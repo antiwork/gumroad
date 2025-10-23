@@ -143,7 +143,7 @@ const FilterCheckboxes = ({
         </label>
       ))}
       {filters.length > 5 && !showingAll ? (
-        <button className="link" onClick={() => setShowingAll(true)}>
+        <button className="underline" onClick={() => setShowingAll(true)}>
           Show more
         </button>
       ) : null}
@@ -238,7 +238,7 @@ export const CardGrid = ({
             {title ?? "Filters"}
             {anyFilters ? (
               <div className="text-right">
-                <button className="link" onClick={resetFilters}>
+                <button className="underline" onClick={resetFilters}>
                   Clear
                 </button>
               </div>

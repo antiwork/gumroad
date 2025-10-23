@@ -6,7 +6,7 @@ describe UrlRedirectPresenter do
   include Rails.application.routes.url_helpers
   describe "#download_attributes" do
     it "returns all necessary attributes for the download page" do
-      allow(Aws::S3::Resource).to receive(:new).and_return(double(bucket: double(object: double(content_length: 1, public_url: "https://s3.amazonaws.com/gumroad-specs/attachments/4768692737035/bb69798a4a694e19a0976390a7e40e6b/original/chapter1.srt"))))
+      allow(Aws::S3::Resource).to receive(:new).and_return(double(bucket: double(object: double(content_length: 1, public_url: "#{AWS_S3_ENDPOINT}/#{S3_BUCKET}/attachments/4768692737035/bb69798a4a694e19a0976390a7e40e6b/original/chapter1.srt"))))
 
       product = create(:product)
       folder = create(:product_folder, link: product, name: "Folder")
@@ -112,7 +112,7 @@ describe UrlRedirectPresenter do
 
       content_items = instance.download_attributes[:content_items]
       expect(content_items.length).to eq(1)
-      expect(content_items.first[:thumbnail_url]).to eq("https://gumroad-specs.s3.amazonaws.com/#{file.thumbnail_variant.key}")
+      expect(content_items.first[:thumbnail_url]).to eq("#{AWS_S3_ENDPOINT}/#{S3_BUCKET}/#{file.thumbnail_variant.key}")
     end
   end
 

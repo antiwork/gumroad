@@ -4,7 +4,7 @@ require "spec_helper"
 
 describe ProductDuplicatorService do
   let(:seller) { create(:user) }
-  let(:s3_url) { "https://s3.amazonaws.com/gumroad-specs/specs/magic.mp3" }
+  let(:s3_url) { "#{AWS_S3_ENDPOINT}/#{S3_BUCKET}/specs/magic.mp3" }
   let(:product) do
     product_params = { user: seller, price_cents: 5000, name: "test product",
                        description: "description for test product",
@@ -20,8 +20,8 @@ describe ProductDuplicatorService do
   end
 
   it "duplicates the product and marks the duplicate product as draft" do
-    file_params = [{ external_id: SecureRandom.uuid, url: "https://s3.amazonaws.com/gumroad-specs/attachment/pencil.png" },
-                   { external_id: SecureRandom.uuid, url: "https://s3.amazonaws.com/gumroad-specs/attachment/manual.pdf" }]
+    file_params = [{ external_id: SecureRandom.uuid, url: "#{AWS_S3_ENDPOINT}/#{S3_BUCKET}/attachment/pencil.png" },
+                   { external_id: SecureRandom.uuid, url: "#{AWS_S3_ENDPOINT}/#{S3_BUCKET}/attachment/manual.pdf" }]
     product.save_files!(file_params)
 
     variant_category = create(:variant_category, title: "sizes", link: product)

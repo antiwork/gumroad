@@ -11,7 +11,8 @@ class User < ApplicationRecord
           StripeConnect, Stats, PaymentStats, FeatureStatus, Risk, Compliance, Validations, Taxation, PingNotification,
           AsyncDeviseNotification, Posts, AffiliatedProducts, Followers, LowBalanceFraudCheck, MailerLevel,
           DirectAffiliates, AsJson, Tier, Recommendations, Team, AustralianBacktaxes, WithCdnUrl,
-          TwoFactorAuthentication, Versionable, Comments, VipCreator, SignedUrlHelper, Purchases, SecureExternalId
+          TwoFactorAuthentication, Versionable, Comments, VipCreator, SignedUrlHelper, Purchases, SecureExternalId,
+          PayoutInfo
 
   stripped_fields :name, :facebook_meta_tag, :google_analytics_id, :username, :email, :support_email
 
@@ -340,6 +341,11 @@ class User < ApplicationRecord
     end
   end
 
+  alias_method :compliant, :compliant?
+  alias_method :on_probation, :on_probation?
+  alias_method :flagged_for_fraud, :flagged_for_fraud?
+  alias_method :flagged_for_tos_violation, :flagged_for_tos_violation?
+
   state_machine(:tier_state, initial: :tier_0) do
     state :tier_0, value: TIER_0
     state :tier_1, value: TIER_1
@@ -416,6 +422,10 @@ class User < ApplicationRecord
     return name if name.present?
     return form_email || username.presence if prefer_email_over_default_username && username == external_id
     username.presence || form_email
+  end
+
+  def display_name_or_email
+    display_name(prefer_email_over_default_username: true)
   end
 
   def support_or_form_email
@@ -638,6 +648,10 @@ class User < ApplicationRecord
   def form_email
     return unconfirmed_email if unconfirmed_email.present?
     email if email.present?
+  end
+
+  def form_email_domain
+    Mail::Address.new(form_email).domain.presence
   end
 
   def currency_symbol

@@ -12,11 +12,11 @@ describe "Product::Searchable - Indexing scenarios" do
       taxonomy = create(:taxonomy)
       @product.update!(name: "Searching for Robby Fischer", description: "Search search search", taxonomy:, is_adult: true)
       @product.tag!("tag")
-      @product.save_files!([{ external_id: SecureRandom.uuid, url: "https://s3.amazonaws.com/gumroad-specs/attachment/some-url.txt" }])
+      @product.save_files!([{ external_id: SecureRandom.uuid, url: "#{AWS_S3_ENDPOINT}/#{S3_BUCKET}/attachment/some-url.txt" }])
       @product.save_files!([
-                             { external_id: SecureRandom.uuid, url: "https://s3.amazonaws.com/gumroad-specs/attachment/pencil.png" },
-                             { external_id: SecureRandom.uuid, url: "https://s3.amazonaws.com/gumroad-specs/attachment/pic.jpg" },
-                             { external_id: SecureRandom.uuid, url: "https://s3.amazonaws.com/gumroad-specs/attachment/other.jpg" },
+                             { external_id: SecureRandom.uuid, url: "#{AWS_S3_ENDPOINT}/#{S3_BUCKET}/attachment/pencil.png" },
+                             { external_id: SecureRandom.uuid, url: "#{AWS_S3_ENDPOINT}/#{S3_BUCKET}/attachment/pic.jpg" },
+                             { external_id: SecureRandom.uuid, url: "#{AWS_S3_ENDPOINT}/#{S3_BUCKET}/attachment/other.jpg" },
                            ])
       @product.user.update!(name: "creator name", user_risk_state: "compliant")
       purchase = create(:purchase_with_balance, link: @product, seller: @product.user, price_cents: @product.price_cents)
@@ -206,8 +206,8 @@ describe "Product::Searchable - Indexing scenarios" do
     it "updates the index for the associated product on product file save" do
       expect_product_update %w[filetypes]
 
-      file_params = [{ external_id: SecureRandom.uuid, url: "https://s3.amazonaws.com/gumroad-specs/attachment/pencil.png" },
-                     { external_id: SecureRandom.uuid, url: "https://s3.amazonaws.com/gumroad-specs/attachment/manual.pdf" }]
+      file_params = [{ external_id: SecureRandom.uuid, url: "#{AWS_S3_ENDPOINT}/#{S3_BUCKET}/attachment/pencil.png" },
+                     { external_id: SecureRandom.uuid, url: "#{AWS_S3_ENDPOINT}/#{S3_BUCKET}/attachment/manual.pdf" }]
       @product.save_files!(file_params)
     end
 
@@ -281,7 +281,7 @@ describe "Product::Searchable - Indexing scenarios" do
 
     it "sends updated filetypes when a file is added" do
       expect_product_update %w[filetypes]
-      @product.save_files!([{ external_id: SecureRandom.uuid, url: "https://s3.amazonaws.com/gumroad-specs/attachment/pic.jpg" }])
+      @product.save_files!([{ external_id: SecureRandom.uuid, url: "#{AWS_S3_ENDPOINT}/#{S3_BUCKET}/attachment/pic.jpg" }])
     end
 
     it "enqueues the job when a purchase transitions to the successful state" do

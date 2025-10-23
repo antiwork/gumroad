@@ -1,4 +1,7 @@
-export const formatDate = (date: Date) => date.toLocaleString([], { dateStyle: "long", timeStyle: "short" });
+export const formatDate = (
+  date: Date,
+  options: Intl.DateTimeFormatOptions = { dateStyle: "long", timeStyle: "short" },
+) => date.toLocaleString([], options);
 
 export const formatCallDate = (
   date: Date,

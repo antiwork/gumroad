@@ -11,7 +11,7 @@ describe "InstallmentJson"  do
   describe "#installment_mobile_json_data" do
     before do
       @product_file_1 = create(:product_file, installment: @installment, link: @installment.link)
-      @product_file_2 = create(:product_file, installment: @installment, link: @installment.link, url: "https://s3.amazonaws.com/gumroad-specs/attachments/2/original/chapter2.mp4")
+      @product_file_2 = create(:product_file, installment: @installment, link: @installment.link, url: "#{AWS_S3_ENDPOINT}/#{S3_BUCKET}/attachments/2/original/chapter2.mp4")
       @installment.update!(published_at: 1.week.ago)
     end
 

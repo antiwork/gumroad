@@ -195,7 +195,7 @@ describe("Authentication Scenario", type: :system, js: true) do
     it "does not return an access token if the password is blank and a user does not exist" do
       client = OAuth2::Client.new(@app.uid, @app.secret, site: "http://" + DOMAIN)
       link = create(:product, user: create(:user))
-      create(:product_file, link_id: link.id, url: "https://s3.amazonaws.com/gumroad-specs/specs/ScreenRecording.mov")
+      create(:product_file, link_id: link.id, url: "#{AWS_S3_ENDPOINT}/#{S3_BUCKET}/specs/ScreenRecording.mov")
       create(:purchase_with_balance, link:, email: "user@testing.com")
       expect { client.password.get_token("user@testing.com", "") }.to raise_error(OAuth2::Error)
     end
@@ -203,7 +203,7 @@ describe("Authentication Scenario", type: :system, js: true) do
     it "does not return an access token if the email is blank and a user does not exist" do
       client = OAuth2::Client.new(@app.uid, @app.secret, site: "http://" + DOMAIN)
       link = create(:product, user: create(:user))
-      create(:product_file, link_id: link.id, url: "https://s3.amazonaws.com/gumroad-specs/specs/ScreenRecording.mov")
+      create(:product_file, link_id: link.id, url: "#{AWS_S3_ENDPOINT}/#{S3_BUCKET}/specs/ScreenRecording.mov")
       create(:purchase_with_balance, link:, email: "user@testing.com")
       expect { client.password.get_token("", "123456") }.to raise_error(OAuth2::Error)
     end

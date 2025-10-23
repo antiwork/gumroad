@@ -5,6 +5,7 @@ import { createCast, is } from "ts-safe-cast";
 import { deletePurchasedProduct, setPurchaseArchived } from "$app/data/library";
 import { ProductNativeType } from "$app/parsers/product";
 import { assertDefined } from "$app/utils/assert";
+import { classNames } from "$app/utils/classNames";
 import { asyncVoid } from "$app/utils/promise";
 import { assertResponseError } from "$app/utils/request";
 import { register } from "$app/utils/serverComponentUtil";
@@ -331,6 +332,8 @@ const LibraryPage = ({ results, creators, bundles, reviews_page_enabled, followi
     if (e.key === "Enter") dispatch({ type: "update-search", search: { query: enteredQuery } });
   };
 
+  const shouldShowFilter = !showArchivedNotice && (hasParams || archivedCount > 0 || state.results.length > 9);
+
   return (
     <Layout
       selectedTab="purchases"
@@ -376,7 +379,7 @@ const LibraryPage = ({ results, creators, bundles, reviews_page_enabled, followi
               You have {archivedCount} archived purchase{archivedCount === 1 ? "" : "s"}.{" "}
               <button
                 type="button"
-                className="link"
+                className="underline"
                 onClick={() => dispatch({ type: "update-search", search: { showArchivedOnly: true } })}
               >
                 Click here to view
@@ -384,8 +387,13 @@ const LibraryPage = ({ results, creators, bundles, reviews_page_enabled, followi
             </span>
           </div>
         ) : null}
-        <div className="grid grid-cols-1 items-start gap-x-16 gap-y-8 lg:grid-cols-[var(--grid-cols-sidebar)]">
-          {!showArchivedNotice && (hasParams || archivedCount > 0 || state.results.length > 9) ? (
+        <div
+          className={classNames(
+            "grid grid-cols-1 items-start gap-x-16 gap-y-8",
+            shouldShowFilter && "lg:grid-cols-[var(--grid-cols-sidebar)]",
+          )}
+        >
+          {shouldShowFilter ? (
             <Stack>
               <header>
                 <div>
@@ -394,7 +402,7 @@ const LibraryPage = ({ results, creators, bundles, reviews_page_enabled, followi
                     : "No products found"}
                 </div>
                 {isDesktop ? null : (
-                  <button className="link" onClick={() => setMobileFiltersExpanded(!mobileFiltersExpanded)}>
+                  <button className="underline" onClick={() => setMobileFiltersExpanded(!mobileFiltersExpanded)}>
                     Filter
                   </button>
                 )}
@@ -494,7 +502,7 @@ const LibraryPage = ({ results, creators, bundles, reviews_page_enabled, followi
                       ))}
                       <div>
                         {creators.length > 5 && !showingAllCreators ? (
-                          <button className="link" onClick={() => setShowingAllCreators(true)}>
+                          <button className="underline" onClick={() => setShowingAllCreators(true)}>
                             Show more
                           </button>
                         ) : null}

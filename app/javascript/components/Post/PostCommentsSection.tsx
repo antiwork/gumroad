@@ -289,7 +289,7 @@ const CommentContainer = ({ comment, upsertComment, confirmCommentDeletion }: Co
         )}
         {replyDraft == null && comment.depth < max_allowed_depth ? (
           <footer>
-            <button className="link" onClick={() => setReplyDraft("")}>
+            <button className="underline" onClick={() => setReplyDraft("")}>
               Reply
             </button>
           </footer>
@@ -359,7 +359,8 @@ const CommentTextarea = ({
   }, [props.value]);
 
   return (
-    <div className={classNames("override grid gap-3", showAvatar && "relative grid-cols-[max-content_1fr]")}>
+    <section className={classNames("override grid gap-3", showAvatar && "relative grid-cols-[max-content_1fr]")}>
+      <h3 className="sr-only">Write a comment</h3>
       {showAvatar ? (
         <UserAvatar
           size="large"
@@ -377,7 +378,7 @@ const CommentTextarea = ({
         </div>
       )}
       {loggedInUser != null || purchase_id != null ? <div className="flex justify-end gap-3">{children}</div> : null}
-    </div>
+    </section>
   );
 };
 

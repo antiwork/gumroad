@@ -15,7 +15,7 @@ describe "S3Retrievable" do
 
   subject(:s3_retrievable_object) do
     model.new.tap do |test_class|
-      test_class.url = "https://s3.amazonaws.com/gumroad-specs/specs/nyt.pdf"
+      test_class.url = "#{AWS_S3_ENDPOINT}/#{S3_BUCKET}/specs/nyt.pdf"
     end
   end
 
@@ -31,12 +31,12 @@ describe "S3Retrievable" do
 
   describe "#unique_url_identifier" do
     it "returns url as an identifier" do
-      expect(s3_retrievable_object.unique_url_identifier).to eq("https://s3.amazonaws.com/gumroad-specs/specs/nyt.pdf")
+      expect(s3_retrievable_object.unique_url_identifier).to eq("#{AWS_S3_ENDPOINT}/#{S3_BUCKET}/specs/nyt.pdf")
     end
 
     context "when it has an s3 guid" do
       before do
-        s3_retrievable_object.url = "https://s3.amazonaws.com/gumroad-specs/attachments/23b2d41ac63a40b5afa1a99bf38a0982/original/nyt.pdf"
+        s3_retrievable_object.url = "#{AWS_S3_ENDPOINT}/#{S3_BUCKET}/attachments/23b2d41ac63a40b5afa1a99bf38a0982/original/nyt.pdf"
       end
 
       it "returns s3 guid" do
@@ -64,7 +64,7 @@ describe "S3Retrievable" do
     end
 
     it "raises a descriptive exception if the S3 object doesn't exist" do
-      record = model.create!(url: "https://s3.amazonaws.com/gumroad-specs/attachments/missing.txt")
+      record = model.create!(url: "#{AWS_S3_ENDPOINT}/#{S3_BUCKET}/attachments/missing.txt")
 
       expect do
         record.download_original { }
@@ -82,7 +82,7 @@ describe "S3Retrievable" do
 
   describe "#s3_url" do
     it "returns s3 url value" do
-      expect(s3_retrievable_object.s3_url).to eq("https://s3.amazonaws.com/gumroad-specs/specs/nyt.pdf")
+      expect(s3_retrievable_object.s3_url).to eq("#{AWS_S3_ENDPOINT}/#{S3_BUCKET}/specs/nyt.pdf")
     end
 
     include_examples "s3 retrievable instance method", "s3_url"
@@ -114,7 +114,7 @@ describe "S3Retrievable" do
 
   describe "#s3_directory_uri" do
     before do
-      s3_retrievable_object.url = "https://s3.amazonaws.com/gumroad-specs/attachments/23b2d41ac63a40b5afa1a99bf38a0982/original/nyt.pdf"
+      s3_retrievable_object.url = "#{AWS_S3_ENDPOINT}/#{S3_BUCKET}/attachments/23b2d41ac63a40b5afa1a99bf38a0982/original/nyt.pdf"
     end
 
     it "returns file directory" do
@@ -126,7 +126,7 @@ describe "S3Retrievable" do
 
   describe "#restore_deleted_s3_object!" do
     context "when the versioned object exists" do
-      let!(:record) { model.create!(url: "https://s3.amazonaws.com/gumroad-specs/#{SecureRandom.hex}") }
+      let!(:record) { model.create!(url: "#{AWS_S3_ENDPOINT}/#{S3_BUCKET}/#{SecureRandom.hex}") }
 
       before do
         Aws::S3::Resource.new.bucket(S3_BUCKET).object(record.s3_key).upload_file(
@@ -155,7 +155,7 @@ describe "S3Retrievable" do
     end
 
     context "when the versioned object is missing" do
-      let!(:record) { model.create!(url: "https://s3.amazonaws.com/gumroad-specs/#{SecureRandom.hex}") }
+      let!(:record) { model.create!(url: "#{AWS_S3_ENDPOINT}/#{S3_BUCKET}/#{SecureRandom.hex}") }
 
       it "retuns false" do
         expect(record.restore_deleted_s3_object!).to eq(false)
@@ -172,14 +172,14 @@ describe "S3Retrievable" do
         content_type: "application/pdf"
       )
 
-      record = model.create!(url: "https://s3.amazonaws.com/gumroad-specs/#{s3_directory}/incorrect-file-name.pdf")
+      record = model.create!(url: "#{AWS_S3_ENDPOINT}/#{S3_BUCKET}/#{s3_directory}/incorrect-file-name.pdf")
 
       record.confirm_s3_key!
       expect(record.s3_key).to eq(s3_directory + "/file.pdf")
     end
 
     it "does nothing if the file exists on S3" do
-      previous_url = "https://s3.amazonaws.com/gumroad-specs/specs/sample.mov"
+      previous_url = "#{AWS_S3_ENDPOINT}/#{S3_BUCKET}/specs/sample.mov"
       record = model.create!(url: previous_url)
 
       record.confirm_s3_key!
@@ -198,9 +198,9 @@ describe "S3Retrievable" do
 
   describe ".with_s3_key" do
     it "only includes s3 files matching the s3 key" do
-      foo = model.create!(url: "https://s3.amazonaws.com/gumroad-specs/attachments/foo.pdf")
-      foo2 = model.create!(url: "https://s3.amazonaws.com/gumroad-specs/attachments/foo.pdf")
-      other = model.create!(url: "https://s3.amazonaws.com/gumroad-specs/attachments/other.pdf")
+      foo = model.create!(url: "#{AWS_S3_ENDPOINT}/#{S3_BUCKET}/attachments/foo.pdf")
+      foo2 = model.create!(url: "#{AWS_S3_ENDPOINT}/#{S3_BUCKET}/attachments/foo.pdf")
+      other = model.create!(url: "#{AWS_S3_ENDPOINT}/#{S3_BUCKET}/attachments/other.pdf")
       model.create!(url: "https://example.com")
 
       expect(model.with_s3_key("attachments/foo.pdf")).to match_array([foo, foo2])

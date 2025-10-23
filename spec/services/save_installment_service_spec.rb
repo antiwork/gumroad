@@ -16,7 +16,7 @@ describe SaveInstallmentService do
         bought_variants: [],
         created_after: "2024-01-01",
         created_before: "2024-01-31",
-        files: [{ external_id: SecureRandom.uuid, stream_only: false, subtitles: [], url: "https://s3.amazonaws.com/gumroad-specs/attachment/some-url.txt" }],
+        files: [{ external_id: SecureRandom.uuid, stream_only: false, subtitles: [], url: "#{AWS_S3_ENDPOINT}/#{S3_BUCKET}/attachment/some-url.txt" }],
         installment_type: "product",
         link_id: product.unique_permalink,
         message: "<p>Hello, world!</p>",
@@ -85,7 +85,7 @@ describe SaveInstallmentService do
       expect(installment.send_emails).to be(true)
       expect(installment.shown_on_profile).to be(true)
       expect(installment.published?).to be(false)
-      expect(installment.product_files.sole.url).to eq("https://s3.amazonaws.com/gumroad-specs/attachment/some-url.txt")
+      expect(installment.product_files.sole.url).to eq("#{AWS_S3_ENDPOINT}/#{S3_BUCKET}/attachment/some-url.txt")
     end
 
     it "creates a variant-type installment" do
@@ -297,21 +297,21 @@ describe SaveInstallmentService do
       expect(installment.send_emails).to be(true)
       expect(installment.shown_on_profile).to be(true)
       expect(installment.published?).to be(false)
-      expect(installment.product_files.sole.url).to eq("https://s3.amazonaws.com/gumroad-specs/attachment/some-url.txt")
+      expect(installment.product_files.sole.url).to eq("#{AWS_S3_ENDPOINT}/#{S3_BUCKET}/attachment/some-url.txt")
     end
 
     it "marks the old file as deleted" do
-      installment.product_files.create!(url: "https://s3.amazonaws.com/gumroad-specs/attachment/old-url.txt")
+      installment.product_files.create!(url: "#{AWS_S3_ENDPOINT}/#{S3_BUCKET}/attachment/old-url.txt")
       service = described_class.new(seller:, installment:, params:, preview_email_recipient:)
       expect do
         service.process
       end.to change { installment.reload.product_files.count }.from(1).to(2)
-      expect(installment.product_files.alive.sole.url).to eq("https://s3.amazonaws.com/gumroad-specs/attachment/some-url.txt")
+      expect(installment.product_files.alive.sole.url).to eq("#{AWS_S3_ENDPOINT}/#{S3_BUCKET}/attachment/some-url.txt")
       expect(service.error).to be_nil
     end
 
     it "removes the existing files" do
-      installment.product_files.create!(url: "https://s3.amazonaws.com/gumroad-specs/attachment/old-url.txt")
+      installment.product_files.create!(url: "#{AWS_S3_ENDPOINT}/#{S3_BUCKET}/attachment/old-url.txt")
       service = described_class.new(seller:, installment:, params: params.deep_merge(installment: { files: [] }), preview_email_recipient:)
       expect do
         service.process

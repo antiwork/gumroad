@@ -438,7 +438,7 @@ You can modify or cancel your membership at any time.`;
             </strong>{" "}
             <button
               type="button"
-              className="link"
+              className="underline"
               onClick={() =>
                 void sendSamplePriceChangeEmail({
                   productPermalink: uniquePermalink,

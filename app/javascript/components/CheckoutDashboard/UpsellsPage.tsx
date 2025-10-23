@@ -29,6 +29,7 @@ import { useClientAlert } from "$app/components/ClientAlertProvider";
 import { Details } from "$app/components/Details";
 import { Icon } from "$app/components/Icons";
 import { useLoggedInUser } from "$app/components/LoggedInUser";
+import { Modal } from "$app/components/Modal";
 import { Pagination, PaginationProps } from "$app/components/Pagination";
 import { Popover } from "$app/components/Popover";
 import { applySelection } from "$app/components/Product/ConfigurationSelector";
@@ -930,11 +931,7 @@ const Form = ({
           </section>
         </form>
         <CheckoutPreview cartItem={previewCartItem}>
-          <dialog open aria-labelledby={`${uid}preview`}>
-            <header>
-              <h2 id={`${uid}preview`}>{offerText.value}</h2>
-              <button className="close" />
-            </header>
+          <Modal open modal={false} title={offerText.value}>
             {isCrossSell ? (
               <CrossSellModal
                 crossSell={{
@@ -1007,7 +1004,7 @@ const Form = ({
                 decline={() => {}}
               />
             )}
-          </dialog>
+          </Modal>
         </CheckoutPreview>
       </div>
     </>
