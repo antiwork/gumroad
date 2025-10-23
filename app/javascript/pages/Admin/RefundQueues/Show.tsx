@@ -3,16 +3,23 @@ import React from "react";
 
 import EmptyState from "$app/components/Admin/EmptyState";
 import UserCard, { type User } from "$app/components/Admin/Users/User";
+import PaginatedLoader, { type Pagination } from "$app/components/Admin/PaginatedLoader";
+
+type PageProps = {
+  users: User[];
+  pagination: Pagination;
+};
 
 const AdminRefundQueue = () => {
-  const { users } = usePage<{ users: User[] }>().props;
+  const { pagination,users } = usePage<PageProps>().props;
 
   return (
     <section className="flex flex-col gap-4">
       {users.map((user) => (
-        <UserCard key={user.id} user={user} is_affiliate_user={false} />
+        <UserCard key={`refund-queue-user-${user.id}`} user={user} />
       ))}
-      {users.length === 0 && <EmptyState message="No users found." />}
+      {pagination.page === 1 && users.length === 0 && <EmptyState message="No users found." />}
+      <PaginatedLoader itemsLength={users.length} pagination={pagination} only={["users", "pagination"]} />
     </section>
   );
 };
