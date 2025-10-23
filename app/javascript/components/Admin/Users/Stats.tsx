@@ -5,7 +5,7 @@ import { request, assertResponseError } from "$app/utils/request";
 
 import Loading from "$app/components/Admin/Loading";
 import { showAlert } from "$app/components/server-components/Alert";
-import { useIsIntersecting } from "$app/components/useIsIntersecting";
+import { useIsIntersecting } from "$app/components/useIsIntersecting";
 
 type UserStatsProps = {
   total: string;

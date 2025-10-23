@@ -2,7 +2,7 @@ import React from "react";
 
 import Comment, { type CommentProps } from "$app/components/Admin/Commentable/Comment";
 import Loading from "$app/components/Admin/Loading";
-import { useIsIntersecting } from "$app/components/useIsIntersecting";
+import { useIsIntersecting } from "$app/components/useIsIntersecting";
 
 type AdminCommentableContentProps = {
   count: number;
@@ -28,14 +28,15 @@ const AdminCommentableContent = ({
       </div>
     );
 
-  const elementRef = useIsIntersecting<HTMLDivElement>(
-    (isIntersecting) => {
+  const handleIntersection = React.useCallback(
+    (isIntersecting: boolean) => {
       if (!isIntersecting || !hasMore || isLoading) return;
       onLoadMore();
     },
-    undefined,
-    [isLoading, hasMore],
+    [hasMore, isLoading, onLoadMore],
   );
+
+  const elementRef = useIsIntersecting<HTMLDivElement>(handleIntersection);
 
   return (
     <div>

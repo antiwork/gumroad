@@ -5,7 +5,7 @@ import { request } from "$app/utils/request";
 
 import PayoutInfo, { type PayoutInfoProps } from "$app/components/Admin/Users/PayoutInfo/PayoutInfo";
 import type { User } from "$app/components/Admin/Users/User";
-import { useIsIntersecting } from "$app/components/useIsIntersecting";
+import { useIsIntersecting } from "$app/components/useIsIntersecting";
 
 type AdminUserPayoutInfoProps = {
   user: User;
