@@ -1,4 +1,4 @@
-import { Link, router } from "@inertiajs/react";
+import { Link, useForm } from "@inertiajs/react";
 import { DirectUpload } from "@rails/activestorage";
 import { findChildren, Node as TiptapNode } from "@tiptap/core";
 import { Plugin } from "@tiptap/pm/state";
@@ -19,11 +19,9 @@ import {
 import { assert, assertDefined } from "$app/utils/assert";
 import { ALLOWED_EXTENSIONS } from "$app/utils/file";
 import GuidGenerator from "$app/utils/guid_generator";
-import { asyncVoid } from "$app/utils/promise";
 import { assertResponseError, request } from "$app/utils/request";
 
 import { Button, NavigationButton } from "$app/components/Button";
-import { useClientAlert } from "$app/components/ClientAlertProvider";
 import { useCurrentSeller } from "$app/components/CurrentSeller";
 import { useAppDomain, useDomains } from "$app/components/DomainSettings";
 import {
@@ -96,10 +94,10 @@ type WorkflowEmailsProps = {
 
 const WorkflowEmails = ({ context, workflow }: WorkflowEmailsProps) => {
   const [sendToPastCustomers, setSendToPastCustomers] = React.useState(workflow.send_to_past_customers);
-  const { showAlert } = useClientAlert();
-  const [isSaving, setIsSaving] = React.useState(false);
   const [files, filesDispatch] = React.useReducer(filesReducer, installmentsFilesToFilesState(workflow.installments));
   const [emails, setEmails] = React.useState<EmailFormState[]>(installmentsToEmails(workflow.installments));
+
+  const form = useForm({});
   const workflowTrigger = determineWorkflowTrigger(workflow);
   const isAbandonedCartWorkflow = workflowTrigger === "abandoned_cart";
   const [expandedEmailIds, setExpandedEmailIds] = React.useState<Set<string>>(
@@ -209,74 +207,47 @@ const WorkflowEmails = ({ context, workflow }: WorkflowEmailsProps) => {
     setInvalidFields(invalidFields);
     return invalidFields.length === 0;
   };
-  const handleSave = asyncVoid(
-    async ({
-      sendPreviewForEmailId,
-      saveActionName = "save",
-    }: { sendPreviewForEmailId?: string; saveActionName?: SaveActionName } = {}) => {
-      setFocusedFieldInfo(null);
+  const handleSave = ({
+    sendPreviewForEmailId,
+    saveActionName = "save",
+  }: { sendPreviewForEmailId?: string; saveActionName?: SaveActionName } = {}) => {
+    setFocusedFieldInfo(null);
 
-      if (!validate()) return;
+    if (!validate()) return;
 
-      const payload = {
-        workflow: {
-          send_to_past_customers: sendToPastCustomers,
-          save_action_name: saveActionName,
-          installments: emails.map((email) => {
-            const emailFiles = files.filter((file) => file.email_id === email.id);
-            return {
-              id: email.id,
-              name: email.name,
-              message: email.message,
-              time_period: email.delayed_delivery_time_period,
-              time_duration: email.delayed_delivery_time_duration,
-              send_preview_email: email.id === sendPreviewForEmailId,
-              files: emailFiles.map((file, index) => ({
-                external_id: file.id,
-                url: file.url,
-                position: index,
-                // if email is marked stream-only, all streamable files are considered stream-only
-                stream_only: file.is_streamable && email.stream_only,
-                subtitle_files: file.subtitle_files,
-              })),
-            };
-          }),
-        },
-      };
+    form.transform(() => ({
+      workflow: {
+        send_to_past_customers: sendToPastCustomers,
+        save_action_name: saveActionName,
+        installments: emails.map((email) => {
+          const emailFiles = files.filter((file) => file.email_id === email.id);
+          return {
+            id: email.id,
+            name: email.name,
+            message: email.message,
+            time_period: email.delayed_delivery_time_period,
+            time_duration: email.delayed_delivery_time_duration,
+            send_preview_email: email.id === sendPreviewForEmailId,
+            files: emailFiles.map((file, index) => ({
+              external_id: file.id,
+              url: file.url,
+              position: index,
+              // if email is marked stream-only, all streamable files are considered stream-only
+              stream_only: file.is_streamable && email.stream_only,
+              subtitle_files: file.subtitle_files,
+            })),
+          };
+        }),
+      },
+    }));
 
-      setIsSaving(true);
+    form.patch(Routes.workflow_emails_path(workflow.external_id), {
+      only: ["workflow", "flash"],
+    });
+  };
 
-      const formData = new FormData();
-      formData.append("workflow[send_to_past_customers]", payload.workflow.send_to_past_customers.toString());
-      formData.append("workflow[save_action_name]", payload.workflow.save_action_name);
-      formData.append("workflow[installments]", JSON.stringify(payload.workflow.installments));
-
-      router.patch(Routes.workflow_emails_path(workflow.external_id), formData, {
-        onSuccess: () => {
-          setIsSaving(false);
-          if (sendPreviewForEmailId) {
-            showAlert("A preview has been sent to your email.", "success");
-          } else {
-            showAlert(
-              saveActionName === "save_and_publish"
-                ? "Workflow published!"
-                : saveActionName === "save_and_unpublish"
-                  ? "Unpublished!"
-                  : "Changes saved!",
-              "success",
-            );
-          }
-          router.reload({ only: ["workflow"] });
-        },
-        onError: () => {
-          setIsSaving(false);
-          showAlert("Sorry, something went wrong. Please try again.", "error");
-        },
-      });
-    },
-  );
   const isBusy =
-    isSaving ||
+    form.processing ||
     imagesUploading.size > 0 ||
     files.some((file) => isFileUploading(file) || file.subtitle_files.some((subtitle) => isFileUploading(subtitle)));
   const sortedEmails = sortEmailsByDelayedDeliveryTime(emails);
@@ -289,7 +260,7 @@ const WorkflowEmails = ({ context, workflow }: WorkflowEmailsProps) => {
           navigation={<EditPageNavigation workflowExternalId={workflow.external_id} />}
           actions={
             <>
-              <Link href={Routes.workflows_url()} className="button" inert={isBusy || undefined}>
+              <Link href={Routes.workflows_path()} className="button" inert={isBusy || undefined}>
                 {workflow.published ? (
                   <>
                     <Icon name="x-square" />
@@ -374,7 +345,7 @@ const WorkflowEmails = ({ context, workflow }: WorkflowEmailsProps) => {
                               onDelete={() => setDeletingEmailId(email.id)}
                               onChange={(value) => updateEmail(email.id, value)}
                               onSendPreviewEmail={() => handleSave({ sendPreviewForEmailId: email.id })}
-                              isSaving={isSaving}
+                              isSaving={form.processing}
                               hasUploadingImages={imagesUploading.size > 0 && email.message.includes('src="blob:')}
                             />
                           ))}

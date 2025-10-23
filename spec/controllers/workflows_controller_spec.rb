@@ -67,10 +67,12 @@ describe WorkflowsController, type: :controller, inertia: true do
     end
 
     context "with valid params" do
-      it "creates a workflow and redirects" do
+      it "303 redirects to workflow emails page with a success message" do
         post :create, params: { workflow: { name: "Test Workflow", workflow_type: "audience" } }
+
         expect(response).to redirect_to(workflow_emails_path(Workflow.last.external_id))
-        expect(flash[:notice]).to eq("Workflow created successfully!")
+        expect(response).to have_http_status(:see_other)
+        expect(flash[:notice]).to eq("Changes saved!")
       end
     end
   end
@@ -82,10 +84,12 @@ describe WorkflowsController, type: :controller, inertia: true do
     end
 
     context "with valid params" do
-      it "updates the workflow and redirects" do
+      it "303 redirects to workflow emails page with a success message" do
         patch :update, params: { id: workflow.external_id, workflow: { name: "Updated Workflow" } }
+
         expect(response).to redirect_to(workflow_emails_path(workflow.external_id))
-        expect(flash[:notice]).to eq("Workflow updated successfully!")
+        expect(response).to have_http_status(:see_other)
+        expect(flash[:notice]).to eq("Changes saved!")
       end
     end
   end
@@ -96,10 +100,12 @@ describe WorkflowsController, type: :controller, inertia: true do
       let(:request_params) { { id: workflow.external_id } }
     end
 
-    it "marks workflow as deleted and redirects" do
+    it "303 redirects to workflows page with a success message" do
       delete :destroy, params: { id: workflow.external_id }
+
       expect(response).to redirect_to(workflows_path)
-      expect(flash[:notice]).to eq("Workflow deleted successfully!")
+      expect(response).to have_http_status(:see_other)
+      expect(flash[:notice]).to eq("Workflow deleted!")
       expect(workflow.reload.deleted_at).to be_present
     end
   end

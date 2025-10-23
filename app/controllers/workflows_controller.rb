@@ -6,6 +6,26 @@ class WorkflowsController < Sellers::BaseController
 
   layout "inertia"
 
+  inertia_share do
+    parent_shared_data = RenderingExtension.custom_context(view_context).merge(
+      current_user: current_user_props(current_user, impersonated_user),
+      authenticity_token: form_authenticity_token,
+      flash: inertia_flash_props,
+      title: @title
+    )
+
+    workflow_presenter = WorkflowPresenter.new(seller: current_seller, workflow: @workflow)
+    workflow_shared_props = {
+      context: -> { workflow_presenter.workflow_form_context_props }
+    }
+
+    if @workflow
+      workflow_shared_props[:workflow] = -> { workflow_presenter.workflow_props }
+    end
+
+    parent_shared_data.merge(workflow_shared_props)
+  end
+
   def index
     authorize Workflow
     create_user_event("workflows_view")
@@ -16,59 +36,42 @@ class WorkflowsController < Sellers::BaseController
 
   def new
     authorize Workflow
-
-    workflow_presenter = WorkflowPresenter.new(seller: current_seller)
-    render inertia: "Workflows/New", props: {
-      context: -> { workflow_presenter.workflow_form_context_props },
-    }
-  end
-
-  def edit
-    workflow_presenter = WorkflowPresenter.new(seller: current_seller, workflow: @workflow)
-    render inertia: "Workflows/Edit", props: {
-      workflow: -> { workflow_presenter.workflow_props },
-      context: -> { workflow_presenter.workflow_form_context_props },
-    }
+    render inertia: "Workflows/New"
   end
 
   def create
     authorize Workflow
 
-    success, message = save_workflow
+    success, errors = save_workflow
     if success
-      redirect_to workflow_emails_path(@workflow.external_id), notice: "Workflow created successfully!"
+      redirect_to workflow_emails_path(@workflow.external_id), notice: "Changes saved!", status: :see_other
     else
-      workflow_presenter = WorkflowPresenter.new(seller: current_seller, workflow: @workflow)
-      render inertia: "Workflows/New", props: {
-        context: -> { workflow_presenter.workflow_form_context_props },
-        errors: message,
-      }, status: :unprocessable_entity
+      redirect_to new_workflow_path, inertia: { errors: errors }
     end
   end
 
+  def edit
+    render inertia: "Workflows/Edit"
+  end
+
   def update
-    success, message = save_workflow
+    success, errors = save_workflow
     if success
       # For publish/unpublish actions, stay on edit page; otherwise go to emails page
       if ["save_and_publish", "unpublish"].include?(workflow_params[:save_action_name])
         notice_message = workflow_params[:save_action_name] == "save_and_publish" ? "Workflow published!" : "Unpublished!"
-        redirect_to edit_workflow_path(@workflow.external_id), notice: notice_message
+        redirect_to edit_workflow_path(@workflow.external_id), notice: notice_message, status: :see_other
       else
-        redirect_to workflow_emails_path(@workflow.external_id), notice: "Changes saved!"
+        redirect_to workflow_emails_path(@workflow.external_id), notice: "Changes saved!", status: :see_other
       end
     else
-      workflow_presenter = WorkflowPresenter.new(seller: current_seller, workflow: @workflow)
-      render inertia: "Workflows/Edit", props: {
-        workflow: -> { workflow_presenter.workflow_props },
-        context: -> { workflow_presenter.workflow_form_context_props },
-        errors: message,
-      }, status: :unprocessable_entity
+      redirect_to edit_workflow_path(@workflow.external_id), inertia: { errors: errors }, status: :see_other
     end
   end
 
   def destroy
     @workflow.mark_deleted!
-    redirect_to workflows_path, notice: "Workflow deleted successfully!"
+    redirect_to workflows_path, notice: "Workflow deleted!", status: :see_other
   end
 
 
@@ -85,6 +88,14 @@ class WorkflowsController < Sellers::BaseController
 
     def authorize_workflow
       authorize @workflow
+    end
+
+    def fetch_product_and_enforce_ownership
+      # Override parent method to handle workflow params structure
+      permalink = workflow_params[:permalink]
+      @product = current_seller.products.visible.find_by(unique_permalink: permalink) ||
+                 current_seller.products.visible.find_by(custom_permalink: permalink) ||
+                 e404
     end
 
     def save_workflow
@@ -104,12 +115,5 @@ class WorkflowsController < Sellers::BaseController
         bought_products: [], not_bought_products: [], affiliate_products: [],
         bought_variants: [], not_bought_variants: [],
       )
-    end
-
-    def fetch_product_and_enforce_ownership
-      permalink = workflow_params[:permalink]
-      @product = current_seller.products.visible.find_by(unique_permalink: permalink) ||
-                 current_seller.products.visible.find_by(custom_permalink: permalink)
-      e404 unless @product
     end
 end

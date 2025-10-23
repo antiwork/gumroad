@@ -24,7 +24,7 @@ describe("Workflows", js: true, type: :system) do
   before do
     @product = create(:product, name: "product name", user: seller, created_at: 2.hours.ago)
     @product2 = create(:product, name: "product 2 name", user: seller, created_at: 1.hour.ago)
-    create(:purchase, link: @product)
+    create(:free_purchase, link: @product)
     index_model_records(Purchase)
 
     allow_any_instance_of(User).to receive(:sales_cents_total).and_return(Installment::MINIMUM_SALES_CENTS_VALUE)

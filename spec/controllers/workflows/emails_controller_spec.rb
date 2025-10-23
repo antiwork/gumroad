@@ -22,7 +22,7 @@ describe Workflows::EmailsController, type: :controller, inertia: true do
     it "renders successfully with Inertia" do
       get :show, params: { workflow_id: workflow.external_id }
       expect(response).to be_successful
-      expect(inertia.component).to eq("Workflows/Emails")
+      expect(inertia.component).to eq("Workflows/Emails/Index")
       expect(inertia.props[:workflow]).to be_present
       expect(inertia.props[:context]).to be_present
     end
@@ -37,10 +37,10 @@ describe Workflows::EmailsController, type: :controller, inertia: true do
   describe "PATCH update" do
     it_behaves_like "authorize called for action", :patch, :update do
       let(:record) { workflow }
-      let(:request_params) { { workflow_id: workflow.external_id, workflow: { send_to_past_customers: true, save_action_name: "save", installments: "[]" } } }
+      let(:request_params) { { workflow_id: workflow.external_id, workflow: { send_to_past_customers: true, save_action_name: "save", installments: [] } } }
     end
 
-    it "redirects to emails page on success" do
+    it "303 redirects to emails page with a success message" do
       installment_params = [{
         id: "test-id",
         name: "Test Email",
@@ -56,30 +56,35 @@ describe Workflows::EmailsController, type: :controller, inertia: true do
         workflow: {
           send_to_past_customers: true,
           save_action_name: "save",
-          installments: installment_params.to_json
+          installments: installment_params
         }
       }
 
       expect(response).to redirect_to(workflow_emails_path(workflow.external_id))
+      expect(response).to have_http_status(:see_other)
+      expect(flash[:notice]).to eq("Changes saved!")
     end
 
     context "when save fails" do
+      let(:errors) { workflow.errors.tap { |e| e.add(:base, "Error message") } }
+
       before do
-        allow_any_instance_of(Workflow::SaveInstallmentsService).to receive(:process).and_return([false, "Error message"])
+        allow_any_instance_of(Workflow::SaveInstallmentsService).to receive(:process).and_return([false, errors])
       end
 
-      it "redirects with alert" do
+      it "303 redirects with Inertia errors" do
         patch :update, params: {
           workflow_id: workflow.external_id,
           workflow: {
             send_to_past_customers: true,
             save_action_name: "save",
-            installments: "[]"
+            installments: []
           }
         }
 
         expect(response).to redirect_to(workflow_emails_path(workflow.external_id))
-        expect(flash[:alert]).to eq("Error message")
+        expect(response).to have_http_status(:see_other)
+        expect(session[:inertia_errors]).to be_present
       end
     end
   end

@@ -1,3 +1,4 @@
+import type { FileItem } from "$app/components/EmailAttachments";
 export type WorkflowType = "audience" | "seller" | "product" | "variant" | "follower" | "affiliate" | "abandoned_cart";
 export type LegacyWorkflowTrigger = "member_cancellation" | null;
 export type SaveActionName = "save" | "save_and_publish" | "save_and_unpublish";
@@ -101,5 +102,3 @@ export type WorkflowFormContext = {
   eligible_for_abandoned_cart_workflows: boolean;
 };
 
-// Import FileItem type from the email attachments component
-import type { FileItem } from "$app/components/EmailAttachments";

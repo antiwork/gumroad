@@ -15,11 +15,14 @@ class Workflow::SaveInstallmentsService
   end
 
   def process
-    return [false, "Installments data is required"] unless params[:installments].present?
+    unless params[:installments].present?
+      workflow.errors.add(:base, "Installments data is required")
+      return [false, workflow.errors]
+    end
 
     if workflow.abandoned_cart_type? && params[:installments].size != 1
-      @error = "An abandoned cart workflow can only have one email."
-      return [false, error]
+      workflow.errors.add(:base, "An abandoned cart workflow can only have one email.")
+      return [false, workflow.errors]
     end
 
     begin
@@ -55,9 +58,10 @@ class Workflow::SaveInstallmentsService
         workflow.unpublish! if params[:save_action_name] == Workflow::SAVE_AND_UNPUBLISH_ACTION
       end
     rescue ActiveRecord::RecordInvalid => e
-      @error = e.record.errors.full_messages.first
+      @error = e.record.errors
     rescue Installment::InstallmentInvalid, Installment::PreviewEmailError => e
-      @error = e.message
+      workflow.errors.add(:base, e.message)
+      @error = workflow.errors
     end
 
     [error.nil?, error]

@@ -6,25 +6,50 @@ class Workflows::EmailsController < Sellers::BaseController
 
   layout "inertia"
 
-  def show
-    create_user_event("workflows_view")
+  inertia_share do
+    RenderingExtension.custom_context(view_context).merge(
+      current_user: current_user_props(current_user, impersonated_user),
+      authenticity_token: form_authenticity_token,
+      flash: inertia_flash_props,
+      title: @title
+    )
+  end
 
+  def show
     workflow_presenter = WorkflowPresenter.new(seller: current_seller, workflow: @workflow)
-    render inertia: "Workflows/Emails", props: {
+    render inertia: "Workflows/Emails/Index", props: {
       workflow: -> { workflow_presenter.workflow_props },
       context: -> { workflow_presenter.workflow_form_context_props },
     }
   end
 
   def update
-    service = Workflow::SaveInstallmentsService.new(seller: current_seller, params: parsed_installments_params, workflow: @workflow, preview_email_recipient: impersonating_user || logged_in_user)
-    success, message = service.process
+    service = Workflow::SaveInstallmentsService.new(seller: current_seller, params: installments_params, workflow: @workflow, preview_email_recipient: impersonating_user || logged_in_user)
+    success, errors = service.process
 
-    # The frontend handles the success/error messages via router.reload()
     if success
-      redirect_to workflow_emails_path(@workflow.external_id)
+      # Determine the flash message based on save_action_name
+      flash_message = case installments_params[:save_action_name]
+      when "save_and_publish"
+        "Workflow published!"
+      when "save_and_unpublish"
+        "Workflow unpublished!"
+      else
+        "Changes saved!"
+      end
+
+      workflow_presenter = WorkflowPresenter.new(seller: current_seller, workflow: @workflow.reload)
+      render inertia: "Workflows/Emails/Index", props: {
+        workflow: -> { workflow_presenter.workflow_props },
+        context: -> { workflow_presenter.workflow_form_context_props },
+        flash: { message: flash_message, status: "success" },
+      }
     else
-      redirect_to workflow_emails_path(@workflow.external_id), alert: message
+      workflow_presenter = WorkflowPresenter.new(seller: current_seller, workflow: @workflow)
+      render inertia: "Workflows/Emails/Index", props: {
+        workflow: -> { workflow_presenter.workflow_props },
+        context: -> { workflow_presenter.workflow_form_context_props },
+      }, status: :unprocessable_entity, inertia: { errors: errors }
     end
   end
 
@@ -39,16 +64,8 @@ class Workflows::EmailsController < Sellers::BaseController
       authorize @workflow
     end
 
-    def parsed_installments_params
-      workflow_params = params.require(:workflow)
-
-      if workflow_params[:installments].is_a?(String)
-        parsed_installments = JSON.parse(workflow_params[:installments])
-        workflow_params_hash = workflow_params.to_unsafe_h.merge(installments: parsed_installments)
-        workflow_params = ActionController::Parameters.new(workflow_params_hash)
-      end
-
-      workflow_params.permit(
+    def installments_params
+      params.require(:workflow).permit(
         :send_to_past_customers, :save_action_name,
         installments: [
           :id, :name, :message, :time_period, :time_duration, :send_preview_email,

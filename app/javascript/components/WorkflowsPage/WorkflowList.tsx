@@ -5,7 +5,6 @@ import { Workflow } from "$app/types/workflow";
 import { formatStatNumber } from "$app/utils/formatStatNumber";
 
 import { Button } from "$app/components/Button";
-import { useClientAlert } from "$app/components/ClientAlertProvider";
 import { Icon } from "$app/components/Icons";
 import { useLoggedInUser } from "$app/components/LoggedInUser";
 import { Modal } from "$app/components/Modal";
@@ -18,10 +17,8 @@ type WorkflowListProps = {
   workflows: Workflow[];
 };
 
-const WorkflowList = ({ workflows: initialWorkflows }: WorkflowListProps) => {
-  const { showAlert } = useClientAlert();
+const WorkflowList = ({ workflows }: WorkflowListProps) => {
   const loggedInUser = useLoggedInUser();
-  const [workflows, setWorkflows] = React.useState(initialWorkflows);
   const canManageWorkflow = !!loggedInUser?.policies.workflow.create;
   const newWorkflowButton = (
     <Link href={Routes.new_workflow_path()} className="button accent" inert={!canManageWorkflow || undefined}>
@@ -69,14 +66,9 @@ const WorkflowList = ({ workflows: initialWorkflows }: WorkflowListProps) => {
                       onClick={() => {
                         setDeletingWorkflow({ ...deletingWorkflow, state: "deleting" });
                         router.delete(Routes.workflow_path(deletingWorkflow.id), {
-                          onSuccess: () => {
-                            setWorkflows(workflows.filter((workflow) => workflow.external_id !== deletingWorkflow.id));
+                          only: ["workflows", "flash"],
+                          onFinish: () => {
                             setDeletingWorkflow(null);
-                            showAlert("Workflow deleted!", "success");
-                          },
-                          onError: () => {
-                            setDeletingWorkflow(null);
-                            showAlert("Sorry, something went wrong. Please try again.", "error");
                           },
                         });
                       }}

@@ -806,7 +806,9 @@ Rails.application.routes.draw do
 
     # workflows
     resources :workflows, only: [:index, :new, :create, :edit, :update, :destroy] do
-      resource :emails, only: [:show, :update], controller: "workflows/emails"
+      scope module: 'workflows' do
+        resource :emails, only: [:show, :update]
+      end
     end
 
     # utm links

@@ -8,7 +8,6 @@
   <body id="<%= @body_id %>" class="<%= bclass.join(" ") %>" style="<%= params[:as_embed] && "background: transparent" %>">
     <div id="design-settings" data-settings="<%= custom_context[:design_settings].to_json %>" style="display: none;"></div>
     <div id="user-agent-info" data-settings="<%= custom_context[:user_agent_info].to_json %>" style="display: none;"></div>
-    <%= render("layouts/shared/flash") %>
     <%= content_for?(:content) ? yield(:content) : yield %>
     <% if content_for? :footer %>
       <footer>

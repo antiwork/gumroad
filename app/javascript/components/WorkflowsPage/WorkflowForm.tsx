@@ -1,4 +1,4 @@
-import { Link, router } from "@inertiajs/react";
+import { Link, useForm } from "@inertiajs/react";
 import cx from "classnames";
 import * as React from "react";
 
@@ -11,10 +11,8 @@ import {
   ProductOption,
   VariantOption,
 } from "$app/types/workflow";
-import { asyncVoid } from "$app/utils/promise";
 
 import { Button } from "$app/components/Button";
-import { useClientAlert } from "$app/components/ClientAlertProvider";
 import { Icon } from "$app/components/Icons";
 import { NumberInput } from "$app/components/NumberInput";
 import { TagInput } from "$app/components/TagInput";
@@ -89,7 +87,6 @@ type WorkflowFormProps = {
 
 const WorkflowForm = ({ context, workflow }: WorkflowFormProps) => {
   const wasPublishedPreviously = !!workflow?.first_published_at;
-  const { showAlert } = useClientAlert();
   const [formState, setFormState] = React.useState<WorkflowFormState>(() => {
     if (!workflow)
       return {
@@ -126,7 +123,7 @@ const WorkflowForm = ({ context, workflow }: WorkflowFormProps) => {
       fromCountry: workflow.bought_from ?? "",
     };
   });
-  const [isSaving, setIsSaving] = React.useState(false);
+  const form = useForm({});
   const [invalidFields, setInvalidFields] = React.useState<Set<keyof WorkflowFormState>>(() => new Set());
   const nameInputRef = React.useRef<HTMLInputElement>(null);
   const paidMoreThanInputRef = React.useRef<HTMLInputElement>(null);
@@ -202,7 +199,7 @@ const WorkflowForm = ({ context, workflow }: WorkflowFormProps) => {
     return invalidFieldNames.size === 0;
   };
 
-  const handleSave = asyncVoid(async (saveActionName: SaveActionName = "save") => {
+  const handleSave = (saveActionName: SaveActionName = "save") => {
     if (!validate()) return;
 
     const boughtItems = formState.bought.flatMap(
@@ -233,7 +230,8 @@ const WorkflowForm = ({ context, workflow }: WorkflowFormProps) => {
           { productIds: [], variantIds: [] },
         )
       : { productIds: [], variantIds: [] };
-    const payload = {
+
+    form.transform(() => ({
       name: formState.name,
       workflow_type: workflowType,
       workflow_trigger: workflowTrigger,
@@ -251,43 +249,16 @@ const WorkflowForm = ({ context, workflow }: WorkflowFormProps) => {
       affiliate_products: formState.trigger === "new_affiliate" ? formState.affiliatedProducts : [],
       send_to_past_customers: formState.sendToPastCustomers,
       save_action_name: saveActionName,
-    };
-
-    setIsSaving(true);
+    }));
 
     if (workflow) {
-      router.patch(Routes.workflow_path(workflow.external_id), payload, {
-        only: ["workflow"],
-        onSuccess: () => {
-          setIsSaving(false);
-          if (saveActionName === "save") {
-            showAlert("Changes saved!", "success");
-          } else {
-            showAlert(saveActionName === "save_and_publish" ? "Workflow published!" : "Unpublished!", "success");
-          }
-        },
-        onError: () => {
-          setIsSaving(false);
-          showAlert("Sorry, something went wrong. Please try again.", "error");
-        },
+      form.patch(Routes.workflow_path(workflow.external_id), {
+        only: ["workflow", "flash"],
       });
     } else {
-      router.post(Routes.workflows_path(), payload, {
-        onSuccess: () => {
-          setIsSaving(false);
-          if (saveActionName === "save") {
-            showAlert("Changes saved!", "success");
-          } else {
-            showAlert(saveActionName === "save_and_publish" ? "Workflow published!" : "Unpublished!", "success");
-          }
-        },
-        onError: () => {
-          setIsSaving(false);
-          showAlert("Sorry, something went wrong. Please try again.", "error");
-        },
-      });
+      form.post(Routes.workflows_path());
     }
-  });
+  };
 
   const abandonedCartButton = (
     <Button
@@ -310,18 +281,18 @@ const WorkflowForm = ({ context, workflow }: WorkflowFormProps) => {
       navigation={workflow ? <EditPageNavigation workflowExternalId={workflow.external_id} /> : null}
       actions={
         <>
-          <Link href={Routes.workflows_url()} className="button" inert={isSaving || undefined}>
+          <Link href={Routes.workflows_path()} className="button" inert={form.processing || undefined}>
             <Icon name="x-square" />
             Cancel
           </Link>
-          <Button color="primary" onClick={() => handleSave()} disabled={isSaving}>
+          <Button color="primary" onClick={() => handleSave()} disabled={form.processing}>
             {workflow ? "Save changes" : "Save and continue"}
           </Button>
           {workflow ? (
             <PublishButton
               isPublished={workflow.published}
               wasPublishedPreviously={wasPublishedPreviously}
-              isDisabled={isSaving}
+              isDisabled={form.processing}
               sendToPastCustomers={
                 formState.trigger === "abandoned_cart"
                   ? null
