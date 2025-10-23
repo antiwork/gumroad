@@ -9,30 +9,64 @@ import ChartTooltip from "./ChartTooltip";
 
 type ChurnDailyData = {
   date: string;
+  month: string;
+  month_index: number;
   customer_churn_rate: number;
   churned_subscribers: number;
   churned_mrr_cents: number;
 };
 
-export const ChurnChart = ({ data }: { data: ChurnDailyData[] }) => {
-  const dataPoints = React.useMemo(
-    () =>
-      data.map((item, index) => {
-        const date = parseISO(item.date);
-        const isFirst = index === 0;
-        const isLast = index === data.length - 1;
+type DataPoint = {
+  date: string;
+  dateFormatted: string;
+  churnRate: number;
+  cancellations: number;
+  revenueLost: number;
+  label: string;
+  dailyRates?: number[];
+};
 
-        return {
+export const ChurnChart = ({ data, aggregateBy }: { data: ChurnDailyData[]; aggregateBy: "daily" | "monthly" }) => {
+  const dataPoints = React.useMemo(() => {
+    const points: DataPoint[] = [];
+
+    data.forEach((item, index) => {
+      const date = parseISO(item.date);
+      const isFirst = index === 0;
+      const isLast = index === data.length - 1;
+      const label = isFirst || isLast ? format(date, "MMM d") : "";
+
+      if (aggregateBy === "monthly") {
+        const monthIndex = item.month_index;
+        if (!points[monthIndex]) {
+          points[monthIndex] = {
+            date: item.date,
+            dateFormatted: item.month,
+            churnRate: item.customer_churn_rate,
+            cancellations: item.churned_subscribers,
+            revenueLost: item.churned_mrr_cents,
+            label,
+          };
+        } else {
+          points[monthIndex].churnRate = Math.max(points[monthIndex].churnRate, item.customer_churn_rate);
+          points[monthIndex].cancellations += item.churned_subscribers;
+          points[monthIndex].revenueLost += item.churned_mrr_cents;
+        }
+      } else {
+        // Daily view
+        points.push({
           date: item.date,
           dateFormatted: format(date, "EEEE, MMMM do"),
           churnRate: item.customer_churn_rate,
           cancellations: item.churned_subscribers,
           revenueLost: item.churned_mrr_cents,
-          label: isFirst || isLast ? format(date, "MMM d") : "",
-        };
-      }),
-    [data],
-  );
+          label,
+        });
+      }
+    });
+
+    return points;
+  }, [data, aggregateBy]);
 
   const { tooltip, containerRef, dotRef, events } = useChartTooltip();
   const tooltipData = tooltip ? dataPoints[tooltip.index] : null;

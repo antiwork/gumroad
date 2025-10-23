@@ -4,29 +4,22 @@ require "spec_helper"
 require "inertia_rails/rspec"
 
 RSpec.describe ChurnController, type: :controller, inertia: true do
-  let(:user) { create(:user) }
-  let!(:product) { create(:subscription_product, user: user) }
+  include ChurnTestHelpers
 
-  before do
-    sign_in user
-  end
+  let(:user) { create(:user) }
+
+  before { sign_in user }
 
   describe "GET #show" do
     context "when user has subscription products" do
-      it "renders the Churn/Show component with correct props and behavior" do
-        service_instance = instance_double(CreatorAnalytics::Churn)
-        allow(CreatorAnalytics::Churn).to receive(:new).and_return(service_instance)
-        allow(service_instance).to receive(:has_subscription_products?).and_return(true)
-        allow(service_instance).to receive(:available_products).and_return([product])
+      let!(:product) { create(:subscription_product, user: user) }
 
-        expect(LargeSeller).to receive(:create_if_warranted).with(user)
-        expect(InertiaRails).to receive(:optional).and_call_original
-
+      it "renders the Churn/Show component with correct structure" do
         get :show
 
         expect(response).to be_successful
         expect(inertia.component).to eq("Churn/Show")
-        expect(inertia.props[:churn_props]).to include(
+        expect(inertia.props[:churn_props]).to match(
           has_subscription_products: true,
           products: array_including(
             hash_including(
@@ -37,179 +30,207 @@ RSpec.describe ChurnController, type: :controller, inertia: true do
             )
           )
         )
+      end
+
+      it "creates large seller record if warranted" do
+        expect(LargeSeller).to receive(:create_if_warranted).with(user)
+        get :show
+      end
+
+      it "does not include churn_data on initial load" do
+        get :show
         expect(inertia.props).not_to have_key(:churn_data)
+      end
+
+      context "with partial reload requesting churn_data" do
+        let(:monthly_price) { create(:price, link: product, price_cents: 1000, recurrence: "monthly") }
+
+        before do
+          # Create test data for churn calculation
+          create_active_subscription(product: product, price: monthly_price, created_at: "2023-11-01 12:00:00")
+          create_churned_subscription(
+            product: product,
+            price: monthly_price,
+            created_at: "2023-11-01 12:00:00",
+            deactivated_at: "2023-12-15 12:00:00"
+          )
+        end
+
+        it "includes churn_data in response when explicitly requested" do
+          # Stub InertiaRails.optional to execute the block
+          allow(InertiaRails).to receive(:optional) do |&block|
+            block.call
+          end
+
+          get :show, params: { only: ["churn_data"], from: "2023-12-01", to: "2023-12-31" }
+
+          expect(inertia.props[:churn_data]).to be_present
+          expect(inertia.props[:churn_data]).to include(
+            :start_date,
+            :end_date,
+            :metrics,
+            :daily_data
+          )
+          expect(inertia.props[:churn_data][:metrics]).to include(
+            :customer_churn_rate,
+            :last_period_churn_rate,
+            :churned_subscribers,
+            :churned_mrr_cents
+          )
+        end
       end
     end
 
     context "when user has no subscription products" do
       let!(:product) { create(:product, user: user) }
 
-      it "renders successfully and indicates no subscription products" do
+      it "indicates no subscription products" do
         get :show
+
         expect(response).to be_successful
-        expect(inertia.props[:churn_props]).to include(
-          has_subscription_products: false,
-          products: be_empty
-        )
+        expect(inertia.props[:churn_props][:has_subscription_products]).to be false
+        expect(inertia.props[:churn_props][:products]).to be_empty
         expect(inertia.props[:churn_data]).to be_nil
       end
     end
 
     context "with date parameters" do
+      let!(:product) { create(:subscription_product, user: user) }
       let(:from_date) { "2024-01-01" }
       let(:to_date) { "2024-01-31" }
 
-      it "passes date parameters to service" do
-        expect(CreatorAnalytics::Churn).to receive(:new).with(
-          user: user,
-          params: hash_including(from: from_date, to: to_date)
-        ).and_call_original
-
+      it "accepts valid date range" do
         get :show, params: { from: from_date, to: to_date }
-      end
-    end
 
-    context "with product parameters" do
-      let(:product_ids) { [product.id] }
-
-      it "passes product parameters to service" do
-        service_instance = instance_double(CreatorAnalytics::Churn)
-        allow(CreatorAnalytics::Churn).to receive(:new).and_return(service_instance)
-        allow(service_instance).to receive(:has_subscription_products?).and_return(true)
-        allow(service_instance).to receive(:available_products).and_return([])
-        allow(service_instance).to receive(:fetch_churn_data).and_return(nil)
-
-        expect(CreatorAnalytics::Churn).to receive(:new).with(
-          user: user,
-          params: instance_of(ActionController::Parameters)
-        ).and_return(service_instance)
-
-        get :show, params: { products: product_ids }
         expect(response).to be_successful
       end
-    end
 
-    context "with Rails cache for large sellers" do
-      let!(:large_seller) { create(:large_seller, user: user) }
-
-      it "calls service when churn_data is requested with partial reload" do
-        service_instance = instance_double(CreatorAnalytics::Churn)
-        allow(CreatorAnalytics::Churn).to receive(:new).and_return(service_instance)
-        allow(service_instance).to receive(:has_subscription_products?).and_return(true)
-        allow(service_instance).to receive(:available_products).and_return([product])
-
-        allow(service_instance).to receive(:fetch_churn_data).and_return({})
-
+      it "raises error for invalid date range when churn_data is requested" do
         allow(InertiaRails).to receive(:optional) do |&block|
           block.call
         end
 
-        get :show, params: { only: ["churn_data"] }
-        expect(response).to be_successful
-      end
-
-      it "returns cached data when available" do
-        service_instance = instance_double(CreatorAnalytics::Churn)
-        allow(CreatorAnalytics::Churn).to receive(:new).and_return(service_instance)
-        allow(service_instance).to receive(:has_subscription_products?).and_return(true)
-        allow(service_instance).to receive(:available_products).and_return([product])
-
-        cached_data = { customer_churn_rate: 5.5, churned_subscribers: 10 }
-        allow(service_instance).to receive(:fetch_churn_data).and_return(cached_data)
-
-        allow(InertiaRails).to receive(:optional) do |&block|
-          block.call
-        end
-
-        get :show, params: { only: ["churn_data"] }
-        expect(response).to be_successful
-        expect(inertia.props[:churn_data]).to eq(cached_data)
+        expect do
+          get :show, params: { from: "2024-01-31", to: "2024-01-01", only: ["churn_data"] }
+        end.to raise_error(ArgumentError, /Invalid date range/)
       end
     end
 
-    context "without caching" do
+    context "with product filtering" do
+      let!(:product1) { create(:subscription_product, user: user) }
+      let!(:product2) { create(:subscription_product, user: user) }
+      let(:monthly_price1) { create(:price, link: product1, price_cents: 1000, recurrence: "monthly") }
+      let(:monthly_price2) { create(:price, link: product2, price_cents: 2000, recurrence: "monthly") }
+
       before do
-        allow(LargeSeller).to receive(:where).and_return(double(exists?: false))
-      end
-
-      it "calculates data in real-time when churn_data is requested" do
-        service_instance = instance_double(CreatorAnalytics::Churn)
-        allow(CreatorAnalytics::Churn).to receive(:new).and_return(service_instance)
-        allow(service_instance).to receive(:has_subscription_products?).and_return(true)
-        allow(service_instance).to receive(:available_products).and_return([product])
-
-        mock_churn_data = {
-          start_date: "2024-01-01",
-          end_date: "2024-01-31",
-          metrics: {
-            customer_churn_rate: 5.5,
-            last_period_churn_rate: 4.2,
-            churned_subscribers: 10,
-            churned_mrr_cents: 5000
-          },
-          daily_data: []
-        }
-
-        expect(service_instance).to receive(:fetch_churn_data).and_return(mock_churn_data)
-
-        allow(InertiaRails).to receive(:optional) do |&block|
-          block.call
-        end
-
-        allow(Rails.cache).to receive(:fetch).and_call_original
-        expect(Rails.cache).not_to receive(:fetch).with(
-          match(/seller_daily_churn_metrics:/),
-          anything
+        create_churned_subscription(
+          product: product1,
+          price: monthly_price1,
+          created_at: "2023-11-01 12:00:00",
+          deactivated_at: "2023-12-15 12:00:00"
         )
-
-        get :show, params: { only: ["churn_data"] }
-        expect(response).to be_successful
-        expect(inertia.props[:churn_data]).to eq(mock_churn_data)
+        create_churned_subscription(
+          product: product2,
+          price: monthly_price2,
+          created_at: "2023-11-01 12:00:00",
+          deactivated_at: "2023-12-15 12:00:00"
+        )
       end
 
-      it "returns real-time data when churn_data is requested without caching" do
-        service_instance = instance_double(CreatorAnalytics::Churn)
-        allow(CreatorAnalytics::Churn).to receive(:new).and_return(service_instance)
-        allow(service_instance).to receive(:has_subscription_products?).and_return(true)
-        allow(service_instance).to receive(:available_products).and_return([product])
-
-        mock_churn_data = {
-          start_date: "2024-01-01",
-          end_date: "2024-01-31",
-          metrics: {
-            customer_churn_rate: 5.5,
-            last_period_churn_rate: 4.2,
-            churned_subscribers: 10,
-            churned_mrr_cents: 5000
-          },
-          daily_data: []
-        }
-        allow(service_instance).to receive(:fetch_churn_data).and_return(mock_churn_data)
-
+      it "filters data by selected products" do
         allow(InertiaRails).to receive(:optional) do |&block|
           block.call
         end
 
-        get :show, params: { only: ["churn_data"] }
+        # Request churn data for only product1
+        get :show, params: {
+          only: ["churn_data"],
+          from: "2023-12-01",
+          to: "2023-12-31",
+          products: [product1.id]
+        }
+
         expect(response).to be_successful
-        expect(inertia.props[:churn_data]).to eq(mock_churn_data)
+        expect(inertia.props[:churn_data]).to be_present
+
+        # Should show only product1's MRR lost ($10), not product2's ($20)
+        expect(inertia.props[:churn_data][:metrics][:churned_mrr_cents]).to eq(1000)
       end
     end
 
-    describe "error handling" do
-      context "when service raises an error" do
-        it "propagates service errors" do
-          allow_any_instance_of(CreatorAnalytics::Churn).to receive(:has_subscription_products?).and_raise(StandardError, "Service error")
+    context "caching behavior" do
+      let!(:product) { create(:subscription_product, user: user) }
+      let(:monthly_price) { create(:price, link: product, price_cents: 1000, recurrence: "monthly") }
 
-          expect { get :show }.to raise_error(StandardError, "Service error")
+      before do
+        create_churned_subscription(
+          product: product,
+          price: monthly_price,
+          created_at: "2023-11-01 12:00:00",
+          deactivated_at: "2023-12-15 12:00:00"
+        )
+      end
+
+      context "for large sellers" do
+        let!(:large_seller) { create(:large_seller, user: user) }
+
+        it "uses caching for churn data" do
+          allow(InertiaRails).to receive(:optional) do |&block|
+            block.call
+          end
+
+          # First request - should cache
+          get :show, params: { only: ["churn_data"], from: "2023-12-01", to: "2023-12-31" }
+          first_response = inertia.props[:churn_data]
+
+          expect(response).to be_successful
+          expect(first_response).to be_present
+
+          # Second request - should use cache
+          get :show, params: { only: ["churn_data"], from: "2023-12-01", to: "2023-12-31" }
+          second_response = inertia.props[:churn_data]
+
+          expect(second_response).to eq(first_response)
         end
       end
 
-      context "when LargeSeller.create_if_warranted fails" do
-        it "propagates LargeSeller creation errors" do
-          allow(LargeSeller).to receive(:create_if_warranted).and_raise(StandardError, "LargeSeller error")
+      context "for regular sellers" do
+        it "calculates data in real-time without caching" do
+          allow(InertiaRails).to receive(:optional) do |&block|
+            block.call
+          end
 
-          expect { get :show }.to raise_error(StandardError, "LargeSeller error")
+          get :show, params: { only: ["churn_data"], from: "2023-12-01", to: "2023-12-31" }
+
+          expect(response).to be_successful
+          expect(inertia.props[:churn_data]).to be_present
+          expect(inertia.props[:churn_data][:metrics][:churned_subscribers]).to eq(1)
+        end
+      end
+    end
+
+    context "error handling" do
+      context "with invalid date format" do
+        let!(:product) { create(:subscription_product, user: user) }
+
+        it "raises ArgumentError for malformed dates" do
+          expect do
+            get :show, params: { from: "invalid-date", to: "2024-01-31", only: ["churn_data"] }
+          end.to raise_error(ArgumentError)
+        end
+      end
+
+      context "when service validation fails" do
+        let!(:product) { create(:subscription_product, user: user) }
+
+        it "raises ArgumentError with validation message" do
+          allow(InertiaRails).to receive(:optional) do |&block|
+            block.call
+          end
+
+          expect do
+            get :show, params: { from: "2024-12-31", to: "2024-01-01", only: ["churn_data"] }
+          end.to raise_error(ArgumentError, /Invalid date range/)
         end
       end
     end

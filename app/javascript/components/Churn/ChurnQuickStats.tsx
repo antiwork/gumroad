@@ -2,14 +2,14 @@ import * as React from "react";
 
 import { formatPriceCentsWithCurrencySymbol } from "$app/utils/currency";
 
+import { Stats } from "$app/components/Stats";
+
 type ChurnMetrics = {
   customer_churn_rate: number;
   last_period_churn_rate: number;
   churned_subscribers: number;
   churned_mrr_cents: number;
 };
-
-import { Stats } from "$app/components/Stats";
 
 const ChurnQuickStats = ({ metrics }: { metrics: ChurnMetrics | undefined }) => {
   const churnRate = metrics ? metrics.customer_churn_rate : 0;

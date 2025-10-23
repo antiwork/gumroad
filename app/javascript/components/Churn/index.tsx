@@ -2,6 +2,16 @@ import { router } from "@inertiajs/react";
 import { lightFormat } from "date-fns";
 import * as React from "react";
 
+import { AnalyticsLayout } from "$app/components/Analytics/AnalyticsLayout";
+import { ProductsPopover } from "$app/components/Analytics/ProductsPopover";
+import { useAnalyticsDateRange } from "$app/components/Analytics/useAnalyticsDateRange";
+import { ChurnChart } from "$app/components/Churn/ChurnChart";
+import ChurnQuickStats from "$app/components/Churn/ChurnQuickStats";
+import { DateRangePicker } from "$app/components/DateRangePicker";
+import { Progress } from "$app/components/Progress";
+
+import placeholder from "$assets/images/placeholders/sales.png";
+
 export type ChurnData = {
   start_date: string;
   end_date: string;
@@ -13,21 +23,13 @@ export type ChurnData = {
   };
   daily_data: {
     date: string;
+    month: string;
+    month_index: number;
     customer_churn_rate: number;
     churned_subscribers: number;
     churned_mrr_cents: number;
   }[];
 };
-
-import { AnalyticsLayout } from "$app/components/Analytics/AnalyticsLayout";
-import { ProductsPopover } from "$app/components/Analytics/ProductsPopover";
-import { useAnalyticsDateRange } from "$app/components/Analytics/useAnalyticsDateRange";
-import { ChurnChart } from "$app/components/Churn/ChurnChart";
-import { ChurnDateRangePicker } from "$app/components/Churn/ChurnDateRangePicker";
-import ChurnQuickStats from "$app/components/Churn/ChurnQuickStats";
-import { Progress } from "$app/components/Progress";
-
-import placeholder from "$assets/images/placeholders/sales.png";
 
 export type Product = {
   id: string;
@@ -50,6 +52,7 @@ const Churn = ({ churn_props, churn_data }: ChurnProps) => {
   const [products, setProducts] = React.useState(
     initialProducts.map((product) => ({ ...product, selected: product.alive })),
   );
+  const [aggregateBy, setAggregateBy] = React.useState<"daily" | "monthly">("daily");
 
   const hasContent = has_subscription_products;
 
@@ -81,8 +84,16 @@ const Churn = ({ churn_props, churn_data }: ChurnProps) => {
       actions={
         hasContent ? (
           <>
+            <select
+              aria-label="Aggregate by"
+              onChange={(e) => setAggregateBy(e.target.value === "daily" ? "daily" : "monthly")}
+              className="w-auto"
+            >
+              <option value="daily">Daily</option>
+              <option value="monthly">Monthly</option>
+            </select>
             <ProductsPopover products={products} setProducts={setProducts} />
-            <ChurnDateRangePicker {...dateRange} />
+            <DateRangePicker {...dateRange} />
           </>
         ) : null
       }
@@ -91,7 +102,7 @@ const Churn = ({ churn_props, churn_data }: ChurnProps) => {
         <div className="space-y-8 p-4 md:p-8">
           <ChurnQuickStats metrics={churn_data?.metrics} />
           {churn_data ? (
-            <ChurnChart data={churn_data.daily_data} />
+            <ChurnChart data={churn_data.daily_data} aggregateBy={aggregateBy} />
           ) : (
             <div className="input">
               <Progress width="1em" />
