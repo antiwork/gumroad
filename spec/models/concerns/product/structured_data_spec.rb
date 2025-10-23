@@ -202,7 +202,7 @@ describe Product::StructuredData do
 
           context "with MOBI file" do
             let!(:mobi_file) do
-              create(:product_file, link: product, filetype: "mobi", url: "https://s3.amazonaws.com/gumroad-specs/test.mobi")
+              create(:product_file, link: product, filetype: "mobi", url: "#{AWS_S3_ENDPOINT}/#{S3_BUCKET}/test.mobi")
             end
 
             it "includes workExample for the MOBI" do

@@ -45,36 +45,36 @@ describe WithFileProperties do
     end
   end
 
-  { audio: { fake_uri: "https://s3.amazonaws.com/gumroad-specs/specs/magic.mp3",
+  { audio: { fake_uri: "#{AWS_S3_ENDPOINT}/#{S3_BUCKET}/specs/magic.mp3",
              filename: "magic.mp3", filegroup: "audio", constraints: { size: 466_312, duration: 46, bitrate: 128 } },
-    exe: { fake_uri: "https://s3.amazonaws.com/gumroad-specs/specs/test.exe",
+    exe: { fake_uri: "#{AWS_S3_ENDPOINT}/#{S3_BUCKET}/specs/test.exe",
            filename: "test.exe", filegroup: "executable", constraints: { size: 118 } },
-    archive: { fake_uri: "https://s3.amazonaws.com/gumroad-specs/specs/test.zip",
+    archive: { fake_uri: "#{AWS_S3_ENDPOINT}/#{S3_BUCKET}/specs/test.zip",
                filename: "test.zip", filegroup: "archive", constraints: { size: 67_852 } },
-    psd: { fake_uri: "https://s3.amazonaws.com/gumroad-specs/specs/index.psd",
+    psd: { fake_uri: "#{AWS_S3_ENDPOINT}/#{S3_BUCKET}/specs/index.psd",
            filename: "index.psd", filegroup: "image", constraints: { size: 132_284 } },
-    text: { fake_uri: "https://s3.amazonaws.com/gumroad-specs/specs/blah.txt",
+    text: { fake_uri: "#{AWS_S3_ENDPOINT}/#{S3_BUCKET}/specs/blah.txt",
             filename: "blah.txt", filegroup: "document", constraints: { size: 52 } },
-    video: { fake_uri: "https://s3.amazonaws.com/gumroad-specs/specs/small.m4v",
+    video: { fake_uri: "#{AWS_S3_ENDPOINT}/#{S3_BUCKET}/specs/small.m4v",
              filename: "small.m4v", filegroup: "video",
              constraints: { size: 208_857, width: 320, height: 240, duration: 13, framerate: 60, bitrate: 125_779 } },
-    image: { fake_uri: "https://s3.amazonaws.com/gumroad-specs/specs/kFDzu.png",
+    image: { fake_uri: "#{AWS_S3_ENDPOINT}/#{S3_BUCKET}/specs/kFDzu.png",
              filename: "kFDzu.png", filegroup: "image", constraints: { size: 47_684, width: 1633, height: 512 } },
-    pdf_document: { fake_uri: "https://s3.amazonaws.com/gumroad-specs/specs/billion-dollar-company-chapter-0.pdf",
+    pdf_document: { fake_uri: "#{AWS_S3_ENDPOINT}/#{S3_BUCKET}/specs/billion-dollar-company-chapter-0.pdf",
                     filename: "billion-dollar-company-chapter-0.pdf", filegroup: "document",
                     constraints: { size: 111_237, pagelength: 6 }, stubbing_method: :stub_for_pdf },
-    word_document_docx: { fake_uri: "https://s3.amazonaws.com/gumroad-specs/specs/sample_doc.docx",
+    word_document_docx: { fake_uri: "#{AWS_S3_ENDPOINT}/#{S3_BUCKET}/specs/sample_doc.docx",
                           filename: "sample_doc.docx", filegroup: "document",
                           constraints: { size: 156_126, pagelength: 4 } },
-    word_document: { fake_uri: "https://s3.amazonaws.com/gumroad-specs/specs/test_doc.doc",
+    word_document: { fake_uri: "#{AWS_S3_ENDPOINT}/#{S3_BUCKET}/specs/test_doc.doc",
                      filename: "test_doc.doc", filegroup: "document", constraints: { size: 28_672, pagelength: 2 },
                      stubbing_method: :stub_for_word_doc },
-    epub: { fake_uri: "https://s3.amazonaws.com/gumroad-specs/specs/sample.epub",
+    epub: { fake_uri: "#{AWS_S3_ENDPOINT}/#{S3_BUCKET}/specs/sample.epub",
             filename: "test.epub", filegroup: "document", constraints: { size: 881_436, pagelength: 13 } },
-    powerpoint: { fake_uri: "https://s3.amazonaws.com/gumroad-specs/specs/test.ppt",
+    powerpoint: { fake_uri: "#{AWS_S3_ENDPOINT}/#{S3_BUCKET}/specs/test.ppt",
                   filename: "test.ppt", filegroup: "document",
                   constraints: { size: 954_368, pagelength: 7 }, stubbing_method: :stub_for_ppt },
-    powerpoint_pptx: { fake_uri: "https://s3.amazonaws.com/gumroad-specs/specs/test.pptx",
+    powerpoint_pptx: { fake_uri: "#{AWS_S3_ENDPOINT}/#{S3_BUCKET}/specs/test.pptx",
                        filename: "test.pptx", filegroup: "document",
                        constraints: { size: 1_346_541, pagelength: 2 } } }.each do |file_type, properties|
     describe "#{file_type} files" do
@@ -107,7 +107,7 @@ describe WithFileProperties do
 
   describe "videos" do
     before do
-      @video_file = create(:product_file, url: "https://s3.amazonaws.com/gumroad-specs/specs/sample.mov")
+      @video_file = create(:product_file, url: "#{AWS_S3_ENDPOINT}/#{S3_BUCKET}/specs/sample.mov")
       @file_path = file_fixture("sample.mov").to_s
     end
 
@@ -154,7 +154,7 @@ describe WithFileProperties do
 
   describe "epubs" do
     before do
-      @epub_file = create(:product_file, url: "https://s3.amazonaws.com/gumroad-specs/attachment/sample.epub")
+      @epub_file = create(:product_file, url: "#{AWS_S3_ENDPOINT}/#{S3_BUCKET}/attachment/sample.epub")
       file_path = file_fixture("sample.epub")
       @epub_file.assign_epub_document_attributes(file_path)
     end
@@ -187,7 +187,7 @@ describe WithFileProperties do
   describe "very large files" do
     before do
       @product_file = create(:product_file)
-      @product_file.url = "https://s3.amazonaws.com/gumroad-specs/some-video-file.mov"
+      @product_file.url = "#{AWS_S3_ENDPOINT}/#{S3_BUCKET}/some-video-file.mov"
 
       s3_double = double
       allow(s3_double).to receive(:content_length).and_return(2_000_000_000)
@@ -207,7 +207,7 @@ describe WithFileProperties do
   describe "long file names" do
     before do
       @product_file = create(:product_file)
-      @product_file.url = "https://s3.amazonaws.com/gumroad-specs/attachments/5635138219475/1dc6d2b8f68c4da9b944e8930602057c/original/SET GS สปาหน้าเด็ก หน้าใส ไร้สิว อ่อนเยาว์ สวย เด้ง.jpg"
+      @product_file.url = "#{AWS_S3_ENDPOINT}/#{S3_BUCKET}/attachments/5635138219475/1dc6d2b8f68c4da9b944e8930602057c/original/SET GS สปาหน้าเด็ก หน้าใส ไร้สิว อ่อนเยาว์ สวย เด้ง.jpg"
 
       s3_double = double
       allow(s3_double).to receive(:content_length).and_return(1000)
@@ -226,7 +226,7 @@ describe WithFileProperties do
   end
 
   it "raises a descriptive exception if the S3 object doesn't exist" do
-    file = create(:product_file, url: "https://s3.amazonaws.com/gumroad-specs/attachments/missing.txt")
+    file = create(:product_file, url: "#{AWS_S3_ENDPOINT}/#{S3_BUCKET}/attachments/missing.txt")
 
     expect do
       file.analyze
@@ -242,7 +242,7 @@ describe WithFileProperties do
         content_type: "application/pdf"
       )
 
-      file = create(:product_file, url: "https://s3.amazonaws.com/gumroad-specs/#{s3_directory}/incorrect-file-name.pdf")
+      file = create(:product_file, url: "#{AWS_S3_ENDPOINT}/#{S3_BUCKET}/#{s3_directory}/incorrect-file-name.pdf")
       file.analyze
       file.reload
 

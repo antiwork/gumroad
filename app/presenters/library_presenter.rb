@@ -41,8 +41,8 @@ class LibraryPresenter
       next if purchase.link.is_recurring_billing && !purchase.subscription.alive?
 
       product = purchase.link
-      product_seller_data[product.user.id] ||= product.user.name && product.user.username && {
-        name: product.user.name,
+      product_seller_data[product.user.id] ||= product.user.username && {
+        name: product.user.name || product.user.username,
         profile_url: product.user.profile_url(recommended_by: "library"),
         avatar_url: product.user.avatar_url
       }
