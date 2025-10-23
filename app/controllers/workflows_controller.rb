@@ -6,6 +6,11 @@ class WorkflowsController < Sellers::BaseController
 
   layout "inertia"
 
+  FLASH_CHANGES_SAVED = "Changes saved!"
+  FLASH_WORKFLOW_PUBLISHED = "Workflow published!"
+  FLASH_WORKFLOW_UNPUBLISHED = "Unpublished!"
+  FLASH_WORKFLOW_DELETED = "Workflow deleted!"
+
   inertia_share do
     parent_shared_data = RenderingExtension.custom_context(view_context).merge(
       current_user: current_user_props(current_user, impersonated_user),
@@ -20,7 +25,9 @@ class WorkflowsController < Sellers::BaseController
     }
 
     if @workflow
+      workflow_presenter = WorkflowPresenter.new(seller: current_seller, workflow: @workflow)
       workflow_shared_props[:workflow] = -> { workflow_presenter.workflow_props }
+      workflow_shared_props[:context] = -> { workflow_presenter.workflow_form_context_props }
     end
 
     parent_shared_data.merge(workflow_shared_props)
@@ -44,9 +51,9 @@ class WorkflowsController < Sellers::BaseController
 
     success, errors = save_workflow
     if success
-      redirect_to workflow_emails_path(@workflow.external_id), notice: "Changes saved!", status: :see_other
+      redirect_to workflow_emails_path(@workflow.external_id), notice: FLASH_CHANGES_SAVED, status: :see_other
     else
-      redirect_to new_workflow_path, inertia: { errors: errors }
+      redirect_to new_workflow_path, inertia: { errors: errors }, status: :see_other
     end
   end
 
@@ -57,13 +64,21 @@ class WorkflowsController < Sellers::BaseController
   def update
     success, errors = save_workflow
     if success
+      notice_message = case workflow_params[:save_action_name]
+                      when "save_and_publish"
+                        FLASH_WORKFLOW_PUBLISHED
+                      when "unpublish"
+                        FLASH_WORKFLOW_UNPUBLISHED
+                      else
+                        FLASH_CHANGES_SAVED
+                      end
+
       # For publish/unpublish actions, stay on edit page; otherwise go to emails page
-      if ["save_and_publish", "unpublish"].include?(workflow_params[:save_action_name])
-        notice_message = workflow_params[:save_action_name] == "save_and_publish" ? "Workflow published!" : "Unpublished!"
-        redirect_to edit_workflow_path(@workflow.external_id), notice: notice_message, status: :see_other
-      else
-        redirect_to workflow_emails_path(@workflow.external_id), notice: "Changes saved!", status: :see_other
-      end
+      redirect_path = ["save_and_publish", "unpublish"].include?(workflow_params[:save_action_name]) ?
+                      edit_workflow_path(@workflow.external_id) :
+                      workflow_emails_path(@workflow.external_id)
+
+      redirect_to redirect_path, notice: notice_message, status: :see_other
     else
       redirect_to edit_workflow_path(@workflow.external_id), inertia: { errors: errors }, status: :see_other
     end
@@ -71,7 +86,7 @@ class WorkflowsController < Sellers::BaseController
 
   def destroy
     @workflow.mark_deleted!
-    redirect_to workflows_path, notice: "Workflow deleted!", status: :see_other
+    redirect_to workflows_path, notice: FLASH_WORKFLOW_DELETED, status: :see_other
   end
 
 

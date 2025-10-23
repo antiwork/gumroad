@@ -5,10 +5,10 @@ import { WorkflowFormContext } from "$app/types/workflow";
 
 import WorkflowForm from "$app/components/WorkflowsPage/WorkflowForm";
 
-function WorkflowNew() {
+function WorkflowsNew() {
   const { context } = usePage<{ context: WorkflowFormContext }>().props;
 
   return <WorkflowForm context={context} />;
 }
 
-export default WorkflowNew;
+export default WorkflowsNew;

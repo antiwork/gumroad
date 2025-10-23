@@ -5,10 +5,10 @@ import { Workflow, WorkflowFormContext } from "$app/types/workflow";
 
 import WorkflowEmails from "$app/components/WorkflowsPage/WorkflowEmails";
 
-function WorkflowEmailsPage() {
+function WorkflowsEmailsIndex() {
   const { workflow, context } = usePage<{ workflow: Workflow; context: WorkflowFormContext }>().props;
 
   return <WorkflowEmails workflow={workflow} context={context} />;
 }
 
-export default WorkflowEmailsPage;
+export default WorkflowsEmailsIndex;

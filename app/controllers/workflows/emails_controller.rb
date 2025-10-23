@@ -6,6 +6,10 @@ class Workflows::EmailsController < Sellers::BaseController
 
   layout "inertia"
 
+  FLASH_CHANGES_SAVED = "Changes saved!"
+  FLASH_WORKFLOW_PUBLISHED = "Workflow published!"
+  FLASH_WORKFLOW_UNPUBLISHED = "Workflow unpublished!"
+
   inertia_share do
     RenderingExtension.custom_context(view_context).merge(
       current_user: current_user_props(current_user, impersonated_user),
@@ -31,11 +35,11 @@ class Workflows::EmailsController < Sellers::BaseController
       # Determine the flash message based on save_action_name
       flash_message = case installments_params[:save_action_name]
       when "save_and_publish"
-        "Workflow published!"
+        FLASH_WORKFLOW_PUBLISHED
       when "save_and_unpublish"
-        "Workflow unpublished!"
+        FLASH_WORKFLOW_UNPUBLISHED
       else
-        "Changes saved!"
+        FLASH_CHANGES_SAVED
       end
 
       workflow_presenter = WorkflowPresenter.new(seller: current_seller, workflow: @workflow.reload)
