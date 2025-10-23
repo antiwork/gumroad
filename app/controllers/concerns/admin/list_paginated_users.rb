@@ -4,7 +4,7 @@ module Admin::ListPaginatedUsers
   extend ActiveSupport::Concern
   include Pagy::Backend
 
-  RECORDS_PER_PAGE = 25
+  RECORDS_PER_PAGE = 5
 
   private
 
