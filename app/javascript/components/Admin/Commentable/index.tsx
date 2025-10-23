@@ -20,12 +20,9 @@ const AdminCommentableComments = ({ count, endpoint, commentableType }: AdminCom
     data: comments,
     isLoading,
     setData: setComments,
-    fetchData: fetchComments,
     hasMore,
-    pagination,
-    setHasMore,
     hasLoaded,
-    setHasLoaded,
+    fetchNextPage,
   } = useLazyPaginatedFetch<CommentProps[]>([], {
     url: endpoint,
     responseParser: (data: unknown) => {
@@ -33,35 +30,18 @@ const AdminCommentableComments = ({ count, endpoint, commentableType }: AdminCom
       return result.comments;
     },
     mode: "append",
+    fetchOnMount: open,
   });
 
   const [commentsCount, setCommentsCount] = React.useState(count ?? 0);
 
-  const resetComments = () => {
-    setComments([]);
-    setCommentsCount(pagination.count);
-    setHasLoaded(false);
-    setHasMore(true);
-  };
-
   const onToggle = (e: React.MouseEvent<HTMLDetailsElement>) => {
     setOpen(e.currentTarget.open);
-    if (e.currentTarget.open) {
-      void fetchComments();
-    } else {
-      resetComments();
-    }
   };
 
   const appendComment = (comment: CommentProps) => {
     setComments([comment, ...comments]);
     setCommentsCount(commentsCount + 1);
-  };
-
-  const fetchNextPage = () => {
-    if (pagination.next) {
-      void fetchComments({ page: pagination.next });
-    }
   };
 
   return (

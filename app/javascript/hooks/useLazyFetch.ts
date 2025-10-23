@@ -6,7 +6,7 @@ import { showAlert } from "$app/components/server-components/Alert";
 interface UseLazyFetchOptions<T> {
   url: string;
   responseParser: (data: unknown) => T;
-  hasMore?: boolean;
+  fetchOnMount?: boolean;
 }
 
 interface UseLazyFetchResult<T> {
@@ -35,7 +35,6 @@ type PaginatedResponse = {
 const useLazyFetchCore = <T>(
   initialData: T,
   options: UseLazyFetchOptions<T>,
-  shouldFetchCondition: (hasLoaded: boolean) => boolean,
   onSuccess?: (responseData: unknown, parsedData: T) => void,
 ) => {
   const [data, setData] = React.useState<T>(initialData);
@@ -44,8 +43,6 @@ const useLazyFetchCore = <T>(
 
   const fetchData = React.useCallback(
     async (queryParams: QueryParams = {}) => {
-      if (!shouldFetchCondition(hasLoaded)) return;
-
       setIsLoading(true);
 
       try {
@@ -73,7 +70,7 @@ const useLazyFetchCore = <T>(
         setIsLoading(false);
       }
     },
-    [options.url, options.responseParser, hasLoaded, shouldFetchCondition],
+    [options.url, options.responseParser, onSuccess],
   );
 
   return {
@@ -87,13 +84,29 @@ const useLazyFetchCore = <T>(
   };
 };
 
-export const useLazyFetch = <T>(initialData: T, options: UseLazyFetchOptions<T>): UseLazyFetchResult<T> =>
-  useLazyFetchCore(initialData, options, (hasLoaded) => !hasLoaded);
+const useFetchOnMount = (options: { fetchOnMount?: boolean }, hasLoaded: boolean, fetchFn: () => Promise<void>) => {
+  const fetchOnMount = options.fetchOnMount ?? true;
+
+  React.useEffect(() => {
+    if (fetchOnMount && !hasLoaded) {
+      void fetchFn();
+    }
+  }, [fetchOnMount, hasLoaded, fetchFn]);
+};
+
+export const useLazyFetch = <T>(initialData: T, options: UseLazyFetchOptions<T>): UseLazyFetchResult<T> => {
+  const core = useLazyFetchCore(initialData, options);
+
+  useFetchOnMount(options, core.hasLoaded, core.fetchData);
+
+  return core;
+};
 
 type UseLazyPaginatedFetchResult<T> = UseLazyFetchResult<T> & {
   hasMore: boolean;
   setHasMore: (hasMore: boolean) => void;
   pagination: Pagination;
+  fetchNextPage: () => Promise<void>;
 };
 
 interface UseLazyPaginatedFetchOptions<T> extends UseLazyFetchOptions<T> {
@@ -128,7 +141,6 @@ export const useLazyPaginatedFetch = <T>(
   const core = useLazyFetchCore(
     initialData,
     options,
-    (hasLoaded) => !hasLoaded || hasMore,
     (responseData, parsedData) => {
       const { pagination: paginationData } = cast<PaginatedResponse>(responseData);
       setPagination(paginationData);
@@ -151,6 +163,15 @@ export const useLazyPaginatedFetch = <T>(
     [core.fetchData, perPage],
   );
 
+  useFetchOnMount(options, core.hasLoaded, fetchData);
+
+  const fetchNextPage = React.useCallback((): Promise<void> => {
+    if (!hasMore || !pagination.next) {
+      return Promise.resolve();
+    }
+    return fetchData({ page: pagination.next });
+  }, [hasMore, pagination.next, fetchData]);
+
   return {
     ...core,
     data: currentData,
@@ -159,5 +180,6 @@ export const useLazyPaginatedFetch = <T>(
     setHasMore,
     pagination,
     fetchData,
+    fetchNextPage,
   };
 };
