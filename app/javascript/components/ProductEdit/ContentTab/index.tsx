@@ -43,7 +43,7 @@ import { S3UploadConfigProvider, useS3UploadConfig } from "$app/components/S3Upl
 import { Separator } from "$app/components/Separator";
 import { showAlert } from "$app/components/server-components/Alert";
 import { EntityInfo } from "$app/components/server-components/DownloadPage/Layout";
-import { PageList, PageListLayout, PageListTab } from "$app/components/server-components/DownloadPage/PageListLayout";
+import { PageList, PageListLayout, PageListItem } from "$app/components/server-components/DownloadPage/PageListLayout";
 import { TestimonialSelectModal } from "$app/components/TestimonialSelectModal";
 import { FileEmbedGroup } from "$app/components/TiptapExtensions/FileEmbedGroup";
 import { FileUpload } from "$app/components/TiptapExtensions/FileUpload";
@@ -753,7 +753,7 @@ const ContentTabContent = ({ selectedVariantId }: { selectedVariantId: string | 
                   >
                     <>
                       {isDesktop ? null : (
-                        <PageListTab asChild>
+                        <PageListItem asChild>
                           <button onClick={() => setPagesExpanded(!pagesExpanded)}>
                             <span className="flex-1">
                               <strong>Table of contents:</strong> {titleWithFallback(selectedPage?.title)}
@@ -761,7 +761,7 @@ const ContentTabContent = ({ selectedVariantId }: { selectedVariantId: string | 
 
                             <Icon name={pagesExpanded ? "outline-cheveron-down" : "outline-cheveron-right"} />
                           </button>
-                        </PageListTab>
+                        </PageListItem>
                       )}
                       {isDesktop || pagesExpanded ? (
                         <>
@@ -815,7 +815,7 @@ const ContentTabContent = ({ selectedVariantId }: { selectedVariantId: string | 
                               />
                             </WithTooltip>
                           ) : null}
-                          <PageListTab asChild>
+                          <PageListItem asChild>
                             <button
                               className="add-page"
                               onClick={(e) => {
@@ -826,7 +826,7 @@ const ContentTabContent = ({ selectedVariantId }: { selectedVariantId: string | 
                               <Icon name="plus" />
                               <span className="flex-1">Add another page</span>
                             </button>
-                          </PageListTab>
+                          </PageListItem>
                         </>
                       ) : null}
                     </>

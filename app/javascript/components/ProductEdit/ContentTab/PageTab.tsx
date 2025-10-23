@@ -7,7 +7,7 @@ import { generatePageIcon } from "$app/utils/rich_content_page";
 
 import { Icon } from "$app/components/Icons";
 import { Popover } from "$app/components/Popover";
-import { PageListTab } from "$app/components/server-components/DownloadPage/PageListLayout";
+import { PageListItem } from "$app/components/server-components/DownloadPage/PageListLayout";
 import { BlurOnEnter } from "$app/components/TiptapExtensions/BlurOnEnter";
 import PlainTextStarterKit from "$app/components/TiptapExtensions/PlainTextStarterKit";
 
@@ -67,10 +67,11 @@ export const PageTab = ({
     "outline-key": "Page has license key",
   };
   return (
-    <PageListTab
+    <PageListItem
       onClick={onClick}
       isSelected={selected}
       className="group/tab relative [&_.sortable-drag]:border [&_.sortable-drag]:bg-muted-foreground [&_.sortable-ghost]:outline [&_.sortable-ghost]:outline-accent [&_.sortable-ghost]:outline-dashed [&_.sortable-ghost>_*]:opacity-30"
+      role="tab"
     >
       {!disabled ? (
         <Icon
@@ -104,6 +105,6 @@ export const PageTab = ({
           </Popover>
         </span>
       )}
-    </PageListTab>
+    </PageListItem>
   );
 };

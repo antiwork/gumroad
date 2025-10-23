@@ -37,7 +37,7 @@ export const PageList = React.forwardRef<HTMLDivElement, React.HTMLProps<HTMLDiv
 );
 PageList.displayName = "PageList";
 
-export const PageListTab = ({
+export const PageListItem = ({
   className,
   asChild,
   isSelected,
@@ -51,7 +51,6 @@ export const PageListTab = ({
         isSelected && "bg-muted-foreground",
         className,
       )}
-      role="tab"
       aria-selected={isSelected}
       {...props}
     />

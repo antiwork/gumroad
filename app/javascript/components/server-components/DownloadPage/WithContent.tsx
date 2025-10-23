@@ -25,7 +25,7 @@ import { Icon } from "$app/components/Icons";
 import { Popover } from "$app/components/Popover";
 import { FileEmbed } from "$app/components/ProductEdit/ContentTab/FileEmbed";
 import { showAlert } from "$app/components/server-components/Alert";
-import { PageList, PageListTab } from "$app/components/server-components/DownloadPage/PageListLayout";
+import { PageList, PageListItem } from "$app/components/server-components/DownloadPage/PageListLayout";
 import { LicenseKey } from "$app/components/TiptapExtensions/LicenseKey";
 import { PostsProvider } from "$app/components/TiptapExtensions/Posts";
 import { useAddThirdPartyAnalytics } from "$app/components/useAddThirdPartyAnalytics";
@@ -282,17 +282,18 @@ const WithContent = ({
         showPageList && isDesktop ? (
           <PageList aria-label="Table of Contents">
             {pages.map((page, index) => (
-              <PageListTab
+              <PageListItem
                 key={page.page_id}
                 isSelected={index === activePageIndex}
                 onClick={() => setActivePageIndex(index)}
+                role="tab"
               >
                 <Icon
                   name={pageIcons[index] ?? "file-text"}
                   aria-label={pageIcons[index] ? PAGE_ICON_LABEL[pageIcons[index]] : "file-text"}
                 />
                 <span className="flex-1">{page.title ?? "Untitled"}</span>
-              </PageListTab>
+              </PageListItem>
             ))}
           </PageList>
         ) : null
