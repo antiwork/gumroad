@@ -8,7 +8,7 @@ class WorkflowsController < Sellers::BaseController
 
   FLASH_CHANGES_SAVED = "Changes saved!"
   FLASH_WORKFLOW_PUBLISHED = "Workflow published!"
-  FLASH_WORKFLOW_UNPUBLISHED = "Workflow unpublished!"
+  FLASH_WORKFLOW_UNPUBLISHED = "Unpublished!"
   FLASH_WORKFLOW_DELETED = "Workflow deleted!"
 
   inertia_share do
@@ -68,14 +68,14 @@ class WorkflowsController < Sellers::BaseController
       notice_message = case workflow_params[:save_action_name]
       when "save_and_publish"
         FLASH_WORKFLOW_PUBLISHED
-      when "unpublish"
+      when "save_and_unpublish"
         FLASH_WORKFLOW_UNPUBLISHED
       else
         FLASH_CHANGES_SAVED
       end
 
       # For publish/unpublish actions, stay on edit page; otherwise go to emails page
-      redirect_path = if ["save_and_publish", "unpublish"].include?(workflow_params[:save_action_name])
+      redirect_path = if ["save_and_publish", "save_and_unpublish"].include?(workflow_params[:save_action_name])
                         edit_workflow_path(@workflow.external_id)
                       else
                         workflow_emails_path(@workflow.external_id)
@@ -83,7 +83,8 @@ class WorkflowsController < Sellers::BaseController
 
       redirect_to redirect_path, notice: notice_message, status: :see_other
     else
-      redirect_to edit_workflow_path(@workflow.external_id), inertia: { errors: errors }, status: :see_other
+      error_message = errors.full_messages.first if errors.respond_to?(:full_messages)
+      redirect_to edit_workflow_path(@workflow.external_id), inertia: { errors: errors }, alert: error_message, status: :see_other
     end
   end
 

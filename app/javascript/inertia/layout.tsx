@@ -22,7 +22,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
     if (flash?.message) {
       showAlert(flash.message, flash.status);
     }
-  }, [flash]);
+  }, [flash, showAlert]);
 
   return (
     <>

@@ -8,7 +8,7 @@ class Workflows::EmailsController < Sellers::BaseController
 
   FLASH_CHANGES_SAVED = "Changes saved!"
   FLASH_WORKFLOW_PUBLISHED = "Workflow published!"
-  FLASH_WORKFLOW_UNPUBLISHED = "Workflow unpublished!"
+  FLASH_WORKFLOW_UNPUBLISHED = "Unpublished!"
 
   inertia_share do
     RenderingExtension.custom_context(view_context).merge(

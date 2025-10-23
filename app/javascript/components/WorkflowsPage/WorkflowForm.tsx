@@ -232,23 +232,25 @@ const WorkflowForm = ({ context, workflow }: WorkflowFormProps) => {
       : { productIds: [], variantIds: [] };
 
     form.transform(() => ({
-      name: formState.name,
-      workflow_type: workflowType,
-      workflow_trigger: workflowTrigger,
-      bought_products: bought.productIds,
-      bought_variants: bought.variantIds,
-      variant_external_id: variantId,
-      permalink: productPermalink,
-      not_bought_products: notBought.productIds,
-      not_bought_variants: notBought.variantIds,
-      paid_more_than: triggerSupportsPaidFilters ? formState.paidMoreThan : null,
-      paid_less_than: triggerSupportsPaidFilters ? formState.paidLessThan : null,
-      created_after: triggerSupportsDateFilters ? formState.afterDate : "",
-      created_before: triggerSupportsDateFilters ? formState.beforeDate : "",
-      bought_from: triggerSupportsFromCountryFilter ? formState.fromCountry : null,
-      affiliate_products: formState.trigger === "new_affiliate" ? formState.affiliatedProducts : [],
-      send_to_past_customers: formState.sendToPastCustomers,
-      save_action_name: saveActionName,
+      workflow: {
+        name: formState.name,
+        workflow_type: workflowType,
+        workflow_trigger: workflowTrigger,
+        bought_products: bought.productIds,
+        bought_variants: bought.variantIds,
+        variant_external_id: variantId,
+        permalink: productPermalink,
+        not_bought_products: notBought.productIds,
+        not_bought_variants: notBought.variantIds,
+        paid_more_than: triggerSupportsPaidFilters ? formState.paidMoreThan : null,
+        paid_less_than: triggerSupportsPaidFilters ? formState.paidLessThan : null,
+        created_after: triggerSupportsDateFilters ? formState.afterDate : "",
+        created_before: triggerSupportsDateFilters ? formState.beforeDate : "",
+        bought_from: triggerSupportsFromCountryFilter ? formState.fromCountry : null,
+        affiliate_products: formState.trigger === "new_affiliate" ? formState.affiliatedProducts : [],
+        send_to_past_customers: formState.sendToPastCustomers,
+        save_action_name: saveActionName,
+      },
     }));
 
     if (workflow) {
