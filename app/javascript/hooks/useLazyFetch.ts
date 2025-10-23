@@ -24,17 +24,8 @@ type QueryParams = Record<string, string | number>;
 
 export type Pagination = {
   count: number;
-  from: number;
-  in: number;
-  last: number;
-  limit: number;
   next: number | null;
-  offset: number;
-  outset: number;
-  overflow: number;
   page: number;
-  prev: number | null;
-  to: number;
 };
 
 type PaginatedResponse = {
@@ -134,17 +125,8 @@ export const useLazyPaginatedFetch = <T>(
   const [hasMore, setHasMore] = React.useState(false);
   const [pagination, setPagination] = React.useState<Pagination>({
     count: 0,
-    from: 0,
-    in: 0,
-    last: 0,
-    limit: 0,
     next: null,
-    offset: 0,
-    outset: 0,
-    overflow: 0,
     page: 0,
-    prev: null,
-    to: 0,
   });
   const [currentData, setCurrentData] = React.useState<T>(initialData);
 
