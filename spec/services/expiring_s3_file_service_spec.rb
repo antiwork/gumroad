@@ -11,14 +11,14 @@ describe ExpiringS3FileService do
 
     it "generates URL with given data and default values" do
       result = ExpiringS3FileService.new(file: @file, extension: "pdf").perform
-      expect(result).to match(/gumroad-specs.s3.amazonaws.com\/File/)
+      expect(result).to match(/#{AWS_S3_ENDPOINT}\/gumroad-specs\/File/o)
       expect(result).to match(/pdf/)
       expect(result).to match(Regexp.new "#{ExpiringS3FileService::DEFAULT_FILE_EXPIRY.to_i}")
     end
 
     it "generates URL with given filename" do
       result = ExpiringS3FileService.new(file: @file, filename: "test.pdf").perform
-      expect(result).to match(/gumroad-specs.s3.amazonaws.com\/test.pdf/)
+      expect(result).to match(/#{AWS_S3_ENDPOINT}\/gumroad-specs\/test.pdf/o)
     end
 
     it "generates URL with given path, prefix, extension, expiry" do
@@ -28,7 +28,7 @@ describe ExpiringS3FileService do
                                          path: "folder",
                                          expiry: 1.hour).perform
       expect(result).to match(
-        /gumroad-specs.s3.amazonaws.com\/folder\/prefix_.*txt.*3600/
+        /#{AWS_S3_ENDPOINT}\/gumroad-specs\/folder\/prefix_.*txt.*3600/o
                         )
     end
 

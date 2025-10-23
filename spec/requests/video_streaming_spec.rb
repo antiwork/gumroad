@@ -136,7 +136,7 @@ describe "Video stream scenario", type: :system, js: true do
       end
 
       it "does not record media_location if purchase is nil" do
-        streamable_url = "https://s3.amazonaws.com/gumroad-specs/specs/ScreenRecording.mov"
+        streamable_url = "#{AWS_S3_ENDPOINT}/#{S3_BUCKET}/specs/ScreenRecording.mov"
         installment = create(:installment, call_to_action_text: "CTA", call_to_action_url: "https://www.gum.co", seller: @product.user)
         installment_product_file = create(:product_file, :analyze, installment:, url: streamable_url)
         installment_product_file.save!(validate: false)

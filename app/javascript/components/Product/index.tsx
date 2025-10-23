@@ -781,7 +781,7 @@ const Reviews = ({
             />
           ))}
           {state.pagination.page < state.pagination.pages ? (
-            <button className="link" onClick={() => void loadNextPage()} disabled={isLoading}>
+            <button className="underline" onClick={() => void loadNextPage()} disabled={isLoading}>
               Load more
             </button>
           ) : null}

@@ -2950,7 +2950,7 @@ describe StripeChargeProcessor, :vcr do
                 "legacy_balance_transaction_source": "flxlnpd_1QYGAMS8k6WhriunjwlD8pdL",
                 "livemode": true,
                 "type": "payment",
-                "user_facing_description": "Manual paydown of your loan"
+                "user_facing_description": "Forced debit from Stripe Payments"
               }
             },
             "livemode": true,
@@ -2989,6 +2989,14 @@ describe StripeChargeProcessor, :vcr do
                  merchant_account: merchant_account,
                  stripe_loan_paydown_id: "cptxn_1QYGAMS8k6Whriun3Ks2V9XM",
                  amount_cents: -220156)
+
+          expect do
+            StripeChargeProcessor.handle_stripe_event(stripe_event)
+          end.not_to change { Credit.count }
+        end
+
+        it "does not add a loan deduction if it is not deducted from Stripe payments as per the description" do
+          stripe_event["data"]["object"]["user_facing_description"] = "Manual paydown of your loan"
 
           expect do
             StripeChargeProcessor.handle_stripe_event(stripe_event)

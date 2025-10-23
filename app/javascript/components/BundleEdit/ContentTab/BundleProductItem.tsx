@@ -5,7 +5,6 @@ import { variantLabel } from "$app/utils/labels";
 import { BundleProduct } from "$app/components/BundleEdit/state";
 import { Button } from "$app/components/Button";
 import {
-  CartItemEnd,
   CartItemFooter,
   CartItemMain,
   CartItemMedia,
@@ -60,9 +59,9 @@ export const BundleProductItem = ({
               ) : null}
             </ul>
           </CartItemFooter>
-          {bundleProduct.is_quantity_enabled || bundleProduct.variants ? (
-            <CartItemFooter>
-              <ul className="list-none pl-0">
+          <CartItemFooter>
+            <ul className="list-none pl-0">
+              {bundleProduct.is_quantity_enabled || bundleProduct.variants ? (
                 <li>
                   <Popover
                     trigger={<div className="link">Configure</div>}
@@ -121,19 +120,15 @@ export const BundleProductItem = ({
                     </div>
                   </Popover>
                 </li>
-              </ul>
-            </CartItemFooter>
-          ) : null}
+              ) : null}
+              <li>
+                <button className="underline" onClick={removeBundleProduct}>
+                  Remove
+                </button>
+              </li>
+            </ul>
+          </CartItemFooter>
         </CartItemMain>
-        <CartItemEnd className="mt-auto">
-          <ul className="list-none">
-            <li>
-              <button className="underline" onClick={removeBundleProduct}>
-                Remove
-              </button>
-            </li>
-          </ul>
-        </CartItemEnd>
       </CartItemRow>
     </CartListItem>
   );

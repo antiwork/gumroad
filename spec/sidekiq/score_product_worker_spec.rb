@@ -7,9 +7,14 @@ describe ScoreProductWorker, :vcr do
     end
 
     it "sends message to SQS risk queue" do
-      sqs = Aws::SQS::Client.new
-      queue_url = sqs.get_queue_url(queue_name: "risk_queue").queue_url
-      expect_any_instance_of(Aws::SQS::Client).to receive(:send_message).with({ queue_url:, message_body: { "type" => "product", "id" => 123 }.to_s })
+      sqs_client = instance_double(Aws::SQS::Client)
+      queue_url = "https://sqs.us-east-1.amazonaws.com/123456789012/risk_queue"
+      queue_url_response = instance_double(Aws::SQS::Types::GetQueueUrlResult, queue_url:)
+
+      allow(Aws::SQS::Client).to receive(:new).and_return(sqs_client)
+      allow(sqs_client).to receive(:get_queue_url).with(queue_name: "risk_queue").and_return(queue_url_response)
+      expect(sqs_client).to receive(:send_message).with({ queue_url:, message_body: { "type" => "product", "id" => 123 }.to_s })
+
       ScoreProductWorker.new.perform(123)
     end
   end

@@ -4,9 +4,11 @@ module User::AsJson
   extend ActiveSupport::Concern
 
   def as_json(options = {})
+    return as_json_for_admin(impersonatable: options.delete(:impersonatable)) if options.delete(:admin)
+
     result =
       if options[:internal_use] || valid_api_scope?(options)
-        super(only: %i[name bio twitter_handle currency_type])
+        super(only: %i[name bio twitter_handle currency_type], methods: options[:methods], include: options[:include])
           .merge(common_fields_for_as_json)
           .merge(profile_url: avatar_url, email: form_email)
       else
@@ -24,6 +26,53 @@ module User::AsJson
     end
 
     result.with_indifferent_access
+  end
+
+  def as_json_for_admin(impersonatable: false)
+    as_json(
+      internal_use: true,
+      methods: [
+        :display_name,
+        :form_email,
+        :form_email_block,
+        :form_email_domain,
+        :form_email_domain_block,
+        :avatar_url,
+        :username,
+        :subdomain_with_protocol,
+        :support_email,
+        :custom_fee_per_thousand,
+        :updated_at,
+        :verified,
+        :deleted_at,
+        :all_adult_products,
+        :unpaid_balance_cents,
+        :suspended,
+        :flagged_for_fraud,
+        :flagged_for_tos_violation,
+        :on_probation,
+        :disable_paypal_sales
+      ],
+      include: {
+        admin_manageable_user_memberships: {
+          include: {
+            seller: {
+              only: [:id],
+              methods: [:avatar_url, :display_name_or_email]
+            }
+          }
+        },
+        alive_user_compliance_info: {
+          only: %i[is_business first_name last_name street_address city state state_code zip_code country country_code business_name business_type business_street_address business_city business_state business_zip_code business_country created_at],
+          methods: %i[country_code business_country_code state_code business_state_code has_individual_tax_id has_business_tax_id]
+        }
+      }
+    ).merge(
+      id:,
+      impersonatable:,
+      user_risk_state: user_risk_state.humanize,
+      comment_count: comments.size
+    )
   end
 
   private
