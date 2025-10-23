@@ -19,7 +19,7 @@ class Workflows::EmailsController < Sellers::BaseController
     )
   end
 
-  def show
+  def index
     workflow_presenter = WorkflowPresenter.new(seller: current_seller, workflow: @workflow)
     render inertia: "Workflows/Emails/Index", props: {
       workflow: -> { workflow_presenter.workflow_props },

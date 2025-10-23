@@ -74,7 +74,6 @@ class WorkflowsController < Sellers::BaseController
         FLASH_CHANGES_SAVED
       end
 
-      # For publish/unpublish actions, stay on edit page; otherwise go to emails page
       redirect_path = if ["save_and_publish", "save_and_unpublish"].include?(workflow_params[:save_action_name])
                         edit_workflow_path(@workflow.external_id)
                       else

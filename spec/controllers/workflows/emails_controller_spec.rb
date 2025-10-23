@@ -13,14 +13,14 @@ describe Workflows::EmailsController, type: :controller, inertia: true do
 
   include_context "with user signed in as admin for seller"
 
-  describe "GET show" do
-    it_behaves_like "authorize called for action", :get, :show do
+  describe "GET index" do
+    it_behaves_like "authorize called for action", :get, :index do
       let(:record) { workflow }
       let(:request_params) { { workflow_id: workflow.external_id } }
     end
 
     it "renders successfully with Inertia" do
-      get :show, params: { workflow_id: workflow.external_id }
+      get :index, params: { workflow_id: workflow.external_id }
       expect(response).to be_successful
       expect(inertia.component).to eq("Workflows/Emails/Index")
       expect(inertia.props[:workflow]).to be_present
@@ -29,7 +29,7 @@ describe Workflows::EmailsController, type: :controller, inertia: true do
 
     context "when workflow doesn't exist" do
       it "returns 404" do
-        expect { get :show, params: { workflow_id: "nonexistent" } }.to raise_error(ActionController::RoutingError)
+        expect { get :index, params: { workflow_id: "nonexistent" } }.to raise_error(ActionController::RoutingError)
       end
     end
   end

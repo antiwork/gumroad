@@ -807,7 +807,9 @@ Rails.application.routes.draw do
     # workflows
     resources :workflows, only: [:index, :new, :create, :edit, :update, :destroy] do
       scope module: 'workflows' do
-        resource :emails, only: [:show, :update]
+        resources :emails, only: [:index] do
+          patch :update, on: :collection
+        end
       end
     end
 
