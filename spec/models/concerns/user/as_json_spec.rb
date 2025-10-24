@@ -150,7 +150,7 @@ describe User::AsJson do
           "on_probation",
           "disable_paypal_sales",
           "user_risk_state",
-          "comment_count"
+          "comments_count"
         )
       end
 
@@ -158,8 +158,8 @@ describe User::AsJson do
         expect(as_json["id"]).to eq(user.id)
       end
 
-      it "returns the comment count" do
-        expect(as_json["comment_count"]).to eq(2)
+      it "returns the comments count" do
+        expect(as_json["comments_count"]).to eq(2)
       end
 
       it "returns user_risk_state as humanized" do
