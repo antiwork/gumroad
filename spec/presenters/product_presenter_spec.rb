@@ -255,6 +255,8 @@ describe ProductPresenter do
             suggested_price_cents: 200,
             custom_button_text_option: "pay_prompt",
             custom_summary: "To summarize, I am a product.",
+            custom_view_content_button_text: nil,
+            receipt_additional_text: nil,
             custom_attributes: { "Detail 1" => "Value 1" },
             file_attributes: [
               {
@@ -477,6 +479,8 @@ describe ProductPresenter do
               suggested_price_cents: nil,
               custom_button_text_option: nil,
               custom_summary: nil,
+              custom_view_content_button_text: "Let's see what you've got!",
+              receipt_additional_text: "Thank you for your purchase. We appreciate your support!",
               custom_attributes: [],
               file_attributes: [],
               max_purchase_count: nil,
@@ -725,6 +729,8 @@ describe ProductPresenter do
               suggested_price_cents: nil,
               custom_button_text_option: nil,
               custom_summary: nil,
+              custom_view_content_button_text: nil,
+              receipt_additional_text: nil,
               custom_attributes: [],
               file_attributes: [],
               max_purchase_count: nil,

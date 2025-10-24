@@ -1157,4 +1157,29 @@ describe("Product Edit Scenario", type: :system, js: true) do
     expect(product.community_chat_enabled?).to be(false)
     expect(product.active_community).to be_nil
   end
+
+  describe "Receipt customization" do
+    it "allows customizing the view content button label" do
+      visit edit_link_path(product.unique_permalink)
+
+      fill_in "View Content button text", with: "Get Your Files"
+
+      expect do
+        save_change
+        product.reload
+      end.to change { product.custom_view_content_button_text }.from(nil).to("Get Your Files")
+    end
+
+    it "allows adding a custom message to receipts" do
+      visit edit_link_path(product.unique_permalink)
+
+      message = "Need help? Reach out to us anytime at help@example.com"
+      fill_in "Receipt additional text", with: message
+
+      expect do
+        save_change
+        product.reload
+      end.to change { product.receipt_additional_text }.from(nil).to(message)
+    end
+  end
 end

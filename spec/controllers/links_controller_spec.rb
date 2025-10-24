@@ -2980,6 +2980,22 @@ describe LinksController, :vcr, inertia: true do
           end
         end
       end
+
+      describe "receipt customization" do
+        it "updates custom view content button text" do
+          post :update, params: { id: @product.unique_permalink, custom_view_content_button_text: "Download Files" }, as: :json
+
+          expect(response).to be_successful
+          expect(@product.reload.custom_view_content_button_text).to eq("Download Files")
+        end
+
+        it "updates receipt additional text" do
+          post :update, params: { id: @product.unique_permalink, receipt_additional_text: "Thank you for your purchase!" }, as: :json
+
+          expect(response).to be_successful
+          expect(@product.reload.receipt_additional_text).to eq("Thank you for your purchase!")
+        end
+      end
     end
 
     describe "GET new" do
