@@ -20,6 +20,8 @@ import { CoverEditor } from "$app/components/ProductEdit/ProductTab/CoverEditor"
 import { CustomButtonTextOptionInput } from "$app/components/ProductEdit/ProductTab/CustomButtonTextOptionInput";
 import { CustomPermalinkInput } from "$app/components/ProductEdit/ProductTab/CustomPermalinkInput";
 import { CustomSummaryInput } from "$app/components/ProductEdit/ProductTab/CustomSummaryInput";
+import { ReceiptAdditionalTextInput } from "$app/components/ProductEdit/ProductTab/ReceiptAdditionalTextInput";
+import { ViewContentButtonTextInput } from "$app/components/ProductEdit/ProductTab/ViewContentButtonTextInput";
 import { DescriptionEditor, useImageUpload } from "$app/components/ProductEdit/ProductTab/DescriptionEditor";
 import { DiscordIntegrationEditor } from "$app/components/ProductEdit/ProductTab/DiscordIntegrationEditor";
 import { DurationEditor } from "$app/components/ProductEdit/ProductTab/DurationEditor";
@@ -196,39 +198,20 @@ export const ProductTab = () => {
                     options={CUSTOM_BUTTON_TEXT_OPTIONS}
                   />
                 ) : null}
-                <fieldset>
-                  <label htmlFor={`${uid}-view-content-text`}>View Content button text</label>
-                  <input
-                    id={`${uid}-view-content-text`}
-                    type="text"
-                    maxLength={25}
-                    placeholder="View Content"
-                    value={product.custom_view_content_button_text ?? "View Content"}
-                    onChange={(evt) =>
-                      updateProduct({ custom_view_content_button_text: evt.target.value.slice(0, 25) })
-                    }
-                  />
-                  <div className="hint">
-                    Used for the customer “View content” CTA after purchase. Max 25 characters.
-                  </div>
-                </fieldset>
+                <ViewContentButtonTextInput
+                  id={`${uid}-view-content-text`}
+                  value={product.custom_view_content_button_text}
+                  onChange={(value) => updateProduct({ custom_view_content_button_text: value })}
+                />
                 <CustomSummaryInput
                   value={product.custom_summary}
                   onChange={(value) => updateProduct({ custom_summary: value })}
                 />
-                <fieldset>
-                  <label htmlFor={`${uid}-receipt-additional-text`}>Receipt additional text</label>
-                  <textarea
-                    id={`${uid}-receipt-additional-text`}
-                    maxLength={100}
-                    placeholder="Optional note shown on the receipt and receipt email"
-                    value={product.receipt_additional_text ?? ""}
-                    onChange={(evt) => updateProduct({ receipt_additional_text: evt.target.value.slice(0, 100) })}
-                  />
-                  <div className="hint">
-                    Shown under the receipt header in both the web receipt and email. Max 100 characters.
-                  </div>
-                </fieldset>
+                <ReceiptAdditionalTextInput
+                  id={`${uid}-receipt-additional-text`}
+                  value={product.receipt_additional_text ?? ""}
+                  onChange={(value) => updateProduct({ receipt_additional_text: value })}
+                />
                 <AttributesEditor
                   customAttributes={product.custom_attributes}
                   setCustomAttributes={(custom_attributes) => updateProduct({ custom_attributes })}

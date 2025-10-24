@@ -971,21 +971,6 @@ class Link < ApplicationRecord
     end
   end
 
-  # Override to sanitize receipt additional text input. Keep newlines; strip HTML tags and leading/trailing whitespace.
-  def save_receipt_additional_text(argument)
-    cleaned = if argument.nil?
-      nil
-    else
-      text = argument.to_s
-      # Strip all HTML tags to ensure plain text only, but preserve newlines.
-      text_without_tags = strip_tags(text)
-      text_without_tags.strip
-    end
-
-    self.json_data ||= {}
-    self.json_data["receipt_additional_text"] = cleaned
-    save
-  end
 
   def admin_url
     "#{PROTOCOL}://#{DOMAIN}/admin/links/#{unique_permalink}"

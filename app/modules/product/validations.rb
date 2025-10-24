@@ -3,7 +3,7 @@
 module Product::Validations
   include ActionView::Helpers::TextHelper
 
-  MAX_VIEW_CONTENT_BUTTON_TEXT_LENGTH = 25
+  MAX_VIEW_CONTENT_BUTTON_TEXT_LENGTH = 26
   MAX_RECEIPT_ADDITIONAL_TEXT_LENGTH = 100
 
   private
