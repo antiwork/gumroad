@@ -1,9 +1,18 @@
 # frozen_string_literal: true
 
 module Admin::Commentable
+  include Pagy::Backend
+
   def index
+    pagination, comments = pagy(
+      commentable.comments.includes(:author).references(:author).order(created_at: :desc),
+      limit: params[:per_page] || 20,
+      page: params[:page] || 1
+    )
+
     render json: {
-      comments: commentable.comments.includes(:author).references(:author).order(created_at: :desc).map { json_payload(_1) }
+      comments: comments.map { json_payload(_1) },
+      pagination:
     }
   end
 

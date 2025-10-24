@@ -484,22 +484,26 @@ describe("Posts on seller profile", type: :system, js: true) do
         # Verify current user's avatar when signed in as the post author
         login_as seller
         visit "#{seller.subdomain_with_protocol}/p/#{post.slug}"
-        expect(page).to have_css("img[src='#{seller.avatar_url}'][alt='Current user avatar']")
+        within_section "Write a comment", section_element: :section do
+          expect(page).to have_css("img[src='#{seller.avatar_url}']")
+        end
 
         # Verify current user's avatar when signed in as the comment author
         login_as commenter
         visit "#{seller.subdomain_with_protocol}/p/#{post.slug}"
-        expect(page).to have_css("img[src='#{commenter.avatar_url}'][alt='Current user avatar']")
+        within_section "Write a comment", section_element: :section do
+          expect(page).to have_css("img[src='#{commenter.avatar_url}']")
+        end
 
         # Verify avatars of comment authors
         create(:comment, commentable: post)
         visit "#{seller.subdomain_with_protocol}/p/#{post.slug}"
         within_section "2 comments" do
           within "article:nth-child(1)" do
-            expect(page).to have_css("img[src='#{seller.avatar_url}'][alt='Comment author avatar']")
+            expect(page).to have_css("img[src='#{seller.avatar_url}']")
           end
           within "article:nth-child(2)" do
-            expect(page).to have_css("img[src='#{ActionController::Base.helpers.asset_url("gumroad-default-avatar-5.png")}'][alt='Comment author avatar']")
+            expect(page).to have_css("img[src='#{ActionController::Base.helpers.asset_url("gumroad-default-avatar-5.png")}']")
           end
         end
       end

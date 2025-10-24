@@ -200,7 +200,7 @@ describe("Product Edit Scenario", type: :system, js: true) do
     end
 
     # The product itself should be listed but disabled, variants listed with icon
-    within "dialog" do
+    within_modal do
       find(:combo_box, "Product").click
       product_option = find("[role='option']", text: "Sample product", exact_text: true)
       expect(product_option).not_to have_selector("span.icon.icon-arrow-right-reply"); # icon for variant
@@ -213,7 +213,7 @@ describe("Product Edit Scenario", type: :system, js: true) do
     end
 
     # When searching, only variants should appear, not the product itself, and no icon
-    within "dialog" do
+    within_modal do
       fill_in "Product", with: "Sample product"
       expect(page).not_to have_selector("[role='option']", text: "Sample product", exact_text: true)
 
