@@ -32,5 +32,4 @@ class PurchaseRefundPolicy < ApplicationRecord
       title != product_refund_policy.title
     end
   end
-
 end
