@@ -230,7 +230,7 @@ class Onetime::SetMaxAllowedRefundPeriodForPurchaseRefundPolicies < Onetime::Bas
     end
 
     def ask_ai_with_timeout(prompt, timeout_seconds: 30)
-      Timeout::timeout(timeout_seconds) do
+      Timeout.timeout(timeout_seconds) do
         ask_ai(prompt)
       end
     rescue Timeout::Error
