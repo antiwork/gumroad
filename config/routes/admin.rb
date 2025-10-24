@@ -96,6 +96,7 @@ namespace :admin do
       post :restore
     end
     resource :staff_picked, only: [:create], controller: "products/staff_picked"
+    resources :comments, only: [:index, :create], controller: "products/comments"
   end
 
   resources :payouts, only: [:index]
