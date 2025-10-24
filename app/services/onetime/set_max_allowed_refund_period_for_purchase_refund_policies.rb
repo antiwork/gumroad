@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require "benchmark"
+require "timeout"
 
 class Onetime::SetMaxAllowedRefundPeriodForPurchaseRefundPolicies < Onetime::Base
   LAST_PROCESSED_ID_KEY = :last_processed_id
@@ -12,6 +13,7 @@ class Onetime::SetMaxAllowedRefundPeriodForPurchaseRefundPolicies < Onetime::Bas
   def initialize(max_id: PurchaseRefundPolicy.last!.id)
     @max_id = max_id
     @title_cache = build_title_cache
+    @link_cache = {}
   end
 
   def process
@@ -30,8 +32,11 @@ class Onetime::SetMaxAllowedRefundPeriodForPurchaseRefundPolicies < Onetime::Bas
         record_start_time = Time.now
 
         max_refund_period_in_days = determine_max_refund_period_in_days(purchase_refund_policy, record_timings)
+
+        record_total_time = Time.now - record_start_time
+
         if max_refund_period_in_days.nil?
-          Rails.logger.info("No exact match found for title '#{purchase_refund_policy.title}', skipping")
+          log_policy_result(purchase_refund_policy.id, record_total_time, record_timings, "skipped - no match", nil)
           next
         end
 
@@ -44,18 +49,20 @@ class Onetime::SetMaxAllowedRefundPeriodForPurchaseRefundPolicies < Onetime::Bas
           record_timings[:update] = update_time
 
           update_batch_stats(batch_stats, record_timings)
-
-          record_total_time = Time.now - record_start_time
-          log_record_timing(purchase_refund_policy.id, record_total_time, record_timings, max_refund_period_in_days)
+          log_policy_result(purchase_refund_policy.id, record_total_time, record_timings, "processed", max_refund_period_in_days)
           track_slowest_records(batch_stats, purchase_refund_policy.id, record_total_time)
           batch_stats[:processed_count] += 1
         rescue => e
+          log_policy_result(purchase_refund_policy.id, record_total_time, record_timings, "error", nil, e.message)
           invalid_policy_ids << { purchase_refund_policy.id => e.message }
         end
       end
 
       batch_total_time = Time.now - batch_start_time
       log_batch_summary(batch_stats, batch_total_time)
+
+      # Clear link cache periodically to prevent memory bloat
+      @link_cache.clear if batch_stats[:processed_count] > 0
 
       $redis.set(LAST_PROCESSED_ID_KEY, batch.last.id, ex: 1.month)
     end
@@ -64,13 +71,14 @@ class Onetime::SetMaxAllowedRefundPeriodForPurchaseRefundPolicies < Onetime::Bas
   end
 
   private
-    attr_reader :max_id, :title_cache
+    attr_reader :max_id, :title_cache, :link_cache
 
     def eligible_purchase_refund_policies
       first_policy_id = [first_eligible_policy_id, $redis.get(LAST_PROCESSED_ID_KEY).to_i + 1].max
       PurchaseRefundPolicy
         .where(id: first_policy_id..max_id)
         .includes({ purchase: { link: :product_refund_policy } })
+        .preload(:purchase)
     end
 
     def first_eligible_policy_id
@@ -110,20 +118,32 @@ class Onetime::SetMaxAllowedRefundPeriodForPurchaseRefundPolicies < Onetime::Bas
       begin
         ai_response = nil
         ai_time = Benchmark.realtime do
-          ai_response = ask_ai(max_refund_period_in_days_prompt(purchase_refund_policy))
+          ai_response = ask_ai_with_timeout(max_refund_period_in_days_prompt(purchase_refund_policy))
         end
         timings[:ai_call] = ai_time
 
-        days = Integer(ai_response.dig("choices", 0, "message", "content")) rescue ai_response.dig("choices", 0, "message", "content")
+        raw_content = ai_response.dig("choices", 0, "message", "content")
+        days = Integer(raw_content) rescue raw_content
 
         if RefundPolicy::ALLOWED_REFUND_PERIODS_IN_DAYS.key?(days)
           days
         else
-          Rails.logger.info("  #{purchase_refund_policy.id}: Unknown refund period for policy : #{days}")
           nil
         end
+      rescue Net::ReadTimeout => e
+        timings[:ai_error] = "timeout: #{e.message}"
+        nil
+      rescue OpenAI::Error => e
+        error_details = extract_error_details(e)
+        timings[:ai_error] = "openai: #{e.class.name} - #{e.message}#{error_details}"
+        nil
+      rescue Net::HTTPError => e
+        error_details = extract_error_details(e)
+        timings[:ai_error] = "http: #{e.class.name} - #{e.message}#{error_details}"
+        nil
       rescue => e
-        Rails.logger.info("  #{purchase_refund_policy.id}: Error determining max refund period for policy: #{e.message}")
+        error_details = extract_error_details(e)
+        timings[:ai_error] = "unexpected: #{e.class.name} - #{e.message}#{error_details}"
         nil
       end
     end
@@ -137,8 +157,23 @@ class Onetime::SetMaxAllowedRefundPeriodForPurchaseRefundPolicies < Onetime::Bas
       cached_value = title_cache[purchase_refund_policy.title]
       return cached_value if cached_value.present?
 
-      other_purchase_refund_policy = PurchaseRefundPolicy.joins(:purchase).where(purchases: { link_id: purchase_refund_policy.purchase.link_id }).where.not(id: purchase_refund_policy.id).where(title: purchase_refund_policy.title).first
-      return other_purchase_refund_policy.max_refund_period_in_days if other_purchase_refund_policy.present?
+      # Use link cache to avoid repeated queries for the same link_id + title combination
+      cache_key = "#{purchase_refund_policy.purchase.link_id}_#{purchase_refund_policy.title}"
+
+      unless link_cache.key?(cache_key)
+        other_purchase_refund_policy = PurchaseRefundPolicy
+          .joins(:purchase)
+          .where(purchases: { link_id: purchase_refund_policy.purchase.link_id })
+          .where.not(id: purchase_refund_policy.id)
+          .where(title: purchase_refund_policy.title)
+          .select(:id, :max_refund_period_in_days)
+          .limit(1)
+          .first
+
+        link_cache[cache_key] = other_purchase_refund_policy&.max_refund_period_in_days
+      end
+
+      return link_cache[cache_key] if link_cache[cache_key].present?
 
       nil
     end
@@ -184,14 +219,22 @@ class Onetime::SetMaxAllowedRefundPeriodForPurchaseRefundPolicies < Onetime::Bas
     end
 
     def ask_ai(prompt)
-      OpenAI::Client.new.chat(
-        parameters: {
-          messages: [{ role: "user", content: prompt }],
-          model: "gpt-4o-mini",
-          temperature: 0.0,
-          max_tokens: 10
-        }
-      )
+      request_params = {
+        messages: [{ role: "user", content: prompt }],
+        model: "gpt-4o-mini",
+        temperature: 0.0,
+        max_tokens: 10
+      }
+
+      OpenAI::Client.new.chat(parameters: request_params)
+    end
+
+    def ask_ai_with_timeout(prompt, timeout_seconds: 30)
+      Timeout::timeout(timeout_seconds) do
+        ask_ai(prompt)
+      end
+    rescue Timeout::Error
+      raise Net::ReadTimeout, "AI request timed out after #{timeout_seconds} seconds"
     end
 
     def initialize_batch_stats
@@ -227,14 +270,22 @@ class Onetime::SetMaxAllowedRefundPeriodForPurchaseRefundPolicies < Onetime::Bas
       end
     end
 
-    def log_record_timing(policy_id, total_time, timings, max_refund_days)
+    def log_policy_result(policy_id, total_time, timings, status, max_refund_days = nil, error_message = nil)
       timing_parts = []
       timing_parts << "cache: #{format_time(timings[:cache_lookup])}" if timings[:cache_lookup]
       timing_parts << "exact_match: #{format_time(timings[:exact_match])}" if timings[:exact_match]
       timing_parts << "ai: #{format_time(timings[:ai_call])}" if timings[:ai_call]
       timing_parts << "update: #{format_time(timings[:update])}" if timings[:update]
+      timing_parts << "ai_error: #{timings[:ai_error]}" if timings[:ai_error]
 
-      Rails.logger.info "PurchaseRefundPolicy #{policy_id}: processed in #{format_time(total_time)} (#{timing_parts.join(', ')}) - set to #{max_refund_days} days"
+      case status
+      when "processed"
+        Rails.logger.info "PurchaseRefundPolicy #{policy_id}: processed in #{format_time(total_time)} (#{timing_parts.join(', ')}) - set to #{max_refund_days} days"
+      when "skipped - no match"
+        Rails.logger.info "PurchaseRefundPolicy #{policy_id}: skipped in #{format_time(total_time)} (#{timing_parts.join(', ')}) - no match found"
+      when "error"
+        Rails.logger.info "PurchaseRefundPolicy #{policy_id}: error in #{format_time(total_time)} (#{timing_parts.join(', ')}) - #{error_message}"
+      end
     end
 
     def track_slowest_records(batch_stats, policy_id, total_time)
@@ -278,5 +329,44 @@ class Onetime::SetMaxAllowedRefundPeriodForPurchaseRefundPolicies < Onetime::Bas
     def format_time(seconds)
       return "0.000s" if seconds.nil?
       "#{format('%.3f', seconds)}s"
+    end
+
+    def extract_error_details(error)
+      details = []
+
+      if error.respond_to?(:response) && error.response
+        if error.response.respond_to?(:body) && error.response.body
+          body = error.response.body
+          body = body.length > 200 ? "#{body[0..200]}..." : body
+          details << " | response_body: #{body}"
+        end
+
+        if error.response.respond_to?(:status)
+          details << " | status: #{error.response.status}"
+        end
+      end
+
+      if error.respond_to?(:response) && error.response&.respond_to?(:status)
+        details << " | http_status: #{error.response.status}"
+      end
+
+      if error.respond_to?(:cause) && error.cause
+        details << " | cause: #{error.cause.class.name} - #{error.cause.message}"
+      end
+
+      if error.is_a?(Faraday::Error)
+        details << " | faraday_error: #{error.class.name}"
+        if error.respond_to?(:response) && error.response
+          details << " | response_status: #{error.response.status}" if error.response.respond_to?(:status)
+          details << " | response_headers: #{error.response.headers.inspect}" if error.response.respond_to?(:headers)
+        end
+      end
+
+      if error.is_a?(Net::ReadTimeout) || error.message.include?("ReadTimeout")
+        details << " | timeout_type: Net::ReadTimeout"
+        details << " | socket_closed: #{error.message.include?('closed')}"
+      end
+
+      details.join
     end
 end
