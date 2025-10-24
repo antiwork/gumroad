@@ -25,14 +25,7 @@ import { asyncVoid } from "$app/utils/promise";
 import { assertResponseError, request } from "$app/utils/request";
 
 import { Button, NavigationButton } from "$app/components/Button";
-import {
-  CartListItem,
-  CartItemMain,
-  CartItemMedia,
-  CartItemRow,
-  CartItemTitle,
-  CartList,
-} from "$app/components/CartList";
+import { CartListItem, CartItemMain, CartItemMedia, CartItemTitle, CartList } from "$app/components/CartList";
 import { useCurrentSeller } from "$app/components/CurrentSeller";
 import { useAppDomain, useDomains } from "$app/components/DomainSettings";
 import {
@@ -660,26 +653,24 @@ const AbandonedCartProductListNodeView = (props: NodeViewProps) => {
                 className={classNames({ "pointer-events-none": !isPreview })}
                 key={product.unique_permalink}
               >
-                <CartItemRow>
-                  <CartItemMedia>
-                    {product.thumbnail_url ? (
-                      <img src={product.thumbnail_url} className="rounded-none object-fill" />
-                    ) : null}
-                  </CartItemMedia>
-                  <CartItemMain>
-                    <CartItemTitle asChild>
-                      <a
-                        href={product.url}
-                        target="_blank"
-                        rel="noopener noreferrer nofollow"
-                        tabIndex={isPreview ? undefined : -1}
-                      >
-                        <h4 className="font-bold">{product.name}</h4>
-                      </a>
-                    </CartItemTitle>
-                    <SellerByLine isPreview={isPreview} />
-                  </CartItemMain>
-                </CartItemRow>
+                <CartItemMedia>
+                  {product.thumbnail_url ? (
+                    <img src={product.thumbnail_url} className="rounded-none object-fill" />
+                  ) : null}
+                </CartItemMedia>
+                <CartItemMain>
+                  <CartItemTitle asChild>
+                    <a
+                      href={product.url}
+                      target="_blank"
+                      rel="noopener noreferrer nofollow"
+                      tabIndex={isPreview ? undefined : -1}
+                    >
+                      <h4 className="font-bold">{product.name}</h4>
+                    </a>
+                  </CartItemTitle>
+                  <SellerByLine isPreview={isPreview} />
+                </CartItemMain>
               </CartListItem>
             ))}
           </CartList>

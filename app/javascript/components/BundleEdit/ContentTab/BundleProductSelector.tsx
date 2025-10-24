@@ -6,7 +6,6 @@ import {
   CartItemEnd,
   CartItemMain,
   CartItemMedia,
-  CartItemRow,
   CartItemTitle,
   CartItemFooter,
 } from "$app/components/CartList";
@@ -21,23 +20,21 @@ export const BundleProductSelector = ({
   selected?: boolean;
   onToggle: () => void;
 }) => (
-  <CartListItem>
-    <CartItemRow className="sm:grid-cols-[5rem_1fr_auto]">
-      <CartItemMedia>
-        <Thumbnail url={bundleProduct.thumbnail_url} nativeType={bundleProduct.native_type} />
-      </CartItemMedia>
-      <CartItemMain>
-        <CartItemTitle>{bundleProduct.name}</CartItemTitle>
-        {bundleProduct.variants ? (
-          <CartItemFooter>
-            {bundleProduct.variants.list.length} {bundleProduct.variants.list.length === 1 ? "version" : "versions"}{" "}
-            available
-          </CartItemFooter>
-        ) : null}
-      </CartItemMain>
-      <CartItemEnd className="justify-center">
-        <input type="checkbox" checked={!!selected} onChange={onToggle} />
-      </CartItemEnd>
-    </CartItemRow>
+  <CartListItem className="sm:*:grid-cols-[5rem_1fr_auto]">
+    <CartItemMedia>
+      <Thumbnail url={bundleProduct.thumbnail_url} nativeType={bundleProduct.native_type} />
+    </CartItemMedia>
+    <CartItemMain>
+      <CartItemTitle>{bundleProduct.name}</CartItemTitle>
+      {bundleProduct.variants ? (
+        <CartItemFooter>
+          {bundleProduct.variants.list.length} {bundleProduct.variants.list.length === 1 ? "version" : "versions"}{" "}
+          available
+        </CartItemFooter>
+      ) : null}
+    </CartItemMain>
+    <CartItemEnd className="justify-center">
+      <input type="checkbox" checked={!!selected} onChange={onToggle} />
+    </CartItemEnd>
   </CartListItem>
 );

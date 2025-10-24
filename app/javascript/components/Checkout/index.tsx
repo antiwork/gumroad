@@ -19,10 +19,8 @@ import {
   CartItemFooter,
   CartItemMain,
   CartItemMedia,
-  CartItemRow,
   CartItemTitle,
   CartList,
-  CartItemExtra,
   CartItemEnd,
 } from "$app/components/CartList";
 import { PaymentForm } from "$app/components/Checkout/PaymentForm";
@@ -441,144 +439,14 @@ const CartItemComponent = ({
   const price = hasFreeTrial(item, isGift) ? 0 : item.price * item.quantity;
 
   return (
-    <CartListItem>
-      <CartItemRow>
-        <CartItemMedia>
-          <a href={item.product.url}>
-            <Thumbnail url={item.product.thumbnail_url} nativeType={item.product.native_type} />
-          </a>
-        </CartItemMedia>
-        <CartItemMain>
-          <CartItemTitle asChild>
-            <a href={item.product.url}>
-              <h4 className="font-bold">{item.product.name}</h4>
-            </a>
-          </CartItemTitle>
-          <CartItemTitle className="font-normal" asChild>
-            <a href={item.product.creator.profile_url}>{item.product.creator.name}</a>
-          </CartItemTitle>
-          <CartItemFooter>
-            <ul className="list-none pl-0">
-              <li>
-                <strong>{item.product.is_multiseat_license ? "Seats:" : "Qty:"}</strong> {item.quantity}
-              </li>
-              {option?.name ? (
-                <li>
-                  <strong>{variantLabel(item.product.native_type)}:</strong> {option.name}
-                </li>
-              ) : null}
-              {item.recurrence ? (
-                <li>
-                  <strong>Membership:</strong> {recurrenceNames[item.recurrence]}
-                </li>
-              ) : null}
-              {item.call_start_time ? (
-                <li>
-                  <strong>Time:</strong> {formatCallDate(new Date(item.call_start_time), { date: { hideYear: true } })}
-                </li>
-              ) : null}
-            </ul>
-          </CartItemFooter>
-        </CartItemMain>
-        <CartItemEnd>
-          <span className="current-price" aria-label="Price">
-            {formatPrice(convertToUSD(item, price))}
-          </span>
-          {hasFreeTrial(item, isGift) && item.product.free_trial ? (
-            <>
-              <span>
-                {item.product.free_trial.duration.amount === 1
-                  ? `one ${item.product.free_trial.duration.unit}`
-                  : `${item.product.free_trial.duration.amount} ${item.product.free_trial.duration.unit}s`}{" "}
-                free
-              </span>
-              {item.recurrence ? (
-                <span>
-                  {formatAmountPerRecurrence(item.recurrence, formatPrice(convertToUSD(item, discount.price)))} after
-                </span>
-              ) : null}
-            </>
-          ) : item.pay_in_installments && item.product.installment_plan ? (
-            <span>in {item.product.installment_plan.number_of_installments} installments</span>
-          ) : item.recurrence ? (
-            isGift ? (
-              recurrenceDurationLabels[item.recurrence]
-            ) : (
-              recurrenceNames[item.recurrence]
-            )
-          ) : null}
-          <footer className="mt-auto">
-            <ul className="list-none">
-              {(item.product.rental && !item.product.rental.rent_only) ||
-              item.product.is_quantity_enabled ||
-              item.product.recurrences ||
-              item.product.options.length > 0 ||
-              item.product.installment_plan ||
-              isPWYW ? (
-                <li>
-                  <Popover
-                    trigger={<span className="link">Configure</span>}
-                    open={editPopoverOpen}
-                    onToggle={setEditPopoverOpen}
-                  >
-                    <div className="paragraphs" style={{ width: "24rem" }}>
-                      <ConfigurationSelector
-                        selection={selection}
-                        setSelection={(selection) => {
-                          setError(null);
-                          setSelection(selection);
-                        }}
-                        product={item.product}
-                        discount={
-                          discount.discount && discount.discount.type !== "ppp" ? discount.discount.value : null
-                        }
-                        showInstallmentPlan
-                      />
-                      {error ? (
-                        <div role="alert" className="danger">
-                          {error}
-                        </div>
-                      ) : null}
-                      <Button color="accent" onClick={saveChanges}>
-                        Save changes
-                      </Button>
-                    </div>
-                  </Popover>
-                </li>
-              ) : null}
-              <li>
-                <button
-                  className="underline"
-                  onClick={() => {
-                    const newItems = cart.items.filter((i) => i !== item);
-                    updateCart({
-                      discountCodes: cart.discountCodes.filter(({ products }) =>
-                        Object.keys(products).some((permalink) =>
-                          newItems.some((item) => item.product.permalink === permalink),
-                        ),
-                      ),
-                      items: newItems.map(({ accepted_offer, ...rest }) => ({
-                        ...rest,
-                        accepted_offer:
-                          accepted_offer?.original_product_id === item.product.id ? null : (accepted_offer ?? null),
-                      })),
-                    });
-                  }}
-                >
-                  Remove
-                </button>
-              </li>
-            </ul>
-          </footer>
-        </CartItemEnd>
-      </CartItemRow>
-      {item.product.bundle_products.length > 0 ? (
-        <CartItemExtra>
-          <h4>This bundle contains...</h4>
-          <CartList>
-            {item.product.bundle_products.map((bundleProduct) => (
-              <CartListItem key={bundleProduct.product_id}>
-                <CartItemRow>
+    <CartListItem
+      extra={
+        item.product.bundle_products.length > 0 ? (
+          <>
+            <h4>This bundle contains...</h4>
+            <CartList>
+              {item.product.bundle_products.map((bundleProduct) => (
+                <CartListItem key={bundleProduct.product_id}>
                   <CartItemMedia>
                     <Thumbnail url={bundleProduct.thumbnail_url} nativeType={bundleProduct.native_type} />
                   </CartItemMedia>
@@ -597,12 +465,139 @@ const CartItemComponent = ({
                       </ul>
                     </CartItemFooter>
                   </CartItemMain>
-                </CartItemRow>
-              </CartListItem>
-            ))}
-          </CartList>
-        </CartItemExtra>
-      ) : null}
+                </CartListItem>
+              ))}
+            </CartList>
+          </>
+        ) : null
+      }
+    >
+      <CartItemMedia>
+        <a href={item.product.url}>
+          <Thumbnail url={item.product.thumbnail_url} nativeType={item.product.native_type} />
+        </a>
+      </CartItemMedia>
+      <CartItemMain>
+        <CartItemTitle asChild>
+          <a href={item.product.url}>
+            <h4 className="font-bold">{item.product.name}</h4>
+          </a>
+        </CartItemTitle>
+        <CartItemTitle className="font-normal" asChild>
+          <a href={item.product.creator.profile_url}>{item.product.creator.name}</a>
+        </CartItemTitle>
+        <CartItemFooter>
+          <ul className="list-none pl-0">
+            <li>
+              <strong>{item.product.is_multiseat_license ? "Seats:" : "Qty:"}</strong> {item.quantity}
+            </li>
+            {option?.name ? (
+              <li>
+                <strong>{variantLabel(item.product.native_type)}:</strong> {option.name}
+              </li>
+            ) : null}
+            {item.recurrence ? (
+              <li>
+                <strong>Membership:</strong> {recurrenceNames[item.recurrence]}
+              </li>
+            ) : null}
+            {item.call_start_time ? (
+              <li>
+                <strong>Time:</strong> {formatCallDate(new Date(item.call_start_time), { date: { hideYear: true } })}
+              </li>
+            ) : null}
+          </ul>
+        </CartItemFooter>
+      </CartItemMain>
+      <CartItemEnd>
+        <span className="current-price" aria-label="Price">
+          {formatPrice(convertToUSD(item, price))}
+        </span>
+        {hasFreeTrial(item, isGift) && item.product.free_trial ? (
+          <>
+            <span>
+              {item.product.free_trial.duration.amount === 1
+                ? `one ${item.product.free_trial.duration.unit}`
+                : `${item.product.free_trial.duration.amount} ${item.product.free_trial.duration.unit}s`}{" "}
+              free
+            </span>
+            {item.recurrence ? (
+              <span>
+                {formatAmountPerRecurrence(item.recurrence, formatPrice(convertToUSD(item, discount.price)))} after
+              </span>
+            ) : null}
+          </>
+        ) : item.pay_in_installments && item.product.installment_plan ? (
+          <span>in {item.product.installment_plan.number_of_installments} installments</span>
+        ) : item.recurrence ? (
+          isGift ? (
+            recurrenceDurationLabels[item.recurrence]
+          ) : (
+            recurrenceNames[item.recurrence]
+          )
+        ) : null}
+        <footer className="mt-auto">
+          <ul className="list-none">
+            {(item.product.rental && !item.product.rental.rent_only) ||
+            item.product.is_quantity_enabled ||
+            item.product.recurrences ||
+            item.product.options.length > 0 ||
+            item.product.installment_plan ||
+            isPWYW ? (
+              <li>
+                <Popover
+                  trigger={<span className="link">Configure</span>}
+                  open={editPopoverOpen}
+                  onToggle={setEditPopoverOpen}
+                >
+                  <div className="paragraphs" style={{ width: "24rem" }}>
+                    <ConfigurationSelector
+                      selection={selection}
+                      setSelection={(selection) => {
+                        setError(null);
+                        setSelection(selection);
+                      }}
+                      product={item.product}
+                      discount={discount.discount && discount.discount.type !== "ppp" ? discount.discount.value : null}
+                      showInstallmentPlan
+                    />
+                    {error ? (
+                      <div role="alert" className="danger">
+                        {error}
+                      </div>
+                    ) : null}
+                    <Button color="accent" onClick={saveChanges}>
+                      Save changes
+                    </Button>
+                  </div>
+                </Popover>
+              </li>
+            ) : null}
+            <li>
+              <button
+                className="underline"
+                onClick={() => {
+                  const newItems = cart.items.filter((i) => i !== item);
+                  updateCart({
+                    discountCodes: cart.discountCodes.filter(({ products }) =>
+                      Object.keys(products).some((permalink) =>
+                        newItems.some((item) => item.product.permalink === permalink),
+                      ),
+                    ),
+                    items: newItems.map(({ accepted_offer, ...rest }) => ({
+                      ...rest,
+                      accepted_offer:
+                        accepted_offer?.original_product_id === item.product.id ? null : (accepted_offer ?? null),
+                    })),
+                  });
+                }}
+              >
+                Remove
+              </button>
+            </li>
+          </ul>
+        </footer>
+      </CartItemEnd>
     </CartListItem>
   );
 };

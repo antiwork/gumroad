@@ -32,7 +32,6 @@ import {
   CartItemFooter,
   CartItemMain,
   CartItemMedia,
-  CartItemRow,
   CartItemTitle,
   CartList,
 } from "$app/components/CartList";
@@ -389,41 +388,39 @@ export const Product = ({
                 });
                 return (
                   <CartListItem key={bundleProduct.id}>
-                    <CartItemRow>
-                      <CartItemMedia>
-                        <Thumbnail url={bundleProduct.thumbnail_url} nativeType={bundleProduct.native_type} />
-                      </CartItemMedia>
-                      <CartItemMain>
-                        <CartItemTitle asChild>
-                          <a href={bundleProduct.url}>
-                            <h4 className="font-bold">{bundleProduct.name}</h4>
-                          </a>
-                        </CartItemTitle>
-                        {bundleProduct.ratings ? (
-                          <div className="flex shrink-0 items-center gap-1" aria-label="Rating">
-                            <Icon name="solid-star" />
-                            {`${bundleProduct.ratings.average.toFixed(1)} (${bundleProduct.ratings.count})`}
-                          </div>
-                        ) : null}
-                        <CartItemFooter>
-                          <ul className="list-none pl-0">
+                    <CartItemMedia>
+                      <Thumbnail url={bundleProduct.thumbnail_url} nativeType={bundleProduct.native_type} />
+                    </CartItemMedia>
+                    <CartItemMain>
+                      <CartItemTitle asChild>
+                        <a href={bundleProduct.url}>
+                          <h4 className="font-bold">{bundleProduct.name}</h4>
+                        </a>
+                      </CartItemTitle>
+                      {bundleProduct.ratings ? (
+                        <div className="flex shrink-0 items-center gap-1" aria-label="Rating">
+                          <Icon name="solid-star" />
+                          {`${bundleProduct.ratings.average.toFixed(1)} (${bundleProduct.ratings.count})`}
+                        </div>
+                      ) : null}
+                      <CartItemFooter>
+                        <ul className="list-none pl-0">
+                          <li>
+                            <strong>Qty:</strong> {bundleProduct.quantity}
+                          </li>
+                          {bundleProduct.variant ? (
                             <li>
-                              <strong>Qty:</strong> {bundleProduct.quantity}
+                              <strong>{variantLabel(bundleProduct.native_type)}:</strong> {bundleProduct.variant}
                             </li>
-                            {bundleProduct.variant ? (
-                              <li>
-                                <strong>{variantLabel(bundleProduct.native_type)}:</strong> {bundleProduct.variant}
-                              </li>
-                            ) : null}
-                          </ul>
-                        </CartItemFooter>
-                      </CartItemMain>
-                      <CartItemEnd>
-                        <span className="current-price" aria-label="Price">
-                          {discountedPriceCents < basePriceCents ? <s>{price}</s> : price}
-                        </span>
-                      </CartItemEnd>
-                    </CartItemRow>
+                          ) : null}
+                        </ul>
+                      </CartItemFooter>
+                    </CartItemMain>
+                    <CartItemEnd>
+                      <span className="current-price" aria-label="Price">
+                        {discountedPriceCents < basePriceCents ? <s>{price}</s> : price}
+                      </span>
+                    </CartItemEnd>
                   </CartListItem>
                 );
               })}

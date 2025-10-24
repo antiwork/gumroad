@@ -4,8 +4,9 @@ import * as React from "react";
 import { classNames } from "$app/utils/classNames";
 
 type BaseProps = {
+  children: React.ReactNode;
   className?: string;
-  children?: React.ReactNode;
+  extra?: React.ReactNode;
 } & React.HTMLAttributes<HTMLElement>;
 
 export const CartList = ({ children, className }: BaseProps) => (
@@ -20,21 +21,13 @@ export const CartList = ({ children, className }: BaseProps) => (
   </div>
 );
 
-export const CartListItem = ({ className, children, ...props }: BaseProps) => (
+export const CartListItem = ({ className, children, extra, ...props }: BaseProps) => (
   <div role="listitem" className={classNames("grid border-border not-first:border-t", className)} {...props}>
-    {children}
+    <section className="col-span-3 grid grid-cols-[3.625rem_1fr_auto] gap-x-4 rounded-sm p-4 not-first:rounded-none sm:grid-cols-[8.5rem_1fr_auto] sm:p-0 sm:pr-4">
+      {children}
+    </section>
+    {extra ? <section className="col-span-3 grid gap-4 border-border p-4 not-first:border-t">{extra}</section> : null}
   </div>
-);
-
-export const CartItemRow = ({ className, children }: BaseProps) => (
-  <section
-    className={classNames(
-      "col-span-3 grid grid-cols-[3.625rem_1fr_auto] gap-x-4 rounded-sm p-4 not-first:rounded-none sm:grid-cols-[8.5rem_1fr_auto] sm:p-0 sm:pr-4",
-      className,
-    )}
-  >
-    {children}
-  </section>
 );
 
 export const CartItemMedia = ({ className, children }: BaseProps) => (
@@ -63,10 +56,4 @@ export const CartItemFooter = ({ className, children }: BaseProps) => (
 
 export const CartItemEnd = ({ className, children }: BaseProps) => (
   <section className={classNames("flex flex-col items-end gap-1 sm:py-4", className)}>{children}</section>
-);
-
-export const CartItemExtra = ({ className, children }: BaseProps) => (
-  <section className={classNames("col-span-3 grid gap-4 border-border p-4 not-first:border-t", className)}>
-    {children}
-  </section>
 );
