@@ -80,7 +80,7 @@ const SubscriptionManagerMagicLink = ({
                 {user_emails.length > 1 ? (
                   <>
                     Can't see the email? Please check your spam folder.{" "}
-                    <button className="link" onClick={() => setHasSentEmail(false)}>
+                    <button className="underline" onClick={() => setHasSentEmail(false)}>
                       Click here to choose another email
                     </button>{" "}
                     or try resending the link below.

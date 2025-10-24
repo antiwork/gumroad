@@ -120,7 +120,7 @@ class ProductFilesArchive < ApplicationRecord
       archive_filename = (folder_archive? ? (rich_content_provider.rich_content_folder_name(folder_id).presence || "Untitled") : with_product_files_owner.name).gsub(/\s+/, "_").tr("/", "-")
       s3_key = ["attachments_zipped", with_product_files_owner.user.external_id,
                 with_product_files_owner.external_id, external_id, archive_filename].join("/")
-      url = "https://s3.amazonaws.com/#{S3_BUCKET}/#{s3_key}"
+      url = "#{AWS_S3_ENDPOINT}/#{S3_BUCKET}/#{s3_key}"
       # NOTE: Total url length must be 255 characters or less to fit MySQL column
       url.first(251) + ".zip"
     end

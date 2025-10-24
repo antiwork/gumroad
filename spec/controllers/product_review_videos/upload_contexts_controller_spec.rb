@@ -18,7 +18,7 @@ describe ProductReviewVideos::UploadContextsController do
         expect(response).to be_successful
         expect(response.parsed_body).to match(
           aws_access_key_id: AWS_ACCESS_KEY,
-          s3_url: "https://s3.amazonaws.com/#{S3_BUCKET}",
+          s3_url: "#{AWS_S3_ENDPOINT}/#{S3_BUCKET}",
           user_id: user.external_id
         )
       end

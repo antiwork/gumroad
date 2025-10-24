@@ -22,10 +22,6 @@ class Admin::UsersController < Admin::BaseController
     end
   end
 
-  def stats
-    render partial: "stats", locals: { user: @user }
-  end
-
   def refund_balance
     RefundUnpaidPurchasesWorker.perform_async(@user.id, current_user.id)
     render json: { success: true }
@@ -37,11 +33,6 @@ class Admin::UsersController < Admin::BaseController
     render json: { success: true }
   rescue => e
     render json: { success: false, message: e.message }
-  end
-
-  def refund_queue
-    @title = "Refund queue"
-    @users = User.refund_queue
   end
 
   def enable

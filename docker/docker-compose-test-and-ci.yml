@@ -41,7 +41,78 @@ services:
     ports:
       - "11211"
 
+  minio:
+    image: quay.io/gumroad/minio:RELEASE.2025-09-07T16-13-09Z
+    ports:
+      - "9000"
+      - "9001"
+    volumes:
+      - minio_data:/data
+    environment:
+      MINIO_ROOT_USER: minioadmin
+      MINIO_ROOT_PASSWORD: minioadmin
+    command: server /data --console-address ":9001"
+    healthcheck:
+      test: [ "CMD", "mc", "ready", "local" ]
+      interval: 30s
+      timeout: 20s
+      retries: 3
+      start_period: 30s
+
+  createbuckets:
+    image: quay.io/gumroad/minio-mc:RELEASE.2025-08-13T08-35-41Z
+    depends_on:
+      minio:
+        condition: service_healthy
+    entrypoint: >
+      /bin/sh -c " /usr/bin/mc alias set myminio http://minio:9000 minioadmin minioadmin; for bucket in gumroad-specs gumroad-invoices; do
+        if ! /usr/bin/mc ls myminio/$$bucket > /dev/null 2>&1; then
+          echo \"Bucket $$bucket does not exist. Creating...\";
+          /usr/bin/mc mb myminio/$$bucket;
+
+          echo \"Setting public read policy for $$bucket\";
+          /usr/bin/mc anonymous set public myminio/$$bucket;
+        else
+          echo \"Bucket $$bucket already exists.\";
+        fi;
+        echo \"Enabling versioning for $$bucket\";
+        /usr/bin/mc version enable myminio/$$bucket;
+      done; exit 0; "
+
+  copyfixturefiles:
+    image: quay.io/gumroad/minio-mc:RELEASE.2025-08-13T08-35-41Z
+    depends_on:
+      createbuckets:
+        condition: service_completed_successfully
+    volumes:
+      - ../spec/support/fixtures:/fixtures:ro
+      - ./fixture-files-private.txt:/fixture-files-private.txt:ro
+      - ./fixture-files-public.txt:/fixture-files-public.txt:ro
+    entrypoint: >
+      /bin/sh -c " /usr/bin/mc alias set myminio http://minio:9000 minioadmin minioadmin > /dev/null 2>&1; echo \"Copying private fixture files to MinIO bucket...\"; while IFS= read -r file || [ -n \"$$file\" ]; do
+        [ -z \"$$file\" ] && continue;
+        if [ -f \"/fixtures/$$file\" ]; then
+          echo \"Copying '$$file' to gumroad-specs/specs/ (private)\";
+          /usr/bin/mc cp \"/fixtures/$$file\" \"myminio/gumroad-specs/specs/$$file\" > /dev/null 2>&1;
+        else
+          echo \"Error: '$$file' not found in fixtures directory\";
+          exit 1;
+        fi;
+      done < /fixture-files-private.txt; echo \"Copying public fixture files to MinIO bucket...\"; while IFS= read -r file || [ -n \"$$file\" ]; do
+        [ -z \"$$file\" ] && continue;
+        if [ -f \"/fixtures/$$file\" ]; then
+          echo \"Copying '$$file' to gumroad-specs/specs/ (public)\";
+          /usr/bin/mc cp \"/fixtures/$$file\" \"myminio/gumroad-specs/specs/$$file\" > /dev/null 2>&1;
+          echo \"Setting public-read ACL for '$$file'\";
+          /usr/bin/mc anonymous set download \"myminio/gumroad-specs/specs/$$file\" > /dev/null 2>&1;
+        else
+          echo \"Error: '$$file' not found in fixtures directory\";
+          exit 1;
+        fi;
+      done < /fixture-files-public.txt; echo \"Fixture files copied successfully\"; exit 0; "
+
 volumes:
   mysql_data:
   redis_data:
   mongo_data:
+  minio_data:

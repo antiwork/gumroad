@@ -69,7 +69,7 @@ const ApplicationRow = ({ application, onRemove }: { application: Application; o
       </div>
       <div className="actions">
         <NavigationButton href={Routes.oauth_application_path(application.id)}>Edit</NavigationButton>
-        <Button outline color="danger" onClick={deleteApp}>
+        <Button color="danger" onClick={deleteApp}>
           Delete
         </Button>
       </div>

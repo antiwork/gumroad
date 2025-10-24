@@ -5,9 +5,9 @@
       <span><%= method[:path] %></span>
     </p>
     <p><%= method[:description].html_safe %></p>
-    <figure class="code">
-      <pre tabindex="0"><a><%= method[:is_oauth].present? ? "https://gumroad.com#{method[:path]}" : "https://api.gumroad.com/v2#{method[:path]}" %></a></pre>
-    </figure>
+    <%= react_component "CodeSnippet", props: {
+          children: method[:is_oauth].present? ? "https://gumroad.com#{method[:path]}" : "https://api.gumroad.com/v2#{method[:path]}"
+        }, prerender: true %>
     <% if method[:parameters_layout].present? %>
       <div class="parameters">
         <h4>Parameters:</h4>
@@ -15,16 +15,16 @@
       </div>
     <% end %>
     <% if method[:curl_layout].present? %>
-      <figure class="code">
-        <figcaption>cURL example</figcaption>
-        <pre tabindex="0"><%= render "public/api/curl/#{method[:curl_layout]}" %></pre>
-      </figure>
+      <%= react_component "CodeSnippet", props: {
+            caption: "cURL example",
+            children: render("public/api/curl/#{method[:curl_layout]}")
+          }, prerender: true %>
     <% end %>
     <% if method[:response_layout].present? %>
-      <figure class="code">
-        <figcaption>Example response:</figcaption>
-        <pre tabindex="0"><%= render "public/api/response/#{method[:response_layout]}" %></pre>
-      </figure>
+      <%= react_component "CodeSnippet", props: {
+            caption: "Example response:",
+            children: render("public/api/response/#{method[:response_layout]}")
+          }, prerender: true %>
     <% end %>
   </div>
 </div>

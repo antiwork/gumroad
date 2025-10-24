@@ -7,7 +7,7 @@ describe "RecommendationsScenario", type: :system, js: true do
     @original_product = create(:product)
     @recommended_product = create(:product,
                                   user: create(:named_user),
-                                  preview_url: "https://s3.amazonaws.com/gumroad-specs/specs/kFDzu.png")
+                                  preview_url: "#{AWS_S3_ENDPOINT}/#{S3_BUCKET}/specs/kFDzu.png")
     3.times do |i|
       create(:purchase, email: "gumroaduser#{i}@gmail.com", link: @original_product)
       create(:purchase, email: "gumroaduser#{i}@gmail.com", link: @recommended_product)

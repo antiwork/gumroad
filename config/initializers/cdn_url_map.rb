@@ -35,12 +35,12 @@ PUBLIC_STORAGE_CDN_S3_PROXY_HOST = public_assets_cdn_hosts.dig(Rails.env.to_sym,
 if CDN_S3_PROXY_HOST && PUBLIC_STORAGE_CDN_S3_PROXY_HOST
   if Rails.env.production?
     # Optimize CDN_URL_MAP for production to reduce the number of string look ups.
-    CDN_URL_MAP["https://s3.amazonaws.com/gumroad/"] = "#{CDN_S3_PROXY_HOST}/res/gumroad/"
+    CDN_URL_MAP["#{AWS_S3_ENDPOINT}/gumroad/"] = "#{CDN_S3_PROXY_HOST}/res/gumroad/"
     CDN_URL_MAP["https://gumroad-public-storage.s3.amazonaws.com/"] = "#{PUBLIC_STORAGE_CDN_S3_PROXY_HOST}/"
   else
-    CDN_URL_MAP.merge!("https://s3.amazonaws.com/gumroad/" => "#{CDN_S3_PROXY_HOST}/res/gumroad/",
-                       "https://s3.amazonaws.com/gumroad-staging/" => "#{CDN_S3_PROXY_HOST}/res/gumroad-staging/",
-                       "https://s3.amazonaws.com/gumroad_dev/" => "#{CDN_S3_PROXY_HOST}/res/gumroad_dev/",
+    CDN_URL_MAP.merge!("#{AWS_S3_ENDPOINT}/gumroad/" => "#{CDN_S3_PROXY_HOST}/res/gumroad/",
+                       "#{AWS_S3_ENDPOINT}/gumroad-staging/" => "#{CDN_S3_PROXY_HOST}/res/gumroad-staging/",
+                       "#{AWS_S3_ENDPOINT}/gumroad_dev/" => "#{CDN_S3_PROXY_HOST}/res/gumroad_dev/",
                        "https://gumroad-dev-public-storage.s3.amazonaws.com/" => "#{PUBLIC_STORAGE_CDN_S3_PROXY_HOST}/")
   end
 end

@@ -10,11 +10,11 @@ describe User::SocialTwitter do
     end
 
     it "stores the user's profile picture from twitter to S3 and returns the URL for the saved file" do
-      twitter_user = double(profile_image_url: "https://s3.amazonaws.com/gumroad-specs/specs/kFDzu.png")
+      twitter_user = double(profile_image_url: "#{AWS_S3_ENDPOINT}/#{S3_BUCKET}/specs/kFDzu.png")
       expect($twitter).to receive(:user).and_return(twitter_user)
 
       twitter_picture_url = @user.twitter_picture_url
-      expect(twitter_picture_url).to match("https://gumroad-specs.s3.amazonaws.com/#{@user.avatar_variant.key}")
+      expect(twitter_picture_url).to match("#{AWS_S3_ENDPOINT}/#{S3_BUCKET}/#{@user.avatar_variant.key}")
 
       picture_response = HTTParty.get(twitter_picture_url)
       expect(picture_response.content_type).to eq("image/png")
