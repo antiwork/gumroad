@@ -26,9 +26,11 @@ const PaginatedLoader = ({ itemsLength, pagination, only }: PaginatedLoaderProps
     preserveScroll: true,
   };
 
-  return <WhenVisible key={`${pagination.page}-${pagination.limit}`} fallback={<Loading />} params={params}>
-    <div />
-  </WhenVisible>;
+  return (
+    <WhenVisible key={`${pagination.page}-${pagination.limit}`} fallback={<Loading />} params={params}>
+      <div />
+    </WhenVisible>
+  );
 };
 
 export default PaginatedLoader;
