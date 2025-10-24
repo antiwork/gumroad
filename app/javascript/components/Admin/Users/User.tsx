@@ -57,7 +57,7 @@ export type User = {
   flagged_for_tos_violation: boolean;
   on_probation: boolean;
   user_risk_state: string;
-  comment_count: number;
+  comments_count: number;
   bio: string;
   created_at: string;
   updated_at: string;
