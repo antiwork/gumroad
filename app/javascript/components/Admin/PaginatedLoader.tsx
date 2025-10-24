@@ -18,21 +18,17 @@ const PaginatedLoader = ({ itemsLength, pagination, only }: PaginatedLoaderProps
   const expectedItemsUpToCurrentPage = pagination.page * pagination.limit;
   const hasFullPage = itemsLength >= expectedItemsUpToCurrentPage;
 
-  if (hasFullPage) {
-    const params = {
-      data: { page: pagination.page + 1 },
-      only,
-      preserveScroll: true,
-    };
+  if (!hasFullPage) return null;
 
-    return (
-      <WhenVisible key={`${pagination.page}-${pagination.limit}`} fallback={<Loading />} params={params}>
-        <div />
-      </WhenVisible>
-    );
-  }
+  const params = {
+    data: { page: pagination.page + 1 },
+    only,
+    preserveScroll: true,
+  };
 
-  return null;
+  return <WhenVisible key={`${pagination.page}-${pagination.limit}`} fallback={<Loading />} params={params}>
+    <div />
+  </WhenVisible>;
 };
 
 export default PaginatedLoader;

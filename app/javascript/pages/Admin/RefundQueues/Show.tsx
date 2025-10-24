@@ -16,7 +16,7 @@ const AdminRefundQueue = () => {
   return (
     <section className="flex flex-col gap-4">
       {users.map((user) => (
-        <UserCard key={`refund-queue-user-${user.id}`} user={user} />
+        <UserCard key={user.id} user={user} />
       ))}
       {pagination.page === 1 && users.length === 0 && <EmptyState message="No users found." />}
       <PaginatedLoader itemsLength={users.length} pagination={pagination} only={["users", "pagination"]} />
