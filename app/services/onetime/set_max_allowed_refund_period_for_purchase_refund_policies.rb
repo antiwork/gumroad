@@ -1,5 +1,7 @@
 # frozen_string_literal: true
 
+require "benchmark"
+
 class Onetime::SetMaxAllowedRefundPeriodForPurchaseRefundPolicies < Onetime::Base
   LAST_PROCESSED_ID_KEY = :last_processed_id
 
@@ -18,24 +20,42 @@ class Onetime::SetMaxAllowedRefundPeriodForPurchaseRefundPolicies < Onetime::Bas
       ReplicaLagWatcher.watch
       Rails.logger.info "Processing purchase refund policies #{batch.first.id} to #{batch.last.id}"
 
+      batch_stats = initialize_batch_stats
+      batch_start_time = Time.now
+
       batch.each do |purchase_refund_policy|
         next if purchase_refund_policy.max_refund_period_in_days.present?
 
-        max_refund_period_in_days = determine_max_refund_period_in_days(purchase_refund_policy)
+        record_timings = {}
+        record_start_time = Time.now
+
+        max_refund_period_in_days = determine_max_refund_period_in_days(purchase_refund_policy, record_timings)
         if max_refund_period_in_days.nil?
           Rails.logger.info("No exact match found for title '#{purchase_refund_policy.title}', skipping")
           next
         end
 
         begin
-          purchase_refund_policy.with_lock do
-            purchase_refund_policy.update!(max_refund_period_in_days: max_refund_period_in_days)
-            Rails.logger.info "PurchaseRefundPolicy: #{purchase_refund_policy.id}: updated with max allowed refund period of #{max_refund_period_in_days} days"
+          update_time = Benchmark.realtime do
+            purchase_refund_policy.with_lock do
+              purchase_refund_policy.update!(max_refund_period_in_days: max_refund_period_in_days)
+            end
           end
+          record_timings[:update] = update_time
+
+          update_batch_stats(batch_stats, record_timings)
+
+          record_total_time = Time.now - record_start_time
+          log_record_timing(purchase_refund_policy.id, record_total_time, record_timings, max_refund_period_in_days)
+          track_slowest_records(batch_stats, purchase_refund_policy.id, record_total_time)
+          batch_stats[:processed_count] += 1
         rescue => e
           invalid_policy_ids << { purchase_refund_policy.id => e.message }
         end
       end
+
+      batch_total_time = Time.now - batch_start_time
+      log_batch_summary(batch_stats, batch_total_time)
 
       $redis.set(LAST_PROCESSED_ID_KEY, batch.last.id, ex: 1.month)
     end
@@ -50,7 +70,7 @@ class Onetime::SetMaxAllowedRefundPeriodForPurchaseRefundPolicies < Onetime::Bas
       first_policy_id = [first_eligible_policy_id, $redis.get(LAST_PROCESSED_ID_KEY).to_i + 1].max
       PurchaseRefundPolicy
         .where(id: first_policy_id..max_id)
-        .includes({ purchase: :link }, :product_refund_policy)
+        .includes({ purchase: { link: :product_refund_policy } })
     end
 
     def first_eligible_policy_id
@@ -68,18 +88,33 @@ class Onetime::SetMaxAllowedRefundPeriodForPurchaseRefundPolicies < Onetime::Bas
       cache
     end
 
-    def determine_max_refund_period_in_days(purchase_refund_policy)
-      previous_value = determine_max_refund_period_in_days_from_previous_policy(purchase_refund_policy)
+    def determine_max_refund_period_in_days(purchase_refund_policy, timings = {})
+      previous_value = nil
+      cache_time = Benchmark.realtime do
+        previous_value = determine_max_refund_period_in_days_from_previous_policy(purchase_refund_policy)
+      end
+      timings[:cache_lookup] = cache_time
+
       return previous_value if previous_value.present?
 
       return 0 if purchase_refund_policy.title.match?(/no refunds|final|no returns/i)
 
-      exact_match = find_exact_match_by_title(purchase_refund_policy.title)
+      exact_match = nil
+      exact_match_time = Benchmark.realtime do
+        exact_match = find_exact_match_by_title(purchase_refund_policy.title)
+      end
+      timings[:exact_match] = exact_match_time
+
       return exact_match if exact_match
 
       begin
-        response = ask_ai(max_refund_period_in_days_prompt(purchase_refund_policy))
-        days = Integer(response.dig("choices", 0, "message", "content")) rescue response.dig("choices", 0, "message", "content")
+        ai_response = nil
+        ai_time = Benchmark.realtime do
+          ai_response = ask_ai(max_refund_period_in_days_prompt(purchase_refund_policy))
+        end
+        timings[:ai_call] = ai_time
+
+        days = Integer(ai_response.dig("choices", 0, "message", "content")) rescue ai_response.dig("choices", 0, "message", "content")
 
         if RefundPolicy::ALLOWED_REFUND_PERIODS_IN_DAYS.key?(days)
           days
@@ -94,7 +129,10 @@ class Onetime::SetMaxAllowedRefundPeriodForPurchaseRefundPolicies < Onetime::Bas
     end
 
     def determine_max_refund_period_in_days_from_previous_policy(purchase_refund_policy)
-      return purchase_refund_policy.product_refund_policy.max_refund_period_in_days if purchase_refund_policy.product_refund_policy&.title == purchase_refund_policy.title
+      return nil unless purchase_refund_policy.purchase&.link&.product_refund_policy
+
+      product_refund_policy = purchase_refund_policy.purchase.link.product_refund_policy
+      return product_refund_policy.max_refund_period_in_days if product_refund_policy.read_attribute(:title) == purchase_refund_policy.title
 
       cached_value = title_cache[purchase_refund_policy.title]
       return cached_value if cached_value.present?
@@ -154,5 +192,91 @@ class Onetime::SetMaxAllowedRefundPeriodForPurchaseRefundPolicies < Onetime::Bas
           max_tokens: 10
         }
       )
+    end
+
+    def initialize_batch_stats
+      {
+        processed_count: 0,
+        cache_lookups: { count: 0, total_time: 0.0 },
+        exact_matches: { count: 0, total_time: 0.0 },
+        ai_calls: { count: 0, total_time: 0.0 },
+        updates: { count: 0, total_time: 0.0 },
+        slowest_records: []
+      }
+    end
+
+    def update_batch_stats(batch_stats, record_timings)
+      if record_timings[:cache_lookup]
+        batch_stats[:cache_lookups][:count] += 1
+        batch_stats[:cache_lookups][:total_time] += record_timings[:cache_lookup]
+      end
+
+      if record_timings[:exact_match]
+        batch_stats[:exact_matches][:count] += 1
+        batch_stats[:exact_matches][:total_time] += record_timings[:exact_match]
+      end
+
+      if record_timings[:ai_call]
+        batch_stats[:ai_calls][:count] += 1
+        batch_stats[:ai_calls][:total_time] += record_timings[:ai_call]
+      end
+
+      if record_timings[:update]
+        batch_stats[:updates][:count] += 1
+        batch_stats[:updates][:total_time] += record_timings[:update]
+      end
+    end
+
+    def log_record_timing(policy_id, total_time, timings, max_refund_days)
+      timing_parts = []
+      timing_parts << "cache: #{format_time(timings[:cache_lookup])}" if timings[:cache_lookup]
+      timing_parts << "exact_match: #{format_time(timings[:exact_match])}" if timings[:exact_match]
+      timing_parts << "ai: #{format_time(timings[:ai_call])}" if timings[:ai_call]
+      timing_parts << "update: #{format_time(timings[:update])}" if timings[:update]
+
+      Rails.logger.info "PurchaseRefundPolicy #{policy_id}: processed in #{format_time(total_time)} (#{timing_parts.join(', ')}) - set to #{max_refund_days} days"
+    end
+
+    def track_slowest_records(batch_stats, policy_id, total_time)
+      batch_stats[:slowest_records] << { id: policy_id, time: total_time }
+      batch_stats[:slowest_records].sort_by! { |r| -r[:time] }
+      batch_stats[:slowest_records] = batch_stats[:slowest_records].first(5)
+    end
+
+    def log_batch_summary(stats, total_time)
+      return if stats[:processed_count].zero?
+
+      avg_time = total_time / stats[:processed_count]
+      Rails.logger.info "Batch summary: #{stats[:processed_count]} records in #{format_time(total_time)} (avg: #{format_time(avg_time)}/record)"
+
+      if stats[:cache_lookups][:count] > 0
+        avg_cache = stats[:cache_lookups][:total_time] / stats[:cache_lookups][:count]
+        Rails.logger.info "  - Cache lookups: #{stats[:cache_lookups][:count]} (avg: #{format_time(avg_cache)})"
+      end
+
+      if stats[:exact_matches][:count] > 0
+        avg_exact = stats[:exact_matches][:total_time] / stats[:exact_matches][:count]
+        Rails.logger.info "  - Exact matches: #{stats[:exact_matches][:count]} (avg: #{format_time(avg_exact)})"
+      end
+
+      if stats[:ai_calls][:count] > 0
+        avg_ai = stats[:ai_calls][:total_time] / stats[:ai_calls][:count]
+        Rails.logger.info "  - AI calls: #{stats[:ai_calls][:count]} (avg: #{format_time(avg_ai)})"
+      end
+
+      if stats[:updates][:count] > 0
+        avg_update = stats[:updates][:total_time] / stats[:updates][:count]
+        Rails.logger.info "  - DB updates: #{stats[:updates][:count]} (avg: #{format_time(avg_update)})"
+      end
+
+      if stats[:slowest_records].any?
+        slowest_list = stats[:slowest_records].map { |r| "#{r[:id]} (#{format_time(r[:time])})" }.join(", ")
+        Rails.logger.info "Slowest records: [#{slowest_list}]"
+      end
+    end
+
+    def format_time(seconds)
+      return "0.000s" if seconds.nil?
+      "#{format('%.3f', seconds)}s"
     end
 end
