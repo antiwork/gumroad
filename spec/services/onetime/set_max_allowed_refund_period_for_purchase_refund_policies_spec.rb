@@ -110,7 +110,9 @@ describe Onetime::SetMaxAllowedRefundPeriodForPurchaseRefundPolicies do
     end
   end
 
-  describe "PurchaseRefundPolicy#determine_max_refund_period_in_days" do
+  describe "Service#determine_max_refund_period_in_days" do
+    let(:service_instance) { described_class.new }
+
     it "returns correct days for known titles" do
       policy_no_refunds = build(:purchase_refund_policy, title: "No refunds allowed")
       policy_7_days = build(:purchase_refund_policy, title: "7-day money back guarantee")
@@ -118,16 +120,16 @@ describe Onetime::SetMaxAllowedRefundPeriodForPurchaseRefundPolicies do
       policy_30_days = build(:purchase_refund_policy, title: "30-day money back guarantee")
       policy_6_months = build(:purchase_refund_policy, title: "6-month money back guarantee")
 
-      expect(policy_no_refunds.determine_max_refund_period_in_days).to eq(0)
-      expect(policy_7_days.determine_max_refund_period_in_days).to eq(7)
-      expect(policy_14_days.determine_max_refund_period_in_days).to eq(14)
-      expect(policy_30_days.determine_max_refund_period_in_days).to eq(30)
-      expect(policy_6_months.determine_max_refund_period_in_days).to eq(183)
+      expect(service_instance.send(:determine_max_refund_period_in_days, policy_no_refunds)).to eq(0)
+      expect(service_instance.send(:determine_max_refund_period_in_days, policy_7_days)).to eq(7)
+      expect(service_instance.send(:determine_max_refund_period_in_days, policy_14_days)).to eq(14)
+      expect(service_instance.send(:determine_max_refund_period_in_days, policy_30_days)).to eq(30)
+      expect(service_instance.send(:determine_max_refund_period_in_days, policy_6_months)).to eq(183)
     end
 
     it "returns nil for unknown titles" do
       policy_unknown = build(:purchase_refund_policy, title: "Unknown policy")
-      expect(policy_unknown.determine_max_refund_period_in_days).to be_nil
+      expect(service_instance.send(:determine_max_refund_period_in_days, policy_unknown)).to be_nil
     end
   end
 end
