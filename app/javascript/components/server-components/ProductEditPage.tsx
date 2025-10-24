@@ -132,11 +132,6 @@ const findUpdatedContent = (product: Product, lastSavedProduct: Product) => {
   };
 };
 
-// Note: validation on the server enforces max-length limits for fields such as
-// `receipt_additional_text` and `custom_view_content_button_text`. We intentionally
-// avoid client-side truncation here and send the `product` as-is, following
-// the existing project pattern.
-
 const ProductEditPage = (props: Props) => {
   const [product, setProduct] = React.useState(props.product);
   const [contentUpdates, setContentUpdates] = React.useState<ContentUpdates>(null);
