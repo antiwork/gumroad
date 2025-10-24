@@ -61,10 +61,8 @@ describe("Viewing a purchase receipt", type: :system, js: true) do
 
     context "with customized receipt fields" do
       before do
-        product.update!(
-          custom_view_content_button_text: "Download Your Files",
-          receipt_additional_text: "Questions? Contact support@example.com for help."
-        )
+        product.save_custom_view_content_button_text("Download Your Files")
+        product.save_receipt_additional_text("Questions? Contact support@example.com for help.")
       end
 
       it "shows the customized button text and additional message" do
