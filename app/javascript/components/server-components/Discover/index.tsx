@@ -267,8 +267,8 @@ const Discover = (props: Props) => {
               sort: state.params.query ? "default" : state.params.sort,
             }}
             appendFilters={
-              <details>
-                <summary>Rating</summary>
+              <details className="flex-wrap items-center p-4 gap-4 justify-between not-first:border-t not-first:border-border block">
+                <summary className="grow grid-flow-col grid-cols-[1fr_auto] before:[grid-column:2]">Rating</summary>
                 <fieldset role="group">
                   {range(4, 0).map((number) => (
                     <label key={number}>

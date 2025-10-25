@@ -5,6 +5,7 @@ import { request } from "$app/utils/request";
 
 import Loading from "$app/components/Admin/Loading";
 import type { User } from "$app/components/Admin/Users/User";
+import { Stack } from "$app/components/ui/Stack";
 
 type LatestPostsProps = {
   user: User;
@@ -14,11 +15,13 @@ export type PostProps = {
   id: number;
   name: string;
   created_at: string;
+  classname?: string | undefined;
+  grow?: boolean | undefined;
 };
 
-const Post = ({ name, created_at }: PostProps) => (
-  <div>
-    <h5>{name}</h5>
+const Post = ({ name, created_at, classname, grow }: PostProps) => (
+  <div className={classname}>
+    <h5 className={grow ? "grow" : ""}>{name}</h5>
     <time>{created_at}</time>
   </div>
 );
@@ -27,11 +30,11 @@ const LatestPostsContent = ({ posts, isLoading }: { posts: PostProps[]; isLoadin
   if (isLoading) return <Loading />;
   if (posts.length > 0)
     return (
-      <div className="stack">
+      <Stack>
         {posts.map(({ id, name, created_at }) => (
-          <Post key={id} id={id} name={name} created_at={created_at} />
+          <Post key={id} id={id} name={name} created_at={created_at} classname="flex flex-wrap items-center p-4 gap-4 justify-between not-first:border-t not-first:border-border" grow/>
         ))}
-      </div>
+      </Stack>
     );
   return (
     <div className="info" role="status">
