@@ -60,7 +60,7 @@ const AdminUserMerchantAccounts = ({ user }: AdminUserMerchantAccountsProps) => 
     <div ref={elementRef}>
       <h3>Merchant Accounts</h3>
 
-      {isLoading ? <LoadingSpinner className="size-3" /> : null}
+      {isLoading ? <LoadingSpinner /> : null}
 
       {data?.merchant_accounts && data.merchant_accounts.length > 0 ? (
         <ul className="inline">
