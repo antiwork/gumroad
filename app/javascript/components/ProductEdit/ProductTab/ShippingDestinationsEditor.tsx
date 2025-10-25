@@ -6,7 +6,8 @@ import { PriceInput } from "$app/components/PriceInput";
 import { ShippingDestination, useProductEditContext } from "$app/components/ProductEdit/state";
 import Placeholder from "$app/components/ui/Placeholder";
 import { WithTooltip } from "$app/components/WithTooltip";
-import { Stack } from "$app/components/ui/Stack";
+import { Stack, StackItem } from "$app/components/ui/Stack";
+import { classNames } from "$app/utils/classNames";
 
 export const ShippingDestinationsEditor = ({
   shippingDestinations,
@@ -48,14 +49,16 @@ export const ShippingDestinationsEditor = ({
               }
               onRemove={() => onChange(shippingDestinations.filter((_, i) => i !== index))}
               key={index}
+              classname="flex flex-wrap items-center p-4 gap-4 justify-between not-first:border-t not-first:border-border"
+              grow
             />
           ))}
-          <div>
-            <Button onClick={addShippingDestination}>
+          <StackItem>
+            <Button onClick={addShippingDestination} grow>
               <Icon name="plus" />
               Add shipping destination
             </Button>
-          </div>
+          </StackItem>
         </Stack>
       ) : (
         <Placeholder>
@@ -77,10 +80,14 @@ const ShippingDestinationRow = ({
   shippingDestination,
   onChange,
   onRemove,
+  classname,
+  grow,
 }: {
   shippingDestination: ShippingDestination;
   onChange: (shippingDestination: ShippingDestination) => void;
   onRemove: () => void;
+  classname?: string | undefined;
+  grow?: boolean | undefined;
 }) => {
   const { availableCountries, currencyType } = useProductEditContext();
   const uid = React.useId();
@@ -88,8 +95,8 @@ const ShippingDestinationRow = ({
   const updateDestination = (update: Partial<ShippingDestination>) => onChange({ ...shippingDestination, ...update });
 
   return (
-    <div aria-label="Shipping destination">
-      <fieldset className="input-with-button">
+    <div aria-label="Shipping destination" className={classname}>
+      <fieldset className={classNames("input-with-button", grow?"grow basis-0":"")}>
         <legend>
           <label htmlFor={`${uid}-country`}>Country</label>
         </legend>

@@ -13,7 +13,8 @@ import * as BraintreeDataCollector from "braintree-web/data-collector";
 import * as BraintreePaypal from "braintree-web/paypal";
 import cx from "classnames";
 import * as React from "react";
-import { Stack } from "$app/components/ui/Stack";
+import { Stack, StackItem } from "$app/components/ui/Stack";
+import { classNames } from "$app/utils/classNames";
 import { useBraintreeToken } from "$app/data/braintree_client_token_data";
 import { preparePaymentRequestPaymentMethodData } from "$app/data/card_payment_method_data";
 import {
@@ -192,7 +193,7 @@ const ZipCodeInput = () => {
   );
 };
 
-const EmailAddress = () => {
+const EmailAddress = ({classname,grow}: {classname?: string, grow?: boolean}) => {
   const uid = React.useId();
   const loggedInUser = useLoggedInUser();
   const [state, dispatch] = useState();
@@ -216,12 +217,12 @@ const EmailAddress = () => {
   };
 
   return (
-    <div>
-      <div className="paragraphs">
+    <div className={classname} >
+      <div className={classNames("paragraphs", grow ? "grow" : "")}>
         <fieldset className={cx({ danger: errors.has("email") })}>
           <legend>
             <label htmlFor={`${uid}email`}>
-              <h4>Email address</h4>
+              <h4 className="font-bold">Email address</h4>
             </label>
           </legend>
           <div className={cx("popover", { expanded: !!state.emailTypoSuggestion })} style={{ width: "100%" }}>
@@ -253,7 +254,7 @@ const EmailAddress = () => {
   );
 };
 
-const SharedInputs = () => {
+const SharedInputs = ({classname,grow}: {classname?: string |undefined, grow?: boolean |undefined}) => {
   const uid = React.useId();
   const [state, dispatch] = useState();
   const errors = getErrors(state);
@@ -367,9 +368,9 @@ const SharedInputs = () => {
   return (
     <>
       {showCountryInput || showVatIdInput ? (
-        <div>
-          <div className="paragraphs">
-            <h4>Contact information</h4>
+        <div className={classname}>
+          <div className={classNames("paragraphs", grow ? "grow" : "")}>
+            <h4 className="font-bold">Contact information</h4>
             {showCountryInput ? (
               <div
                 style={{
@@ -437,7 +438,7 @@ const useFail = () => {
   };
 };
 
-const CustomerDetails = () => {
+const CustomerDetails = ({classname,grow}: {classname?: string, grow?: boolean}) => {
   const isLoggedIn = !!useLoggedInUser();
   const [state, dispatch] = useState();
   const uid = React.useId();
@@ -484,11 +485,11 @@ const CustomerDetails = () => {
 
   return (
     <>
-      <SharedInputs />
+      <SharedInputs classname={classname} grow={grow}/>
       {hasShipping(state) ? (
-        <div>
-          <div className="paragraphs">
-            <h4 style={{ display: "flex", justifyContent: "space-between" }}>
+        <div className={classname}>
+          <div className={classNames("paragraphs", grow ? "grow" : "")}>
+            <h4 className="font-bold" style={{ display: "flex", justifyContent: "space-between" }}>
               Shipping information
               {isLoggedIn ? (
                 <label>
@@ -591,13 +592,13 @@ const CustomerDetails = () => {
         </div>
       ) : null}
       {state.warning ? (
-        <div>
-          <div role="status" className="warning">
+        <div className={classname}>
+          <div role="status" className="grow warning">
             {state.warning}
           </div>
         </div>
       ) : null}
-      {isTippingEnabled(state) ? <TipSelector /> : null}
+      {isTippingEnabled(state) ? <TipSelector classname={classname} grow={grow}/> : null}
       {state.products.length === 1 && state.products[0]?.canGift && !state.products[0]?.payInInstallments ? (
         <GiftForm isMembership={state.products[0]?.nativeType === "membership"} />
       ) : null}
@@ -612,7 +613,7 @@ const CustomerDetails = () => {
   );
 };
 
-const CreditCard = () => {
+const CreditCard = ({classname,grow}: {classname?: string, grow?: boolean}) => {
   const [state, dispatch] = useState();
   const fail = useFail();
   const isLoggedIn = !!useLoggedInUser();
@@ -682,8 +683,8 @@ const CreditCard = () => {
   if (state.paymentMethod !== "card") return null;
 
   return (
-    <div style={{ borderTop: "none", paddingTop: "0" }}>
-      <div className="paragraphs">
+    <div className={classname} style={{ borderTop: "none", paddingTop: "0" }}>
+      <div className={classNames("paragraphs", grow ? "grow" : "")}>
         {!useSavedCard ? (
           <fieldset>
             <legend>
@@ -724,7 +725,7 @@ const CreditCard = () => {
   );
 };
 
-const TipSelector = () => {
+const TipSelector = ({classname,grow}: {classname?: string |undefined, grow?: boolean |undefined}) => {
   const [state, dispatch] = useState();
   const errors = getErrors(state);
   const showPercentageOptions = getTotalPriceFromProducts(state) > 0;
@@ -737,9 +738,9 @@ const TipSelector = () => {
   const defaultOther = state.surcharges.type === "loaded" ? state.surcharges.result.subtotal * 0.3 : 5;
 
   return (
-    <div>
-      <div className="paragraphs">
-        <h4>Add a tip</h4>
+    <div className={classname}>
+      <div className={classNames("paragraphs", grow ? "grow" : "")}>
+        <h4 className="font-bold">Add a tip</h4>
         {showPercentageOptions ? (
           <div
             role="radiogroup"
@@ -805,7 +806,7 @@ const TipSelector = () => {
   );
 };
 
-const BraintreePayPal = ({ token }: { token: string }) => {
+const BraintreePayPal = ({ token,grow }: { token: string,grow?: boolean |undefined}) => {
   const [state, dispatch] = useState();
   const fail = useFail();
   const payLabel = usePayLabel();
@@ -864,13 +865,13 @@ const BraintreePayPal = ({ token }: { token: string }) => {
   }, [state.status.type]);
 
   return (
-    <Button className="button-paypal" onClick={() => dispatch({ type: "offer" })} disabled={isSubmitDisabled(state)}>
+    <Button className={classNames("button-paypal", grow ? "grow" : "")} onClick={() => dispatch({ type: "offer" })} disabled={isSubmitDisabled(state)}>
       {payLabel}
     </Button>
   );
 };
 
-const NativePayPal = ({ implementation }: { implementation: PayPalNamespace }) => {
+const NativePayPal = ({ implementation,grow }: { implementation: PayPalNamespace,grow?: boolean |undefined}) => {
   const [state, dispatch] = useState();
   const fail = useFail();
   const isDarkTheme = useIsDarkTheme();
@@ -958,13 +959,14 @@ const NativePayPal = ({ implementation }: { implementation: PayPalNamespace }) =
         ref={ref}
         hidden={isProcessing(state)}
         style={isDarkTheme ? { filter: "invert(1) grayscale(1)" } : undefined}
+        className={grow?"grow":""}
       />
       {isProcessing(state) ? <Progress width="1em" /> : null}
     </>
   );
 };
 
-const PayPal = () => {
+const PayPal = ({classname,grow}: {classname?: string |undefined, grow?: boolean |undefined}) => {
   const [state, dispatch] = useState();
 
   const [nativePaypal, setNativePaypal] = React.useState<PayPalNamespace | null>(null);
@@ -1014,17 +1016,17 @@ const PayPal = () => {
 
   if (state.paymentMethod !== "paypal" || !implementation) return null;
   return (
-    <div>
+    <div className={classname}>
       {nativePaypal && implementation === "native" ? (
-        <NativePayPal implementation={nativePaypal} />
+        <NativePayPal implementation={nativePaypal} grow={grow} />
       ) : braintreeToken.type === "available" ? (
-        <BraintreePayPal token={braintreeToken.token} />
+        <BraintreePayPal token={braintreeToken.token} grow={grow} />
       ) : null}
     </div>
   );
 };
 
-const StripePaymentRequest = () => {
+const StripePaymentRequest = ({classname,grow}: {classname?: string |undefined, grow?: boolean |undefined}) => {
   const [state, dispatch] = useState();
   const stripe = useStripe();
   const fail = useFail();
@@ -1155,8 +1157,8 @@ const StripePaymentRequest = () => {
   if (!canPay || state.paymentMethod !== "stripePaymentRequest") return null;
 
   return (
-    <div>
-      <Button color="primary" onClick={() => dispatch({ type: "offer" })} disabled={isSubmitDisabled(state)}>
+    <div className={classname}>
+      <Button color="primary" className={grow?"grow":""} onClick={() => dispatch({ type: "offer" })} disabled={isSubmitDisabled(state)}>
         {payLabel}
       </Button>
     </div>
@@ -1205,19 +1207,19 @@ export const PaymentForm = ({
   return (
     <Stack ref={paymentFormRef} className={className} aria-label="Payment form">
       {isTestPurchase ? (
-        <div>
-          <div role="alert" className="info">
+        <StackItem>
+          <div role="alert" className=" grow info">
             This will be a test purchase as you are the creator of at least one of the products. Your payment method
             will not be charged.
           </div>
-        </div>
+        </StackItem>
       ) : null}
-      <EmailAddress />
+      <EmailAddress classname={classNames("flex flex-wrap items-center p-4 gap-4 justify-between",isTestPurchase ? "border-t border-border" : "")}/>
       {!isFreePurchase ? (
         <>
-          <div>
-            <div className="paragraphs">
-              <h4>Pay with</h4>
+          <StackItem>
+            <div className="grow paragraphs">
+              <h4 className="font-bold">Pay with</h4>
               {state.availablePaymentMethods.length > 1 ? (
                 <Tabs>
                   {state.availablePaymentMethods.map((method) => (
@@ -1226,23 +1228,23 @@ export const PaymentForm = ({
                 </Tabs>
               ) : null}
             </div>
-          </div>
+          </StackItem>
           {notice ? (
-            <div>
-              <div role="alert" className="info">
+            <StackItem>
+              <div role="alert" className="grow info">
                 {notice}
               </div>
-            </div>
+            </StackItem>
           ) : null}
-          <CreditCard />
+          <CreditCard classname="flex flex-wrap items-center p-4 gap-4 justify-between border-t border-border" grow/>
         </>
       ) : null}
-      <CustomerDetails />
+      <CustomerDetails classname="flex flex-wrap items-center p-4 gap-4 justify-between border-t border-border" grow/>
       {!isFreePurchase ? (
         <>
-          <PayPal />
+          <PayPal classname="flex flex-wrap items-center p-4 gap-4 justify-between border-t border-border" grow/>
           <StripeElementsProvider>
-            <StripePaymentRequest />
+            <StripePaymentRequest classname="flex flex-wrap items-center p-4 gap-4 justify-between border-t border-border" grow/>
           </StripeElementsProvider>
         </>
       ) : null}

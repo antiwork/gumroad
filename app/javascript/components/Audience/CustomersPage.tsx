@@ -3,8 +3,9 @@ import cx from "classnames";
 import { lightFormat, subMonths } from "date-fns";
 import { format } from "date-fns-tz";
 import * as React from "react";
+import { classNames } from "$app/utils/classNames";
 
-import { Stack } from "$app/components/ui/Stack";
+import { Stack, StackItem } from "$app/components/ui/Stack";
 
 import {
   Address,
@@ -288,7 +289,7 @@ const CustomersPage = ({
               }
             >
               <Stack style={{ width: "35rem" }}>
-                <div>
+                <StackItem>
                   <ProductSelect
                     products={products.filter(
                       (product) => !excludedItems.find((excludedItem) => product.id === excludedItem.id),
@@ -296,9 +297,10 @@ const CustomersPage = ({
                     label="Customers who bought"
                     items={includedItems}
                     setItems={setIncludedItems}
+                    className="grow basis-0"
                   />
-                </div>
-                <div>
+                </StackItem>
+                <StackItem>
                   <ProductSelect
                     products={products.filter(
                       (product) => !includedItems.find((includedItem) => product.id === includedItem.id),
@@ -306,15 +308,17 @@ const CustomersPage = ({
                     label="Customers who have not bought"
                     items={excludedItems}
                     setItems={setExcludedItems}
+                    className="grow basis-0"
                   />
-                </div>
-                <div>
+                </StackItem>
+                <StackItem>
                   <div
                     style={{
                       display: "grid",
                       gap: "var(--spacer-4)",
                       gridTemplateColumns: "repeat(auto-fit, minmax(var(--dynamic-grid), 1fr))",
                     }}
+                    className="grow"
                   >
                     <fieldset>
                       <label htmlFor={`${uid}-minimum-amount`}>Paid more than</label>
@@ -337,14 +341,15 @@ const CustomersPage = ({
                       />
                     </fieldset>
                   </div>
-                </div>
-                <div>
+                </StackItem>
+                <StackItem>
                   <div
                     style={{
                       display: "grid",
                       gap: "var(--spacer-4)",
                       gridTemplateColumns: "repeat(auto-fit, minmax(var(--dynamic-grid), 1fr))",
                     }}
+                    className="grow"
                   >
                     <fieldset>
                       <label htmlFor={`${uid}-after-date`}>After</label>
@@ -367,9 +372,9 @@ const CustomersPage = ({
                       <small suppressHydrationWarning>{`11:59 ${timeZoneAbbreviation}`}</small>
                     </fieldset>
                   </div>
-                </div>
-                <div>
-                  <fieldset>
+                </StackItem>
+                <StackItem>
+                  <fieldset className="grow basis-0">
                     <label htmlFor={`${uid}-country`}>From</label>
                     <select
                       id={`${uid}-country`}
@@ -386,9 +391,9 @@ const CustomersPage = ({
                       ))}
                     </select>
                   </fieldset>
-                </div>
-                <div>
-                  <h4>
+                </StackItem>
+                <StackItem>
+                  <h4 className="grow font-bold">
                     <label htmlFor={`${uid}-active-customers-only`}>Show active customers only</label>
                   </h4>
                   <Toggle
@@ -396,7 +401,7 @@ const CustomersPage = ({
                     value={activeCustomersOnly}
                     onChange={(activeCustomersOnly) => updateQuery({ activeCustomersOnly })}
                   />
-                </div>
+                </StackItem>
               </Stack>
             </Popover>
             <Popover
@@ -605,15 +610,17 @@ const ProductSelect = ({
   products,
   items,
   setItems,
+  className,
 }: {
   label: string;
   products: Product[];
   items: Item[];
   setItems: (items: Item[]) => void;
+  className?: string | undefined;
 }) => {
   const uid = React.useId();
   return (
-    <fieldset>
+    <fieldset className={className}>
       <legend>
         <label htmlFor={uid}>{label}</label>
       </legend>
@@ -891,30 +898,30 @@ const CustomerDrawer = ({
         />
       ) : null}
       <Stack as="section">
-        <h3 className="flex gap-1">
+        <StackItem className="flex gap-1">
           Order information
           {!subscription && customer.transaction_url_for_seller ? (
-            <a href={customer.transaction_url_for_seller} target="_blank" rel="noreferrer" aria-label="Transaction">
+            <a href={customer.transaction_url_for_seller} target="_blank" rel="noreferrer" aria-label="Transaction" className="grow">
               <Icon name="arrow-up-right-square" />
             </a>
           ) : null}
-        </h3>
-        <div>
-          <h5>Customer name</h5>
+        </StackItem>
+        <StackItem>
+          <h5 className="grow font-bold">Customer name</h5>
           {customer.name}
-        </div>
-        <div>
-          <h5>{customer.is_multiseat_license ? "Seats" : "Quantity"}</h5>
+        </StackItem>
+        <StackItem>
+          <h5 className="grow font-bold">{customer.is_multiseat_license ? "Seats" : "Quantity"}</h5>
           {customer.quantity}
-        </div>
+        </StackItem>
         {customer.download_count ? (
-          <div>
-            <h5>Download count</h5>
+          <StackItem>
+            <h5 className="grow font-bold">Download count</h5>
             {customer.download_count}
-          </div>
+          </StackItem>
         ) : null}
-        <div>
-          <h5>Price</h5>
+        <StackItem>
+          <h5 className="grow font-bold">Price</h5>
           <div>
             {customer.price.cents_before_offer_code > customer.price.cents ? (
               <>
@@ -933,16 +940,16 @@ const CustomerDrawer = ({
               customer.price.recurrence,
             )}
           </div>
-        </div>
+        </StackItem>
         {customer.price.tip_cents ? (
-          <div>
-            <h5>Tip</h5>
+          <StackItem>
+            <h5 className="grow font-bold">Tip</h5>
             {formatPrice(customer.price.tip_cents, customer.price.currency_type, customer.price.recurrence)}
-          </div>
+          </StackItem>
         ) : null}
         {customer.discount && !customer.upsell ? (
-          <div>
-            <h5>Discount</h5>
+          <StackItem>
+            <h5 className="grow font-bold">Discount</h5>
             {customer.discount.code ? (
               <div>
                 {formatDiscount(customer.discount, customer.price.currency_type)} off with code{" "}
@@ -951,19 +958,19 @@ const CustomerDrawer = ({
             ) : (
               `${formatDiscount(customer.discount, customer.price.currency_type)} off`
             )}
-          </div>
+          </StackItem>
         ) : null}
         {customer.upsell ? (
-          <div>
-            <h5>Upsell</h5>
+          <StackItem>
+            <h5 className="grow font-bold">Upsell</h5>
             {`${customer.upsell}${
               customer.discount ? ` (${formatDiscount(customer.discount, customer.price.currency_type)} off)` : ""
             }`}
-          </div>
+          </StackItem>
         ) : null}
         {subscription?.status ? (
-          <div>
-            <h5>{subscription.is_installment_plan ? "Installment plan status" : "Membership status"}</h5>
+          <StackItem>
+            <h5 className="grow font-bold">{subscription.is_installment_plan ? "Installment plan status" : "Membership status"}</h5>
             <div
               style={{
                 color:
@@ -976,24 +983,24 @@ const CustomerDrawer = ({
                 ? INSTALLMENT_PLAN_STATUS_LABELS[subscription.status]
                 : MEMBERSHIP_STATUS_LABELS[subscription.status]}
             </div>
-          </div>
+          </StackItem>
         ) : null}
         {customer.referrer ? (
-          <div>
-            <h5>Referrer</h5>
+          <StackItem>
+            <h5 className="grow font-bold">Referrer</h5>
             {customer.referrer}
-          </div>
+          </StackItem>
         ) : null}
         {customer.physical ? (
           <>
-            <div>
-              <h5>SKU</h5>
+            <StackItem>
+              <h5 className="grow font-bold">SKU</h5>
               {customer.physical.sku}
-            </div>
-            <div>
-              <h5>Order number</h5>
+            </StackItem>
+            <StackItem>
+              <h5 className="grow font-bold">Order number</h5>
               {customer.physical.order_number}
-            </div>
+            </StackItem>
           </>
         ) : null}
       </Stack>
@@ -1007,13 +1014,13 @@ const CustomerDrawer = ({
       ) : null}
       {customer.custom_fields.length > 0 ? (
         <Stack as="section">
-          <header>
-            <h3>Information provided</h3>
-          </header>
+          <StackItem as="header">
+            <h3 className="grow">Information provided</h3>
+          </StackItem>
           {customer.custom_fields.map((field, idx) => {
             const content = (
-              <section key={idx}>
-                <h5>{field.attribute}</h5>
+              <StackItem as="section" key={idx}>
+                <h5 className="grow font-bold">{field.attribute}</h5>
                 {field.type === "text" ? (
                   field.value
                 ) : (
@@ -1023,7 +1030,7 @@ const CustomerDrawer = ({
                     ))}
                   </div>
                 )}
-              </section>
+              </StackItem>
             );
             return field.type === "file" ? <div key={idx}>{content}</div> : content;
           })}
@@ -1041,22 +1048,22 @@ const CustomerDrawer = ({
       ) : null}
       {customer.is_bundle_purchase ? (
         <Stack as="section">
-          <header>
-            <h3>Content</h3>
-          </header>
+          <StackItem as="header">
+            <h3 className="grow">Content</h3>
+          </StackItem>
           {productPurchases.length > 0 ? (
             productPurchases.map((customer) => (
-              <section key={customer.id}>
-                <h5>{customer.product.name}</h5>
+              <StackItem as="section" key={customer.id}>
+                <h5 className="grow font-bold">{customer.product.name}</h5>
                 <Button onClick={() => setSelectedProductPurchaseId(customer.id)}>Manage</Button>
-              </section>
+              </StackItem>
             ))
           ) : (
-            <section>
-              <div className="text-center">
+            <StackItem as="section">
+              <div className="grow text-center">
                 <Progress width="2em" />
               </div>
-            </section>
+            </StackItem>
           )}
         </Stack>
       ) : null}
@@ -1133,10 +1140,10 @@ const CustomerDrawer = ({
       {customer.call ? <CallSection call={customer.call} onChange={(call) => onChange({ ...customer, call })} /> : null}
       {!showCharges && !customer.refunded && !customer.chargedback && customer.price.cents_refundable > 0 ? (
         <Stack as="section">
-          <header>
-            <h3>Refund</h3>
-          </header>
-          <section>
+          <StackItem as="header">
+            <h3 className="grow">Refund</h3>
+          </StackItem>
+          <StackItem as="section">
             <RefundForm
               purchaseId={customer.id}
               currencyType={customer.price.currency_type}
@@ -1152,8 +1159,9 @@ const CustomerDrawer = ({
                   partially_refunded: amountRefundable > 0 && amountRefundable < customer.price.cents_refundable,
                 })
               }
+              className="grow basis-0"
             />
-          </section>
+          </StackItem>
         </Stack>
       ) : null}
       {subscription?.status === "alive" ? (
@@ -1175,9 +1183,9 @@ const CustomerDrawer = ({
       ) : null}
       {canPing && !subscription ? (
         <Stack as="section">
-          <div>
-            <PingButton purchaseId={customer.id} />
-          </div>
+          <StackItem>
+            <PingButton purchaseId={customer.id} className="grow basis-0" />
+          </StackItem>
         </Stack>
       ) : null}
       {customer.is_access_revoked !== null && !isCoffee && !commission ? (
@@ -1203,15 +1211,15 @@ const CustomerDrawer = ({
       ) : null}
       {missedPosts?.length !== 0 ? (
         <Stack as="section">
-          <header>
-            <h3>Send missed posts</h3>
-          </header>
+          <StackItem as="header">
+            <h3 className="grow">Send missed posts</h3>
+          </StackItem>
           {missedPosts ? (
             <>
               {missedPosts.slice(0, shownMissedPosts).map((post) => (
-                <section key={post.id}>
-                  <div>
-                    <h5>
+                <StackItem as="section" key={post.id}>
+                  <div className="grow">
+                    <h5 className="font-bold">
                       <a href={post.url} target="_blank" rel="noreferrer">
                         {post.name}
                       </a>
@@ -1225,38 +1233,39 @@ const CustomerDrawer = ({
                   >
                     {sentEmailIds.current.has(post.id) ? "Sent" : loadingId === post.id ? "Sending...." : "Send"}
                   </Button>
-                </section>
+                </StackItem>
               ))}
               {shownMissedPosts < missedPosts.length ? (
-                <section>
+                <StackItem as="section">
                   <Button
                     onClick={() => setShownMissedPosts((prevShownMissedPosts) => prevShownMissedPosts + PAGE_SIZE)}
+                    className="grow basis-0"
                   >
                     Show more
                   </Button>
-                </section>
+                </StackItem>
               ) : null}
             </>
           ) : (
-            <section>
-              <div className="text-center">
+            <StackItem as="section">
+              <div className="grow text-center">
                 <Progress width="2em" />
               </div>
-            </section>
+            </StackItem>
           )}
         </Stack>
       ) : null}
       {emails?.length !== 0 ? (
         <Stack as="section">
-          <header>
-            <h3>Emails received</h3>
-          </header>
+          <StackItem as="header">
+            <h3 className="grow">Emails received</h3>
+          </StackItem>
           {emails ? (
             <>
               {emails.slice(0, shownEmails).map((email) => (
-                <section key={email.id}>
-                  <div>
-                    <h5>
+                <StackItem as="section" key={email.id}>
+                  <div className="grow">
+                    <h5 className="font-bold">
                       {email.type === "receipt" ? (
                         <a href={email.url} target="_blank" rel="noreferrer">
                           {email.name}
@@ -1292,22 +1301,22 @@ const CustomerDrawer = ({
                           : "Resend email"}
                     </Button>
                   )}
-                </section>
+                </StackItem>
               ))}
               {shownMissedPosts < emails.length ? (
-                <section>
-                  <Button onClick={() => setShownEmails((prevShownEmails) => prevShownEmails + PAGE_SIZE)}>
+                <StackItem as="section">
+                  <Button onClick={() => setShownEmails((prevShownEmails) => prevShownEmails + PAGE_SIZE)} className="grow basis-0">
                     Load more
                   </Button>
-                </section>
+                </StackItem>
               ) : null}
             </>
           ) : (
-            <section>
-              <div className="text-center">
+            <StackItem as="section">
+              <div className="grow text-center">
                 <Progress width="2em" />
               </div>
-            </section>
+            </StackItem>
           )}
         </Stack>
       ) : null}
@@ -1359,12 +1368,12 @@ const AddressSection = ({
 
   return (
     <Stack as="section">
-      <header>
-        <h3>Shipping address</h3>
-      </header>
+      <StackItem as="header">
+        <h3 className="grow">Shipping address</h3>
+      </StackItem>
       {isEditing ? (
-        <div>
-          <div className="paragraphs">
+        <StackItem>
+          <div className="grow paragraphs">
             <fieldset>
               <legend>
                 <label htmlFor={`${uid}-full-name`}>Full name</label>
@@ -1457,10 +1466,10 @@ const AddressSection = ({
               </Button>
             </div>
           </div>
-        </div>
+        </StackItem>
       ) : (
-        <div>
-          <p>
+        <StackItem>
+          <p className="grow">
             {currentAddress.full_name}
             <br />
             {currentAddress.street_address}
@@ -1472,12 +1481,12 @@ const AddressSection = ({
           <button className="underline" onClick={() => setIsEditing(true)}>
             Edit
           </button>
-        </div>
+        </StackItem>
       )}
-      <div>
-        <h5>Shipping charged</h5>
+      <StackItem>
+        <h5 className="grow font-bold">Shipping charged</h5>
         {price}
-      </div>
+      </StackItem>
     </Stack>
   );
 };
@@ -1500,24 +1509,24 @@ const TrackingSection = ({
 
   return (
     <Stack as="section">
-      <h3>Tracking information</h3>
+      <StackItem>Tracking information</StackItem>
       {tracking.shipped ? (
         tracking.url ? (
-          <div>
-            <NavigationButton color="primary" href={tracking.url} target="_blank">
+          <StackItem>
+            <NavigationButton color="primary" href={tracking.url} target="_blank" className="grow">
               Track shipment
             </NavigationButton>
-          </div>
+          </StackItem>
         ) : (
-          <div>
-            <div role="status" className="success">
+          <StackItem>
+            <div role="status" className="grow success">
               Shipped
             </div>
-          </div>
+          </StackItem>
         )
       ) : (
-        <div>
-          <fieldset>
+        <StackItem>
+          <fieldset className="grow basis-0">
             <input
               type="text"
               placeholder="Tracking URL (optional)"
@@ -1528,7 +1537,7 @@ const TrackingSection = ({
               Mark as shipped
             </Button>
           </fieldset>
-        </div>
+        </StackItem>
       )}
     </Stack>
   );
@@ -1570,17 +1579,18 @@ const EmailSection = ({
 
   return (
     <Stack as="section">
-      <header>
-        <h3>{label}</h3>
-      </header>
+      <StackItem as="header">
+        <h3 className="grow">{label}</h3>
+      </StackItem>
       {isEditing ? (
-        <fieldset>
+        <StackItem as="fieldset">
           <input
             type="text"
             value={email}
             onChange={(evt) => setEmail(evt.target.value)}
             disabled={isLoading}
             placeholder={label}
+            className="grow"
           />
           <div
             style={{
@@ -1597,10 +1607,10 @@ const EmailSection = ({
               Save
             </Button>
           </div>
-        </fieldset>
+        </StackItem>
       ) : (
-        <section>
-          <h5>{currentEmail}</h5>
+        <StackItem as="section">
+          <h5 className="grow font-bold">{currentEmail}</h5>
           {onSave ? (
             <button className="underline" onClick={() => setIsEditing(true)}>
               Edit
@@ -1611,11 +1621,11 @@ const EmailSection = ({
               go to gumroad.com/settings to update their email.
             </small>
           )}
-        </section>
+        </StackItem>
       )}
       {onChangeCanContact ? (
-        <section>
-          <fieldset role="group">
+        <StackItem as="section">
+          <fieldset role="group" className="grow basis-0">
             <label>
               Receives emails
               <input
@@ -1629,13 +1639,13 @@ const EmailSection = ({
               />
             </label>
           </fieldset>
-        </section>
+        </StackItem>
       ) : null}
     </Stack>
   );
 };
 
-const ReviewVideosSubsections = ({ review, onChange }: { review: Review; onChange: (review: Review) => void }) => {
+const ReviewVideosSubsections = ({ review, onChange, className,grow }: { review: Review; onChange: (review: Review) => void; className?: string | undefined; grow?: boolean;}) => {
   const [loading, setLoading] = React.useState(false);
   const [approvedVideoRemovalModalOpen, setApprovedVideoRemovalModalOpen] = React.useState(false);
 
@@ -1674,9 +1684,9 @@ const ReviewVideosSubsections = ({ review, onChange }: { review: Review; onChang
   };
 
   const approvedVideoSubsection = approvedVideo ? (
-    <section>
-      <div className="flex flex-col gap-4">
-        <h5>Approved video</h5>
+    <section className={className}>
+      <div className={classNames("flex flex-col gap-4", grow ? "grow" : "")}>
+        <h5 className="font-bold">Approved video</h5>
         <ReviewVideoPlayer videoId={approvedVideo.id} thumbnail={approvedVideo.thumbnail_url} />
         <Button onClick={() => setApprovedVideoRemovalModalOpen(true)} disabled={loading}>
           Remove
@@ -1703,9 +1713,9 @@ const ReviewVideosSubsections = ({ review, onChange }: { review: Review; onChang
   ) : null;
 
   const pendingVideoSubsection = pendingVideo ? (
-    <section>
-      <div className="flex flex-col gap-4">
-        <h5>Pending video</h5>
+    <section className="flex flex-wrap items-center p-4 gap-4 justify-between">
+      <div className={classNames("flex flex-col gap-4", grow ? "grow" : "")}>
+        <h5 className="font-bold">Pending video</h5>
         <ReviewVideoPlayer videoId={pendingVideo.id} thumbnail={pendingVideo.thumbnail_url} />
         <div className="flex flex-row gap-2">
           {pendingVideo.can_approve ? (
@@ -1746,30 +1756,32 @@ const ReviewSection = ({
   onChange: (review: Review) => void;
 }) => (
   <Stack as="section">
-    <h3>Review</h3>
-    <section>
-      <h5>Rating</h5>
+    <StackItem>Review</StackItem>
+    <StackItem as="section">
+      <h5 className="grow font-bold">Rating</h5>
       <div aria-label={`${review.rating} ${review.rating === 1 ? "star" : "stars"}`}>
         <RatingStars rating={review.rating} />
       </div>
-    </section>
+    </StackItem>
     {review.message ? (
-      <section>
-        <h5>Message</h5>
+      <StackItem as="section">
+        <h5 className="grow font-bold">Message</h5>
         {review.message}
-      </section>
+      </StackItem>
     ) : null}
-    <ReviewVideosSubsections review={review} onChange={onChange} />
+    <ReviewVideosSubsections className ="flex flex-wrap items-center p-4 gap-4 justify-between" grow review={review} onChange={onChange} />
     {review.response ? (
-      <section>
-        <h5>Response</h5>
+      <StackItem as="section">
+        <h5 className="grow font-bold">Response</h5>
         {review.response.message}
-      </section>
+      </StackItem>
     ) : null}
     <ReviewResponseForm
       message={review.response?.message}
       purchaseId={purchaseId}
       onChange={(response) => onChange({ ...review, response })}
+      classname="flex flex-wrap items-center p-4 gap-4 justify-between"
+      grow
     />
   </Stack>
 );
@@ -1827,13 +1839,13 @@ const OptionSection = ({
 
   return (
     <Stack as="section">
-      <header>
-        <h3>{title}</h3>
-      </header>
-      <section>
+      <StackItem as = "header">
+        <h3 className="grow">{title}</h3>
+      </StackItem>
+      <StackItem as="section" >
         {options.length > 0 ? (
           isEditing ? (
-            <fieldset className={cx({ danger: selectedOptionId.error })}>
+            <fieldset className={classNames({ danger: selectedOptionId.error },"grow basis-0")}>
               <select
                 value={selectedOptionId.value ?? "None selected"}
                 name={title}
@@ -1865,18 +1877,18 @@ const OptionSection = ({
             </fieldset>
           ) : (
             <>
-              <h5>{option?.name ?? "None selected"}</h5>
+              <h5 className="grow font-bold">{option?.name ?? "None selected"}</h5>
               <button className="underline" onClick={() => setIsEditing(true)}>
                 Edit
               </button>
             </>
           )
         ) : (
-          <div className="text-center">
+          <div className="text-center grow">
             <Progress width="2em" />
           </div>
         )}
-      </section>
+      </StackItem>
     </Stack>
   );
 };
@@ -1888,11 +1900,11 @@ const UtmLinkStack = ({ link, showHeader }: { link: Customer["utm_link"]; showHe
     <Stack as="section">
       {showHeader ? (
         <>
-          <section>
-            <h3>UTM link</h3>
-          </section>
-          <div>
-            <small role="status" className="info">
+          <StackItem as="section">
+            <h3 className="grow">UTM link</h3>
+          </StackItem>
+          <StackItem>
+            <small role="status" className="info grow">
               <span>
                 This sale was driven by a{" "}
                 <a href={link.utm_url} target="_blank" rel="noreferrer">
@@ -1901,38 +1913,38 @@ const UtmLinkStack = ({ link, showHeader }: { link: Customer["utm_link"]; showHe
                 .
               </span>
             </small>
-          </div>
+          </StackItem>
         </>
       ) : null}
-      <div>
-        <h5>Title</h5>
+      <StackItem>
+        <h5 className="grow font-bold">Title</h5>
         <a href={Routes.utm_links_dashboard_path({ query: link.title })} target="_blank" rel="noreferrer">
           {link.title}
         </a>
-      </div>
-      <div>
-        <h5>Source</h5>
+      </StackItem>
+      <StackItem>
+        <h5 className="grow font-bold">Source</h5>
         {link.source}
-      </div>
-      <div>
-        <h5>Medium</h5>
+      </StackItem>
+      <StackItem>
+        <h5 className="grow font-bold">Medium</h5>
         {link.medium}
-      </div>
-      <div>
-        <h5>Campaign</h5>
+      </StackItem>
+      <StackItem>
+        <h5 className="grow font-bold">Campaign</h5>
         {link.campaign}
-      </div>
+      </StackItem>
       {link.term ? (
-        <div>
-          <h5>Term</h5>
+        <StackItem>
+          <h5 className="grow font-bold">Term</h5>
           {link.term}
-        </div>
+        </StackItem>
       ) : null}
       {link.content ? (
-        <div>
-          <h5>Content</h5>
+        <StackItem>
+          <h5 className="grow font-bold">Content</h5>
           {link.content}
-        </div>
+        </StackItem>
       ) : null}
     </Stack>
   );
@@ -1949,25 +1961,25 @@ const LicenseSection = ({ license, onSave }: { license: License; onSave: (enable
 
   return (
     <Stack as="section">
-      <header>
-        <h3>License key</h3>
-      </header>
-      <div>
-        <pre>
+      <StackItem as="header">
+        <h3 className="grow">License key</h3>
+      </StackItem>
+      <StackItem>
+        <pre className="grow">
           <code>{license.key}</code>
         </pre>
-      </div>
-      <div>
+      </StackItem>
+      <StackItem>
         {license.enabled ? (
-          <Button color="danger" disabled={isLoading} onClick={() => void handleSave(false)}>
+          <Button color="danger" className="grow basis-0" disabled={isLoading} onClick={() => void handleSave(false)}>
             Disable
           </Button>
         ) : (
-          <Button disabled={isLoading} onClick={() => void handleSave(true)}>
+          <Button className="grow basis-0" disabled={isLoading} onClick={() => void handleSave(true)}>
             Enable
           </Button>
         )}
-      </div>
+      </StackItem>
     </Stack>
   );
 };
@@ -1986,13 +1998,13 @@ const SeatSection = ({ seats: currentSeats, onSave }: { seats: number; onSave: (
 
   return (
     <Stack as="section">
-      <header>
-        <h3>Seats</h3>
-      </header>
+      <StackItem as="header">
+        <h3 className="grow">Seats</h3>
+      </StackItem>
       {isEditing ? (
-        <fieldset>
+        <StackItem as="fieldset">
           <NumberInput value={seats} onChange={(seats) => setSeats(seats ?? 0)}>
-            {(props) => <input type="number" {...props} min={1} aria-label="Seats" />}
+            {(props) => <input type="number" className="grow" {...props} min={1} aria-label="Seats" />}
           </NumberInput>
           <div
             style={{
@@ -2009,14 +2021,14 @@ const SeatSection = ({ seats: currentSeats, onSave }: { seats: number; onSave: (
               Save
             </Button>
           </div>
-        </fieldset>
+        </StackItem>
       ) : (
-        <section>
-          <h5>{seats}</h5>
+        <StackItem as="section">
+          <h5 className="grow font-bold">{seats}</h5>
           <button className="underline" onClick={() => setIsEditing(true)}>
             Edit
           </button>
-        </section>
+        </StackItem>
       )}
     </Stack>
   );
@@ -2033,8 +2045,8 @@ const SubscriptionCancellationSection = ({
   const constructor = isInstallmentPlan ? "installment plan" : "subscription";
   return (
     <Stack as="section">
-      <div>
-        <Button color="danger" onClick={() => setOpen(true)}>
+      <StackItem>
+        <Button color="danger" className="grow basis-0" onClick={() => setOpen(true)}>
           Cancel {constructor}
         </Button>
         <Modal
@@ -2052,12 +2064,12 @@ const SubscriptionCancellationSection = ({
         >
           Would you like to cancel this {constructor}?
         </Modal>
-      </div>
+      </StackItem>
     </Stack>
   );
 };
 
-const PingButton = ({ purchaseId }: { purchaseId: string }) => {
+const PingButton = ({ purchaseId, className }: { purchaseId: string; className?: string | undefined }) => {
   const [isLoading, setIsLoading] = React.useState(false);
 
   const handleClick = async () => {
@@ -2074,7 +2086,7 @@ const PingButton = ({ purchaseId }: { purchaseId: string }) => {
   };
 
   return (
-    <Button color="primary" disabled={isLoading} onClick={() => void handleClick()}>
+    <Button color="primary" disabled={isLoading} onClick={() => void handleClick()} className={className}>
       {isLoading ? "Resending ping..." : "Resend ping"}
     </Button>
   );
@@ -2112,17 +2124,17 @@ const AccessSection = ({
 
   return (
     <Stack as="section">
-      <div>
+      <StackItem>
         {isAccessRevoked ? (
-          <Button disabled={isLoading} onClick={() => void handleClick(false)}>
+          <Button className="grow basis-0" disabled={isLoading} onClick={() => void handleClick(false)}>
             Re-enable access
           </Button>
         ) : (
-          <Button color="primary" disabled={isLoading} onClick={() => void handleClick(true)}>
+          <Button color="primary" className="grow basis-0" disabled={isLoading} onClick={() => void handleClick(true)}>
             Revoke access
           </Button>
         )}
-      </div>
+      </StackItem>
     </Stack>
   );
 };
@@ -2135,6 +2147,7 @@ const RefundForm = ({
   paypalRefundExpired,
   modalTitle,
   modalText,
+  className,
   onChange,
   onClose,
 }: {
@@ -2145,6 +2158,7 @@ const RefundForm = ({
   paypalRefundExpired: boolean;
   modalTitle: string;
   modalText: string;
+  className?: string | undefined;
   onChange: (amountRefundable: number) => void;
   onClose?: () => void;
 }) => {
@@ -2185,7 +2199,7 @@ const RefundForm = ({
 
   return (
     <>
-      <fieldset className={cx({ danger: refundAmountCents.error })}>
+      <fieldset className={classNames({ danger: refundAmountCents.error }, className)}>
         <PriceInput
           cents={refundAmountCents.value}
           onChange={(value) => setRefundAmountCents({ value })}
@@ -2254,21 +2268,25 @@ const ChargeRow = ({
   onChange,
   showRefundFeeNotice,
   canPing,
+  classname,
+  grow
 }: {
   purchase: Charge;
   customerEmail: string;
   onChange: (update: Partial<Charge>) => void;
   showRefundFeeNotice: boolean;
   canPing: boolean;
+  classname?:string | undefined;
+  grow?:boolean;
 }) => {
   const [isRefunding, setIsRefunding] = React.useState(false);
   const userAgentInfo = useUserAgentInfo();
 
   return (
     <>
-      <section key={purchase.id}>
-        <section style={{ display: "flex", gap: "var(--spacer-1)", alignItems: "center" }}>
-          <h5>
+      <section key={purchase.id} className={classname}>
+        <section className={grow?"grow":""} style={{ display: "flex", gap: "var(--spacer-1)", alignItems: "center" }}>
+          <h5 className="font-bold">
             {formatPrice(purchase.amount_refundable, purchase.currency_type)} on{" "}
             {new Date(purchase.created_at).toLocaleDateString(userAgentInfo.locale, {
               year: "numeric",
@@ -2352,23 +2370,23 @@ const ChargesSection = ({
 
   return (
     <Stack as="section">
-      <header>
-        <h3>Charges</h3>
-      </header>
+      <StackItem as="header">
+        <h3 className="grow">Charges</h3>
+      </StackItem>
       {loading ? (
-        <section>
-          <div className="text-center">
+        <StackItem as="section">
+          <div className="grow text-center">
             <Progress width="2em" />
           </div>
-        </section>
+        </StackItem>
       ) : charges.length > 0 ? (
         <>
           {remainingCharges !== null ? (
-            <section>
-              <div role="status" className="info">
+            <StackItem as="section">
+              <div role="status" className="info grow">
                 {`${remainingCharges} ${remainingCharges > 1 ? "charges" : "charge"} remaining`}
               </div>
-            </section>
+            </StackItem>
           ) : null}
           {charges.map((charge) => (
             <ChargeRow
@@ -2378,13 +2396,15 @@ const ChargesSection = ({
               onChange={(update) => updateCharge(charge.id, update)}
               showRefundFeeNotice={showRefundFeeNotice}
               canPing={canPing}
+              classname="flex flex-wrap items-center p-4 gap-4 justify-between border-t border-border"
+              grow={true}
             />
           ))}
         </>
       ) : (
-        <section>
-          <div>No charges yet</div>
-        </section>
+        <StackItem as="section">
+          <div className="grow">No charges yet</div>
+        </StackItem>
       )}
     </Stack>
   );
@@ -2409,23 +2429,24 @@ const CallSection = ({ call, onChange }: { call: Call; onChange: (call: Call) =>
 
   return (
     <Stack as="section">
-      <header>
-        <h3>Call</h3>
-      </header>
-      <section>
-        <h5>Start time</h5>
+      <StackItem as="header">
+        <h3 className="grow">Call</h3>
+      </StackItem>
+      <StackItem as="section">
+        <h5 className="grow font-bold">Start time</h5>
         {formatCallDate(new Date(call.start_time), { timeZone: { userTimeZone: currentSeller?.timeZone.name } })}
-      </section>
-      <section>
-        <h5>End time</h5>
+      </StackItem>
+      <StackItem as="section">
+        <h5 className="grow font-bold">End time</h5>
         {formatCallDate(new Date(call.end_time), { timeZone: { userTimeZone: currentSeller?.timeZone.name } })}
-      </section>
-      <section>
+      </StackItem>
+      <StackItem as="section">
         <form
           onSubmit={(evt) => {
             evt.preventDefault();
             void handleSave();
           }}
+          className="grow"
         >
           <fieldset>
             <input
@@ -2439,7 +2460,7 @@ const CallSection = ({ call, onChange }: { call: Call; onChange: (call: Call) =>
             </Button>
           </fieldset>
         </form>
-      </section>
+      </StackItem>
     </Stack>
   );
 };
@@ -2567,11 +2588,11 @@ const CommissionSection = ({
 
   return (
     <Stack as="section">
-      <header>
-        <h3>Files</h3>
-      </header>
-      <section>
-        <section className="grid gap-2">
+      <StackItem as="header">
+        <h3 className="grow">Files</h3>
+      </StackItem>
+      <StackItem as="section">
+        <section className="grid gap-2 grow">
           {commission.files.length ? (
             <div role="tree">
               {commission.files.map((file) => (
@@ -2589,7 +2610,7 @@ const CommissionSection = ({
             </Button>
           ) : null}
         </section>
-      </section>
+      </StackItem>
     </Stack>
   );
 };

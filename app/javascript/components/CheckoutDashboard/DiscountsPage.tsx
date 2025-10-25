@@ -18,7 +18,7 @@ import { writeQueryParams } from "$app/utils/url";
 
 import { Button } from "$app/components/Button";
 import { DiscountInput, InputtedDiscount } from "$app/components/CheckoutDashboard/DiscountInput";
-import { Stack } from "$app/components/ui/Stack";
+import { Stack, StackItem } from "$app/components/ui/Stack";
 import { Layout, Page } from "$app/components/CheckoutDashboard/Layout";
 import { useClientAlert } from "$app/components/ClientAlertProvider";
 import { CopyToClipboard } from "$app/components/CopyToClipboard";
@@ -481,54 +481,54 @@ const DiscountsPage = ({ offer_codes, pages, products, pagination: initialPagina
               <button className="close" aria-label="Close" onClick={() => setSelectedOfferCodeId(null)} />
             </header>
             <Stack as="section">
-              <h3>Details</h3>
-              <div>
-                <h5>Code</h5>
+              <StackItem as="h3">Details</StackItem>
+              <StackItem>
+                <h5 className="grow font-bold">Code</h5>
                 <div className="pill small">{selectedOfferCode.code.toUpperCase()}</div>
-              </div>
-              <div>
-                <h5>Discount</h5>
+              </StackItem>
+              <StackItem>
+                <h5 className="grow font-bold">Discount</h5>
                 {formatAmount(selectedOfferCode)}
-              </div>
+              </StackItem>
               {selectedOfferCodeStatistics != null ? (
                 <>
-                  <div>
-                    <h5>Uses</h5>
+                  <StackItem>
+                    <h5 className="grow font-bold">Uses</h5>
                     {formatUses(selectedOfferCodeStatistics.uses.total, selectedOfferCode.limit)}
-                  </div>
-                  <div>
-                    <h5>Revenue</h5>
+                  </StackItem>
+                  <StackItem>
+                    <h5 className="grow font-bold">Revenue</h5>
                     {formatRevenue(selectedOfferCodeStatistics.revenue_cents)}
-                  </div>
+                  </StackItem>
                 </>
               ) : null}
               {selectedOfferCode.valid_at ? (
-                <div>
-                  <h5>Start date</h5>
+                <StackItem>
+                  <h5 className="grow font-bold">Start date</h5>
                   {formatDateTime(new Date(selectedOfferCode.valid_at))}
-                </div>
+                </StackItem>
               ) : null}
               {selectedOfferCode.expires_at ? (
-                <div>
-                  <h5>End date</h5>
+                <StackItem>
+                  <h5 className="grow font-bold">End date</h5>
                   {formatDateTime(new Date(selectedOfferCode.expires_at))}
-                </div>
+                </StackItem>
               ) : null}
               {selectedOfferCode.minimum_quantity !== null ? (
-                <div>
-                  <h5>Minimum quantity</h5>
+                <StackItem>
+                  <h5 className="grow font-bold">Minimum quantity</h5>
                   {selectedOfferCode.minimum_quantity}
-                </div>
+                </StackItem>
               ) : null}
               {(selectedOfferCode.products ?? products).some(({ is_tiered_membership }) => is_tiered_membership) ? (
-                <div>
-                  <h5>Discount duration for memberships</h5>
+                <StackItem>
+                  <h5 className="grow font-bold">Discount duration for memberships</h5>
                   {selectedOfferCode.duration_in_billing_cycles === 1 ? "Once (first billing period only)" : "Forever"}
-                </div>
+                </StackItem>
               ) : null}
               {selectedOfferCode.minimum_amount_cents !== null ? (
-                <div>
-                  <h5>Minimum amount</h5>
+                <StackItem>
+                  <h5 className="grow font-bold">Minimum amount</h5>
                   {formatPriceCentsWithCurrencySymbol(
                     selectedOfferCode.currency_type,
                     selectedOfferCode.minimum_amount_cents,
@@ -536,21 +536,21 @@ const DiscountsPage = ({ offer_codes, pages, products, pagination: initialPagina
                       symbolFormat: "short",
                     },
                   )}
-                </div>
+                </StackItem>
               ) : null}
             </Stack>
             {selectedOfferCode.products ? (
               <Stack as="section">
-                <h3>Products</h3>
+                <StackItem as="h3">Products</StackItem>
                 {selectedOfferCode.products.map((product) => {
                   const uses =
                     selectedOfferCodeStatistics != null
                       ? (selectedOfferCodeStatistics.uses.products[product.id] ?? 0)
                       : null;
                   return (
-                    <div key={product.id} className="grid grid-cols-[1fr_auto] gap-2">
-                      <div>
-                        <h5>{product.name}</h5>
+                    <StackItem key={product.id} className="grid grid-cols-[1fr_auto] gap-2">
+                      <div className="grow">
+                        <h5 className="font-bold">{product.name}</h5>
                         {uses != null ? `${uses} ${uses === 1 ? "use" : "uses"}` : null}
                       </div>
                       <CopyToClipboard
@@ -562,7 +562,7 @@ const DiscountsPage = ({ offer_codes, pages, products, pagination: initialPagina
                           <Icon name="link" />
                         </Button>
                       </CopyToClipboard>
-                    </div>
+                    </StackItem>
                   );
                 })}
               </Stack>

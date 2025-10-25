@@ -7,24 +7,27 @@ import { assertResponseError } from "$app/utils/request";
 
 import { Button, NavigationButton } from "$app/components/Button";
 import { CartItem } from "$app/components/Checkout/cartState";
-import { Stack } from "$app/components/ui/Stack";
+import { Stack, StackItem } from "$app/components/ui/Stack";
 import { useState } from "$app/components/Checkout/payment";
 import { DiscordButton } from "$app/components/DiscordButton";
 import { Icon } from "$app/components/Icons";
 import { useLoggedInUser } from "$app/components/LoggedInUser";
 import { showAlert } from "$app/components/server-components/Alert";
+import { classNames } from "$app/utils/classNames";
 
 export const LineItem = ({
   name,
   price,
   quantity,
+  grow
 }: {
   name: string;
   price?: string | undefined;
   quantity?: number | undefined;
+  grow?: boolean | undefined;
 }) => (
   <>
-    <h4 className="product-details">
+    <h4 className={classNames("product-details", grow ? "grow" : "")}>
       <div className="product-name">
         {name}
         {quantity ? <span className="quantity">× {quantity}</span> : null}
@@ -34,30 +37,31 @@ export const LineItem = ({
   </>
 );
 
-export const LineItemResultEntry = ({ name, result }: { name: string; result: LineItemResult }) =>
+export const LineItemResultEntry = ({ name, result, classname, grow }: { name: string; result: LineItemResult; classname?: string | undefined; grow?: boolean | undefined }) =>
   result.success ? (
-    <SuccessfulLineItemResultEntry name={name} result={result} />
+    <SuccessfulLineItemResultEntry name={name} result={result} classname={classname} grow={grow}/>
   ) : (
-    <FailedLineItemResultEntry name={name} result={result} />
+    <FailedLineItemResultEntry name={name} result={result} classname={classname} grow={grow}/>
   );
 
-const FailedLineItemResultEntry = ({ name, result }: { name: string; result: ErrorLineItemResult }) => {
+const FailedLineItemResultEntry = ({ name, result, classname, grow }: { name: string; result: ErrorLineItemResult; classname?: string | undefined; grow?: boolean | undefined }) => {
   const message = result.error_message ?? "Sorry, something went wrong.";
   return (
     <>
-      <div>
-        <Stack as="section" borderless>
-          <div>
+      <div className={classname}>
+        <Stack as="section" borderless className={grow ? "grow" : ""}>
+          <StackItem>
             <LineItem
               name={name}
               price={"formatted_price" in result ? (result.formatted_price ?? undefined) : undefined}
+              grow
             />
-          </div>
+          </StackItem>
         </Stack>
       </div>
-      <div>
+      <div className={classname}>
         <div
-          className="payment_failed_notice warning"
+          className={classNames("payment_failed_notice warning", grow ? "grow" : "")}
           role="alert"
           dangerouslySetInnerHTML={{ __html: `<div>${message}</div>` }}
         />
@@ -66,7 +70,7 @@ const FailedLineItemResultEntry = ({ name, result }: { name: string; result: Err
   );
 };
 
-const SuccessfulLineItemResultEntry = ({ name, result }: { name: string; result: SuccessfulLineItemResult }) => {
+const SuccessfulLineItemResultEntry = ({ name, result ,classname, grow}: { name: string; result: SuccessfulLineItemResult; classname?: string | undefined; grow?: boolean | undefined }) => {
   // TODO only do this for a logged-in user
   const trackViewContentClick = () => {
     void trackUserProductAction({
@@ -77,15 +81,16 @@ const SuccessfulLineItemResultEntry = ({ name, result }: { name: string; result:
 
   return (
     <>
-      <div>
-        <Stack as="section" borderless>
-          <div>
+      <div className={classname}>
+        <Stack as="section" borderless className={grow ? "grow" : ""}>
+          <StackItem>
             <LineItem
               name={`${name} ${result.variants_displayable}`}
               quantity={result.show_quantity ? result.quantity : undefined}
               price={result.price}
+              grow
             />
-          </div>
+          </StackItem>
           {result.enabled_integrations.discord ? (
             <div>
               <DiscordButton
@@ -151,21 +156,21 @@ const SuccessfulLineItemResultEntry = ({ name, result }: { name: string; result:
       </div>
 
       {result.has_shipping_to_show ? (
-        <div>
-          <Stack as="section" borderless>
-            <div>
-              <LineItem name="Shipping" price={result.shipping_amount} />
-            </div>
+        <div className={classname}>
+          <Stack as="section" borderless className={grow ? "grow" : ""}>
+            <StackItem>
+              <LineItem name="Shipping" price={result.shipping_amount} grow />
+            </StackItem>
           </Stack>
         </div>
       ) : null}
 
       {result.has_sales_tax_to_show ? (
-        <div>
-          <Stack as="section" borderless>
-            <div>
-              <LineItem name={result.sales_tax_label ?? ""} price={result.sales_tax_amount} />
-            </div>
+        <div className={classname}>
+          <Stack as="section" borderless className={grow ? "grow" : ""}>
+            <StackItem>
+              <LineItem name={result.sales_tax_label ?? ""} price={result.sales_tax_amount} grow/>
+            </StackItem>
           </Stack>
         </div>
       ) : null}
@@ -175,8 +180,12 @@ const SuccessfulLineItemResultEntry = ({ name, result }: { name: string; result:
 
 export const CreateAccountForm = ({
   createAccountData,
+  classname,
+  grow
 }: {
-  createAccountData: Pick<CreateAccountPayload, "email" | "cardParams" | "purchaseId">;
+  createAccountData: Pick<CreateAccountPayload, "email" | "cardParams" | "purchaseId">,
+  classname?: string | undefined,
+  grow?: boolean | undefined
 }) => {
   const [password, setPassword] = React.useState("");
   const [status, setStatus] = React.useState<"idle" | "processing" | "success">("idle");
@@ -207,15 +216,15 @@ export const CreateAccountForm = ({
         evt.preventDefault();
         void startAccountCreation();
       }}
-      className="paragraphs"
+      className={classNames("paragraphs", classname)}
     >
       {status === "success" ? (
-        <div className="success" role="alert">
+        <div className={classNames("success", grow ? "grow" : "")} role="alert">
           Done! Your account has been created. You'll get a confirmation email shortly.
         </div>
       ) : (
         <>
-          <div>
+          <div className={grow?"grow":""}>
             <h3>Create an account to access all of your purchases in one place</h3>
           </div>
           <fieldset>
@@ -265,16 +274,16 @@ export const Receipt = ({
   if (state.status.type !== "finished") return null;
   return (
     <Stack className="mx-auto my-8 max-w-2xl">
-      <header>
-        <h4 className="relative">
+      <StackItem as="header">
+        <h4 className="grow font-bold relative">
           Checkout
           <a href={discoverUrl} style={{ position: "absolute", right: 0 }} aria-label="Close">
             <Icon name="x-circle" />
           </a>
         </h4>
-      </header>
-      <header>
-        <h2>{results.some(({ result }) => !result.success) ? "Summary" : "Your purchase was successful!"}</h2>
+      </StackItem>
+      <StackItem as="header">
+        <h2 className="grow">{results.some(({ result }) => !result.success) ? "Summary" : "Your purchase was successful!"}</h2>
 
         {results.some(({ result }) => result.success) ? (
           <div>
@@ -289,9 +298,9 @@ export const Receipt = ({
               : `We sent a receipt to ${state.email}`}
           </div>
         ) : null}
-      </header>
+      </StackItem>
       {results.map(({ result, item }, key) => (
-        <LineItemResultEntry key={key} result={result} name={item.product.name} />
+        <LineItemResultEntry key={key} result={result} name={item.product.name} classname = "flex flex-wrap items-center p-4 gap-4 justify-between border-t border-border" grow />
       ))}
       {!user && canBuyerSignUp ? (
         <CreateAccountForm
@@ -302,6 +311,8 @@ export const Receipt = ({
                 ? null
                 : state.status.paymentMethod.cardParamsResult.cardParams,
           }}
+          classname = "flex flex-wrap items-center p-4 gap-4 justify-between border-t border-border"
+          grow
         />
       ) : null}
     </Stack>

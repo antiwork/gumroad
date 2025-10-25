@@ -65,7 +65,7 @@ import { WithTooltip } from "$app/components/WithTooltip";
 
 import { FileEmbed, FileEmbedConfig, getDownloadUrl } from "./FileEmbed";
 import { Page, PageTab, titleWithFallback } from "./PageTab";
-import { Stack } from "$app/components/ui/Stack";
+import { Stack, StackItem } from "$app/components/ui/Stack";
 
 const PageTabList = React.forwardRef<HTMLDivElement, React.HTMLProps<HTMLDivElement>>(({ children }, ref) => (
   <div ref={ref} role="tablist" className="pagelist">
@@ -835,20 +835,20 @@ const ContentTabContent = ({ selectedVariantId }: { selectedVariantId: string | 
               {isDesktop ? (
                 <>
                   <Stack>
-                    <ReviewForm permalink="" purchaseId="" review={null} preview />
+                    <ReviewForm permalink="" purchaseId="" review={null} preview classname="flex flex-wrap items-center p-4 gap-4 justify-between not-first:border-t not-first:border-border" grow/>
                   </Stack>
                   <Stack>
                     {product.native_type === "membership" ? (
-                      <details>
-                        <summary inert>Membership</summary>
-                      </details>
+                      <StackItem as="details">
+                        <summary className="grow grid-flow-col grid-cols-[1fr_auto] before:[grid-column:2]" inert>Membership</summary>
+                      </StackItem>
                     ) : null}
-                    <details>
-                      <summary inert>Receipt</summary>
-                    </details>
-                    <details>
-                      <summary inert>Library</summary>
-                    </details>
+                    <StackItem as="details">
+                      <summary className="grow grid-flow-col grid-cols-[1fr_auto] before:[grid-column:2]" inert>Receipt</summary>
+                    </StackItem>
+                    <StackItem as="details">
+                      <summary className="grow grid-flow-col grid-cols-[1fr_auto] before:[grid-column:2]" inert>Library</summary>
+                    </StackItem>
                   </Stack>
                   <EntityInfo
                     entityName={selectedVariant ? `${product.name} - ${selectedVariant.name}` : product.name}

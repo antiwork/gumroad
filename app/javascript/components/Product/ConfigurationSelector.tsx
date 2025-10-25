@@ -1,4 +1,3 @@
-import cx from "classnames";
 import {
   addMinutes,
   compareAsc,
@@ -39,6 +38,7 @@ import { PriceInput } from "$app/components/PriceInput";
 import { TypeSafeOptionSelect } from "$app/components/TypeSafeOptionSelect";
 import { Calendar } from "$app/components/ui/Calendar";
 import { useRunOnce } from "$app/components/useRunOnce";
+import { classNames } from "$app/utils/classNames";
 
 const PWYWInput = React.forwardRef<
   HTMLInputElement,
@@ -50,12 +50,13 @@ const PWYWInput = React.forwardRef<
     suggestedPriceCents: number | null;
     hasError: boolean;
     hideLabel?: boolean;
+    grow?: boolean;
   }
->(({ currencyCode, cents, onChange, suggestedPriceCents, hasError, onBlur, hideLabel }, ref) => {
+>(({ currencyCode, cents, onChange, suggestedPriceCents, hasError, onBlur, hideLabel, grow = false }, ref) => {
   const uid = React.useId();
 
   return (
-    <fieldset className={cx({ danger: hasError })}>
+    <fieldset className={classNames({ danger: hasError }, grow? "grow basis-0": "")}>
       {!hideLabel ? (
         <legend>
           <label htmlFor={uid}>Name a fair price:</label>
@@ -533,8 +534,9 @@ export const ConfigurationSelector = React.forwardRef<
     hidePrices?: boolean;
     initialSelection?: PriceSelection;
     showInstallmentPlan?: boolean;
+    grow?: boolean;
   }
->(({ product, selection, setSelection, discount, hidePrices, initialSelection, showInstallmentPlan = false }, ref) => {
+>(({ product, selection, setSelection, discount, hidePrices, initialSelection, showInstallmentPlan = false ,grow = false}, ref) => {
   const update = (update: Partial<PriceSelection> | ((selection: PriceSelection) => Partial<PriceSelection>)) =>
     setSelection?.((prevSelection) => ({
       ...prevSelection,
@@ -580,6 +582,7 @@ export const ConfigurationSelector = React.forwardRef<
       hasError={selection.price.error}
       hideLabel={product.native_type === "coffee"}
       ref={pwywInputRef}
+      grow={grow}
     />
   );
 
@@ -589,7 +592,7 @@ export const ConfigurationSelector = React.forwardRef<
       <>
         <div
           role="radiogroup"
-          className="radio-buttons"
+          className={classNames("radio-buttons", grow? "grow": "")}
           style={{ gridTemplateColumns: "repeat(auto-fit, minmax(min(6rem, 100%), 1fr))" }}
         >
           {product.options.map((option) => (

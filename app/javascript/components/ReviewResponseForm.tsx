@@ -7,6 +7,7 @@ import { Button } from "$app/components/Button";
 import { useLoggedInUser } from "$app/components/LoggedInUser";
 import { Modal } from "$app/components/Modal";
 import { showAlert } from "$app/components/server-components/Alert";
+import { classNames } from "$app/utils/classNames";
 
 export const ReviewResponseForm = ({
   message: originalMessage,
@@ -14,12 +15,16 @@ export const ReviewResponseForm = ({
   onChange,
   onEditingChange,
   buttonProps = { small: false },
+  classname,
+  grow,
 }: {
   message: string | undefined;
   purchaseId: string;
   onChange: (response: { message: string } | null) => void;
   onEditingChange?: (isEditing: boolean) => void;
   buttonProps?: React.ComponentProps<typeof Button>;
+  classname?: string | undefined;
+  grow?: boolean;
 }) => {
   const loggedInUser = useLoggedInUser();
 
@@ -61,9 +66,9 @@ export const ReviewResponseForm = ({
   if (!loggedInUser?.policies.product_review_response.update) return null;
 
   return (
-    <section>
+    <section className={classname}>
       {isEditing ? (
-        <form onSubmit={(event) => void respondToReview(event)} className="grid gap-3">
+        <form onSubmit={(event) => void respondToReview(event)} className={classNames("grid gap-3", grow ? "grow" : "")}>
           <textarea
             value={message}
             placeholder="Add a response to the review"
@@ -82,7 +87,7 @@ export const ReviewResponseForm = ({
           </div>
         </form>
       ) : (
-        <div className="flex w-full gap-3">
+        <div className={classNames("flex w-full gap-3", grow ? "grow" : "")}>
           <Button {...buttonProps} onClick={() => setIsEditing(true)} className="flex-1">
             {originalMessage ? "Edit" : "Add response"}
           </Button>

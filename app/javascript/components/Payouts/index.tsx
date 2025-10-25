@@ -20,7 +20,7 @@ import { useUserAgentInfo } from "$app/components/UserAgent";
 import { WithTooltip } from "$app/components/WithTooltip";
 
 import placeholder from "$assets/images/placeholders/payouts.png";
-import { Stack } from "$app/components/ui/Stack";
+import { Stack, StackItem } from "$app/components/ui/Stack";
 
 const INSTANT_PAYOUT_FEE_PERCENTAGE = 0.03;
 const MINIMUM_INSTANT_PAYOUT_AMOUNT_CENTS = 1000;
@@ -352,28 +352,28 @@ const Period = ({ payoutPeriodData }: { payoutPeriodData: PayoutPeriodData }) =>
         ) : null}
       </div>
       <Stack style={{ marginTop: "var(--spacer-4)" }}>
-        <div>
-          <h4>Sales</h4>
+        <StackItem>
+          <h4 className="grow font-bold">Sales</h4>
           <div>{formatDollarAmount(payoutPeriodData.sales_cents)}</div>
-        </div>
+        </StackItem>
         {payoutPeriodData.credits_cents > 0 ? (
-          <div>
-            <h4>Credits</h4>
+          <StackItem>
+            <h4 className="grow font-bold">Credits</h4>
             <div>{formatDollarAmount(payoutPeriodData.credits_cents)}</div>
-          </div>
+          </StackItem>
         ) : null}
         {payoutPeriodData.affiliate_credits_cents !== 0 ? (
-          <div>
-            <h4>Affiliate or collaborator fees received</h4>
+          <StackItem>
+            <h4 className="grow font-bold">Affiliate or collaborator fees received</h4>
             <div>{formatDollarAmount(payoutPeriodData.affiliate_credits_cents)}</div>
-          </div>
+          </StackItem>
         ) : null}
         {payoutPeriodData.discover_fees_cents !== 0 || payoutPeriodData.direct_fees_cents !== 0 ? (
           <>
             {payoutPeriodData.discover_fees_cents !== 0 ? (
-              <div>
-                <div>
-                  <h4>
+              <StackItem>
+                <div className="grow">
+                  <h4 className="font-bold">
                     Discover sales{" "}
                     <a href="/help/article/66-gumroads-fees" target="_blank" rel="noreferrer">
                       fees
@@ -387,12 +387,12 @@ const Period = ({ payoutPeriodData }: { payoutPeriodData: PayoutPeriodData }) =>
                   ) : null}
                 </div>
                 <div>{formatNegativeDollarAmount(payoutPeriodData.discover_fees_cents)}</div>
-              </div>
+              </StackItem>
             ) : null}
             {payoutPeriodData.direct_fees_cents !== 0 ? (
-              <div>
-                <div>
-                  <h4>
+              <StackItem>
+                <div className="grow">
+                  <h4 className="font-bold">
                     Direct sales{" "}
                     <a href="/help/article/66-gumroads-fees" target="_blank" rel="noreferrer">
                       fees
@@ -406,80 +406,80 @@ const Period = ({ payoutPeriodData }: { payoutPeriodData: PayoutPeriodData }) =>
                   ) : null}
                 </div>
                 <div>{formatNegativeDollarAmount(payoutPeriodData.direct_fees_cents)}</div>
-              </div>
+              </StackItem>
             ) : null}
           </>
         ) : (
-          <div>
-            <h4>
+          <StackItem>
+            <h4 className="grow font-bold">
               <a href="/help/article/66-gumroads-fees" target="_blank" rel="noreferrer">
                 Fees
               </a>
             </h4>
             <div>{formatNegativeDollarAmount(payoutPeriodData.fees_cents)}</div>
-          </div>
+          </StackItem>
         )}
         {payoutPeriodData.refunds_cents !== 0 ? (
-          <div>
-            <h4>Refunds</h4>
+          <StackItem>
+            <h4 className="grow font-bold">Refunds</h4>
             <div>{formatNegativeDollarAmount(payoutPeriodData.refunds_cents)}</div>
-          </div>
+          </StackItem>
         ) : null}
         {payoutPeriodData.chargebacks_cents !== 0 ? (
-          <div>
-            <h4>
+          <StackItem>
+            <h4 className="grow font-bold">
               <a href="/help/article/134-how-does-gumroad-handle-chargebacks" target="_blank" rel="noreferrer">
                 Chargebacks
               </a>
             </h4>
             <div>{formatNegativeDollarAmount(payoutPeriodData.chargebacks_cents)}</div>
-          </div>
+          </StackItem>
         ) : null}
         {payoutPeriodData.credits_cents < 0 ? (
-          <div>
-            <h4>
+          <StackItem>
+            <h4 className="grow font-bold">
               <a href="/help/article/269-balance-page" target="_blank" rel="noreferrer">
                 Credits
               </a>
             </h4>
             <div>{formatNegativeDollarAmount(payoutPeriodData.credits_cents)}</div>
-          </div>
+          </StackItem>
         ) : null}
         {payoutPeriodData.loan_repayment_cents !== 0 ? (
-          <div>
-            <h4>Loan repayments</h4>
+          <StackItem>
+            <h4 className="grow font-bold">Loan repayments</h4>
             <div>{formatNegativeDollarAmount(payoutPeriodData.loan_repayment_cents)}</div>
-          </div>
+          </StackItem>
         ) : null}
         {payoutPeriodData.affiliate_fees_cents !== 0 ? (
-          <div>
-            <h4>Affiliate or collaborator fees paid</h4>
+          <StackItem>
+            <h4 className="grow font-bold">Affiliate or collaborator fees paid</h4>
             <div>{formatNegativeDollarAmount(payoutPeriodData.affiliate_fees_cents)}</div>
-          </div>
+          </StackItem>
         ) : null}
         {payoutPeriodData.paypal_payout_cents !== 0 ? (
-          <div>
-            <h4>
+          <StackItem>
+            <h4 className="grow font-bold">
               <a href="/help/article/275-paypal-connect" target="_blank" rel="noreferrer">
                 PayPal payouts
               </a>
             </h4>
             <div>{formatNegativeDollarAmount(payoutPeriodData.paypal_payout_cents)}</div>
-          </div>
+          </StackItem>
         ) : null}
         {payoutPeriodData.stripe_connect_payout_cents !== 0 ? (
-          <div>
-            <h4>
+          <StackItem>
+            <h4 className="grow font-bold">
               <a href="/help/article/330-stripe-connect" target="_blank" rel="noreferrer">
                 Stripe Connect payouts
               </a>
             </h4>
             <div>{formatNegativeDollarAmount(payoutPeriodData.stripe_connect_payout_cents)}</div>
-          </div>
+          </StackItem>
         ) : null}
         {payoutPeriodData.taxes_cents !== 0 ? (
-          <div>
-            <h4>
+          <StackItem>
+            <h4 className="grow font-bold">
               <a href="/help/article/121-sales-tax-on-gumroad" target="_blank" rel="noreferrer">
                 Taxes
               </a>
@@ -492,9 +492,9 @@ const Period = ({ payoutPeriodData }: { payoutPeriodData: PayoutPeriodData }) =>
                 <span>{formatDollarAmount(payoutPeriodData.taxes_cents)}</span>
               </WithTooltip>
             </div>
-          </div>
+          </StackItem>
         ) : null}
-        <div>
+        <StackItem>
           {(() => {
             const isCurrentPeriod = payoutPeriodData.status === "payable";
             switch (payoutPeriodData.payout_method_type) {
@@ -503,15 +503,16 @@ const Period = ({ payoutPeriodData }: { payoutPeriodData: PayoutPeriodData }) =>
                   <PeriodStripeConnectAccount
                     isCurrentPeriod={isCurrentPeriod}
                     stripeConnectAccount={payoutPeriodData}
+                    grow
                   />
                 );
               case "bank":
-                return <PeriodBankAccount isCurrentPeriod={isCurrentPeriod} bankAccount={payoutPeriodData} />;
+                return <PeriodBankAccount isCurrentPeriod={isCurrentPeriod} bankAccount={payoutPeriodData} grow />;
               case "paypal":
-                return <PeriodPaypalAccount isCurrentPeriod={isCurrentPeriod} paypalAccount={payoutPeriodData} />;
+                return <PeriodPaypalAccount isCurrentPeriod={isCurrentPeriod} paypalAccount={payoutPeriodData} grow />;
               case "legacy-na":
               case "none":
-                return <PeriodNoAccount />;
+                return <PeriodNoAccount grow />;
             }
           })()}
           <div className="payout-amount">
@@ -520,7 +521,7 @@ const Period = ({ payoutPeriodData }: { payoutPeriodData: PayoutPeriodData }) =>
               {payoutPeriodData.status === "payable" && payoutPeriodData.should_be_shown_currencies_always ? "USD" : ""}
             </span>
           </div>
-        </div>
+        </StackItem>
       </Stack>
     </section>
   );
@@ -548,11 +549,13 @@ const PeriodEmpty = ({ minimumPayoutAmountCents }: { minimumPayoutAmountCents: n
 const PeriodStripeConnectAccount = ({
   isCurrentPeriod,
   stripeConnectAccount,
+  grow,
 }: {
   isCurrentPeriod: boolean;
   stripeConnectAccount: StripeConnectAccount & { payout_currency: string };
+  grow?: boolean | undefined;
 }) => (
-  <h4>
+  <h4 className={grow ? "grow font-bold" : ""}>
     {isCurrentPeriod
       ? stripeConnectAccount.payout_currency.toUpperCase() !== "USD"
         ? `Will be converted to ${stripeConnectAccount.payout_currency.toUpperCase()} and sent to:`
@@ -568,16 +571,18 @@ const PeriodStripeConnectAccount = ({
 const PeriodBankAccount = ({
   isCurrentPeriod,
   bankAccount,
+  grow,
 }: {
   isCurrentPeriod: boolean;
   bankAccount: BankAccount & { arrival_date?: string | null; status?: string; payout_currency: string };
+  grow?: boolean | undefined;
 }) => (
-  <div style={{ display: "flex", flexDirection: "column", gap: "var(--spacer-2)" }}>
+  <div className={grow?"grow":""} style={{ display: "flex", flexDirection: "column", gap: "var(--spacer-2)" }}>
     <div style={{ display: "flex", alignItems: "center", gap: "var(--spacer-2)" }}>
       {bankAccount.arrival_date ? (
         <Icon name={bankAccount.status === "completed" ? "solid-check-circle" : "outline-clock"} />
       ) : null}
-      <h4>
+      <h4 className={grow ? "font-bold" : ""}>
         {bankAccount.arrival_date ? (
           <>
             {bankAccount.status === "completed" ? "Deposited " : "Expected deposit "}
@@ -627,17 +632,19 @@ const PeriodBankAccount = ({
 const PeriodPaypalAccount = ({
   isCurrentPeriod,
   paypalAccount,
+  grow,
 }: {
   isCurrentPeriod: boolean;
   paypalAccount: PaypalAccount;
+  grow?: boolean | undefined;
 }) => (
-  <h4>
+  <h4 className= {grow ? "grow font-bold" : ""}>
     {isCurrentPeriod ? "Will be sent to Paypal account:" : "Sent to Paypal account:"}{" "}
     <span>{paypalAccount.paypal_address}</span>
   </h4>
 );
 
-const PeriodNoAccount = () => <h4>Will be sent to:</h4>;
+const PeriodNoAccount = ({grow}: {grow?: boolean | undefined}) => <h4 className={grow?"grow font-bold":""}>Will be sent to:</h4>;
 
 const Payouts = ({
   next_payout_period_data,

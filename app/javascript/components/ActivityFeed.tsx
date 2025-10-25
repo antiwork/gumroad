@@ -1,7 +1,7 @@
 import * as React from "react";
 
 import { formatPriceCentsWithCurrencySymbol } from "$app/utils/currency";
-import { Stack } from "$app/components/ui/Stack";
+import { Stack, StackItem } from "$app/components/ui/Stack";
 import { Icon } from "$app/components/Icons";
 import { useLoggedInUser } from "$app/components/LoggedInUser";
 import Placeholder from "$app/components/ui/Placeholder";
@@ -68,8 +68,8 @@ export const ActivityFeed = ({ items }: { items: ActivityItem[] }) => {
   return (
     <Stack>
       {items.map(({ type, timestamp, details }, i) => (
-        <div key={i}>
-          <span className="flex gap-3">
+        <StackItem key={i}>
+          <span className="flex gap-3 grow">
             {type === "new_sale" && <Sale details={details} />}
             {type === "follower_added" && <Follow details={details} />}
             {type === "follower_removed" && <FollowRemoved details={details} />}
@@ -77,7 +77,7 @@ export const ActivityFeed = ({ items }: { items: ActivityItem[] }) => {
           <span className="text-muted" suppressHydrationWarning>
             {new Date(timestamp).toLocaleString(userAgentInfo.locale, { dateStyle: "medium", timeStyle: "short" })}
           </span>
-        </div>
+        </StackItem>
       ))}
     </Stack>
   );

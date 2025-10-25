@@ -6,7 +6,7 @@ import { assertResponseError } from "$app/utils/request";
 import { register } from "$app/utils/serverComponentUtil";
 
 import { showAlert } from "$app/components/server-components/Alert";
-import { Stack } from "$app/components/ui/Stack";
+import { Stack, StackItem } from "$app/components/ui/Stack";
 
 const AdminProductPurchases = ({
   product_id,
@@ -58,9 +58,9 @@ const AdminProductPurchases = ({
         {purchases && purchases.length > 0 ? (
           <Stack>
             {purchases.map((purchase) => (
-              <div key={purchase.id}>
-                <div>
-                  <h5>
+              <StackItem key={purchase.id}>
+                <div className="grow">
+                  <h5 className="font-bold">
                     <a href={Routes.admin_purchase_path(purchase.id)}>{purchase.displayed_price}</a>
                     {purchase.gumroad_responsible_for_tax ? ` + ${purchase.formatted_gumroad_tax_amount} VAT` : null}
                   </h5>
@@ -90,7 +90,7 @@ const AdminProductPurchases = ({
                   <a href={Routes.admin_search_purchases_path({ query: purchase.email })}>{purchase.email}</a>
                   <small>{purchase.created}</small>
                 </div>
-              </div>
+              </StackItem>
             ))}
           </Stack>
         ) : null}

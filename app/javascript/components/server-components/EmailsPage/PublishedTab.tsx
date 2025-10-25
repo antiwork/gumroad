@@ -25,7 +25,7 @@ import { useOnChange } from "$app/components/useOnChange";
 import { useUserAgentInfo } from "$app/components/UserAgent";
 
 import publishedPlaceholder from "$assets/images/placeholders/published_posts.png";
-import { Stack } from "$app/components/ui/Stack";
+import { Stack, StackItem } from "$app/components/ui/Stack";
 
 export const PublishedTab = () => {
   const data = cast<{ installments: PublishedInstallment[]; pagination: Pagination } | undefined>(useLoaderData());
@@ -186,41 +186,41 @@ export const PublishedTab = () => {
                   <button className="close" aria-label="Close" onClick={() => setSelectedInstallmentId(null)} />
                 </header>
                 <Stack>
-                  <div>
-                    <h5>Sent</h5>
+                  <StackItem>
+                    <h5 className="grow font-bold">Sent</h5>
                     {new Date(selectedInstallment.published_at).toLocaleString(userAgentInfo.locale, {
                       timeZone: currentSeller.timeZone.name,
                     })}
-                  </div>
-                  <div>
-                    <h5>Emailed</h5>
+                  </StackItem>
+                  <StackItem>
+                    <h5 className="grow font-bold">Emailed</h5>
                     {selectedInstallment.send_emails
                       ? formatStatNumber({ value: selectedInstallment.sent_count })
                       : "n/a"}
-                  </div>
-                  <div>
-                    <h5>Opened</h5>
+                  </StackItem>
+                  <StackItem>
+                    <h5 className="grow font-bold">Opened</h5>
                     {selectedInstallment.send_emails
                       ? selectedInstallment.open_rate !== null
                         ? `${formatStatNumber({ value: selectedInstallment.open_count })} (${formatStatNumber({ value: selectedInstallment.open_rate, suffix: "%" })})`
                         : formatStatNumber({ value: selectedInstallment.open_rate })
                       : "n/a"}
-                  </div>
-                  <div>
-                    <h5>Clicks</h5>
+                  </StackItem>
+                  <StackItem>
+                    <h5 className="grow font-bold ">Clicks</h5>
                     {selectedInstallment.send_emails
                       ? selectedInstallment.click_rate !== null
                         ? `${formatStatNumber({ value: selectedInstallment.click_count })} (${formatStatNumber({ value: selectedInstallment.click_rate, suffix: "%" })})`
                         : formatStatNumber({ value: selectedInstallment.click_rate })
                       : "n/a"}
-                  </div>
-                  <div>
-                    <h5>Views</h5>
+                  </StackItem>
+                  <StackItem>
+                    <h5 className="grow font-bold">Views</h5>
                     {formatStatNumber({
                       value: selectedInstallment.view_count,
                       placeholder: "n/a",
                     })}
-                  </div>
+                  </StackItem>
                 </Stack>
                 <div className="grid grid-flow-col gap-4">
                   {selectedInstallment.send_emails ? <ViewEmailButton installment={selectedInstallment} /> : null}

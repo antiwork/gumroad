@@ -41,7 +41,7 @@ import { useDebouncedCallback } from "$app/components/useDebouncedCallback";
 import { Sort, useSortingTableDriver } from "$app/components/useSortingTableDriver";
 
 import placeholder from "$assets/images/placeholders/upsells.png";
-import { Stack } from "$app/components/ui/Stack";
+import { Stack, StackItem } from "$app/components/ui/Stack";
 
 type Variant = {
   id: string;
@@ -401,14 +401,14 @@ const UpsellDrawer = ({
         <button className="close" aria-label="Close" onClick={onClose} />
       </header>
       <Stack as = "section">
-        <h3>Details</h3>
-        <div>
-          <h5>Offer text</h5>
+        <StackItem as="h3">Details</StackItem>
+        <StackItem>
+          <h5 className="grow font-bold">Offer text</h5>
           {selectedUpsell.text}
-        </div>
+        </StackItem>
         {selectedUpsell.discount ? (
-          <div>
-            <h5>Discount</h5>
+          <StackItem>
+            <h5 className="grow font-bold">Discount</h5>
             {selectedUpsell.discount.type === "percent"
               ? `${selectedUpsell.discount.percents}%`
               : formatPriceCentsWithCurrencySymbol(
@@ -418,26 +418,26 @@ const UpsellDrawer = ({
                     symbolFormat: "long",
                   },
                 )}
-          </div>
+          </StackItem>
         ) : null}
         {statistics ? (
           <>
-            <div>
-              <h5>Uses</h5>
+            <StackItem>
+              <h5 className="grow font-bold">Uses</h5>
               {statistics.uses.total}
-            </div>
-            <div>
-              <h5>Revenue</h5>
+            </StackItem>
+            <StackItem>
+              <h5 className="grow font-bold">Revenue</h5>
               {formatPriceCentsWithCurrencySymbol(selectedUpsell.product.currency_type, statistics.revenue_cents, {
                 symbolFormat: "short",
               })}
-            </div>
+            </StackItem>
           </>
         ) : null}
-        <div>
-          <h5>Status</h5>
+        <StackItem>
+          <h5 className="grow font-bold">Status</h5>
           <span>{selectedUpsell.paused ? "Paused" : "Live"}</span>
-        </div>
+        </StackItem>
       </Stack>
       <section className="grid auto-cols-fr grid-flow-col gap-4">
         <Button onClick={onTogglePause} disabled={isLoading || isReadOnly}>
@@ -446,51 +446,51 @@ const UpsellDrawer = ({
       </section>
       {selectedUpsell.cross_sell ? (
         <Stack as = "section">
-          <h3>Selected products</h3>
+          <StackItem as="h3">Selected products</StackItem>
           {selectedUpsell.universal ? (
-            <div>
-              <h5>All products</h5>
-            </div>
+            <StackItem>
+              <h5 className="grow font-bold">All products</h5>
+            </StackItem>
           ) : (
             selectedUpsell.selected_products.map(({ id, name }) => (
-              <div key={id}>
-                <div>
-                  <h5>{name}</h5>
+              <StackItem key={id}>
+                <div className="grow">
+                  <h5 className="font-bold">{name}</h5>
                   {statistics
                     ? `${statistics.uses.selected_products[id] ?? 0} ${(statistics.uses.selected_products[id] ?? 0) === 1 ? "use" : "uses"} from this product`
                     : null}
                 </div>
-              </div>
+              </StackItem>
             ))
           )}
         </Stack>
       ) : (
         <Stack as = "section">
-          <h3>Selected product</h3>
-          <div>
-            <h5>{selectedUpsell.product.name}</h5>
-          </div>
+          <StackItem as="h3">Selected product</StackItem>
+          <StackItem>
+            <h5 className="grow font-bold">{selectedUpsell.product.name}</h5>
+          </StackItem>
         </Stack>
       )}
       {selectedUpsell.cross_sell ? (
         <Stack as = "section">
-          <h3>Offered product</h3>
-          <div>
-            <h5>{formatOfferedProductName(selectedUpsell.product.name, selectedUpsell.product.variant?.name)}</h5>
-          </div>
+          <StackItem as="h3">Offered product</StackItem>
+          <StackItem>
+            <h5 className="grow font-bold">{formatOfferedProductName(selectedUpsell.product.name, selectedUpsell.product.variant?.name)}</h5>
+          </StackItem>
         </Stack>
       ) : (
         <Stack as = "section">
-          <h3>Offers</h3>
+          <StackItem as="h3">Offers</StackItem>
           {selectedUpsell.upsell_variants.map((upsellVariant) => (
-            <div key={upsellVariant.id}>
-              <div>
-                <h5>{`${upsellVariant.selected_variant.name} → ${upsellVariant.offered_variant.name}`}</h5>
+            <StackItem key={upsellVariant.id}>
+              <div className="grow">
+                <h5 className="font-bold">{`${upsellVariant.selected_variant.name} → ${upsellVariant.offered_variant.name}`}</h5>
                 {statistics
                   ? `${statistics.uses.upsell_variants[upsellVariant.id] ?? 0} ${(statistics.uses.upsell_variants[upsellVariant.id] ?? 0) === 1 ? "use" : "uses"}`
                   : null}
               </div>
-            </div>
+            </StackItem>
           ))}
         </Stack>
       )}

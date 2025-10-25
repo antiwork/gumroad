@@ -5,7 +5,7 @@ import { register } from "$app/utils/serverComponentUtil";
 
 import { Button } from "$app/components/Button";
 import { showAlert } from "$app/components/server-components/Alert";
-import { Stack } from "$app/components/ui/Stack";
+import { Stack, StackItem } from "$app/components/ui/Stack";
 
 type SecureRedirectPageProps = {
   message: string;
@@ -82,17 +82,18 @@ const SecureRedirectPage = ({
 
   return (
     <Stack className="single-page-form horizontal-form">
-      <header>
-        <h2>Confirm access</h2>
+      <StackItem as="header">
+        <h2 className="grow">Confirm access</h2>
         <p>{message}</p>
-      </header>
-      <div className="mini-rule legacy-only"></div>
+      </StackItem>
+      <StackItem className="mini-rule legacy-only"></StackItem>
       <form
         onSubmit={(e) => {
           void handleSubmit(e);
         }}
+        className="flex flex-wrap items-center p-4 gap-4 justify-between not-first:border-t not-first:border-border"
       >
-        <label htmlFor="confirmation_text" className="form-label">
+        <label htmlFor="confirmation_text" className="form-label grow">
           {field_name}
         </label>
         <input

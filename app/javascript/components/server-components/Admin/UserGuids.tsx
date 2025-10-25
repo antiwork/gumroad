@@ -5,7 +5,7 @@ import { assertResponseError, request } from "$app/utils/request";
 import { register } from "$app/utils/serverComponentUtil";
 
 import { showAlert } from "$app/components/server-components/Alert";
-import { Stack } from "$app/components/ui/Stack";
+import { Stack, StackItem } from "$app/components/ui/Stack";
 
 type UserGuids = { guid: string; user_ids: number[] }[];
 
@@ -36,12 +36,12 @@ const AdminUserGuids = ({ user_id }: { user_id: number }) => {
         userGuids.length > 0 ? (
           <Stack>
             {userGuids.map((guidData) => (
-              <div key={guidData.guid}>
-                <h5>
+              <StackItem key={guidData.guid}>
+                <h5 className="grow font-bold">
                   <a href={`/admin/guids/${guidData.guid}`}>{guidData.guid}</a>
                 </h5>
                 <span>{guidData.user_ids.length} users</span>
-              </div>
+              </StackItem>
             ))}
           </Stack>
         ) : (

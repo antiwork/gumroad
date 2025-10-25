@@ -39,7 +39,7 @@ import { showAlert } from "$app/components/server-components/Alert";
 import { useOriginalLocation } from "$app/components/useOriginalLocation";
 
 import { useOnChangeSync } from "../useOnChange";
-import { Stack } from "$app/components/ui/Stack";
+import { Stack, StackItem } from "$app/components/ui/Stack";
 
 type Props = {
   product: {
@@ -329,32 +329,33 @@ const SubscriptionManager = ({
 
   return (
     <Stack className="input-group mx-auto my-8 max-w-2xl">
-      <header>
+      <StackItem as="header">
         {`Manage ${subscriptionEntity}`}
-        <h2>{product.name}</h2>
-      </header>
+        <h2 className="grow">{product.name}</h2>
+      </StackItem>
 
       {!hasSavedCard && subscription.is_gift ? (
-        <div>
-          <div role="alert" className="warning">
+        <StackItem>
+          <div role="alert" className="grow warning">
             <div>
               Your {subscriptionEntity} is paid up until {formattedSubscriptionEndDate}. Add your own payment method
               below to ensure that your {subscriptionEntity} renews.
             </div>
           </div>
-        </div>
+        </StackItem>
       ) : null}
 
       {!subscription.is_installment_plan ? (
-        <div style={{ display: "grid", gap: "1rem", gridTemplateColumns: "1fr" }}>
+        <StackItem style={{ display: "grid", gap: "1rem", gridTemplateColumns: "1fr" }}>
           <ConfigurationSelector
             product={configurationSelectorProduct}
             selection={selection}
             setSelection={setSelection}
             initialSelection={initialSelection}
             discount={subscription.discount}
+            grow
           />
-        </div>
+        </StackItem>
       ) : null}
 
       <StateContext.Provider value={reducer}>

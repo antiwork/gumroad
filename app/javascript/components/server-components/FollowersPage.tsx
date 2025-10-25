@@ -21,7 +21,7 @@ import { useUserAgentInfo } from "$app/components/UserAgent";
 import { WithTooltip } from "$app/components/WithTooltip";
 
 import placeholder from "$assets/images/placeholders/followers.png";
-import { Stack } from "$app/components/ui/Stack";
+import { Stack, StackItem } from "$app/components/ui/Stack";
 
 const Layout = ({
   title,
@@ -212,8 +212,8 @@ export const FollowersPage = ({ followers: initialFollowers, per_page, total }: 
                   <button className="close" onClick={() => setSelectedFollowerId(null)} title="Close" />
                 </header>
                 <Stack>
-                  <div>
-                    <div>
+                  <StackItem>
+                    <div className="grow">
                       <h4>Email</h4>
                       <div>{selectedFollower.email}</div>
                       <Button
@@ -225,7 +225,7 @@ export const FollowersPage = ({ followers: initialFollowers, per_page, total }: 
                         {removing ? "Removing..." : "Remove follower"}
                       </Button>
                     </div>
-                  </div>
+                  </StackItem>
                 </Stack>
               </aside>
             ) : null}

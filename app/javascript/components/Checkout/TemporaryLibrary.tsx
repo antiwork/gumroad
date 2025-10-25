@@ -13,7 +13,7 @@ import { Result } from "$app/components/server-components/CheckoutPage";
 import { PageHeader } from "$app/components/ui/PageHeader";
 import { ProductCardGrid } from "$app/components/ui/ProductCardGrid";
 import { useRunOnce } from "$app/components/useRunOnce";
-import { Stack } from "$app/components/ui/Stack";
+import { Stack ,StackItem} from "$app/components/ui/Stack";
 
 const formatName = (productName: string, optionName: string | null) =>
   optionName ? `${productName} - ${optionName}` : productName;
@@ -35,7 +35,7 @@ export const TemporaryLibrary = ({ results, canBuyerSignUp }: { results: Result[
         <div className="grid grid-cols-1 items-start gap-x-16 gap-y-8 lg:grid-cols-[var(--grid-cols-sidebar)]">
           {!user && canBuyerSignUp ? (
             <Stack>
-              <div>
+              <StackItem>
                 <CreateAccountForm
                   createAccountData={{
                     email: state.email,
@@ -46,7 +46,7 @@ export const TemporaryLibrary = ({ results, canBuyerSignUp }: { results: Result[
                         : state.status.paymentMethod.cardParamsResult.cardParams,
                   }}
                 />
-              </div>
+              </StackItem>
             </Stack>
           ) : null}
           <ProductCardGrid>

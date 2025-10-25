@@ -63,7 +63,7 @@ import { useOnChange } from "$app/components/useOnChange";
 import { useOriginalLocation } from "$app/components/useOriginalLocation";
 import { useUserAgentInfo } from "$app/components/UserAgent";
 import { useRunOnce } from "$app/components/useRunOnce";
-import { Stack } from "$app/components/ui/Stack";
+import { Stack, StackItem } from "$app/components/ui/Stack";
 
 export type Seller = { id: string; name: string; avatar_url: string; profile_url: string };
 
@@ -581,12 +581,12 @@ export const Product = ({
           ) : null}
           {product.summary || product.attributes.length > 0 ? (
             <Stack>
-              {product.summary ? <p>{product.summary}</p> : null}
+              {product.summary ? <StackItem as = "p">{product.summary}</StackItem> : null}
               {product.attributes.map(({ name, value }, idx) => (
-                <div key={idx}>
-                  <h5>{name}</h5>
+                <StackItem key={idx}>
+                  <h5 className="grow font-bold">{name}</h5>
                   <div>{value}</div>
-                </div>
+                </StackItem>
               ))}
             </Stack>
           ) : null}
@@ -649,11 +649,11 @@ const ExistingPurchaseStack = ({
       <Stack>
         {purchase.membership ? (
           <>
-            <div>
-              <h5>{purchase.membership.tier_name}</h5>
+            <StackItem>
+              <h5 className="grow font-bold">{purchase.membership.tier_name}</h5>
               {purchase.total_price_including_tax_and_shipping}
-            </div>
-            <div>
+            </StackItem>
+            <StackItem>
               <NavigationButton
                 href={purchase.membership.manage_url}
                 target="_blank"
@@ -663,15 +663,16 @@ const ExistingPurchaseStack = ({
                     permalink,
                   }).catch(assertResponseError)
                 }
+                grow
               >
                 {purchase.subscription_has_lapsed ? "Restart membership" : "Manage membership"}
               </NavigationButton>
               {viewContentButton}
-            </div>
+            </StackItem>
           </>
         ) : (
-          <li>
-            <h3>
+          <StackItem>
+            <h3 className="grow">
               {isBundle
                 ? purchase.is_gift_receiver_purchase
                   ? "You've received this bundle as a gift"
@@ -681,7 +682,7 @@ const ExistingPurchaseStack = ({
                   : "You've purchased this product"}
             </h3>
             {viewContentButton}
-          </li>
+          </StackItem>
         )}
         {!isPreorder && !isBundle && allowRating ? (
           <ReviewForm
@@ -689,6 +690,8 @@ const ExistingPurchaseStack = ({
             purchaseId={purchase.id}
             review={purchase.review}
             purchaseEmailDigest={purchase.email_digest}
+            classname="flex flex-wrap items-center p-4 gap-4 justify-between not-first:border-t not-first:border-border"
+            grow
           />
         ) : null}
       </Stack>

@@ -33,7 +33,7 @@ import { useOnChange } from "$app/components/useOnChange";
 import { useUserAgentInfo } from "$app/components/UserAgent";
 
 import scheduledPlaceholder from "$assets/images/placeholders/scheduled_posts.png";
-import { Stack } from "$app/components/ui/Stack";
+import { Stack, StackItem } from "$app/components/ui/Stack";
 
 export const ScheduledTab = () => {
   const data = cast<{ installments: ScheduledInstallment[]; pagination: Pagination } | undefined>(useLoaderData());
@@ -180,16 +180,16 @@ export const ScheduledTab = () => {
                   <button className="close" aria-label="Close" onClick={() => setSelectedInstallmentId(null)} />
                 </header>
                 <Stack>
-                  <div>
-                    <h5>Sent to</h5>
+                  <StackItem>
+                    <h5 className="grow font-bold">Sent to</h5>
                     {selectedInstallment.recipient_description}
-                  </div>
-                  <div>
-                    <h5>Audience</h5>
+                  </StackItem>
+                  <StackItem>
+                    <h5 className="grow font-bold">Audience</h5>
                     {audienceCountValue(audienceCounts, selectedInstallment.external_id)}
-                  </div>
-                  <div>
-                    <h5>Delivery Time</h5>
+                  </StackItem>
+                  <StackItem>
+                    <h5 className="grow font-bold">Delivery Time</h5>
                     {new Date(selectedInstallment.to_be_published_at).toLocaleString(userAgentInfo.locale, {
                       month: "short",
                       day: "numeric",
@@ -198,7 +198,7 @@ export const ScheduledTab = () => {
                       minute: "numeric",
                       timeZone: currentSeller.timeZone.name,
                     })}
-                  </div>
+                  </StackItem>
                 </Stack>
                 <div className="grid grid-flow-col gap-4">
                   {selectedInstallment.send_emails ? <ViewEmailButton installment={selectedInstallment} /> : null}

@@ -85,10 +85,12 @@ type ButtonVariation = {
   small?: boolean;
 };
 
-export interface ButtonProps extends Omit<React.ComponentPropsWithoutRef<"button">, "color">, ButtonVariation {}
+export interface ButtonProps extends Omit<React.ComponentPropsWithoutRef<"button">, "color">, ButtonVariation {
+  grow?: boolean | undefined;
+}
 
 export const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
-  ({ className, color, outline, small, disabled, ...props }, ref) => {
+  ({ className, color, outline, small, disabled, grow, ...props }, ref) => {
     useValidateClassName(className);
 
     const variant = outline ? "outline" : color === "danger" ? "destructive" : "default";
@@ -99,6 +101,7 @@ export const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
         className={classNames(
           buttonVariants({ variant, size, color: color && !outline ? color : undefined }),
           className,
+          grow?"grow":"",
         )}
         ref={ref}
         disabled={disabled}
@@ -112,10 +115,11 @@ Button.displayName = "Button";
 
 export interface NavigationButtonProps extends Omit<React.ComponentPropsWithoutRef<"a">, "color">, ButtonVariation {
   disabled?: boolean | undefined;
+  grow?: boolean | undefined;
 }
 
 export const NavigationButton = React.forwardRef<HTMLAnchorElement, NavigationButtonProps>(
-  ({ className, color, outline, small, disabled, ...props }, ref) => {
+  ({ className, color, outline, small, disabled, grow, ...props }, ref) => {
     useValidateClassName(className);
 
     const variant = outline ? "outline" : color === "danger" ? "destructive" : "default";
@@ -125,7 +129,7 @@ export const NavigationButton = React.forwardRef<HTMLAnchorElement, NavigationBu
       <a
         className={classNames(
           buttonVariants({ variant, size, color: color && !outline ? color : undefined }),
-          className,
+          className,grow?"grow":"",
         )}
         ref={ref}
         inert={disabled}

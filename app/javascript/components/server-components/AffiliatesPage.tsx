@@ -63,7 +63,7 @@ import { Sort, useClientSortingTableDriver, useSortingTableDriver } from "$app/c
 import { WithTooltip } from "$app/components/WithTooltip";
 
 import placeholder from "$assets/images/placeholders/affiliated.png";
-import { Stack } from "$app/components/ui/Stack";
+import { Stack, StackItem } from "$app/components/ui/Stack";
 
 type LayoutProps = {
   title: string;
@@ -614,28 +614,28 @@ const AffiliateDetails = ({
 
         return (
           <Stack as = "section" key={product.id}>
-            <h3>{product.name}</h3>
+            <StackItem as="h3">{product.name}</StackItem>
             {statistics ? (
               <>
-                <div>
-                  <h5>Revenue</h5>
+                <StackItem>
+                  <h5 className="grow font-bold">Revenue</h5>
                   {formattedSalesVolumeAmount(productStatistics?.volume_cents ?? 0)}
-                </div>
-                <div>
-                  <h5>Sales</h5>
+                </StackItem>
+                <StackItem>
+                  <h5 className="grow font-bold">Sales</h5>
                   {productStatistics?.sales_count ?? 0}
-                </div>
+                </StackItem>
               </>
             ) : null}
-            <div>
-              <h5>Commission</h5>
+            <StackItem>
+              <h5 className="grow font-bold">Commission</h5>
               {((product.fee_percent ?? 0) / 100).toLocaleString([], { style: "percent" })}
-            </div>
-            <div>
+            </StackItem>
+            <StackItem>
               <CopyToClipboard tooltipPosition="bottom" copyTooltip="Copy link" text={product.referral_url}>
-                <Button>Copy link</Button>
+                <Button grow>Copy link</Button>
               </CopyToClipboard>
-            </div>
+            </StackItem>
           </Stack>
         );
       })}

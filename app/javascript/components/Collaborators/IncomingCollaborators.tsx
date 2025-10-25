@@ -21,7 +21,7 @@ import Placeholder from "$app/components/ui/Placeholder";
 import { WithTooltip } from "$app/components/WithTooltip";
 
 import placeholder from "$assets/images/placeholders/collaborators.png";
-import { Stack } from "$app/components/ui/Stack";
+import { Stack, StackItem } from "$app/components/ui/Stack";
 
 const formatProductNames = (incomingCollaborator: IncomingCollaborator) => {
   if (incomingCollaborator.products.length === 0) {
@@ -79,21 +79,21 @@ const IncomingCollaboratorDetails = ({
       </header>
 
       <Stack as = "section">
-        <h3>Email</h3>
-        <div>
-          <span>{selected.seller_email}</span>
-        </div>
+        <StackItem as="h3">Email</StackItem>
+        <StackItem>
+          <span className="grow">{selected.seller_email}</span>
+        </StackItem>
       </Stack>
 
       <Stack as = "section">
-        <h3>Products</h3>
+        <StackItem as="h3">Products</StackItem>
         {selected.products.map((product) => (
-          <section key={product.id}>
-            <a href={product.url} target="_blank" rel="noreferrer">
+          <StackItem key={product.id}>
+            <a className="grow" href={product.url} target="_blank" rel="noreferrer">
               {product.name}
             </a>
             <div>{formatAsPercent(product.affiliate_percentage)}</div>
-          </section>
+          </StackItem>
         ))}
       </Stack>
 

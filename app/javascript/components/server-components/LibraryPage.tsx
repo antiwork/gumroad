@@ -30,7 +30,7 @@ import { useOriginalLocation } from "$app/components/useOriginalLocation";
 import { useRunOnce } from "$app/components/useRunOnce";
 
 import placeholder from "$assets/images/placeholders/library.png";
-import { Stack } from "$app/components/ui/Stack";
+import { Stack, StackItem } from "$app/components/ui/Stack";
 
 export type Result = {
   product: {
@@ -395,8 +395,8 @@ const LibraryPage = ({ results, creators, bundles, reviews_page_enabled, followi
         >
           {shouldShowFilter ? (
             <Stack>
-              <header>
-                <div>
+              <StackItem as="header">
+                <div className="grow">
                   {filteredResults.length
                     ? `Showing 1-${Math.min(filteredResults.length, resultsLimit)} of ${filteredResults.length} products`
                     : "No products found"}
@@ -406,11 +406,11 @@ const LibraryPage = ({ results, creators, bundles, reviews_page_enabled, followi
                     Filter
                   </button>
                 )}
-              </header>
+              </StackItem>
               {isDesktop || mobileFiltersExpanded ? (
                 <>
-                  <div>
-                    <div className="input input-wrapper product-search__wrapper">
+                  <StackItem>
+                    <div className="grow input input-wrapper product-search__wrapper">
                       <Icon name="solid-search" />
                       <input
                         className="search-products"
@@ -421,9 +421,9 @@ const LibraryPage = ({ results, creators, bundles, reviews_page_enabled, followi
                         onKeyDown={handleSearchKeyDown}
                       />
                     </div>
-                  </div>
-                  <div className="sort">
-                    <fieldset>
+                  </StackItem>
+                  <StackItem className="sort">
+                    <fieldset className="grow basis-0">
                       <legend>
                         <label className="filter-header" htmlFor={sortUid}>
                           Sort by
@@ -443,10 +443,10 @@ const LibraryPage = ({ results, creators, bundles, reviews_page_enabled, followi
                         <option value="purchase_date">Purchase Date</option>
                       </select>
                     </fieldset>
-                  </div>
+                  </StackItem>
                   {bundles.length > 0 ? (
-                    <div>
-                      <fieldset>
+                    <StackItem>
+                      <fieldset className="grow basis-0">
                         <legend>
                           <label htmlFor={bundlesUid}>Bundles</label>
                         </legend>
@@ -465,10 +465,10 @@ const LibraryPage = ({ results, creators, bundles, reviews_page_enabled, followi
                           isClearable
                         />
                       </fieldset>
-                    </div>
+                    </StackItem>
                   ) : null}
-                  <div className="creator">
-                    <fieldset role="group">
+                  <StackItem className="creator">
+                    <fieldset className="grow basis-0" role="group">
                       <legend className="filter-header">Creator</legend>
                       <label>
                         All Creators
@@ -508,10 +508,10 @@ const LibraryPage = ({ results, creators, bundles, reviews_page_enabled, followi
                         ) : null}
                       </div>
                     </fieldset>
-                  </div>
+                  </StackItem>
                   {archivedCount > 0 ? (
-                    <div className="archived">
-                      <fieldset role="group">
+                    <StackItem className="archived">
+                      <fieldset className="grow basis-0" role="group">
                         <label className="filter-archived">
                           Show archived only
                           <input
@@ -527,7 +527,7 @@ const LibraryPage = ({ results, creators, bundles, reviews_page_enabled, followi
                           />
                         </label>
                       </fieldset>
-                    </div>
+                    </StackItem>
                   ) : null}
                 </>
               ) : null}

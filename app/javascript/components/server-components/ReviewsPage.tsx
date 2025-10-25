@@ -215,6 +215,8 @@ const Row = ({ review, onChange }: { review: Review; onChange: (review: Review) 
                 purchaseEmailDigest={review.purchase_email_digest}
                 review={review}
                 onChange={(newReview) => onChange({ ...review, ...newReview })}
+                classname="flex flex-wrap items-center p-4 gap-4 justify-between not-first:border-t not-first:border-border"
+                grow
               />
             </Stack>
           </Popover>

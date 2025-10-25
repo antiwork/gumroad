@@ -17,7 +17,7 @@ import { showAlert } from "$app/components/server-components/Alert";
 import { PurchaseCustomField } from "$app/components/server-components/DownloadPage/WithContent";
 import { PageHeader } from "$app/components/ui/PageHeader";
 import { useIsAboveBreakpoint } from "$app/components/useIsAboveBreakpoint";
-import { Stack } from "$app/components/ui/Stack";
+import { Stack, StackItem } from "$app/components/ui/Stack";
 
 type ContentUnavailabilityReasonCode =
   | "inactive_membership"
@@ -130,6 +130,8 @@ export const Layout = ({
                 purchaseEmailDigest={purchase.email_digest}
                 review={purchase.review}
                 disabledStatus={disabledStatus}
+                classname="flex flex-wrap items-center p-4 gap-4 justify-between not-first:border-t not-first:border-border"
+                grow
               />
             </Stack>
           ) : null}
@@ -145,8 +147,8 @@ export const Layout = ({
             <Stack>
               {content_unavailability_reason_code === null && purchase.membership ? (
                 purchase.membership.is_installment_plan ? (
-                  <details>
-                    <summary>Installment plan</summary>
+                  <StackItem as="details">
+                    <summary className="grow grid-flow-col grid-cols-[1fr_auto] before:[grid-column:2]">Installment plan</summary>
                     {purchase.membership.is_installment_plan_completed ? (
                       "This installment plan has been paid in full."
                     ) : (
@@ -154,10 +156,10 @@ export const Layout = ({
                         Manage
                       </NavigationButton>
                     )}
-                  </details>
+                  </StackItem>
                 ) : (
-                  <details>
-                    <summary>Membership</summary>
+                  <StackItem as="details">
+                    <summary className="grow grid-flow-col grid-cols-[1fr_auto] before:[grid-column:2]">Membership</summary>
                     <div style={{ display: "grid" }}>
                       {purchase.membership.has_active_subscription ? (
                         <NavigationButton href={Routes.manage_subscription_url(purchase.membership.subscription_id)}>
@@ -171,12 +173,12 @@ export const Layout = ({
                         </NavigationButton>
                       ) : null}
                     </div>
-                  </details>
+                  </StackItem>
                 )
               ) : null}
               {receiptPurchaseId ? (
-                <details>
-                  <summary>Receipt</summary>
+                <StackItem as="details">
+                  <summary className="grow grid-flow-col grid-cols-[1fr_auto] before:[grid-column:2]">Receipt</summary>
                   <div className="paragraphs">
                     <NavigationButton
                       href={
@@ -191,16 +193,16 @@ export const Layout = ({
                       {isResendingReceipt ? "Resending receipt..." : "Resend receipt"}
                     </Button>
                   </div>
-                </details>
+                </StackItem>
               ) : null}
               {loggedInUser !== null ? (
-                <details>
-                  <summary>Library</summary>
+                <StackItem as="details">
+                  <summary className="grow grid-flow-col grid-cols-[1fr_auto] before:[grid-column:2]">Library</summary>
                   <div className="paragraphs">
                     <PurchaseArchiveButton purchase_id={purchase.id} initial_is_archived={purchase.is_archived} />
                     <PurchaseDeleteButton purchase_id={purchase.id} product_name={purchase.product_name} />
                   </div>
-                </details>
+                </StackItem>
               ) : null}
             </Stack>
           ) : null}
@@ -281,8 +283,8 @@ const CallDetails = ({ call }: { call: Call }) => {
 
   return (
     <Stack>
-      <div>
-        <h5>
+      <StackItem>
+        <h5 className="grow font-bold">
           {`${formatTime(startTime)} - ${formatTime(endTime)} ${
             Intl.DateTimeFormat("en-US", { timeZoneName: "short" })
               .formatToParts(new Date())
@@ -290,14 +292,14 @@ const CallDetails = ({ call }: { call: Call }) => {
           }`}
         </h5>
         {formattedStartDate === formattedEndDate ? formattedStartDate : `${formattedStartDate} - ${formattedEndDate}`}
-      </div>
+      </StackItem>
       {call.url ? (
-        <div>
-          <strong>Call link</strong>
+        <StackItem>
+          <strong className="grow">Call link</strong>
           <a href={call.url} target="_blank" rel="noopener noreferrer">
             {call.url}
           </a>
-        </div>
+        </StackItem>
       ) : null}
     </Stack>
   );
@@ -306,10 +308,10 @@ const CallDetails = ({ call }: { call: Call }) => {
 export const EntityInfo = ({ entityName, creator }: { entityName: string | null; creator: LayoutProps["creator"] }) =>
   entityName || creator ? (
     <Stack>
-      {entityName ? <div>{entityName}</div> : null}
+      {entityName ? <StackItem>{entityName}</StackItem> : null}
       {creator ? (
-        <div>
-          <span style={{ display: "flex", alignItems: "center", gap: "var(--spacer-2)" }}>
+        <StackItem>
+          <span className="grow" style={{ display: "flex", alignItems: "center", gap: "var(--spacer-2)" }}>
             {creator.avatar_url ? <img className="user-avatar" src={creator.avatar_url} /> : null}
 
             <span>
@@ -319,7 +321,7 @@ export const EntityInfo = ({ entityName, creator }: { entityName: string | null;
               </a>
             </span>
           </span>
-        </div>
+        </StackItem>
       ) : null}
     </Stack>
   ) : null;
@@ -423,20 +425,20 @@ const AddToLibrary = ({ add_to_library_option, terms_page_url, purchase_id, purc
     <Stack>
       {add_to_library_option === "add_to_library_button" ? (
         <>
-          <span>Access this product from anywhere, forever:</span>
-          <div>
-            <div style={{ display: "grid" }}>
+          <StackItem as="span">Access this product from anywhere, forever:</StackItem>
+          <StackItem>
+            <div className="grow"style={{ display: "grid" }}>
               <Button color="primary" onClick={handleAddPurchaseToLibrary} disabled={isSubmitting}>
                 {isSubmitting ? "Adding..." : "Add to library"}
               </Button>
             </div>
-          </div>
+          </StackItem>
         </>
       ) : (
         <>
-          <span>Create an account to access all of your purchases in one place</span>
-          <div>
-            <form autoComplete="off" onSubmit={handleSignupAndAddPurchaseToLibrary} className="grid gap-4">
+          <StackItem as="span">Create an account to access all of your purchases in one place</StackItem>
+          <StackItem>
+            <form autoComplete="off" onSubmit={handleSignupAndAddPurchaseToLibrary} className="grow grid gap-4">
               <fieldset>
                 <input
                   type="password"
@@ -452,7 +454,7 @@ const AddToLibrary = ({ add_to_library_option, terms_page_url, purchase_id, purc
                 {isSubmitting ? "Creating..." : "Create"}
               </Button>
             </form>
-          </div>
+          </StackItem>
         </>
       )}
     </Stack>

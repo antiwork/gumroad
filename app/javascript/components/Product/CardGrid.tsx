@@ -16,7 +16,7 @@ import { useDebouncedCallback } from "$app/components/useDebouncedCallback";
 import { useOnChange } from "$app/components/useOnChange";
 
 import { Card } from "./Card";
-import { Stack } from "$app/components/ui/Stack";
+import { Stack ,StackItem} from "$app/components/ui/Stack";
 
 export const SORT_BY_LABELS = {
   default: "Default",
@@ -234,20 +234,20 @@ export const CardGrid = ({
     >
       {hideFilters ? null : (
         <Stack className="overflow-y-auto lg:sticky lg:inset-y-4 lg:max-h-[calc(100vh-2rem)]" aria-label="Filters">
-          <header>
+          <StackItem as="header">
             {title ?? "Filters"}
             {anyFilters ? (
-              <div className="text-right">
+              <div className="grow text-right">
                 <button className="underline" onClick={resetFilters}>
                   Clear
                 </button>
               </div>
             ) : null}
-          </header>
+          </StackItem>
           {prependFilters}
           {hideSort ? null : (
-            <details>
-              <summary>Sort by</summary>
+            <StackItem as="details">
+              <summary className="grow grid-flow-col grid-cols-[1fr_auto] before:[grid-column:2]">Sort by</summary>
               <fieldset role="group">
                 {(onProfile ? PROFILE_SORT_KEYS : SORT_KEYS).map((key) => (
                   <label key={key}>
@@ -262,11 +262,14 @@ export const CardGrid = ({
                   </label>
                 ))}
               </fieldset>
-            </details>
+            </StackItem>
           )}
           {results?.tags_data.length || searchParams.tags?.length || tagsOpen ? (
-            <details onToggle={() => setTagsOpen(!tagsOpen)}>
-              <summary>Tags</summary>
+            <details
+              onToggle={() => setTagsOpen(!tagsOpen)}
+              className="flex flex-wrap items-center p-4 gap-4 justify-between not-first:border-t not-first:border-border block"
+            >
+              <summary className="grow grid-flow-col grid-cols-[1fr_auto] before:[grid-column:2]">Tags</summary>
               <fieldset role="group">
                 <label>
                   All Products
@@ -289,8 +292,11 @@ export const CardGrid = ({
             </details>
           ) : null}
           {results?.filetypes_data.length || searchParams.filetypes?.length || filetypesOpen ? (
-            <details onToggle={() => setFiletypesOpen(!filetypesOpen)}>
-              <summary>Contains</summary>
+            <details
+              onToggle={() => setFiletypesOpen(!filetypesOpen)}
+              className="flex flex-wrap items-center p-4 gap-4 justify-between not-first:border-t not-first:border-border block"
+            >
+              <summary className="grow grid-flow-col grid-cols-[1fr_auto] before:[grid-column:2]">Contains</summary>
               <fieldset role="group">
                 {results ? (
                   <FilterCheckboxes
@@ -303,8 +309,8 @@ export const CardGrid = ({
               </fieldset>
             </details>
           ) : null}
-          <details>
-            <summary>Price</summary>
+          <StackItem as="details">
+            <summary className="grow grid-flow-col grid-cols-[1fr_auto] before:[grid-column:2]">Price</summary>
             <div
               style={{
                 display: "grid",
@@ -348,7 +354,7 @@ export const CardGrid = ({
                 </div>
               </fieldset>
             </div>
-          </details>
+          </StackItem>
           {appendFilters}
         </Stack>
       )}

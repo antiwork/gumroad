@@ -34,7 +34,7 @@ import { useOnChange } from "$app/components/useOnChange";
 import { useUserAgentInfo } from "$app/components/UserAgent";
 
 import draftsPlaceholder from "$assets/images/placeholders/draft_posts.png";
-import { Stack } from "$app/components/ui/Stack";
+import { Stack, StackItem } from "$app/components/ui/Stack";
 
 export const DraftsTab = () => {
   const data = cast<{ installments: DraftInstallment[]; pagination: Pagination } | undefined>(useLoaderData());
@@ -160,16 +160,16 @@ export const DraftsTab = () => {
                   <button className="close" aria-label="Close" onClick={() => setSelectedInstallmentId(null)} />
                 </header>
                 <Stack>
-                  <div>
-                    <h5>Sent to</h5>
+                  <StackItem>
+                    <h5 className="grow font-bold">Sent to</h5>
                     {selectedInstallment.recipient_description}
-                  </div>
-                  <div>
-                    <h5>Audience</h5>
+                  </StackItem>
+                  <StackItem>
+                    <h5 className="grow font-bold">Audience</h5>
                     {audienceCountValue(audienceCounts, selectedInstallment.external_id)}
-                  </div>
-                  <div>
-                    <h5>Last edited</h5>
+                  </StackItem>
+                  <StackItem>
+                    <h5 className="grow font-bold">Last edited</h5>
                     {new Date(selectedInstallment.updated_at).toLocaleString(userAgentInfo.locale, {
                       month: "short",
                       day: "numeric",
@@ -178,7 +178,7 @@ export const DraftsTab = () => {
                       minute: "numeric",
                       timeZone: currentSeller.timeZone.name,
                     })}
-                  </div>
+                  </StackItem>
                 </Stack>
                 <div className="grid grid-flow-col gap-4">
                   {selectedInstallment.send_emails ? <ViewEmailButton installment={selectedInstallment} /> : null}

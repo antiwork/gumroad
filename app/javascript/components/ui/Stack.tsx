@@ -6,21 +6,23 @@ type StackProps = React.PropsWithChildren<{
   className?: string | undefined;
   as?: "div" | "section" | "main" | "aside";
   borderless?: boolean;
-  twoColumns?: boolean;
 }> &React.HTMLAttributes<HTMLElement>;
 
+type StackItemProps = React.PropsWithChildren<{
+  className?: string | undefined;
+  as?: "div" | "header" | "footer"| "details"| "h3" | "h4" | "h5" | "h6"| "section"| "fieldset"| "p"| "button"| "span";
+}> & React.HTMLAttributes<HTMLElement>;
+
+
 export const Stack = React.forwardRef<HTMLElement, StackProps>(
-  ({ className, as: Component = "div", borderless = false, twoColumns = false, children, ...rest }, ref) => {
+  ({ className, as: Component = "div", borderless = false, children, ...rest }, ref) => {
 
-    const baseClasses="grid bg-background border border-border rounded stack-component [&>*]:flex [&>*]:flex-wrap [&>*]:items-center [&>*]:p-4 [&>*]:gap-4 [&>*]:justify-between [&>*:not(:first-child)]:border-t [&>*:not(:first-child)]:border-border [&>*>:first-child]:grow [&>*>:first-child:where(.button,fieldset)]:basis-0 [&>*>:where(.button,fieldset)+:where(.button,fieldset)]:flex-1 [&>*_h4]:font-bold [&>*_h5]:font-bold [&>*_h6]:font-bold [&>details]:block  [&>details_summary]:grid-flow-col [&>details_summary]:grid-cols-[1fr_auto] [&>details_summary::before]:col-start-2"
+    const baseClasses="grid bg-background border border-border rounded stack-component";
 
-    const mainStackClasses = Component === "main" ? "h-min my-4 mx-auto max-w-md w-[calc(100%-2*1rem)] [&>header]:text-center [&>footer]:text-center [&>*]:flex-col [&>*]:items-stretch" : "";
+    const mainStackClasses = Component === "main" ? "h-min my-4 mx-auto max-w-md w-[calc(100%-2*1rem)] [&>*]:flex-col [&>*]:items-stretch" : "";
 
 
     const borderlessClasses = borderless ? "border-none gap-4 [&>*]:p-0 [&>*]:border-none" : "";
-
-
-    const twoColumnsClasses = twoColumns ? "lg:grid-cols-2 lg:[&>:nth-child(odd)]:border-r lg:[&>:nth-child(odd)]:border-r-border lg:[&>:nth-child(2)]:!border-t-0" : "";
 
     return (
       <Component
@@ -29,7 +31,28 @@ export const Stack = React.forwardRef<HTMLElement, StackProps>(
           baseClasses,
           mainStackClasses,
           borderlessClasses,
-          twoColumnsClasses,
+          className
+        )}
+        {...rest}
+      >
+        {children}
+      </Component>
+    );
+  }
+);
+
+export const StackItem = React.forwardRef<HTMLElement, StackItemProps>(
+  ({ className, as: Component = "div",children, ...rest }, ref) => {
+    const baseClasses = "flex flex-wrap items-center p-4 gap-4 justify-between not-first:border-t not-first:border-border";
+
+    const detailsClasses = Component === "details" ? "block" : "";
+
+    return (
+      <Component
+        ref={ref as any}
+        className={classNames(
+          baseClasses,
+          detailsClasses,
           className
         )}
         {...rest}
@@ -41,3 +64,4 @@ export const Stack = React.forwardRef<HTMLElement, StackProps>(
 );
 
 Stack.displayName = "Stack";
+StackItem.displayName = "StackItem";

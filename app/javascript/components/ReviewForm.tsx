@@ -15,6 +15,7 @@ import { ReviewVideoRecorder } from "$app/components/ReviewForm/ReviewVideoRecor
 import { VideoState, ReviewVideoRecorderUiState } from "$app/components/ReviewForm/ReviewVideoRecorderCommon";
 import { useReviewVideoUploader } from "$app/components/ReviewForm/useReviewVideoUploader";
 import { showAlert } from "$app/components/server-components/Alert";
+import { classNames } from "$app/utils/classNames";
 
 export type Review = {
   rating: number;
@@ -103,8 +104,10 @@ export const ReviewForm = React.forwardRef<
     preview?: boolean;
     disabledStatus?: string | null;
     style?: React.CSSProperties;
+    classname?: string | undefined;
+    grow?: boolean | undefined;
   }
->(({ permalink, purchaseId, purchaseEmailDigest, review, onChange, preview, disabledStatus, style }, ref) => {
+>(({ permalink, purchaseId, purchaseEmailDigest, review, onChange, preview, disabledStatus, style, classname, grow }, ref) => {
   const appDomain = useAppDomain();
   const [isLoading, setIsLoading] = React.useState(false);
   const [rating, setRating] = React.useState<number | null>(review?.rating ?? null);
@@ -322,9 +325,9 @@ export const ReviewForm = React.forwardRef<
   );
 
   return (
-    <form onSubmit={(event) => void handleSubmit(event)} style={style} className="flex flex-col items-start!">
-      {error ? <p className="text-red"> {error} </p> : null}
-      <div className="flex flex-wrap justify-between gap-2">
+    <form onSubmit={(event) => void handleSubmit(event)} style={style} className={classNames("flex flex-col items-start!",classname)}>
+      {error ? <p className={classNames("text-red", grow?"grow":"")}> {error} </p> : null}
+      <div className={classNames("flex flex-wrap justify-between gap-2", error? "" : (grow? "grow" : ""))}>
         <label htmlFor={uid}>{viewing ? "Your rating:" : "Liked it? Give it a rating:"}</label>
         <RatingSelector currentRating={rating} onChangeCurrentRating={setRating} disabled={disabled || viewing} />
       </div>

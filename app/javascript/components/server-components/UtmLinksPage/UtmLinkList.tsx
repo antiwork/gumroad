@@ -32,7 +32,7 @@ import { WithTooltip } from "$app/components/WithTooltip";
 
 import noLinksYetPlaceholder from "$assets/images/placeholders/utm_links_empty.png";
 import noLinksFoundPlaceholder from "$assets/images/placeholders/utm_links_not_found.png";
-import { Stack } from "$app/components/ui/Stack";
+import { Stack, StackItem } from "$app/components/ui/Stack";
 
 const duplicateLinkPath = (link: SavedUtmLink) => `/dashboard/utm_links/new?copy_from=${link.id}`;
 const editLinkPath = (link: SavedUtmLink) => `/dashboard/utm_links/${link.id}/edit`;
@@ -421,64 +421,64 @@ const UtmLinkDetails = ({
         <button className="close" aria-label="Close details" onClick={onClose} />
       </header>
       <Stack as ="section">
-        <div>
-          <h3>Details</h3>
-        </div>
-        <div>
-          <h5>Date</h5>
+        <StackItem>
+          <h3 className= "grow">Details</h3>
+        </StackItem>
+        <StackItem>
+          <h5 className="grow font-bold">Date</h5>
           {new Date(utmLink.created_at).toLocaleDateString(userAgentInfo.locale, {
             month: "short",
             day: "numeric",
             year: "numeric",
           })}
-        </div>
+        </StackItem>
         {utmLink.destination_option ? (
-          <div>
-            <h5>Destination</h5>
+          <StackItem>
+            <h5 className="grow font-bold">Destination</h5>
             <a href={utmLink.destination_option.url} target="_blank" rel="noopener noreferrer">
               {utmLink.destination_option.label}
             </a>
-          </div>
+          </StackItem>
         ) : null}
-        <div>
-          <h5>Source</h5>
+        <StackItem>
+          <h5 className="grow font-bold">Source</h5>
           {utmLink.source}
-        </div>
-        <div>
-          <h5>Medium</h5>
+        </StackItem>
+        <StackItem>
+          <h5 className="grow font-bold">Medium</h5>
           {utmLink.medium}
-        </div>
-        <div>
-          <h5>Campaign</h5>
+        </StackItem>
+        <StackItem>
+          <h5 className="grow font-bold">Campaign</h5>
           {utmLink.campaign}
-        </div>
+        </StackItem>
         {utmLink.term ? (
-          <div>
-            <h5>Term</h5>
+          <StackItem>
+            <h5 className="grow font-bold">Term</h5>
             {utmLink.term}
-          </div>
+          </StackItem>
         ) : null}
         {utmLink.content ? (
-          <div>
-            <h5>Content</h5>
+          <StackItem>
+            <h5 className="grow font-bold">Content</h5>
             {utmLink.content}
-          </div>
+          </StackItem>
         ) : null}
       </Stack>
       <Stack as="section">
-        <h3>Statistics</h3>
-        <div>
-          <h5>Clicks</h5>
+        <StackItem as="h3">Statistics</StackItem>
+        <StackItem>
+          <h5 className="grow font-bold">Clicks</h5>
           {utmLink.clicks}
-        </div>
-        <div>
-          <h5>Sales</h5>
+        </StackItem>
+        <StackItem>
+          <h5 className="grow font-bold">Sales</h5>
           <div aria-busy={utmLink.sales_count === null} aria-live="polite">
             {utmLink.sales_count !== null ? utmLink.sales_count : <Progress width="1rem" />}
           </div>
-        </div>
-        <div>
-          <h5>Revenue</h5>
+        </StackItem>
+        <StackItem>
+          <h5 className="grow font-bold">Revenue</h5>
           <div aria-busy={utmLink.revenue_cents === null} aria-live="polite">
             {utmLink.revenue_cents !== null ? (
               `$${fixedDecimalPointNumber(utmLink.revenue_cents / 100)}`
@@ -486,9 +486,9 @@ const UtmLinkDetails = ({
               <Progress width="1rem" />
             )}
           </div>
-        </div>
-        <div>
-          <h5>Conversion rate</h5>
+        </StackItem>
+        <StackItem>
+          <h5 className="grow font-bold">Conversion rate</h5>
           <div aria-busy={utmLink.conversion_rate === null} aria-live="polite">
             {utmLink.conversion_rate !== null ? (
               `${fixedDecimalPointNumber(utmLink.conversion_rate * 100)}%`
@@ -496,33 +496,33 @@ const UtmLinkDetails = ({
               <Progress width="1rem" />
             )}
           </div>
-        </div>
+        </StackItem>
       </Stack>
       <Stack as="section">
-        <div>
-          <h3>Short link</h3>
+        <StackItem>
+          <h3 className="grow">Short link</h3>
           <CopyToClipboard text={utmLink.short_url} copyTooltip="Copy short link">
             <Button aria-label="Copy short link">
               <Icon name="link" />
             </Button>
           </CopyToClipboard>
-        </div>
-        <div>
-          <h5>{utmLink.short_url}</h5>
-        </div>
+        </StackItem>
+        <StackItem>
+          <h5 className="grow font-bold">{utmLink.short_url}</h5>
+        </StackItem>
       </Stack>
       <Stack as="section">
-        <div>
-          <h3>UTM link</h3>
+        <StackItem>
+          <h3 className="grow">UTM link</h3>
           <CopyToClipboard text={utmLink.utm_url} copyTooltip="Copy UTM link">
             <Button aria-label="Copy UTM link">
               <Icon name="link" />
             </Button>
           </CopyToClipboard>
-        </div>
-        <div>
-          <h5>{utmLink.utm_url}</h5>
-        </div>
+        </StackItem>
+        <StackItem>
+          <h5 className="grow font-bold">{utmLink.utm_url}</h5>
+        </StackItem>
       </Stack>
       <div style={{ display: "grid", gridAutoFlow: "column", gap: "var(--spacer-4)" }}>
         <Link to={duplicateLinkPath(utmLink)} className="button">

@@ -9,7 +9,8 @@ import { register } from "$app/utils/serverComponentUtil";
 import { Button } from "$app/components/Button";
 import { PoweredByFooter } from "$app/components/PoweredByFooter";
 import { showAlert } from "$app/components/server-components/Alert";
-import { Stack } from "$app/components/ui/Stack";
+import { Stack, StackItem } from "$app/components/ui/Stack";
+import { classNames } from "$app/utils/classNames";
 
 type FieldState = { value: string; error?: boolean };
 
@@ -109,11 +110,11 @@ const GenerateInvoicePage = ({
   return (
     <>
       <Stack as = "main">
-        <header>
-          <h4>{form_info.heading}</h4>
-        </header>
-        <div>
-          <fieldset className={cx({ danger: fullName.error })}>
+        <StackItem as="header" className="text-center">
+          <h4 className="grow font-bold">{form_info.heading}</h4>
+        </StackItem>
+        <StackItem>
+          <fieldset className={classNames({ danger: fullName.error },"grow basis-0")}>
             <label htmlFor="full_name">Full name</label>
             <input
               id="full_name"
@@ -124,14 +125,14 @@ const GenerateInvoicePage = ({
             />
           </fieldset>
           {form_info.display_vat_id ? (
-            <fieldset>
+            <fieldset className="flex-1">
               <legend>
                 <label htmlFor="chargeable_vat_id">{form_info.vat_id_label}</label>
               </legend>
               <input id="chargeable_vat_id" type="text" value={vatId} onChange={(e) => setVatId(e.target.value)} />
             </fieldset>
           ) : null}
-          <fieldset className={cx({ danger: streetAddress.error })}>
+          <fieldset className={classNames({ danger: streetAddress.error },"flex-1")}>
             <label htmlFor="street_address">Street address</label>
             <input
               id="street_address"
@@ -184,7 +185,7 @@ const GenerateInvoicePage = ({
               ))}
             </select>
           </fieldset>
-          <fieldset className={cx({ danger: additionalNotes.error })}>
+          <fieldset className={classNames({ danger: additionalNotes.error },"flex-1")}>
             <legend>
               <label htmlFor="additional_notes">Additional notes</label>
             </legend>
@@ -196,31 +197,31 @@ const GenerateInvoicePage = ({
               onChange={(e) => setAdditionalNotes({ value: e.target.value })}
             />
           </fieldset>
-        </div>
-        <div>
-          <h5>{supplier_info.heading}</h5>
+        </StackItem>
+        <StackItem>
+          <h5 className="grow font-bold">{supplier_info.heading}</h5>
           {supplier_info.attributes.map((attribute, index) => (
             <div key={index}>
               {attribute.label ? <h6>{attribute.label}</h6> : null}
               <p className="whitespace-pre">{attribute.value}</p>
             </div>
           ))}
-          <h5>{seller_info.heading}</h5>
+          <h5 className="font-bold">{seller_info.heading}</h5>
           {seller_info.attributes.map((attribute, index) => (
             <div key={index}>
               {attribute.label ? <h6>{attribute.label}</h6> : null}
               {attribute.value}
             </div>
           ))}
-        </div>
-        <div>
-          <h5>{order_info.heading}</h5>
+        </StackItem>
+        <StackItem>
+          <h5 className="grow font-bold">{order_info.heading}</h5>
           <div>
-            <h6>{order_info.invoice_date_attribute.label}</h6>
+            <h6 className="font-bold">{order_info.invoice_date_attribute.label}</h6>
             <span>{order_info.invoice_date_attribute.value}</span>
           </div>
           <div>
-            <h6>To</h6>
+            <h6 className="font-bold">To</h6>
             <div style={{ opacity: fullName.value.length ? undefined : "var(--disabled-opacity)" }}>
               {fullName.value || "Edgar Gumstein"}
             </div>
@@ -244,20 +245,20 @@ const GenerateInvoicePage = ({
           </div>
           {additionalNotes.value.length ? (
             <div>
-              <h6>Additional notes</h6>
+              <h6 className="font-bold">Additional notes</h6>
               {additionalNotes.value}
             </div>
           ) : null}
           {order_info.form_attributes.map((attribute, index) => (
             <div key={index}>
-              {attribute.label ? <h6>{attribute.label}</h6> : null}
+              {attribute.label ? <h6 className="font-bold">{attribute.label}</h6> : null}
               {attribute.value}
             </div>
           ))}
-        </div>
-        <footer>
+        </StackItem>
+        <StackItem as="footer" className="text-center">
           {downloadUrl ? (
-            <span>
+            <span className="grow">
               Right-click{" "}
               <a href={downloadUrl} download>
                 here
@@ -265,12 +266,12 @@ const GenerateInvoicePage = ({
               and "Save as..." if the PDF hasn't been automatically downloaded to your computer.
             </span>
           ) : (
-            <span>This invoice will be downloaded as a PDF to your computer.</span>
+            <span className="grow">This invoice will be downloaded as a PDF to your computer.</span>
           )}
           <Button color="accent" onClick={() => void handleDownload()} disabled={isLoading}>
             Download
           </Button>
-        </footer>
+        </StackItem>
       </Stack>
       <PoweredByFooter />
     </>

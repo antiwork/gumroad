@@ -19,7 +19,7 @@ import { useLoggedInUser } from "$app/components/LoggedInUser";
 import { Select } from "$app/components/Select";
 import { Toggle } from "$app/components/Toggle";
 import { TypeSafeOptionSelect } from "$app/components/TypeSafeOptionSelect";
-import { Stack } from "$app/components/ui/Stack";
+import { Stack, StackItem } from "$app/components/ui/Stack";
 
 export type SimpleProduct = { id: string; name: string; archived: boolean };
 
@@ -127,8 +127,8 @@ const FormPage = ({
             {customFields.length > 0 ? (
               <Stack>
                 {customFields.map((field, i) => (
-                  <div key={field.key}>
-                    <div className="paragraphs">
+                  <StackItem key={field.key}>
+                    <div className="grow paragraphs">
                       <fieldset>
                         <legend>
                           <label htmlFor={`${uid}-${field.key}-type`}>Type of field</label>
@@ -225,7 +225,7 @@ const FormPage = ({
                         ) : null}
                       </fieldset>
                     </div>
-                  </div>
+                  </StackItem>
                 ))}
               </Stack>
             ) : null}

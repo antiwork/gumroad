@@ -10,7 +10,7 @@ import { CopyToClipboard } from "$app/components/CopyToClipboard";
 import { useDomains, useDiscoverUrl } from "$app/components/DomainSettings";
 import { Icon } from "$app/components/Icons";
 import { LoadingSpinner } from "$app/components/LoadingSpinner";
-import { Stack } from "$app/components/ui/Stack";
+import { Stack, StackItem } from "$app/components/ui/Stack";
 
 const DiscoverLinkSection = ({
   globalAffiliateId,
@@ -225,8 +225,8 @@ const ProductEligibilitySection = ({
       {result.isLoading ? <LoadingSpinner /> : null}
       {result.product ? (
         <Stack>
-          <div>
-            <a href={result.product.short_url} target="_blank" rel="noreferrer">
+          <StackItem>
+            <a href={result.product.short_url} target="_blank" rel="noreferrer" className="grow">
               {result.product.name}
             </a>
             <span>{result.product.formatted_price}</span>
@@ -236,7 +236,7 @@ const ProductEligibilitySection = ({
                 Copy link
               </Button>
             </CopyToClipboard>
-          </div>
+          </StackItem>
         </Stack>
       ) : null}
       {result.error ? (

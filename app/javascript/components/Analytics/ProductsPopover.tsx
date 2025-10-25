@@ -4,7 +4,7 @@ import { type Product } from "$app/components/Analytics";
 import { Button } from "$app/components/Button";
 import { Icon } from "$app/components/Icons";
 import { Popover } from "$app/components/Popover";
-import { Stack } from "$app/components/ui/Stack";
+import { Stack, StackItem } from "$app/components/ui/Stack";
 
 
 export type ProductOption = Product & { selected: boolean };
@@ -25,8 +25,8 @@ export const ProductsPopover = ({
     }
   >
     <Stack>
-      <div>
-        <fieldset>
+      <StackItem>
+        <fieldset className="grow basis-0">
           <label>
             <input
               type="checkbox"
@@ -58,16 +58,16 @@ export const ProductsPopover = ({
             </label>
           ))}
         </fieldset>
-      </div>
-      <div>
-        <Button
+      </StackItem>
+      <StackItem>
+        <Button className="grow basis-0"
           onClick={() =>
             setProducts((prevProducts) => prevProducts.map((product) => ({ ...product, selected: !product.selected })))
           }
         >
           Toggle selected
         </Button>
-      </div>
+      </StackItem>
     </Stack>
   </Popover>
 );

@@ -1,7 +1,7 @@
 import * as React from "react";
 
 import { useDomains } from "$app/components/DomainSettings";
-import { Stack } from "$app/components/ui/Stack";
+import { Stack, StackItem } from "$app/components/ui/Stack";
 
 export const Layout = ({ heading, children }: { heading: string; children: React.ReactNode }) => {
   const { rootDomain } = useDomains();
@@ -9,10 +9,10 @@ export const Layout = ({ heading, children }: { heading: string; children: React
   return (
     <>
       <Stack>
-        <header>
-          <h2>{heading}</h2>
-        </header>
-        <p>{children}</p>
+        <StackItem as="header">
+          <h2 className="grow">{heading}</h2>
+        </StackItem>
+        <StackItem as="p">{children}</StackItem>
       </Stack>
       <footer
         style={{
