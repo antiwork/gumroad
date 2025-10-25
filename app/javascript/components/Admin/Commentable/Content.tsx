@@ -2,14 +2,25 @@ import React from "react";
 
 import Comment, { type CommentProps } from "$app/components/Admin/Commentable/Comment";
 import Loading from "$app/components/Admin/Loading";
+import { useIsIntersecting } from "$app/components/useIsIntersecting";
 
-type AdminCommentableCommentsProps = {
+type AdminCommentableContentProps = {
   count: number;
   comments: CommentProps[];
+  hasLoaded: boolean;
   isLoading: boolean;
+  hasMore: boolean;
+  onLoadMore: () => void;
 };
 
-const AdminCommentableComments = ({ count, comments, isLoading }: AdminCommentableCommentsProps) => {
+const AdminCommentableContent = ({
+  count,
+  comments,
+  hasLoaded,
+  isLoading,
+  hasMore,
+  onLoadMore,
+}: AdminCommentableContentProps) => {
   if (count === 0 && !isLoading)
     return (
       <div className="info" role="status">
@@ -17,17 +28,29 @@ const AdminCommentableComments = ({ count, comments, isLoading }: AdminCommentab
       </div>
     );
 
+  const handleIntersection = React.useCallback(
+    (isIntersecting: boolean) => {
+      if (!isIntersecting || !hasMore || isLoading) return;
+      onLoadMore();
+    },
+    [hasMore, isLoading, onLoadMore],
+  );
+
+  const elementRef = useIsIntersecting<HTMLDivElement>(handleIntersection);
+
   return (
     <div>
-      {isLoading ? <Loading /> : null}
+      {isLoading && !hasLoaded ? <Loading /> : null}
 
       <div className="rows" role="list">
         {comments.map((comment) => (
           <Comment key={comment.id} comment={comment} />
         ))}
       </div>
+
+      {hasMore ? <div ref={elementRef}>{isLoading ? <Loading /> : null}</div> : null}
     </div>
   );
 };
 
-export default AdminCommentableComments;
+export default AdminCommentableContent;

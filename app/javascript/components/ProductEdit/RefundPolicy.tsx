@@ -5,6 +5,7 @@ import { assertDefined } from "$app/utils/assert";
 
 import { Button } from "$app/components/Button";
 import { Details } from "$app/components/Details";
+import { Modal } from "$app/components/Modal";
 import { Popover } from "$app/components/Popover";
 import { Select } from "$app/components/Select";
 import { Toggle } from "$app/components/Toggle";
@@ -139,15 +140,14 @@ export const RefundPolicySelector = ({
 
 export const RefundPolicyModalPreview = ({ refundPolicy, open }: { refundPolicy: RefundPolicy; open: boolean }) => {
   const userAgentInfo = useUserAgentInfo();
-  const uid = React.useId();
   return (
-    <dialog open={!!refundPolicy.fine_print && open} aria-labelledby={uid}>
-      <header>
-        <h2 id={uid}>{refundPolicy.title}</h2>
-        <button className="close" aria-label="Close" />
-      </header>
+    <Modal
+      open={!!refundPolicy.fine_print && open}
+      title={refundPolicy.title}
+      modal={false}
+      footer={`Last updated ${new Date().toLocaleString(userAgentInfo.locale, { dateStyle: "medium" })}`}
+    >
       <div style={{ whiteSpace: "pre-wrap" }}>{refundPolicy.fine_print}</div>
-      <footer>Last updated {new Date().toLocaleString(userAgentInfo.locale, { dateStyle: "medium" })}</footer>
-    </dialog>
+    </Modal>
   );
 };

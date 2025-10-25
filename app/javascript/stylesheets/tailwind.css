@@ -10,6 +10,12 @@
 @source "../../views/**/*.erb";
 @source "../../../public/help/**/*.html";
 
+/*
+ * Capybara tests don't support the media query used by Tailwind v4's default hover variant.
+ * Defining a legacy-hover variant that uses a basic :hover selector for cases like Capybara test compatibility.
+ */
+@custom-variant legacy-hover (&:hover);
+
 @theme {
   --color-black: #000000;
   --color-white: #ffffff;

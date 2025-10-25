@@ -44,7 +44,6 @@ namespace :admin do
       post :mass_transfer_purchases
       post :probation_with_reminder
       post :refund_balance
-      get :stats
       post :verify
       post :enable
       post :create_stripe_managed_account
@@ -71,6 +70,7 @@ namespace :admin do
   resource :block_email_domains, only: [:show, :update]
   resource :unblock_email_domains, only: [:show, :update]
   resource :suspend_users, only: [:show, :update]
+  resource :refund_queue, only: [:show]
 
   resources :affiliates, only: [:index, :show], defaults: { format: "html" }
 
@@ -151,6 +151,5 @@ namespace :admin do
 
   scope module: "users" do
     post :block_ip_address
-    get :refund_queue
   end
 end
