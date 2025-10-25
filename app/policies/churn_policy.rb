@@ -2,7 +2,9 @@
 
 class ChurnPolicy < ApplicationPolicy
   def show?
-    user.member_of?(seller) && (
+    has_subscription_products = seller.products.alive.is_recurring_billing.exists?
+
+    has_subscription_products && user.member_of?(seller) && (
       user.role_admin_for?(seller) ||
       user.role_marketing_for?(seller) ||
       user.role_support_for?(seller) ||

@@ -12,6 +12,7 @@ describe ChurnPolicy do
   let(:accountant_user) { create(:user) }
   let(:regular_user) { create(:user) }
   let(:unauthorized_user) { create(:user) }
+  let!(:subscription_product) { create(:subscription_product, user: seller) }
 
   before do
     create(:team_membership, user: admin_user, seller:, role: TeamMembership::ROLE_ADMIN)
@@ -90,6 +91,27 @@ describe ChurnPolicy do
 
     it "denies regular users access to churn data" do
       seller_context = SellerContext.new(user: regular_user, seller:)
+      policy = described_class.new(seller_context, :churn)
+      expect(policy.show?).to be false
+    end
+  end
+
+  context "when seller has no subscription products" do
+    let(:seller_without_subscriptions) { create(:user, username: "nosubsseller", email: "nosubs@example.com") }
+    let(:admin_for_non_subscription_seller) { create(:user, username: "adminnosubs", email: "adminnosubs@example.com") }
+
+    before do
+      create(:team_membership, user: admin_for_non_subscription_seller, seller: seller_without_subscriptions, role: TeamMembership::ROLE_ADMIN)
+    end
+
+    it "denies access even to admin users" do
+      seller_context = SellerContext.new(user: admin_for_non_subscription_seller, seller: seller_without_subscriptions)
+      policy = described_class.new(seller_context, :churn)
+      expect(policy.show?).to be false
+    end
+
+    it "denies access in authorization scenario" do
+      seller_context = SellerContext.new(user: admin_for_non_subscription_seller, seller: seller_without_subscriptions)
       policy = described_class.new(seller_context, :churn)
       expect(policy.show?).to be false
     end

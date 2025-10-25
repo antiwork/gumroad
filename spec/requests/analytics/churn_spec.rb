@@ -11,14 +11,28 @@ describe "Churn analytics", :js, :sidekiq_inline, type: :system do
 
   include_context "with switching account to user as admin for seller"
 
-  it_behaves_like "creator dashboard page", "Analytics" do
-    let(:path) { churn_dashboard_path }
+  context "without subscription products" do
+    it "denies access to the churn page" do
+      visit churn_dashboard_path
+      # User is redirected to dashboard when not authorized
+      expect(page).to have_current_path(dashboard_path)
+    end
   end
 
-  it "shows the empty state" do
-    visit churn_dashboard_path
-    expect(page).to have_text("No subscription products yet")
-    expect(page).to have_text("Churn analytics are available for creators with active subscription products")
+  context "with subscription products" do
+    let!(:subscription_product) { create(:subscription_product, user: seller, name: "Test Membership") }
+
+    it_behaves_like "creator dashboard page", "Analytics" do
+      let(:path) { churn_dashboard_path }
+    end
+
+    it "shows the churn page with zero data when there are no subscribers" do
+      visit churn_dashboard_path
+      expect(page).to have_text("Churn rate")
+      expect(page).to have_text("0.0%")
+      expect(page).to have_text("Churned users")
+      expect(page).to have_text("0")
+    end
   end
 
   context "with subscription products and churn data" do
