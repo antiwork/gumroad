@@ -19,7 +19,7 @@ class SaveFilesService
   #                                   description: "100 detailed recipes",
   #                                   subtitles: {
   #                                               "aghsha2828ah": {
-  #                                                                 url: "https://s3.amazonaws.com/gumroad_dev/attachments/5427372145012/5db55fc31ed743818107b00ce6ad100b/original/sample.srt",
+  #                                                                 url: "#{AWS_S3_ENDPOINT}/gumroad_dev/attachments/5427372145012/5db55fc31ed743818107b00ce6ad100b/original/sample.srt",
   #                                                                 language: "English"
   #                                                               },
   #                                               ...

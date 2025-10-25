@@ -33,7 +33,7 @@ RSpec.shared_examples_for "with workflow form 'context' in response" do
     expect(result[:context][:currency_symbol]).to eq("$")
     expect(result[:context][:countries]).to match_array(["United States"] + Compliance::Countries.for_select.map { _1.last }.without("United States"))
     expect(result[:context][:aws_access_key_id]).to eq(AWS_ACCESS_KEY)
-    expect(result[:context][:s3_url]).to eq("https://s3.amazonaws.com/#{S3_BUCKET}")
+    expect(result[:context][:s3_url]).to eq("#{AWS_S3_ENDPOINT}/#{S3_BUCKET}")
     expect(result[:context][:user_id]).to eq(user.external_id)
     expect(result[:context][:gumroad_address]).to eq(GumroadAddress.full)
     expect(result[:context][:eligible_for_abandoned_cart_workflows]).to eq(user.eligible_for_abandoned_cart_workflows?)

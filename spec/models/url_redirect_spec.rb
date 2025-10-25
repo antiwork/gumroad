@@ -18,7 +18,7 @@ describe UrlRedirect do
     let(:product) { create(:product) }
     let!(:readable_document) { create(:readable_document, link: product) }
     let!(:video) { create(:streamable_video, link: product) }
-    let!(:stream_only_video) { create(:streamable_video, stream_only: true, link: product, url: "https://s3.amazonaws.com/gumroad-specs/attachments/43a5363194e74e9ee75b6203eaea6705/original/episode2.mp4") }
+    let!(:stream_only_video) { create(:streamable_video, stream_only: true, link: product, url: "#{AWS_S3_ENDPOINT}/#{S3_BUCKET}/attachments/43a5363194e74e9ee75b6203eaea6705/original/episode2.mp4") }
     let!(:deleted_file) { create(:listenable_audio, deleted_at: Time.current) }
     let(:purchase) { create(:purchase, link: product) }
     let(:url_redirect) { create(:url_redirect, purchase:) }
@@ -104,7 +104,7 @@ describe UrlRedirect do
         @url_redirect = create(:url_redirect, link: @product, imported_customer: @imported_customer, purchase: nil)
         @installment = create(:installment, link: @product, installment_type: "product")
         @product.product_files << create(
-          :product_file, url: "https://s3.amazonaws.com/gumroad-specs/attachments/43a5363194e74e9ee75b6203eaea6705/original/manual.pdf"
+          :product_file, url: "#{AWS_S3_ENDPOINT}/#{S3_BUCKET}/attachments/43a5363194e74e9ee75b6203eaea6705/original/manual.pdf"
         )
         expect(@url_redirect.redirect_or_s3_location).to eq @url_redirect.signed_location_for_file(@product.alive_product_files.first)
       end
@@ -120,7 +120,7 @@ describe UrlRedirect do
         @installment = create(:installment, link: @product, installment_type: "product")
         3.times do
           @product.product_files << create(
-            :product_file, url: "https://s3.amazonaws.com/gumroad-specs/attachments/43a5363194e74e9ee75b6203eaea6705/original/manual.pdf"
+            :product_file, url: "#{AWS_S3_ENDPOINT}/#{S3_BUCKET}/attachments/43a5363194e74e9ee75b6203eaea6705/original/manual.pdf"
           )
         end
         expect(@url_redirect.redirect_or_s3_location).to eq @url_redirect.download_page_url
@@ -128,7 +128,7 @@ describe UrlRedirect do
 
       it "returns the right url when there is a provided url redirect for an installment" do
         @installment = create(:installment, link: @product, installment_type: "product")
-        url = "https://s3.amazonaws.com/gumroad-specs/attachments/43a5363194e74e9ee75b6203eaea6705/original/chapter1.mp4"
+        url = "#{AWS_S3_ENDPOINT}/#{S3_BUCKET}/attachments/43a5363194e74e9ee75b6203eaea6705/original/chapter1.mp4"
         @installment.product_files << create(:product_file, url:)
         @installment_url_redirect = create(:url_redirect, installment: @installment, imported_customer: @imported_customer, link: @product)
         @product.product_files << create(:product_file, url:)
@@ -226,13 +226,13 @@ describe UrlRedirect do
     before do
       @product = create(:product)
       @product.product_files << create(
-        :product_file, url: "https://s3.amazonaws.com/gumroad-specs/attachments/43a5363194e74e9ee75b6203eaea6705/original/episode1.mp4"
+        :product_file, url: "#{AWS_S3_ENDPOINT}/#{S3_BUCKET}/attachments/43a5363194e74e9ee75b6203eaea6705/original/episode1.mp4"
       )
       @product.product_files << create(
-        :product_file, url: "https://s3.amazonaws.com/gumroad-specs/attachments/43a5363194e74e9ee75b6203eaea6705/original/episode2.mp4"
+        :product_file, url: "#{AWS_S3_ENDPOINT}/#{S3_BUCKET}/attachments/43a5363194e74e9ee75b6203eaea6705/original/episode2.mp4"
       )
       @product.product_files << create(
-        :product_file, url: "https://s3.amazonaws.com/gumroad-specs/attachments/43a5363194e74e9ee75b6203eaea6705/original/manual.pdf"
+        :product_file, url: "#{AWS_S3_ENDPOINT}/#{S3_BUCKET}/attachments/43a5363194e74e9ee75b6203eaea6705/original/manual.pdf"
       )
       @product.save!
       @url_redirect = create(:url_redirect, link: @product, purchase: nil)
@@ -249,7 +249,7 @@ describe UrlRedirect do
     it "creates the correct signed URL for a stamped pdf" do
       pdf_product_file = @product.product_files.alive.pdf.last
       pdf_product_file.update!(pdf_stamp_enabled: true)
-      url = "https://s3.amazonaws.com/gumroad-specs/attachments/43a5363194e74e9ee75b6203eaea6705/original/stamped_manual.pdf"
+      url = "#{AWS_S3_ENDPOINT}/#{S3_BUCKET}/attachments/43a5363194e74e9ee75b6203eaea6705/original/stamped_manual.pdf"
       @url_redirect.stamped_pdfs.create!(product_file: pdf_product_file, url:)
       signed_s3_url = @url_redirect.signed_location_for_file(pdf_product_file)
       expect(signed_s3_url).to match(/verify=/)
@@ -262,10 +262,10 @@ describe UrlRedirect do
       it "contains the purchase information if there is an associated purchase" do
         product = create(:product)
         product.product_files << create(
-          :product_file, url: "https://s3.amazonaws.com/gumroad-specs/attachments/6996320f4de6424990904fcda5808cef/original/Don&amp;#39;t Stop.mp3"
+          :product_file, url: "#{AWS_S3_ENDPOINT}/#{S3_BUCKET}/attachments/6996320f4de6424990904fcda5808cef/original/Don&amp;#39;t Stop.mp3"
         )
         product.product_files << create(
-          :product_file, url: "https://s3.amazonaws.com/gumroad-specs/attachments/a1a5b8c8c38749e2b3cb27099a817517/original/Alice&#39;s Adventures in Wonderland.pdf"
+          :product_file, url: "#{AWS_S3_ENDPOINT}/#{S3_BUCKET}/attachments/a1a5b8c8c38749e2b3cb27099a817517/original/Alice&#39;s Adventures in Wonderland.pdf"
         )
         purchase = create(:purchase, link: product, purchaser: create(:user))
         url_redirect = create(:url_redirect, link: product, purchase:)
@@ -287,10 +287,10 @@ describe UrlRedirect do
 
   describe "#video_files_playlist" do
     let(:product) { create(:product) }
-    let(:file2) { create(:product_file, link: product, url: "https://s3.amazonaws.com/gumroad-specs/attachments/2/original/chapter2.mp4", position: 3) }
-    let(:file4) { create(:product_file, link: product, url: "https://s3.amazonaws.com/gumroad-specs/attachments/4/original/chapter4.mp4", position: 0) }
-    let(:file1) { create(:product_file, link: product, url: "https://s3.amazonaws.com/gumroad-specs/attachments/1/original/chapter1.mp4", position: 2) }
-    let(:file3) { create(:product_file, link: product, url: "https://s3.amazonaws.com/gumroad-specs/attachments/3/original/chapter3.mp4", position: 1) }
+    let(:file2) { create(:product_file, link: product, url: "#{AWS_S3_ENDPOINT}/#{S3_BUCKET}/attachments/2/original/chapter2.mp4", position: 3) }
+    let(:file4) { create(:product_file, link: product, url: "#{AWS_S3_ENDPOINT}/#{S3_BUCKET}/attachments/4/original/chapter4.mp4", position: 0) }
+    let(:file1) { create(:product_file, link: product, url: "#{AWS_S3_ENDPOINT}/#{S3_BUCKET}/attachments/1/original/chapter1.mp4", position: 2) }
+    let(:file3) { create(:product_file, link: product, url: "#{AWS_S3_ENDPOINT}/#{S3_BUCKET}/attachments/3/original/chapter3.mp4", position: 1) }
 
     before do
       allow_any_instance_of(Aws::S3::Object).to receive(:content_length).and_return(1_000_000)
@@ -389,9 +389,9 @@ describe UrlRedirect do
   describe "#html5_video_url_and_guid_for_product_file" do
     before do
       @multifile_product = create(:product)
-      @file_1 = create(:product_file, url: "https://s3.amazonaws.com/gumroad-specs/attachments/2/original/chapter2.mp4")
+      @file_1 = create(:product_file, url: "#{AWS_S3_ENDPOINT}/#{S3_BUCKET}/attachments/2/original/chapter2.mp4")
       @multifile_product.product_files << @file_1
-      @file_2 = create(:product_file, url: "https://s3.amazonaws.com/gumroad-specs/attachments/3/original/chapter3.mp4")
+      @file_2 = create(:product_file, url: "#{AWS_S3_ENDPOINT}/#{S3_BUCKET}/attachments/3/original/chapter3.mp4")
       @multifile_product.product_files << @file_2
       @multifile_url_redirect = create(:url_redirect, link: @multifile_product, purchase: nil)
 

@@ -1494,7 +1494,7 @@ describe("Workflows", js: true, type: :system) do
       installment1 = @workflow.installments.alive.find_by(name: "Thank you!")
       expect(installment1.message).to include("<p>An important message</p>")
       expect(installment1.message).to have_link("Click me", href: "https://example.com/button")
-      expect(installment1.message).to include('<img src="https://gumroad-specs.s3.amazonaws.com')
+      expect(installment1.message).to include(%{<img src="#{AWS_S3_ENDPOINT}/#{S3_BUCKET}})
       expect(installment1.installment_rule.delayed_delivery_time).to eq(86_400)
       expect(installment1.installment_rule.time_period).to eq("day")
       expect(installment1.has_stream_only_files?).to be(false)

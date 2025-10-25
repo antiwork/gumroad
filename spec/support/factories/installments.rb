@@ -87,7 +87,7 @@ FactoryBot.define do
     link { nil }
     seller factory: :user
     after(:create) do |installment|
-      create(:product_file, installment:, url: "https://s3.amazonaws.com/gumroad-specs/specs/billion-dollar-company-chapter-0.pdf", link: nil)
+      create(:product_file, installment:, url: "#{AWS_S3_ENDPOINT}/#{S3_BUCKET}/specs/billion-dollar-company-chapter-0.pdf", link: nil)
     end
   end
 
@@ -99,7 +99,7 @@ FactoryBot.define do
     link { nil }
     seller factory: :user
     after(:create) do |installment|
-      create(:product_file, installment:, url: "https://s3.amazonaws.com/gumroad-specs/specs/billion-dollar-company-chapter-0.pdf", link: nil)
+      create(:product_file, installment:, url: "#{AWS_S3_ENDPOINT}/#{S3_BUCKET}/specs/billion-dollar-company-chapter-0.pdf", link: nil)
     end
   end
 end

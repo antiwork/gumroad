@@ -26,7 +26,6 @@ import AdminUserStats from "$app/components/server-components/Admin/UserStats";
 import AffiliateRequestPage from "$app/components/server-components/AffiliateRequestPage";
 import AffiliatesPage from "$app/components/server-components/AffiliatesPage";
 import Alert from "$app/components/server-components/Alert";
-import AudienceCustomersPage from "$app/components/server-components/Audience/CustomersPage";
 import AudiencePage from "$app/components/server-components/AudiencePage";
 import BundleEditPage from "$app/components/server-components/BundleEditPage";
 import CheckoutPage from "$app/components/server-components/CheckoutPage";
@@ -34,7 +33,6 @@ import CommunitiesPage from "$app/components/server-components/CommunitiesPage";
 import CountrySelectionModal from "$app/components/server-components/CountrySelectionModal";
 import CustomersDownloadPopover from "$app/components/server-components/CustomersPage/DownloadPopover";
 import CustomersFilterPopover from "$app/components/server-components/CustomersPage/FilterPopover";
-import DashboardPage from "$app/components/server-components/DashboardPage";
 import DeveloperWidgetsPage from "$app/components/server-components/Developer/WidgetsPage";
 import Discover from "$app/components/server-components/Discover";
 import DiscoverProductPage from "$app/components/server-components/Discover/ProductPage";
@@ -93,6 +91,7 @@ import WishlistPage from "$app/components/server-components/WishlistPage";
 import WishlistsFollowingPage from "$app/components/server-components/WishlistsFollowingPage";
 import WishlistsPage from "$app/components/server-components/WishlistsPage";
 import WorkflowsPage from "$app/components/server-components/WorkflowsPage";
+import CodeSnippet from "$app/components/ui/CodeSnippet";
 
 ReactOnRails.register({
   AdminActionButton,
@@ -122,16 +121,15 @@ ReactOnRails.register({
   ApplicationEditPage,
   HelpCenterArticlesIndexPage,
   SupportHeader,
-  AudienceCustomersPage,
   AudiencePage,
   AuthorizedApplicationsSettingsPage,
   BundleEditPage,
   CheckoutPage,
+  CodeSnippet,
   CommunitiesPage,
   CountrySelectionModal,
   CustomersDownloadPopover,
   CustomersFilterPopover,
-  DashboardPage,
   DeveloperWidgetsPage,
   Discover,
   DiscoverProductPage,

@@ -339,94 +339,177 @@ class Country
     end
   end
 
+  # Ref: https://docs.stripe.com/connect/cross-border-payouts/special-requirements#cross-border-minimum-payout-amounts-table
   def min_cross_border_payout_amount_local_cents
     case alpha2_code
-    when Compliance::Countries::THA.alpha2
-      # ~16.82 USD, as-of this comment
-      600_00
-    when Compliance::Countries::KOR.alpha2
-      # ~30.33 USD as-of this comment
-      40_000_00
-    when Compliance::Countries::NAM.alpha2
-      # ~31 USD as-of this comment
-      550_00
-    when Compliance::Countries::PHL.alpha2
-      # ~0.36 USD as-of this comment
-      20_00
-    when Compliance::Countries::MEX.alpha2
-      # ~0.58 USD as-of this comment
-      10_00
-    when Compliance::Countries::BOL.alpha2
-      # ~29 USD as-of this comment
-      200_00
-    when Compliance::Countries::UZB.alpha2
-      # ~27 USD as-of this comment
-      343_000_00
-    when Compliance::Countries::GUY.alpha2
-      # ~$30 USD as-of this comment
-      6_300_00
-    when Compliance::Countries::KHM.alpha2
-      # $30 USD as-of this comment
-      123_000_00
-    when Compliance::Countries::MNG.alpha2
-      # $30 USD as-of this comment
-      105_000_00
-    when Compliance::Countries::AGO.alpha2
-      # 25 USD as-of this comment
-      23_000_00
-    when Compliance::Countries::ARG.alpha2
-      # ~12.60 USD as-of this comment
-      4_600_00
-    when Compliance::Countries::RWA.alpha2
-      # 0.074 USD as-of this comment
-      100_00
-    when Compliance::Countries::TWN.alpha2
-      # ~24.50 USD as-of this comment
-      800_00
-    when Compliance::Countries::ARM.alpha2
-      # 31.25 USD as-of this comment
-      12_100_00
-    when Compliance::Countries::BTN.alpha2
-      # $29 USD as-of this comment
-      2_500_00
-    when Compliance::Countries::LAO.alpha2
-      # 23.50 USD as-of this comment
-      516_000_00
-    when Compliance::Countries::MOZ.alpha2
-      # 26.60 USD as-of this comment
-      1_700_00
-    when Compliance::Countries::CHL.alpha2
-      # ~24.58 USD as-of this comment
-      23_000_00
-    when Compliance::Countries::OMN.alpha2
-      # ~2.60 USD as-of this comment
-      1_00
-    when Compliance::Countries::ALB.alpha2
-      # 33 USD as-of this comment
+    when Compliance::Countries::ALB.alpha2 # Albania
       3_000_00
-    when Compliance::Countries::AZE.alpha2
-      # 30 USD as-of this comment
-      50_00
-    when Compliance::Countries::PRY.alpha2
-      # $26.43 USD as-of this comment
-      210_000_00
-    when Compliance::Countries::GAB.alpha2
-      # ~0.16 USD as-of this comment
-      100_00
-    when Compliance::Countries::DZA.alpha2
-      # .0075 USD as-of this comment
+    when Compliance::Countries::DZA.alpha2 # Algeria
       1_00
-    else
-      # NOTE: if more countries are added to CROSS_BORDER_PAYOUTS_COUNTRIES,
-      # this needs to be updated as well. Reference for country minimums:
-      # https://stripe.com/docs/payouts#cbp-minimum-payout-amounts
+    when Compliance::Countries::AGO.alpha2 # Angola
+      23_000_00
+    when Compliance::Countries::ATG.alpha2 # Antigua & Barbuda
+      1_00
+    when Compliance::Countries::ARG.alpha2 # Argentina
+      4_600_00
+    when Compliance::Countries::ARM.alpha2 # Armenia
+      12_100_00
+    when Compliance::Countries::AZE.alpha2 # Azerbaijan
+      50_00
+    when Compliance::Countries::BHS.alpha2 # Bahamas
+      1_00
+    when Compliance::Countries::BHR.alpha2 # Bahrain
+      1_00
+    when Compliance::Countries::BGD.alpha2 # Bangladesh
+      20_00
+    when Compliance::Countries::BEN.alpha2 # Benin
+      1_00
+    when Compliance::Countries::BTN.alpha2 # Bhutan
+      2_500_00
+    when Compliance::Countries::BOL.alpha2 # Bolivia
+      200_00
+    when Compliance::Countries::BIH.alpha2 # Bosnia & Herzegovina
+      50_00
+    when Compliance::Countries::BWA.alpha2 # Botswana
+      1_00
+    when Compliance::Countries::BRN.alpha2 # Brunei
+      1_00
+    when Compliance::Countries::BRN.alpha2 # Brunei
+      1_00
+    when Compliance::Countries::KHM.alpha2 # Cambodia
+      123_000_00
+    when Compliance::Countries::CHL.alpha2 # Chile
+      23_000_00
+    when Compliance::Countries::COL.alpha2 # Colombia
+      140_000_00
+    when Compliance::Countries::CRI.alpha2 # Costa Rica
       0
+    when Compliance::Countries::CIV.alpha2 # Côte d’Ivoire
+      1_00
+    when Compliance::Countries::DOM.alpha2 # Dominican Republic
+      1_00
+    when Compliance::Countries::ECU.alpha2 # Ecuador
+      0
+    when Compliance::Countries::EGY.alpha2 # Egypt
+      20_00
+    when Compliance::Countries::SLV.alpha2 # El Salvador
+      30_00
+    when Compliance::Countries::ETH.alpha2 # Ethiopia
+      1_00
+    when Compliance::Countries::GAB.alpha2 # Gabon
+      100_00
+    when Compliance::Countries::GHA.alpha2 # Ghana
+      1_00
+    when Compliance::Countries::GTM.alpha2 # Guatemala
+      1_00
+    when Compliance::Countries::GUY.alpha2 # Guyana
+      6_300_00
+    when Compliance::Countries::ISL.alpha2 # Iceland
+      1_00
+    when Compliance::Countries::IND.alpha2 # India
+      1_00
+    when Compliance::Countries::IDN.alpha2 # Indonesia
+      1_00
+    when Compliance::Countries::ISR.alpha2 # Israel
+      0
+    when Compliance::Countries::JAM.alpha2 # Jamaica
+      1_00
+    when Compliance::Countries::JOR.alpha2 # Jordan
+      1_00
+    when Compliance::Countries::KAZ.alpha2 # Kazakhstan
+      1_00
+    when Compliance::Countries::KEN.alpha2 # Kenya
+      1_00
+    when Compliance::Countries::KWT.alpha2 # Kuwait
+      1_00
+    when Compliance::Countries::LAO.alpha2 # Laos
+      516_000_00
+    when Compliance::Countries::MAC.alpha2 # Macao SAR China
+      1_00
+    when Compliance::Countries::MDG.alpha2 # Madagascar
+      132_300_00
+    when Compliance::Countries::MYS.alpha2 # Malaysia
+      133_00
+    when Compliance::Countries::MUS.alpha2 # Mauritius
+      1_00
+    when Compliance::Countries::MEX.alpha2 # Mexico
+      10_00
+    when Compliance::Countries::MDA.alpha2 # Moldova
+      500_00
+    when Compliance::Countries::MCO.alpha2 # Monaco
+      1_00
+    when Compliance::Countries::MNG.alpha2 # Mongolia
+      105_000_00
+    when Compliance::Countries::MAR.alpha2 # Morocco
+      0
+    when Compliance::Countries::MOZ.alpha2 # Mozambique
+      1_700_00
+    when Compliance::Countries::NAM.alpha2 # Namibia
+      550_00
+    when Compliance::Countries::NER.alpha2 # Niger
+      1_00
+    when Compliance::Countries::NGA.alpha2 # Nigeria
+      1_00
+    when Compliance::Countries::MKD.alpha2 # North Macedonia
+      1_500_00
+    when Compliance::Countries::OMN.alpha2 # Oman
+      1_00
+    when Compliance::Countries::PAK.alpha2 # Pakistan
+      1_00
+    when Compliance::Countries::PAN.alpha2 # Panama
+      50_00
+    when Compliance::Countries::PRY.alpha2 # Paraguay
+      210_000_00
+    when Compliance::Countries::PER.alpha2 # Peru
+      0
+    when Compliance::Countries::PHL.alpha2 # Philippines
+      20_00
+    when Compliance::Countries::QAT.alpha2 # Qatar
+      1_00
+    when Compliance::Countries::RWA.alpha2 # Rwanda
+      100_00
+    when Compliance::Countries::SMR.alpha2 # San Marino
+      1_00
+    when Compliance::Countries::SAU.alpha2 # Saudi Arabia
+      1_00
+    when Compliance::Countries::SEN.alpha2 # Senegal
+      1_00
+    when Compliance::Countries::SRB.alpha2 # Serbia
+      3_000_00
+    when Compliance::Countries::ZAF.alpha2 # South Africa
+      100_00
+    when Compliance::Countries::KOR.alpha2 # South Korea
+      40_000_00
+    when Compliance::Countries::LKA.alpha2 # Sri Lanka
+      1_00
+    when Compliance::Countries::LCA.alpha2 # St. Lucia
+      1_00
+    when Compliance::Countries::TWN.alpha2 # Taiwan
+      800_00
+    when Compliance::Countries::TZA.alpha2 # Tanzania
+      800_00
+    when Compliance::Countries::THA.alpha2 # Thailand
+      600_00
+    when Compliance::Countries::TTO.alpha2 # Trinidad & Tobago
+      0
+    when Compliance::Countries::TUN.alpha2 # Tunisia
+      0
+    when Compliance::Countries::TUR.alpha2 # Turkey
+      5_00
+    when Compliance::Countries::URY.alpha2 # Uruguay
+      0
+    when Compliance::Countries::UZB.alpha2 # Uzbekistan
+      343_000_00
+    when Compliance::Countries::VNM.alpha2 # Vietnam
+      81_125_00
+    else
+      nil
     end
   end
 
   def min_cross_border_payout_amount_usd_cents
     return 0 unless payout_currency.present?
 
-    get_usd_cents(payout_currency, min_cross_border_payout_amount_local_cents)
+    get_usd_cents(payout_currency, min_cross_border_payout_amount_local_cents.to_i)
   end
 end
