@@ -151,7 +151,7 @@ const CoverUploader = ({
 
   return isSelecting ? (
     isUploading ? (
-      <LoadingSpinner />
+      <LoadingSpinner className="size-20" />
     ) : (
       <div style={{ width: "100%" }}>
         <div className="tab-buttons small" role="tablist">
