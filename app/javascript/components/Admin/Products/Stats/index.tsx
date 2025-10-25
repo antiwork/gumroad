@@ -14,6 +14,7 @@ const AdminProductStats = ({ product_id }: { product_id: number }) => {
   } = useLazyFetch<{ views_count: number }>(
     { views_count: 0 },
     {
+      fetchUnlessLoaded: true,
       url: Routes.views_count_admin_product_path(product_id),
       responseParser: (data) => cast<{ views_count: number }>(data),
     },
@@ -33,6 +34,7 @@ const AdminProductStats = ({ product_id }: { product_id: number }) => {
       },
     },
     {
+      fetchUnlessLoaded: true,
       url: Routes.sales_stats_admin_product_path(product_id),
       responseParser: (data) => cast<{ sales_stats: AdminProductStatsSalesProps }>(data),
     },

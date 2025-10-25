@@ -5,6 +5,7 @@ import DateTimeWithRelativeTooltip from "$app/components/Admin/DateTimeWithRelat
 import { type Product } from "$app/components/Admin/Products/Product";
 import AdminProductStats from "$app/components/Admin/Products/Stats";
 import { type User } from "$app/components/Admin/Users/User";
+import { Icon } from "$app/components/Icons";
 
 type Props = {
   user: User;
@@ -28,15 +29,19 @@ const AdminUsersProductsHeader = ({ product, user, isCurrentUrl }: Props) => (
       )}
 
       <div className="grid gap-2">
-        <h2>
-          {product.price_formatted},
+        <h2 className="flex items-center gap-2">
+          {product.price_formatted}
+          <span>&bull;</span>
           {isCurrentUrl ? product.name : <Link href={Routes.admin_product_path(product.id)}>{product.name}</Link>}
+          <Link href={product.long_url} target="_blank" rel="noreferrer noopener">
+            <Icon name="arrow-up-right-square" />
+          </Link>
         </h2>
 
         <div>
           <ul className="inline">
             <li>
-              <DateTimeWithRelativeTooltip date={product.created_at} />
+              <DateTimeWithRelativeTooltip date={product.created_at} utc />
             </li>
             <li>
               <Link href={Routes.admin_user_path(user.id)}>{user.name}</Link>

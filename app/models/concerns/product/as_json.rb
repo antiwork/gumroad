@@ -53,6 +53,7 @@ module Product::AsJson
       as_json(
         original: true,
         methods: %i[
+          price_formatted
           admins_can_generate_url_redirects
           html_safe_description
           alive
@@ -75,6 +76,7 @@ module Product::AsJson
         ],
         methods: %i[
           external_id
+          long_url
           alive
           recommendable
           staff_picked

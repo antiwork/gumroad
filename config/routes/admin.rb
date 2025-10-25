@@ -96,7 +96,7 @@ namespace :admin do
   resources :products, controller: "links", only: [:show, :destroy] do
     member do
       get "/file/:product_file_id/access", to: "links#access_product_file", as: :admin_access_product_file
-      get :purchases
+      get :legacy_purchases
       get :views_count
       get :sales_stats
       post :restore

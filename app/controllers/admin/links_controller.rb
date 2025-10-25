@@ -1,7 +1,7 @@
 # frozen_string_literal: true
 
 class Admin::LinksController < Admin::BaseController
-  before_action :fetch_product_by_general_permalink, except: %i[purchases
+  before_action :fetch_product_by_general_permalink, except: %i[legacy_purchases
                                                                 flag_seller_for_tos_violation
                                                                 views_count sales_stats
                                                                 join_discord
@@ -75,7 +75,7 @@ class Admin::LinksController < Admin::BaseController
     render json: { success: @product.update_attribute(:deleted_at, nil) }
   end
 
-  def purchases
+  def legacy_purchases
     product_id = params[:id].to_i
     product = Link.find_by(id: product_id)
 
@@ -128,7 +128,7 @@ class Admin::LinksController < Admin::BaseController
         sales_stats: {
           preorder_state: @product.is_in_preorder_state,
           count: @product.is_in_preorder_state ? @product.sales.preorder_authorization_successful.count : @product.sales.successful.count,
-          stripe_failed_count: @product.sales.preorder_authorization_failed.stripe_failed.count,
+          stripe_failed_count: @product.is_in_preorder_state ? @product.sales.preorder_authorization_failed.stripe_failed.count : @product.sales.stripe_failed.count,
           balance_formatted: @product.balance_formatted
         }
       }

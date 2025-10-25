@@ -1,48 +1,44 @@
 import React from "react";
 import { cast } from "ts-safe-cast";
 
-import { useLazyFetch } from "$app/hooks/useLazyFetch";
+import { request } from "$app/utils/request";
 
 import AdminProductInfoContent from "$app/components/Admin/Products/Info/Content";
 import { type InfoProps } from "$app/components/Admin/Products/Info/Content";
 import { type Product } from "$app/components/Admin/Products/Product";
+import { useIsIntersecting } from "$app/components/useIsIntersecting";
 
 type Props = {
   product: Product;
 };
 
 const AdminProductInfo = ({ product }: Props) => {
-  const [open, setOpen] = React.useState(false);
+  const [isLoading, setIsLoading] = React.useState(false);
+  const [info, setInfo] = React.useState<InfoProps | null>(null);
 
-  const {
-    data: info,
-    isLoading,
-    fetchData: fetchInfo,
-  } = useLazyFetch<InfoProps | null>(null, {
-    url: Routes.admin_product_info_path(product.id, { format: "json" }),
-    responseParser: (data) => {
-      const parsed = cast<{ info: InfoProps }>(data);
-      return parsed.info;
-    },
+  const elementRef = useIsIntersecting<HTMLDivElement>((isIntersecting) => {
+    if (!isIntersecting || info) return;
+
+    const fetchInfo = async () => {
+      setIsLoading(true);
+      const response = await request({
+        method: "GET",
+        url: Routes.admin_product_info_path(product.id, { format: "json" }),
+        accept: "json",
+      });
+      const data = cast<{ info: InfoProps }>(await response.json());
+      setInfo(data.info);
+      setIsLoading(false);
+    };
+
+    void fetchInfo();
   });
 
-  const onToggle = (e: React.MouseEvent<HTMLDetailsElement>) => {
-    setOpen(e.currentTarget.open);
-    if (e.currentTarget.open) {
-      void fetchInfo();
-    }
-  };
-
   return (
-    <>
-      <hr />
-      <details open={open} onToggle={onToggle}>
-        <summary>
-          <h3>Info</h3>
-        </summary>
-        <AdminProductInfoContent info={info} isLoading={isLoading} />
-      </details>
-    </>
+    <div ref={elementRef} className="border-t border-border pt-4">
+      <h3 className="mb-4">Info</h3>
+      <AdminProductInfoContent info={info} isLoading={isLoading} />
+    </div>
   );
 };
 

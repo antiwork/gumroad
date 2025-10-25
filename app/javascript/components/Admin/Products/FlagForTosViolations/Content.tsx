@@ -30,7 +30,7 @@ const FlagForTosViolationsContent = ({
   compliance,
   onSuccess = () => {},
 }: FlagForTosViolationsContentProps) => {
-  if (!flaggedForTosViolation) {
+  if (!flaggedForTosViolation && product.alive && !user.suspended && !user.flagged_for_tos_violation) {
     const suspendTosSuccessMessage = `User was flagged for TOS violation and product ${product.is_tiered_membership ? "unpublished" : "deleted"}.`;
     const suspendTosConfirmMessage = `Are you sure you want to flag the user and ${product.is_tiered_membership ? "unpublish" : "delete"} the product?`;
 

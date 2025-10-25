@@ -356,6 +356,7 @@ class Link < ApplicationRecord
   def alive?
     purchase_disabled_at.nil? && banned_at.nil? && deleted_at.nil?
   end
+  alias_method :alive, :alive?
 
   def published?
     deleted_at.nil? && purchase_disabled_at.nil? && !draft

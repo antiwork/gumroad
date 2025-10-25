@@ -56,7 +56,11 @@ const ProductAttributesAndInfo = ({ productData }: Props) => {
 
   const hasNoAttributes = custom_summary == null && file_info_attributes.length === 0 && custom_attributes.length === 0;
 
-  return hasNoAttributes && preorder == null && !should_show_sales_count && !has_stream_only_files ? null : (
+  return hasNoAttributes && preorder == null && !should_show_sales_count && !has_stream_only_files ? (
+    <div role="status" className="info">
+      No additional details.
+    </div>
+  ) : (
     <div className="product-info grid gap-4">
       {should_show_sales_count ? (
         <div role="alert" className="info">

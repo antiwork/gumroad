@@ -24,14 +24,10 @@ const AdminProductPurchases = ({ product_id, is_affiliate_user = false, user_id 
   const {
     data: purchases,
     isLoading,
-    fetchData: fetchPurchases,
+    fetchNextPage,
     hasMore,
-    pagination,
-    setData: setPurchases,
-    setHasMore,
-    setHasLoaded,
-    setIsLoading,
   } = useLazyPaginatedFetch<ProductPurchase[]>([], {
+    fetchUnlessLoaded: open,
     url,
     responseParser: (data) => {
       const parsed = cast<{ purchases: ProductPurchase[] }>(data);
@@ -40,32 +36,10 @@ const AdminProductPurchases = ({ product_id, is_affiliate_user = false, user_id 
     mode: "append",
   });
 
-  const fetchNextPage = () => {
-    if (purchases.length >= pagination.limit) {
-      void fetchPurchases({ page: pagination.page + 1 });
-    }
-  };
-
-  const resetPurchases = () => {
-    setPurchases([]);
-    setHasLoaded(false);
-    setHasMore(true);
-    setIsLoading(true);
-  };
-
-  const onToggle = (e: React.MouseEvent<HTMLDetailsElement>) => {
-    setOpen(e.currentTarget.open);
-    if (e.currentTarget.open) {
-      void fetchPurchases();
-    } else {
-      resetPurchases();
-    }
-  };
-
   return (
     <>
       <hr />
-      <details open={open} onToggle={onToggle}>
+      <details open={open} onToggle={(e) => setOpen(e.currentTarget.open)}>
         <summary>
           <h3>{is_affiliate_user ? "Affiliate purchases" : "Purchases"}</h3>
         </summary>
@@ -73,7 +47,7 @@ const AdminProductPurchases = ({ product_id, is_affiliate_user = false, user_id 
           purchases={purchases}
           isLoading={isLoading}
           hasMore={hasMore}
-          onLoadMore={fetchNextPage}
+          onLoadMore={() => void fetchNextPage()}
         />
       </details>
     </>

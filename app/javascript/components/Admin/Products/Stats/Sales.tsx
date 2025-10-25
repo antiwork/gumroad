@@ -34,16 +34,19 @@ const AdminProductStatsSales = ({
 
   const label = preorder_state ? "pre-orders" : "sales";
   const totalLabel = preorder_state ? "total (pre-order auths)" : "total";
-  const formattedCount = new Intl.NumberFormat().format(count);
-  const formattedStripeFailedCount = new Intl.NumberFormat().format(stripe_failed_count);
+  const formattedCount = count.toLocaleString();
+  const formattedStripeFailedCount = stripe_failed_count.toLocaleString();
   const failedPercentage = stripe_failed_count / (stripe_failed_count + count);
-  const formattedFailedPercentage = new Intl.NumberFormat().format(failedPercentage);
+  const formattedFailedPercentage = failedPercentage.toLocaleString(undefined, {
+    style: "percent",
+    maximumFractionDigits: 2,
+  });
   return (
     <>
       <li>
         {formattedCount} {label}
         {stripe_failed_count > 0 && (
-          <WithTooltip tip={formattedFailedPercentage}>{formattedStripeFailedCount} failed</WithTooltip>
+          <WithTooltip tip={formattedFailedPercentage}>&nbsp;({formattedStripeFailedCount} failed)</WithTooltip>
         )}
       </li>
 
