@@ -9,9 +9,7 @@ class Admin::Users::Products::TosViolationFlagsController < Admin::Users::Produc
         )
       }
     else
-      render json: {
-        error: "User is not flagged for TOS violation",
-      }, status: :bad_request
+      render json: { tos_violation_flags: [] }
     end
   end
 

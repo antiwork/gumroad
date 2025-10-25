@@ -108,8 +108,6 @@ namespace :admin do
       resource :info, only: [:show]
       resource :staff_picked, controller: "staff_picked", only: [:create]
       resources :purchases, only: [:index]
-      resources :sales_stats, only: [:index]
-      resource :views_count, controller: "views_count", only: [:show]
     end
   end
 

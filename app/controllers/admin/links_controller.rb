@@ -115,11 +115,26 @@ class Admin::LinksController < Admin::BaseController
   end
 
   def views_count
-    render layout: false
+    if request.format.json?
+      render json: { views_count: @product.number_of_views }
+    else
+      render layout: false
+    end
   end
 
   def sales_stats
-    render layout: false
+    if request.format.json?
+      render json: {
+        sales_stats: {
+          preorder_state: @product.is_in_preorder_state,
+          count: @product.is_in_preorder_state ? @product.sales.preorder_authorization_successful.count : @product.sales.successful.count,
+          stripe_failed_count: @product.sales.preorder_authorization_failed.stripe_failed.count,
+          balance_formatted: @product.balance_formatted
+        }
+      }
+    else
+      render layout: false
+    end
   end
 
   def join_discord

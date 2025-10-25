@@ -369,8 +369,9 @@ class Link < ApplicationRecord
   end
 
   def admins_can_generate_url_redirects?
-    product_files.alive.exists?
+    alive_product_files.any?
   end
+  alias_method :admins_can_generate_url_redirects, :admins_can_generate_url_redirects?
 
   def rentable?
     rent_only? || buy_and_rent?
@@ -436,10 +437,12 @@ class Link < ApplicationRecord
   def has_stampable_pdfs?
     alive_product_files.any?(&:must_be_pdf_stamped?)
   end
+  alias_method :has_stampable_pdfs, :has_stampable_pdfs?
 
   def streamable?
     has_filegroup?("video")
   end
+  alias_method :streamable, :streamable?
 
   def require_captcha?
     user.created_at > REQUIRE_CAPTCHA_FOR_SELLERS_YOUNGER_THAN.ago
@@ -927,6 +930,7 @@ class Link < ApplicationRecord
       AdultKeywordDetector.adult?(text)
     end
   end
+  alias_method :has_adult_keywords, :has_adult_keywords?
 
   # Public: Check if a zip archive should ever be generated for this product
   # This is for a product in general, not a specific purchase of a product.

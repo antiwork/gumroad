@@ -38,7 +38,7 @@ export type Product = {
   user_id: string;
   admins_can_generate_url_redirects: boolean;
   alive_product_files: ProductFile[];
-  stripped_html_safe_description: string;
+  html_safe_description: string;
   alive: boolean;
   is_adult: boolean;
   active_integrations: ActiveIntegration[];

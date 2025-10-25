@@ -54,7 +54,7 @@ module Product::AsJson
         original: true,
         methods: %i[
           admins_can_generate_url_redirects
-          stripped_html_safe_description
+          html_safe_description
           alive
           is_adult
           is_tiered_membership
@@ -84,10 +84,10 @@ module Product::AsJson
           is_physical
           is_licensed
           is_adult
-          user_all_adult_products
           has_adult_keywords
         ],
         include: {
+          user: { methods: :all_adult_products },
           tags: { methods: :humanized_name },
           active_integrations: { only: :type }
         }

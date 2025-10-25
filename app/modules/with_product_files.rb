@@ -4,6 +4,7 @@ module WithProductFiles
   def self.included(base)
     base.class_eval do
       has_many :product_files
+      has_many :ordered_alive_product_files, -> { alive.in_order }, class_name: "ProductFile"
       has_many :product_files_archives
       has_many :product_folders, -> { alive }, foreign_key: :product_id
       attr_accessor :cached_alive_product_files, :cached_rich_content_files_and_folders

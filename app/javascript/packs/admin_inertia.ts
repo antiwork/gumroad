@@ -62,7 +62,7 @@ const urlsMigratedtoInertia = [
   // Routes.admin_compliance_guids_url(),
   // Routes.admin_compliance_cards_url(),
   // Routes.admin_user_url(),
-  // Routes.admin_product_url(),
+  new RegExp(Routes.admin_product_url("\\w+"), "u"),
   // Add other urls here when they are migrated to inertia
 ];
 
@@ -75,7 +75,8 @@ interface InertiaBeforeEvent extends Event {
 
 router.on("before", (event: InertiaBeforeEvent) => {
   const url = event.detail.visit.url.toString();
-  const hasMigratedToInertia = url && urlsMigratedtoInertia.includes(url);
+  const hasMigratedToInertia =
+    url && urlsMigratedtoInertia.some((pattern) => (pattern instanceof RegExp ? pattern.test(url) : pattern === url));
 
   if (!hasMigratedToInertia) {
     event.preventDefault();

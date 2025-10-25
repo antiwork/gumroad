@@ -16,8 +16,10 @@ export type InfoProps = {
   is_physical: boolean;
   is_licensed: boolean;
   is_adult: boolean;
-  user_all_adult_products: boolean;
   has_adult_keywords: boolean;
+  user: {
+    all_adult_products: boolean;
+  };
   taxonomy?: {
     ancestry_path: string[];
   } | null;
@@ -29,8 +31,8 @@ export type InfoProps = {
   formatted_rental_price_cents: string;
 };
 
-const AdminProductInfoContent = ({ info, isLoading }: { info: InfoProps; isLoading: boolean }) => {
-  if (isLoading) return <Loading />;
+const AdminProductInfoContent = ({ info, isLoading }: { info: InfoProps | null; isLoading: boolean }) => {
+  if (isLoading || !info) return <Loading />;
 
   const hasCircleIntegration = info.active_integrations.some((integration) => integration.type === "CircleIntegration");
   const hasDiscordIntegration = info.active_integrations.some(
@@ -83,7 +85,7 @@ const AdminProductInfoContent = ({ info, isLoading }: { info: InfoProps; isLoadi
       <dd>{info.is_adult ? <YesIcon /> : <NoIcon />}</dd>
 
       <dt>Is Adult (on user)</dt>
-      <dd>{info.user_all_adult_products ? <YesIcon /> : <NoIcon />}</dd>
+      <dd>{info.user.all_adult_products ? <YesIcon /> : <NoIcon />}</dd>
 
       <dt>Has adult keywords</dt>
       <dd>{info.has_adult_keywords ? <YesIcon /> : <NoIcon />}</dd>
