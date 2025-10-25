@@ -1,8 +1,8 @@
 import React from "react";
 
+import { NoIcon, YesIcon } from "$app/components/Admin/Icons";
 import Loading from "$app/components/Admin/Loading";
 import { type ActiveIntegration } from "$app/components/Admin/Products/Product";
-import { BooleanIcon } from "$app/components/Icons";
 
 export type InfoProps = {
   purchase_type: string;
@@ -46,24 +46,16 @@ const AdminProductInfoContent = ({ info, isLoading }: { info: InfoProps; isLoadi
       <dd>{info.external_id}</dd>
 
       <dt>Published</dt>
-      <dd>
-        <BooleanIcon value={info.alive} />
-      </dd>
+      <dd>{info.alive ? <YesIcon /> : <NoIcon />}</dd>
 
       <dt>Listed on Discover</dt>
-      <dd>
-        <BooleanIcon value={info.recommendable} />
-      </dd>
+      <dd>{info.recommendable ? <YesIcon /> : <NoIcon />}</dd>
 
       <dt>Staff-picked</dt>
-      <dd>
-        <BooleanIcon value={info.staff_picked} />
-      </dd>
+      <dd>{info.staff_picked ? <YesIcon /> : <NoIcon />}</dd>
 
       <dt>Preorder</dt>
-      <dd>
-        <BooleanIcon value={info.is_in_preorder_state} />
-      </dd>
+      <dd>{info.is_in_preorder_state ? <YesIcon /> : <NoIcon />}</dd>
 
       {info.purchase_type !== "buy_only" && (
         <>
@@ -76,39 +68,25 @@ const AdminProductInfoContent = ({ info, isLoading }: { info: InfoProps; isLoadi
       )}
 
       <dt>Has stamped PDFs</dt>
-      <dd>
-        <BooleanIcon value={info.has_stampable_pdfs} />
-      </dd>
+      <dd>{info.has_stampable_pdfs ? <YesIcon /> : <NoIcon />}</dd>
 
       <dt>Streaming</dt>
-      <dd>
-        <BooleanIcon value={info.streamable} />
-      </dd>
+      <dd>{info.streamable ? <YesIcon /> : <NoIcon />}</dd>
 
       <dt>Physical</dt>
-      <dd>
-        <BooleanIcon value={info.is_physical} />
-      </dd>
+      <dd>{info.is_physical ? <YesIcon /> : <NoIcon />}</dd>
 
       <dt>Licensed</dt>
-      <dd>
-        <BooleanIcon value={info.is_licensed} />
-      </dd>
+      <dd>{info.is_licensed ? <YesIcon /> : <NoIcon />}</dd>
 
       <dt>Is Adult (on product)</dt>
-      <dd>
-        <BooleanIcon value={info.is_adult} />
-      </dd>
+      <dd>{info.is_adult ? <YesIcon /> : <NoIcon />}</dd>
 
       <dt>Is Adult (on user)</dt>
-      <dd>
-        <BooleanIcon value={info.user_all_adult_products} />
-      </dd>
+      <dd>{info.user_all_adult_products ? <YesIcon /> : <NoIcon />}</dd>
 
       <dt>Has adult keywords</dt>
-      <dd>
-        <BooleanIcon value={info.has_adult_keywords} />
-      </dd>
+      <dd>{info.has_adult_keywords ? <YesIcon /> : <NoIcon />}</dd>
 
       <dt>Category</dt>
       <dd>{info.taxonomy?.ancestry_path.join(" > ")}</dd>
@@ -117,14 +95,10 @@ const AdminProductInfoContent = ({ info, isLoading }: { info: InfoProps; isLoadi
       <dd>{info.tags.map((tag) => tag.humanized_name).join(", ")}</dd>
 
       <dt>Circle Community</dt>
-      <dd>
-        <BooleanIcon value={hasCircleIntegration} />
-      </dd>
+      <dd>{hasCircleIntegration ? <YesIcon /> : <NoIcon />}</dd>
 
       <dt>Discord Channel</dt>
-      <dd>
-        <BooleanIcon value={hasDiscordIntegration} />
-      </dd>
+      <dd>{hasDiscordIntegration ? <YesIcon /> : <NoIcon />}</dd>
     </dl>
   );
 };

@@ -37,6 +37,12 @@ namespace :admin do
       resource :payout_info, only: :show
       resources :latest_posts, only: :index
       resources :stats, only: :index
+      resources :products, only: [] do
+        scope module: :products do
+          resources :tos_violation_flags, only: [:index, :create]
+          resources :purchases, only: :index
+        end
+      end
     end
     resources :service_charges, only: :index
     member do
@@ -95,8 +101,16 @@ namespace :admin do
       get :sales_stats
       post :restore
     end
-    resource :staff_picked, only: [:create], controller: "products/staff_picked"
-    resources :comments, only: [:index, :create], controller: "products/comments"
+    scope module: :products do
+      concerns :commentable
+
+      resource :details, controller: "details", only: [:show]
+      resource :info, only: [:show]
+      resource :staff_picked, controller: "staff_picked", only: [:create]
+      resources :purchases, only: [:index]
+      resources :sales_stats, only: [:index]
+      resource :views_count, controller: "views_count", only: [:show]
+    end
   end
 
   resources :payouts, only: [:index]

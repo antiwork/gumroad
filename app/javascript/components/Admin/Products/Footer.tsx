@@ -1,8 +1,8 @@
 import React from "react";
 
 import DateTimeWithRelativeTooltip from "$app/components/Admin/DateTimeWithRelativeTooltip";
+import { NoIcon } from "$app/components/Admin/Icons";
 import type { Product } from "$app/components/Admin/Products/Product";
-import { NoIcon } from "$app/components/Icons";
 
 type AdminProductFooterProps = {
   product: Product;
