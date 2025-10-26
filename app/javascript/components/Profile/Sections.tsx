@@ -123,8 +123,9 @@ const ProductsSectionView = ({
       currencyCode={currencyCode}
       defaults={defaultParams}
       prependFilters={
-        <div>
+        <div className="flex flex-wrap items-center p-4 gap-4 justify-between not-first:border-t not-first:border-border">
           <input
+            className="grow"
             aria-label="Search products"
             placeholder="Search products"
             value={enteredQuery}
