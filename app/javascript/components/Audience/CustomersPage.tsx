@@ -1061,7 +1061,6 @@ const CustomerDrawer = ({
           ) : (
             <StackItem as="section">
               <div className="grow text-center">
-                <Progress width="2em" />
                 <LoadingSpinner className="size-8" />
               </div>
             </StackItem>
@@ -1250,10 +1249,9 @@ const CustomerDrawer = ({
           ) : (
             <StackItem as="section">
               <div className="grow text-center">
-                <Progress width="2em" />
                 <LoadingSpinner className="size-8" />
 
-              </div>  
+              </div>
             </StackItem>
           )}
         </Stack>

@@ -214,7 +214,7 @@ export const FollowersPage = ({ followers: initialFollowers, per_page, total }: 
                 <Stack>
                   <StackItem>
                     <div className="grow">
-                      <h4>Email</h4>
+                      <h4 className="font-bold">Email</h4>
                       <div>{selectedFollower.email}</div>
                       <Button
                         color="danger"
