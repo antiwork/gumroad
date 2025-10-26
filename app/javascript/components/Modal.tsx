@@ -39,6 +39,6 @@ export const Modal = ({
       {children}
       {footer ? <footer className="grid gap-4 sm:flex sm:justify-end">{footer}</footer> : null}
     </Dialog.Content>
-    <Dialog.Overlay className="fixed inset-0 z-30 bg-black/80" />
+    <Dialog.Overlay className="fixed inset-0 z-30 bg-backdrop" />
   </Dialog.Root>
 );

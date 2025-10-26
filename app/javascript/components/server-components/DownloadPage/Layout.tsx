@@ -8,13 +8,13 @@ import { asyncVoid } from "$app/utils/promise";
 import { assertResponseError, request } from "$app/utils/request";
 
 import { Button, NavigationButton } from "$app/components/Button";
+import { PageListLayout } from "$app/components/Download/PageListLayout";
 import { Icon } from "$app/components/Icons";
 import { useLoggedInUser } from "$app/components/LoggedInUser";
 import { Modal } from "$app/components/Modal";
 import { PurchaseArchiveButton } from "$app/components/PurchaseArchiveButton";
 import { Review, ReviewForm } from "$app/components/ReviewForm";
 import { showAlert } from "$app/components/server-components/Alert";
-import { PageListLayout } from "$app/components/server-components/DownloadPage/PageListLayout";
 import { PurchaseCustomField } from "$app/components/server-components/DownloadPage/WithContent";
 import { PageHeader } from "$app/components/ui/PageHeader";
 import { useIsAboveBreakpoint } from "$app/components/useIsAboveBreakpoint";

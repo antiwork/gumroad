@@ -14,6 +14,7 @@ import { DiscordButton } from "$app/components/DiscordButton";
 import { DownloadAllButton } from "$app/components/Download/DownloadAllButton";
 import { FileItem, FileList as DownloadFileList, FolderItem } from "$app/components/Download/FileList";
 import { OpenInAppButton } from "$app/components/Download/OpenInAppButton";
+import { PageList, PageListItem } from "$app/components/Download/PageListLayout";
 import { DownloadPagePostList, Post } from "$app/components/Download/PostList";
 import {
   FileDownloadInfo,
@@ -25,7 +26,6 @@ import { Icon } from "$app/components/Icons";
 import { Popover } from "$app/components/Popover";
 import { FileEmbed } from "$app/components/ProductEdit/ContentTab/FileEmbed";
 import { showAlert } from "$app/components/server-components/Alert";
-import { PageList, PageListItem } from "$app/components/server-components/DownloadPage/PageListLayout";
 import { LicenseKey } from "$app/components/TiptapExtensions/LicenseKey";
 import { PostsProvider } from "$app/components/TiptapExtensions/Posts";
 import { useAddThirdPartyAnalytics } from "$app/components/useAddThirdPartyAnalytics";

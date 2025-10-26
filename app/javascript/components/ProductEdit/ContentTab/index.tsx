@@ -21,6 +21,7 @@ import { generatePageIcon } from "$app/utils/rich_content_page";
 import { Button } from "$app/components/Button";
 import { InputtedDiscount } from "$app/components/CheckoutDashboard/DiscountInput";
 import { ComboBox } from "$app/components/ComboBox";
+import { PageList, PageListLayout, PageListItem } from "$app/components/Download/PageListLayout";
 import { EvaporateUploaderProvider, useEvaporateUploader } from "$app/components/EvaporateUploader";
 import { FileKindIcon } from "$app/components/FileRowContent";
 import { Icon } from "$app/components/Icons";
@@ -43,7 +44,6 @@ import { S3UploadConfigProvider, useS3UploadConfig } from "$app/components/S3Upl
 import { Separator } from "$app/components/Separator";
 import { showAlert } from "$app/components/server-components/Alert";
 import { EntityInfo } from "$app/components/server-components/DownloadPage/Layout";
-import { PageList, PageListLayout, PageListItem } from "$app/components/server-components/DownloadPage/PageListLayout";
 import { TestimonialSelectModal } from "$app/components/TestimonialSelectModal";
 import { FileEmbedGroup } from "$app/components/TiptapExtensions/FileEmbedGroup";
 import { FileUpload } from "$app/components/TiptapExtensions/FileUpload";

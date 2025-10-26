@@ -5,9 +5,9 @@ import * as React from "react";
 
 import { generatePageIcon } from "$app/utils/rich_content_page";
 
+import { PageListItem } from "$app/components/Download/PageListLayout";
 import { Icon } from "$app/components/Icons";
 import { Popover } from "$app/components/Popover";
-import { PageListItem } from "$app/components/server-components/DownloadPage/PageListLayout";
 import { BlurOnEnter } from "$app/components/TiptapExtensions/BlurOnEnter";
 import PlainTextStarterKit from "$app/components/TiptapExtensions/PlainTextStarterKit";
 
@@ -70,6 +70,7 @@ export const PageTab = ({
     <PageListItem
       onClick={onClick}
       isSelected={selected}
+      // .sortable-* are created by react-sortablejs, and we can't add Tailwind classes to them directly.
       className="group/tab relative [&_.sortable-drag]:border [&_.sortable-drag]:bg-muted [&.sortable-ghost]:outline [&.sortable-ghost]:outline-accent [&.sortable-ghost]:outline-dashed [&.sortable-ghost>_*]:opacity-30"
       role="tab"
     >
