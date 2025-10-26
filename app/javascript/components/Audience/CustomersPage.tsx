@@ -66,12 +66,12 @@ import { DateInput } from "$app/components/DateInput";
 import { DateRangePicker } from "$app/components/DateRangePicker";
 import { FileKindIcon } from "$app/components/FileRowContent";
 import { Icon } from "$app/components/Icons";
+import { LoadingSpinner } from "$app/components/LoadingSpinner";
 import { Modal } from "$app/components/Modal";
 import { NumberInput } from "$app/components/NumberInput";
 import { Pagination, PaginationProps } from "$app/components/Pagination";
 import { Popover } from "$app/components/Popover";
 import { PriceInput } from "$app/components/PriceInput";
-import { Progress } from "$app/components/Progress";
 import { RatingStars } from "$app/components/RatingStars";
 import { ReviewResponseForm } from "$app/components/ReviewResponseForm";
 import { ReviewVideoPlayer } from "$app/components/ReviewVideoPlayer";
@@ -1062,6 +1062,7 @@ const CustomerDrawer = ({
             <StackItem as="section">
               <div className="grow text-center">
                 <Progress width="2em" />
+                <LoadingSpinner className="size-8" />
               </div>
             </StackItem>
           )}
@@ -1250,7 +1251,9 @@ const CustomerDrawer = ({
             <StackItem as="section">
               <div className="grow text-center">
                 <Progress width="2em" />
-              </div>
+                <LoadingSpinner className="size-8" />
+
+              </div>  
             </StackItem>
           )}
         </Stack>
@@ -1314,7 +1317,7 @@ const CustomerDrawer = ({
           ) : (
             <StackItem as="section">
               <div className="grow text-center">
-                <Progress width="2em" />
+                <LoadingSpinner className="size-8" />
               </div>
             </StackItem>
           )}
@@ -1885,7 +1888,7 @@ const OptionSection = ({
           )
         ) : (
           <div className="text-center grow">
-            <Progress width="2em" />
+            <LoadingSpinner className="size-8" />
           </div>
         )}
       </StackItem>
@@ -2376,7 +2379,7 @@ const ChargesSection = ({
       {loading ? (
         <StackItem as="section">
           <div className="grow text-center">
-            <Progress width="2em" />
+            <LoadingSpinner className="size-8" />
           </div>
         </StackItem>
       ) : charges.length > 0 ? (

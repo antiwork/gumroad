@@ -1,9 +1,9 @@
 import React from "react";
 
-import Loading from "$app/components/Admin/Loading";
 import Header from "$app/components/Admin/Users/PayoutInfo/Header";
 import AdminManualPayoutForm from "$app/components/Admin/Users/PayoutInfo/ManualPayoutForm";
 import AdminTogglePayoutsForm from "$app/components/Admin/Users/PayoutInfo/TogglePayoutsForm";
+import { LoadingSpinner } from "$app/components/LoadingSpinner";
 
 export type ActiveBankAccountProps = {
   type: string;
@@ -45,7 +45,7 @@ type PayoutInfoComponentProps = {
 };
 
 const PayoutInfo = ({ user_id, payoutInfo, isLoading }: PayoutInfoComponentProps) => {
-  if (isLoading) return <Loading />;
+  if (isLoading) return <LoadingSpinner />;
   if (!payoutInfo) return <div>No payout info found.</div>;
 
   const {

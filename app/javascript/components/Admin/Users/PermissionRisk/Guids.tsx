@@ -6,6 +6,7 @@ import { request } from "$app/utils/request";
 
 import Loading from "$app/components/Admin/Loading";
 import { Stack } from "$app/components/ui/Stack";
+import { LoadingSpinner } from "$app/components/LoadingSpinner";
 
 type UserGuids = { guid: string; user_ids: number[] }[];
 
@@ -26,7 +27,7 @@ const Guid = ({ guid, user_ids, classname, grow }: GuidProps) => (
 );
 
 const UserGuidsContent = ({ userGuids, isLoading }: { userGuids: UserGuids; isLoading: boolean }) => {
-  if (isLoading) return <Loading />;
+  if (isLoading) return <LoadingSpinner />;
   if (userGuids.length > 0)
     return (
       <Stack>

@@ -52,9 +52,9 @@ import {
   getTotalPriceFromProducts,
 } from "$app/components/Checkout/payment";
 import { Icon } from "$app/components/Icons";
+import { LoadingSpinner } from "$app/components/LoadingSpinner";
 import { useLoggedInUser } from "$app/components/LoggedInUser";
 import { PriceInput } from "$app/components/PriceInput";
-import { Progress } from "$app/components/Progress";
 import { showAlert } from "$app/components/server-components/Alert";
 import { Tabs } from "$app/components/ui/Tabs";
 import { useIsDarkTheme } from "$app/components/useIsDarkTheme";
@@ -961,7 +961,7 @@ const NativePayPal = ({ implementation,grow }: { implementation: PayPalNamespace
         style={isDarkTheme ? { filter: "invert(1) grayscale(1)" } : undefined}
         className={grow?"grow":""}
       />
-      {isProcessing(state) ? <Progress width="1em" /> : null}
+      {isProcessing(state) ? <LoadingSpinner /> : null}
     </>
   );
 };

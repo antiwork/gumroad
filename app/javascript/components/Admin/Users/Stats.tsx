@@ -3,7 +3,7 @@ import { cast } from "ts-safe-cast";
 
 import { request, assertResponseError } from "$app/utils/request";
 
-import Loading from "$app/components/Admin/Loading";
+import { LoadingSpinner } from "$app/components/LoadingSpinner";
 import { showAlert } from "$app/components/server-components/Alert";
 import { useIsIntersecting } from "$app/components/useIsIntersecting";
 
@@ -48,10 +48,10 @@ const AdminUserStats = ({ user_id }: { user_id: number }) => {
 
   return (
     <ul ref={elementRef} className="inline">
-      <li>{userStats ? `${userStats.total} total` : <Loading />}</li>
-      <li>{userStats ? `${userStats.balance} balance` : <Loading />}</li>
-      <li>{userStats ? `${userStats.chargeback_volume} vol CB` : <Loading />}</li>
-      <li>{userStats ? `${userStats.chargeback_count} count CB` : <Loading />}</li>
+      <li>{userStats ? `${userStats.total} total` : <LoadingSpinner />}</li>
+      <li>{userStats ? `${userStats.balance} balance` : <LoadingSpinner />}</li>
+      <li>{userStats ? `${userStats.chargeback_volume} vol CB` : <LoadingSpinner />}</li>
+      <li>{userStats ? `${userStats.chargeback_count} count CB` : <LoadingSpinner />}</li>
     </ul>
   );
 };
