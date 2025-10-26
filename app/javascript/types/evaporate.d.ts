@@ -28,7 +28,6 @@ declare module "$vendor/evaporate.cjs" {
       logging?: boolean;
       checkForPreviousUploads?: boolean;
       maxRetries?: number;
-      logLevel?: string;
     });
 
     add(params: UploadParams): string | number;

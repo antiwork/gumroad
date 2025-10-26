@@ -35,9 +35,8 @@ export const useConfigureEvaporate = (props: Props) => {
         maxRetryBackoffSecs: 300,
         checkForPreviousUploads: true,
         maxRetries: 5,
-        logLevel: 'debug',
         progressIntervalMS: 1000,
-        logging: true,
+        logging: false,
       }),
     [props.aws_access_key_id, bucket, s3Endpoint],
   );
