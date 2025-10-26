@@ -47,11 +47,11 @@ import { AffiliateSignupForm, ProductRow } from "$app/components/AffiliatesDashb
 import { Button } from "$app/components/Button";
 import { CopyToClipboard } from "$app/components/CopyToClipboard";
 import { Icon } from "$app/components/Icons";
+import { LoadingSpinner } from "$app/components/LoadingSpinner";
 import { useLoggedInUser } from "$app/components/LoggedInUser";
 import { NumberInput } from "$app/components/NumberInput";
 import { Pagination } from "$app/components/Pagination";
 import { Popover } from "$app/components/Popover";
-import { Progress } from "$app/components/Progress";
 import { showAlert } from "$app/components/server-components/Alert";
 import { PageHeader } from "$app/components/ui/PageHeader";
 import Placeholder from "$app/components/ui/Placeholder";
@@ -465,7 +465,7 @@ const AffiliatesTab = () => {
       <div className="p-4 lg:p-8" style={{ display: "grid", gap: "var(--spacer-7)" }}>
         {navigation.state === "loading" && affiliates.length === 0 ? (
           <div style={{ justifySelf: "center" }}>
-            <Progress width="5rem" />
+            <LoadingSpinner className="size-20" />
           </div>
         ) : (
           <>

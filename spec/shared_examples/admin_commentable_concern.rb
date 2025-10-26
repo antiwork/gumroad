@@ -48,9 +48,10 @@ RSpec.shared_examples_for "Admin::Commentable" do
 
         expect(json_response["comments"]).to be_an(Array)
         expect(json_response["comments"].length).to eq(2)
+        expect(json_response["pagination"]).to be_present
 
-        expect(json_response).to eq(
-          "comments" => [
+        expect(json_response["comments"]).to eq(
+          [
             {
               "id" => comment2.id,
               "content" => "Second comment",
@@ -77,6 +78,36 @@ RSpec.shared_examples_for "Admin::Commentable" do
             }
           ]
         )
+      end
+
+      it "paginates comments correctly" do
+        # Request page 1 with per_page=1
+        get :index, params: route_params.merge(page: 1, per_page: 1), format: :json
+
+        expect(response).to have_http_status(:success)
+        json_response = response.parsed_body
+
+        expect(json_response["comments"].length).to eq(1)
+        expect(json_response["comments"].first["id"]).to eq(comment2.id)
+        expect(json_response["comments"].first["content"]).to eq("Second comment")
+
+        expect(json_response["pagination"]).to be_present
+        expect(json_response["pagination"]["page"]).to eq(1)
+        expect(json_response["pagination"]["count"]).to eq(2)
+
+        # Request page 2 with per_page=1
+        get :index, params: route_params.merge(page: 2, per_page: 1), format: :json
+
+        expect(response).to have_http_status(:success)
+        json_response = response.parsed_body
+
+        expect(json_response["comments"].length).to eq(1)
+        expect(json_response["comments"].first["id"]).to eq(comment1.id)
+        expect(json_response["comments"].first["content"]).to eq("First comment")
+
+        expect(json_response["pagination"]).to be_present
+        expect(json_response["pagination"]["page"]).to eq(2)
+        expect(json_response["pagination"]["count"]).to eq(2)
       end
     end
 
