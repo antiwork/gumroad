@@ -13,8 +13,8 @@ import { AudienceQuickStats } from "$app/components/Audience/AudienceQuickStats"
 import { Button } from "$app/components/Button";
 import { DateRangePicker } from "$app/components/DateRangePicker";
 import { Icon } from "$app/components/Icons";
+import { LoadingSpinner } from "$app/components/LoadingSpinner";
 import { Popover } from "$app/components/Popover";
-import { Progress } from "$app/components/Progress";
 import { showAlert } from "$app/components/server-components/Alert";
 import { ExportSubscribersPopover } from "$app/components/server-components/FollowersPage/ExportSubscribersPopover";
 import Placeholder from "$app/components/ui/Placeholder";
@@ -80,7 +80,7 @@ const AudiencePage = ({ total_follower_count }: { total_follower_count: number }
             <AudienceChart data={data} />
           ) : (
             <div className="input">
-              <Progress width="1em" />
+              <LoadingSpinner />
               Loading charts...
             </div>
           )}
