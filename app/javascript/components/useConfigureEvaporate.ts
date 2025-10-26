@@ -18,6 +18,8 @@ export const useConfigureEvaporate = (props: Props) => {
   // e.g., "http://minio:9000/my-bucket" -> "http://minio:9000"
   const s3Endpoint = props.s3_url.substring(0, props.s3_url.lastIndexOf("/"));
 
+  const cancellationKeysToUploadIdsRef = React.useRef<Record<string, string>>({});
+
   const evaporate = React.useMemo(
     () =>
       new Evaporate({
@@ -27,10 +29,13 @@ export const useConfigureEvaporate = (props: Props) => {
         fetchCurrentServerTimeUrl: Routes.s3_utility_current_utc_time_string_path(),
         maxFileSize: MAX_FILE_SIZE,
         s3Endpoint,
-        maxConcurrentParts: 1,
-        partSize: 5 * 1024 * 1024,
+        maxConcurrentParts: 3,
+        partSize: 20 * 1024 * 1024,
         retryBackoffPower: 2,
-        maxRetryBackoffSecs: 120,
+        maxRetryBackoffSecs: 300,
+        checkForPreviousUploads: true,
+        maxRetries: 5,
+        logLevel: 'debug',
         progressIntervalMS: 1000,
         logging: true,
       }),
@@ -56,6 +61,7 @@ export const useConfigureEvaporate = (props: Props) => {
   );
 
   const scheduleUpload = async ({
+    cancellationKey,
     name,
     file,
     mimeType,
@@ -91,7 +97,8 @@ export const useConfigureEvaporate = (props: Props) => {
 
         onProgress(progress);
       },
-      initiated: () => {
+      initiated: (uploadId: string) => {
+        cancellationKeysToUploadIdsRef.current[cancellationKey] = uploadId;
       },
     });
 
@@ -99,7 +106,11 @@ export const useConfigureEvaporate = (props: Props) => {
   };
 
   const cancelUpload = (cancellationKey: string) => {
-    evaporate.cancel(cancellationKey);
+    const uploadId = cancellationKeysToUploadIdsRef.current[cancellationKey];
+    if (uploadId) {
+      evaporate.cancel(uploadId);
+      delete cancellationKeysToUploadIdsRef.current[cancellationKey];
+    }
   };
 
   const retryUpload = () => {

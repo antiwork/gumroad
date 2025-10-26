@@ -26,6 +26,9 @@ declare module "$vendor/evaporate.cjs" {
       maxRetryBackoffSecs?: number;
       progressIntervalMS?: number;
       logging?: boolean;
+      checkForPreviousUploads?: boolean;
+      maxRetries?: number;
+      logLevel?: string;
     });
 
     add(params: UploadParams): string | number;
