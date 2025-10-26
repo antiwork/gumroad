@@ -1250,7 +1250,6 @@ const CustomerDrawer = ({
             <StackItem as="section">
               <div className="grow text-center">
                 <LoadingSpinner className="size-8" />
-
               </div>
             </StackItem>
           )}
