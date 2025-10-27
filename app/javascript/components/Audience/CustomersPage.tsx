@@ -1269,7 +1269,19 @@ const CustomerDrawer = ({
                     </h5>
                     <small>{`${email.state} ${formatDateWithoutTime(new Date(email.state_at))}`}</small>
                   </div>
-                  {email.type === "post" && (
+                  {email.type === "receipt" ? (
+                    <Button
+                      color="primary"
+                      onClick={() => void onSend(email.id, "receipt")}
+                      disabled={!!loadingId || sentEmailIds.current.has(email.id)}
+                    >
+                      {sentEmailIds.current.has(email.id)
+                        ? "Receipt resent"
+                        : loadingId === email.id
+                          ? "Resending receipt..."
+                          : "Resend receipt"}
+                    </Button>
+                  ) : (
                     <Button
                       color="primary"
                       onClick={() => void onSend(email.id, "post")}
