@@ -7,6 +7,7 @@ import { cast } from "ts-safe-cast";
 
 import { RichContent } from "$app/parsers/richContent";
 import { assertDefined } from "$app/utils/assert";
+import { classNames } from "$app/utils/classNames";
 import { asyncVoid } from "$app/utils/promise";
 import { assertResponseError } from "$app/utils/request";
 
@@ -18,7 +19,7 @@ import { Popover } from "$app/components/Popover";
 import { useRichTextEditor } from "$app/components/RichTextEditor";
 import { showAlert } from "$app/components/server-components/Alert";
 import { License, useContentFiles } from "$app/components/server-components/DownloadPage/WithContent";
-import { fileGroupRowsClassName, titleWithFallback } from "$app/components/TiptapExtensions/FileEmbedGroup";
+import { titleWithFallback } from "$app/components/TiptapExtensions/FileEmbedGroup";
 import { FileUpload } from "$app/components/TiptapExtensions/FileUpload";
 import { LicenseKey, LicenseProvider } from "$app/components/TiptapExtensions/LicenseKey";
 import { LongAnswer } from "$app/components/TiptapExtensions/LongAnswer";
@@ -153,26 +154,37 @@ const TiptapButton = TiptapNode.create<{ saleInfo: SaleInfo | null }>({
   },
 });
 
+export const connectedFileRowClassName = (isLastInGroup: boolean) =>
+  classNames({
+    "border-none!": isLastInGroup,
+    "rounded-b-none! border-0! border-b! border-border": !isLastInGroup,
+  });
+
 const FileEmbedNodeView = ({ node, getPos, editor }: NodeViewProps) => {
   const contentFiles = useContentFiles();
   const file = contentFiles.find((file) => file.id === node.attrs.id);
   const [playingAudioForId, setPlayingAudioForId] = React.useState<null | string>(null);
   const pos = getPos();
-  const isInGroup =
+  const groupNode =
     // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Tiptap types are wrong
-    pos !== undefined &&
-    !!findParentNodeClosestToPos(
-      editor.state.tr.doc.resolve(pos),
-      (parent) => parent.type.name === FileEmbedGroup.name,
-    );
+    pos !== undefined
+      ? findParentNodeClosestToPos(
+          editor.state.tr.doc.resolve(pos),
+          (parent) => parent.type.name === FileEmbedGroup.name,
+        )
+      : undefined;
+  const { hasStreamable } = useFilesInGroup(groupNode?.node);
+  const isConnectedRow = !!groupNode && !hasStreamable;
+  const isLastInGroup = groupNode?.node.content.child(groupNode.node.childCount - 1) === node;
   const fileRow = file ? (
     <FileRow
       file={file}
       playingAudioForId={playingAudioForId}
       setPlayingAudioForId={setPlayingAudioForId}
       isEmbed
-      isTreeItem={isInGroup}
+      isTreeItem={!!groupNode}
       collapsed={!!node.attrs.collapsed}
+      className={isConnectedRow ? connectedFileRowClassName(isLastInGroup) : undefined}
     />
   ) : null;
   return file ? (
@@ -223,15 +235,11 @@ const useFilesAndFoldersDownloadInfo = () =>
     "Download info is not set. Make sure FilesAndFoldersDownloadInfoProvider is used.",
   );
 
-const ARCHIVE_FETCH_INTERVAL_DURATION_IN_MS = 5000;
-// The actual archive size limit is 500 MB (524288000B)
-const ARCHIVE_SIZE_LIMIT_IN_BYTES = 500000000;
-const FileEmbedGroupNodeView = ({ node }: NodeViewProps) => {
-  const [expanded, setExpanded] = React.useState(false);
-  const ref = React.useRef<HTMLDivElement>(null);
+const useFilesInGroup = (node: ProseMirrorNode | undefined) => {
   const downloadInfo = useFilesAndFoldersDownloadInfo();
-
   const [downloadableFilesInFolder, hasStreamable] = React.useMemo(() => {
+    if (!node) return [[], false];
+
     const files: FileDownloadInfo[] = [];
     const fileIds: string[] = [];
     node.content.descendants((c) => {
@@ -242,7 +250,19 @@ const FileEmbedGroupNodeView = ({ node }: NodeViewProps) => {
       if (file) files.push(file);
     });
     return [files, downloadInfo.hasStreamable(fileIds)];
-  }, [node.content.childCount, downloadInfo]);
+  }, [node?.content.childCount, downloadInfo]);
+
+  return { downloadableFilesInFolder, hasStreamable };
+};
+
+const ARCHIVE_FETCH_INTERVAL_DURATION_IN_MS = 5000;
+// The actual archive size limit is 500 MB (524288000B)
+const ARCHIVE_SIZE_LIMIT_IN_BYTES = 500000000;
+const FileEmbedGroupNodeView = ({ node }: NodeViewProps) => {
+  const [expanded, setExpanded] = React.useState(false);
+  const ref = React.useRef<HTMLDivElement>(null);
+  const downloadInfo = useFilesAndFoldersDownloadInfo();
+  const { downloadableFilesInFolder, hasStreamable } = useFilesInGroup(node);
 
   const canGenerateArchive =
     downloadableFilesInFolder.reduce((total, file) => total + file.size, 0) < ARCHIVE_SIZE_LIMIT_IN_BYTES;
@@ -280,7 +300,7 @@ const FileEmbedGroupNodeView = ({ node }: NodeViewProps) => {
             <NodeViewContent id={uid} role="group" />
           ) : (
             <div role="group">
-              <NodeViewContent id={uid} className={fileGroupRowsClassName} />
+              <NodeViewContent id={uid} className="rows" />
             </div>
           )}
         </div>

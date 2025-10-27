@@ -16,6 +16,7 @@ import { summarizeUploadProgress } from "$app/utils/summarizeUploadProgress";
 
 import { AudioPlayer } from "$app/components/AudioPlayer";
 import { Button, NavigationButton } from "$app/components/Button";
+import { connectedFileRowClassName } from "$app/components/Download/RichContent";
 import { useEvaporateUploader } from "$app/components/EvaporateUploader";
 import { FileRowContent } from "$app/components/FileRowContent";
 import { Icon } from "$app/components/Icons";
@@ -29,7 +30,7 @@ import { showAlert } from "$app/components/server-components/Alert";
 import { SubtitleList } from "$app/components/SubtitleList";
 import { SubtitleFile } from "$app/components/SubtitleList/Row";
 import { SubtitleUploadBox } from "$app/components/SubtitleUploadBox";
-import { FileEmbedGroup, titleWithFallback } from "$app/components/TiptapExtensions/FileEmbedGroup";
+import { FileEmbedGroup, getFilesInGroup, titleWithFallback } from "$app/components/TiptapExtensions/FileEmbedGroup";
 import { NodeActionsMenu } from "$app/components/TiptapExtensions/NodeActionsMenu";
 import Placeholder from "$app/components/ui/Placeholder";
 import { WithTooltip } from "$app/components/WithTooltip";
@@ -183,6 +184,12 @@ const FileEmbedNodeView = ({ node, editor, getPos, updateAttributes }: NodeViewP
   };
 
   const isInGroup = parentNode?.type.name === FileEmbedGroup.name;
+  const { hasStreamable } = React.useMemo(
+    () => (parentNode ? getFilesInGroup(parentNode, product.files) : { files: [], hasStreamable: false }),
+    [parentNode, product.files],
+  );
+  const isConnectedRow = isInGroup && !hasStreamable;
+  const isLastInGroup = parentNode?.content.child(parentNode.childCount - 1) === node;
   const shouldIgnoreFileGroupingAt = (clientY: number) => {
     if (!ref.current) return false;
 
@@ -344,7 +351,10 @@ const FileEmbedNodeView = ({ node, editor, getPos, updateAttributes }: NodeViewP
       className={cx({ "relative rounded-sm border border-dashed border-accent": isDropZone })}
       contentEditable={false}
     >
-      <div className={cx("embed", { selected })} role={isInGroup ? "treeitem" : undefined}>
+      <div
+        className={cx("embed", { selected, [connectedFileRowClassName(isLastInGroup)]: isConnectedRow })}
+        role={isInGroup ? "treeitem" : undefined}
+      >
         {file.is_streamable && !node.attrs.collapsed ? (
           loadingVideo ? (
             <figure className="preview">
@@ -653,7 +663,7 @@ const FileEmbedNodeView = ({ node, editor, getPos, updateAttributes }: NodeViewP
         ) : null}
       </div>
       {isDropZone ? (
-        <div className="absolute inset-0 bg-black/80">
+        <div className="absolute inset-0 bg-backdrop">
           <div className="button primary absolute inset-0">Create folder with 2 items</div>
         </div>
       ) : null}

@@ -1,4 +1,5 @@
 import { Node as TiptapNode } from "@tiptap/core";
+import { Node as ProseMirrorNode } from "@tiptap/pm/model";
 import { NodeSelection } from "@tiptap/pm/state";
 import { NodeViewContent, NodeViewProps, NodeViewWrapper, ReactNodeViewRenderer } from "@tiptap/react";
 import cx from "classnames";
@@ -17,12 +18,6 @@ import { Popover } from "$app/components/Popover";
 import { showAlert } from "$app/components/server-components/Alert";
 import { NodeActionsMenu } from "$app/components/TiptapExtensions/NodeActionsMenu";
 import { useRunOnce } from "$app/components/useRunOnce";
-
-// We sometimes want to display files as a list of connected rows rather than separate cards.
-// Styling these is an issue because we can't easily pass config to the file embed view from the group
-// (context doesn't work: https://github.com/ueberdosis/tiptap/issues/6547) so child selectors works around it.
-export const fileGroupRowsClassName =
-  "rows [&_[role=treeitem]]:border-none! [&>_*>_:not(:last-child)]:border-b! [&>_*>_:not(:last-child)]:border-border";
 
 type FileEntry = {
   id: string;
@@ -43,6 +38,15 @@ type FileEmbedGroupStorage = { lastCreatedUid: string | null };
 
 export const titleWithFallback = (title: unknown) => (title ? String(title).trim() : "") || "Untitled";
 
+export const getFilesInGroup = (node: ProseMirrorNode, files: FileEntry[]) => {
+  const filesInGroup: FileEntry[] = [];
+  node.content.forEach((c) => {
+    const file = files.find((file) => file.id === c.attrs.id);
+    if (file) filesInGroup.push(file);
+  });
+  return { files: filesInGroup, hasStreamable: filesInGroup.some((file) => file.is_streamable) };
+};
+
 // The actual archive size limit is 500 MB (524288000B)
 const ARCHIVE_SIZE_LIMIT_IN_BYTES = 500000000;
 const FileEmbedGroupNodeView = ({
@@ -59,11 +63,7 @@ const FileEmbedGroupNodeView = ({
   // eslint-disable-next-line @typescript-eslint/consistent-type-assertions -- https://tiptap.dev/guide/typescript#storage-types
   const storage = extension.storage as FileEmbedGroupStorage;
   const isNew = node.attrs.uid === storage.lastCreatedUid;
-  const files: FileEntry[] = [];
-  node.content.forEach((c) => {
-    const file = config.files.find((file) => file.id === c.attrs.id);
-    if (file) files.push(file);
-  });
+  const { files, hasStreamable } = getFilesInGroup(node, config.files);
   const downloadableFiles = files.filter((file) => !!file.url && !file.stream_only);
 
   const folderTitle = titleWithFallback(node.attrs.name);
@@ -222,11 +222,11 @@ const FileEmbedGroupNodeView = ({
               ) : null}
             </div>
           ) : null}
-          {files.some((file) => file.is_streamable) ? (
+          {hasStreamable ? (
             <NodeViewContent id={uid} role="group" />
           ) : (
             <div role="group">
-              <NodeViewContent id={uid} className={fileGroupRowsClassName} />
+              <NodeViewContent id={uid} className="rows" />
             </div>
           )}
         </div>
