@@ -157,6 +157,14 @@ const FileEmbedNodeView = ({ node, editor, getPos, updateAttributes }: NodeViewP
     [selected],
   );
 
+  const isInGroup = parentNode?.type.name === FileEmbedGroup.name;
+  const { hasStreamable } = React.useMemo(
+    () => (parentNode ? getFilesInGroup(parentNode, product.files) : { files: [], hasStreamable: false }),
+    [parentNode, product.files],
+  );
+  const isConnectedRow = isInGroup && !hasStreamable;
+  const isLastInGroup = parentNode?.content.child(parentNode.childCount - 1) === node;
+
   if (!fileExists) return;
   const updateFile = (data: Partial<FileEntry>) =>
     updateProduct((product) => {
@@ -183,13 +191,6 @@ const FileEmbedNodeView = ({ node, editor, getPos, updateAttributes }: NodeViewP
     setIsDropZone(value);
   };
 
-  const isInGroup = parentNode?.type.name === FileEmbedGroup.name;
-  const { hasStreamable } = React.useMemo(
-    () => (parentNode ? getFilesInGroup(parentNode, product.files) : { files: [], hasStreamable: false }),
-    [parentNode, product.files],
-  );
-  const isConnectedRow = isInGroup && !hasStreamable;
-  const isLastInGroup = parentNode?.content.child(parentNode.childCount - 1) === node;
   const shouldIgnoreFileGroupingAt = (clientY: number) => {
     if (!ref.current) return false;
 
