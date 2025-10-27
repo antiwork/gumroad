@@ -1580,8 +1580,8 @@ const EmailSection = ({
 
   return (
     <section className="stack">
-      <header style={{ display: "flex", alignItems: "center", gap: "var(--spacer-3)" }}>
-        <h3 style={{ margin: 0 }}>{label}</h3>
+      <header className="flex items-center gap-3">
+        <h3 className="m-0">{label}</h3>
         {receiptEmail && onResendReceipt ? (
           <Button
             color="primary"
