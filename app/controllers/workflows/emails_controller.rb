@@ -10,15 +10,6 @@ class Workflows::EmailsController < Sellers::BaseController
   FLASH_WORKFLOW_PUBLISHED = "Workflow published!"
   FLASH_WORKFLOW_UNPUBLISHED = "Unpublished!"
 
-  inertia_share do
-    RenderingExtension.custom_context(view_context).merge(
-      current_user: current_user_props(current_user, impersonated_user),
-      authenticity_token: form_authenticity_token,
-      flash: inertia_flash_props,
-      title: @title
-    )
-  end
-
   def index
     workflow_presenter = WorkflowPresenter.new(seller: current_seller, workflow: @workflow)
     render inertia: "Workflows/Emails/Index", props: {
@@ -48,7 +39,7 @@ class Workflows::EmailsController < Sellers::BaseController
 
       redirect_to workflow_emails_path(@workflow.external_id), status: :see_other, notice: flash_message
     else
-      redirect_to workflow_emails_path(@workflow.external_id), status: :see_other, inertia: { errors: errors }, alert: "Please fix the errors and try again."
+      redirect_to workflow_emails_path(@workflow.external_id), inertia: { errors: errors }, alert: "Please fix the errors and try again."
     end
   end
 

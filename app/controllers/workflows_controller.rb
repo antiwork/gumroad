@@ -3,6 +3,7 @@
 class WorkflowsController < Sellers::BaseController
   before_action :set_workflow, only: %i[edit update destroy]
   before_action :authorize_workflow, only: %i[edit update destroy]
+  before_action :fetch_product_and_enforce_ownership, only: %i[create update], if: -> { product_or_variant_workflow? }
 
   layout "inertia"
 
@@ -10,26 +11,6 @@ class WorkflowsController < Sellers::BaseController
   FLASH_WORKFLOW_PUBLISHED = "Workflow published!"
   FLASH_WORKFLOW_UNPUBLISHED = "Unpublished!"
   FLASH_WORKFLOW_DELETED = "Workflow deleted!"
-
-  inertia_share do
-    parent_shared_data = RenderingExtension.custom_context(view_context).merge(
-      current_user: current_user_props(current_user, impersonated_user),
-      authenticity_token: form_authenticity_token,
-      flash: inertia_flash_props,
-      title: @title
-    )
-
-    if @workflow
-      workflow_presenter = WorkflowPresenter.new(seller: current_seller, workflow: @workflow)
-      workflow_props = {
-        workflow: -> { workflow_presenter.workflow_props },
-        context: -> { workflow_presenter.workflow_form_context_props }
-      }
-      parent_shared_data.merge(workflow_props)
-    else
-      parent_shared_data
-    end
-  end
 
   def index
     authorize Workflow
@@ -50,20 +31,28 @@ class WorkflowsController < Sellers::BaseController
   def create
     authorize Workflow
 
-    success, errors = save_workflow
+    service = Workflow::ManageService.new(seller: current_seller, params: workflow_params, product: @product, workflow: nil)
+    success, errors = service.process
+
     if success
-      redirect_to workflow_emails_path(@workflow.external_id), notice: FLASH_CHANGES_SAVED, status: :see_other
+      redirect_to workflow_emails_path(service.workflow.external_id), notice: FLASH_CHANGES_SAVED, status: :see_other
     else
-      redirect_to new_workflow_path, inertia: { errors: errors }, status: :see_other
+      redirect_to new_workflow_path, inertia: { errors: errors }
     end
   end
 
   def edit
-    render inertia: "Workflows/Edit"
+    workflow_presenter = WorkflowPresenter.new(seller: current_seller, workflow: @workflow)
+    render inertia: "Workflows/Edit", props: {
+      workflow: -> { workflow_presenter.workflow_props },
+      context: -> { workflow_presenter.workflow_form_context_props }
+    }
   end
 
   def update
-    success, errors = save_workflow
+    service = Workflow::ManageService.new(seller: current_seller, params: workflow_params, product: @product, workflow: @workflow)
+    success, errors = service.process
+
     if success
       notice_message = case workflow_params[:save_action_name]
       when "save_and_publish"
@@ -74,16 +63,10 @@ class WorkflowsController < Sellers::BaseController
         FLASH_CHANGES_SAVED
       end
 
-      redirect_path = if ["save_and_publish", "save_and_unpublish"].include?(workflow_params[:save_action_name])
-                        edit_workflow_path(@workflow.external_id)
-                      else
-                        workflow_emails_path(@workflow.external_id)
-                      end
-
-      redirect_to redirect_path, notice: notice_message, status: :see_other
+      redirect_to edit_workflow_path(@workflow.external_id), notice: notice_message, status: :see_other
     else
-      error_message = errors.full_messages.first if errors.respond_to?(:full_messages)
-      redirect_to edit_workflow_path(@workflow.external_id), inertia: { errors: errors }, alert: error_message, status: :see_other
+      error_message = errors.full_messages.first
+      redirect_to edit_workflow_path(@workflow.external_id), inertia: { errors: errors }, alert: error_message
     end
   end
 
@@ -108,20 +91,16 @@ class WorkflowsController < Sellers::BaseController
       authorize @workflow
     end
 
+    def product_or_variant_workflow?
+      [Workflow::PRODUCT_TYPE, Workflow::VARIANT_TYPE].include?(workflow_params[:workflow_type])
+    end
+
     def fetch_product_and_enforce_ownership
       # Override parent method to handle workflow params structure
       permalink = workflow_params[:permalink]
       @product = current_seller.products.visible.find_by(unique_permalink: permalink) ||
                  current_seller.products.visible.find_by(custom_permalink: permalink) ||
                  e404
-    end
-
-    def save_workflow
-      fetch_product_and_enforce_ownership if [Workflow::PRODUCT_TYPE, Workflow::VARIANT_TYPE].include?(workflow_params[:workflow_type])
-
-      service = Workflow::ManageService.new(seller: current_seller, params: workflow_params, product: @product, workflow: @workflow)
-      @workflow ||= service.workflow
-      service.process
     end
 
     def workflow_params

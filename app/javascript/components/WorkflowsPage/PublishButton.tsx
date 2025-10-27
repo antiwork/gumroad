@@ -1,6 +1,6 @@
 import * as React from "react";
 
-import { SaveActionName } from "$app/types/workflow";
+import { type SaveActionName } from "$app/types/workflow";
 
 import { Button } from "$app/components/Button";
 import { Icon } from "$app/components/Icons";
