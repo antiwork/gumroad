@@ -337,7 +337,7 @@ describe AttributeBlockable do
           end
         end
       end
-     end
+    end
   end
 
   describe "blockable attribute introspection" do
