@@ -1,10 +1,10 @@
 import React from "react";
 
-import Loading from "$app/components/Admin/Loading";
 import type { Compliance } from "$app/components/Admin/Products/FlagForTosViolations";
 import AdminFlagForTosViolationsForm from "$app/components/Admin/Products/FlagForTosViolations/Form";
 import type { Product } from "$app/components/Admin/Products/Product";
 import type { User } from "$app/components/Admin/Users/User";
+import { LoadingSpinner } from "$app/components/LoadingSpinner";
 
 export type TosViolationFlags = {
   id: number;
@@ -48,7 +48,7 @@ const FlagForTosViolationsContent = ({
   }
 
   if (isLoading) {
-    return <Loading />;
+    return <LoadingSpinner />;
   }
 
   if (tosViolationFlags.length === 0) {

@@ -1,6 +1,6 @@
 import React from "react";
 
-import Loading from "$app/components/Admin/Loading";
+import { LoadingSpinner } from "$app/components/LoadingSpinner";
 import { WithTooltip } from "$app/components/WithTooltip";
 
 export type AdminProductStatsSalesProps = {
@@ -23,10 +23,10 @@ const AdminProductStatsSales = ({
     return (
       <>
         <li>
-          <Loading />
+          <LoadingSpinner />
         </li>
         <li>
-          <Loading />
+          <LoadingSpinner />
         </li>
       </>
     );

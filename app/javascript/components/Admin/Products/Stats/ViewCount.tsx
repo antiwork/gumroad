@@ -1,6 +1,6 @@
 import React from "react";
 
-import Loading from "$app/components/Admin/Loading";
+import { LoadingSpinner } from "$app/components/LoadingSpinner";
 
 type AdminProductStatsViewCountProps = {
   viewsCount: number;
@@ -8,7 +8,7 @@ type AdminProductStatsViewCountProps = {
 };
 
 const AdminProductStatsViewCount = ({ viewsCount, isLoading }: AdminProductStatsViewCountProps) => (
-  <li>{isLoading ? <Loading /> : `${viewsCount} views`}</li>
+  <li>{isLoading ? <LoadingSpinner /> : `${viewsCount} views`}</li>
 );
 
 export default AdminProductStatsViewCount;

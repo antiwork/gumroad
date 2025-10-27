@@ -1,6 +1,6 @@
 import React from "react";
 
-import Loading from "$app/components/Admin/Loading";
+import { LoadingSpinner } from "$app/components/LoadingSpinner";
 
 import AdminProductPurchase, { ProductPurchase } from "./Purchase";
 
@@ -39,7 +39,7 @@ const AdminProductPurchasesContent = ({
         ))}
       </div>
 
-      {isLoading ? <Loading /> : null}
+      {isLoading ? <LoadingSpinner /> : null}
 
       {hasMore ? (
         <button className="button small" onClick={handleClick} disabled={isLoading}>

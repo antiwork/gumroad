@@ -64,7 +64,7 @@ const AdminUsersProductsProduct = ({ product, is_affiliate_user = false }: Admin
 
   return (
     <article
-      className="override grid gap-4 rounded border border-border bg-background p-4"
+      className="grid gap-4 rounded border border-border bg-background p-4"
       data-product-id={product.unique_permalink}
     >
       <AdminProductHeader product={product} user={user} isCurrentUrl={isCurrentUrl} />
