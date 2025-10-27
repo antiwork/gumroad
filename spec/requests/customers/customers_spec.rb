@@ -119,6 +119,23 @@ describe "Sales page", type: :system, js: true do
       expect(page).to have_link("$3", href: "https://www.google.com")
     end
 
+    it "allows resending receipt from the table" do
+      login_as seller
+      visit customers_path
+
+      within(:table_row, { "Name" => "Customer 1" }) do
+        click_on "Resend receipt"
+        expect(page).to have_button("Resending...", disabled: true)
+      end
+
+      expect(page).to have_alert(text: "Receipt resent")
+      expect(SendPurchaseReceiptJob).to have_enqueued_sidekiq_job(purchase1.id).on("critical")
+
+      within(:table_row, { "Name" => "Customer 1" }) do
+        expect(page).to have_button("Resend receipt", disabled: false)
+      end
+    end
+
     context "when the seller has no sales" do
       let(:user) { create(:user) }
 
