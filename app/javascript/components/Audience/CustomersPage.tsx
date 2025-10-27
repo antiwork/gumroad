@@ -178,6 +178,7 @@ const CustomersPage = ({
 
   const [selectedCustomerId, setSelectedCustomerId] = React.useState<string | null>(null);
   const selectedCustomer = customers.find(({ id }) => id === selectedCustomerId);
+  const [resendingReceipts, setResendingReceipts] = React.useState<Set<string>>(new Set());
 
   const thProps = useSortingTableDriver<SortKey>(sort, (sort) => updateQuery({ sort }));
 
@@ -210,6 +211,23 @@ const CustomersPage = ({
   };
 
   const reloadCustomers = async () => loadCustomers(1);
+
+  const handleResendReceiptFromTable = async (customerId: string) => {
+    setResendingReceipts((prev) => new Set(prev).add(customerId));
+    try {
+      await resendReceipt(customerId);
+      showAlert("Receipt resent", "success");
+    } catch (e) {
+      assertResponseError(e);
+      showAlert(e.message, "error");
+    } finally {
+      setResendingReceipts((prev) => {
+        const next = new Set(prev);
+        next.delete(customerId);
+        return next;
+      });
+    }
+  };
 
   const searchInputRef = React.useRef<HTMLInputElement>(null);
 
@@ -449,6 +467,7 @@ const CustomersPage = ({
                   <th>Product</th>
                   <th {...thProps("created_at")}>Purchase Date</th>
                   <th {...thProps("price_cents")}>Price</th>
+                  <th>Actions</th>
                 </tr>
               </thead>
               <tbody>
@@ -543,6 +562,19 @@ const CustomersPage = ({
                         ) : (
                           price
                         )}
+                      </td>
+                      <td>
+                        <Button
+                          color="primary"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            void handleResendReceiptFromTable(customer.id);
+                          }}
+                          disabled={resendingReceipts.has(customer.id)}
+                          small
+                        >
+                          {resendingReceipts.has(customer.id) ? "Resending..." : "Resend receipt"}
+                        </Button>
                       </td>
                     </tr>
                   );
@@ -709,7 +741,7 @@ const CustomerDrawer = ({
   const onSend = async (id: string, type: "receipt" | "post") => {
     setLoadingId(id);
     try {
-      await (type === "receipt" ? resendReceipt(id) : resendPost(customer.id, id));
+      await (type === "receipt" ? resendReceipt(customer.id) : resendPost(customer.id, id));
       sentEmailIds.current.add(id);
       showAlert(type === "receipt" ? "Receipt resent" : "Email Sent", "success");
     } catch (e) {
