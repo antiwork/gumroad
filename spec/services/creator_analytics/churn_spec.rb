@@ -157,7 +157,7 @@ describe CreatorAnalytics::Churn do
         expect(result[:daily_data].length).to eq(30)
 
         result[:daily_data].each do |daily|
-          expect(daily).to include(:date, :month, :month_index, :customer_churn_rate, :churned_subscribers, :churned_mrr_cents)
+          expect(daily).to include(:date, :month, :month_index, :customer_churn_rate, :churned_subscribers, :churned_mrr_cents, :active_at_start, :new_subscribers)
         end
       end
 

@@ -77,6 +77,16 @@ RSpec.describe ChurnController, type: :controller, inertia: true do
             :churned_subscribers,
             :churned_mrr_cents
           )
+
+          expect(inertia.props[:churn_data][:daily_data]).to be_an(Array)
+          expect(inertia.props[:churn_data][:daily_data].first).to include(
+            :date,
+            :customer_churn_rate,
+            :churned_subscribers,
+            :churned_mrr_cents,
+            :active_at_start,
+            :new_subscribers
+          )
         end
       end
     end
