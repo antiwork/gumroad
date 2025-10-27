@@ -107,7 +107,9 @@ class CreatorAnalytics::Churn
           date: date,
           customer_churn_rate: metrics[:churn_rate],
           churned_subscribers: metrics[:churned_count],
-          churned_mrr_cents: metrics[:churned_mrr]
+          churned_mrr_cents: metrics[:churned_mrr],
+          active_at_start: metrics[:active_at_start],
+          new_subscribers: metrics[:new_subscribers]
         }
       end
     end
@@ -139,7 +141,10 @@ class CreatorAnalytics::Churn
       {
         churn_rate: churn_rate,
         churned_count: churned_count,
-        churned_mrr: churned_mrr
+        churned_mrr: churned_mrr,
+        total_base: total_base,
+        active_at_start: active_at_start,
+        new_subscribers: new_subscribers
       }
     end
 
@@ -230,7 +235,9 @@ class CreatorAnalytics::Churn
           month_index: ((date.year - start_date.year) * 12) + (date.month - start_date.month),
           customer_churn_rate: record[:customer_churn_rate],
           churned_subscribers: record[:churned_subscribers],
-          churned_mrr_cents: record[:churned_mrr_cents]
+          churned_mrr_cents: record[:churned_mrr_cents],
+          active_at_start: record[:active_at_start],
+          new_subscribers: record[:new_subscribers]
         }
       end
     end

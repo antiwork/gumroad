@@ -28,6 +28,8 @@ export type ChurnData = {
     customer_churn_rate: number;
     churned_subscribers: number;
     churned_mrr_cents: number;
+    active_at_start: number;
+    new_subscribers: number;
   }[];
 };
 

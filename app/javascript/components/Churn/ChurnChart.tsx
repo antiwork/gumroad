@@ -14,6 +14,8 @@ type ChurnDailyData = {
   customer_churn_rate: number;
   churned_subscribers: number;
   churned_mrr_cents: number;
+  active_at_start: number;
+  new_subscribers: number;
 };
 
 type DataPoint = {
@@ -23,7 +25,8 @@ type DataPoint = {
   cancellations: number;
   revenueLost: number;
   label: string;
-  daysInPeriod?: number;
+  activeAtStart?: number;
+  newSubscribers?: number;
 };
 
 export const ChurnChart = ({ data, aggregateBy }: { data: ChurnDailyData[]; aggregateBy: "daily" | "monthly" }) => {
@@ -32,7 +35,16 @@ export const ChurnChart = ({ data, aggregateBy }: { data: ChurnDailyData[]; aggr
 
     data.forEach(
       (
-        { date, month, month_index: monthIndex, customer_churn_rate, churned_subscribers, churned_mrr_cents },
+        {
+          date,
+          month,
+          month_index: monthIndex,
+          customer_churn_rate,
+          churned_subscribers,
+          churned_mrr_cents,
+          active_at_start,
+          new_subscribers,
+        },
         index,
       ) => {
         const parsedDate = parseISO(date);
@@ -42,11 +54,12 @@ export const ChurnChart = ({ data, aggregateBy }: { data: ChurnDailyData[]; aggr
           dataPoints[monthIndex] = {
             date,
             dateFormatted: month,
-            churnRate: (dataPoints[monthIndex]?.churnRate || 0) + customer_churn_rate,
+            churnRate: customer_churn_rate,
             cancellations: (dataPoints[monthIndex]?.cancellations || 0) + churned_subscribers,
             revenueLost: (dataPoints[monthIndex]?.revenueLost || 0) + churned_mrr_cents,
             label: dataPoints[monthIndex]?.label || label,
-            daysInPeriod: (dataPoints[monthIndex]?.daysInPeriod || 0) + 1,
+            activeAtStart: dataPoints[monthIndex]?.activeAtStart ?? active_at_start, // Using the first day's value
+            newSubscribers: (dataPoints[monthIndex]?.newSubscribers || 0) + new_subscribers,
           };
         } else {
           dataPoints.push({
@@ -63,7 +76,13 @@ export const ChurnChart = ({ data, aggregateBy }: { data: ChurnDailyData[]; aggr
 
     return dataPoints.map((dataPoint) => ({
       ...dataPoint,
-      churnRate: dataPoint.daysInPeriod ? dataPoint.churnRate / dataPoint.daysInPeriod : dataPoint.churnRate,
+      churnRate:
+        dataPoint.activeAtStart !== undefined && dataPoint.newSubscribers !== undefined
+          ? (() => {
+              const totalBase = dataPoint.activeAtStart + dataPoint.newSubscribers;
+              return totalBase === 0 ? 0 : parseFloat(((dataPoint.cancellations / totalBase) * 100).toFixed(2));
+            })()
+          : dataPoint.churnRate,
     }));
   }, [data, aggregateBy]);
 
