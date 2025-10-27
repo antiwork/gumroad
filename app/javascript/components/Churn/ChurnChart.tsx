@@ -23,49 +23,48 @@ type DataPoint = {
   cancellations: number;
   revenueLost: number;
   label: string;
-  dailyRates?: number[];
+  daysInPeriod?: number;
 };
 
 export const ChurnChart = ({ data, aggregateBy }: { data: ChurnDailyData[]; aggregateBy: "daily" | "monthly" }) => {
   const dataPoints = React.useMemo(() => {
-    const points: DataPoint[] = [];
+    const dataPoints: DataPoint[] = [];
 
-    data.forEach((item, index) => {
-      const date = parseISO(item.date);
-      const isFirst = index === 0;
-      const isLast = index === data.length - 1;
-      const label = isFirst || isLast ? format(date, "MMM d") : "";
+    data.forEach(
+      (
+        { date, month, month_index: monthIndex, customer_churn_rate, churned_subscribers, churned_mrr_cents },
+        index,
+      ) => {
+        const parsedDate = parseISO(date);
+        const label = index === 0 || index === data.length - 1 ? format(parsedDate, "MMM d") : "";
 
-      if (aggregateBy === "monthly") {
-        const monthIndex = item.month_index;
-        if (!points[monthIndex]) {
-          points[monthIndex] = {
-            date: item.date,
-            dateFormatted: item.month,
-            churnRate: item.customer_churn_rate,
-            cancellations: item.churned_subscribers,
-            revenueLost: item.churned_mrr_cents,
-            label,
+        if (aggregateBy === "monthly") {
+          dataPoints[monthIndex] = {
+            date,
+            dateFormatted: month,
+            churnRate: (dataPoints[monthIndex]?.churnRate || 0) + customer_churn_rate,
+            cancellations: (dataPoints[monthIndex]?.cancellations || 0) + churned_subscribers,
+            revenueLost: (dataPoints[monthIndex]?.revenueLost || 0) + churned_mrr_cents,
+            label: dataPoints[monthIndex]?.label || label,
+            daysInPeriod: (dataPoints[monthIndex]?.daysInPeriod || 0) + 1,
           };
         } else {
-          points[monthIndex].churnRate = Math.max(points[monthIndex].churnRate, item.customer_churn_rate);
-          points[monthIndex].cancellations += item.churned_subscribers;
-          points[monthIndex].revenueLost += item.churned_mrr_cents;
+          dataPoints.push({
+            date,
+            dateFormatted: format(parsedDate, "EEEE, MMMM do"),
+            churnRate: customer_churn_rate,
+            cancellations: churned_subscribers,
+            revenueLost: churned_mrr_cents,
+            label,
+          });
         }
-      } else {
-        // Daily view
-        points.push({
-          date: item.date,
-          dateFormatted: format(date, "EEEE, MMMM do"),
-          churnRate: item.customer_churn_rate,
-          cancellations: item.churned_subscribers,
-          revenueLost: item.churned_mrr_cents,
-          label,
-        });
-      }
-    });
+      },
+    );
 
-    return points;
+    return dataPoints.map((dataPoint) => ({
+      ...dataPoint,
+      churnRate: dataPoint.daysInPeriod ? dataPoint.churnRate / dataPoint.daysInPeriod : dataPoint.churnRate,
+    }));
   }, [data, aggregateBy]);
 
   const { tooltip, containerRef, dotRef, events } = useChartTooltip();
