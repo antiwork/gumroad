@@ -75,8 +75,12 @@ interface InertiaBeforeEvent extends Event {
 
 router.on("before", (event: InertiaBeforeEvent) => {
   const url = event.detail.visit.url.toString();
+  const urlToCompare = url.split("?")[0];
   const hasMigratedToInertia =
-    url && urlsMigratedtoInertia.some((pattern) => (pattern instanceof RegExp ? pattern.test(url) : pattern === url));
+    urlToCompare &&
+    urlsMigratedtoInertia.some((pattern) =>
+      pattern instanceof RegExp ? pattern.test(urlToCompare) : pattern === urlToCompare,
+    );
 
   if (!hasMigratedToInertia) {
     event.preventDefault();

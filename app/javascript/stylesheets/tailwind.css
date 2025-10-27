@@ -45,6 +45,7 @@
   --spacing-product-page: 75.25rem;
   --grid-cols-sidebar: 1fr 3fr;
 
+  --loading-spinner: url("~images/loading-rainbow.svg");
   --animate-fade-in-down-out-up: fade-in-down-out-up 5s both;
 
   @keyframes fade-in-down-out-up {

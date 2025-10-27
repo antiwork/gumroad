@@ -173,7 +173,7 @@ const TableRowLoadingSpinner = () => (
   <tr>
     <td colSpan={4}>
       <div className="flex items-center justify-center py-4">
-        <LoadingSpinner width="2em" />
+        <LoadingSpinner className="size-8" />
       </div>
     </td>
   </tr>
