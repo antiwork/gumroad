@@ -664,7 +664,7 @@ const FileEmbedNodeView = ({ node, editor, getPos, updateAttributes }: NodeViewP
       </div>
       {isDropZone ? (
         <div className="absolute inset-0 bg-backdrop">
-          <div className="button primary absolute inset-0">Create folder with 2 items</div>
+          <div className="button primary absolute top-1/2 left-1/2 -translate-1/2">Create folder with 2 items</div>
         </div>
       ) : null}
     </NodeViewWrapper>
