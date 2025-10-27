@@ -178,7 +178,6 @@ const CustomersPage = ({
 
   const [selectedCustomerId, setSelectedCustomerId] = React.useState<string | null>(null);
   const selectedCustomer = customers.find(({ id }) => id === selectedCustomerId);
-  const [resendingReceipts, setResendingReceipts] = React.useState<Set<string>>(new Set());
 
   const thProps = useSortingTableDriver<SortKey>(sort, (sort) => updateQuery({ sort }));
 
@@ -211,23 +210,6 @@ const CustomersPage = ({
   };
 
   const reloadCustomers = async () => loadCustomers(1);
-
-  const handleResendReceiptFromTable = async (customerId: string) => {
-    setResendingReceipts((prev) => new Set(prev).add(customerId));
-    try {
-      await resendReceipt(customerId);
-      showAlert("Receipt resent", "success");
-    } catch (e) {
-      assertResponseError(e);
-      showAlert(e.message, "error");
-    } finally {
-      setResendingReceipts((prev) => {
-        const next = new Set(prev);
-        next.delete(customerId);
-        return next;
-      });
-    }
-  };
 
   const searchInputRef = React.useRef<HTMLInputElement>(null);
 
@@ -467,7 +449,6 @@ const CustomersPage = ({
                   <th>Product</th>
                   <th {...thProps("created_at")}>Purchase Date</th>
                   <th {...thProps("price_cents")}>Price</th>
-                  <th>Actions</th>
                 </tr>
               </thead>
               <tbody>
@@ -562,19 +543,6 @@ const CustomersPage = ({
                         ) : (
                           price
                         )}
-                      </td>
-                      <td>
-                        <Button
-                          color="primary"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            void handleResendReceiptFromTable(customer.id);
-                          }}
-                          disabled={resendingReceipts.has(customer.id)}
-                          small
-                        >
-                          {resendingReceipts.has(customer.id) ? "Resending..." : "Resend receipt"}
-                        </Button>
                       </td>
                     </tr>
                   );
@@ -901,6 +869,10 @@ const CustomerDrawer = ({
             },
           )
         }
+        receiptEmail={emails?.find((e) => e.type === "receipt")}
+        onResendReceipt={(id) => void onSend(id, "receipt")}
+        loadingId={loadingId}
+        sentEmailIds={sentEmailIds}
       />
       {customer.giftee_email ? (
         <EmailSection
@@ -1297,19 +1269,7 @@ const CustomerDrawer = ({
                     </h5>
                     <small>{`${email.state} ${formatDateWithoutTime(new Date(email.state_at))}`}</small>
                   </div>
-                  {email.type === "receipt" ? (
-                    <Button
-                      color="primary"
-                      onClick={() => void onSend(email.id, "receipt")}
-                      disabled={!!loadingId || sentEmailIds.current.has(email.id)}
-                    >
-                      {sentEmailIds.current.has(email.id)
-                        ? "Receipt resent"
-                        : loadingId === email.id
-                          ? "Resending receipt..."
-                          : "Resend receipt"}
-                    </Button>
-                  ) : (
+                  {email.type === "post" && (
                     <Button
                       color="primary"
                       onClick={() => void onSend(email.id, "post")}
@@ -1570,12 +1530,20 @@ const EmailSection = ({
   onSave,
   canContact,
   onChangeCanContact,
+  receiptEmail,
+  onResendReceipt,
+  loadingId,
+  sentEmailIds,
 }: {
   label: string;
   email: string;
   onSave: ((email: string) => Promise<void>) | null;
   canContact?: boolean;
   onChangeCanContact?: (canContact: boolean) => Promise<void>;
+  receiptEmail?: CustomerEmail | undefined;
+  onResendReceipt?: ((id: string) => void) | undefined;
+  loadingId?: string | null | undefined;
+  sentEmailIds?: React.MutableRefObject<Set<string>> | undefined;
 }) => {
   const [email, setEmail] = React.useState(currentEmail);
   const [isEditing, setIsEditing] = React.useState(false);
@@ -1600,8 +1568,21 @@ const EmailSection = ({
 
   return (
     <section className="stack">
-      <header>
-        <h3>{label}</h3>
+      <header style={{ display: "flex", alignItems: "center", gap: "var(--spacer-3)" }}>
+        <h3 style={{ margin: 0 }}>{label}</h3>
+        {receiptEmail && onResendReceipt ? (
+          <Button
+            color="primary"
+            onClick={() => onResendReceipt(receiptEmail.id)}
+            disabled={!!loadingId || sentEmailIds?.current.has(receiptEmail.id)}
+          >
+            {sentEmailIds?.current.has(receiptEmail.id)
+              ? "Receipt resent"
+              : loadingId === receiptEmail.id
+                ? "Resending receipt..."
+                : "Resend receipt"}
+          </Button>
+        ) : null}
       </header>
       {isEditing ? (
         <fieldset>
