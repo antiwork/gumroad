@@ -4,6 +4,7 @@ import { createCast } from "ts-safe-cast";
 import { request, assertResponseError, ResponseError } from "$app/utils/request";
 import { register } from "$app/utils/serverComponentUtil";
 
+import { LoadingSpinner } from "$app/components/LoadingSpinner";
 import { showAlert } from "$app/components/server-components/Alert";
 
 const AdminProductStats = ({ product_id }: { product_id: number }) => {
@@ -51,12 +52,12 @@ const AdminProductStats = ({ product_id }: { product_id: number }) => {
           <li dangerouslySetInnerHTML={{ __html: viewsCountHtml }} />
         </ul>
       ) : (
-        <div role="progressbar" style={{ width: "0.75em" }} />
+        <LoadingSpinner className="size-3" />
       )}
       {salesStatsHtml ? (
         <ul className="inline" dangerouslySetInnerHTML={{ __html: salesStatsHtml }} />
       ) : (
-        <div role="progressbar" style={{ width: "0.75em" }} />
+        <LoadingSpinner className="size-3" />
       )}
     </>
   );
