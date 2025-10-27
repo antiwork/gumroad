@@ -404,16 +404,14 @@ export const Product = ({
                         </div>
                       ) : null}
                       <CartItemFooter>
-                        <ul className="list-none pl-0">
+                        <li>
+                          <strong>Qty:</strong> {bundleProduct.quantity}
+                        </li>
+                        {bundleProduct.variant ? (
                           <li>
-                            <strong>Qty:</strong> {bundleProduct.quantity}
+                            <strong>{variantLabel(bundleProduct.native_type)}:</strong> {bundleProduct.variant}
                           </li>
-                          {bundleProduct.variant ? (
-                            <li>
-                              <strong>{variantLabel(bundleProduct.native_type)}:</strong> {bundleProduct.variant}
-                            </li>
-                          ) : null}
-                        </ul>
+                        ) : null}
                       </CartItemFooter>
                     </CartItemMain>
                     <CartItemEnd>

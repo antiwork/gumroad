@@ -241,7 +241,7 @@ export const Checkout = ({
                 <div className="grid gap-4 p-4">
                   {state.surcharges.type === "loaded" ? (
                     <>
-                      <CartPriceItem title="Subtotal" price={subtotal} />
+                      <CartPriceItem title="Subtotal" price={subtotal} displayZeroPrice />
                       <CartPriceItem title="Tip" price={tip} />
                       <CartPriceItem
                         title={`${nameOfSalesTaxForCountry(state.country)} (included)`}
@@ -314,7 +314,7 @@ export const Checkout = ({
                 {total != null ? (
                   <>
                     <footer className="grid gap-4 p-4">
-                      <CartPriceItem title="Total" price={total} className="*:text-lg" />
+                      <CartPriceItem title="Total" price={total} className="*:text-lg" displayZeroPrice />
                     </footer>
                     {commissionCompletionTotal > 0 || futureInstallmentsWithoutTipsTotal > 0 ? (
                       <div className="grid gap-4 p-4">
@@ -363,16 +363,18 @@ export const Checkout = ({
   );
 };
 
-export function CartPriceItem({
+const CartPriceItem = ({
   title,
   price,
   className,
+  displayZeroPrice = false,
 }: {
   title: React.ReactNode;
-  price?: number | null;
+  price: number | null;
   className?: string;
-}) {
-  if (!price || price === 0) {
+  displayZeroPrice?: boolean;
+}) => {
+  if (price == null || (price === 0 && !displayZeroPrice)) {
     return null;
   }
   return (
@@ -381,7 +383,7 @@ export function CartPriceItem({
       <div>{formatUSDCentsWithExpandedCurrencySymbol(Math.floor(price))}</div>
     </div>
   );
-}
+};
 
 const CartItemComponent = ({
   item,
@@ -453,16 +455,14 @@ const CartItemComponent = ({
                   <CartItemMain>
                     <CartItemTitle>{bundleProduct.name}</CartItemTitle>
                     <CartItemFooter>
-                      <ul className="list-none pl-0">
+                      <li>
+                        <strong>Qty:</strong> {bundleProduct.quantity}
+                      </li>
+                      {bundleProduct.variant ? (
                         <li>
-                          <strong>Qty:</strong> {bundleProduct.quantity}
+                          <strong>{variantLabel(bundleProduct.native_type)}:</strong> {bundleProduct.variant.name}
                         </li>
-                        {bundleProduct.variant ? (
-                          <li>
-                            <strong>{variantLabel(bundleProduct.native_type)}:</strong> {bundleProduct.variant.name}
-                          </li>
-                        ) : null}
-                      </ul>
+                      ) : null}
                     </CartItemFooter>
                   </CartItemMain>
                 </CartListItem>
@@ -487,26 +487,24 @@ const CartItemComponent = ({
           <a href={item.product.creator.profile_url}>{item.product.creator.name}</a>
         </CartItemTitle>
         <CartItemFooter>
-          <ul className="list-none pl-0">
+          <li>
+            <strong>{item.product.is_multiseat_license ? "Seats:" : "Qty:"}</strong> {item.quantity}
+          </li>
+          {option?.name ? (
             <li>
-              <strong>{item.product.is_multiseat_license ? "Seats:" : "Qty:"}</strong> {item.quantity}
+              <strong>{variantLabel(item.product.native_type)}:</strong> {option.name}
             </li>
-            {option?.name ? (
-              <li>
-                <strong>{variantLabel(item.product.native_type)}:</strong> {option.name}
-              </li>
-            ) : null}
-            {item.recurrence ? (
-              <li>
-                <strong>Membership:</strong> {recurrenceNames[item.recurrence]}
-              </li>
-            ) : null}
-            {item.call_start_time ? (
-              <li>
-                <strong>Time:</strong> {formatCallDate(new Date(item.call_start_time), { date: { hideYear: true } })}
-              </li>
-            ) : null}
-          </ul>
+          ) : null}
+          {item.recurrence ? (
+            <li>
+              <strong>Membership:</strong> {recurrenceNames[item.recurrence]}
+            </li>
+          ) : null}
+          {item.call_start_time ? (
+            <li>
+              <strong>Time:</strong> {formatCallDate(new Date(item.call_start_time), { date: { hideYear: true } })}
+            </li>
+          ) : null}
         </CartItemFooter>
       </CartItemMain>
       <CartItemEnd>
@@ -537,7 +535,7 @@ const CartItemComponent = ({
           )
         ) : null}
         <footer className="mt-auto">
-          <ul className="list-none">
+          <ul className="grid list-none gap-x-4 gap-y-1 md:flex md:flex-wrap">
             {(item.product.rental && !item.product.rental.rent_only) ||
             item.product.is_quantity_enabled ||
             item.product.recurrences ||

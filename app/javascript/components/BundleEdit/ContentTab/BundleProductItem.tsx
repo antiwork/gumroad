@@ -47,20 +47,18 @@ export const BundleProductItem = ({
       <CartItemMain>
         <CartItemTitle>{bundleProduct.name}</CartItemTitle>
         <CartItemFooter>
-          <ul className="mt-auto list-none pl-0">
+          <li>
+            <strong>Qty:</strong> {bundleProduct.quantity}
+          </li>
+          {selectedVariant ? (
             <li>
-              <strong>Qty:</strong> {bundleProduct.quantity}
+              <strong>{variantLabel(bundleProduct.native_type)}:</strong> {selectedVariant.name}
             </li>
-            {selectedVariant ? (
-              <li>
-                <strong>{variantLabel(bundleProduct.native_type)}:</strong> {selectedVariant.name}
-              </li>
-            ) : null}
-          </ul>
+          ) : null}
         </CartItemFooter>
       </CartItemMain>
       <CartItemEnd className="mt-auto">
-        <ul className="list-none pl-0">
+        <ul className="grid list-none gap-x-4 gap-y-1 pl-0 md:flex md:flex-wrap">
           {bundleProduct.is_quantity_enabled || bundleProduct.variants ? (
             <li>
               <Popover

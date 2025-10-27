@@ -13,7 +13,7 @@ export const CartList = ({ children, className }: BaseProps) => (
   <div
     role="list"
     className={classNames(
-      "overflow-hidden rounded-sm border border-border bg-background *:not-first:border-t *:not-first:border-border",
+      "rounded-sm border border-border bg-background *:not-first:border-t *:not-first:border-border",
       className,
     )}
   >
@@ -51,7 +51,9 @@ export const CartItemTitle = ({ className, children, asChild = false }: BaseProp
 };
 
 export const CartItemFooter = ({ className, children }: BaseProps) => (
-  <footer className={classNames("mt-auto items-end", className)}>{children}</footer>
+  <footer className={classNames("mt-auto items-end", className)}>
+    <ul className="grid list-none gap-x-4 gap-y-1 pl-0 md:flex md:flex-wrap">{children}</ul>
+  </footer>
 );
 
 export const CartItemEnd = ({ className, children }: BaseProps) => (
