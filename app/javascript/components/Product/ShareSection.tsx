@@ -149,7 +149,7 @@ export const ShareSection = ({
             </WithTooltip>
           }
         >
-          <div className="grid grid-cols-1">
+          <div className="grid grid-cols-1 gap-4">
             <TwitterShareButton url={product.long_url} text={`Buy ${product.name} on @Gumroad`} />
             <FacebookShareButton url={product.long_url} text={product.name} />
             <CopyToClipboard text={product.long_url} copyTooltip="Copy product URL">
