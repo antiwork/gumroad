@@ -247,7 +247,7 @@ module User::Risk
         .merge(Balance.unpaid)
         .group(:user_id)
         .having("SUM(amount_cents) > 0")
-        .order(updated_at: :desc)
+        .order(updated_at: :desc, id: :desc)
     end
   end
 end
