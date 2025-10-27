@@ -741,7 +741,7 @@ const CustomerDrawer = ({
   const onSend = async (id: string, type: "receipt" | "post") => {
     setLoadingId(id);
     try {
-      await (type === "receipt" ? resendReceipt(customer.id) : resendPost(customer.id, id));
+      await (type === "receipt" ? resendReceipt(id) : resendPost(customer.id, id));
       sentEmailIds.current.add(id);
       showAlert(type === "receipt" ? "Receipt resent" : "Email Sent", "success");
     } catch (e) {
