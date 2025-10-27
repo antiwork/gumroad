@@ -106,8 +106,8 @@ class CreatorAnalytics::Churn
         {
           date: date,
           customer_churn_rate: metrics[:churn_rate],
-          churned_subscribers: metrics[:churned_count],
-          churned_mrr_cents: metrics[:churned_mrr],
+          churned_subscribers: metrics[:churned_subscribers],
+          churned_mrr_cents: metrics[:churned_mrr_cents],
           active_at_start: metrics[:active_at_start],
           new_subscribers: metrics[:new_subscribers]
         }
@@ -122,26 +122,26 @@ class CreatorAnalytics::Churn
     def calculate_period_metrics(period_start, period_end, subscriptions)
       active_at_start = 0
       new_subscribers = 0
-      churned_count = 0
-      churned_mrr = 0
+      churned_subscribers = 0
+      churned_mrr_cents = 0
 
       subscriptions.each do |sub|
         active_at_start += 1 if active_at_period_start?(sub, period_start)
         new_subscribers += 1 if new_during_period?(sub, period_start, period_end)
 
         if churned_during_period?(sub, period_start, period_end)
-          churned_count += 1
-          churned_mrr += calculate_mrr_cents(sub)
+          churned_subscribers += 1
+          churned_mrr_cents += calculate_mrr_cents(sub)
         end
       end
 
       total_base = active_at_start + new_subscribers
-      churn_rate = total_base.zero? ? 0.0 : (churned_count.to_f / total_base * 100).round(2)
+      churn_rate = total_base.zero? ? 0.0 : (churned_subscribers.to_f / total_base * 100).round(2)
 
       {
         churn_rate: churn_rate,
-        churned_count: churned_count,
-        churned_mrr: churned_mrr,
+        churned_subscribers: churned_subscribers,
+        churned_mrr_cents: churned_mrr_cents,
         total_base: total_base,
         active_at_start: active_at_start,
         new_subscribers: new_subscribers
@@ -221,8 +221,8 @@ class CreatorAnalytics::Churn
       {
         customer_churn_rate: period_metrics[:churn_rate],
         last_period_churn_rate: last_period_rate,
-        churned_subscribers: period_metrics[:churned_count],
-        churned_mrr_cents: period_metrics[:churned_mrr]
+        churned_subscribers: period_metrics[:churned_subscribers],
+        churned_mrr_cents: period_metrics[:churned_mrr_cents]
       }
     end
 
