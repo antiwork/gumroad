@@ -335,10 +335,7 @@ const WithContent = ({
       </PurchaseInfoProvider>
 
       {showPageList ? (
-        <div
-          role="navigation"
-          className="mt-auto grid grid-cols-[auto_1fr_1fr] gap-4 border-t border-border pt-4 lg:flex lg:justify-end"
-        >
+        <div role="navigation" className="mt-auto flex gap-4 border-t border-border pt-4 lg:justify-end lg:pb-4">
           {isDesktop ? null : (
             <Popover
               aria-label="Table of Contents"
@@ -374,13 +371,21 @@ const WithContent = ({
             </Popover>
           )}
           <WithTooltip position="top" tip={hasPreviousPage ? null : "No more pages"}>
-            <Button disabled={!hasPreviousPage} onClick={() => setActivePageIndex(activePageIndex - 1)}>
+            <Button
+              disabled={!hasPreviousPage}
+              onClick={() => setActivePageIndex(activePageIndex - 1)}
+              className="flex-1 lg:flex-none"
+            >
               <Icon name="arrow-left" />
               Previous
             </Button>
           </WithTooltip>
           <WithTooltip position="top" tip={hasNextPage ? null : "No more pages"}>
-            <Button disabled={!hasNextPage} onClick={() => setActivePageIndex(activePageIndex + 1)}>
+            <Button
+              disabled={!hasNextPage}
+              onClick={() => setActivePageIndex(activePageIndex + 1)}
+              className="flex-1 lg:flex-none"
+            >
               Next
               <Icon name="arrow-right" />
             </Button>
