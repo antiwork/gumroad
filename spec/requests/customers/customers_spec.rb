@@ -727,6 +727,26 @@ describe "Sales page", type: :system, js: true do
         expect(purchase2.reload.can_contact).to eq(true)
       end
 
+      it "allows resending receipt from the Email header section" do
+        visit customers_path
+        find(:table_row, { "Name" => "Customer 2" }).click
+
+        within_section "Membership", section_element: :aside do
+          within_section "Email", section_element: :section do
+            expect(page).to have_button("Resend receipt")
+            click_on "Resend receipt"
+            expect(page).to have_button("Resending receipt...", disabled: true)
+          end
+        end
+        expect(page).to have_alert(text: "Receipt resent")
+
+        within_section "Membership", section_element: :aside do
+          within_section "Email", section_element: :section do
+            expect(page).to have_button("Receipt resent", disabled: true)
+          end
+        end
+      end
+
       it "shows an error when entering an invalid email" do
         visit customers_path
         find(:table_row, { "Name" => "Customer 2" }).click
