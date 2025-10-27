@@ -1,7 +1,7 @@
 import { WhenVisible } from "@inertiajs/react";
 import React from "react";
 
-import Loading from "$app/components/Admin/Loading";
+import { LoadingSpinner } from "$app/components/LoadingSpinner";
 
 export type Pagination = {
   page: number;
@@ -24,10 +24,11 @@ const PaginatedLoader = ({ itemsLength, pagination, only }: PaginatedLoaderProps
     data: { page: pagination.page + 1 },
     only,
     preserveScroll: true,
+    preserveUrl: true,
   };
 
   return (
-    <WhenVisible key={`${pagination.page}-${pagination.limit}`} fallback={<Loading />} params={params}>
+    <WhenVisible key={`${pagination.page}-${pagination.limit}`} fallback={<LoadingSpinner />} params={params}>
       <div />
     </WhenVisible>
   );
