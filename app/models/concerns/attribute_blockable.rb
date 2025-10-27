@@ -228,12 +228,17 @@ module AttributeBlockable
 
       define_method("block_by_#{blockable_method}!") do |by_user_id: nil, expires_in: nil|
         return if (value = send(blockable_method)).blank?
-        block_by_method!(object_type, value, by_user_id:, expires_in:)
+        blocked_object = BlockedObject.block!(object_type, value, by_user_id, expires_in:)
+        blocked_by_attributes[blockable_method.to_s] = blocked_object
       end
 
       define_method("unblock_by_#{blockable_method}!") do
         return if (value = send(blockable_method)).blank?
-        unblock_by_method!(object_type, value)
+        scope = BLOCKED_OBJECT_TYPES.fetch(object_type.to_sym, :all)
+        BlockedObject.send(scope).find_objects([value]).each do |blocked_object|
+          blocked_object.unblock!
+          blocked_by_attributes.delete(blockable_method.to_s) if blocked_object.blocked_at.nil?
+        end
       end
 
       # Register this blockable attribute for introspection
@@ -289,44 +294,6 @@ module AttributeBlockable
     blocked_object = blocked_object_for_value(object_type, value)
     blocked_by_attributes[method_key] = blocked_object
     blocked_object
-  end
-
-  # Blocks one or more values for the specified attribute type.
-  #
-  # @param method_name [Symbol, String] The BlockedObject type
-  # @param values [Array<String>] Values to block
-  # @param by_user_id [Integer, nil] ID of user performing the block
-  # @param expires_in [ActiveSupport::Duration, nil] Time until block expires
-  # @return [void]
-  #
-  # @example
-  #   user.block_by_method!(:email, 'spam@example.com', by_user_id: admin.id)
-  #
-  # @example With expiration
-  #   user.block_by_method!(:ip_address, '192.168.1.1', expires_in: 7.days)
-  def block_by_method!(method_name, *values, by_user_id: nil, expires_in: nil)
-    values.compact_blank.each do |value|
-      blocked_object = BlockedObject.block!(method_name, value, by_user_id, expires_in:)
-      blocked_by_attributes[method_name] = blocked_object
-    end
-  end
-
-  # Unblocks one or more values for the specified attribute type.
-  #
-  # @param method_name [Symbol, String] The BlockedObject type
-  # @param values [Array<String>] Values to unblock
-  # @param by_user_id [Integer, nil] Unused, kept for API compatibility
-  # @param expires_in [ActiveSupport::Duration, nil] Unused, kept for API compatibility
-  # @return [void]
-  #
-  # @example
-  #   user.unblock_by_method!(:email, 'no-longer-spam@example.com')
-  def unblock_by_method!(method_name, *values, by_user_id: nil, expires_in: nil)
-    scope = BLOCKED_OBJECT_TYPES.fetch(method_name.to_sym, :all)
-    BlockedObject.send(scope).find_objects(values).each do |blocked_object|
-      blocked_object.unblock!
-      blocked_by_attributes.delete(method_name) if blocked_object.blocked_at.nil?
-    end
   end
 
   # Retrieves BlockedObject records for the given values and attribute type.
