@@ -94,13 +94,11 @@ RSpec.describe ChurnController, type: :controller, inertia: true do
     context "when user has no subscription products" do
       let!(:product) { create(:product, user: user) }
 
-      it "indicates no subscription products" do
+      it "denies access and redirects" do
         get :show
 
-        expect(response).to be_successful
-        expect(inertia.props[:churn_props][:has_subscription_products]).to be false
-        expect(inertia.props[:churn_props][:products]).to be_empty
-        expect(inertia.props[:churn_data]).to be_nil
+        expect(response).to redirect_to(dashboard_path)
+        expect(flash[:alert]).to eq("You are not allowed to perform this action.")
       end
     end
 
