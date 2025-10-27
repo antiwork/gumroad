@@ -4,6 +4,10 @@ module Admin::ListPaginatedUsers
   extend ActiveSupport::Concern
   include Pagy::Backend
 
+  # We list 5 users per page by default for the following reasons:
+  # - Feature: A list of user cards is used for the refund queue or for searching users, so we don't need to display too many users per page to avoid overwhelming the user.
+  # - UX: A user card in the admin takes up almost the entire height of the page, so we don't need to display too many users per page since the viewer would not see the entire list.
+  # - Performance: Loading a user card is slow because we load a lot of data for each user.
   RECORDS_PER_PAGE = 5
 
   private
