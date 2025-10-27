@@ -9,9 +9,9 @@ import { Button } from "$app/components/Button";
 import { CopyToClipboard } from "$app/components/CopyToClipboard";
 import { useCurrentSeller } from "$app/components/CurrentSeller";
 import { Icon } from "$app/components/Icons";
+import { LoadingSpinner } from "$app/components/LoadingSpinner";
 import { useLoggedInUser } from "$app/components/LoggedInUser";
 import { Popover } from "$app/components/Popover";
-import { Progress } from "$app/components/Progress";
 import { showAlert } from "$app/components/server-components/Alert";
 import { ExportSubscribersPopover } from "$app/components/server-components/FollowersPage/ExportSubscribersPopover";
 import { PageHeader } from "$app/components/ui/PageHeader";
@@ -174,7 +174,7 @@ export const FollowersPage = ({ followers: initialFollowers, per_page, total }: 
       <div className="space-y-4 p-4 md:p-8">
         {loading ? (
           <div className="flex justify-center">
-            <Progress width="5rem" />
+            <LoadingSpinner className="size-20" />
           </div>
         ) : followers.length > 0 ? (
           <div>

@@ -71,7 +71,7 @@ module User::AsJson
       id:,
       impersonatable:,
       user_risk_state: user_risk_state.humanize,
-      comment_count: comments.size
+      comments_count: comments.size
     )
   end
 

@@ -9,7 +9,7 @@ type AdminUserCommentsProps = {
 
 const AdminUserComments = ({ user }: AdminUserCommentsProps) => (
   <AdminCommentableComments
-    count={user.comment_count}
+    count={user.comments_count}
     endpoint={Routes.admin_user_comments_path(user.id)}
     commentableType="user"
   />

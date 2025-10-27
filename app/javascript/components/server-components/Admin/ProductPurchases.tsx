@@ -5,6 +5,7 @@ import { ProductPurchase, fetchProductPurchases } from "$app/data/admin/admin_pr
 import { assertResponseError } from "$app/utils/request";
 import { register } from "$app/utils/serverComponentUtil";
 
+import { LoadingSpinner } from "$app/components/LoadingSpinner";
 import { showAlert } from "$app/components/server-components/Alert";
 
 const AdminProductPurchases = ({
@@ -93,7 +94,7 @@ const AdminProductPurchases = ({
             ))}
           </div>
         ) : null}
-        {isLoading ? <div role="progressbar" style={{ width: "0.75rem" }} /> : null}
+        {isLoading ? <LoadingSpinner className="size-3" /> : null}
         {purchases?.length === 0 ? (
           <div className="info" role="status">
             No purchases have been made.
