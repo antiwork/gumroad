@@ -5,10 +5,9 @@ import { cast } from "ts-safe-cast";
 import { CurrentUser } from "$app/types/user";
 import { assertResponseError } from "$app/utils/request";
 
-import AdminNavFooterTrigger from "$app/components/Admin/Nav/FooterTrigger";
+import { DashboardNavProfilePopover } from "$app/components/Admin/Nav/ProfilePopover";
 import { Icon } from "$app/components/Icons";
 import { useLoggedInUser } from "$app/components/LoggedInUser";
-import { Popover } from "$app/components/Popover";
 import { showAlert } from "$app/components/server-components/Alert";
 
 type ResponseData = {
@@ -50,11 +49,7 @@ const AdminNavFooter = () => {
   };
 
   return (
-    <Popover
-      position="top"
-      trigger={(open: boolean) => <AdminNavFooterTrigger user={loggedInUser} open={open} />}
-      className="border-y border-nav-foreground/50 border-b-transparent after:border-t-nav-foreground! after:dark:border-t-nav-foreground/35! [&>.dropdown]:mx-4 [&>.dropdown]:border-nav-foreground/35!"
-    >
+    <DashboardNavProfilePopover user={loggedInUser}>
       <div role="menu">
         {current_user.impersonated_user ? (
           <>
@@ -76,7 +71,7 @@ const AdminNavFooter = () => {
           </a>
         ) : null}
       </div>
-    </Popover>
+    </DashboardNavProfilePopover>
   );
 };
 

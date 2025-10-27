@@ -10,6 +10,7 @@ import { Link, router } from "@inertiajs/react";
 import * as React from "react";
 
 import { escapeRegExp } from "$app/utils";
+import { classNames } from "$app/utils/classNames";
 import { initTeamMemberReadOnlyAccess } from "$app/utils/team_member_read_only";
 
 import NavbarFooter from "$app/components/client-components/Nav/footer";
@@ -58,7 +59,10 @@ export const ClientNavLink = ({
       href={href}
       title={text}
       {...(onClick && { onClick })}
-      className="flex items-center truncate border-y border-nav-foreground/50 border-b-transparent px-6 py-4 no-underline last:border-b-nav-foreground/50 hover:text-accent aria-[current=page]:text-accent"
+      className={classNames(
+        "flex items-center truncate border-y border-white/50 border-b-transparent px-6 py-4 no-underline last:border-b-white/50 hover:text-accent dark:border-foreground/50 dark:border-b-transparent dark:last:border-b-foreground/50",
+        { "text-accent": !!ariaCurrent },
+      )}
     >
       {icon ? <Icon name={icon} className="mr-4" /> : null}
       {text}

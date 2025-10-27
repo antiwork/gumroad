@@ -1,5 +1,6 @@
-import cx from "classnames";
 import * as React from "react";
+
+import { classNames } from "$app/utils/classNames";
 
 import { Details } from "$app/components/Details";
 import { useGlobalEventListener } from "$app/components/useGlobalEventListener";
@@ -9,6 +10,7 @@ export type Props = {
   trigger: React.ReactNode | ((open: boolean) => React.ReactNode);
   children: React.ReactNode | ((close: () => void) => React.ReactNode);
   className?: string;
+  dropdownClassName?: string;
   open?: boolean;
   onToggle?: (open: boolean) => void;
   style?: React.CSSProperties;
@@ -20,7 +22,8 @@ export type Props = {
 export const Popover = ({
   trigger,
   children,
-  className,
+  className: triggerClassName,
+  dropdownClassName,
   open: openProp,
   onToggle,
   style,
@@ -55,7 +58,7 @@ export const Popover = ({
 
   return (
     <Details
-      className={cx("popover toggle", position, className)}
+      className={classNames("popover toggle", position, triggerClassName)}
       summary={renderedTrigger}
       summaryProps={{
         inert: disabled,
@@ -68,7 +71,7 @@ export const Popover = ({
       ref={(el) => (ref.current = el)}
       style={style}
     >
-      <div className="dropdown" style={dropoverPosition}>
+      <div className={classNames("dropdown", dropdownClassName)} style={dropoverPosition}>
         {children instanceof Function ? children(() => toggle(false)) : children}
       </div>
     </Details>

@@ -3,7 +3,7 @@ import { createCast } from "ts-safe-cast";
 
 import { register } from "$app/utils/serverComponentUtil";
 
-import AdminNavFooterTrigger from "$app/components/Admin/Nav/FooterTrigger";
+import { DashboardNavProfilePopover } from "$app/components/Admin/Nav/ProfilePopover";
 import { useAppDomain } from "$app/components/DomainSettings";
 import { useLoggedInUser } from "$app/components/LoggedInUser";
 import {
@@ -13,7 +13,6 @@ import {
   NavSection,
   UnbecomeDropdownItem,
 } from "$app/components/Nav";
-import { Popover } from "$app/components/Popover";
 
 type ImpersonatedUser = {
   name: string;
@@ -36,11 +35,7 @@ export const Nav = ({ title, current_user }: Props) => {
     <NavFramework
       title={title}
       footer={
-        <Popover
-          position="top"
-          trigger={(open: boolean) => <AdminNavFooterTrigger user={loggedInUser} open={open} />}
-          className="border-y border-nav-foreground/50 border-b-transparent after:border-t-nav-foreground! after:dark:border-t-nav-foreground/35! [&>.dropdown]:mx-4 [&>.dropdown]:border-nav-foreground/35!"
-        >
+        <DashboardNavProfilePopover user={loggedInUser}>
           <div role="menu">
             {current_user.impersonated_user ? (
               <>
@@ -54,7 +49,7 @@ export const Nav = ({ title, current_user }: Props) => {
             <NavLinkDropdownItem text="Logout" icon="box-arrow-in-right-fill" href={Routes.logout_url()} />
             {loggedInUser?.isImpersonating ? <UnbecomeDropdownItem /> : null}
           </div>
-        </Popover>
+        </DashboardNavProfilePopover>
       }
     >
       <NavSection>

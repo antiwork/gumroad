@@ -56,7 +56,10 @@ const BaseNavLink = ({
       aria-current={ariaCurrent}
       href={href}
       title={text}
-      className="flex items-center truncate border-y border-nav-foreground/50 border-b-transparent px-6 py-4 no-underline last:border-b-nav-foreground/50 hover:text-accent aria-[current=page]:text-accent"
+      className={classNames(
+        "flex items-center truncate border-y border-white/50 border-b-transparent px-6 py-4 no-underline last:border-b-white/50 hover:text-accent dark:border-foreground/50 dark:border-b-transparent dark:last:border-b-foreground/50",
+        { "text-accent": !!ariaCurrent },
+      )}
       {...props}
     >
       {icon ? <Icon name={icon} className="mr-4" /> : null}
@@ -121,17 +124,17 @@ export const Nav = ({ title, children, footer }: Props) => {
       <nav
         aria-label="Main"
         className={classNames(
-          "flex flex-col overflow-x-hidden overflow-y-auto bg-black text-nav-foreground lg:static lg:w-[12.8125rem]",
+          "flex flex-col overflow-x-hidden overflow-y-auto bg-black text-white lg:static lg:w-52 dark:text-foreground",
           {
-            "fixed z-10 size-full lg:static lg:w-[12.8125rem]": open,
+            "fixed z-10 size-full lg:static lg:w-52": open,
           },
         )}
       >
-        <div className="override grid grid-cols-[auto_1fr_auto] items-center gap-3 p-4 text-[1.125rem] leading-[1.4] lg:hidden">
+        <div className="override grid grid-cols-[auto_1fr_auto] items-center gap-3 p-4 text-lg leading-6 lg:hidden">
           <a href={Routes.root_url()} className="no-underline">
             <span className="logo-g" />
           </a>
-          <h1 className="w-full truncate text-center text-base leading-[1.4]">{title}</h1>
+          <h1 className="w-full truncate text-center text-base">{title}</h1>
           <button aria-label="Toggle navigation" onClick={toggle}>
             <Icon name={open ? "x" : "outline-menu"} />
           </button>
