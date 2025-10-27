@@ -70,8 +70,8 @@ module User::AsJson
       impersonatable:,
       user_risk_state: user_risk_state.humanize,
       comments_count: comments.size,
-      blocked_by_form_email_object: blocked_by_form_email_object.as_json(only: %i[blocked_at created_at]),
-      blocked_by_form_email_domain_object: blocked_by_form_email_domain_object.as_json(only: %i[blocked_at created_at])
+      blocked_by_form_email_object: blocked_by_form_email_object&.as_json(only: %i[blocked_at created_at]),
+      blocked_by_form_email_domain_object: blocked_by_form_email_domain_object&.as_json(only: %i[blocked_at created_at])
     )
   end
 
