@@ -7,7 +7,7 @@ class Admin::RefundQueuesController < Admin::BaseController
     @title = "Refund queue"
     @users = User.refund_queue
                  .with_attached_avatar
-                 .includes(:admin_manageable_user_memberships, :links, :purchases)
+                 .includes(:admin_manageable_user_memberships)
 
     list_paginated_users users: @users,
                          template: "Admin/RefundQueues/Show",
