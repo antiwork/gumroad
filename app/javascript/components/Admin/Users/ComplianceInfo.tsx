@@ -148,7 +148,7 @@ const ComplianceInfo = ({ complianceInfo }: ComplianceInfoComponentProps) => {
 const AdminUserComplianceInfo = ({ user }: AdminUserComplianceInfoProps) => (
   <>
     <hr />
-    <ComplianceInfo complianceInfo={user.alive_user_compliance_info} />
+    <ComplianceInfo complianceInfo={user.alive_user_compliance_info ?? null} />
   </>
 );
 
