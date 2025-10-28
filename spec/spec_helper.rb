@@ -51,7 +51,7 @@ def configure_vcr
   VCR.configure do |config|
     config.cassette_library_dir = File.join(Rails.root, "spec", "support", "fixtures", "vcr_cassettes")
     config.hook_into :webmock
-    config.ignore_hosts "gumroad-specs.s3.amazonaws.com", "s3.amazonaws.com", "codeclimate.com", "mongo", "redis", "elasticsearch"
+    config.ignore_hosts "gumroad-specs.s3.amazonaws.com", "s3.amazonaws.com", "codeclimate.com", "mongo", "redis", "elasticsearch", "minio"
     config.ignore_hosts "api.knapsackpro.com"
     config.ignore_hosts "googlechromelabs.github.io"
     config.ignore_hosts "storage.googleapis.com"
@@ -264,7 +264,7 @@ RSpec.configure do |config|
   config.around(:each, :shipping) do |example|
     vcr_turned_on do
       only_matching_vcr_request_from(["easypost", "taxjar"]) do
-        VCR.use_cassette("ShippingScenarios/#{example.description}", record: :once) do
+        VCR.use_cassette("ShippingScenarios/#{example.description}") do
           # Debug flaky specs.
           puts "*" * 100
           puts example.full_description
@@ -281,7 +281,7 @@ RSpec.configure do |config|
   config.around(:each, :taxjar) do |example|
     vcr_turned_on do
       only_matching_vcr_request_from(["taxjar"]) do
-        VCR.use_cassette("Taxjar/#{example.description}", record: :once) do
+        VCR.use_cassette("Taxjar/#{example.description}") do
           example.run
         end
       end

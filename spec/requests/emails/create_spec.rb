@@ -108,7 +108,7 @@ describe("Email Creation Flow", :js, type: :system) do
     expect(installment.name).to eq("Hello")
     expect(installment.message).to include("<p>Hello, world!</p>")
     expect(installment.message).to have_link("Click me", href: "https://example.com/button")
-    image_cdn_url = "https://gumroad-specs.s3.amazonaws.com/#{ActiveStorage::Blob.last.key}"
+    image_cdn_url = "#{AWS_S3_ENDPOINT}/#{S3_BUCKET}/#{ActiveStorage::Blob.last.key}"
     expect(installment.message).to include(%Q(<img src="#{image_cdn_url}"))
     expect(installment.product_type?).to be(true)
     expect(installment.link).to eq(product)

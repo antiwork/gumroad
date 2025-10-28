@@ -19,10 +19,10 @@ import { Button, NavigationButton } from "$app/components/Button";
 import { useEvaporateUploader } from "$app/components/EvaporateUploader";
 import { FileRowContent } from "$app/components/FileRowContent";
 import { Icon } from "$app/components/Icons";
+import { LoadingSpinner } from "$app/components/LoadingSpinner";
 import { PlayVideoIcon } from "$app/components/PlayVideoIcon";
 import { Popover } from "$app/components/Popover";
 import { FileEntry, useProductEditContext } from "$app/components/ProductEdit/state";
-import { Progress } from "$app/components/Progress";
 import { useS3UploadConfig } from "$app/components/S3UploadConfig";
 import { Separator } from "$app/components/Separator";
 import { showAlert } from "$app/components/server-components/Alert";
@@ -349,7 +349,7 @@ const FileEmbedNodeView = ({ node, editor, getPos, updateAttributes }: NodeViewP
           loadingVideo ? (
             <figure className="preview">
               <div style={{ position: "absolute", top: "50%", left: "50%", transform: "translate(-50%, -50%)" }}>
-                <Progress width="4em" />
+                <LoadingSpinner className="size-16" />
               </div>
             </figure>
           ) : file.thumbnail ? (
@@ -369,7 +369,7 @@ const FileEmbedNodeView = ({ node, editor, getPos, updateAttributes }: NodeViewP
                   }}
                 />
                 <button
-                  className="link"
+                  className="underline"
                   style={{
                     position: "absolute",
                     top: "50%",
@@ -420,7 +420,7 @@ const FileEmbedNodeView = ({ node, editor, getPos, updateAttributes }: NodeViewP
             <label className="thumbnail" aria-label="Upload a thumbnail">
               {loadingVideo ? (
                 <div style={{ placeSelf: "center" }}>
-                  <Progress width="3em" />
+                  <LoadingSpinner className="size-12" />
                 </div>
               ) : (
                 <>
@@ -453,7 +453,7 @@ const FileEmbedNodeView = ({ node, editor, getPos, updateAttributes }: NodeViewP
 
                 {file.is_streamable && isComplete ? (
                   <li>
-                    <button className="link" onClick={() => setExpanded(!expanded)}>
+                    <button className="underline" onClick={() => setExpanded(!expanded)}>
                       {file.subtitle_files.length}{" "}
                       {file.subtitle_files.length === 1 ? "closed caption" : "closed captions"}
                     </button>

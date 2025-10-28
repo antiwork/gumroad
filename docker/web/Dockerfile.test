@@ -63,6 +63,7 @@ ENV DATABASE_HOST=db_test \
     MONGO_DATABASE_PASSWORD=password \
     MONGO_REPLICA_SET=empty_replica_set \
     ELASTICSEARCH_HOST=http://elasticsearch:9200 \
+    AWS_S3_ENDPOINT=http://minio:9000 \
     MEMCACHE_SERVERS=memcached \
     RAILS_LOG_LEVEL=info \
     IN_DOCKER=true

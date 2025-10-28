@@ -26,14 +26,14 @@ describe PdfStampingService::StampForPurchase do
 
         stamped_pdf = url_redirect.stamped_pdfs.first
         expect(stamped_pdf.product_file).to eq(product_file_one)
-        expect(stamped_pdf.url).to match(/s3.amazonaws.com/)
+        expect(stamped_pdf.url).to match(/#{AWS_S3_ENDPOINT}/o)
         expect(url_redirect.reload.is_done_pdf_stamping?).to eq(true)
       end
 
       context "with encrypted stampable PDFs" do
-        let!(:product_file_two) { create(:readable_document, pdf_stamp_enabled: true, url: "https://s3.amazonaws.com/gumroad-specs/specs/encrypted-GameFu.pdf") }
+        let!(:product_file_two) { create(:readable_document, pdf_stamp_enabled: true, url: "#{AWS_S3_ENDPOINT}/#{S3_BUCKET}/specs/encrypted_pdf.pdf") }
         let!(:product_file_three) { create(:readable_document, pdf_stamp_enabled: true) }
-        let!(:product_file_four) { create(:readable_document, pdf_stamp_enabled: false, url: "https://s3.amazonaws.com/gumroad-specs/specs/encrypted-GameFu.pdf") }
+        let!(:product_file_four) { create(:readable_document, pdf_stamp_enabled: false, url: "#{AWS_S3_ENDPOINT}/#{S3_BUCKET}/specs/encrypted_pdf.pdf") }
 
         before do
           product.product_files << product_file_one
@@ -61,7 +61,7 @@ describe PdfStampingService::StampForPurchase do
 
         def expect_stamped_pdf(stamped_pdf, product_file)
           expect(stamped_pdf.product_file).to eq(product_file)
-          expect(stamped_pdf.url).to match(/s3.amazonaws.com/)
+          expect(stamped_pdf.url).to match(/#{AWS_S3_ENDPOINT}/o)
         end
       end
     end

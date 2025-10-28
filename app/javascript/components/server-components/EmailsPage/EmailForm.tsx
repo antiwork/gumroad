@@ -754,7 +754,7 @@ export const EmailForm = () => {
                   {hasAudience ? (
                     recipientCount.loading ? (
                       <div>
-                        <LoadingSpinner width="1.25em" />
+                        <LoadingSpinner className="size-5" />
                       </div>
                     ) : (
                       <div aria-label="Recipient count">{`${recipientCount.count.toLocaleString()} / ${recipientCount.total.toLocaleString()}`}</div>

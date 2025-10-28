@@ -40,7 +40,7 @@ describe "Call", type: :system, js: true do
 
       within_section "Select a date" do
         expect(page).to have_text("September 2024")
-        click_on "Next month"
+        click_on "Next Month"
         expect(page).to have_text("October 2024")
 
         click_on "1", match: :first
@@ -100,7 +100,7 @@ describe "Call", type: :system, js: true do
 
         select_disclosure "Configure" do
           choose "$20"
-          click_on "Next month"
+          click_on "Next Month"
           click_on "1", match: :first
           choose "01:00 PM"
           expect(page).to have_text("You selected Tuesday, October 1 at 01:00 PM")

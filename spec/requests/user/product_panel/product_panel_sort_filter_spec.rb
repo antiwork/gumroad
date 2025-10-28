@@ -6,7 +6,7 @@ describe("Product panel on creator profile - Sort/Filter", type: :system, js: tr
   before do
     @creator = create(:named_user)
     purchaser_email = "one@gr.test"
-    @preview_image_url = "https://s3.amazonaws.com/gumroad-specs/specs/kFDzu.png"
+    @preview_image_url = "#{AWS_S3_ENDPOINT}/#{S3_BUCKET}/specs/kFDzu.png"
     @a = create(:product_with_files, user: @creator, name: "Digital Product A", price_cents: 300, created_at: 20.minutes.ago, preview_url: @preview_image_url)
     @a.tag!("Audio")
     @b = create(:product, user: @creator, name: "Physical Product B", price_cents: 200, created_at: 19.minutes.ago)
@@ -86,11 +86,11 @@ describe("Product panel on creator profile - Sort/Filter", type: :system, js: tr
       create(:product_file, link: @a)
 
       # seed ZIP
-      create(:product_file, link: @b, url: "https://s3.amazonaws.com/gumroad-specs/specs/preorder.zip")
-      @c.product_files << create(:product_file, url: "https://s3.amazonaws.com/gumroad-specs/specs/preorder.zip")
+      create(:product_file, link: @b, url: "#{AWS_S3_ENDPOINT}/#{S3_BUCKET}/specs/preorder.zip")
+      @c.product_files << create(:product_file, url: "#{AWS_S3_ENDPOINT}/#{S3_BUCKET}/specs/preorder.zip")
 
       # seed MP3
-      @c.product_files << create(:product_file, url: "https://s3.amazonaws.com/gumroad-specs/specs/magic.mp3")
+      @c.product_files << create(:product_file, url: "#{AWS_S3_ENDPOINT}/#{S3_BUCKET}/specs/magic.mp3")
       @c.save!
 
       Link.import(refresh: true, force: true)

@@ -150,9 +150,18 @@ module User::Risk
   def suspended?
     suspended_for_tos_violation? || suspended_for_fraud?
   end
+  alias_method :suspended, :suspended?
 
   def flagged?
     flagged_for_tos_violation? || flagged_for_fraud?
+  end
+
+  def form_email_block
+    BlockedObject.email.find_active_object(email)
+  end
+
+  def form_email_domain_block
+    BlockedObject.email_domain.find_active_object(form_email_domain)
   end
 
   def add_user_comment(transition)
@@ -246,8 +255,7 @@ module User::Risk
         .merge(Balance.unpaid)
         .group(:user_id)
         .having("SUM(amount_cents) > 0")
-        .order(updated_at: :desc)
-        .limit(MAX_REFUND_QUEUE_SIZE)
+        .order(updated_at: :desc, id: :desc)
     end
   end
 end

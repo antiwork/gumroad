@@ -4,7 +4,6 @@
 //     A workaround would be to move the email specific media queries into a <style data-premailer="ignore"> block,
 //     but it doesn't work yet due to a known premailer issue (https://github.com/premailer/premailer/issues/242).
 // [3] Some email clients don't support grid and flex. A table layout is needed for a better compatibility.
-// [4] Some email clients don't support pseudo-elements: https: //www.caniemail.com/search/?s=pseudo
 // [5] Some email clients don't support spacing between grid items, flex items and columns: https: //www.caniemail.com/search/?s=gap
 // [6] Some email clients strip out HTML5 semantic elements: https://www.caniemail.com/features/html-semantics/
 
@@ -627,7 +626,10 @@ $accent-color: map-get($colors, "pink"); // [1]
 
 .price {
   display: inline-block;
-  background: $accent-color url("~images/email/price_tag_arrow.png") no-repeat right / auto 100%; // [1] [4]
+  border: $border;
+  border-right: none;
+  padding: spacer(1) spacer(5) spacer(1) spacer(2);
+  background: $accent-color url("~images/email/price_tag_arrow.png") no-repeat right / contain;
 }
 
 .review {

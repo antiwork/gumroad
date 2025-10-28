@@ -56,7 +56,7 @@ describe User::PasswordsController do
       expect(@user.reload.valid_password?("password_new")).to be(true)
 
       expect(flash[:notice]).to eq "Your password has been reset, and you're now logged in."
-      expect(response).to redirect_to root_url
+      expect(response).to be_successful
     end
 
     it "invalidates all active sessions after successful password reset" do
@@ -65,7 +65,7 @@ describe User::PasswordsController do
       post :update, params: { user: { password: "password_new", password_confirmation: "password_new", reset_password_token: @user.send_reset_password_instructions } }
     end
 
-    describe "should fail when errors" do
+    describe "should fail when there are errors" do
       let(:old_password) { @user.password }
 
       it "shows error after unsuccessful pw reset" do
@@ -73,7 +73,7 @@ describe User::PasswordsController do
         post :update, params: { user: { password: "password_new", password_confirmation: "password_no", reset_password_token: @user.send_reset_password_instructions } }
 
         expect(@user.password).to eq old_password
-        expect(flash[:alert]).to eq "Those two passwords didn't match."
+        expect(response.parsed_body).to eq({ error_message: "Those two passwords didn't match." }.as_json)
       end
 
       context "when specifying a compromised password", :vcr do
@@ -82,7 +82,7 @@ describe User::PasswordsController do
             post :update, params: { user: { password: "password", password_confirmation: "password", reset_password_token: @user.send_reset_password_instructions } }
           end
 
-          expect(flash[:alert]).to eq "Password has previously appeared in a data breach as per haveibeenpwned.com and should never be used. Please choose something harder to guess."
+          expect(response.parsed_body).to eq({ error_message: "Password has previously appeared in a data breach as per haveibeenpwned.com and should never be used. Please choose something harder to guess." }.as_json)
         end
       end
     end

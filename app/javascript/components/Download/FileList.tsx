@@ -666,7 +666,7 @@ const VideoEmbedPreview = ({
       />
       <TrackClick eventName="watch" resourceId={file.id}>
         <button
-          className="link"
+          className="underline"
           style={{
             position: "absolute",
             top: "50%",
@@ -677,7 +677,7 @@ const VideoEmbedPreview = ({
           onClick={() => void startPlaying()}
           aria-label="Watch"
         >
-          {isFetchingMediaUrls ? <LoadingSpinner width="4em" /> : <PlayVideoIcon />}
+          {isFetchingMediaUrls ? <LoadingSpinner className="size-16" /> : <PlayVideoIcon />}
         </button>
       </TrackClick>
     </figure>

@@ -52,12 +52,12 @@ export const ReviewVideoPlayer = ({ videoId, thumbnail }: { videoId: string; thu
           <img src={thumbnail} loading="lazy" className="absolute h-full w-full rounded-t bg-black object-cover" />
         ) : null}
         <button
-          className="link absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2"
+          className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 underline"
           onClick={() => void onPlay()}
           aria-label="Watch"
           disabled={loading}
         >
-          {loading ? <LoadingSpinner width="3em" /> : <PlayVideoIcon />}
+          {loading ? <LoadingSpinner className="size-12" /> : <PlayVideoIcon />}
         </button>
       </figure>
     </div>
