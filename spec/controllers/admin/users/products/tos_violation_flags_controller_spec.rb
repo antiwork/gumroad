@@ -58,10 +58,15 @@ describe Admin::Users::Products::TosViolationFlagsController do
       it "creates a comment for the TOS violation flag" do
         expect do
           post :create, params: { user_id: user.id, product_id: product.id }.merge(suspend_tos_params)
-        end.to change { Comment.count }.by(1)
+        end.to change { Comment.count }.by(2)
 
-        comment = Comment.last
-        expect(comment.commentable).to eq(user)
+        comment = Comment.where(commentable: user).last
+        expect(comment.comment_type).to eq(Comment::COMMENT_TYPE_FLAGGED)
+        expect(comment.content).to include("Flagged for a policy violation")
+        expect(comment.content).to include(product.name)
+        expect(comment.content).to include("Spam content")
+
+        comment = Comment.where(commentable: product).last
         expect(comment.comment_type).to eq(Comment::COMMENT_TYPE_FLAGGED)
         expect(comment.content).to include("Flagged for a policy violation")
         expect(comment.content).to include(product.name)
@@ -74,7 +79,7 @@ describe Admin::Users::Products::TosViolationFlagsController do
         it "unpublishes the product" do
           expect do
             post :create, params: { user_id: user.id, product_id: product.id }.merge(suspend_tos_params)
-          end.to change { product.reload.published }.from(true).to(false)
+          end.to change { product.reload.published? }.from(true).to(false)
         end
       end
 
@@ -84,7 +89,7 @@ describe Admin::Users::Products::TosViolationFlagsController do
         it "deletes the product" do
           expect do
             post :create, params: { user_id: user.id, product_id: product.id }.merge(suspend_tos_params)
-          end.to change { product.reload.deleted }.from(false).to(true)
+          end.to change { product.reload.deleted? }.from(false).to(true)
         end
       end
     end

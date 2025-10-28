@@ -1,5 +1,6 @@
 import React from "react";
 
+import { Button } from "$app/components/Button";
 import { LoadingSpinner } from "$app/components/LoadingSpinner";
 
 import AdminProductPurchase, { ProductPurchase } from "./Purchase";
@@ -17,13 +18,6 @@ const AdminProductPurchasesContent = ({
   hasMore,
   onLoadMore,
 }: AdminProductPurchasesContentProps) => {
-  const handleClick = (e: React.MouseEvent<HTMLButtonElement>) => {
-    e.preventDefault();
-    if (hasMore) {
-      onLoadMore();
-    }
-  };
-
   if (purchases.length === 0 && !isLoading)
     return (
       <div className="info" role="status">
@@ -42,9 +36,9 @@ const AdminProductPurchasesContent = ({
       {isLoading ? <LoadingSpinner /> : null}
 
       {hasMore ? (
-        <button className="button small" onClick={handleClick} disabled={isLoading}>
+        <Button small onClick={onLoadMore} disabled={isLoading}>
           {isLoading ? "Loading..." : "Load more"}
-        </button>
+        </Button>
       ) : null}
     </div>
   );

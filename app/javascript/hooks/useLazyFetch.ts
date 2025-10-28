@@ -170,10 +170,10 @@ export const useLazyPaginatedFetch = <T extends unknown[]>(
   useFetchOnMount(options, core.hasLoaded, fetchData);
 
   const fetchNextPage = React.useCallback((): Promise<void> => {
-    if (!hasMore || !pagination.next) {
+    if (!hasMore) {
       return Promise.resolve();
     }
-    return fetchData({ page: pagination.next });
+    return fetchData({ page: pagination.next ?? pagination.page + 1 });
   }, [hasMore, pagination.next, fetchData]);
 
   return {
