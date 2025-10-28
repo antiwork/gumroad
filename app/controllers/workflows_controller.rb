@@ -55,12 +55,12 @@ class WorkflowsController < Sellers::BaseController
 
     if success
       notice_message = case workflow_params[:save_action_name]
-      when "save_and_publish"
-        FLASH_WORKFLOW_PUBLISHED
-      when "save_and_unpublish"
-        FLASH_WORKFLOW_UNPUBLISHED
-      else
-        FLASH_CHANGES_SAVED
+                       when "save_and_publish"
+                         FLASH_WORKFLOW_PUBLISHED
+                       when "save_and_unpublish"
+                         FLASH_WORKFLOW_UNPUBLISHED
+                       else
+                         FLASH_CHANGES_SAVED
       end
 
       redirect_to workflow_emails_path(@workflow.external_id), notice: notice_message, status: :see_other

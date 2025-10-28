@@ -174,17 +174,17 @@ describe WorkflowsController, type: :controller, inertia: true do
       it "handles ActiveRecord::RecordInvalid errors" do
         allow_any_instance_of(Workflow::ManageService).to receive(:process).and_raise(ActiveRecord::RecordInvalid.new(workflow))
 
-        expect {
+        expect do
           patch :update, params: { id: workflow.external_id, workflow: { name: "Test" } }
-        }.to raise_error(ActiveRecord::RecordInvalid)
+        end.to raise_error(ActiveRecord::RecordInvalid)
       end
     end
 
     context "when workflow doesn't exist" do
       it "returns 404" do
-        expect {
+        expect do
           patch :update, params: { id: "nonexistent", workflow: { name: "Test" } }
-        }.to raise_error(ActionController::RoutingError)
+        end.to raise_error(ActionController::RoutingError)
       end
     end
   end
