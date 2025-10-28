@@ -100,13 +100,13 @@ describe Workflows::EmailsController, type: :controller, inertia: true do
     end
 
     context "when save fails" do
-      let(:errors) { workflow.errors.tap { |e| e.add(:base, "Error message") } }
+      let(:errors) { workflow.errors.tap { |e| e.add(:base, "Installment message is required") } }
 
       before do
         allow_any_instance_of(Workflow::SaveInstallmentsService).to receive(:process).and_return([false, errors])
       end
 
-      it "redirects with Inertia errors and alert message" do
+      it "redirects with Inertia errors and specific alert message" do
         patch :update, params: {
           workflow_id: workflow.external_id,
           workflow: {
@@ -117,7 +117,7 @@ describe Workflows::EmailsController, type: :controller, inertia: true do
         }
 
         expect(response).to redirect_to(workflow_emails_path(workflow.external_id))
-        expect(flash[:alert]).to eq("Please fix the errors and try again.")
+        expect(flash[:alert]).to eq("Installment message is required")
         expect(session[:inertia_errors]).to be_present
       end
     end

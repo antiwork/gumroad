@@ -118,15 +118,15 @@ describe WorkflowsController, type: :controller, inertia: true do
     end
 
     context "with valid params" do
-      it "303 redirects to edit workflow page with a success message" do
+      it "303 redirects to workflow emails page with a success message" do
         patch :update, params: { id: workflow.external_id, workflow: { name: "Updated Workflow" } }
 
-        expect(response).to redirect_to(edit_workflow_path(workflow.external_id))
+        expect(response).to redirect_to(workflow_emails_path(workflow.external_id))
         expect(response).to have_http_status(:see_other)
         expect(flash[:notice]).to eq("Changes saved!")
       end
 
-      it "redirects to edit workflow page with publish message when save_and_publish" do
+      it "redirects to workflow emails page with publish message when save_and_publish" do
         # Mark workflow as published previously so it can be published again
         workflow.update_columns(first_published_at: 1.day.ago, published_at: nil)
         # Ensure seller is eligible to send emails
@@ -134,15 +134,15 @@ describe WorkflowsController, type: :controller, inertia: true do
 
         patch :update, params: { id: workflow.external_id, workflow: { name: "Updated Workflow", save_action_name: "save_and_publish" } }
 
-        expect(response).to redirect_to(edit_workflow_path(workflow.external_id))
+        expect(response).to redirect_to(workflow_emails_path(workflow.external_id))
         expect(response).to have_http_status(:see_other)
         expect(flash[:notice]).to eq("Workflow published!")
       end
 
-      it "redirects to edit workflow page with unpublish message when save_and_unpublish" do
+      it "redirects to workflow emails page with unpublish message when save_and_unpublish" do
         patch :update, params: { id: workflow.external_id, workflow: { name: "Updated Workflow", save_action_name: "save_and_unpublish" } }
 
-        expect(response).to redirect_to(edit_workflow_path(workflow.external_id))
+        expect(response).to redirect_to(workflow_emails_path(workflow.external_id))
         expect(response).to have_http_status(:see_other)
         expect(flash[:notice]).to eq("Unpublished!")
       end

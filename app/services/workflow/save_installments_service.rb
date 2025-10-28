@@ -15,7 +15,7 @@ class Workflow::SaveInstallmentsService
   end
 
   def process
-    unless params[:installments].present?
+    if params[:installments].nil?
       workflow.errors.add(:base, "Installments data is required")
       return [false, workflow.errors]
     end
@@ -71,7 +71,7 @@ class Workflow::SaveInstallmentsService
     attr_reader :params, :seller, :workflow, :preview_email_recipient
 
     def delete_removed_installments
-      return unless params[:installments].present?
+      return if params[:installments].nil?
 
       deleted_external_ids = workflow.installments.alive.map(&:external_id) - params[:installments].pluck(:id)
       workflow.installments.by_external_ids(deleted_external_ids).find_each do |installment|

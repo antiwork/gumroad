@@ -39,7 +39,8 @@ class Workflows::EmailsController < Sellers::BaseController
 
       redirect_to workflow_emails_path(@workflow.external_id), status: :see_other, notice: flash_message
     else
-      redirect_to workflow_emails_path(@workflow.external_id), inertia: { errors: errors }, alert: "Please fix the errors and try again."
+      error_message = errors.full_messages.first
+      redirect_to workflow_emails_path(@workflow.external_id), inertia: { errors: errors }, alert: error_message
     end
   end
 

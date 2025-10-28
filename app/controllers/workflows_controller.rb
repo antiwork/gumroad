@@ -63,7 +63,7 @@ class WorkflowsController < Sellers::BaseController
         FLASH_CHANGES_SAVED
       end
 
-      redirect_to edit_workflow_path(@workflow.external_id), notice: notice_message, status: :see_other
+      redirect_to workflow_emails_path(@workflow.external_id), notice: notice_message, status: :see_other
     else
       error_message = errors.full_messages.first
       redirect_to edit_workflow_path(@workflow.external_id), inertia: { errors: errors }, alert: error_message
@@ -74,7 +74,6 @@ class WorkflowsController < Sellers::BaseController
     @workflow.mark_deleted!
     redirect_to workflows_path, notice: FLASH_WORKFLOW_DELETED, status: :see_other
   end
-
 
   private
     def set_title
