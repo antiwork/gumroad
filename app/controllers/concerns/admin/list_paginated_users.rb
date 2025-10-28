@@ -26,10 +26,10 @@ module Admin::ListPaginatedUsers
             props: {
               users: InertiaRails.merge do
                 users.with_blocked_attributes_for(:form_email, :form_email_domain).map do |user|
-                  user.as_json(
-                    admin: true,
+                  Admin::UserPresenter::Card.new(
+                    user:,
                     impersonatable: policy([:admin, :impersonators, user]).create?
-                  )
+                  ).props
                 end
               end,
               pagination:
