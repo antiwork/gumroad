@@ -237,7 +237,7 @@ module AttributeBlockable
         scope = BLOCKED_OBJECT_TYPES.fetch(object_type.to_sym, :all)
         BlockedObject.send(scope).find_objects([value]).each do |blocked_object|
           blocked_object.unblock!
-          blocked_by_attributes.delete(blockable_method.to_s) if blocked_object.blocked_at.nil?
+          blocked_by_attributes.delete(blockable_method.to_s)
         end
       end
 
