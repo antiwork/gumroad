@@ -27,6 +27,7 @@ export type Pagination = {
   count: number;
   next: number | null;
   page: number;
+  limit: number;
 };
 
 type PaginatedResponse = {
@@ -138,6 +139,7 @@ export const useLazyPaginatedFetch = <T>(
     count: 0,
     next: null,
     page: 0,
+    limit: 0,
   });
   const [currentData, setCurrentData] = React.useState<T>(initialData);
 
