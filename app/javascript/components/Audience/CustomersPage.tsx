@@ -869,6 +869,10 @@ const CustomerDrawer = ({
             },
           )
         }
+        receiptEmail={emails?.find((e) => e.type === "receipt")}
+        onResendReceipt={(id) => void onSend(id, "receipt")}
+        loadingId={loadingId}
+        sentEmailIds={sentEmailIds}
       />
       {customer.giftee_email ? (
         <EmailSection
@@ -1538,12 +1542,20 @@ const EmailSection = ({
   onSave,
   canContact,
   onChangeCanContact,
+  receiptEmail,
+  onResendReceipt,
+  loadingId,
+  sentEmailIds,
 }: {
   label: string;
   email: string;
   onSave: ((email: string) => Promise<void>) | null;
   canContact?: boolean;
   onChangeCanContact?: (canContact: boolean) => Promise<void>;
+  receiptEmail?: CustomerEmail | undefined;
+  onResendReceipt?: ((id: string) => void) | undefined;
+  loadingId?: string | null | undefined;
+  sentEmailIds?: React.MutableRefObject<Set<string>> | undefined;
 }) => {
   const [email, setEmail] = React.useState(currentEmail);
   const [isEditing, setIsEditing] = React.useState(false);
@@ -1629,6 +1641,25 @@ const EmailSection = ({
           </fieldset>
         </section>
       ) : null}
+      {receiptEmail && (
+        <section>
+          <Button
+            color="primary"
+            onClick={() => {
+              if (receiptEmail && onResendReceipt) {
+                onResendReceipt(receiptEmail.id);
+              }
+            }}
+            disabled={!!loadingId || sentEmailIds?.current.has(receiptEmail.id)}
+          >
+            {sentEmailIds?.current.has(receiptEmail.id)
+              ? "Receipt resent"
+              : loadingId === receiptEmail.id
+                ? "Resending receipt..."
+                : "Resend receipt"}
+          </Button>
+        </section>
+      )}
     </section>
   );
 };
