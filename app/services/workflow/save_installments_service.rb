@@ -3,26 +3,28 @@
 class Workflow::SaveInstallmentsService
   include InstallmentRuleHelper
 
-  attr_reader :error, :old_and_new_installment_id_mapping
+  attr_reader :errors, :old_and_new_installment_id_mapping
 
   def initialize(seller:, params:, workflow:, preview_email_recipient:)
     @seller = seller
     @params = params
     @workflow = workflow
     @preview_email_recipient = preview_email_recipient
-    @error = nil
+    @errors = nil
     @old_and_new_installment_id_mapping = {}
   end
 
   def process
     if params[:installments].nil?
       workflow.errors.add(:base, "Installments data is required")
-      return [false, workflow.errors]
+      @errors = workflow.errors
+      return [false, errors]
     end
 
     if workflow.abandoned_cart_type? && params[:installments].size != 1
       workflow.errors.add(:base, "An abandoned cart workflow can only have one email.")
-      return [false, workflow.errors]
+      @errors = workflow.errors
+      return [false, errors]
     end
 
     begin
@@ -58,21 +60,19 @@ class Workflow::SaveInstallmentsService
         workflow.unpublish! if params[:save_action_name] == Workflow::SAVE_AND_UNPUBLISH_ACTION
       end
     rescue ActiveRecord::RecordInvalid => e
-      @error = e.record.errors
+      @errors = e.record.errors
     rescue Installment::InstallmentInvalid, Installment::PreviewEmailError => e
       workflow.errors.add(:base, e.message)
-      @error = workflow.errors
+      @errors = workflow.errors
     end
 
-    [error.nil?, error]
+    [errors.nil?, errors]
   end
 
   private
     attr_reader :params, :seller, :workflow, :preview_email_recipient
 
     def delete_removed_installments
-      return if params[:installments].nil?
-
       deleted_external_ids = workflow.installments.alive.map(&:external_id) - params[:installments].pluck(:id)
       workflow.installments.by_external_ids(deleted_external_ids).find_each do |installment|
         installment.mark_deleted!
