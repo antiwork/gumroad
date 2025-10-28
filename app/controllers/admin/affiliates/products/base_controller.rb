@@ -13,4 +13,3 @@ class Admin::Affiliates::Products::BaseController < Admin::Users::BaseController
       @product = Link.find(params[:product_id])
     end
 end
-

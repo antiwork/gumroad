@@ -103,4 +103,3 @@ describe Admin::Affiliates::Products::PurchasesController do
     end
   end
 end
-
