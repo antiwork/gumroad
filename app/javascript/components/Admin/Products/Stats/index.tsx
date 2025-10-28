@@ -43,17 +43,18 @@ const AdminProductStats = ({ product_id }: { product_id: number }) => {
     },
   );
 
-  const elementRef = useIsIntersecting<HTMLDivElement>((isIntersecting) => {
+  const elementRef = useIsIntersecting<HTMLLIElement>((isIntersecting) => {
     if (!isIntersecting) return;
     if (!hasLoadedViewsCount && !isViewsCountLoading) void fetchViewsCount();
     if (!hasLoadedSalesStats && !isSalesStatsLoading) void fetchSalesStats();
   });
 
   return (
-    <div ref={elementRef}>
+    <>
+      <li className="hidden after:hidden" ref={elementRef} />
       <AdminProductStatsViewCount viewsCount={viewsCount} isLoading={isViewsCountLoading} />
       <AdminProductStatsSales salesStats={salesStats} isLoading={isSalesStatsLoading} />
-    </div>
+    </>
   );
 };
 

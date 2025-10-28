@@ -7,6 +7,8 @@ import AdminProductStats from "$app/components/Admin/Products/Stats";
 import { type User } from "$app/components/Admin/Users/User";
 import { Icon } from "$app/components/Icons";
 
+import coverPlaceholder from "$assets/images/cover_placeholder.png";
+
 type Props = {
   user: User;
   product: Product;
@@ -21,11 +23,7 @@ const AdminUsersProductsHeader = ({ product, user, isCurrentUrl }: Props) => (
           <img src={product.preview_url} alt="Preview image" style={{ width: "var(--form-element-height)" }} />
         </a>
       ) : (
-        <img
-          src={product.cover_placeholder_url}
-          alt="Cover placeholder"
-          style={{ width: "var(--form-element-height)" }}
-        />
+        <img src={coverPlaceholder} alt="Cover placeholder" style={{ width: "var(--form-element-height)" }} />
       )}
 
       <div className="grid gap-2">

@@ -12,7 +12,7 @@ const AdminUsersProductsDescription = ({ product }: Props) => {
     const tmp = document.createElement("div");
     tmp.innerHTML = product.html_safe_description;
     return tmp.textContent;
-  }, [product.html_safe_description]);
+  }, []);
 
   return (
     <>
@@ -22,7 +22,7 @@ const AdminUsersProductsDescription = ({ product }: Props) => {
           <h3>Description</h3>
         </summary>
         {strippedHtmlSafeDescription ? (
-          <div>{strippedHtmlSafeDescription}</div>
+          <div dangerouslySetInnerHTML={{ __html: product.html_safe_description }} />
         ) : (
           <div className="info" role="status">
             No description provided.
