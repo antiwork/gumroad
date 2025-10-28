@@ -44,41 +44,6 @@ describe Admin::Products::PurchasesController do
       expect(purchase_ids).not_to include(other_purchase.id)
     end
 
-    context "with affiliate_user_id filter" do
-      let(:affiliate_user) { create(:user) }
-      let(:affiliate) { create(:direct_affiliate, affiliate_user: affiliate_user, seller: product.user) }
-      let!(:affiliate_purchase) { create(:purchase, link: product, affiliate: affiliate) }
-
-      it "filters purchases by affiliate user" do
-        get :index, params: { product_id: product.id, affiliate_user_id: affiliate_user.id }, format: :json
-
-        expect(response).to have_http_status(:ok)
-
-        purchases = response.parsed_body["purchases"]
-        expect(purchases).to be_present
-        expect(purchases.length).to eq(1)
-        expect(purchases.first["id"]).to eq(affiliate_purchase.id)
-      end
-
-      it "excludes purchases not associated with the affiliate user" do
-        non_affiliate_purchase = create(:purchase, link: product, affiliate: nil)
-        other_affiliate = create(:direct_affiliate, affiliate_user: create(:user), seller: product.user)
-        other_affiliate_purchase = create(:purchase, link: product, affiliate: other_affiliate)
-
-        get :index, params: { product_id: product.id, affiliate_user_id: affiliate_user.id }, format: :json
-
-        expect(response).to have_http_status(:ok)
-
-        purchases = response.parsed_body["purchases"]
-        purchase_ids = purchases.map { |p| p["id"] }
-
-        expect(purchase_ids).to include(affiliate_purchase.id)
-        expect(purchase_ids).not_to include(purchase.id)
-        expect(purchase_ids).not_to include(non_affiliate_purchase.id)
-        expect(purchase_ids).not_to include(other_affiliate_purchase.id)
-      end
-    end
-
     context "with pagination parameters" do
       before do
         create_list(:purchase, 7, link: product)

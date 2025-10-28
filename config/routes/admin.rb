@@ -73,6 +73,12 @@ namespace :admin do
 
   get "/users/:user_id/guids", to: "compliance/guids#index", as: :compliance_guids
 
+  resources :affiliates, only: [] do
+    resources :products, only: [], module: :affiliates do
+      resources :purchases, only: :index, module: :products
+    end
+  end
+
   resource :block_email_domains, only: [:show, :update]
   resource :unblock_email_domains, only: [:show, :update]
   resource :suspend_users, only: [:show, :update]
