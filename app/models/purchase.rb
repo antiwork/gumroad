@@ -582,6 +582,8 @@ class Purchase < ApplicationRecord
       .order(created_at: :desc, id: :desc)
   }
 
+  scope :for_affiliate_user, ->(user) { where(affiliate: user.direct_affiliate_accounts) }
+
   scope :stripe, -> { where(charge_processor_id: StripeChargeProcessor.charge_processor_id) }
 
   scope :not_access_revoked_or_is_paid, -> { not_is_access_revoked.or(paid) }

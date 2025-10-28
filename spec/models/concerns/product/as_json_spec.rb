@@ -274,7 +274,7 @@ describe Product::AsJson, :vcr do
           expect(json_hash[attr]).to eq link.send(attr)
         end
         expect(json_hash[:creator_name]).to eq "elliomax"
-        expect(json_hash[:preview_url]).to eq "https://i.vimeocdn.com/video/212645621_640.jpg"
+        expect(json_hash[:preview_url]).to eq "https://i.vimeocdn.com/video/212645621-df44232fa6e6b46afd643f7e733a7bfe2cc7cb97486158998bfbc601231722e9-d_640?region=us"
         expect(json_hash[:preview_oembed_url]).to eq "https://player.vimeo.com/video/30698649?app_id=122963"
       end
 
