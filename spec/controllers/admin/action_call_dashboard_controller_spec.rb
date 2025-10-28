@@ -25,13 +25,13 @@ describe Admin::ActionCallDashboardController, type: :controller, inertia: true 
       expect(response).to have_http_status(:ok)
       expect_inertia.to render_component "Admin/ActionCallDashboard/Index"
       expect(inertia.props[:admin_action_call_infos]).to eq([admin_action_call_info2, admin_action_call_info1].map do |info|
-          {
-            id: info.id,
-            controller_name: info.controller_name,
-            action_name: info.action_name,
-            call_count: info.call_count
-          }
-        end
+        {
+          id: info.id,
+          controller_name: info.controller_name,
+          action_name: info.action_name,
+          call_count: info.call_count
+        }
+      end
       )
     end
   end
