@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[7.1].define(version: 2025_10_03_165816) do
+ActiveRecord::Schema[7.1].define(version: 2025_10_28_084435) do
   create_table "active_storage_attachments", charset: "utf8mb4", collation: "utf8mb4_unicode_ci", force: :cascade do |t|
     t.string "name", limit: 191, null: false
     t.string "record_type", limit: 191, null: false
@@ -2440,6 +2440,16 @@ ActiveRecord::Schema[7.1].define(version: 2025_10_03_165816) do
     t.text "json_data"
     t.integer "flags", default: 0, null: false
     t.index ["user_id", "state"], name: "index_user_compliance_info_requests_on_user_id_and_state"
+  end
+
+  create_table "user_tax_forms", charset: "utf8mb4", collation: "utf8mb4_unicode_ci", force: :cascade do |t|
+    t.bigint "user_id", null: false
+    t.integer "tax_year", null: false
+    t.string "tax_form_type", null: false
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.index ["user_id", "tax_year", "tax_form_type"], name: "index_user_tax_forms_on_user_id_and_tax_year_and_tax_form_type", unique: true
+    t.index ["user_id"], name: "index_user_tax_forms_on_user_id"
   end
 
   create_table "users", charset: "utf8mb4", collation: "utf8mb4_unicode_ci", force: :cascade do |t|
