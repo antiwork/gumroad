@@ -1124,16 +1124,20 @@ describe "Sales page", type: :system, js: true do
             click_on "Refund Options"
             fill_in "4", with: "2"
             click_on "Issue partial refund"
-            within_modal "Charge refund" do
-              expect(page).to have_text("Would you like to confirm this charge refund?")
-              click_on "Cancel"
-            end
-            expect(page).to_not have_modal("Charge refund")
-            click_on "Issue partial refund"
-            within_modal "Charge refund" do
-              click_on "Confirm refund"
-            end
           end
+        end
+        within_modal "Charge refund" do
+          expect(page).to have_text("Would you like to confirm this charge refund?")
+          click_on "Cancel"
+        end
+        expect(page).to_not have_modal("Charge refund")
+        within_section "Membership", section_element: :aside do
+          within_section "Charges", section_element: :section do
+            click_on "Issue partial refund"
+          end
+        end
+        within_modal "Charge refund" do
+          click_on "Confirm refund"
         end
         expect(page).to have_alert(text: "Purchase successfully refunded.")
         expect(page).to have_text("Partial refund")
@@ -1148,10 +1152,10 @@ describe "Sales page", type: :system, js: true do
             expect(page).to have_selector("[role='status']", text: "Going forward, Gumroad does not return any fees when a payment is refunded. Learn more")
             find_field("2", with: "2").fill_in with: "3"
             click_on "Refund fully"
-            within_modal "Charge refund" do
-              click_on "Confirm refund"
-            end
           end
+        end
+        within_modal "Charge refund" do
+          click_on "Confirm refund"
         end
         wait_for_ajax
         expect(page).to have_alert(text: "Refund amount cannot be greater than the purchase price.")
@@ -1160,10 +1164,10 @@ describe "Sales page", type: :system, js: true do
           within_section "Charges", section_element: :section do
             find_field("2", with: "3").fill_in with: "2"
             click_on "Refund fully"
-            within_modal "Charge refund" do
-              click_on "Confirm refund"
-            end
           end
+        end
+        within_modal "Charge refund" do
+          click_on "Confirm refund"
         end
         expect(page).to have_alert(text: "Purchase successfully refunded.")
         within_section "Membership", section_element: :aside do
@@ -1330,10 +1334,10 @@ describe "Sales page", type: :system, js: true do
               end
               expect(page).to have_field("1", with: "1")
               click_on "Refund fully"
-              within_modal "Charge refund" do
-                click_on "Confirm refund"
-              end
             end
+          end
+          within_modal "Charge refund" do
+            click_on "Confirm refund"
           end
           expect(page).to have_alert(text: "Purchase successfully refunded.")
           deposit_purchase = commission.deposit_purchase.reload
@@ -1348,10 +1352,10 @@ describe "Sales page", type: :system, js: true do
               end
               fill_in "1", with: "0.5"
               click_on "Issue partial refund"
-              within_modal "Charge refund" do
-                click_on "Confirm refund"
-              end
             end
+          end
+          within_modal "Charge refund" do
+            click_on "Confirm refund"
           end
           wait_for_ajax
           expect(page).to have_alert(text: "Purchase successfully refunded.")
@@ -1447,15 +1451,19 @@ describe "Sales page", type: :system, js: true do
           within_section "Refund", section_element: :section do
             fill_in "3", with: "1"
             click_on "Issue partial refund"
-            within_modal "Purchase refund" do
-              click_on "Cancel"
-            end
-            expect(page).to_not have_modal("Purchase refund")
-            click_on "Issue partial refund"
-            within_modal "Purchase refund" do
-              click_on "Confirm refund"
-            end
           end
+        end
+        within_modal "Purchase refund" do
+          click_on "Cancel"
+        end
+        expect(page).to_not have_modal("Purchase refund")
+        within_section "Product 2", section_element: :aside do
+          within_section "Refund", section_element: :section do
+            click_on "Issue partial refund"
+          end
+        end
+        within_modal "Purchase refund" do
+          click_on "Confirm refund"
         end
         expect(page).to have_alert(text: "Purchase successfully refunded.")
         within find(:table_row, { "Name" => "Customer 3" }) do
@@ -1471,10 +1479,10 @@ describe "Sales page", type: :system, js: true do
           within_section "Refund", section_element: :section do
             find_field("2", with: "2").fill_in with: "3"
             click_on "Refund fully"
-            within_modal "Purchase refund" do
-              click_on "Confirm refund"
-            end
           end
+        end
+        within_modal "Purchase refund" do
+          click_on "Confirm refund"
         end
         expect(page).to have_alert(text: "Refund amount cannot be greater than the purchase price.")
 
@@ -1482,10 +1490,10 @@ describe "Sales page", type: :system, js: true do
           within_section "Refund", section_element: :section do
             fill_in "2", with: "2"
             click_on "Refund fully"
-            within_modal "Purchase refund" do
-              click_on "Confirm refund"
-            end
           end
+        end
+        within_modal "Purchase refund" do
+          click_on "Confirm refund"
         end
         expect(page).to have_alert(text: "Purchase successfully refunded.")
         within find(:table_row, { "Name" => "Customer 3" }) do
@@ -1532,10 +1540,10 @@ describe "Sales page", type: :system, js: true do
             within_section "Refund", section_element: :section do
               expect(page).to have_field("1", with: "1")
               click_on "Refund fully"
-              within_modal "Purchase refund" do
-                click_on "Confirm refund"
-              end
             end
+          end
+          within_modal "Purchase refund" do
+            click_on "Confirm refund"
           end
           expect(page).to have_alert(text: "Purchase successfully refunded.")
 
@@ -1555,10 +1563,10 @@ describe "Sales page", type: :system, js: true do
             within_section "Refund", section_element: :section do
               expect(page).to have_field("1", with: "1")
               click_on "Refund fully"
-              within_modal "Purchase refund" do
-                click_on "Confirm refund"
-              end
             end
+          end
+          within_modal "Purchase refund" do
+            click_on "Confirm refund"
           end
           expect(page).to have_alert(text: "Your balance is insufficient to process this refund.")
 
