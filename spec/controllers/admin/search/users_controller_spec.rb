@@ -2,8 +2,9 @@
 
 require "spec_helper"
 require "shared_examples/admin_base_controller_concern"
+require "inertia_rails/rspec"
 
-describe Admin::Search::UsersController do
+describe Admin::Search::UsersController, type: :controller, inertia: true do
   render_views
 
   it_behaves_like "inherits from Admin::BaseController"
@@ -24,8 +25,7 @@ describe Admin::Search::UsersController do
       get :index, params: { query: "Doe" }
 
       expect(response).to be_successful
-      expect(response.body).to include("data-page")
-      expect(response.body).to include("Admin/Search/Users/Index")
+      expect(inertia.component).to eq("Admin/Search/Users/Index")
     end
 
     it "returns JSON response when requested" do
