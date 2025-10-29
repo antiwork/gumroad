@@ -25,16 +25,19 @@ module Admin::ListPaginatedUsers
             inertia: template,
             props: {
               users: InertiaRails.merge do
-                users.with_blocked_attributes_for(:form_email, :form_email_domain).map do |user|
-                  user.as_json(
-                    admin: true,
-                    impersonatable: policy([:admin, :impersonators, user]).create?
-                  )
-                end
+                users.with_attached_avatar
+                     .includes(:admin_manageable_user_memberships)
+                     .with_blocked_attributes_for(:form_email, :form_email_domain)
+                     .map do |user|
+                       Admin::UserPresenter::Card.new(
+                         user:,
+                         impersonatable: policy([:admin, :impersonators, user]).create?
+                       ).props
+                     end
               end,
               pagination:
             },
-            legacy_template: legacy_template
+            legacy_template:
           )
         end
         format.json { render json: { users:, pagination: } }
