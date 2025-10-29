@@ -1124,15 +1124,14 @@ describe "Sales page", type: :system, js: true do
             click_on "Refund Options"
             fill_in "4", with: "2"
             click_on "Issue partial refund"
-          end
-        end
-        within_modal "Charge refund" do
-          expect(page).to have_text("Would you like to confirm this charge refund?")
-          click_on "Cancel"
-        end
-        expect(page).to_not have_modal("Charge refund")
-        within_section "Membership", section_element: :aside do
-          within_section "Charges", section_element: :section do
+
+            within page.document do
+              within_modal "Charge refund" do
+                expect(page).to have_text("Would you like to confirm this charge refund?")
+                click_on "Cancel"
+              end
+            end
+
             click_on "Issue partial refund"
           end
         end
@@ -1152,16 +1151,15 @@ describe "Sales page", type: :system, js: true do
             expect(page).to have_selector("[role='status']", text: "Going forward, Gumroad does not return any fees when a payment is refunded. Learn more")
             find_field("2", with: "2").fill_in with: "3"
             click_on "Refund fully"
-          end
-        end
-        within_modal "Charge refund" do
-          click_on "Confirm refund"
-        end
-        wait_for_ajax
-        expect(page).to have_alert(text: "Refund amount cannot be greater than the purchase price.")
 
-        within_section "Membership", section_element: :aside do
-          within_section "Charges", section_element: :section do
+            within page.document do
+              within_modal "Charge refund" do
+                click_on "Confirm refund"
+              end
+              wait_for_ajax
+              expect(page).to have_alert(text: "Refund amount cannot be greater than the purchase price.")
+            end
+
             find_field("2", with: "3").fill_in with: "2"
             click_on "Refund fully"
           end
@@ -1451,14 +1449,14 @@ describe "Sales page", type: :system, js: true do
           within_section "Refund", section_element: :section do
             fill_in "3", with: "1"
             click_on "Issue partial refund"
-          end
-        end
-        within_modal "Purchase refund" do
-          click_on "Cancel"
-        end
-        expect(page).to_not have_modal("Purchase refund")
-        within_section "Product 2", section_element: :aside do
-          within_section "Refund", section_element: :section do
+
+            within page.document do
+              within_modal "Purchase refund" do
+                click_on "Cancel"
+              end
+              expect(page).to_not have_modal("Purchase refund")
+            end
+
             click_on "Issue partial refund"
           end
         end
@@ -1479,15 +1477,14 @@ describe "Sales page", type: :system, js: true do
           within_section "Refund", section_element: :section do
             find_field("2", with: "2").fill_in with: "3"
             click_on "Refund fully"
-          end
-        end
-        within_modal "Purchase refund" do
-          click_on "Confirm refund"
-        end
-        expect(page).to have_alert(text: "Refund amount cannot be greater than the purchase price.")
 
-        within_section "Product 2", section_element: :aside do
-          within_section "Refund", section_element: :section do
+            within page.document do
+              within_modal "Purchase refund" do
+                click_on "Confirm refund"
+              end
+              expect(page).to have_alert(text: "Refund amount cannot be greater than the purchase price.")
+            end
+
             fill_in "2", with: "2"
             click_on "Refund fully"
           end
