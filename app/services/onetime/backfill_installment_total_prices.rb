@@ -138,23 +138,15 @@ class Onetime::BackfillInstallmentTotalPrices < Onetime::Base
       first_payment = purchases.first.displayed_price_cents
       current_price = subscription.link.price_cents
 
-      # Calculate expected payments using current price to detect price changes
       expected_payments = plan.calculate_installment_payment_price_cents(current_price)
       expected_second = expected_payments[1] || expected_payments[0]
 
       remainder = first_payment - expected_second
       count = plan.number_of_installments
 
-      # If remainder is invalid, check if it's due to price change
-      # A large negative remainder often indicates price increased significantly
       if remainder < 0 || remainder >= count
-        # Estimate original price from first payment to detect price changes
-        # First payment is approximately total_price / count + remainder
-        # So total_price is approximately first_payment * count
         estimated_original_total = first_payment * count
 
-        # If the remainder is very negative or the estimated total is very different from current price,
-        # it likely means the price changed
         price_difference = (estimated_original_total - current_price).abs
         if remainder < -100 || price_difference > (current_price * 0.1)
           return {
@@ -174,11 +166,7 @@ class Onetime::BackfillInstallmentTotalPrices < Onetime::Base
         }
       end
 
-      # Calculate total from valid remainder and verify it matches current price
       total = expected_second * count + remainder
-
-      # For installment plans, total should equal product price
-      # If they don't match, price may have changed
       if total != current_price
         return {
           total: nil,
@@ -202,9 +190,9 @@ class Onetime::BackfillInstallmentTotalPrices < Onetime::Base
       if dry_run
         log_backfill_dry_run(subscription, result)
       else
-        ActiveRecord::Base.transaction do
-          subscription.original_purchase.update!(total_price_before_installments_cents: result[:total])
-        end
+        current_json_data = subscription.original_purchase.json_data.dup
+        current_json_data["total_price_before_installments_cents"] = result[:total]
+        subscription.original_purchase.update_column(:json_data, current_json_data)
         log_backfill_success(subscription, result)
       end
 
@@ -243,14 +231,12 @@ class Onetime::BackfillInstallmentTotalPrices < Onetime::Base
     end
 
     def log_backfill_dry_run(subscription, result)
-      strategy = result[:strategy]
-      Rails.logger.info("✅ [DRY RUN] Subscription #{subscription.external_id} (ID: #{subscription.id}): Would backfill via Strategy #{strategy}")
+      Rails.logger.info("✅ [DRY RUN] Subscription #{subscription.external_id} (ID: #{subscription.id}): Would backfill via Strategy #{result[:strategy]}")
       log_calculation_details(result)
     end
 
     def log_backfill_success(subscription, result)
-      strategy = result[:strategy]
-      Rails.logger.info("✅ Subscription #{subscription.external_id} (ID: #{subscription.id}): Backfilled via Strategy #{strategy}")
+      Rails.logger.info("✅ Subscription #{subscription.external_id} (ID: #{subscription.id}): Backfilled via Strategy #{result[:strategy]}")
       log_calculation_details(result)
       Rails.logger.warn("   ⚠️  #{result[:warning]}") if result[:warning]
     end
