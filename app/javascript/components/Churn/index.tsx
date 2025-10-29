@@ -8,7 +8,7 @@ import { useAnalyticsDateRange } from "$app/components/Analytics/useAnalyticsDat
 import { ChurnChart } from "$app/components/Churn/ChurnChart";
 import ChurnQuickStats from "$app/components/Churn/ChurnQuickStats";
 import { DateRangePicker } from "$app/components/DateRangePicker";
-import { Progress } from "$app/components/Progress";
+import { LoadingSpinner } from "$app/components/LoadingSpinner";
 
 import placeholder from "$assets/images/placeholders/sales.png";
 
@@ -107,7 +107,7 @@ const Churn = ({ churn_props, churn_data }: ChurnProps) => {
             <ChurnChart data={churn_data.daily_data} aggregateBy={aggregateBy} />
           ) : (
             <div className="input">
-              <Progress width="1em" />
+              <LoadingSpinner />
               Loading charts...
             </div>
           )}
