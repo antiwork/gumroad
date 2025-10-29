@@ -43,6 +43,7 @@ import { ImageUploadSettingsContext, RichTextEditor, useRichTextEditor } from "$
 import { S3UploadConfigProvider } from "$app/components/S3UploadConfig";
 import { Separator } from "$app/components/Separator";
 import { showAlert } from "$app/components/server-components/Alert";
+import { InvalidNameForEmailDeliveryWarning } from "$app/components/server-components/InvalidNameForEmailDeliveryWarning";
 import {
   Layout,
   EditPageNavigation,
@@ -95,6 +96,7 @@ const useAbandonedCartProducts = () => assertDefined(React.useContext(AbandonedC
 
 const WorkflowEmails = () => {
   const { context, workflow } = cast<{ context: WorkflowFormContext; workflow: Workflow }>(useLoaderData());
+  const currentSeller = useCurrentSeller();
   const loaderDataRevalidator = useRevalidator();
   const [sendToPastCustomers, setSendToPastCustomers] = React.useState(workflow.send_to_past_customers);
   const [isSaving, setIsSaving] = React.useState(false);
@@ -346,6 +348,7 @@ const WorkflowEmails = () => {
               <ImageUploadSettingsContext.Provider value={imageSettings}>
                 <FilesDispatchProvider value={filesDispatch}>
                   <section className="space-y-4 p-4 md:p-8">
+                    {currentSeller?.isNameInvalidForEmailDelivery ? <InvalidNameForEmailDeliveryWarning /> : null}
                     {emails.length === 0 ? (
                       <Placeholder>
                         <h2>Create emails for your workflow</h2>

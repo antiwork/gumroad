@@ -57,7 +57,7 @@ export const ReviewVideoPlayer = ({ videoId, thumbnail }: { videoId: string; thu
           aria-label="Watch"
           disabled={loading}
         >
-          {loading ? <LoadingSpinner width="3em" /> : <PlayVideoIcon />}
+          {loading ? <LoadingSpinner className="size-12" /> : <PlayVideoIcon />}
         </button>
       </figure>
     </div>

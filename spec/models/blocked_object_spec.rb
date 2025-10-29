@@ -90,4 +90,101 @@ describe BlockedObject do
       expect(blocked_object.object_value).to eq email
     end
   end
+
+  describe "expires_at validation" do
+    context "when object_type is ip_address" do
+      let(:object_type) { BLOCKED_OBJECT_TYPES[:ip_address] }
+      let(:object_value) { "192.168.1.1" }
+
+      context "when blocked_at is present" do
+        it "is invalid without expires_at" do
+          blocked_object = BlockedObject.new(
+            object_type: object_type,
+            object_value: object_value,
+            blocked_at: Time.current
+          )
+
+          expect(blocked_object).not_to be_valid
+          expect(blocked_object.errors[:expires_at]).to include("can't be blank")
+        end
+
+        it "is valid with expires_at" do
+          blocked_object = BlockedObject.new(
+            object_type: object_type,
+            object_value: object_value,
+            blocked_at: Time.current,
+            expires_at: Time.current + 1.hour
+          )
+
+          expect(blocked_object).to be_valid
+        end
+      end
+
+      context "when blocked_at is nil" do
+        it "is valid without expires_at" do
+          blocked_object = BlockedObject.new(
+            object_type: object_type,
+            object_value: object_value,
+            blocked_at: nil,
+            expires_at: nil
+          )
+
+          expect(blocked_object).to be_valid
+        end
+
+        it "is valid with expires_at" do
+          blocked_object = BlockedObject.new(
+            object_type: object_type,
+            object_value: object_value,
+            blocked_at: nil,
+            expires_at: Time.current + 1.hour
+          )
+
+          expect(blocked_object).to be_valid
+        end
+      end
+    end
+
+    context "when object_type is NOT ip_address" do
+      let(:object_type) { BLOCKED_OBJECT_TYPES[:email] }
+      let(:object_value) { "test@example.com" }
+
+      context "when blocked_at is present" do
+        it "is valid without expires_at" do
+          blocked_object = BlockedObject.new(
+            object_type: object_type,
+            object_value: object_value,
+            blocked_at: Time.current,
+            expires_at: nil
+          )
+
+          expect(blocked_object).to be_valid
+        end
+
+        it "is valid with expires_at" do
+          blocked_object = BlockedObject.new(
+            object_type: object_type,
+            object_value: object_value,
+            blocked_at: Time.current,
+            expires_at: Time.current + 1.hour
+          )
+
+          expect(blocked_object).to be_valid
+        end
+      end
+
+      context "when blocked_at is nil" do
+        it "is valid without expires_at" do
+          blocked_object = BlockedObject.new(
+            object_type: object_type,
+            object_value: object_value,
+            blocked_at: nil,
+            expires_at: nil
+          )
+
+          expect(blocked_object).to be_valid
+        end
+      end
+    end
+  end
 end

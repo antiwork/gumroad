@@ -6,8 +6,8 @@ import { request } from "$app/utils/request";
 
 import AdminActionButton from "$app/components/Admin/ActionButton";
 import { YesIcon, NoIcon } from "$app/components/Admin/Icons";
-import AdminLoading from "$app/components/Admin/Loading";
 import type { User } from "$app/components/Admin/Users/User";
+import { LoadingSpinner } from "$app/components/LoadingSpinner";
 import { useIsIntersecting } from "$app/components/useIsIntersecting";
 
 type AdminUserMerchantAccountsProps = {
@@ -60,7 +60,7 @@ const AdminUserMerchantAccounts = ({ user }: AdminUserMerchantAccountsProps) => 
     <div ref={elementRef}>
       <h3>Merchant Accounts</h3>
 
-      {isLoading ? <AdminLoading /> : null}
+      {isLoading ? <LoadingSpinner /> : null}
 
       {data?.merchant_accounts && data.merchant_accounts.length > 0 ? (
         <ul className="inline">

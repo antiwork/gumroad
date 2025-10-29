@@ -5,6 +5,7 @@ import { assertResponseError, request, ResponseError } from "$app/utils/request"
 import { register } from "$app/utils/serverComponentUtil";
 
 import { Button } from "$app/components/Button";
+import { LoadingSpinner } from "$app/components/LoadingSpinner";
 import { Modal } from "$app/components/Modal";
 
 type Props = {
@@ -58,7 +59,7 @@ export const TaxesCollectionModal = ({ taxesOwed, creditCreationDate, name }: Pr
           footer={
             <div>
               <Button color="accent" disabled={signature.length === 0 || saving} onClick={() => void save()}>
-                {saving ? <div role="progressbar" style={{ width: "1em" }} /> : null}
+                {saving ? <LoadingSpinner /> : null}
                 {saving ? "Saving..." : "Save and opt-in"}
               </Button>
             </div>
