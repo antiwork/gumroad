@@ -27,6 +27,8 @@ class User < ApplicationRecord
 
   MAX_LENGTH_NAME = 100
 
+  INVALID_NAME_FOR_EMAIL_DELIVERY_REGEX = /:/
+
   MIN_AU_BACKTAX_OWED_CENTS_FOR_CONTACT = 100_00
 
   MIN_AGE_FOR_SERVICE_PRODUCTS = 30.days
@@ -173,7 +175,8 @@ class User < ApplicationRecord
                        allow_nil: true,
                        if: :username_changed? # validate only when seller changes their username
 
-  validates :name, length: { maximum: MAX_LENGTH_NAME, too_long: "Your name is too long. Please try again with a shorter one." }
+  validates :name, length: { maximum: MAX_LENGTH_NAME, too_long: "Your name is too long. Please try again with a shorter one." },
+                   format: { without: INVALID_NAME_FOR_EMAIL_DELIVERY_REGEX, message: "cannot contain colons (:) as it causes email delivery problems. Please remove any colons from your name and try again.", if: :name_changed? }
   validates :facebook_meta_tag, length: { maximum: MAX_LENGTH_FACEBOOK_META_TAG }
   validates :purchasing_power_parity_limit, allow_nil: true, numericality: { greater_than_or_equal_to: 1, less_than_or_equal_to: 100 }
 
@@ -601,6 +604,10 @@ class User < ApplicationRecord
 
   def account_active?
     alive? && !suspended?
+  end
+
+  def is_name_invalid_for_email_delivery?
+    name.present? && name.match?(INVALID_NAME_FOR_EMAIL_DELIVERY_REGEX)
   end
 
   def deactivate!
