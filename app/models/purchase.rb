@@ -576,6 +576,14 @@ class Purchase < ApplicationRecord
       .where(purchaser_id:)
   }
 
+  scope :for_admin_listing, -> {
+    where(purchase_state: %w[preorder_authorization_successful preorder_concluded_unsuccessfully successful failed not_charged])
+      .exclude_not_charged_except_free_trial
+      .order(created_at: :desc, id: :desc)
+  }
+
+  scope :for_affiliate_user, ->(user) { where(affiliate: user.direct_affiliate_accounts) }
+
   scope :stripe, -> { where(charge_processor_id: StripeChargeProcessor.charge_processor_id) }
 
   scope :not_access_revoked_or_is_paid, -> { not_is_access_revoked.or(paid) }

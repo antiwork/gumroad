@@ -38,8 +38,8 @@ type BlockedObject = {
 export type User = {
   id: number;
   email: string;
-  support_email?: string;
-  name: string;
+  support_email?: string | null;
+  name: string | null;
   avatar_url: string;
   username: string;
   profile_url: string;
@@ -50,11 +50,11 @@ export type User = {
   subdomain_with_protocol: string;
   custom_fee_per_thousand: number | null;
   impersonatable: boolean;
-  verified: boolean;
+  verified: boolean | null;
   all_adult_products: boolean;
   admin_manageable_user_memberships: UserMembership[];
-  alive_user_compliance_info: ComplianceInfoProps | null;
-  compliant: boolean;
+  alive_user_compliance_info?: ComplianceInfoProps | null;
+  compliant?: boolean | null;
   suspended: boolean;
   unpaid_balance_cents: number;
   disable_paypal_sales: boolean;
@@ -63,10 +63,10 @@ export type User = {
   on_probation: boolean;
   user_risk_state: string;
   comments_count: number;
-  bio: string;
+  bio: string | null;
   created_at: string;
   updated_at: string;
-  deleted_at: string;
+  deleted_at: string | null;
 };
 
 export type Props = {
