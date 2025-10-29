@@ -132,7 +132,9 @@ RSpec.configure do |config|
   config.include ActiveSupport::Testing::TimeHelpers
 
   if BUILDING_ON_CI
+    # show retry status in spec process
     config.verbose_retry = true
+    # show exception that triggers a retry if verbose_retry is set to true
     config.display_try_failure_messages = true
     config.default_retry_count = 3
   end
