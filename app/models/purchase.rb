@@ -1241,9 +1241,7 @@ class Purchase < ApplicationRecord
     return 0 if is_gift_receiver_purchase
     return perceived_price_cents if perceived_price_cents.present? && is_applying_plan_change
 
-    if is_recurring_subscription_charge && subscription.is_installment_plan
-      minimum_price = calculate_installment_payment_price_cents(for_recurring: true)
-    elsif is_recurring_subscription_charge
+    if is_recurring_subscription_charge
       minimum_price = subscription.current_subscription_price_cents
     elsif is_preorder_charge?
       minimum_price = preorder.authorization_purchase.displayed_price_cents
@@ -2624,7 +2622,7 @@ class Purchase < ApplicationRecord
 
   def calculate_installment_payment_price_cents(for_recurring: is_recurring_subscription_charge, total_price_cents: nil)
     return unless is_installment_payment
-    plan = installment_plan || subscription&.payment_options&.alive&.order(:id)&.first&.installment_plan || link.installment_plan
+    plan = installment_plan || subscription&.payment_options&.alive&.order(:id)&.first&.installment_plan
     if for_recurring
       nth_installment = subscription.purchases.successful.count
       total_price_cents = subscription.original_purchase.total_price_before_installments_cents || subscription.original_purchase.discounted_total_before_installments_cents
