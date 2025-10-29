@@ -1641,12 +1641,12 @@ const EmailSection = ({
           </fieldset>
         </section>
       ) : null}
-      {receiptEmail && (
+      {receiptEmail ? (
         <section>
           <Button
             color="primary"
             onClick={() => {
-              if (receiptEmail && onResendReceipt) {
+              if (onResendReceipt) {
                 onResendReceipt(receiptEmail.id);
               }
             }}
@@ -1659,7 +1659,7 @@ const EmailSection = ({
                 : "Resend receipt"}
           </Button>
         </section>
-      )}
+      ) : null}
     </section>
   );
 };
