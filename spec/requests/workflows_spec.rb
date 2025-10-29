@@ -1621,5 +1621,39 @@ describe("Workflows", js: true, type: :system) do
       expect(@workflow.installments.alive.first.published_at).to be_nil
       expect(@workflow.installments.alive.first.name).to eq("Thank you! (edited)")
     end
+
+    context "when seller name is invalid for email delivery" do
+      it "displays warning and prompts user to update the name" do
+        # Create a seller with colon in name (simulating legacy data)
+        seller.update_column(:name, "John: The Creator")
+
+        visit workflows_path
+        within_section @workflow.name, section_element: :section do
+          click_on "add one"
+        end
+
+        expect(page).to have_current_path("/workflows/#{@workflow.external_id}/emails")
+
+        expect(page).to have_selector("[role=alert].warning", text: "Your name contains a colon (:) which causes email delivery problems and will be removed from the sender name when emails are sent.")
+        expect(page).to have_link("Update your name", href: "/settings/profile")
+      end
+    end
+
+    context "when seller name is valid for email delivery" do
+      it "does not display warning" do
+        seller.update!(name: "John The Creator")
+
+        visit workflows_path
+        within_section @workflow.name, section_element: :section do
+          click_on "add one"
+        end
+
+        expect(page).to have_current_path("/workflows/#{@workflow.external_id}/emails")
+
+        expect(page).to_not have_selector("[role=alert].warning")
+        expect(page).to_not have_text("Your name contains a colon (:) which causes email delivery problems and will be removed from the sender name when emails are sent.")
+        expect(page).to_not have_link("Update your name", href: "/settings/profile")
+      end
+    end
   end
 end

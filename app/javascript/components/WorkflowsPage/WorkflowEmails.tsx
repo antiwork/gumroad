@@ -40,6 +40,7 @@ import { NumberInput } from "$app/components/NumberInput";
 import { ImageUploadSettingsContext, RichTextEditor, useRichTextEditor } from "$app/components/RichTextEditor";
 import { S3UploadConfigProvider } from "$app/components/S3UploadConfig";
 import { Separator } from "$app/components/Separator";
+import { InvalidNameForEmailDeliveryWarning } from "$app/components/server-components/InvalidNameForEmailDeliveryWarning";
 import Placeholder from "$app/components/ui/Placeholder";
 import { useConfigureEvaporate } from "$app/components/useConfigureEvaporate";
 import { useDebouncedCallback } from "$app/components/useDebouncedCallback";
@@ -93,6 +94,7 @@ type WorkflowEmailsProps = {
 };
 
 const WorkflowEmails = ({ context, workflow }: WorkflowEmailsProps) => {
+  const currentSeller = useCurrentSeller();
   const [sendToPastCustomers, setSendToPastCustomers] = React.useState(workflow.send_to_past_customers);
   const [files, filesDispatch] = React.useReducer(filesReducer, installmentsFilesToFilesState(workflow.installments));
   const [emails, setEmails] = React.useState<EmailFormState[]>(installmentsToEmails(workflow.installments));
@@ -308,6 +310,7 @@ const WorkflowEmails = ({ context, workflow }: WorkflowEmailsProps) => {
               <ImageUploadSettingsContext.Provider value={imageSettings}>
                 <FilesDispatchProvider value={filesDispatch}>
                   <section className="space-y-4 p-4 md:p-8">
+                    {currentSeller?.isNameInvalidForEmailDelivery ? <InvalidNameForEmailDeliveryWarning /> : null}
                     {emails.length === 0 ? (
                       <Placeholder>
                         <h2>Create emails for your workflow</h2>
