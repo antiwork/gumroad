@@ -5,6 +5,8 @@ class UpdateSalesRelatedProductsInfosJob
   sidekiq_options retry: 3, queue: :low
 
   def perform(purchase_id, increment = true)
+    return if Feature.inactive?(:update_sales_related_products_infos)
+
     purchase = Purchase.find(purchase_id)
 
     product_id = purchase.link_id
