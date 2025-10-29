@@ -1,7 +1,3 @@
-import React from "react";
-
-import UserList from "$app/components/Admin/Users/UserList";
-
-const AdminUsers = () => <UserList />;
+import AdminUsers from "$app/components/Admin/Users/UserList";
 
 export default AdminUsers;
