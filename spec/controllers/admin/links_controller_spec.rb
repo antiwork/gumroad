@@ -14,7 +14,7 @@ describe Admin::LinksController do
     @request.env["HTTP_REFERER"] = "where_i_came_from"
   end
 
-  describe "GET purchases" do
+  describe "GET legacy_purchases" do
     def create_purchases_in_order(count, product, options = {})
       count.times.map do |n|
         create(:purchase, options.merge(link: product, created_at: Time.current + n.minutes))
@@ -35,7 +35,7 @@ describe Admin::LinksController do
       end
 
       it "returns the purchases of the specified page" do
-        get :purchases, params: { id: @product.id, is_affiliate_user: "false", page: 2, per_page: 2, format: :json }
+        get :legacy_purchases, params: { id: @product.id, is_affiliate_user: "false", page: 2, per_page: 2, format: :json }
 
         expect(response).to be_successful
         expect(response.parsed_body["purchases"]).to eq purchase_admin_review_json(@purchases.reverse[2..3])
@@ -49,7 +49,7 @@ describe Admin::LinksController do
       end
 
       it "returns user purchases" do
-        get :purchases, params: { id: @product.id, is_affiliate_user: "false", format: :json }
+        get :legacy_purchases, params: { id: @product.id, is_affiliate_user: "false", format: :json }
 
         expect(response).to be_successful
         expect(response.parsed_body["purchases"]).to eq purchase_admin_review_json(@purchases.reverse)
@@ -65,7 +65,7 @@ describe Admin::LinksController do
       end
 
       it "returns affiliate purchases" do
-        get :purchases, params: { id: @product.id, is_affiliate_user: "true", user_id: @affiliate_user.id, format: :json }
+        get :legacy_purchases, params: { id: @product.id, is_affiliate_user: "true", user_id: @affiliate_user.id, format: :json }
 
         expect(response).to be_successful
         expect(response.parsed_body["purchases"]).to eq purchase_admin_review_json(@purchases.reverse)

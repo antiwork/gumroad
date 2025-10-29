@@ -8,7 +8,7 @@ import { showAlert } from "$app/components/server-components/Alert";
 interface UseLazyFetchOptions<T> {
   url: string;
   responseParser: (data: unknown) => T;
-  fetchUnlessLoaded?: boolean;
+  fetchUnlessLoaded: boolean;
 }
 
 interface UseLazyFetchResult<T> {
@@ -24,9 +24,10 @@ interface UseLazyFetchResult<T> {
 type QueryParams = Record<string, string | number>;
 
 export type Pagination = {
-  count: number;
-  next: number | null;
+  count?: number;
+  next?: number | null;
   page: number;
+  limit: number;
 };
 
 type PaginatedResponse = {
@@ -129,7 +130,7 @@ function mergeArrayData<T>(prev: T, next: T, mode: "append" | "prepend"): T {
   return (mode === "append" ? [...prev, ...next] : [...next, ...prev]) as T;
 }
 
-export const useLazyPaginatedFetch = <T>(
+export const useLazyPaginatedFetch = <T extends unknown[]>(
   initialData: T,
   options: UseLazyPaginatedFetchOptions<T>,
 ): UseLazyPaginatedFetchResult<T> => {
@@ -138,6 +139,7 @@ export const useLazyPaginatedFetch = <T>(
     count: 0,
     next: null,
     page: 0,
+    limit: 0,
   });
   const [currentData, setCurrentData] = React.useState<T>(initialData);
 
@@ -148,7 +150,8 @@ export const useLazyPaginatedFetch = <T>(
     const { pagination: paginationData } = cast<PaginatedResponse>(responseData);
     setPagination(paginationData);
 
-    const canFetchMore = paginationData.next !== null;
+    const canFetchMore =
+      "next" in paginationData ? paginationData.next !== null : parsedData.length === paginationData.limit;
     setHasMore(canFetchMore);
 
     if (mode === "replace") {
@@ -167,10 +170,10 @@ export const useLazyPaginatedFetch = <T>(
   useFetchOnMount(options, core.hasLoaded, fetchData);
 
   const fetchNextPage = React.useCallback((): Promise<void> => {
-    if (!hasMore || !pagination.next) {
+    if (!hasMore) {
       return Promise.resolve();
     }
-    return fetchData({ page: pagination.next });
+    return fetchData({ page: pagination.next ?? pagination.page + 1 });
   }, [hasMore, pagination.next, fetchData]);
 
   return {

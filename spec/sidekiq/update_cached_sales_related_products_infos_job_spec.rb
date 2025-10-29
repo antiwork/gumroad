@@ -4,6 +4,10 @@ require "spec_helper"
 
 describe UpdateCachedSalesRelatedProductsInfosJob do
   describe "#perform" do
+    before do
+      Feature.activate(:update_sales_related_products_infos)
+    end
+
     let(:product) { create(:product) }
     let(:product_2) { create(:product) }
     let(:product_3) { create(:product) }
