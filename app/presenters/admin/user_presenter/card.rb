@@ -57,8 +57,8 @@ class Admin::UserPresenter::Card
       deleted_at: user.deleted_at,
 
       # Blocking information
-      blocked_by_form_email_object: blocked_by_form_email_info,
-      blocked_by_form_email_domain_object: blocked_by_form_email_domain_info,
+      blocked_by_form_email_object: blocked_by_object_props(user.blocked_by_form_email_object),
+      blocked_by_form_email_domain_object: blocked_by_object_props(user.blocked_by_form_email_domain_object),
 
       # Associations
       admin_manageable_user_memberships: user_memberships,
@@ -67,28 +67,19 @@ class Admin::UserPresenter::Card
   end
 
   private
-    def blocked_by_form_email_info
-      return nil unless user.blocked_by_form_email_object
-
-      {
-        blocked_at: user.blocked_by_form_email_object.blocked_at,
-        created_at: user.blocked_by_form_email_object.created_at
-      }
-    end
-
-    def blocked_by_form_email_domain_info
-      return nil unless user.blocked_by_form_email_domain_object
-
-      {
-        blocked_at: user.blocked_by_form_email_domain_object.blocked_at,
-        created_at: user.blocked_by_form_email_domain_object.created_at
+    def blocked_by_object_props(blocked_object)
+      blocked_object && {
+        blocked_at: blocked_object.blocked_at,
+        created_at: blocked_object.created_at
       }
     end
 
     def user_memberships
       user.admin_manageable_user_memberships.map do |membership|
         {
-          **membership.attributes.slice("id", "created_at", "updated_at"),
+          id: membership.id,
+          created_at: membership.created_at,
+          updated_at: membership.updated_at,
           seller: {
             id: membership.seller.id,
             avatar_url: membership.seller.avatar_url,
