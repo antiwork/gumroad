@@ -7,7 +7,11 @@ class Admin::BaseController < ApplicationController
 
   inertia_share do
     {
-      card_types: CreditCardUtility.card_types_for_react
+      card_types: CreditCardUtility.card_types_for_react,
+      compliance: {
+        reasons: Compliance::TOS_VIOLATION_REASONS,
+        default_reason: Compliance::DEFAULT_TOS_VIOLATION_REASON
+      }
     }
   end
 
