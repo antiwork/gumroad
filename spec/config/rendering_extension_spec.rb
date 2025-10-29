@@ -48,6 +48,7 @@ describe "RenderingExtension" do
         let(:seller) { create(:named_seller) }
         let(:admin_for_seller) { create(:user, username: "adminforseller") }
         let(:pundit_user) { SellerContext.new(user: admin_for_seller, seller:) }
+        let!(:subscription_product) { create(:subscription_product, user: seller) }
 
         before do
           create(:team_membership, user: admin_for_seller, seller:, role: TeamMembership::ROLE_ADMIN)
