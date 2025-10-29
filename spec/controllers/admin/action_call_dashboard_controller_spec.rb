@@ -31,8 +31,7 @@ describe Admin::ActionCallDashboardController, type: :controller, inertia: true 
           action_name: info.action_name,
           call_count: info.call_count
         }
-      end
-      )
+      end)
     end
   end
 end
