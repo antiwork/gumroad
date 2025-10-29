@@ -56,7 +56,7 @@ export const RefundPaymentMethodSection = ({
         <header>
           <h2>Refund payment method</h2>
           <p>Add a card to automatically cover refunds when your Gumroad balance is too low. You'll only be charged if your balance can't cover the refund amount.</p>
-          <a href="/help" target="_blank" rel="noreferrer">
+          <a href={Routes.help_center_root_path()} target="_blank" rel="noreferrer">
             Learn more
           </a>
         </header>
