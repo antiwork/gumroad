@@ -25,7 +25,7 @@ module Admin::ListPaginatedUsers
             inertia: template,
             props: {
               users: InertiaRails.merge do
-                users.map do |user|
+                users.with_blocked_attributes_for(:form_email, :form_email_domain).map do |user|
                   user.as_json(
                     admin: true,
                     impersonatable: policy([:admin, :impersonators, user]).create?

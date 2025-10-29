@@ -12,7 +12,7 @@ class User < ApplicationRecord
           AsyncDeviseNotification, Posts, AffiliatedProducts, Followers, LowBalanceFraudCheck, MailerLevel,
           DirectAffiliates, AsJson, Tier, Recommendations, Team, AustralianBacktaxes, WithCdnUrl,
           TwoFactorAuthentication, Versionable, Comments, VipCreator, SignedUrlHelper, Purchases, SecureExternalId,
-          PayoutInfo
+          AttributeBlockable, PayoutInfo
 
   stripped_fields :name, :facebook_meta_tag, :google_analytics_id, :username, :email, :support_email
 
@@ -156,6 +156,12 @@ class User < ApplicationRecord
   attr_json_data_accessor :payout_frequency, default: User::PayoutSchedule::WEEKLY
   attr_json_data_accessor :custom_fee_per_thousand
   attr_json_data_accessor :payouts_paused_by
+
+  attr_blockable :email
+  attr_blockable :form_email, object_type: :email
+  attr_blockable :email_domain
+  attr_blockable :form_email_domain, object_type: :email_domain
+  attr_blockable :account_created_ip, object_type: :ip_address
 
   validates :username, uniqueness: { case_sensitive: true },
                        length: { minimum: 3, maximum: 20 },
@@ -645,13 +651,16 @@ class User < ApplicationRecord
     invite.mark_signed_up
   end
 
+  def email_domain
+    to_email_domain(email)
+  end
+
   def form_email
-    return unconfirmed_email if unconfirmed_email.present?
-    email if email.present?
+    unconfirmed_email.presence || email.presence
   end
 
   def form_email_domain
-    Mail::Address.new(form_email).domain.presence
+    to_email_domain(form_email)
   end
 
   def currency_symbol
@@ -1188,5 +1197,9 @@ class User < ApplicationRecord
 
     def reset_avatar_changed
       self.avatar_changed = false
+    end
+
+    def to_email_domain(value)
+      value.presence && Mail::Address.new(value).domain
     end
 end
