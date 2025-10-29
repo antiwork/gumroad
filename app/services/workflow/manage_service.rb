@@ -18,7 +18,7 @@ class Workflow::ManageService
 
     if workflow.new_record? && params[:workflow_type] == Workflow::ABANDONED_CART_TYPE && !seller.eligible_for_abandoned_cart_workflows?
       workflow.errors.add(:base, "You must have at least one completed payout to create an abandoned cart workflow")
-      return [false, workflow.errors]
+      return [false, workflow.errors.full_messages.first]
     end
 
     if workflow.has_never_been_published?
@@ -28,7 +28,7 @@ class Workflow::ManageService
       workflow.send_to_past_customers = params[:send_to_past_customers]
       workflow.add_and_validate_filters(params, seller)
       if workflow.errors.any?
-        return [false, workflow.errors]
+        return [false, workflow.errors.full_messages.first]
       end
     end
 
@@ -62,10 +62,10 @@ class Workflow::ManageService
         end
       end
     rescue ActiveRecord::RecordInvalid => e
-      @error = e.record.errors
+      @error = e.record.errors.full_messages.first
     rescue Installment::InstallmentInvalid => e
       workflow.errors.add(:base, e.message)
-      @error = workflow.errors
+      @error = workflow.errors.full_messages.first
     end
 
     [error.nil?, error]
