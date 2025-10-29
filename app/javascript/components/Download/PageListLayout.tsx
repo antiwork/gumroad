@@ -14,7 +14,7 @@ export const PageListLayout = ({
 }) => (
   <div
     className={classNames(
-      "flex min-h-0 flex-col gap-x-16 gap-y-6 bg-background p-4 [scrollbar-gutter:stable] md:p-8 lg:flex-row lg:overflow-y-auto",
+      "flex min-h-0 flex-col gap-6 bg-background p-4 [scrollbar-gutter:stable] md:p-8 lg:flex-row lg:gap-16 lg:overflow-y-auto",
       className,
     )}
   >
@@ -45,7 +45,7 @@ export const PageListItem = ({
   return (
     <Component
       className={classNames(
-        "tailwind-override flex items-center gap-2 p-4 text-left not-first:border-t first:rounded-t-sm last:rounded-b-sm",
+        "tailwind-override flex items-center gap-2 p-4 not-first:border-t first:rounded-t-sm last:rounded-b-sm",
         isSelected && "bg-muted",
         className,
       )}

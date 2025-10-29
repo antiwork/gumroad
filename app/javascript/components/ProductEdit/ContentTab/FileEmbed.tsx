@@ -163,7 +163,7 @@ const FileEmbedNodeView = ({ node, editor, getPos, updateAttributes }: NodeViewP
     [parentNode, product.files],
   );
   const isConnectedRow = isInGroup && !hasStreamable;
-  const isLastInGroup = parentNode?.content.child(parentNode.childCount - 1) === node;
+  const isLastInGroup = node === parentNode?.content.lastChild;
 
   if (!fileExists) return;
   const updateFile = (data: Partial<FileEntry>) =>

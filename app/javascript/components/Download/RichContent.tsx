@@ -155,10 +155,7 @@ const TiptapButton = TiptapNode.create<{ saleInfo: SaleInfo | null }>({
 });
 
 export const connectedFileRowClassName = (isLastInGroup: boolean) =>
-  classNames({
-    "border-none!": isLastInGroup,
-    "rounded-b-none! border-0! border-b! border-border": !isLastInGroup,
-  });
+  classNames(isLastInGroup ? "border-none!" : "rounded-b-none! border-0! border-b! border-border");
 
 const FileEmbedNodeView = ({ node, getPos, editor }: NodeViewProps) => {
   const contentFiles = useContentFiles();
@@ -175,7 +172,7 @@ const FileEmbedNodeView = ({ node, getPos, editor }: NodeViewProps) => {
       : undefined;
   const { hasStreamable } = useFilesInGroup(groupNode?.node);
   const isConnectedRow = !!groupNode && !hasStreamable;
-  const isLastInGroup = groupNode?.node.content.child(groupNode.node.childCount - 1) === node;
+  const isLastInGroup = node === groupNode?.node.content.lastChild;
   const fileRow = file ? (
     <FileRow
       file={file}
@@ -237,8 +234,8 @@ const useFilesAndFoldersDownloadInfo = () =>
 
 const useFilesInGroup = (node: ProseMirrorNode | undefined) => {
   const downloadInfo = useFilesAndFoldersDownloadInfo();
-  const [downloadableFilesInFolder, hasStreamable] = React.useMemo(() => {
-    if (!node) return [[], false];
+  return React.useMemo(() => {
+    if (!node) return { downloadableFilesInFolder: [], hasStreamable: false };
 
     const files: FileDownloadInfo[] = [];
     const fileIds: string[] = [];
@@ -249,10 +246,8 @@ const useFilesInGroup = (node: ProseMirrorNode | undefined) => {
       const file = downloadInfo.downloadableFiles.find((f) => f.id === fileId);
       if (file) files.push(file);
     });
-    return [files, downloadInfo.hasStreamable(fileIds)];
+    return { downloadableFilesInFolder: files, hasStreamable: downloadInfo.hasStreamable(fileIds) };
   }, [node?.content.childCount, downloadInfo]);
-
-  return { downloadableFilesInFolder, hasStreamable };
 };
 
 const ARCHIVE_FETCH_INTERVAL_DURATION_IN_MS = 5000;
