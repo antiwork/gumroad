@@ -1,39 +1,39 @@
-import cx from "classnames";
 import * as React from "react";
 
-import { Progress } from "$app/components/Progress";
+import { classNames } from "$app/utils/classNames";
 
-export const ProgressPie = ({ progress, className }: { progress: number; className?: string }) => {
+import { Icon } from "$app/components/Icons";
+
+export const ProgressPie = ({
+  progress,
+  className,
+  ...props
+}: { progress: number } & React.HTMLAttributes<HTMLDivElement>) => {
   const radius = 0.5;
-  const strokeWidth = 0.03;
-  const innerRadius = radius - strokeWidth;
   const angle = -Math.PI / 2 + 2 * Math.PI * progress;
-  const arcEndX = radius + innerRadius * Math.cos(angle);
-  const arcEndY = radius + innerRadius * Math.sin(angle);
+  const arcEndX = radius * (1 + Math.cos(angle));
+  const arcEndY = radius * (1 + Math.sin(angle));
   const pathString = `
   M ${radius} ${radius}
-  V ${strokeWidth}
-  A ${innerRadius} ${innerRadius} 0 ${progress > 0.5 ? 1 : 0} 1 ${arcEndX} ${arcEndY}
+  V 0
+  A ${radius} ${radius} 0 ${progress > 0.5 ? 1 : 0} 1 ${arcEndX} ${arcEndY}
   Z`;
   return (
-    <>
+    <div
+      className={classNames("rounded-full border border-border", className)}
+      role="progressbar"
+      aria-valuenow={Math.round(progress * 10000) / 100}
+      {...props}
+    >
       {progress === 1 ? (
-        <span className={cx("progress-pie", "progress-pie--completed", "legacy-only", className)}>
-          <i className="icn-check" />
-        </span>
+        <div className="rounded-full bg-accent p-1 text-2xl/none text-accent-foreground">
+          <Icon name="outline-check" />
+        </div>
       ) : (
-        <svg className={cx("progress-pie", "progress-pie--incomplete", "legacy-only", className)} viewBox="0 0 1 1">
-          <circle
-            className="progress-pie--incomplete__background"
-            cx={radius}
-            cy={radius}
-            r={radius - strokeWidth / 2}
-            strokeWidth={strokeWidth}
-          />
-          <path className="progress-pie--incomplete__pie" d={pathString} />
+        <svg viewBox="0 0 1 1" className="w-8">
+          <path className="fill-accent" d={pathString} />
         </svg>
       )}
-      <Progress progress={progress} width="2em" />
-    </>
+    </div>
   );
 };

@@ -696,7 +696,7 @@ class StripeChargeProcessor
     amount_cents = -data["details"]["total_amount"].to_i
     return if merchant_account.user.credits.where("json_data->'$.stripe_loan_paydown_id' = ?", stripe_loan_paydown_id).exists?
 
-    if data["details"]["reason"] == "collection"
+    if data["details"]["reason"] == "collection" && data["user_facing_description"] == "Forced debit from Stripe Payments"
       Credit.create_for_manual_paydown_on_stripe_loan!(amount_cents:, merchant_account:, stripe_loan_paydown_id:)
     elsif data["details"]["reason"] == "automatic_withholding"
       linked_payment_id = data["details"]["transaction"]["charge"].presence || data["details"]["linked_payment"]

@@ -160,6 +160,15 @@ describe("Checkout upsells page", type: :system, js: true) do
     end
   end
 
+  def within_preview_modal(title:, &block)
+    in_preview do
+      within "[role=dialog]" do
+        expect(page).to have_selector("h2", text: title)
+        block.call
+      end
+    end
+  end
+
   describe "upsell creation" do
     it "allows creating an upsell" do
       visit checkout_upsells_path
@@ -173,36 +182,28 @@ describe("Checkout upsells page", type: :system, js: true) do
       fill_in "Offer description", with: "This is a really cool upsell"
       choose "Paused"
 
-      in_preview do
-        within_modal "My cool upsell" do
-          expect(page).to have_text("This is a really cool upsell")
-        end
+      within_preview_modal(title: "My cool upsell") do
+        expect(page).to have_text("This is a really cool upsell")
       end
 
       fill_in "Offer text", with: "Enhance your learning experience"
       fill_in "Offer description", with: "You'll enjoy a range of exclusive features, including..."
-      in_preview do
-        within_modal "Enhance your learning experience" do
-          expect(page).to have_text("You'll enjoy a range of exclusive features, including...")
-        end
+      within_preview_modal(title: "Enhance your learning experience") do
+        expect(page).to have_text("You'll enjoy a range of exclusive features, including...")
       end
 
       select_combo_box_option search: "Product 1", from: "Apply to this product"
       select_combo_box_option search: "Untitled 1", from: "Version to offer for Untitled 2"
-      in_preview do
-        within_modal "Enhance your learning experience" do
-          expect(page).to have_radio_button("Untitled 1", text: "$10")
-        end
+      within_preview_modal(title: "Enhance your learning experience") do
+        expect(page).to have_radio_button("Untitled 1", text: "$10")
       end
 
       within find("[aria-label='Upsell versions']") do
         click_on "Clear value"
       end
       select_combo_box_option search: "Untitled 2", from: "Version to offer for Untitled 1"
-      in_preview do
-        within_modal "Enhance your learning experience" do
-          expect(page).to have_radio_button("Untitled 2", text: "$15")
-        end
+      within_preview_modal(title: "Enhance your learning experience") do
+        expect(page).to have_radio_button("Untitled 2", text: "$15")
       end
 
       click_on "Save"
@@ -284,60 +285,48 @@ describe("Checkout upsells page", type: :system, js: true) do
 
       fill_in "Offer text", with: "My cool upsell"
       fill_in "Offer description", with: "This is a really cool upsell"
-      in_preview do
-        within_modal "My cool upsell" do
-          expect(page).to have_text("This is a really cool upsell")
-        end
+      within_preview_modal(title: "My cool upsell") do
+        expect(page).to have_text("This is a really cool upsell")
       end
 
       fill_in "Offer text", with: "Enhance your learning experience"
       fill_in "Offer description", with: "You'll enjoy a range of exclusive features, including..."
-      in_preview do
-        within_modal "Enhance your learning experience" do
-          expect(page).to have_text("You'll enjoy a range of exclusive features, including...")
-        end
+      within_preview_modal(title: "Enhance your learning experience") do
+        expect(page).to have_text("You'll enjoy a range of exclusive features, including...")
       end
 
       select_combo_box_option search: "Product 1", from: "Apply to these products"
       select_combo_box_option search: "Product 3", from: "Product to offer"
-      in_preview do
-        within_modal "Enhance your learning experience" do
-          within_section "Product 3", section_element: :article do
-            expect(page).to have_link("Seller")
-            expect(page).to have_selector("[itemprop='price']", text: "$1")
-          end
+      within_preview_modal(title: "Enhance your learning experience") do
+        within_section "Product 3", section_element: :article do
+          expect(page).to have_link("Seller")
+          expect(page).to have_selector("[itemprop='price']", text: "$1")
         end
       end
 
       find(:label, "Product to offer").click
       select_combo_box_option search: "Product 2", from: "Product to offer"
       select_combo_box_option search: "Untitled 2", from: "Version to offer"
-      in_preview do
-        within_modal "Enhance your learning experience" do
-          within_section "Product 2 - Untitled 2", section_element: :article do
-            expect(page).to have_link("Seller")
-            expect(page).to have_selector("[itemprop='price']", text: "$10")
-          end
+      within_preview_modal(title: "Enhance your learning experience") do
+        within_section "Product 2 - Untitled 2", section_element: :article do
+          expect(page).to have_link("Seller")
+          expect(page).to have_selector("[itemprop='price']", text: "$10")
         end
       end
 
       find(:label, "Version to offer").click
       select_combo_box_option search: "Untitled 1", from: "Version to offer"
-      in_preview do
-        within_modal "Enhance your learning experience" do
-          within_section "Product 2 - Untitled 1", section_element: :article do
-            expect(page).to have_selector("[itemprop='price']", text: "$5")
-          end
+      within_preview_modal(title: "Enhance your learning experience") do
+        within_section "Product 2 - Untitled 1", section_element: :article do
+          expect(page).to have_selector("[itemprop='price']", text: "$5")
         end
       end
 
       check "Add discount to the offered product"
       fill_in "Percentage", with: "20"
-      in_preview do
-        within_modal "Enhance your learning experience" do
-          within_section "Product 2 - Untitled 1", section_element: :article do
-            expect(page).to have_selector("[itemprop='price']", text: "$5 $4")
-          end
+      within_preview_modal(title: "Enhance your learning experience") do
+        within_section "Product 2 - Untitled 1", section_element: :article do
+          expect(page).to have_selector("[itemprop='price']", text: "$5 $4")
         end
       end
 
@@ -390,10 +379,8 @@ describe("Checkout upsells page", type: :system, js: true) do
 
       fill_in "Offer text", with: "My cool upsell"
       fill_in "Offer description", with: "This is a really cool upsell"
-      in_preview do
-        within_modal "My cool upsell" do
-          expect(page).to have_text("This is a really cool upsell")
-        end
+      within_preview_modal(title: "My cool upsell") do
+        expect(page).to have_text("This is a really cool upsell")
       end
 
       fill_in "Offer text", with: "Enhance your learning experience"

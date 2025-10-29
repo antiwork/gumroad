@@ -113,7 +113,7 @@ export const TestimonialSelectModal = ({
       <div>
         {isLoading && state.reviews.length === 0 ? (
           <div className="flex items-center justify-center">
-            <LoadingSpinner width="2em" />
+            <LoadingSpinner className="size-8" />
           </div>
         ) : !isLoading && state.reviews.length === 0 ? (
           <p>No reviews with text or video yet.</p>

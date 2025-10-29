@@ -74,7 +74,7 @@ const PostPage = ({
         <time>{publishedAtFormatted}</time>
       </header>
       <article className="grid gap-8 border-b border-border p-4 pt-8 lg:pt-12 lg:pb-8">
-        {pageLoaded ? null : <LoadingSpinner width="2em" />}
+        {pageLoaded ? null : <LoadingSpinner className="size-8" />}
         <EditorContent className="rich-text" editor={editor} />
 
         {call_to_action || download_url ? (

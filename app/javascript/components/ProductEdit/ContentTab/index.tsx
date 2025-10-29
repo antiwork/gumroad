@@ -562,7 +562,7 @@ const ContentTabContent = ({ selectedVariantId }: { selectedVariantId: string | 
                       >
                         {selectingExistingFiles.isLoading ? (
                           <div className="flex min-h-40 justify-center">
-                            <LoadingSpinner width="2rem" />
+                            <LoadingSpinner className="size-8" />
                           </div>
                         ) : (
                           filteredExistingFiles.map((file) => (

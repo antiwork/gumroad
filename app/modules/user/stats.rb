@@ -212,6 +212,7 @@ module User::Stats
   def credits_cents_for_balances(balance_ids)
     credits
       .where(financing_paydown_purchase_id: nil)
+      .where("json_data->>'$.stripe_loan_paydown_id' IS NULL")
       .where(fee_retention_refund_id: nil)
       .where(balance_id: balance_ids)
       .sum("amount_cents")
@@ -219,7 +220,7 @@ module User::Stats
 
   def loan_repayment_cents_for_balances(balance_ids)
     credits
-      .where.not(financing_paydown_purchase_id: nil)
+      .where("financing_paydown_purchase_id IS NOT NULL OR json_data->>'$.stripe_loan_paydown_id' IS NOT NULL")
       .where(balance_id: balance_ids)
       .sum("amount_cents")
   end
