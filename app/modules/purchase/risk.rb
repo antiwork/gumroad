@@ -46,7 +46,7 @@ module Purchase::Risk
     end
 
     def check_for_past_blocked_email_domains
-      return unless BlockedObject.find_active_objects(blockable_email_domains_if_fraudulent_transaction).exists?
+      return unless blocked_by_email_domain_if_fraudulent_transaction?
 
       self.error_code = PurchaseErrorCode::BLOCKED_EMAIL_DOMAIN
       errors.add :base, vague_error_message

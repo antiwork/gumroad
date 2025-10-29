@@ -3,6 +3,25 @@
 module Purchase::Blockable
   extend ActiveSupport::Concern
 
+  included do
+    include AttributeBlockable
+
+    attr_blockable :browser_guid
+    attr_blockable :ip_address
+    attr_blockable :email
+    attr_blockable :paypal_email, object_type: :email
+    attr_blockable :gifter_email, object_type: :email
+    attr_blockable :charge_processor_fingerprint
+    attr_blockable :purchaser_email, object_type: :email
+    attr_blockable :recent_stripe_fingerprint, object_type: :charge_processor_fingerprint
+    attr_blockable :email_domain
+    attr_blockable :paypal_email_domain, object_type: :email_domain
+    attr_blockable :gifter_email_domain, object_type: :email_domain
+    attr_blockable :purchaser_email_domain, object_type: :email_domain
+
+    delegate :email, to: :purchaser, prefix: true, allow_nil: true
+  end
+
   # Max number of failed purchase card fingerprints before a buyer's browser guid gets banned
   MAX_NUMBER_OF_FAILED_FINGERPRINTS = 4
 
@@ -27,47 +46,25 @@ module Purchase::Blockable
   private_constant :MAX_PURCHASER_AGE_FOR_SUSPENSION
 
   def buyer_blocked?
-    BlockedObject.find_active_object(browser_guid)&.blocked? ||
-      blocked_emails.any? ||
-      blocked_ip_addresses.any? ||
-      charge_processor_fingerprint_blocked?
-  end
-
-  def blocked_emails
-    BlockedObject
-      .email
-      .find_active_objects(blockable_emails_if_fraudulent_transaction)
-      .map(&:object_value)
-  end
-
-  def blocked_ip_addresses
-    BlockedObject
-      .ip_address
-      .find_active_objects([ip_address])
-      .map(&:object_value)
-  end
-
-  def charge_processor_fingerprint_blocked?
-    charge_processor_fingerprint.present? && BlockedObject.charge_processor_fingerprint.find_active_object(charge_processor_fingerprint).present?
+    blocked_by_browser_guid? ||
+      blocked_by_email? ||
+      blocked_by_paypal_email? ||
+      blocked_by_gifter_email? ||
+      blocked_by_purchaser_email? ||
+      blocked_by_ip_address? ||
+      blocked_by_charge_processor_fingerprint? ||
+      blocked_by_recent_stripe_fingerprint?
   end
 
   def block_buyer!(blocking_user_id: nil, comment_content: nil)
-    BlockedObject.block!(BLOCKED_OBJECT_TYPES[:browser_guid], browser_guid, blocking_user_id)
-    BlockedObject.block!(
-      BLOCKED_OBJECT_TYPES[:ip_address],
-      ip_address,
-      blocking_user_id,
-      expires_in: BlockedObject::IP_ADDRESS_BLOCKING_DURATION_IN_MONTHS.months
-    )
-    blockable_emails_if_fraudulent_transaction.each do |email|
-      BlockedObject.block!(BLOCKED_OBJECT_TYPES[:email], email, blocking_user_id)
-    end
-
-    BlockedObject.block!(
-      BLOCKED_OBJECT_TYPES[:charge_processor_fingerprint],
-      charge_processor_fingerprint,
-      blocking_user_id
-    ) if charge_processor_fingerprint.present?
+    block_by_browser_guid!(by_user_id: blocking_user_id)
+    block_by_email!(by_user_id: blocking_user_id)
+    block_by_paypal_email!(by_user_id: blocking_user_id)
+    block_by_gifter_email!(by_user_id: blocking_user_id)
+    block_by_purchaser_email!(by_user_id: blocking_user_id)
+    block_by_ip_address!(by_user_id: blocking_user_id, expires_in: BlockedObject::IP_ADDRESS_BLOCKING_DURATION_IN_MONTHS.months)
+    block_by_charge_processor_fingerprint!(by_user_id: blocking_user_id)
+    block_by_recent_stripe_fingerprint!(by_user_id: blocking_user_id)
 
     blocking_user = User.find_by(id: blocking_user_id) if blocking_user_id.present?
     update!(is_buyer_blocked_by_admin: true) if blocking_user&.is_team_member?
@@ -76,18 +73,15 @@ module Purchase::Blockable
   end
 
   def unblock_buyer!
-    BlockedObject.unblock!(browser_guid)
-    BlockedObject
-      .email
-      .find_active_objects(blocked_emails)
-      .each(&:unblock!)
-    BlockedObject
-      .ip_address
-      .find_active_objects(blocked_ip_addresses)
-      .each(&:unblock!)
-    BlockedObject
-      .charge_processor_fingerprint
-      .unblock!(charge_processor_fingerprint.presence || recent_stripe_fingerprint)
+    unblock_by_browser_guid!
+    unblock_by_email!
+    unblock_by_paypal_email!
+    unblock_by_gifter_email!
+    unblock_by_purchaser_email!
+    unblock_by_ip_address!
+    unblock_by_charge_processor_fingerprint!
+    unblock_by_recent_stripe_fingerprint!
+
     update!(is_buyer_blocked_by_admin: false) if is_buyer_blocked_by_admin?
   end
 
@@ -122,11 +116,17 @@ module Purchase::Blockable
     end
 
     def blockable_emails_if_fraudulent_transaction
-      [purchaser&.email, paypal_email, email, gifter_email].compact_blank.uniq
+      [purchaser_email, paypal_email, email, gifter_email].compact_blank.uniq
     end
 
-    def blockable_email_domains_if_fraudulent_transaction
-      blockable_emails_if_fraudulent_transaction.map { |email| Mail::Address.new(email).domain }
+    [:purchaser_email, :paypal_email, :gifter_email, :email].each do |email_attribute|
+      define_method("#{email_attribute}_domain") do
+        send(email_attribute).presence && Mail::Address.new(send(email_attribute)).domain
+      end
+    end
+
+    def blocked_by_email_domain_if_fraudulent_transaction?
+      blocked_by_email_domain? || blocked_by_paypal_email_domain? || blocked_by_gifter_email_domain? || blocked_by_purchaser_email_domain?
     end
 
     def ban_fraudulent_buyer_browser_guid!
@@ -149,6 +149,7 @@ module Purchase::Blockable
 
     def suspend_buyer_on_fraudulent_card_decline!
       return if Feature.inactive?(:suspend_fraudulent_buyers)
+
       failure_code = stripe_error_code || error_code
       return unless failure_code == PurchaseErrorCode::CARD_DECLINED_FRAUDULENT
       return unless purchaser.present?

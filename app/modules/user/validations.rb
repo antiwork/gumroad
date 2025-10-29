@@ -21,17 +21,13 @@ module User::Validations
 
     def account_created_email_domain_is_not_blocked
       return if self.errors[:email].present?
-
-      email_domain = Mail::Address.new(email).domain
-      return if email_domain.blank?
-      return unless BlockedObject.email_domain.find_active_object(email_domain)&.blocked?
+      return unless blocked_by_email_domain?
 
       errors.add(:base, "Something went wrong.")
     end
 
     def account_created_ip_is_not_blocked
-      return if account_created_ip.blank?
-      return unless BlockedObject.find_active_object(account_created_ip)&.blocked?
+      return unless blocked_by_account_created_ip?
 
       errors.add(:base, "Something went wrong.")
     end
