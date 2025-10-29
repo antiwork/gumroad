@@ -12,6 +12,7 @@ class Admin::AffiliatesController < Admin::BaseController
   def index
     @title = "Affiliate results"
     @users = @users.joins(:direct_affiliate_accounts).distinct.limit(25)
+    @users = @users.with_blocked_attributes_for(:form_email, :form_email_domain)
 
     redirect_to admin_affiliate_path(@users.first) if @users.length == 1
   end
