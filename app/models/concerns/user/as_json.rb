@@ -34,9 +34,7 @@ module User::AsJson
       methods: [
         :display_name,
         :form_email,
-        :form_email_block,
         :form_email_domain,
-        :form_email_domain_block,
         :avatar_url,
         :username,
         :subdomain_with_protocol,
@@ -71,7 +69,9 @@ module User::AsJson
       id:,
       impersonatable:,
       user_risk_state: user_risk_state.humanize,
-      comments_count: comments.size
+      comments_count: comments.size,
+      blocked_by_form_email_object: blocked_by_form_email_object&.as_json(only: %i[blocked_at created_at]),
+      blocked_by_form_email_domain_object: blocked_by_form_email_domain_object&.as_json(only: %i[blocked_at created_at])
     )
   end
 

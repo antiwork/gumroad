@@ -107,13 +107,13 @@ describe AdminHelper do
   end
 
   describe "#blocked_email_tooltip" do
-    let(:user) { User.last }
     let(:email) { "john@example.com" }
-    let!(:email_blocked_object) { BlockedObject.block!(:email, email, user) }
-    let!(:email_domain_blocked_object) { BlockedObject.block!(:email_domain, Mail::Address.new(email).domain, user) }
+    let!(:user) { create(:user, email:) }
+    let!(:email_blocked_object) { BlockedObject.block!(:email, email, nil) }
+    let!(:email_domain_blocked_object) { BlockedObject.block!(:email_domain, Mail::Address.new(email).domain, nil) }
 
     it "includes email and email domain tooltip information" do
-      result = blocked_email_tooltip(email)
+      result = blocked_email_tooltip(user)
       expect(result).to include("Email blocked")
       expect(result).to include("example.com blocked")
     end
@@ -124,7 +124,7 @@ describe AdminHelper do
       end
 
       it "includes email information" do
-        result = blocked_email_tooltip(email)
+        result = blocked_email_tooltip(user)
         expect(result).to_not include("Email blocked")
         expect(result).to include("example.com blocked")
       end
@@ -136,7 +136,7 @@ describe AdminHelper do
       end
 
       it "includes email information" do
-        result = blocked_email_tooltip(email)
+        result = blocked_email_tooltip(user)
         expect(result).to include("Email blocked")
         expect(result).to_not include("example.com blocked")
       end
@@ -149,7 +149,7 @@ describe AdminHelper do
       end
 
       it "returns nil" do
-        result = blocked_email_tooltip(email)
+        result = blocked_email_tooltip(user)
         expect(result).to be(nil)
       end
     end
