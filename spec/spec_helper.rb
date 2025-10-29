@@ -132,9 +132,7 @@ RSpec.configure do |config|
   config.include ActiveSupport::Testing::TimeHelpers
 
   if BUILDING_ON_CI
-    # show retry status in spec process
     config.verbose_retry = true
-    # show exception that triggers a retry if verbose_retry is set to true
     config.display_try_failure_messages = true
     config.default_retry_count = 3
   end
@@ -142,10 +140,9 @@ RSpec.configure do |config|
     # Disable webmock while cleanup, see also https://github.com/teamcapybara/capybara#gotchas
     WebMock.allow_net_connect!(net_http_connect_on_start: true)
     [
-      Thread.new { prepare_mysql }
+      Thread.new { prepare_mysql },
+      Thread.new { ElasticsearchSetup.prepare_test_environment }
     ].each(&:join)
-    # Skip ElasticsearchSetup for local testing without Docker
-    # Thread.new { ElasticsearchSetup.prepare_test_environment }
   end
 
   config.before(:suite) do
