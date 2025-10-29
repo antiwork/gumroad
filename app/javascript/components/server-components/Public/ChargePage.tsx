@@ -8,7 +8,7 @@ const ChargePage = () => (
     type="charge"
   >
     <form>
-      <section>
+      <section className="p-4! md:p-8!">
         <header>
           <h2>Who/what is Gumroad?</h2>
         </header>
@@ -19,7 +19,7 @@ const ChargePage = () => (
       </section>
     </form>
     <form>
-      <section>
+      <section className="p-4! md:p-8!">
         <header>
           <h2>
             <a href="/help/article/214-why-was-i-charged-by-gumroad" target="_blank" rel="noreferrer">

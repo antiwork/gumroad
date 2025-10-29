@@ -19,7 +19,7 @@
             <li>
               Email:
               <%= copy_to_clipboard(user.form_email) %>
-              <%= blocked_email_tooltip(user.form_email) %>
+              <%= blocked_email_tooltip(user) %>
             </li>
           <% end %>
           <% if user.support_email.present? %>
