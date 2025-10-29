@@ -45,6 +45,7 @@ class Comment < ApplicationRecord
   scope :with_type_on_probation, -> { where(comment_type: COMMENT_TYPE_ON_PROBATION) }
   scope :with_type_payouts_paused, -> { where(comment_type: COMMENT_TYPE_PAYOUTS_PAUSED) }
   scope :with_type_payouts_resumed, -> { where(comment_type: COMMENT_TYPE_PAYOUTS_RESUMED) }
+  scope :with_type_flagged, -> { where(comment_type: COMMENT_TYPE_FLAGGED) }
 
   def mark_subtree_deleted!
     transaction do
