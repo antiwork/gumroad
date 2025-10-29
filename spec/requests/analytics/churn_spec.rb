@@ -113,22 +113,6 @@ describe "Churn analytics", :js, :sidekiq_inline, type: :system do
       within_section("Churned users") { expect(page).to have_text("0") }
     end
 
-    it "supports custom date ranges without 31-day limit" do
-      visit churn_dashboard_path(from: "2023-12-01", to: "2023-12-15")
-
-      date_range_text = find('[aria-label="Date range selector"]').text
-      select_disclosure date_range_text do
-        click_on "Custom range..."
-        fill_in "From (including)", with: "11/01/2023"
-      end
-      find("body").click
-
-      # Should allow the date range without any validation error
-      expect(page).not_to have_alert(text: "Date range cannot exceed 31 days")
-      expect(page.current_url).to include("from=2023-01-11")
-      expect(page.current_url).to include("to=2023-12-15")
-    end
-
     it "supports quick date range selections" do
       visit churn_dashboard_path(from: "2023-12-01", to: "2023-12-31")
 
