@@ -28,7 +28,7 @@ class Workflow::ManageService
       workflow.send_to_past_customers = params[:send_to_past_customers]
       workflow.add_and_validate_filters(params, seller)
       if workflow.errors.any?
-        @error = workflow.errors.full_messages.first
+        @error = workflow.errors.full_messages.first.to_s
         return [false, error]
       end
     end
@@ -63,7 +63,7 @@ class Workflow::ManageService
         end
       end
     rescue ActiveRecord::RecordInvalid => e
-      @error = e.record.errors.full_messages.first
+      @error = e.record.errors.full_messages.first.to_s
     rescue Installment::InstallmentInvalid => e
       @error = e.message
     end
