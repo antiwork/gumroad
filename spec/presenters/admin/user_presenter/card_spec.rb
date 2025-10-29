@@ -164,9 +164,9 @@ describe Admin::UserPresenter::Card do
           membership_data = props[:admin_manageable_user_memberships].first
 
           expect(membership_data).to include(
-            "id" => membership.id,
-            "created_at" => membership.created_at,
-            "updated_at" => membership.updated_at
+            id: membership.id,
+            created_at: membership.created_at,
+            updated_at: membership.updated_at
           )
         end
 
