@@ -101,4 +101,3 @@ export type WorkflowFormContext = {
   gumroad_address: string;
   eligible_for_abandoned_cart_workflows: boolean;
 };
-
