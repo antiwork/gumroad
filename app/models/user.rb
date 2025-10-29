@@ -347,11 +347,6 @@ class User < ApplicationRecord
     end
   end
 
-  alias_method :compliant, :compliant?
-  alias_method :on_probation, :on_probation?
-  alias_method :flagged_for_fraud, :flagged_for_fraud?
-  alias_method :flagged_for_tos_violation, :flagged_for_tos_violation?
-
   state_machine(:tier_state, initial: :tier_0) do
     state :tier_0, value: TIER_0
     state :tier_1, value: TIER_1

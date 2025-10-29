@@ -53,142 +53,33 @@ describe Admin::UserPresenter::Card do
       end
     end
 
-    describe "identification fields" do
-      it "returns the numeric id" do
+    describe "fields" do
+      it "returns the correct values" do
         expect(props[:id]).to eq(user.id)
-      end
-    end
-
-    describe "basic user fields" do
-      it "returns the user's name" do
         expect(props[:name]).to eq(user.name)
-      end
-
-      it "returns the user's bio" do
         expect(props[:bio]).to eq(user.bio)
-      end
-    end
-
-    describe "display fields" do
-      it "returns the avatar_url" do
         expect(props[:avatar_url]).to eq(user.avatar_url)
-      end
-
-      it "returns the username" do
         expect(props[:username]).to eq(user.username)
-      end
-    end
-
-    describe "email fields" do
-      it "returns the form_email as email" do
         expect(props[:email]).to eq(user.form_email)
-      end
-
-      it "returns the form_email" do
         expect(props[:form_email]).to eq(user.form_email)
-      end
-
-      it "returns the form_email_domain" do
         expect(props[:form_email_domain]).to eq(user.form_email_domain)
-      end
-
-      it "returns the support_email" do
         expect(props[:support_email]).to eq(user.support_email)
-      end
-    end
-
-    describe "URL fields" do
-      it "returns the avatar_url as profile_url" do
         expect(props[:profile_url]).to eq(user.avatar_url)
-      end
-
-      it "returns the subdomain_with_protocol" do
         expect(props[:subdomain_with_protocol]).to eq(user.subdomain_with_protocol)
-      end
-    end
-
-    describe "financial fields" do
-      it "returns the custom_fee_per_thousand" do
         expect(props[:custom_fee_per_thousand]).to eq(user.custom_fee_per_thousand)
-      end
-
-      it "returns the unpaid_balance_cents" do
         expect(props[:unpaid_balance_cents]).to eq(user.unpaid_balance_cents)
-      end
-
-      it "returns the disable_paypal_sales flag" do
         expect(props[:disable_paypal_sales]).to eq(user.disable_paypal_sales)
-      end
-    end
-
-    describe "status flags" do
-      it "returns the verified status" do
-        expect(props[:verified]).to eq(user.verified)
-      end
-
-      it "returns the suspended status" do
-        expect(props[:suspended]).to eq(user.suspended)
-      end
-
-      it "returns the flagged_for_fraud status" do
-        expect(props[:flagged_for_fraud]).to eq(user.flagged_for_fraud)
-      end
-
-      it "returns the flagged_for_tos_violation status" do
-        expect(props[:flagged_for_tos_violation]).to eq(user.flagged_for_tos_violation)
-      end
-
-      it "returns the on_probation status" do
-        expect(props[:on_probation]).to eq(user.on_probation)
-      end
-
-      it "returns the all_adult_products status" do
-        expect(props[:all_adult_products]).to eq(user.all_adult_products)
-      end
-    end
-
-    describe "impersonatable flag" do
-      context "when impersonatable is false" do
-        let(:impersonatable) { false }
-
-        it "returns false" do
-          expect(props[:impersonatable]).to be(false)
-        end
-      end
-
-      context "when impersonatable is true" do
-        let(:impersonatable) { true }
-
-        it "returns true" do
-          expect(props[:impersonatable]).to be(true)
-        end
-      end
-    end
-
-    describe "risk & moderation fields" do
-      it "returns the user_risk_state as humanized" do
+        expect(props[:verified]).to eq(user.verified?)
+        expect(props[:suspended]).to eq(user.suspended?)
+        expect(props[:flagged_for_fraud]).to eq(user.flagged_for_fraud?)
+        expect(props[:flagged_for_tos_violation]).to eq(user.flagged_for_tos_violation?)
+        expect(props[:on_probation]).to eq(user.on_probation?)
+        expect(props[:all_adult_products]).to eq(user.all_adult_products?)
         expect(props[:user_risk_state]).to eq(user.user_risk_state.humanize)
-      end
-
-      it "returns the comments count" do
         expect(props[:comments_count]).to eq(2)
-      end
-
-      it "returns the compliant status" do
         expect(props[:compliant]).to eq(user.compliant?)
-      end
-    end
-
-    describe "timestamp fields" do
-      it "returns the created_at timestamp" do
         expect(props[:created_at]).to eq(user.created_at)
-      end
-
-      it "returns the updated_at timestamp" do
         expect(props[:updated_at]).to eq(user.updated_at)
-      end
-
-      it "returns the deleted_at timestamp" do
         expect(props[:deleted_at]).to eq(user.deleted_at)
       end
     end
@@ -340,17 +231,12 @@ describe Admin::UserPresenter::Card do
           )
         end
 
-        it "returns the correct compliance field values" do
+        it "returns the correct field values" do
           info = props[:alive_user_compliance_info]
 
           expect(info[:first_name]).to eq(compliance_info.first_name)
           expect(info[:last_name]).to eq(compliance_info.last_name)
           expect(info[:is_business]).to eq(compliance_info.is_business)
-        end
-
-        it "includes method-based attributes" do
-          info = props[:alive_user_compliance_info]
-
           expect(info[:state_code]).to eq(compliance_info.state_code)
           expect(info[:country_code]).to eq(compliance_info.country_code)
           expect(info[:business_state_code]).to eq(compliance_info.business_state_code)

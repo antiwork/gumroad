@@ -39,12 +39,12 @@ class Admin::UserPresenter::Card
       disable_paypal_sales: user.disable_paypal_sales,
 
       # Status flags
-      verified: user.verified,
-      suspended: user.suspended,
-      flagged_for_fraud: user.flagged_for_fraud,
-      flagged_for_tos_violation: user.flagged_for_tos_violation,
-      on_probation: user.on_probation,
-      all_adult_products: user.all_adult_products,
+      verified: user.verified?,
+      suspended: user.suspended?,
+      flagged_for_fraud: user.flagged_for_fraud?,
+      flagged_for_tos_violation: user.flagged_for_tos_violation?,
+      on_probation: user.on_probation?,
+      all_adult_products: user.all_adult_products?,
 
       # Risk & moderation
       user_risk_state: user.user_risk_state.humanize,
