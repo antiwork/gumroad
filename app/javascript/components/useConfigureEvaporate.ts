@@ -59,7 +59,7 @@ export const useConfigureEvaporate = (props: Props) => {
     [props.s3_url, props.user_id],
   );
 
-  const scheduleUpload = async ({
+  const scheduleUpload = ({
     cancellationKey,
     name,
     file,
@@ -108,13 +108,12 @@ export const useConfigureEvaporate = (props: Props) => {
     const uploadId = cancellationKeysToUploadIdsRef.current[cancellationKey];
     if (uploadId) {
       evaporate.cancel(uploadId);
-      delete cancellationKeysToUploadIdsRef.current[cancellationKey];
+      const { [cancellationKey]: _, ...rest } = cancellationKeysToUploadIdsRef.current;
+      cancellationKeysToUploadIdsRef.current = rest;
     }
   };
 
-  const retryUpload = () => {
-    return true;
-  };
+  const retryUpload = () => true;
 
   return {
     evaporateUploader: {
@@ -122,6 +121,6 @@ export const useConfigureEvaporate = (props: Props) => {
       cancelUpload,
       retryUpload,
     },
-    s3UploadConfig
+    s3UploadConfig,
   };
 };
