@@ -746,7 +746,7 @@ const PaymentsPage = (props: Props) => {
       payouts_paused_by_user: payoutsPausedByUser,
       payout_threshold_cents: payoutThresholdCents.value,
       payout_frequency: payoutFrequency,
-    } as any;
+    };
 
     if (selectedPayoutMethod === "bank") {
       data = { ...data, ...{ bank_account: bankAccount } };
