@@ -40,7 +40,7 @@ describe "Tax Center", js: true, type: :system do
                                    "Gross" => "$10.00",
                                    "Fees" => "-$1.00",
                                    "Taxes" => "-$0.15",
-                                   "Affiliate Commission" => "-$0.00",
+                                   "Affiliate commission" => "-$0.00",
                                    "Net" => "$8.85"
                                  }
                                ])
@@ -56,7 +56,7 @@ describe "Tax Center", js: true, type: :system do
                                    "Gross" => "$10.00",
                                    "Fees" => "-$0.50",
                                    "Taxes" => "-$0.00",
-                                   "Affiliate Commission" => "-$0.00",
+                                   "Affiliate commission" => "-$0.00",
                                    "Net" => "$9.50"
                                  }
                                ])

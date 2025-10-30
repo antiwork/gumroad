@@ -201,7 +201,7 @@ const TaxCenterPage = ({
                   <th>Gross</th>
                   <th>Fees</th>
                   <th>Taxes</th>
-                  <th>Affiliate Commission</th>
+                  <th>Affiliate commission</th>
                   <th>Net</th>
                   <th></th>
                 </tr>
@@ -218,7 +218,7 @@ const TaxCenterPage = ({
                     <td data-label="Gross">{doc.gross}</td>
                     <td data-label="Fees">-{doc.fees}</td>
                     <td data-label="Taxes">-{doc.taxes}</td>
-                    <td data-label="Affiliate Commission">-{doc.affiliate_credit}</td>
+                    <td data-label="Affiliate commission">-{doc.affiliate_credit}</td>
                     <td data-label="Net">{doc.net}</td>
                     <td data-label="" className="text-right">
                       <div className="flex justify-end">
