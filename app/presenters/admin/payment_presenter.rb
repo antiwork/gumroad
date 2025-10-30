@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 class Admin::PaymentPresenter
   attr_reader :payment
 
