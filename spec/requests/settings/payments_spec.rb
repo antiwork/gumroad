@@ -3803,6 +3803,7 @@ describe("Payments Settings Scenario", type: :system, js: true) do
           old_user_compliance_info.mark_deleted!
           new_user_compliance_info.save!
         end
+        create(:merchant_account, user: @user, charge_processor_merchant_id: "acct_test_jm_1", country: "JM", currency: "jmd")
       end
 
       it "allows to enter bank account details" do
