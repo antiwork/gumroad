@@ -12,7 +12,7 @@ http_interactions:
       Accept:
       - "*/*"
       User-Agent:
-      - Mozilla/5.0 (compatible; ruby-oembed/0.13.1)
+      - Mozilla/5.0 (compatible; ruby-oembed/0.17.0)
   response:
     status:
       code: 200
@@ -26,44 +26,59 @@ http_interactions:
       - keep-alive
       Status:
       - 200 OK
-      Access-Control-Allow-Headers:
-      - Accept, Authorization, Content-Type, Origin
       Cache-Control:
-      - private, max-age=0, must-revalidate
+      - max-age=0, private, must-revalidate
       Access-Control-Allow-Origin:
       - "*"
-      Access-Control-Allow-Methods:
-      - GET, PUT, POST, DELETE
+      Referrer-Policy:
+      - strict-origin-when-cross-origin
       Access-Control-Expose-Headers:
       - Date
+      X-Permitted-Cross-Domain-Policies:
+      - none
+      X-Xss-Protection:
+      - 1; mode=block
+      X-Request-Id:
+      - 6900CAB364E0A01FE3162
+      Access-Control-Allow-Headers:
+      - Accept, Authorization, Content-Type, Origin
+      Access-Control-Allow-Methods:
+      - GET, PUT, POST, DELETE
+      X-Download-Options:
+      - noopen
       Etag:
-      - '"6f4db9d6361f22c26099ef44e40c66e4"'
-      Date:
-      - Wed, 04 Nov 2020 23:56:44 GMT
+      - W/"0a4c31c7da73b2bdf952abe49e9327e9"
       X-Frame-Options:
-      - SAMEORIGIN
+      - SAMEORIGIN, SAMEORIGIN
+      X-Content-Type-Options:
+      - nosniff
+      Date:
+      - Tue, 28 Oct 2025 13:52:52 GMT
+      Set-Cookie:
+      - arpa_context=%7B%7D; path=/; max-age=7.0; expires=Thu, 01 Jan 1970 00:00:07
+        GMT; HttpOnly
       Strict-Transport-Security:
       - max-age=63072000; includeSubdomains; preload
-      Vary:
-      - Accept-Encoding
       Server:
       - am/2
+      Vary:
+      - Accept-Encoding
       X-Cache:
       - Miss from cloudfront
       Via:
-      - 1.1 993f1a5b6afe3aaa0c514229f2091ea0.cloudfront.net (CloudFront)
+      - 1.1 abddbf0eca39746a52a1389ec09fb216.cloudfront.net (CloudFront)
       X-Amz-Cf-Pop:
-      - ARN53
+      - NRT12-P3
       X-Amz-Cf-Id:
-      - goZzECtwdrBrBdLtzykC3QVGbHzX_efDNC6_aLlKYge-TQROoBBieA==
+      - ZG5KOxe8FP7hskPmpBYvnxlTPMq_wccNe-guSfqbDO4cxD_k3GRuQA==
     body:
       encoding: ASCII-8BIT
       string: '{"version":1.0,"type":"rich","provider_name":"SoundCloud","provider_url":"https://soundcloud.com","height":400,"width":670,"title":"Cade
         Turner - Symphony Of Light Exhibition by Cade Turner","description":"In this
         podcast, I share the inspiration behind my upcoming exhibition, Symphony of
         Light, for which I''ve produced a series of heart-felt, evanescent landscapes
-        that were created completely in-camera.","thumbnail_url":"https://i1.sndcdn.com/artworks-000053047348-b62qv1-t500x500.jpg","html":"\u003Ciframe
-        width=\"670\" height=\"400\" scrolling=\"no\" frameborder=\"no\" src=\"https://w.soundcloud.com/player/?visual=true\u0026url=https%3A%2F%2Fapi.soundcloud.com%2Ftracks%2F101276036\u0026show_artwork=true\u0026maxwidth=670\"\u003E\u003C/iframe\u003E","author_name":"Cade
+        that were created completely in-camera.","thumbnail_url":"https://i1.sndcdn.com/artworks-000053047348-b62qv1-t500x500.jpg","html":"<iframe
+        width=\"670\" height=\"400\" scrolling=\"no\" frameborder=\"no\" src=\"https://w.soundcloud.com/player/?visual=true&url=https%3A%2F%2Fapi.soundcloud.com%2Ftracks%2F101276036&show_artwork=true&maxwidth=670\"></iframe>","author_name":"Cade
         Turner","author_url":"https://soundcloud.com/cade-turner"}'
-  recorded_at: Wed, 04 Nov 2020 23:56:44 GMT
-recorded_with: VCR 6.0.0
+  recorded_at: Tue, 28 Oct 2025 13:52:51 GMT
+recorded_with: VCR 6.2.0

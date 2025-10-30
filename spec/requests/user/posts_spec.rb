@@ -288,6 +288,7 @@ describe("Posts on seller profile", type: :system, js: true) do
               click_on("Update")
               wait_for_ajax
               expect(page).to have_text("Good article")
+              expect(page).to_not have_button("Update")
             end
           end
 
