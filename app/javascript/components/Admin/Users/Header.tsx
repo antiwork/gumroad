@@ -24,12 +24,7 @@ const Header = ({ user, is_affiliate_user = false, url }: HeaderProps) => {
   return (
     <div className="paragraphs">
       <div className="flex items-center gap-4">
-        <img
-          src={user.avatar_url}
-          className="user-avatar"
-          style={{ width: "var(--form-element-height)" }}
-          alt={user.name}
-        />
+        <img src={user.avatar_url} className="user-avatar" style={{ width: "var(--form-element-height)" }} alt="" />
         <div className="grid gap-2">
           <h2>
             <Link href={adminUserUrl} className={classNames({ active: url === adminUserUrl })}>

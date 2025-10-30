@@ -212,6 +212,7 @@ const CommentContainer = ({ comment, upsertComment, confirmCommentDeletion }: Co
       });
       showAlert("Successfully updated the comment", "success");
       upsertComment(updated);
+      setEditDraft(null);
     } catch (e) {
       assertResponseError(e);
       showAlert(`An error occurred while updating the comment - ${e.message}`, "error");
