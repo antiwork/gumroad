@@ -16,7 +16,7 @@ type GuidProps = {
 const Guid = ({ guid, user_ids }: GuidProps) => (
   <div>
     <h5>
-      <Link href={Routes.admin_compliance_guids_path(guid)}>{guid}</Link>
+      <Link href={Routes.admin_guid_path(guid)}>{guid}</Link>
     </h5>
     <span>{user_ids.length} users</span>
   </div>
@@ -48,7 +48,7 @@ const AdminUserGuids = ({ user_id }: { user_id: number }) => {
     setIsLoading(true);
     const response = await request({
       method: "GET",
-      url: Routes.admin_compliance_guids_path(user_id, { format: "json" }),
+      url: Routes.admin_user_guids_path(user_id, { format: "json" }),
       accept: "json",
     });
     setUserGuids(cast<UserGuids>(await response.json()));
