@@ -252,6 +252,8 @@ const PaymentsPage = (props: Props) => {
   // Refund payment method state (following debit card pattern)
   const [refundCard, setRefundCard] = React.useState<RefundCardData | null>(null);
   const [refundNameOnCard, setRefundNameOnCard] = React.useState("");
+  const [isSavingRefundCard, setIsSavingRefundCard] = React.useState(false);
+  const [refundCardErrorMessage, setRefundCardErrorMessage] = React.useState<string | null>(null);
 
   const [payoutThresholdCents, setPayoutThresholdCents] = React.useState<{ value: number | null; error?: boolean }>({
     value: props.payout_threshold_cents,
@@ -757,24 +759,7 @@ const PaymentsPage = (props: Props) => {
       data = { ...data, ...{ payment_address: paypalEmailAddress } };
     }
 
-    // Add refund card data if present and no existing refund card (following debit card pattern)
-    if (!props.refund_payment_card && refundCard && refundCard.type === "new") {
-      try {
-        const refundCardData = await prepareCardTokenForPayouts({
-          cardElement: refundCard.element
-        });
-        data = { ...data, refund_card: refundCardData } as any;
-      } catch (e) {
-        if (e instanceof CardPayoutError) {
-          setErrorMessage({ message: "Please check your refund card information", code: null });
-          setIsSaving(false);
-          return;
-        }
-        throw e;
-      }
-    } else if (props.refund_payment_card && !refundCard) {
-      data = { ...data, refund_card: null };
-    }
+    // Refund card is handled by a dedicated endpoint and not included in main form payload
 
     try {
       const response = await request({
@@ -804,13 +789,14 @@ const PaymentsPage = (props: Props) => {
   // Save or remove refund card independently via dedicated endpoint
   const handleSaveRefundCard = asyncVoid(async (action: "save" | "remove" = "save") => {
     try {
+      setRefundCardErrorMessage(null);
+      setIsSavingRefundCard(true);
       let payload: { refund_card: CardPayoutToken | null };
 
       if (action === "remove") {
         payload = { refund_card: null };
       } else {
         if (!refundCard || refundCard.type !== "new") {
-          // Nothing to save
           showAlert("Please enter your refund card details.", "error");
           return;
         }
@@ -821,7 +807,7 @@ const PaymentsPage = (props: Props) => {
 
       const response = await request({
         method: "POST",
-        url: Routes.refund_card_settings_payments_path(),
+        url: "/settings/payments/refund_card",
         accept: "json",
         data: payload,
       });
@@ -836,17 +822,21 @@ const PaymentsPage = (props: Props) => {
 
       if (action === "remove") {
         showAlert("Refund card removed.", "success");
-        // UI wiring happens in later steps; no reload here to keep flow consistent
+        setRefundCard(null);
       } else {
         showAlert("Refund card saved!", "success");
+        setRefundCard({ type: "saved" });
       }
     } catch (e) {
       if (e instanceof CardPayoutError) {
-        setErrorMessage({ message: "Please check your refund card information", code: null });
+        setRefundCardErrorMessage("Please check your refund card information");
+        setIsSavingRefundCard(false);
         return;
       }
       assertResponseError(e);
       showAlert("Sorry, something went wrong. Please try again.", "error");
+    } finally {
+      setIsSavingRefundCard(false);
     }
   });
 
@@ -1233,6 +1223,9 @@ const PaymentsPage = (props: Props) => {
           setRefundCard={setRefundCard}
           nameOnCard={refundNameOnCard}
           onNameOnCardChange={setRefundNameOnCard}
+          onSave={handleSaveRefundCard}
+          isSaving={isSavingRefundCard}
+          errorMessage={refundCardErrorMessage}
         />
         {props.saved_card ? (
           <CreditCardForm

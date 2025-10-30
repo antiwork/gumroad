@@ -44,4 +44,8 @@ class Settings::Payments::UserPolicy < ApplicationPolicy
   def verify_stripe_remediation?
     update?
   end
+
+  def refund_card?
+    update?
+  end
 end

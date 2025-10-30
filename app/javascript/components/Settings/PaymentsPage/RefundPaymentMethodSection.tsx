@@ -11,11 +11,14 @@ import { RefundCardData } from "$app/components/server-components/Settings/Payme
 type Props = {
   refundCard: SavedCreditCard | null;
   isFormDisabled: boolean;
-  // Props following debit card pattern
+
   refundCardData: RefundCardData | null;
   setRefundCard: (refundCard: RefundCardData | null) => void;
   nameOnCard?: string;
   onNameOnCardChange?: (name: string) => void;
+  onSave: (action: "save" | "remove") => void;
+  isSaving?: boolean;
+  errorMessage?: string | null;
 };
 
 export const RefundPaymentMethodSection = ({
@@ -24,32 +27,23 @@ export const RefundPaymentMethodSection = ({
   refundCardData,
   setRefundCard,
   nameOnCard = "",
-  onNameOnCardChange
+  onNameOnCardChange,
+  onSave,
+  isSaving = false,
+  errorMessage = null,
 }: Props) => {
-  const [status, setStatus] = React.useState<"removing" | "removed" | null>(null);
+  const remove = () => setRefundCard(null);
 
-  // Remove card functionality - clears data for main form submission
-  const remove = () => {
-    setRefundCard(null);
-    setStatus("removed");
-  };
-
-  // Handle card element ready (following debit card pattern)
   const handleCardReady = (element: StripeCardElement) => {
     setRefundCard({ type: "new", element });
   };
 
-  // Handle name on card change
   const handleNameChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (onNameOnCardChange) {
       onNameOnCardChange(e.target.value);
     }
   };
 
-  // If card is removed, don't render anything
-  if (status === "removed") return null;
-
-  // If card exists, show saved card display
   if (refundCard) {
     return (
       <section className="p-4! md:p-8!">
@@ -67,8 +61,16 @@ export const RefundPaymentMethodSection = ({
             <span style={{ marginLeft: "auto" }}>{refundCard.expiration_date}</span>
           </div>
           {!isFormDisabled && (
-            <Button outline color="danger" onClick={remove} disabled={status === "removing"}>
-              {status === "removing" ? "Removing..." : "Remove refund card"}
+            <Button
+              outline
+              color="danger"
+              onClick={() => {
+                remove();
+                onSave("remove");
+              }}
+              disabled={isSaving}
+            >
+              {isSaving ? "Removing..." : "Remove refund card"}
             </Button>
           )}
         </div>
@@ -76,7 +78,6 @@ export const RefundPaymentMethodSection = ({
     );
   }
 
-  // If no card, show input form
   return (
     <section className="p-4! md:p-8!">
       <header>
@@ -109,12 +110,24 @@ export const RefundPaymentMethodSection = ({
             setUseSavedCard={() => {}}
             onReady={handleCardReady}
             onChange={(evt) => {
-              // Handle card validation (following debit card pattern)
               if (evt.error && refundCardData?.type === "new") {
                 setRefundCard({ type: "new", element: refundCardData.element });
               }
             }}
           />
+          {errorMessage ? (
+            <div className="mt-2" role="status">
+              <small className="text-danger">{errorMessage}</small>
+            </div>
+          ) : null}
+          <div className="mt-4">
+            <Button
+              onClick={() => onSave("save")}
+              disabled={isFormDisabled || isSaving}
+            >
+              {isSaving ? "Saving..." : "Save refund card"}
+            </Button>
+          </div>
         </div>
       </div>
     </section>
