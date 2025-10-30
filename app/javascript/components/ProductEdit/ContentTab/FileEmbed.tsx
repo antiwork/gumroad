@@ -23,6 +23,11 @@ import { Icon } from "$app/components/Icons";
 import { LoadingSpinner } from "$app/components/LoadingSpinner";
 import { PlayVideoIcon } from "$app/components/PlayVideoIcon";
 import { Popover } from "$app/components/Popover";
+import {
+  FileEmbedGroup,
+  titleWithFallback,
+  useFilesInGroup,
+} from "$app/components/ProductEdit/ContentTab/FileEmbedGroup";
 import { FileEntry, useProductEditContext } from "$app/components/ProductEdit/state";
 import { useS3UploadConfig } from "$app/components/S3UploadConfig";
 import { Separator } from "$app/components/Separator";
@@ -30,7 +35,6 @@ import { showAlert } from "$app/components/server-components/Alert";
 import { SubtitleList } from "$app/components/SubtitleList";
 import { SubtitleFile } from "$app/components/SubtitleList/Row";
 import { SubtitleUploadBox } from "$app/components/SubtitleUploadBox";
-import { FileEmbedGroup, getFilesInGroup, titleWithFallback } from "$app/components/TiptapExtensions/FileEmbedGroup";
 import { NodeActionsMenu } from "$app/components/TiptapExtensions/NodeActionsMenu";
 import Placeholder from "$app/components/ui/Placeholder";
 import { WithTooltip } from "$app/components/WithTooltip";
@@ -158,10 +162,7 @@ const FileEmbedNodeView = ({ node, editor, getPos, updateAttributes }: NodeViewP
   );
 
   const isInGroup = parentNode?.type.name === FileEmbedGroup.name;
-  const { hasStreamable } = React.useMemo(
-    () => (parentNode ? getFilesInGroup(parentNode, product.files) : { files: [], hasStreamable: false }),
-    [parentNode, product.files],
-  );
+  const { hasStreamable } = useFilesInGroup(parentNode, product.files);
   const isConnectedRow = isInGroup && !hasStreamable;
   const isLastInGroup = node === parentNode?.content.lastChild;
 

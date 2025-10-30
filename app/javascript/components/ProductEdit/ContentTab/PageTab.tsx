@@ -3,6 +3,7 @@ import Placeholder from "@tiptap/extension-placeholder";
 import { EditorContent, useEditor } from "@tiptap/react";
 import * as React from "react";
 
+import { classNames } from "$app/utils/classNames";
 import { generatePageIcon } from "$app/utils/rich_content_page";
 
 import { PageListItem } from "$app/components/Download/PageListLayout";
@@ -71,7 +72,10 @@ export const PageTab = ({
       onClick={onClick}
       isSelected={selected}
       // .sortable-* are created by react-sortablejs, and we can't add Tailwind classes to them directly.
-      className="group/tab relative [&_.sortable-drag]:border [&_.sortable-drag]:bg-muted [&.sortable-ghost]:outline [&.sortable-ghost]:outline-accent [&.sortable-ghost]:outline-dashed [&.sortable-ghost>_*]:opacity-30"
+      className={classNames(
+        "group/tab relative [&_.sortable-drag]:border [&_.sortable-drag]:bg-muted [&.sortable-ghost]:outline [&.sortable-ghost]:outline-accent [&.sortable-ghost]:outline-dashed [&.sortable-ghost>_*]:opacity-30",
+        { "outline-2 -outline-offset-2 outline-accent": renaming },
+      )}
       role="tab"
     >
       {!disabled ? (
@@ -83,14 +87,7 @@ export const PageTab = ({
       ) : null}
       <Icon name={icon} aria-label={iconLabels[icon]} />
       <span className="flex-1">
-        {renaming ? (
-          <>
-            <EditorContent editor={editor} className="cursor-text" />
-            <span className="absolute inset-0 outline-2 -outline-offset-2 outline-accent" />
-          </>
-        ) : (
-          titleWithFallback(page.title)
-        )}
+        {renaming ? <EditorContent editor={editor} className="cursor-text" /> : titleWithFallback(page.title)}
       </span>
       {renaming || disabled ? null : (
         <span onClick={(e) => e.stopPropagation()}>

@@ -38,14 +38,16 @@ type FileEmbedGroupStorage = { lastCreatedUid: string | null };
 
 export const titleWithFallback = (title: unknown) => (title ? String(title).trim() : "") || "Untitled";
 
-export const getFilesInGroup = (node: ProseMirrorNode, files: FileEntry[]) => {
-  const filesInGroup: FileEntry[] = [];
-  node.content.forEach((c) => {
-    const file = files.find((file) => file.id === c.attrs.id);
-    if (file) filesInGroup.push(file);
-  });
-  return { files: filesInGroup, hasStreamable: filesInGroup.some((file) => file.is_streamable) };
-};
+export const useFilesInGroup = (node: ProseMirrorNode | null, allFiles: FileEntry[]) =>
+  React.useMemo(() => {
+    if (!node) return { files: [], hasStreamable: false };
+    const filesInGroup: FileEntry[] = [];
+    node.content.forEach((c) => {
+      const file = allFiles.find((file) => file.id === c.attrs.id);
+      if (file) filesInGroup.push(file);
+    });
+    return { files: filesInGroup, hasStreamable: filesInGroup.some((file) => file.is_streamable) };
+  }, [node, allFiles]);
 
 // The actual archive size limit is 500 MB (524288000B)
 const ARCHIVE_SIZE_LIMIT_IN_BYTES = 500000000;
@@ -63,7 +65,7 @@ const FileEmbedGroupNodeView = ({
   // eslint-disable-next-line @typescript-eslint/consistent-type-assertions -- https://tiptap.dev/guide/typescript#storage-types
   const storage = extension.storage as FileEmbedGroupStorage;
   const isNew = node.attrs.uid === storage.lastCreatedUid;
-  const { files, hasStreamable } = getFilesInGroup(node, config.files);
+  const { files, hasStreamable } = useFilesInGroup(node, config.files);
   const downloadableFiles = files.filter((file) => !!file.url && !file.stream_only);
 
   const folderTitle = titleWithFallback(node.attrs.name);
