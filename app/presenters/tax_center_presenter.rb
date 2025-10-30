@@ -90,4 +90,3 @@ class TaxCenterPresenter
       form_type.delete_prefix("us_").tr("_", "-").upcase
     end
 end
-

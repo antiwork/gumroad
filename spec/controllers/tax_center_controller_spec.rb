@@ -127,4 +127,3 @@ describe TaxCenterController, type: :controller, inertia: true do
     end
   end
 end
-

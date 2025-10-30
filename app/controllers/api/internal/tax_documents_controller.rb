@@ -22,4 +22,3 @@ class Api::Internal::TaxDocumentsController < Api::Internal::BaseController
       render json: { success: false, error: "Tax center is not enabled for your account." }, status: :unauthorized
     end
 end
-

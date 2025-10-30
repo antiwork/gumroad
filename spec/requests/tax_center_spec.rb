@@ -34,32 +34,31 @@ describe "Tax Center", js: true, type: :system do
 
     expect(page).to_not have_text("Let's get your tax info ready")
     expect(page).to have_table("Tax documents", with_rows: [
-      {
-        "Document" => "1099-K",
-        "Type" => "IRS form",
-        "Gross" => "$10.00",
-        "Fees" => "-$1.00",
-        "Taxes" => "-$0.15",
-        "Affiliate Commission" => "-$0.00",
-        "Net" => "$8.85"
-      }
-    ])
+                                 {
+                                   "Document" => "1099-K",
+                                   "Type" => "IRS form",
+                                   "Gross" => "$10.00",
+                                   "Fees" => "-$1.00",
+                                   "Taxes" => "-$0.15",
+                                   "Affiliate Commission" => "-$0.00",
+                                   "Net" => "$8.85"
+                                 }
+                               ])
 
     select year_2.to_s, from: "Tax year"
     wait_for_ajax
 
     expect(page).to have_select("Tax year", selected: year_2.to_s)
     expect(page).to have_table("Tax documents", with_rows: [
-      {
-        "Document" => "1099-K",
-        "Type" => "IRS form",
-        "Gross" => "$10.00",
-        "Fees" => "-$0.50",
-        "Taxes" => "-$0.00",
-        "Affiliate Commission" => "-$0.00",
-        "Net" => "$9.50"
-      }
-    ])
+                                 {
+                                   "Document" => "1099-K",
+                                   "Type" => "IRS form",
+                                   "Gross" => "$10.00",
+                                   "Fees" => "-$0.50",
+                                   "Taxes" => "-$0.00",
+                                   "Affiliate Commission" => "-$0.00",
+                                   "Net" => "$9.50"
+                                 }
+                               ])
   end
 end
-

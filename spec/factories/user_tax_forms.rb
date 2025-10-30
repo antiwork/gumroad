@@ -7,5 +7,3 @@ FactoryBot.define do
     tax_form_type { "us_1099_k" }
   end
 end
-
-

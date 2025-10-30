@@ -56,4 +56,3 @@ describe Api::Internal::TaxDocumentsController do
     end
   end
 end
-

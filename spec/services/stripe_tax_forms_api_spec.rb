@@ -74,4 +74,3 @@ describe StripeTaxFormsApi, vcr: { cassette_name: "StripeTaxFormsApi/tax_forms" 
     end
   end
 end
-

@@ -93,7 +93,7 @@ export type TaxCenterPageProps = {
   documents: TaxDocument[];
   available_years: number[];
   selected_year: number;
-}
+};
 
 const TaxCenterPage = ({
   documents: initialDocuments,

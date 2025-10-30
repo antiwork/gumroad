@@ -34,4 +34,3 @@ RSpec.describe UserTaxForm do
     end
   end
 end
-
