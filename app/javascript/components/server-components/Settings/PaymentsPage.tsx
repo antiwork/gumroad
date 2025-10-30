@@ -5,6 +5,7 @@ import * as React from "react";
 import { cast, createCast } from "ts-safe-cast";
 
 import { CardPayoutError, prepareCardTokenForPayouts } from "$app/data/card_payout_data";
+import type { CardPayoutToken } from "$app/data/card_payout_data";
 import { SavedCreditCard } from "$app/parsers/card";
 import { SettingPage } from "$app/parsers/settings";
 import { formatPriceCentsWithCurrencySymbol, formatPriceCentsWithoutCurrencySymbol } from "$app/utils/currency";
@@ -798,6 +799,55 @@ const PaymentsPage = (props: Props) => {
     }
 
     setIsSaving(false);
+  });
+
+  // Save or remove refund card independently via dedicated endpoint
+  const handleSaveRefundCard = asyncVoid(async (action: "save" | "remove" = "save") => {
+    try {
+      let payload: { refund_card: CardPayoutToken | null };
+
+      if (action === "remove") {
+        payload = { refund_card: null };
+      } else {
+        if (!refundCard || refundCard.type !== "new") {
+          // Nothing to save
+          showAlert("Please enter your refund card details.", "error");
+          return;
+        }
+
+        const refundCardData = await prepareCardTokenForPayouts({ cardElement: refundCard.element });
+        payload = { refund_card: refundCardData };
+      }
+
+      const response = await request({
+        method: "POST",
+        url: Routes.refund_card_settings_payments_path(),
+        accept: "json",
+        data: payload,
+      });
+
+      const parsedResponse = cast<{ success: true } | { success: false; error_message: string }>(
+        await response.json(),
+      );
+      if (!parsedResponse.success) {
+        showAlert(parsedResponse.error_message, "error");
+        return;
+      }
+
+      if (action === "remove") {
+        showAlert("Refund card removed.", "success");
+        // UI wiring happens in later steps; no reload here to keep flow consistent
+      } else {
+        showAlert("Refund card saved!", "success");
+      }
+    } catch (e) {
+      if (e instanceof CardPayoutError) {
+        setErrorMessage({ message: "Please check your refund card information", code: null });
+        return;
+      }
+      assertResponseError(e);
+      showAlert("Sorry, something went wrong. Please try again.", "error");
+    }
   });
 
   const [showUpdateCountryConfirmationModal, setShowUpdateCountryConfirmationModal] = React.useState(false);
