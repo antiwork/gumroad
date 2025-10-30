@@ -1,8 +1,8 @@
 import React from "react";
 
+import { BooleanIcon } from "$app/components/Admin/Icons";
 import Loading from "$app/components/Admin/Loading";
 import { type ActiveIntegration } from "$app/components/Admin/Products/Product";
-import { BooleanIcon } from "$app/components/Admin/Icons";
 
 export type InfoProps = {
   purchase_type: string;
