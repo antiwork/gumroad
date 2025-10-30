@@ -30,8 +30,8 @@ class ProductFile < ApplicationRecord
     value.strip.upcase.gsub(/[\s–—−]/, "-")
   end
 
-  before_save :set_filegroup
-  before_save :downcase_filetype
+  before_validation :set_filegroup
+  before_validation :downcase_filetype
   after_commit :schedule_file_analyze, on: :create
   after_commit :stamp_existing_pdfs_if_needed, on: :update
   after_create :reset_moderated_by_iffy_flag
