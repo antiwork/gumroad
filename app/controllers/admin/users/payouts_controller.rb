@@ -1,6 +1,8 @@
 # frozen_string_literal: true
 
 class Admin::Users::PayoutsController < Admin::BaseController
+  include Pagy::Backend
+
   before_action :fetch_user, only: [:index, :pause, :resume]
 
   RECORDS_PER_PAGE = 20
@@ -18,7 +20,7 @@ class Admin::Users::PayoutsController < Admin::BaseController
     render inertia: "Admin/Users/Payouts/Index",
            legacy_template: "admin/users/payouts/index",
            props: {
-             user: Admin::UserPresenter::Card.new(user: @user).props,
+             user: { id: @user.id },
              payouts: @payouts.map { Admin::PaymentPresenter.new(payment: _1).props },
              pagination: PagyPresenter.new(pagination).props
            }

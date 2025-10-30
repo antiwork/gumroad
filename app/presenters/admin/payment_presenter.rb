@@ -24,7 +24,7 @@ class Admin::PaymentPresenter
       returned: payment.returned?,
       processing: payment.processing?,
       unclaimed: payment.unclaimed?,
-      non_terminal_state: Payment::NON_TERMINAL_STATES.include?(payment.state)
+      non_terminal_state: Payment::NON_TERMINAL_STATES.include?(payment.state),
 
       # Processor
       processor: payment.processor,
