@@ -71,4 +71,3 @@ class Admin::PayoutsController < Admin::BaseController
       @payment = Payment.find_by(id: params[:id]) || e404
     end
 end
-

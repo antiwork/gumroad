@@ -168,10 +168,10 @@ describe Admin::PaymentPresenter do
       context "when payment uses PayPal processor" do
         let(:payment) do
           create(:payment_completed,
-            processor: PayoutProcessorType::PAYPAL,
-            txn_id: "PAYPAL-TXN-123",
-            payment_address: "seller@example.com",
-            correlation_id: "CORR-123")
+                 processor: PayoutProcessorType::PAYPAL,
+                 txn_id: "PAYPAL-TXN-123",
+                 payment_address: "seller@example.com",
+                 correlation_id: "CORR-123")
         end
 
         it "includes PayPal-specific information" do
@@ -190,9 +190,9 @@ describe Admin::PaymentPresenter do
       context "when payment uses Stripe processor" do
         let(:payment) do
           create(:payment,
-            processor: PayoutProcessorType::STRIPE,
-            stripe_transfer_id: "tr_123456",
-            stripe_connect_account_id: "acct_123456")
+                 processor: PayoutProcessorType::STRIPE,
+                 stripe_transfer_id: "tr_123456",
+                 stripe_connect_account_id: "acct_123456")
         end
 
         it "includes Stripe-specific information" do
