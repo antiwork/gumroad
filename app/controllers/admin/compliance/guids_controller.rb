@@ -1,6 +1,8 @@
 # frozen_string_literal: true
 
 class Admin::Compliance::GuidsController < Admin::BaseController
+  include Admin::ListPaginatedUsers
+
   def index
     user_id = params[:user_id]
     guids = Event.where(user_id:).distinct.pluck(:browser_guid)
@@ -13,11 +15,9 @@ class Admin::Compliance::GuidsController < Admin::BaseController
   def show
     guid = params[:id]
     @title = guid
-    user_ids = Event.by_browser_guid(guid).distinct.pluck(:user_id)
-    @users = User.find(user_ids)
-    respond_to do |format|
-      format.html
-      format.json { render json: @users }
-    end
+    @users = User.where(id: Event.by_browser_guid(guid).distinct.pluck(:user_id))
+    list_paginated_users users: @users,
+                         template: "Admin/Compliance/Guids/Show",
+                         legacy_template: "admin/compliance/guids/show"
   end
 end

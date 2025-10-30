@@ -16,7 +16,7 @@ type GuidProps = {
 const Guid = ({ guid, user_ids }: GuidProps) => (
   <div>
     <h5>
-      <Link href={Routes.admin_compliance_guids_path(guid)}>{guid}</Link>
+      <Link href={Routes.admin_guid_path(guid)}>{guid}</Link>
     </h5>
     <span>{user_ids.length} users</span>
   </div>
