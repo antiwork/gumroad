@@ -43,6 +43,7 @@ namespace :admin do
           resources :purchases, only: :index
         end
       end
+      resources :guids, only: [:index]
     end
     resources :service_charges, only: :index
     member do
@@ -70,8 +71,6 @@ namespace :admin do
       post :toggle_adult_products
     end
   end
-
-  get "/users/:user_id/guids", to: "compliance/guids#index", as: :compliance_guids
 
   resources :affiliates, only: [] do
     resources :products, only: [], module: :affiliates do
@@ -156,8 +155,8 @@ namespace :admin do
   get "/search_purchases", to: "search#purchases", as: :search_purchases
 
   # Compliance
+  resources :guids, only: [:show]
   scope module: "compliance" do
-    resources :guids, only: [:show]
     resources :cards, only: [:index] do
       collection do
         post :refund
