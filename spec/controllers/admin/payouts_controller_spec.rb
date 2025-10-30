@@ -20,16 +20,6 @@ describe Admin::PayoutsController, type: :controller, inertia: true do
     end
   end
 
-  describe "POST sync_all" do
-    it "syncs all stuck paypal payouts" do
-      sign_in admin_user
-      post :sync_all
-
-      expect(response).to be_successful
-      expect(JSON.parse(response.body)["success"]).to be true
-    end
-  end
-
   describe "POST retry" do
     it "retries a failed payout" do
       failed_payment = create(:payment_failed)

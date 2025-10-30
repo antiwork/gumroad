@@ -11,11 +11,6 @@ class Admin::PayoutsController < Admin::BaseController
            props: { payout: Admin::PaymentPresenter.new(payment: @payment).props }
   end
 
-  def sync_all
-    SyncStuckPaypalPayoutsJob.perform_async
-    render json: { success: true }
-  end
-
   def retry
     unless @payment.cancelled? || @payment.failed? || @payment.returned?
       return render json: { success: false, message: "Failed! Payout is not in a cancelled, failed or returned state." }
