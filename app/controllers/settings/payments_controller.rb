@@ -54,7 +54,6 @@ class Settings::PaymentsController < Sellers::BaseController
 
     return unless update_user_compliance_info
 
-    # Handle refund payment method
     if params[:refund_card].present? && !current_seller.refund_credit_card.present?
       chargeable = ChargeProcessor.get_chargeable_for_params(params[:refund_card], nil)
       return render(json: { success: false, error_message: "Invalid refund card information" }) if chargeable.nil?
@@ -185,7 +184,6 @@ class Settings::PaymentsController < Sellers::BaseController
     safe_redirect_to settings_payments_path
   end
 
-  # Creates or removes the refund credit card independently from the main payments update.
   def refund_card
     if params[:refund_card].present? && !current_seller.refund_credit_card.present?
       chargeable = ChargeProcessor.get_chargeable_for_params(params[:refund_card], nil)

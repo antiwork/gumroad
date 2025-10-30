@@ -249,7 +249,6 @@ const PaymentsPage = (props: Props) => {
 
   const [payoutsPausedByUser, setPayoutsPausedByUser] = React.useState(props.payouts_paused_by_user);
 
-  // Refund payment method state (following debit card pattern)
   const [refundCard, setRefundCard] = React.useState<RefundCardData | null>(null);
   const [refundNameOnCard, setRefundNameOnCard] = React.useState("");
   const [isSavingRefundCard, setIsSavingRefundCard] = React.useState(false);
@@ -785,7 +784,6 @@ const PaymentsPage = (props: Props) => {
     setIsSaving(false);
   });
 
-  // Save or remove refund card independently via dedicated endpoint
   const handleSaveRefundCard = asyncVoid(async (action: "save" | "remove" = "save") => {
     try {
       setRefundCardErrorMessage(null);
@@ -800,7 +798,9 @@ const PaymentsPage = (props: Props) => {
           return;
         }
 
-        const refundCardData = await prepareCardTokenForPayouts({ cardElement: refundCard.element });
+        const refundCardData = await prepareCardTokenForPayouts({
+          cardElement: refundCard.element,
+        });
         payload = { refund_card: refundCardData };
       }
 
