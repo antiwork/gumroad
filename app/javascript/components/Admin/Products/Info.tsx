@@ -45,7 +45,7 @@ const AdminProductInfo = ({ product }: Props) => {
     isLoading,
     fetchData,
   } = useLazyFetch<InfoProps | null>(null, {
-    fetchUnlessLoaded: false,
+    fetchUnlessLoaded: true,
     url: Routes.admin_product_info_path(product.id, { format: "json" }),
     responseParser: (data) => cast<{ info: InfoProps }>(data).info,
   });

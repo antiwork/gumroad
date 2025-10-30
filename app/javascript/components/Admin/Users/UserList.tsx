@@ -2,7 +2,8 @@ import { usePage } from "@inertiajs/react";
 import React from "react";
 
 import EmptyState from "$app/components/Admin/EmptyState";
-import PaginatedLoader, { type Pagination } from "$app/components/Admin/PaginatedLoader";
+import PaginatedLoader from "$app/components/Admin/PaginatedLoader";
+import { type Pagination } from "$app/hooks/useLazyFetch";
 import UserCard, { type User } from "$app/components/Admin/Users/User";
 
 type PageProps = {

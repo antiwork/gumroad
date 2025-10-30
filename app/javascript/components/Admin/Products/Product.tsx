@@ -51,15 +51,14 @@ export type Product = {
 };
 
 type AdminUsersProductsProductProps = {
+  user: User;
   product: Product;
-  is_affiliate_user?: boolean;
+  isAffiliateUser?: boolean;
 };
 
-const AdminUsersProductsProduct = ({ product, is_affiliate_user = false }: AdminUsersProductsProductProps) => {
+const AdminUsersProductsProduct = ({ user, product, isAffiliateUser = false }: AdminUsersProductsProductProps) => {
   const { url, props } = usePage();
-  const user: User = cast<User>(props.user);
   const compliance: Compliance = cast<Compliance>(props.compliance);
-
   const isCurrentUrl = url === Routes.admin_product_path(product.unique_permalink);
 
   return (
@@ -73,7 +72,7 @@ const AdminUsersProductsProduct = ({ product, is_affiliate_user = false }: Admin
       <AdminProductInfo product={product} />
       <AdminProductActions product={product} />
       <AdminFlagForTosViolations user={user} product={product} compliance={compliance} />
-      <AdminProductPurchases product_id={product.id} is_affiliate_user={is_affiliate_user} user_id={user.id} />
+      <AdminProductPurchases product_id={product.id} isAffiliateUser={isAffiliateUser} user_id={user.id} />
       <AdminProductComments product={product} />
       <AdminProductFooter product={product} />
     </article>

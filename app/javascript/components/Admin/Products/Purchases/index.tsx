@@ -8,15 +8,15 @@ import { type ProductPurchase } from "./Purchase";
 
 type AdminProductPurchasesProps = {
   product_id: number;
-  is_affiliate_user?: boolean;
+  isAffiliateUser?: boolean;
   user_id: number | null;
 };
 
-const AdminProductPurchases = ({ product_id, is_affiliate_user = false, user_id }: AdminProductPurchasesProps) => {
+const AdminProductPurchases = ({ product_id, isAffiliateUser = false, user_id }: AdminProductPurchasesProps) => {
   const [open, setOpen] = React.useState(false);
 
   const url =
-    user_id && is_affiliate_user
+    user_id && isAffiliateUser
       ? Routes.admin_affiliate_product_purchases_path(user_id, product_id, { format: "json" })
       : Routes.admin_product_purchases_path(product_id, { format: "json" });
 
@@ -40,7 +40,7 @@ const AdminProductPurchases = ({ product_id, is_affiliate_user = false, user_id 
       <hr />
       <details open={open} onToggle={(e) => setOpen(e.currentTarget.open)}>
         <summary>
-          <h3>{is_affiliate_user ? "Affiliate purchases" : "Purchases"}</h3>
+          <h3>{isAffiliateUser ? "Affiliate purchases" : "Purchases"}</h3>
         </summary>
         <AdminProductPurchasesContent
           purchases={purchases}
