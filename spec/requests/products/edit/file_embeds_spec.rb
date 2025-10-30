@@ -251,6 +251,12 @@ describe("File embeds in product content editor", type: :system, js: true) do
     expect(product.product_files.first.name_displayable).to eq "jimmy"
     expect(product.product_files.first.description).to eq "brand-new jimmy"
     expect(product.product_files.first.isbn).to eq "978-3-16-148410-0"
+
+    refresh
+    within find_embed(name: "jimmy") do
+      click_on "Edit"
+      expect(page).to have_field("ISBN", with: "978-3-16-148410-0")
+    end
   end
 
   it "shows validation error when ISBN isn't valid" do

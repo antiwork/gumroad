@@ -58,7 +58,7 @@ const urlsMigratedtoInertia = [
   Routes.admin_sales_reports_url(),
   Routes.admin_refund_queue_url(),
   Routes.admin_action_call_dashboard_url(),
-  // Routes.admin_search_users_url(),
+  Routes.admin_search_users_url(),
   // Routes.admin_search_purchases_url(),
   // Routes.admin_compliance_guids_url(),
   // Routes.admin_compliance_cards_url(),
