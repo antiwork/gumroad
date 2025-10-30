@@ -150,7 +150,9 @@ namespace :admin do
   post "/paydays/pay_user/:id", to: "paydays#pay_user", as: :pay_user
 
   # Search
-  get "/search_users", to: "search#users", as: :search_users
+  namespace :search do
+    resources :users, only: :index
+  end
   get "/search_purchases", to: "search#purchases", as: :search_purchases
 
   # Compliance
