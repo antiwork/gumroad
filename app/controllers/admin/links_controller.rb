@@ -28,7 +28,10 @@ class Admin::LinksController < Admin::BaseController
         admins_can_mark_as_staff_picked: ->(product) { policy([:admin, :products, :staff_picked, product]).create? },
         admins_can_unmark_as_staff_picked: ->(product) { policy([:admin, :products, :staff_picked, product]).destroy? }
       ),
-      user: @product.user.as_json(admin: true, impersonatable: policy([:admin, :impersonators, @product.user]).create?)
+      user: Admin::UserPresenter::Card.new(
+        user: @product.user,
+        impersonatable: policy([:admin, :impersonators, @product.user]).create?
+      ).props
     }
   end
 
