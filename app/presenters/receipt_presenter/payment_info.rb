@@ -136,7 +136,7 @@ class ReceiptPresenter::PaymentInfo
         product = purchase.link
         link_to_product = link_to(product.name, product.long_url, target: "_blank")
 
-        if purchase.is_installment_payment?
+        if purchase.is_installment_payment
           "We have successfully processed the installment payment for #{link_to_product}.".html_safe
         else
           "We have successfully processed the payment for your recurring subscription to #{link_to_product}.".html_safe
