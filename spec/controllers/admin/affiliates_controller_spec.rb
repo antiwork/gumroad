@@ -2,8 +2,9 @@
 
 require "spec_helper"
 require "shared_examples/admin_base_controller_concern"
+require "inertia_rails/rspec"
 
-describe Admin::AffiliatesController do
+describe Admin::AffiliatesController, inertia: true do
   render_views
 
   it_behaves_like "inherits from Admin::BaseController"
@@ -39,8 +40,17 @@ describe Admin::AffiliatesController do
         get :index, params: { query: "test" }
 
         expect(response).to be_successful
-        expect(response).to render_template(:index)
+        expect(inertia.component).to eq("Admin/Affiliates/Index")
         expect(assigns[:users].to_a).to match_array(@affiliate_users)
+      end
+
+      it "returns JSON response when requested" do
+        get :index, params: { query: "test" }, format: :json
+
+        expect(response).to be_successful
+        expect(response.content_type).to match(%r{application/json})
+        expect(response.parsed_body["users"].map { _1["id"] }).to match_array(@affiliate_users.drop(5).map(&:external_id))
+        expect(response.parsed_body["pagination"]).to be_present
       end
     end
   end
