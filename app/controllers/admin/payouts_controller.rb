@@ -5,6 +5,10 @@ class Admin::PayoutsController < Admin::BaseController
 
   def show
     @title = "Payout"
+
+    render inertia: "Admin/Payouts/Show",
+           legacy_template: "admin/payouts/show",
+           props: { payout: Admin::PaymentPresenter.new(payment: @payment).props }
   end
 
   def sync_all

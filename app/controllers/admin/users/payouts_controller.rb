@@ -8,10 +8,20 @@ class Admin::Users::PayoutsController < Admin::BaseController
 
   def index
     @title = "Payouts"
-    @payouts = @user.payments
-      .order(id: :desc)
-      .page_with_kaminari(params[:page])
-      .per(RECORDS_PER_PAGE)
+
+    pagination, @payouts = pagy(
+      @user.payments.order(id: :desc),
+      limit: params[:per_page] || RECORDS_PER_PAGE,
+      page: params[:page]
+    )
+
+    render inertia: "Admin/Users/Payouts/Index",
+           legacy_template: "admin/users/payouts/index",
+           props: {
+             user: Admin::UserPresenter::Card.new(user: @user).props,
+             payouts: @payouts.map { Admin::PaymentPresenter.new(payment: _1).props },
+             pagination: PagyPresenter.new(pagination).props
+           }
   end
 
   def pause
