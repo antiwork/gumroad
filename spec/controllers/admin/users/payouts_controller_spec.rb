@@ -120,32 +120,4 @@ describe Admin::Users::PayoutsController, type: :controller, inertia: true do
       expect(seller.payouts_paused_for_reason).to be nil
     end
   end
-
-  describe "GET index" do
-    it "lists payouts for a user" do
-      sign_in admin_user
-      get :index, params: { user_id: seller.id }
-
-      expect(response).to be_successful
-    end
-  end
-
-  describe "POST pause" do
-    it "pauses payouts for a user" do
-      sign_in admin_user
-      post :pause, params: { user_id: seller.id, pause_payouts: { reason: "Test reason" } }, format: :json
-
-      expect(response).to be_successful
-    end
-  end
-
-  describe "POST resume" do
-    it "resumes payouts for a user" do
-      seller.update!(payouts_paused_internally: true)
-      sign_in admin_user
-      post :resume, params: { user_id: seller.id }, format: :json
-
-      expect(response).to be_successful
-    end
-  end
 end

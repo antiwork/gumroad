@@ -190,7 +190,6 @@ class Payment < ApplicationRecord
   end
 
   def as_json(options = {})
-    return super if options[:original]
     json = {
       id: external_id,
       amount: format("%.2f", (amount_cents || 0) / 100.0),

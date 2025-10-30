@@ -22,10 +22,10 @@ export type Payout = {
   stripe_connect_account_id: string;
   failed: boolean;
   humanized_failure_reason: string;
-  bank_account?: {
+  bank_account: {
     credit_card: { visual: string };
     formatted_account: string;
-  };
+  } | null;
   payment_address: string;
   txn_id: string;
   correlation_id: string;
