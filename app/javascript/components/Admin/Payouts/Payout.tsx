@@ -145,41 +145,43 @@ const Payout = ({ payout }: Props) => (
 
     <hr />
 
-    {payout.cancelled || payout.failed || payout.returned ? (
-      <AdminActionButton
-        url={Routes.retry_admin_payout_path(payout.id)}
-        label="Retry"
-        confirm_message="Are you sure you want to retry this payment?"
-        loading="Retrying..."
-        done="Retried."
-      />
-    ) : payout.processing && new Date(payout.created_at) <= subDays(new Date(), 2) ? (
-      <AdminActionButton
-        url={Routes.fail_admin_payout_path(payout.id)}
-        label="Mark failed"
-        confirm_message="Are you sure you want to mark this payment as failed?"
-        loading="Marking failed..."
-        done="Marked failed."
-      />
-    ) : payout.unclaimed ? (
-      <AdminActionButton
-        url={Routes.cancel_admin_payout_path(payout.id)}
-        label="Mark cancelled"
-        confirm_message="Are you sure you want to mark this payment as cancelled?"
-        loading="Cancelling..."
-        done="Cancelled!"
-      />
-    ) : null}
+    <div className="flex gap-2">
+      {payout.cancelled || payout.failed || payout.returned ? (
+        <AdminActionButton
+          url={Routes.retry_admin_payout_path(payout.id)}
+          label="Retry"
+          confirm_message="Are you sure you want to retry this payment?"
+          loading="Retrying..."
+          done="Retried."
+        />
+      ) : payout.processing && new Date(payout.created_at) <= subDays(new Date(), 2) ? (
+        <AdminActionButton
+          url={Routes.fail_admin_payout_path(payout.id)}
+          label="Mark failed"
+          confirm_message="Are you sure you want to mark this payment as failed?"
+          loading="Marking failed..."
+          done="Marked failed."
+        />
+      ) : payout.unclaimed ? (
+        <AdminActionButton
+          url={Routes.cancel_admin_payout_path(payout.id)}
+          label="Mark cancelled"
+          confirm_message="Are you sure you want to mark this payment as cancelled?"
+          loading="Cancelling..."
+          done="Cancelled!"
+        />
+      ) : null}
 
-    {payout.is_paypal_processor && payout.non_terminal_state ? (
-      <AdminActionButton
-        url={Routes.sync_admin_payout_path(payout.id)}
-        label="Sync with PayPal"
-        confirm_message="Are you sure you want to try and sync this payment with PayPal?"
-        loading="Syncing..."
-        done="Synced!"
-      />
-    ) : null}
+      {payout.is_paypal_processor && payout.non_terminal_state ? (
+        <AdminActionButton
+          url={Routes.sync_admin_payout_path(payout.id)}
+          label="Sync with PayPal"
+          confirm_message="Are you sure you want to try and sync this payment with PayPal?"
+          loading="Syncing..."
+          done="Synced!"
+        />
+      ) : null}
+    </div>
   </div>
 );
 
