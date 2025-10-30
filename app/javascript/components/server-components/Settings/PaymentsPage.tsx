@@ -759,7 +759,6 @@ const PaymentsPage = (props: Props) => {
       data = { ...data, ...{ payment_address: paypalEmailAddress } };
     }
 
-    // Refund card is handled by a dedicated endpoint and not included in main form payload
 
     try {
       const response = await request({

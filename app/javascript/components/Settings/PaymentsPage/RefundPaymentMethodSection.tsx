@@ -11,7 +11,6 @@ import { RefundCardData } from "$app/components/server-components/Settings/Payme
 type Props = {
   refundCard: SavedCreditCard | null;
   isFormDisabled: boolean;
-
   refundCardData: RefundCardData | null;
   setRefundCard: (refundCard: RefundCardData | null) => void;
   nameOnCard?: string;
