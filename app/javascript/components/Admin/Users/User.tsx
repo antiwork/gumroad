@@ -5,7 +5,7 @@ import AdminUserActions from "$app/components/Admin/Users/Actions";
 import AdminUserAddCredit from "$app/components/Admin/Users/AddCredit";
 import AdminUserChangeEmail from "$app/components/Admin/Users/ChangeEmail";
 import AdminUserComments from "$app/components/Admin/Users/Comments";
-import AdminUserComplianceInfo, { ComplianceInfoProps } from "$app/components/Admin/Users/ComplianceInfo";
+import AdminUserComplianceInfo, { type ComplianceInfoProps } from "$app/components/Admin/Users/ComplianceInfo";
 import AdminUserCustomFee from "$app/components/Admin/Users/CustomFee";
 import AdminUserEmailChanges from "$app/components/Admin/Users/EmailChanges";
 import Footer from "$app/components/Admin/Users/Footer";
