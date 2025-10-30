@@ -349,7 +349,8 @@ class ProductFile < ApplicationRecord
         return
       end
 
-      determine_and_set_filegroup(s3_extension.delete("."))
+      extension = s3_extension&.delete(".")
+      determine_and_set_filegroup(extension) if extension.present?
     end
 
     def invalidate_product_cache
