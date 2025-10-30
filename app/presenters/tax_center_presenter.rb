@@ -63,7 +63,7 @@ class TaxCenterPresenter
     end
 
     def sales_scope
-      start_date = Date.new(year).beginning_of_year.in_time_zone(seller.timezone)
+      start_date = Date.new(year).beginning_of_year
       end_date = start_date.end_of_year
 
       seller.sales

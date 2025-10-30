@@ -348,6 +348,18 @@ describe CreatorHomePresenter do
           }
         )
       end
+
+      it "returns empty tax forms when tax_center feature flag is enabled" do
+        Feature.activate_user(:tax_center, seller)
+
+        create(:user_tax_form, user: seller, tax_year: 2021, tax_form_type: "us_1099_k")
+
+        props = presenter.creator_home_props
+
+        expect(props[:tax_center_enabled]).to be(true)
+        expect(props[:tax_forms]).to eq([])
+        expect(props[:show_1099_download_notice]).to be(true)
+      end
     end
   end
 end

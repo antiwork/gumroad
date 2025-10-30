@@ -176,6 +176,7 @@ const TaxCenterPage = ({
           {availableYears.length > 0 && (
             <div className="flex items-center gap-3">
               <select
+                aria-label="Tax year"
                 disabled={isLoading}
                 value={selectedYear}
                 onChange={(e) => handleYearChange(parseInt(e.target.value, 10))}
@@ -192,7 +193,7 @@ const TaxCenterPage = ({
 
         {documents.length > 0 ? (
           <div className="paragraphs">
-            <table aria-live="polite" aria-busy={isLoading}>
+            <table aria-label="Tax documents" aria-live="polite" aria-busy={isLoading}>
               <thead>
                 <tr>
                   <th>Document</th>
