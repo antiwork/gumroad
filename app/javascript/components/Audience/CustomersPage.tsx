@@ -63,12 +63,12 @@ import { DateInput } from "$app/components/DateInput";
 import { DateRangePicker } from "$app/components/DateRangePicker";
 import { FileKindIcon } from "$app/components/FileRowContent";
 import { Icon } from "$app/components/Icons";
+import { LoadingSpinner } from "$app/components/LoadingSpinner";
 import { Modal } from "$app/components/Modal";
 import { NumberInput } from "$app/components/NumberInput";
 import { Pagination, PaginationProps } from "$app/components/Pagination";
 import { Popover } from "$app/components/Popover";
 import { PriceInput } from "$app/components/PriceInput";
-import { Progress } from "$app/components/Progress";
 import { RatingStars } from "$app/components/RatingStars";
 import { ReviewResponseForm } from "$app/components/ReviewResponseForm";
 import { ReviewVideoPlayer } from "$app/components/ReviewVideoPlayer";
@@ -1052,7 +1052,7 @@ const CustomerDrawer = ({
           ) : (
             <section>
               <div className="text-center">
-                <Progress width="2em" />
+                <LoadingSpinner className="size-8" />
               </div>
             </section>
           )}
@@ -1238,7 +1238,7 @@ const CustomerDrawer = ({
           ) : (
             <section>
               <div className="text-center">
-                <Progress width="2em" />
+                <LoadingSpinner className="size-8" />
               </div>
             </section>
           )}
@@ -1303,7 +1303,7 @@ const CustomerDrawer = ({
           ) : (
             <section>
               <div className="text-center">
-                <Progress width="2em" />
+                <LoadingSpinner className="size-8" />
               </div>
             </section>
           )}
@@ -1871,7 +1871,7 @@ const OptionSection = ({
           )
         ) : (
           <div className="text-center">
-            <Progress width="2em" />
+            <LoadingSpinner className="size-8" />
           </div>
         )}
       </section>
@@ -2225,6 +2225,7 @@ const RefundForm = ({
       </fieldset>
       <div style={{ display: "contents" }}>
         <Modal
+          usePortal
           open={isModalShowing}
           onClose={() => setIsModalShowing(false)}
           title={modalTitle}
@@ -2356,7 +2357,7 @@ const ChargesSection = ({
       {loading ? (
         <section>
           <div className="text-center">
-            <Progress width="2em" />
+            <LoadingSpinner className="size-8" />
           </div>
         </section>
       ) : charges.length > 0 ? (

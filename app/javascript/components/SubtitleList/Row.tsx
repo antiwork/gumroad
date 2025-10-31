@@ -7,7 +7,7 @@ import { summarizeUploadProgress } from "$app/utils/summarizeUploadProgress";
 
 import { Button } from "$app/components/Button";
 import { Icon } from "$app/components/Icons";
-import { Progress } from "$app/components/Progress";
+import { LoadingSpinner } from "$app/components/LoadingSpinner";
 import { UploadProgressBar } from "$app/components/UploadProgressBar";
 import { UploadProgress } from "$app/components/useConfigureEvaporate";
 
@@ -42,7 +42,7 @@ export const Row = ({ subtitleFile, onRemove, onCancel, onChangeLanguage }: Prop
         <>
           <UploadProgressBar progress={progress.percent} />
           <div className="content">
-            <Progress width="2em" />
+            <LoadingSpinner className="size-8" />
             <div>
               <h4>{subtitleFile.file_name}</h4>
               {`${summarizeUploadProgress(progress.percent, progress.bitrate, subtitleFile.file_size ?? 0)} ${

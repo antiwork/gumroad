@@ -10,8 +10,8 @@ import { Layout } from "$app/components/BundleEdit/Layout";
 import { BundleProduct, useBundleEditContext } from "$app/components/BundleEdit/state";
 import { Button } from "$app/components/Button";
 import { Icon } from "$app/components/Icons";
+import { LoadingSpinner } from "$app/components/LoadingSpinner";
 import { Card } from "$app/components/Product/Card";
-import { Progress } from "$app/components/Progress";
 import { showAlert } from "$app/components/server-components/Alert";
 import Placeholder from "$app/components/ui/Placeholder";
 import { ProductCardGrid } from "$app/components/ui/ProductCardGrid";
@@ -150,7 +150,7 @@ export const ContentTab = () => {
                 </div>
                 {isLoading && results.length === 0 ? (
                   <div style={{ justifySelf: "center" }}>
-                    <Progress width="1em" />
+                    <LoadingSpinner />
                   </div>
                 ) : results.length > 0 ? (
                   <div className="cart" role="list">

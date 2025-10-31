@@ -5,6 +5,7 @@ import { lookupCharges, lookupPaypalCharges } from "$app/data/charge"
 import { assertResponseError } from "$app/utils/request"
 
 import { showAlert } from "$app/components/server-components/Alert"
+import { PageHeader } from "$app/components/ui/PageHeader"
 
 const LookupLayout = ({ children, title, type }: {
   children?: React.ReactNode
@@ -80,12 +81,10 @@ const LookupLayout = ({ children, title, type }: {
 
   return (
     <div>
-      <header>
-        <h1>{title}</h1>
-      </header>
+      <PageHeader title={title} className="border-b-0 sm:border-b" />
       <div>
         {success !== null && (
-          <div ref={messageRef} style={{ marginBottom: "var(--spacer-7)" }}>
+          <div ref={messageRef} className="p-4! md:p-8!">
             {success ? (
               <div className="success" role="status">
                 We were able to find a match! It has been emailed to you. Sorry about the inconvenience.
@@ -115,7 +114,7 @@ const LookupLayout = ({ children, title, type }: {
           evt.preventDefault();
           void handleCardLookup();
         }}>
-          <section>
+          <section className="p-4! md:p-8!">
             <header>
               <h2>{type === "charge" ? "What was I charged for?" : "Look up your license key"}</h2>
               {type === "charge" ? "Fill out this form and we'll send you a receipt for your charge." : "We'll send you a receipt including your license key."}
@@ -158,7 +157,7 @@ const LookupLayout = ({ children, title, type }: {
           evt.preventDefault();
           void handlePaypalLookup();
         }}>
-          <section>
+          <section className="p-4! md:p-8!">
             <header>
               <h2>Did you pay with PayPal?</h2>
               Enter the invoice ID from PayPal's email receipt and we'll look it up.

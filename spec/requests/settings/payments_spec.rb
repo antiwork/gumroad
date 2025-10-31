@@ -850,7 +850,7 @@ describe("Payments Settings Scenario", type: :system, js: true) do
         expect(find(:select, "Country")).to have_selector(:option, "Somalia (not supported)", disabled: true)
         select(@update_country, from: "Country")
 
-        within "dialog" do
+        within_modal do
           expect(page).to have_content "Confirm country change"
           expect(page).to have_content "You are about to change your country. Please click \"Confirm\" to continue."
           expect(page).to have_button "Cancel"
@@ -875,7 +875,7 @@ describe("Payments Settings Scenario", type: :system, js: true) do
           visit settings_payments_path
           select(@update_country, from: "Country")
 
-          within "dialog" do
+          within_modal do
             expect(page).to have_content "Confirm country change"
             expect(page).to have_content "Due to limitations with our payments provider, switching your country to #{@update_country} means that you will have to forfeit your remaining balance of #{@user.formatted_balance_to_forfeit(:country_change)}"
             expect(page).to have_content "Please confirm that you're okay forfeiting your balance by typing \"I understand\" below and clicking Confirm."
@@ -964,7 +964,7 @@ describe("Payments Settings Scenario", type: :system, js: true) do
 
           click_on("Update settings")
 
-          within "dialog" do
+          within_modal do
             expect(page).to have_content "Confirm payout method change"
             expect(page).to have_content "Due to limitations with our payments provider, changing payout method from bank account to PayPal means that you will have to forfeit your existing balance of #{@user.formatted_balance_to_forfeit(:payout_method_change)}"
             expect(page).to have_content "Please confirm that you're okay forfeiting your balance by typing \"I understand\" below and clicking Confirm."
@@ -974,7 +974,7 @@ describe("Payments Settings Scenario", type: :system, js: true) do
           expect(page).not_to have_content "Confirm payout method change"
           click_on("Update settings")
 
-          within "dialog" do
+          within_modal do
             expect(page).to have_content "Confirm payout method change"
             expect(page).to have_content "Due to limitations with our payments provider, changing payout method from bank account to PayPal means that you will have to forfeit your existing balance of #{@user.formatted_balance_to_forfeit(:payout_method_change)}"
             expect(page).to have_content "Please confirm that you're okay forfeiting your balance by typing \"I understand\" below and clicking Confirm."
@@ -5753,7 +5753,7 @@ describe("Payments Settings Scenario", type: :system, js: true) do
 
       it "requires selecting a country before proceeding" do
         visit settings_payments_path
-        within "dialog" do
+        within_modal do
           expect(page).to have_content "Where are you located?"
           expect(page).to have_content "You may have to forfeit your balance if you want to change your country in the future."
           expect(page).to have_button "Save", disabled: true
