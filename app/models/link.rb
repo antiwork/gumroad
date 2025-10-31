@@ -44,7 +44,7 @@ class Link < ApplicationRecord
             :flag_query_mode => :bit_operator,
             check_for_column: false
 
-  include ProductsHelper, PreorderHelper, CurrencyHelper, SocialShareUrlHelper, Product::Stats, Product::Preview,
+  include ProductsHelper, PreorderHelper, CurrencyHelper, SocialShareUrlHelper, Product::AsJson, Product::Stats, Product::Preview,
           Product::Validations, Product::Caching, Product::NativeTypeTemplates, Product::Recommendations,
           Product::Prices, Product::Shipping, Product::Searchable, Product::Tags, Product::Taxonomies,
           Product::ReviewStat, Product::Utils, Product::StructuredData, ActionView::Helpers::SanitizeHelper,
@@ -297,8 +297,6 @@ class Link < ApplicationRecord
 
   scope :eligible_for_content_upsells, -> { visible_and_not_archived.not_is_tiered_membership }
 
-  alias super_as_json as_json
-
   before_create :set_default_discover_fee_per_thousand
   after_create :initialize_tier_if_needed
   after_create :add_to_profile_sections
@@ -358,6 +356,7 @@ class Link < ApplicationRecord
   def alive?
     purchase_disabled_at.nil? && banned_at.nil? && deleted_at.nil?
   end
+  alias_method :alive, :alive?
 
   def published?
     deleted_at.nil? && purchase_disabled_at.nil? && !draft
@@ -371,8 +370,9 @@ class Link < ApplicationRecord
   end
 
   def admins_can_generate_url_redirects?
-    product_files.alive.exists?
+    alive_product_files.any?
   end
+  alias_method :admins_can_generate_url_redirects, :admins_can_generate_url_redirects?
 
   def rentable?
     rent_only? || buy_and_rent?
@@ -438,10 +438,12 @@ class Link < ApplicationRecord
   def has_stampable_pdfs?
     alive_product_files.any?(&:must_be_pdf_stamped?)
   end
+  alias_method :has_stampable_pdfs, :has_stampable_pdfs?
 
   def streamable?
     has_filegroup?("video")
   end
+  alias_method :streamable, :streamable?
 
   def require_captcha?
     user.created_at > REQUIRE_CAPTCHA_FOR_SELLERS_YOUNGER_THAN.ago
@@ -559,38 +561,6 @@ class Link < ApplicationRecord
     when "discover_fee_per_thousand" then "Gumroad fee"
     when "native_type" then "Product type"
     else super
-    end
-  end
-
-  def as_json(options = {})
-    if options[:api_scopes].present?
-      as_json_for_api(options)
-    elsif options[:mobile].present?
-      as_json_for_mobile_api
-    elsif options[:variant_details_only].present?
-      as_json_variant_details_only
-    else
-      json = super(only: %i[name description require_shipping preview_url]).merge!(
-        "id" => unique_permalink,
-        "external_id" => external_id,
-        "price" => default_price_cents,
-        "currency" => price_currency_type,
-        "short_url" => long_url,
-        "formatted_price" => price_formatted_verbose,
-        "recommendable" => recommendable?,
-        "rated_as_adult" => rated_as_adult?,
-        "hide_sold_out_variants" => hide_sold_out_variants?,
-      )
-      json["custom_delivery_url"] = nil # Deprecated
-      if preorder_link.present?
-        json.merge!(
-          "is_preorder" => true,
-          "is_in_preorder_state" => is_in_preorder_state,
-          "release_at" => preorder_link.release_at.to_s
-        )
-      end
-
-      json
     end
   end
 
@@ -822,32 +792,6 @@ class Link < ApplicationRecord
     variants
   end
 
-  def as_json_variant_details_only
-    variants = { categories: {}, skus: {}, skus_enabled: false }
-    return variants if variant_categories_alive.empty? && !skus_enabled?
-
-    variant_categories_alive.each do |category|
-      category_hash = {
-        title: category.title.present? ? category.title : "Version",
-        options: {}
-      }
-      category.variants.alive.each do |variant|
-        category_hash[:options][variant.external_id] = variant.as_json(for_views: true)
-      end
-      variants[:categories][category.external_id] = category_hash
-    end
-
-    if skus_enabled?
-      skus.not_is_default_sku.alive.each do |sku|
-        variants[:skus][sku.external_id] = sku.as_json(for_views: true)
-      end
-      variants[:skus_title] = sku_title
-      variants[:skus_enabled] = true
-    end
-
-    variants
-  end
-
   def reorder_previews(preview_positions)
     asset_previews.alive.each do |preview|
       position = preview_positions[preview.guid].try(:to_i)
@@ -987,6 +931,7 @@ class Link < ApplicationRecord
       AdultKeywordDetector.adult?(text)
     end
   end
+  alias_method :has_adult_keywords, :has_adult_keywords?
 
   # Public: Check if a zip archive should ever be generated for this product
   # This is for a product in general, not a specific purchase of a product.
@@ -1315,99 +1260,10 @@ class Link < ApplicationRecord
     end
 
   private
-    def as_json_for_api(options)
-      keep = %w[
-        name description require_shipping preview_url
-        custom_receipt customizable_price custom_permalink
-        subscription_duration
-      ]
-      cached_default_price_cents = default_price_cents
-
-      ppp_factors = purchasing_power_parity_enabled? ? options[:preloaded_ppp_factors] || PurchasingPowerParityService.new.get_all_countries_factors(user) : nil
-
-      json = super_as_json(only: keep).merge!(
-        "id" => external_id,
-        "url" => nil, # Deprecated
-        "price" => cached_default_price_cents,
-        "currency" => price_currency_type,
-        "short_url" => long_url,
-        "thumbnail_url" => thumbnail&.alive&.url.presence,
-        "tags" => tags.pluck(:name),
-        "formatted_price" => price_formatted_verbose,
-        "published" => alive?,
-        "file_info" => multifile_aware_product_file_info,
-        "max_purchase_count" => max_purchase_count,
-        "deleted" => deleted_at.present?,
-        "custom_fields" => custom_field_descriptors.as_json,
-        "custom_summary" => custom_summary,
-        "is_tiered_membership" => is_tiered_membership?,
-        "recurrences" => is_tiered_membership? ? prices.alive.is_buy.map(&:recurrence).uniq : nil,
-        "variants" => variant_categories_alive.map do |cat|
-          {
-            title: cat.title,
-            options: cat.alive_variants.map do |variant|
-              {
-                name: variant.name,
-                price_difference: variant.price_difference_cents,
-                is_pay_what_you_want: variant.customizable_price?,
-                recurrence_prices: is_tiered_membership? ? variant.recurrence_price_values : nil,
-                url: nil, # Deprecated
-              }
-            end.map do
-              ppp_factors.blank? ? _1 :
-                _1.merge({
-                           purchasing_power_parity_prices: _1[:price_difference].present? ? compute_ppp_prices(_1[:price_difference] + cached_default_price_cents, ppp_factors, currency) : nil,
-                           recurrence_prices: _1[:recurrence_prices]&.transform_values do |v|
-                                                v.merge({ purchasing_power_parity_prices: compute_ppp_prices(v[:price_cents], ppp_factors, currency) })
-                                              end,
-                         })
-            end
-          }
-        end
-      )
-      if preorder_link.present?
-        json.merge!(
-          "is_preorder" => true,
-          "is_in_preorder_state" => is_in_preorder_state,
-          "release_at" => preorder_link.release_at.to_s
-        )
-      end
-
-      if ppp_factors.present?
-        json["purchasing_power_parity_prices"] = compute_ppp_prices(cached_default_price_cents, ppp_factors, currency)
-      end
-
-      if options[:api_scopes].include?("view_sales")
-        json["custom_delivery_url"] = nil # Deprecated
-        json["sales_count"] = successful_sales_count
-        json["sales_usd_cents"] = total_usd_cents
-      end
-
-      json
-    end
-
     def compute_ppp_prices(price_cents, factors, currency)
       factors.keys.index_with do |country_code|
         price_cents == 0 ? 0 : [factors[country_code] * price_cents, currency["min_price"]].max.round
       end
-    end
-
-    def as_json_for_mobile_api
-      super_as_json(only: %w[name description unique_permalink]).merge!(
-        created_at:,
-        updated_at:,
-        content_updated_at: content_updated_at || created_at,
-        creator_name: user.name_or_username || "",
-        creator_username: user.username || "",
-        creator_profile_picture_url: user.avatar_url,
-        creator_profile_url: user.profile_url,
-        preview_url: preview_oembed_thumbnail_url || preview_url || "",
-        thumbnail_url: thumbnail&.alive&.url.presence,
-        preview_oembed_url: mobile_oembed_url,
-        preview_height: preview_height_for_mobile,
-        preview_width: preview_width_for_mobile,
-        has_rich_content: true
-      )
     end
 
     def release_custom_permalink_if_possible

@@ -1,7 +1,7 @@
 # frozen_string_literal: true
 
 class Admin::LinksController < Admin::BaseController
-  before_action :fetch_product_by_general_permalink, except: %i[purchases
+  before_action :fetch_product_by_general_permalink, except: %i[legacy_purchases
                                                                 flag_seller_for_tos_violation
                                                                 views_count sales_stats
                                                                 join_discord
@@ -21,6 +21,18 @@ class Admin::LinksController < Admin::BaseController
 
   def show
     @title = @product.name
+    render inertia: "Admin/Products/Show", legacy_template: "admin/links/show", props: {
+      title: @product.name,
+      product: @product.as_json(
+        admin: true,
+        admins_can_mark_as_staff_picked: ->(product) { policy([:admin, :products, :staff_picked, product]).create? },
+        admins_can_unmark_as_staff_picked: ->(product) { policy([:admin, :products, :staff_picked, product]).destroy? }
+      ),
+      user: Admin::UserPresenter::Card.new(
+        user: @product.user,
+        impersonatable: policy([:admin, :impersonators, @product.user]).create?
+      ).props
+    }
   end
 
   def access_product_file
@@ -66,7 +78,7 @@ class Admin::LinksController < Admin::BaseController
     render json: { success: @product.update_attribute(:deleted_at, nil) }
   end
 
-  def purchases
+  def legacy_purchases
     product_id = params[:id].to_i
     product = Link.find_by(id: product_id)
 
@@ -106,11 +118,26 @@ class Admin::LinksController < Admin::BaseController
   end
 
   def views_count
-    render layout: false
+    if request.format.json?
+      render json: { views_count: @product.number_of_views }
+    else
+      render layout: false
+    end
   end
 
   def sales_stats
-    render layout: false
+    if request.format.json?
+      render json: {
+        sales_stats: {
+          preorder_state: @product.is_in_preorder_state,
+          count: @product.is_in_preorder_state ? @product.sales.preorder_authorization_successful.count : @product.sales.successful.count,
+          stripe_failed_count: @product.is_in_preorder_state ? @product.sales.preorder_authorization_failed.stripe_failed.count : @product.sales.stripe_failed.count,
+          balance_formatted: @product.balance_formatted
+        }
+      }
+    else
+      render layout: false
+    end
   end
 
   def join_discord

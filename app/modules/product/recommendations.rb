@@ -4,6 +4,7 @@ module Product::Recommendations
   def recommendable?
     recommendable_reasons.values.all?
   end
+  alias_method :recommendable, :recommendable?
 
   # All of the factors(values/records/etc.) which influence the return value of this method should be watched.
   # Whenever any of those factors change, a `SendToElasticsearchWorker` job must be enqueued to update the `is_recommendable`

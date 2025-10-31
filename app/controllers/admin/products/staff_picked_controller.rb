@@ -1,9 +1,7 @@
 # frozen_string_literal: true
 
-class Admin::Products::StaffPickedController < Admin::BaseController
+class Admin::Products::StaffPickedController < Admin::Products::BaseController
   include AfterCommitEverywhere
-
-  before_action :set_product
 
   def create
     authorize [:admin, :products, :staff_picked, @product]
@@ -13,9 +11,4 @@ class Admin::Products::StaffPickedController < Admin::BaseController
 
     render json: { success: true }
   end
-
-  private
-    def set_product
-      @product = Link.find(params[:product_id])
-    end
 end
