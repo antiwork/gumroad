@@ -11157,7 +11157,7 @@ describe StripeMerchantAccountManager, :vcr do
         "id" => "evt_1QVBfg2m2ugQR0I1VshF1FC2",
         "object" => "event",
         "account" => "acct_1QVBf52m2ugQR0I1",
-        "api_version" => "2023-10-16; risk_in_requirements_beta=v1",
+        "api_version" => "2023-10-16",
         "created" => 1734007152,
         "data" => {
           "object" => {

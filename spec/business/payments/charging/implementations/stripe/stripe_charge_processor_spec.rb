@@ -2853,7 +2853,7 @@ describe StripeChargeProcessor, :vcr do
           {
             "id": "evt_0QbmSZ9e1RjUNIyYopDHaLso",
             "object": "event",
-            "api_version": "2023-10-16; risk_in_requirements_beta=v1",
+            "api_version": "2023-10-16",
             "created": 1735578535,
             "data": {
               "object": {
@@ -2931,7 +2931,7 @@ describe StripeChargeProcessor, :vcr do
           {
             "id": "evt_0QYGAQ9e1RjUNIyYf54eCbYR",
             "object": "event",
-            "api_version": "2023-10-16; risk_in_requirements_beta=v1",
+            "api_version": "2023-10-16",
             "created": 1734739418,
             "data": {
               "object": {
