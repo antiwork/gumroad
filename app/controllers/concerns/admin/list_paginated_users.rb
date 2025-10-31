@@ -19,8 +19,6 @@ module Admin::ListPaginatedUsers
         countless_minimal: true
       )
 
-      yield pagination, users if block_given?
-
       if single_result_redirect_path && pagination.page == 1 && users.length == 1
         return redirect_to single_result_redirect_path.call(users.first)
       end
