@@ -12,10 +12,7 @@ type FlagForTosViolationsContentProps = {
   tosViolationFlags: TosViolationFlags[];
 };
 
-const FlagForTosViolationsContent = ({
-  isLoading,
-  tosViolationFlags,
-}: FlagForTosViolationsContentProps) => {
+const FlagForTosViolationsContent = ({ isLoading, tosViolationFlags }: FlagForTosViolationsContentProps) => {
   if (isLoading) {
     return <LoadingSpinner />;
   }

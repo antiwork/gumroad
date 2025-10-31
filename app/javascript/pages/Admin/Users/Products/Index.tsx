@@ -1,11 +1,10 @@
 import { router, usePage } from "@inertiajs/react";
 import React from "react";
 
-import { Pagination, type PaginationProps } from "$app/components/Pagination";
-
 import AdminUsersProductsProduct, { type Product as ProductType } from "$app/components/Admin/Products/Product";
 import AdminUserAndProductsTabs from "$app/components/Admin/UserAndProductsTabs";
 import { type User as UserType } from "$app/components/Admin/Users/User";
+import { Pagination, type PaginationProps } from "$app/components/Pagination";
 
 type AdminUsersProductsContentProps = {
   user: UserType;
@@ -60,7 +59,7 @@ const AdminUsersProducts = ({ isAffiliateUser = false }: Props) => {
         isAffiliateUser={isAffiliateUser}
         pagination={pagination}
       />
-      { pagination.pages > 1 && <Pagination pagination={pagination} onChangePage={onChangePage} /> }
+      {pagination.pages > 1 && <Pagination pagination={pagination} onChangePage={onChangePage} />}
     </div>
   );
 };
