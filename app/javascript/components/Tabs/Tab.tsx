@@ -1,4 +1,5 @@
-import React from "react";
+import { Slot } from "@radix-ui/react-slot";
+import * as React from "react";
 
 import { classNames } from "$app/utils/classNames";
 
@@ -8,14 +9,14 @@ type TabProps = {
   onClick?: () => void;
   ariaControls?: string;
   className?: string;
-  nodeName?: keyof React.JSX.IntrinsicElements;
+  asChild?: boolean;
 };
 
-const Tab = ({ children, isSelected, onClick = () => {}, ariaControls, className, nodeName = "div" }: TabProps) => {
-  const Node = nodeName;
+const Tab = ({ children, isSelected, onClick = () => {}, ariaControls, className, asChild = false }: TabProps) => {
+  const Component = asChild ? Slot : "div";
 
   return (
-    <Node
+    <Component
       role="tab"
       className={classNames(
         "opacity-70",
@@ -33,7 +34,7 @@ const Tab = ({ children, isSelected, onClick = () => {}, ariaControls, className
       onClick={onClick}
     >
       {children}
-    </Node>
+    </Component>
   );
 };
 
