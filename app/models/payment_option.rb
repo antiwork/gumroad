@@ -8,6 +8,7 @@ class PaymentOption < ApplicationRecord
   belongs_to :installment_plan,
              foreign_key: :product_installment_plan_id, class_name: "ProductInstallmentPlan",
              optional: true
+  has_one :installment_plan_snapshot, dependent: :destroy
 
   validates :installment_plan, presence: true, if: -> { subscription&.is_installment_plan }
 
