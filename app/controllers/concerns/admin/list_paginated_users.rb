@@ -19,6 +19,8 @@ module Admin::ListPaginatedUsers
         countless_minimal: true
       )
 
+      yield users if block_given?
+
       respond_to do |format|
         format.html do
           render(

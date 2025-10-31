@@ -5,7 +5,7 @@ import AdminUserActions from "$app/components/Admin/Users/Actions";
 import AdminUserAddCredit from "$app/components/Admin/Users/AddCredit";
 import AdminUserChangeEmail from "$app/components/Admin/Users/ChangeEmail";
 import AdminUserComments from "$app/components/Admin/Users/Comments";
-import AdminUserComplianceInfo, { ComplianceInfoProps } from "$app/components/Admin/Users/ComplianceInfo";
+import AdminUserComplianceInfo, { type ComplianceInfoProps } from "$app/components/Admin/Users/ComplianceInfo";
 import AdminUserCustomFee from "$app/components/Admin/Users/CustomFee";
 import AdminUserEmailChanges from "$app/components/Admin/Users/EmailChanges";
 import Footer from "$app/components/Admin/Users/Footer";
@@ -71,16 +71,16 @@ export type User = {
 
 export type Props = {
   user: User;
-  is_affiliate_user?: boolean;
+  isAffiliateUser?: boolean;
 };
 
-const UserCard = ({ user, is_affiliate_user = false }: Props) => {
+const UserCard = ({ user, isAffiliateUser = false }: Props) => {
   const page = usePage();
   const { url } = page;
 
   return (
     <div className="grid gap-4 rounded border border-border bg-background p-4" data-user-id={user.id}>
-      <Header user={user} is_affiliate_user={is_affiliate_user} url={url} />
+      <Header user={user} isAffiliateUser={isAffiliateUser} url={url} />
 
       <hr />
 
