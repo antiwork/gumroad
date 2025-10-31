@@ -1,9 +1,8 @@
-import { usePage } from "@inertiajs/react";
+import { router, usePage } from "@inertiajs/react";
 import React from "react";
 
-import { type Pagination } from "$app/hooks/useLazyFetch";
+import { Pagination, type PaginationProps } from "$app/components/Pagination";
 
-import PaginatedLoader from "$app/components/Admin/PaginatedLoader";
 import AdminUsersProductsProduct, { type Product as ProductType } from "$app/components/Admin/Products/Product";
 import AdminUserAndProductsTabs from "$app/components/Admin/UserAndProductsTabs";
 import { type User as UserType } from "$app/components/Admin/Users/User";
@@ -12,7 +11,7 @@ type AdminUsersProductsContentProps = {
   user: UserType;
   products: ProductType[];
   isAffiliateUser?: boolean;
-  pagination: Pagination;
+  pagination: PaginationProps;
 };
 
 const AdminUsersProductsContent = ({
@@ -45,11 +44,12 @@ type Props = {
 type AdminUsersProductsProps = {
   user: UserType;
   products: ProductType[];
-  pagination: Pagination;
+  pagination: PaginationProps;
 };
 
 const AdminUsersProducts = ({ isAffiliateUser = false }: Props) => {
   const { user, products, pagination } = usePage<AdminUsersProductsProps>().props;
+  const onChangePage = (page: number) => router.reload({ data: { page }, only: ["products", "pagination"] });
 
   return (
     <div className="paragraphs">
@@ -60,7 +60,7 @@ const AdminUsersProducts = ({ isAffiliateUser = false }: Props) => {
         isAffiliateUser={isAffiliateUser}
         pagination={pagination}
       />
-      <PaginatedLoader itemsLength={products.length} pagination={pagination} only={["products", "pagination"]} />
+      { pagination.pages > 1 && <Pagination pagination={pagination} onChangePage={onChangePage} /> }
     </div>
   );
 };
