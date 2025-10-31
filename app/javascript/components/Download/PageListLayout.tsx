@@ -45,7 +45,7 @@ export const PageListItem = ({
   return (
     <Component
       className={classNames(
-        "tailwind-override flex items-center gap-2 p-4 not-first:border-t first:rounded-t-sm last:rounded-b-sm",
+        "flex items-center gap-2 p-4 not-first:border-t first:rounded-t-sm last:rounded-b-sm",
         isSelected && "bg-active-bg",
         className,
       )}

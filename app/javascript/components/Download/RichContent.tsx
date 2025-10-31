@@ -7,7 +7,6 @@ import { cast } from "ts-safe-cast";
 
 import { RichContent } from "$app/parsers/richContent";
 import { assertDefined } from "$app/utils/assert";
-import { classNames } from "$app/utils/classNames";
 import { asyncVoid } from "$app/utils/promise";
 import { assertResponseError } from "$app/utils/request";
 
@@ -155,7 +154,7 @@ const TiptapButton = TiptapNode.create<{ saleInfo: SaleInfo | null }>({
 });
 
 export const connectedFileRowClassName = (isLastInGroup: boolean) =>
-  classNames(isLastInGroup ? "border-none!" : "rounded-b-none! border-0! border-b! border-border");
+  isLastInGroup ? "border-none!" : "rounded-b-none! border-0! border-b! border-border";
 
 const FileEmbedNodeView = ({ node, getPos, editor }: NodeViewProps) => {
   const contentFiles = useContentFiles();

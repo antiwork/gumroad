@@ -753,7 +753,7 @@ const ContentTabContent = ({ selectedVariantId }: { selectedVariantId: string | 
                   >
                     <>
                       {isDesktop ? null : (
-                        <PageListItem asChild className="text-left">
+                        <PageListItem asChild className="tailwind-override text-left">
                           <button onClick={() => setPagesExpanded(!pagesExpanded)}>
                             <span className="flex-1">
                               <strong>Table of contents:</strong> {titleWithFallback(selectedPage?.title)}
@@ -815,7 +815,7 @@ const ContentTabContent = ({ selectedVariantId }: { selectedVariantId: string | 
                               />
                             </WithTooltip>
                           ) : null}
-                          <PageListItem asChild className="text-left">
+                          <PageListItem asChild className="tailwind-override text-left">
                             <button
                               className="add-page"
                               onClick={(e) => {
