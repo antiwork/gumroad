@@ -63,6 +63,7 @@ import { Sort, useClientSortingTableDriver, useSortingTableDriver } from "$app/c
 import { WithTooltip } from "$app/components/WithTooltip";
 
 import placeholder from "$assets/images/placeholders/affiliated.png";
+import { Pill } from "$app/components/ui/Pill";
 
 type LayoutProps = {
   title: string;
@@ -880,7 +881,7 @@ const Form = ({ title, headerLabel, submitLabel }: FormProps) => {
                             disabled={navigation.state === "submitting" || !affiliateState.apply_to_all_products}
                             {...inputProps}
                           />
-                          <div className="pill">%</div>
+                          <Pill>%</Pill>
                         </div>
                       )}
                     </NumberInput>

@@ -3,6 +3,7 @@ import * as React from "react";
 import { Form } from "$app/components/Admin/Form";
 import type { User } from "$app/components/Admin/Users/User";
 import { useClientAlert } from "$app/components/ClientAlertProvider";
+import { Pill } from "$app/components/ui/Pill";
 
 type AdminUserAddCreditProps = {
   user: User;
@@ -28,7 +29,7 @@ const AdminUserAddCredit = ({ user }: AdminUserAddCreditProps) => {
             <fieldset>
               <div className="input-with-button">
                 <div className="input">
-                  <span className="pill">$</span>
+                  <Pill as="span">$</Pill>
                   <input type="text" name="credit[credit_amount]" placeholder="10.25" inputMode="decimal" required />
                 </div>
 

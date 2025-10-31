@@ -36,6 +36,7 @@ import memberCancelsTriggerImage from "$assets/images/workflows/triggers/member_
 import newAffiliateTriggerImage from "$assets/images/workflows/triggers/new_affiliate.svg";
 import newSubscriberTriggerImage from "$assets/images/workflows/triggers/new_subscriber.svg";
 import purchaseTriggerImage from "$assets/images/workflows/triggers/purchase.svg";
+import { Pill } from "$app/components/ui/Pill";
 
 // "legacy_audience" is for backwards compatibility and is only shown while editing an existing workflow of that type
 export type WorkflowTrigger =
@@ -538,7 +539,7 @@ const WorkflowForm = () => {
                 >
                   {(inputProps) => (
                     <div className={cx("input", { disabled: wasPublishedPreviously })}>
-                      <div className="pill">{context.currency_symbol}</div>
+                      <Pill>{context.currency_symbol}</Pill>
                       <input
                         id="paid_more_than"
                         type="text"
@@ -562,7 +563,7 @@ const WorkflowForm = () => {
                 >
                   {(inputProps) => (
                     <div className={cx("input", { disabled: wasPublishedPreviously })}>
-                      <div className="pill">{context.currency_symbol}</div>
+                      <Pill>{context.currency_symbol}</Pill>
                       <input
                         id="paid_less_than"
                         type="text"

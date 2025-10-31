@@ -9,6 +9,7 @@ import { Popover } from "$app/components/Popover";
 import { Separator } from "$app/components/Separator";
 import { useOriginalLocation } from "$app/components/useOriginalLocation";
 import { WithTooltip } from "$app/components/WithTooltip";
+import { Pill } from "$app/components/ui/Pill";
 
 type Props = { card_types: { id: string; name: string }[] };
 export const SearchPopover = ({ card_types }: Props) => {
@@ -114,7 +115,7 @@ export const SearchPopover = ({ card_types }: Props) => {
             />
           </div>
           <div className="input">
-            <div className="pill">$</div>
+            <Pill>$</Pill>
             <input
               name="price"
               placeholder="Price (9.99)"

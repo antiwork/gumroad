@@ -38,7 +38,7 @@ const DiscoverLinkSection = ({
         <div className="input">
           <div className="input">{discoverUrl}</div>
           <CopyToClipboard text={discoverUrl} tooltipPosition="bottom">
-            <Button className="pill">Copy link</Button>
+            <Button className="inline-block align-middle !px-3 !py-2 bg-background text-foreground border border-border !rounded-[10rem] truncate pill-component">Copy link</Button>
           </CopyToClipboard>
         </div>
         <small>
@@ -86,7 +86,7 @@ const LinkGenerationSection = ({
             onChange={(evt) => setInputLink(evt.target.value)}
           />
           <Button
-            className="pill"
+            className="inline-block align-middle !px-3 !py-2 bg-background text-foreground border border-border !rounded-[10rem] truncate pill-component"
             onClick={() => {
               try {
                 const url = new URL(inputLink);
@@ -117,7 +117,7 @@ const LinkGenerationSection = ({
         <div className="input">
           <div className="input">{generatedLink}</div>
           <CopyToClipboard text={generatedLink} tooltipPosition="bottom">
-            <Button className="pill">Copy link</Button>
+            <Button className="inline-block align-middle !px-3 !py-2 bg-background text-foreground border border-border !rounded-[10rem] truncate pill-component">Copy link</Button>
           </CopyToClipboard>
         </div>
         <small>Copy this affiliate link and share it with your audience</small>

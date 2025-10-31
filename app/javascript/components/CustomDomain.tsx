@@ -92,7 +92,7 @@ const CustomDomain = ({
           }}
         />
         {customDomain.trim() !== "" ? (
-          <Button className="pill" onClick={verifyCustomDomain} disabled={verificationInfo.buttonState === "verifying"}>
+          <Button className="inline-block align-middle !px-3 !py-2 bg-background text-foreground border border-border !rounded-[10rem] truncate pill-component" onClick={verifyCustomDomain} disabled={verificationInfo.buttonState === "verifying"}>
             <div>
               {
                 {

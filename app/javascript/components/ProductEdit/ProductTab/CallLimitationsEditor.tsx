@@ -5,6 +5,7 @@ import { CallLimitationInfo } from "$app/components/ProductEdit/state";
 import { TypeSafeOptionSelect } from "$app/components/TypeSafeOptionSelect";
 import { useOnChange } from "$app/components/useOnChange";
 import { useOnOutsideClick } from "$app/components/useOnOutsideClick";
+import { Pill } from "$app/components/ui/Pill";
 
 const UNITS = ["minutes", "hours", "days"] as const;
 type Unit = (typeof UNITS)[number];
@@ -61,15 +62,16 @@ export const CallLimitationsEditor = ({
           {(props) => (
             <div className="input" ref={inputRef}>
               <input id={`${uid}-notice-period`} placeholder="15" {...props} />
-              <label className="pill select">
+              <Pill select>
                 <span>{minimumNotice.unit}</span>
                 <TypeSafeOptionSelect
                   aria-label="Units"
                   onChange={(unit) => setMinimumNotice({ ...minimumNotice, unit })}
                   value={minimumNotice.unit}
                   options={UNITS.map((unit) => ({ id: unit, label: unit }))}
+                  className="absolute top-0 left-0 h-full w-full opacity-0 cursor-pointer text-foreground bg-background"
                 />
-              </label>
+              </Pill>
             </div>
           )}
         </NumberInput>

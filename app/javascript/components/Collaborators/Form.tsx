@@ -20,6 +20,7 @@ import { Modal } from "$app/components/Modal";
 import { NumberInput } from "$app/components/NumberInput";
 import { showAlert } from "$app/components/server-components/Alert";
 import { WithTooltip } from "$app/components/WithTooltip";
+import { Pill } from "$app/components/ui/Pill";
 
 const DEFAULT_PERCENT_COMMISSION = 50;
 const MIN_PERCENT_COMMISSION = 1;
@@ -284,7 +285,7 @@ const CollaboratorForm = () => {
                               aria-label="Percentage"
                               {...inputProps}
                             />
-                            <div className="pill">%</div>
+                            <Pill>%</Pill>
                           </div>
                         )}
                       </NumberInput>
@@ -349,7 +350,7 @@ const CollaboratorForm = () => {
                                   aria-label="Percentage"
                                   {...inputProps}
                                 />
-                                <div className="pill">%</div>
+                                <Pill>%</Pill>
                               </div>
                             )}
                           </NumberInput>

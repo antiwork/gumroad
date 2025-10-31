@@ -85,6 +85,7 @@ import { useSortingTableDriver } from "$app/components/useSortingTableDriver";
 import { WithTooltip } from "$app/components/WithTooltip";
 
 import placeholder from "$assets/images/placeholders/customers.png";
+import { Pill } from "$app/components/ui/Pill";
 
 type Product = { id: string; name: string; variants: { id: string; name: string }[] };
 
@@ -477,45 +478,45 @@ const CustomersPage = ({
                       <td>
                         {customer.product.name}
                         {customer.subscription?.is_installment_plan ? (
-                          <span className="pill small" style={{ marginLeft: "var(--spacer-2)" }}>
+                          <Pill as="span" size="small" style={{ marginLeft: "var(--spacer-2)" }}>
                             Installments
-                          </span>
+                          </Pill>
                         ) : null}
                         {customer.is_bundle_purchase ? (
-                          <span className="pill small" style={{ marginLeft: "var(--spacer-2)" }}>
+                          <Pill as="span" size="small" style={{ marginLeft: "var(--spacer-2)" }}>
                             Bundle
-                          </span>
+                          </Pill>
                         ) : null}
                         {customer.subscription ? (
                           !customer.subscription.is_installment_plan && customer.subscription.status !== "alive" ? (
-                            <span className="pill small" style={{ marginLeft: "var(--spacer-2)" }}>
+                            <Pill as="span" size="small" style={{ marginLeft: "var(--spacer-2)" }}>
                               Inactive
-                            </span>
+                            </Pill>
                           ) : null
                         ) : (
                           <>
                             {customer.partially_refunded ? (
-                              <span className="pill small" style={{ marginLeft: "var(--spacer-2)" }}>
+                              <Pill as="span" size="small" style={{ marginLeft: "var(--spacer-2)" }}>
                                 Partially refunded
-                              </span>
+                              </Pill>
                             ) : null}
                             {customer.refunded ? (
-                              <span className="pill small" style={{ marginLeft: "var(--spacer-2)" }}>
+                              <Pill as="span" size="small" style={{ marginLeft: "var(--spacer-2)" }}>
                                 Refunded
-                              </span>
+                              </Pill>
                             ) : null}
                             {customer.chargedback ? (
-                              <span className="pill small" style={{ marginLeft: "var(--spacer-2)" }}>
+                              <Pill as="span" size="small" style={{ marginLeft: "var(--spacer-2)" }}>
                                 Chargedback
-                              </span>
+                              </Pill>
                             ) : null}
                           </>
                         )}
                         {customer.utm_link ? (
                           <div className="has-tooltip" aria-describedby={`utm-link-${customer.id}`}>
-                            <span className="pill small" style={{ marginLeft: "var(--spacer-2)" }}>
+                            <Pill as="span" size="small" style={{ marginLeft: "var(--spacer-2)" }}>
                               UTM
-                            </span>
+                            </Pill>
                             <div
                               role="tooltip"
                               id={`utm-link-${customer.id}`}
@@ -944,7 +945,7 @@ const CustomerDrawer = ({
             {customer.discount.code ? (
               <div>
                 {formatDiscount(customer.discount, customer.price.currency_type)} off with code{" "}
-                <div className="pill small">{customer.discount.code.toUpperCase()}</div>
+                <Pill size="small">{customer.discount.code.toUpperCase()}</Pill>
               </div>
             ) : (
               `${formatDiscount(customer.discount, customer.price.currency_type)} off`
@@ -2287,16 +2288,16 @@ const ChargeRow = ({
             <Icon name="arrow-up-right-square" />
           </a>
           {purchase.partially_refunded ? (
-            <span className="pill small">Partial refund</span>
+            <Pill as="span" size="small">Partial refund</Pill>
           ) : purchase.refunded ? (
-            <span className="pill small">Refunded</span>
+            <Pill as="span" size="small">Refunded</Pill>
           ) : null}
           {purchase.is_upgrade_purchase ? (
             <WithTooltip tip="This is an upgrade charge, generated when the subscriber upgraded to a more expensive plan.">
-              <span className="pill small">Upgrade</span>
+              <Pill as="span" size="small">Upgrade</Pill>
             </WithTooltip>
           ) : null}
-          {purchase.chargedback ? <span className="pill small">Chargedback</span> : null}
+          {purchase.chargedback ? <Pill as="span" size="small">Chargedback</Pill> : null}
         </section>
         {!purchase.refunded && !purchase.chargedback && purchase.amount_refundable > 0 ? (
           <button className="underline" onClick={() => setIsRefunding((prev) => !prev)}>

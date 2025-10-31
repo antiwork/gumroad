@@ -20,6 +20,7 @@ import { useUserAgentInfo } from "$app/components/UserAgent";
 import { WithTooltip } from "$app/components/WithTooltip";
 
 import placeholder from "$assets/images/placeholders/payouts.png";
+import { Pill } from "$app/components/ui/Pill";
 
 const INSTANT_PAYOUT_FEE_PERCENTAGE = 0.03;
 const MINIMUM_INSTANT_PAYOUT_AMOUNT_CENTS = 1000;
@@ -334,7 +335,7 @@ const Period = ({ payoutPeriodData }: { payoutPeriodData: PayoutPeriodData }) =>
       >
         {payoutPeriodData.status === "completed" ? <span>{heading}</span> : <h2>{heading}</h2>}
         {"type" in payoutPeriodData && payoutPeriodData.type === "instant" ? (
-          <div className="pill small">Instant</div>
+          <Pill size="small">Instant</Pill>
         ) : null}
         <span style={{ marginLeft: "auto" }}>{payoutPeriodData.displayable_payout_period_range}</span>
         {payoutPeriodData.status === "completed" && payoutPeriodData.payment_external_id ? (

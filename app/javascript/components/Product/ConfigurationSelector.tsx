@@ -39,6 +39,7 @@ import { PriceInput } from "$app/components/PriceInput";
 import { TypeSafeOptionSelect } from "$app/components/TypeSafeOptionSelect";
 import { Calendar } from "$app/components/ui/Calendar";
 import { useRunOnce } from "$app/components/useRunOnce";
+import { Pill } from "$app/components/ui/Pill";
 
 const PWYWInput = React.forwardRef<
   HTMLInputElement,
@@ -244,7 +245,7 @@ export const OptionRadioButton = ({
         </div>
       ) : null}
       {hidePrice ? null : (
-        <div className="pill">
+        <Pill>
           {discountedPriceCents < priceCents ? (
             <>
               <s>{formatPriceCentsWithCurrencySymbol(currencyCode, priceCents, { symbolFormat: "long" })}</s>{" "}
@@ -261,7 +262,7 @@ export const OptionRadioButton = ({
           <div itemProp="priceCurrency" hidden>
             {currencyCode}
           </div>
-        </div>
+        </Pill>
       )}
       <div>
         <h4>{name}</h4>

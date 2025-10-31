@@ -15,7 +15,7 @@ import {
   recurrenceIds,
 } from "$app/utils/recurringPricing";
 import { assertResponseError, request } from "$app/utils/request";
-
+import { Pill } from "$app/components/ui/Pill";
 import { Button, NavigationButton } from "$app/components/Button";
 import { useClientAlert } from "$app/components/ClientAlertProvider";
 import { Icon } from "$app/components/Icons";
@@ -361,7 +361,7 @@ const NewProductPage = ({
                 </legend>
 
                 <div className="input">
-                  <label className="pill select">
+                  <Pill as="label" select>
                     <span>{selectedCurrency.longSymbol}</span>
                     <TypeSafeOptionSelect
                       onChange={(newCurrencyCode) => {
@@ -376,8 +376,9 @@ const NewProductPage = ({
                           label: displayFormat,
                         };
                       })}
+                      className="absolute top-0 left-0 h-full w-full opacity-0 cursor-pointer text-foreground bg-background"
                     />
-                  </label>
+                  </Pill>
 
                   <input
                     ref={priceInputRef}
@@ -399,7 +400,7 @@ const NewProductPage = ({
                   />
 
                   {isRecurringBilling ? (
-                    <label className="pill select border-0">
+                    <Pill select>
                       <span>{recurrenceLabels[subscriptionDuration || defaultRecurrence]}</span>
                       <TypeSafeOptionSelect
                         onChange={(newSubscriptionDuration) => {
@@ -411,8 +412,9 @@ const NewProductPage = ({
                           id: recurrence,
                           label: recurrenceLabels[recurrence],
                         }))}
+                        className="absolute top-0 left-0 h-full w-full opacity-0 cursor-pointer text-foreground bg-background"
                       />
-                    </label>
+                    </Pill>
                   ) : null}
                 </div>
               </fieldset>

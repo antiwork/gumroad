@@ -16,6 +16,7 @@ import { ToggleSettingRow } from "$app/components/SettingRow";
 import { Layout } from "$app/components/Settings/Layout";
 import { TagInput } from "$app/components/TagInput";
 import { Toggle } from "$app/components/Toggle";
+import { Pill } from "$app/components/ui/Pill";
 
 type ProductLevelSupportEmail = {
   email: string;
@@ -470,7 +471,7 @@ const MainPage = (props: Props) => {
                           />
                         )}
                       </NumberInput>
-                      <div className="pill">%</div>
+                      <Pill>%</Pill>
                     </div>
                   </fieldset>
                   <Toggle

@@ -6,6 +6,7 @@ import { Icon } from "$app/components/Icons";
 import { Popover } from "$app/components/Popover";
 import { useOriginalLocation } from "$app/components/useOriginalLocation";
 import { WithTooltip } from "$app/components/WithTooltip";
+import { Pill } from "$app/components/ui/Pill";
 
 type CardType = {
   id: string;
@@ -201,7 +202,7 @@ const SearchPopover = () => {
             />
           </div>
           <div className="input">
-            <div className="pill">$</div>
+            <Pill>$</Pill>
             <input
               name="price"
               placeholder="Price (9.99)"

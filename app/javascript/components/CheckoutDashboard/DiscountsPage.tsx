@@ -41,6 +41,7 @@ import { useUserAgentInfo } from "$app/components/UserAgent";
 import { useSortingTableDriver, Sort } from "$app/components/useSortingTableDriver";
 
 import placeholder from "$assets/images/placeholders/discounts.png";
+import { Pill } from "$app/components/ui/Pill";
 
 type Product = {
   id: string;
@@ -351,9 +352,9 @@ const DiscountsPage = ({ offer_codes, pages, products, pagination: initialPagina
                       <td>
                         <div className="grid gap-2">
                           <div>
-                            <div className="pill small mr-2" aria-label="Offer code">
+                            <Pill size="small" className="mr-2" aria-label="Offer code">
                               {offerCode.code.toUpperCase()}
-                            </div>
+                            </Pill>
                             <b>{offerCode.name}</b>
                           </div>
                           <small>
@@ -483,7 +484,7 @@ const DiscountsPage = ({ offer_codes, pages, products, pagination: initialPagina
               <h3>Details</h3>
               <div>
                 <h5>Code</h5>
-                <div className="pill small">{selectedOfferCode.code.toUpperCase()}</div>
+                <Pill size="small">{selectedOfferCode.code.toUpperCase()}</Pill>
               </div>
               <div>
                 <h5>Discount</h5>

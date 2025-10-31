@@ -36,6 +36,7 @@ import { CartState, convertToUSD, hasFreeTrial, getDiscountedPrice, CartItem, fi
 import { computeTip, computeTipForPrice, getTotalPrice, isProcessing, useState } from "./payment";
 
 import placeholder from "$assets/images/placeholders/checkout.png";
+import { Pill } from "$app/components/ui/Pill";
 
 function formatPrice(price: number) {
   return formatUSDCentsWithExpandedCurrencySymbol(Math.floor(price));
@@ -270,18 +271,19 @@ export const Checkout = ({
                             tip="This discount is applied based on the cost of living in your country."
                             position="top"
                           >
-                            <button
-                              className="pill small dismissable"
+                            <Pill as="button"
+                              size="small"
+                              kind="dismissable"
                               onClick={() => updateCart({ rejectPppDiscount: true })}
                               aria-label="Purchasing power parity discount"
                             >
                               Purchasing power parity discount
-                            </button>
+                            </Pill>
                           </WithTooltip>
                         ) : null}
                         {visibleDiscounts.map((code) => (
-                          <div
-                            className="pill small dismissable"
+                          <Pill
+                            size="small" kind="dismissable"
                             onClick={() =>
                               updateCart({ discountCodes: cart.discountCodes.filter((item) => item !== code) })
                             }
@@ -289,7 +291,7 @@ export const Checkout = ({
                             aria-label="Discount code"
                           >
                             {code.code}
-                          </div>
+                          </Pill>
                         ))}
                       </h4>
                       {discount > 0 ? <div>{formatPrice(-discount)}</div> : null}

@@ -16,6 +16,7 @@ import { useDebouncedCallback } from "$app/components/useDebouncedCallback";
 import { useOnChange } from "$app/components/useOnChange";
 
 import { Card } from "./Card";
+import { Pill } from "$app/components/ui/Pill";
 
 export const SORT_BY_LABELS = {
   default: "Default",
@@ -317,7 +318,7 @@ export const CardGrid = ({
                   <label htmlFor={minPriceUid}>Minimum price</label>
                 </legend>
                 <div className="input">
-                  <div className="pill">{currencySymbol}</div>
+                  <Pill>{currencySymbol}</Pill>
                   <NumberInput
                     onChange={(value) => {
                       setEnteredMinPrice(value);
@@ -334,7 +335,7 @@ export const CardGrid = ({
                   <label htmlFor={maxPriceUid}>Maximum price</label>
                 </legend>
                 <div className="input">
-                  <div className="pill">{currencySymbol}</div>
+                  <Pill>{currencySymbol}</Pill>
                   <NumberInput
                     onChange={(value) => {
                       setEnteredMaxPrice(value);

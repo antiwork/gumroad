@@ -23,6 +23,7 @@ import Placeholder from "$app/components/ui/Placeholder";
 import { WithTooltip } from "$app/components/WithTooltip";
 
 import placeholderImage from "$assets/images/placeholders/affiliate-signup-form.png";
+import { Pill } from "$app/components/ui/Pill";
 
 type InvalidProductAttrs = Set<"commission" | "destination_url">;
 
@@ -247,7 +248,7 @@ export const ProductRow = ({ product, disabled, onChange }: ProductRowProps) => 
                   disabled={disabled || !product.enabled}
                   {...inputProps}
                 />
-                <div className="pill">%</div>
+                <Pill>%</Pill>
               </div>
             )}
           </NumberInput>

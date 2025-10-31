@@ -13,8 +13,9 @@
   </div>
   <div>
     <%= with_tooltip(tip: "Risk State", position: "left") do %>
-      <div class="pill small <%= user.compliant? ? "success" : "warning" %>"><%= user.user_risk_state.humanize %></div>
-    <% end %>
+      <div class="inline-block align-middle px-3 py-2 bg-background text-foreground border border-border rounded-[10rem] truncate pill-component rounded p-1 text-sm <%= user.compliant? ? "success" : "warning" %>"><%= user.user_risk_state.humanize %></div>
+      <%# TODO: When migrating to React/Inertia, use the Pill component instead of these Tailwind classes example:<Pill size="small"> %>
+      <% end %>
   </div>
 </div>
 

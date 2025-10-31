@@ -22,6 +22,7 @@ import { Select } from "$app/components/Select";
 import { showAlert } from "$app/components/server-components/Alert";
 import { UtmLinkLayout } from "$app/components/server-components/UtmLinksPage";
 import { WithTooltip } from "$app/components/WithTooltip";
+import { Pill } from "$app/components/ui/Pill";
 
 const MAX_UTM_PARAM_LENGTH = 200;
 
@@ -298,7 +299,7 @@ export const UtmLinkForm = () => {
             </legend>
             <div style={{ display: "grid", gridTemplateColumns: "1fr auto", gap: "var(--spacer-2)" }}>
               <div className={cx("input", { disabled: isEditing })}>
-                <div className="pill">{shortUrlPrefix}</div>
+                <Pill>{shortUrlPrefix}</Pill>
                 <input
                   type="text"
                   id={`${uid}-link-text`}
