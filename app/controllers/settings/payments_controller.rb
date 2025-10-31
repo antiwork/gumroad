@@ -197,11 +197,14 @@ class Settings::PaymentsController < Sellers::BaseController
       unless current_seller.update(refund_credit_card_id: credit_card.id)
         return render(json: { success: false, error_message: current_seller.errors.full_messages.to_sentence })
       end
+      current_seller.reload
     elsif params[:refund_card].nil? && current_seller.refund_credit_card.present?
       current_seller.update!(refund_credit_card_id: nil)
+      current_seller.reload
     end
 
-    render json: { success: true }
+    refund_card_data = CheckoutPresenter.saved_card(current_seller.refund_credit_card)
+    render json: { success: true, refund_card: refund_card_data }
   end
 
   private

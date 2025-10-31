@@ -120,6 +120,11 @@ class Purchase
         false
       rescue ChargeProcessorInvalidRequestError => e
         logger.error "Charge refund encountered an invalid request error in purchase: #{external_id}. Response: #{e.message}. #{e.backtrace_locations}"
+        if e.message&.include?("No such charge")
+          errors.add :base, "Unable to process refund: The original payment could not be found. Please contact support."
+        else
+          errors.add :base, "Unable to process refund: #{e.message}"
+        end
         false
       rescue ChargeProcessorUnavailableError => e
         logger.error "Charge processor unavailable in purchase: #{external_id}. Response: #{e.message}"

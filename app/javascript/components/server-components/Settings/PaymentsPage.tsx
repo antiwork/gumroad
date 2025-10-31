@@ -254,6 +254,10 @@ const PaymentsPage = (props: Props) => {
   const [isSavingRefundCard, setIsSavingRefundCard] = React.useState(false);
   const [refundCardErrorMessage, setRefundCardErrorMessage] = React.useState<string | null>(null);
 
+  const [displayedRefundCard, setDisplayedRefundCard] = React.useState<SavedCreditCard | null>(
+    props.refund_payment_card,
+  );
+
   const [payoutThresholdCents, setPayoutThresholdCents] = React.useState<{ value: number | null; error?: boolean }>({
     value: props.payout_threshold_cents,
   });
@@ -811,9 +815,10 @@ const PaymentsPage = (props: Props) => {
         data: payload,
       });
 
-      const parsedResponse = cast<{ success: true } | { success: false; error_message: string }>(
-        await response.json(),
-      );
+      const parsedResponse = cast<
+        | { success: true; refund_card: SavedCreditCard | null }
+        | { success: false; error_message: string }
+      >(await response.json());
       if (!parsedResponse.success) {
         showAlert(parsedResponse.error_message, "error");
         return;
@@ -822,9 +827,13 @@ const PaymentsPage = (props: Props) => {
       if (action === "remove") {
         showAlert("Refund card removed.", "success");
         setRefundCard(null);
+        setDisplayedRefundCard(null);
+        setRefundNameOnCard("");
       } else {
         showAlert("Refund card saved!", "success");
         setRefundCard({ type: "saved" });
+        setDisplayedRefundCard(parsedResponse.refund_card);
+        setRefundNameOnCard("");
       }
     } catch (e) {
       if (e instanceof CardPayoutError) {
@@ -1216,7 +1225,7 @@ const PaymentsPage = (props: Props) => {
           />
         ) : null}
         <RefundPaymentMethodSection
-          refundCard={props.refund_payment_card}
+          refundCard={displayedRefundCard}
           isFormDisabled={props.is_form_disabled}
           refundCardData={refundCard}
           setRefundCard={setRefundCard}

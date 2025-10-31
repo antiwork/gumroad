@@ -5,6 +5,7 @@ class StripeChargeableToken
   include StripeErrorHandler
 
   attr_reader :payment_method_id
+  attr_writer :payment_method_id
 
   def initialize(token, zip_code, product_permalink:)
     @token_s = token
@@ -99,6 +100,7 @@ class StripeChargeableToken
         else
           Stripe::Customer.create(creation_params)
         end
+        @payment_method_id = @customer.default_source if @customer.default_source.present?
       end
     end
     @customer[:id]

@@ -31,15 +31,23 @@ class ChargeSellerRefundCardService
 
   def process_stripe_charge(charge_amount)
     begin
-      # Use existing Stripe integration
-      charge = create_stripe_charge(charge_amount)
+      charge_intent = create_stripe_charge(charge_amount)
 
-      if charge.status == 'succeeded'
-        success(charge_amount)
+      if charge_intent.succeeded?
+        if charge_intent.charge&.status == 'succeeded'
+          success(charge_amount)
+        else
+          failure("Stripe charge failed: charge status was #{charge_intent.charge&.status || 'unknown'}")
+        end
       else
-        failure("Stripe charge failed: #{charge.failure_message}")
+        error_message = if charge_intent.is_a?(StripeChargeIntent) && charge_intent.payment_intent&.last_payment_error
+          charge_intent.payment_intent.last_payment_error.message
+        else
+          "Charge intent did not succeed"
+        end
+        failure("Stripe charge failed: #{error_message}")
       end
-    rescue Stripe::StripeError => e
+    rescue ChargeProcessorInvalidRequestError, ChargeProcessorCardError, ChargeProcessorError => e
       failure("Stripe error: #{e.message}")
     rescue => e
       failure("Unexpected error: #{e.message}")
@@ -47,12 +55,24 @@ class ChargeSellerRefundCardService
   end
 
   def create_stripe_charge(amount)
-    Stripe::Charge.create(
-      amount: amount,
-      currency: 'usd',
-      customer: seller.refund_credit_card.stripe_customer_id,
-      source: seller.refund_credit_card.stripe_fingerprint,
-      description: "Refund payment method charge for seller #{seller.id}"
+    refund_card = seller.refund_credit_card
+
+    raise Stripe::InvalidRequestError.new("Refund card payment method ID not found", nil) if refund_card.processor_payment_method_id.blank?
+
+    merchant_account = MerchantAccount.gumroad(StripeChargeProcessor.charge_processor_id)
+    raise "Gumroad merchant account not found" if merchant_account.nil?
+
+    chargeable = refund_card.to_chargeable(merchant_account: merchant_account)
+    chargeable.prepare!
+
+    ChargeProcessor.create_payment_intent_or_charge!(
+      merchant_account,
+      chargeable,
+      amount,
+      amount,
+      "refund-charge-#{seller.id}",
+      "Refund payment method charge for seller #{seller.id}",
+      off_session: true
     )
   end
 
