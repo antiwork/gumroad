@@ -24,7 +24,7 @@ export const Pill = React.forwardRef<HTMLElement, PillProps>(
     const sizeClass = size === "small" ? "rounded p-1 text-sm" : "";
     const colorClasses = color==="primary"?"border bg-primary text-primary-foreground border-primary":"";
     const selectClass = select ? "relative cursor-pointer before:float-right before:ml-2 before:content-['\\00a0'] before:inline-block before:bg-current before:min-h-[max(1lh,1em)] before:w-[1em] before:[mask-position:50%_50%] before:[mask-size:120%] before:[mask-repeat:no-repeat] before:shrink-0 after:content-['\\00a0'] before:mask-(--icon-cheveron-down)" : "";
-    const kindClasses = kind ==="dismissable"?"before:mask-(--icon-cheveron-down)":"";
+    const kindClasses = kind ==="dismissable"?"cursor-pointer before:float-right before:ml-2 before:content-['\\00a0'] before:inline-block before:bg-current before:min-h-[max(1lh,1em)] before:w-[1em] before:[mask-position:50%_50%] before:[mask-size:120%] before:[mask-repeat:no-repeat] before:shrink-0 after:content-['\\00a0'] before:mask-(--icon-x)" : "";
 
     return (
       <Component
