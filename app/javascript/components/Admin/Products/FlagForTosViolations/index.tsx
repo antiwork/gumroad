@@ -3,6 +3,7 @@ import { cast } from "ts-safe-cast";
 
 import { useLazyFetch } from "$app/hooks/useLazyFetch";
 
+import AdminFlagForTosViolationsForm from "$app/components/Admin/Products/FlagForTosViolations/Form";
 import AdminFlagForTosViolationsContent, {
   type TosViolationFlags,
 } from "$app/components/Admin/Products/FlagForTosViolations/Content";
@@ -54,7 +55,9 @@ const FlagForTosViolations = ({ user, product, compliance }: FlagForTosViolation
     }
   };
 
-  const markAsFlagged = () => setFlaggedForTosViolation(true);
+  const suspendTosSuccessMessage = `User was flagged for TOS violation and product ${product.is_tiered_membership ? "unpublished" : "deleted"}.`;
+  const suspendTosConfirmMessage = `Are you sure you want to flag the user and ${product.is_tiered_membership ? "unpublish" : "delete"} the product?`;
+  const shouldShowForm = !flaggedForTosViolation && product.alive && !user.suspended && !user.flagged_for_tos_violation;
 
   return (
     <>
@@ -63,14 +66,19 @@ const FlagForTosViolations = ({ user, product, compliance }: FlagForTosViolation
         <summary>
           <h3>Flag for TOS violation</h3>
         </summary>
+        { shouldShowForm ? <AdminFlagForTosViolationsForm
+          user_id={user.id}
+          product_id={product.id}
+          success_message={suspendTosSuccessMessage}
+          confirm_message={suspendTosConfirmMessage}
+          reasons={compliance.reasons}
+          default_reason={compliance.default_reason}
+          onSuccess={() => setFlaggedForTosViolation(true)}
+        /> : null }
+
         <AdminFlagForTosViolationsContent
-          user={user}
-          product={product}
           isLoading={isLoading}
-          flaggedForTosViolation={flaggedForTosViolation}
           tosViolationFlags={tos_violation_flags}
-          compliance={compliance}
-          onSuccess={markAsFlagged}
         />
       </details>
     </>
