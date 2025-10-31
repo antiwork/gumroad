@@ -143,6 +143,14 @@ class User < ApplicationRecord
   scope :holding_non_zero_balance, lambda {
     joins(:balances).merge(Balance.unpaid).group("balances.user_id").having("SUM(balances.amount_cents) != 0")
   }
+  scope :admin_search, ->(query) {
+    query = query.to_s.strip
+    if EmailFormatValidator.valid?(query)
+      where(email: query)
+    else
+      where(external_id: query).or(where("email LIKE ?", "%#{query}%")).or(where("name LIKE ?", "%#{query}%"))
+    end
+  }
 
   attribute :recommendation_type, default: User::RecommendationType::OWN_PRODUCTS
 

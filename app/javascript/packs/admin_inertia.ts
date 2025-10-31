@@ -58,12 +58,14 @@ const urlsMigratedtoInertia = [
   Routes.admin_sales_reports_url(),
   Routes.admin_refund_queue_url(),
   Routes.admin_action_call_dashboard_url(),
-  // Routes.admin_search_users_url(),
+  Routes.admin_search_users_url(),
   // Routes.admin_search_purchases_url(),
-  // Routes.admin_compliance_guids_url(),
+  new RegExp(Routes.admin_guid_url("\\w+"), "u"),
   // Routes.admin_compliance_cards_url(),
   // Routes.admin_user_url(),
   new RegExp(Routes.admin_product_url("\\w+"), "u"),
+  new RegExp(Routes.admin_payout_url("\\w+"), "u"),
+  new RegExp(Routes.admin_user_payouts_url("\\w+"), "u"),
   // Add other urls here when they are migrated to inertia
 ];
 
