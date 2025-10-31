@@ -28,6 +28,7 @@ import { Icon } from "$app/components/Icons";
 import { LoadingSpinner } from "$app/components/LoadingSpinner";
 import { Modal } from "$app/components/Modal";
 import { Popover } from "$app/components/Popover";
+import { FileEmbedGroup } from "$app/components/ProductEdit/ContentTab/FileEmbedGroup";
 import { Layout } from "$app/components/ProductEdit/Layout";
 import { ExistingFileEntry, FileEntry, useProductEditContext, Variant } from "$app/components/ProductEdit/state";
 import { ReviewForm } from "$app/components/ReviewForm";
@@ -45,7 +46,6 @@ import { Separator } from "$app/components/Separator";
 import { showAlert } from "$app/components/server-components/Alert";
 import { EntityInfo } from "$app/components/server-components/DownloadPage/Layout";
 import { TestimonialSelectModal } from "$app/components/TestimonialSelectModal";
-import { FileEmbedGroup } from "$app/components/ProductEdit/ContentTab/FileEmbedGroup";
 import { FileUpload } from "$app/components/TiptapExtensions/FileUpload";
 import { uploadImages } from "$app/components/TiptapExtensions/Image";
 import { LicenseKey, LicenseProvider } from "$app/components/TiptapExtensions/LicenseKey";
@@ -1081,7 +1081,7 @@ export const ContentTab = () => {
                                 )}
                               </small>
                             ) : (
-                              <small className="text-muted-foreground">No content yet</small>
+                              <small className="text-muted">No content yet</small>
                             )}
                           </div>
                         </div>

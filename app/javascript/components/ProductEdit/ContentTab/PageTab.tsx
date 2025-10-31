@@ -81,7 +81,7 @@ export const PageTab = ({
       {!disabled ? (
         <Icon
           name="outline-drag"
-          className="invisible absolute left-0 text-muted-foreground group-hover/tab:visible"
+          className="invisible absolute left-0 text-muted group-hover/tab:visible"
           aria-grabbed={dragging}
         />
       ) : null}

@@ -48,7 +48,7 @@ export const WishlistEditor = ({
         <div>
           <h2>{newName || "Untitled"}</h2>
           {isDiscoverable ? (
-            <small className="mt-1 text-muted-foreground">
+            <small className="mt-1 text-muted">
               <Icon name="solid-check-circle" /> Discoverable
             </small>
           ) : null}
