@@ -9,7 +9,7 @@ class Admin::Users::ProductsController < Admin::Users::BaseController
     @title = "#{@user.display_name} products on Gumroad"
 
     list_paginated_products user: @user,
-                            products: @user.products.order(Arel.sql(PRODUCTS_ORDER)),
+                            products: @user.products,
                             inertia_template: "Admin/Users/Products/Index"
   end
 end
