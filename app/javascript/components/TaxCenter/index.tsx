@@ -17,24 +17,24 @@ const TAX_SAVING_SUGGESTIONS: {
   id: string;
   title: string;
   description: string;
-  icon: string;
   avgRefund?: string;
   link: string;
+  logoUrl: string;
 }[] = [
   {
     id: "1",
     title: "stonks.com",
     description: "Helps creators register as a business and unlock major tax deductions. Avg refund: $8,200.",
-    icon: "stonks",
     avgRefund: "$8,200",
     link: "https://stonks.com?utm_source=gumroad",
+    logoUrl: stonksLogo,
   },
 ];
 
 const FAQ_ITEMS: {
   id: string;
   question: string;
-  answer?: React.ReactNode;
+  answer: React.ReactNode;
 }[] = [
   {
     id: "why-1099-k",
@@ -269,7 +269,7 @@ const TaxCenterPage = ({
                     backgroundColor: "#101241",
                   }}
                 >
-                  <img src={stonksLogo} alt="Stonks" className="h-6 w-6" />
+                  <img src={suggestion.logoUrl} alt={suggestion.title} className="h-6 w-6" />
                 </div>
                 <div className="min-w-0 flex-1 space-y-1 text-left">
                   <h4 className="text-lg leading-tight font-semibold">{suggestion.title}</h4>
@@ -287,7 +287,7 @@ const TaxCenterPage = ({
           {FAQ_ITEMS.map((item) => (
             <details key={item.id}>
               <summary>{item.question}</summary>
-              {!!item.answer && <p className="text-sm">{item.answer}</p>}
+              <p className="text-sm">{item.answer}</p>
             </details>
           ))}
         </div>
