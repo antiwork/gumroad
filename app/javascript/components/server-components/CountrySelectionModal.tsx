@@ -6,8 +6,8 @@ import { assertResponseError, request } from "$app/utils/request";
 import { register } from "$app/utils/serverComponentUtil";
 
 import { Button } from "$app/components/Button";
+import { LoadingSpinner } from "$app/components/LoadingSpinner";
 import { Modal } from "$app/components/Modal";
-import { Progress } from "$app/components/Progress";
 
 type Props = {
   country: string | null;
@@ -60,7 +60,7 @@ export const CountrySelectionModal = ({ country: initialCountry, countries }: Pr
         title="Where are you located?"
         footer={
           <Button color="accent" disabled={checked.length !== checkboxes.length || saving} onClick={() => void save()}>
-            {saving ? <Progress width="1em" /> : null}
+            {saving ? <LoadingSpinner /> : null}
             {saving ? "Saving..." : "Save"}
           </Button>
         }

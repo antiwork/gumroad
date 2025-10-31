@@ -12,7 +12,7 @@ class User < ApplicationRecord
           AsyncDeviseNotification, Posts, AffiliatedProducts, Followers, LowBalanceFraudCheck, MailerLevel,
           DirectAffiliates, AsJson, Tier, Recommendations, Team, AustralianBacktaxes, WithCdnUrl,
           TwoFactorAuthentication, Versionable, Comments, VipCreator, SignedUrlHelper, Purchases, SecureExternalId,
-          PayoutInfo
+          AttributeBlockable, PayoutInfo
 
   stripped_fields :name, :facebook_meta_tag, :google_analytics_id, :username, :email, :support_email
 
@@ -26,6 +26,8 @@ class User < ApplicationRecord
   MAX_LENGTH_FACEBOOK_META_TAG = 100
 
   MAX_LENGTH_NAME = 100
+
+  INVALID_NAME_FOR_EMAIL_DELIVERY_REGEX = /:/
 
   MIN_AU_BACKTAX_OWED_CENTS_FOR_CONTACT = 100_00
 
@@ -141,6 +143,14 @@ class User < ApplicationRecord
   scope :holding_non_zero_balance, lambda {
     joins(:balances).merge(Balance.unpaid).group("balances.user_id").having("SUM(balances.amount_cents) != 0")
   }
+  scope :admin_search, ->(query) {
+    query = query.to_s.strip
+    if EmailFormatValidator.valid?(query)
+      where(email: query)
+    else
+      where(external_id: query).or(where("email LIKE ?", "%#{query}%")).or(where("name LIKE ?", "%#{query}%"))
+    end
+  }
 
   attribute :recommendation_type, default: User::RecommendationType::OWN_PRODUCTS
 
@@ -157,6 +167,12 @@ class User < ApplicationRecord
   attr_json_data_accessor :custom_fee_per_thousand
   attr_json_data_accessor :payouts_paused_by
 
+  attr_blockable :email
+  attr_blockable :form_email, object_type: :email
+  attr_blockable :email_domain
+  attr_blockable :form_email_domain, object_type: :email_domain
+  attr_blockable :account_created_ip, object_type: :ip_address
+
   validates :username, uniqueness: { case_sensitive: true },
                        length: { minimum: 3, maximum: 20 },
                        exclusion: { in: DENYLIST },
@@ -167,7 +183,8 @@ class User < ApplicationRecord
                        allow_nil: true,
                        if: :username_changed? # validate only when seller changes their username
 
-  validates :name, length: { maximum: MAX_LENGTH_NAME, too_long: "Your name is too long. Please try again with a shorter one." }
+  validates :name, length: { maximum: MAX_LENGTH_NAME, too_long: "Your name is too long. Please try again with a shorter one." },
+                   format: { without: INVALID_NAME_FOR_EMAIL_DELIVERY_REGEX, message: "cannot contain colons (:) as it causes email delivery problems. Please remove any colons from your name and try again.", if: :name_changed? }
   validates :facebook_meta_tag, length: { maximum: MAX_LENGTH_FACEBOOK_META_TAG }
   validates :purchasing_power_parity_limit, allow_nil: true, numericality: { greater_than_or_equal_to: 1, less_than_or_equal_to: 100 }
 
@@ -340,11 +357,6 @@ class User < ApplicationRecord
       transition all => :on_probation
     end
   end
-
-  alias_method :compliant, :compliant?
-  alias_method :on_probation, :on_probation?
-  alias_method :flagged_for_fraud, :flagged_for_fraud?
-  alias_method :flagged_for_tos_violation, :flagged_for_tos_violation?
 
   state_machine(:tier_state, initial: :tier_0) do
     state :tier_0, value: TIER_0
@@ -602,6 +614,10 @@ class User < ApplicationRecord
     alive? && !suspended?
   end
 
+  def is_name_invalid_for_email_delivery?
+    name.present? && name.match?(INVALID_NAME_FOR_EMAIL_DELIVERY_REGEX)
+  end
+
   def deactivate!
     validate_account_closure_balances!
 
@@ -645,13 +661,16 @@ class User < ApplicationRecord
     invite.mark_signed_up
   end
 
+  def email_domain
+    to_email_domain(email)
+  end
+
   def form_email
-    return unconfirmed_email if unconfirmed_email.present?
-    email if email.present?
+    unconfirmed_email.presence || email.presence
   end
 
   def form_email_domain
-    Mail::Address.new(form_email).domain.presence
+    to_email_domain(form_email)
   end
 
   def currency_symbol
@@ -1188,5 +1207,9 @@ class User < ApplicationRecord
 
     def reset_avatar_changed
       self.avatar_changed = false
+    end
+
+    def to_email_domain(value)
+      value.presence && Mail::Address.new(value).domain
     end
 end

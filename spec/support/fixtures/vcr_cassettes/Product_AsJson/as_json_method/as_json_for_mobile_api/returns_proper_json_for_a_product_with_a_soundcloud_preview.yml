@@ -1,0 +1,84 @@
+---
+http_interactions:
+- request:
+    method: get
+    uri: https://soundcloud.com/oembed?format=json&maxwidth=670&url=https://soundcloud.com/cade-turner/cade-turner-symphony-of-light
+    body:
+      encoding: US-ASCII
+      string: ''
+    headers:
+      Accept-Encoding:
+      - gzip;q=1.0,deflate;q=0.6,identity;q=0.3
+      Accept:
+      - "*/*"
+      User-Agent:
+      - Mozilla/5.0 (compatible; ruby-oembed/0.17.0)
+  response:
+    status:
+      code: 200
+      message: OK
+    headers:
+      Content-Type:
+      - application/json; charset=utf-8
+      Transfer-Encoding:
+      - chunked
+      Connection:
+      - keep-alive
+      Status:
+      - 200 OK
+      Cache-Control:
+      - max-age=0, private, must-revalidate
+      Access-Control-Allow-Origin:
+      - "*"
+      Referrer-Policy:
+      - strict-origin-when-cross-origin
+      Access-Control-Expose-Headers:
+      - Date
+      X-Permitted-Cross-Domain-Policies:
+      - none
+      X-Xss-Protection:
+      - 1; mode=block
+      X-Request-Id:
+      - 6900CAB364E0A01FE3162
+      Access-Control-Allow-Headers:
+      - Accept, Authorization, Content-Type, Origin
+      Access-Control-Allow-Methods:
+      - GET, PUT, POST, DELETE
+      X-Download-Options:
+      - noopen
+      Etag:
+      - W/"0a4c31c7da73b2bdf952abe49e9327e9"
+      X-Frame-Options:
+      - SAMEORIGIN, SAMEORIGIN
+      X-Content-Type-Options:
+      - nosniff
+      Date:
+      - Tue, 28 Oct 2025 13:52:52 GMT
+      Set-Cookie:
+      - arpa_context=%7B%7D; path=/; max-age=7.0; expires=Thu, 01 Jan 1970 00:00:07
+        GMT; HttpOnly
+      Strict-Transport-Security:
+      - max-age=63072000; includeSubdomains; preload
+      Server:
+      - am/2
+      Vary:
+      - Accept-Encoding
+      X-Cache:
+      - Miss from cloudfront
+      Via:
+      - 1.1 abddbf0eca39746a52a1389ec09fb216.cloudfront.net (CloudFront)
+      X-Amz-Cf-Pop:
+      - NRT12-P3
+      X-Amz-Cf-Id:
+      - ZG5KOxe8FP7hskPmpBYvnxlTPMq_wccNe-guSfqbDO4cxD_k3GRuQA==
+    body:
+      encoding: ASCII-8BIT
+      string: '{"version":1.0,"type":"rich","provider_name":"SoundCloud","provider_url":"https://soundcloud.com","height":400,"width":670,"title":"Cade
+        Turner - Symphony Of Light Exhibition by Cade Turner","description":"In this
+        podcast, I share the inspiration behind my upcoming exhibition, Symphony of
+        Light, for which I''ve produced a series of heart-felt, evanescent landscapes
+        that were created completely in-camera.","thumbnail_url":"https://i1.sndcdn.com/artworks-000053047348-b62qv1-t500x500.jpg","html":"<iframe
+        width=\"670\" height=\"400\" scrolling=\"no\" frameborder=\"no\" src=\"https://w.soundcloud.com/player/?visual=true&url=https%3A%2F%2Fapi.soundcloud.com%2Ftracks%2F101276036&show_artwork=true&maxwidth=670\"></iframe>","author_name":"Cade
+        Turner","author_url":"https://soundcloud.com/cade-turner"}'
+  recorded_at: Tue, 28 Oct 2025 13:52:51 GMT
+recorded_with: VCR 6.2.0
