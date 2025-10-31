@@ -65,8 +65,7 @@ class WorkflowsController < Sellers::BaseController
 
       redirect_to workflow_emails_path(@workflow.external_id), notice: notice_message, status: :see_other
     else
-      error_message = errors.full_messages.first
-      redirect_to edit_workflow_path(@workflow.external_id), inertia: { errors: errors }, alert: error_message
+      redirect_to edit_workflow_path(@workflow.external_id), inertia: { errors: { base: [errors] } }, alert: errors
     end
   end
 
