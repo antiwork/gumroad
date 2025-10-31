@@ -18,10 +18,8 @@ class Admin::Users::PayoutsController < Admin::BaseController
     )
 
     render inertia: "Admin/Users/Payouts/Index",
-           legacy_template: "admin/users/payouts/index",
            props: {
-             user: { id: @user.id },
-             payouts: @payouts.map { Admin::PaymentPresenter.new(payment: _1).props },
+             payouts: @payouts.includes(:user, bank_account: :credit_card).map { Admin::PaymentPresenter.new(payment: _1).props },
              pagination: PagyPresenter.new(pagination).props
            }
   end

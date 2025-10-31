@@ -7,20 +7,15 @@ import { type Payout } from "$app/components/Admin/Payouts/Payout";
 import { Pagination, PaginationProps } from "$app/components/Pagination";
 
 type PageProps = {
-  user: { id: number };
   payouts: Payout[];
   pagination: PaginationProps;
 };
 
 const Index = () => {
-  const { user, payouts, pagination } = usePage<PageProps>().props;
+  const { payouts, pagination } = usePage<PageProps>().props;
 
   const onChangePage = (page: number) => {
-    const params = new URLSearchParams(window.location.search);
-    params.set("page", page.toString());
-    router.visit(Routes.admin_user_payouts_path(user.id), {
-      data: Object.fromEntries(params),
-    });
+    router.reload({ data: { page: page.toString() } });
   };
 
   if (payouts.length === 0 && pagination.page === 1) {
