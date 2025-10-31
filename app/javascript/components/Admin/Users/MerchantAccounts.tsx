@@ -5,7 +5,7 @@ import { cast } from "ts-safe-cast";
 import { request } from "$app/utils/request";
 
 import AdminActionButton from "$app/components/Admin/ActionButton";
-import { YesIcon, NoIcon } from "$app/components/Admin/Icons";
+import { BooleanIcon } from "$app/components/Admin/Icons";
 import type { User } from "$app/components/Admin/Users/User";
 import { LoadingSpinner } from "$app/components/LoadingSpinner";
 import { useIsIntersecting } from "$app/components/useIsIntersecting";
@@ -31,7 +31,7 @@ const MerchantAccount = ({ id, charge_processor_id, alive, charge_processor_aliv
     <Link href={Routes.admin_merchant_account_path(id)}>
       {id} - {charge_processor_id}
     </Link>{" "}
-    {alive && charge_processor_alive ? <YesIcon /> : <NoIcon />}
+    <BooleanIcon value={alive ? charge_processor_alive : false} />
   </li>
 );
 

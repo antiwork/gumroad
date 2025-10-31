@@ -18,7 +18,7 @@ const AdminUserGuids = ({ user_id }: { user_id: number }) => {
       const response = await request({
         method: "GET",
         accept: "json",
-        url: Routes.admin_compliance_guids_path(user_id, { format: "json" }),
+        url: Routes.admin_user_guids_path(user_id, { format: "json" }),
       });
       setUserGuids(cast<UserGuids>(await response.json()));
     } catch (e) {

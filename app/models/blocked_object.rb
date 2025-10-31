@@ -14,16 +14,14 @@ class BlockedObject
   field :expires_at, type: DateTime
   field :blocked_by, type: Integer
 
-  scope :email,                        -> { where(object_type: BLOCKED_OBJECT_TYPES[:email]) }
-  scope :email_domain,                 -> { where(object_type: BLOCKED_OBJECT_TYPES[:email_domain]) }
-  scope :browser_guid,                 -> { where(object_type: BLOCKED_OBJECT_TYPES[:browser_guid]) }
-  scope :ip_address,                   -> { where(object_type: BLOCKED_OBJECT_TYPES[:ip_address]) }
-  scope :charge_processor_fingerprint, -> { where(object_type: BLOCKED_OBJECT_TYPES[:charge_processor_fingerprint]) }
-  scope :product,                      -> { where(object_type: BLOCKED_OBJECT_TYPES[:product]) }
-  scope :active,                       -> { where(:blocked_at.ne => nil).any_of({ expires_at: nil }, { :expires_at.gt => Time.current }) }
-
+  BLOCKED_OBJECT_TYPES.each_value do |object_type|
+    scope object_type, -> { where(object_type:) }
+    define_method("#{object_type}?") { self.object_type == object_type }
+  end
   validates_inclusion_of :object_type, in: BLOCKED_OBJECT_TYPES.values
-  validate :expires_on_required_for_active_object_type_ip_address
+  validates :expires_at, presence: { if: %i[ip_address? blocked_at?] }
+
+  scope :active, -> { where(:blocked_at.ne => nil).any_of({ expires_at: nil }, { :expires_at.gt => Time.current }) }
 
   class << self
     def block!(object_type, object_value, blocking_user_id, expires_in: nil)
@@ -42,17 +40,29 @@ class BlockedObject
       blocked_object.unblock! if blocked_object
     end
 
+    def find_object(object_value)
+      find_by(object_value:)
+    rescue NoMethodError
+      BlockedObject.none
+    end
+
     def find_active_object(object_value)
-      active.find_by(object_value:)
+      active.find_object(object_value)
+    end
+
+    def find_objects(object_values)
+      where(:object_value.in => object_values)
     rescue NoMethodError
       BlockedObject.none
     end
 
     def find_active_objects(object_values)
-      active.where(:object_value.in => object_values)
-    rescue NoMethodError
-      BlockedObject.none
+      active.find_objects(object_values)
     end
+  end
+
+  def block!(by_user_id: nil, expires_in: nil)
+    self.class.block!(object_type, object_value, by_user_id, expires_in:)
   end
 
   def unblock!
@@ -63,13 +73,5 @@ class BlockedObject
 
   def blocked?
     blocked_at.present? && (expires_at.nil? || expires_at > Time.current)
-  end
-
-  def expires_on_required_for_active_object_type_ip_address
-    return if object_type != BLOCKED_OBJECT_TYPES[:ip_address]
-    return if blocked_at.nil?
-    return if expires_at.present?
-
-    errors.add(:expires_at, :blank)
   end
 end
