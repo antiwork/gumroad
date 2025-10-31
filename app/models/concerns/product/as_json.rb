@@ -11,7 +11,6 @@ module Product::AsJson
     return super(options) if options.delete(:original)
     return as_json_for_admin_multiple_matches(**options) if options.delete(:admin_multiple_matches)
     return as_json_for_admin_info if options.delete(:admin_info)
-    return as_json_for_admin(**options) if options.delete(:admin)
     return as_json_for_api(options) if options[:api_scopes].present?
     return as_json_for_mobile_api if options.delete(:mobile)
     return as_json_variant_details_only if options.delete(:variant_details_only)
@@ -46,25 +45,6 @@ module Product::AsJson
         only: %i[id name created_at],
         methods: %i[long_url price_formatted],
         include: { user: { original: true, only: %i[id name] } }
-      )
-    end
-
-    def as_json_for_admin(admins_can_mark_as_staff_picked:, admins_can_unmark_as_staff_picked:)
-      as_json(
-        original: true,
-        methods: %i[
-          price_formatted
-          admins_can_generate_url_redirects
-          html_safe_description
-          alive
-          is_adult
-          is_tiered_membership
-        ],
-        include: { active_integrations: { only: :type } }
-      ).merge(
-        alive_product_files: ordered_alive_product_files.as_json(original: true, methods: %i[external_id s3_filename]),
-        admins_can_mark_as_staff_picked: admins_can_mark_as_staff_picked.call(self),
-        admins_can_unmark_as_staff_picked: admins_can_unmark_as_staff_picked.call(self)
       )
     end
 

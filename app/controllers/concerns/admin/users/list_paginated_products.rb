@@ -20,12 +20,12 @@ module Admin::Users::ListPaginatedProducts
                  user:,
                  impersonatable: policy([:admin, :impersonators, user]).create?
                ).props },
-               products: products.includes(:ordered_alive_product_files, :active_integrations).map do |product|
-                           product.as_json(
-                             admin: true,
+               products: products.includes(:user, :ordered_alive_product_files, :active_integrations).map do |product|
+                           Admin::ProductPresenter::Card.new(
+                             product:,
                              admins_can_mark_as_staff_picked: ->(product) { policy([:admin, :products, :staff_picked, product]).create? },
                              admins_can_unmark_as_staff_picked: ->(product) { policy([:admin, :products, :staff_picked, product]).destroy? }
-                            )
+                           ).props
                          end,
                pagination: PagyPresenter.new(pagination).props
              }
