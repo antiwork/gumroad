@@ -65,6 +65,8 @@ const urlsMigratedtoInertia = [
   // Routes.admin_user_url(),
   new RegExp(Routes.admin_product_url("\\w+"), "u"),
   /\/admin\/users\/\w+\/products/, // Routes.admin_user_products_url
+  new RegExp(Routes.admin_payout_url("\\w+"), "u"),
+  new RegExp(Routes.admin_user_payouts_url("\\w+"), "u"),
   // Add other urls here when they are migrated to inertia
 ];
 
