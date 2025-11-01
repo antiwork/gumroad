@@ -8,7 +8,7 @@ import AdminMerchantAccount, {
 const AdminMerchantAccountsShow = () => {
   const { merchant_account } = usePage<{ merchant_account: AdminMerchantAccountProps }>().props;
 
-  return <AdminMerchantAccount merchant_account={merchant_account} />;
+  return <AdminMerchantAccount merchantAccount={merchant_account} />;
 };
 
 export default AdminMerchantAccountsShow;

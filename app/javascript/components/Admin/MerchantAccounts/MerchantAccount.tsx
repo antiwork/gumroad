@@ -25,30 +25,26 @@ export type AdminMerchantAccountProps = {
   live_attributes: Record<string, unknown>;
 };
 
-type Props = {
-  merchant_account: AdminMerchantAccountProps;
-};
-
-const AdminMerchantAccount = ({ merchant_account }: Props) => (
+const AdminMerchantAccount = ({ merchantAccount }: { merchantAccount: AdminMerchantAccountProps }) => (
   <div className="override grid gap-4 rounded border border-border bg-background p-4">
     <div>
-      <h2>Merchant Account {merchant_account.id}</h2>
-      <DateTimeWithRelativeTooltip date={merchant_account.created_at} utc />
+      <h2>Merchant Account {merchantAccount.id}</h2>
+      <DateTimeWithRelativeTooltip date={merchantAccount.created_at} utc />
     </div>
 
     <hr />
     <div>
       <dl>
         <dt>ID</dt>
-        <dd>{merchant_account.id}</dd>
+        <dd>{merchantAccount.id}</dd>
 
         <dt>External ID</dt>
-        <dd>{merchant_account.external_id}</dd>
+        <dd>{merchantAccount.external_id}</dd>
 
         <dt>User</dt>
         <dd>
-          {merchant_account.user_id ? (
-            <Link href={Routes.admin_user_path(merchant_account.user_id)}>{merchant_account.user_id}</Link>
+          {merchantAccount.user_id ? (
+            <Link href={Routes.admin_user_path(merchantAccount.user_id)}>{merchantAccount.user_id}</Link>
           ) : (
             "none"
           )}
@@ -56,46 +52,46 @@ const AdminMerchantAccount = ({ merchant_account }: Props) => (
 
         <dt>Country</dt>
         <dd>
-          {merchant_account.country_name} ({merchant_account.country})
+          {merchantAccount.country_name} ({merchantAccount.country})
         </dd>
 
         <dt>Currency</dt>
-        <dd>{merchant_account.currency.toUpperCase()}</dd>
+        <dd>{merchantAccount.currency.toUpperCase()}</dd>
 
         <dt>Active</dt>
         <dd>
-          <BooleanIcon value={!!merchant_account.deleted_at} />
+          <BooleanIcon value={!!merchantAccount.deleted_at} />
         </dd>
 
         <dt>Funds are held by</dt>
-        <dd>{capitalize(merchant_account.holder_of_funds)}</dd>
+        <dd>{capitalize(merchantAccount.holder_of_funds)}</dd>
 
         <dt>Charge Processor</dt>
         <dd>
-          {capitalize(merchant_account.charge_processor_id)}{" "}
-          {merchant_account.charge_processor_merchant_id ? (
-            <a href={merchant_account.stripe_account_url} target="_blank" rel="noopener noreferrer">
-              {merchant_account.charge_processor_merchant_id}
+          {capitalize(merchantAccount.charge_processor_id)}{" "}
+          {merchantAccount.charge_processor_merchant_id ? (
+            <a href={merchantAccount.stripe_account_url} target="_blank" rel="noopener noreferrer">
+              {merchantAccount.charge_processor_merchant_id}
             </a>
           ) : null}
         </dd>
 
-        <dt>{capitalize(merchant_account.charge_processor_id)} Alive</dt>
+        <dt>{capitalize(merchantAccount.charge_processor_id)} Alive</dt>
         <dd>
-          <BooleanIcon value={!!merchant_account.charge_processor_alive_at} />{" "}
-          <DateTimeWithRelativeTooltip date={merchant_account.charge_processor_alive_at} utc />
+          <BooleanIcon value={!!merchantAccount.charge_processor_alive_at} />{" "}
+          <DateTimeWithRelativeTooltip date={merchantAccount.charge_processor_alive_at} utc />
         </dd>
 
-        <dt>{capitalize(merchant_account.charge_processor_id)} Verified</dt>
+        <dt>{capitalize(merchantAccount.charge_processor_id)} Verified</dt>
         <dd>
-          <BooleanIcon value={!!merchant_account.charge_processor_verified_at} />{" "}
-          <DateTimeWithRelativeTooltip date={merchant_account.charge_processor_verified_at} utc />
+          <BooleanIcon value={!!merchantAccount.charge_processor_verified_at} />{" "}
+          <DateTimeWithRelativeTooltip date={merchantAccount.charge_processor_verified_at} utc />
         </dd>
 
-        <dt>{capitalize(merchant_account.charge_processor_id)} Deleted</dt>
+        <dt>{capitalize(merchantAccount.charge_processor_id)} Deleted</dt>
         <dd>
-          <BooleanIcon value={!!merchant_account.charge_processor_deleted_at} />{" "}
-          <DateTimeWithRelativeTooltip date={merchant_account.charge_processor_deleted_at} utc />
+          <BooleanIcon value={!!merchantAccount.charge_processor_deleted_at} />{" "}
+          <DateTimeWithRelativeTooltip date={merchantAccount.charge_processor_deleted_at} utc />
         </dd>
       </dl>
     </div>
@@ -103,9 +99,9 @@ const AdminMerchantAccount = ({ merchant_account }: Props) => (
     <hr />
     <div className="paragraphs">
       <h3>Charge Processor live attributes</h3>
-      {Object.keys(merchant_account.live_attributes).length > 0 ? (
+      {Object.keys(merchantAccount.live_attributes).length > 0 ? (
         <dl>
-          {Object.entries(merchant_account.live_attributes).map(([key, value]) => (
+          {Object.entries(merchantAccount.live_attributes).map(([key, value]) => (
             <React.Fragment key={key}>
               <dt>{key}</dt>
               <dd>
@@ -126,14 +122,14 @@ const AdminMerchantAccount = ({ merchant_account }: Props) => (
       <dl>
         <dt>Updated</dt>
         <dd>
-          <DateTimeWithRelativeTooltip date={merchant_account.updated_at} utc />
+          <DateTimeWithRelativeTooltip date={merchantAccount.updated_at} utc />
         </dd>
       </dl>
 
       <dl>
         <dt>Deleted</dt>
         <dd>
-          <DateTimeWithRelativeTooltip date={merchant_account.deleted_at} utc placeholder={<NoIcon />} />
+          <DateTimeWithRelativeTooltip date={merchantAccount.deleted_at} utc placeholder={<NoIcon />} />
         </dd>
       </dl>
     </div>
