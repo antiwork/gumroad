@@ -72,7 +72,7 @@ const AdminMerchantAccount = ({ merchant_account }: Props) => (
 
         <dt>Charge Processor</dt>
         <dd>
-          {capitalize(merchant_account.charge_processor_id)}
+          {capitalize(merchant_account.charge_processor_id)}{" "}
           {merchant_account.charge_processor_merchant_id ? (
             <a href={merchant_account.stripe_account_url} target="_blank" rel="noopener noreferrer">
               {merchant_account.charge_processor_merchant_id}
@@ -82,19 +82,19 @@ const AdminMerchantAccount = ({ merchant_account }: Props) => (
 
         <dt>{capitalize(merchant_account.charge_processor_id)} Alive</dt>
         <dd>
-          <BooleanIcon value={!!merchant_account.charge_processor_alive_at} />
+          <BooleanIcon value={!!merchant_account.charge_processor_alive_at} />{" "}
           <DateTimeWithRelativeTooltip date={merchant_account.charge_processor_alive_at} utc />
         </dd>
 
         <dt>{capitalize(merchant_account.charge_processor_id)} Verified</dt>
         <dd>
-          <BooleanIcon value={!!merchant_account.charge_processor_verified_at} />
+          <BooleanIcon value={!!merchant_account.charge_processor_verified_at} />{" "}
           <DateTimeWithRelativeTooltip date={merchant_account.charge_processor_verified_at} utc />
         </dd>
 
         <dt>{capitalize(merchant_account.charge_processor_id)} Deleted</dt>
         <dd>
-          <BooleanIcon value={!!merchant_account.charge_processor_deleted_at} />
+          <BooleanIcon value={!!merchant_account.charge_processor_deleted_at} />{" "}
           <DateTimeWithRelativeTooltip date={merchant_account.charge_processor_deleted_at} utc />
         </dd>
       </dl>
@@ -106,12 +106,12 @@ const AdminMerchantAccount = ({ merchant_account }: Props) => (
       {Object.keys(merchant_account.live_attributes).length > 0 ? (
         <dl>
           {Object.entries(merchant_account.live_attributes).map(([key, value]) => (
-            <dl key={key}>
+            <React.Fragment key={key}>
               <dt>{key}</dt>
               <dd>
                 <code>{JSON.stringify(value)}</code>
               </dd>
-            </dl>
+            </React.Fragment>
           ))}
         </dl>
       ) : (
