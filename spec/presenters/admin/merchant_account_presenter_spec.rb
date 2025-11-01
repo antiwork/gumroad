@@ -83,8 +83,8 @@ describe Admin::MerchantAccountPresenter do
         context "when merchant account is for Stripe" do
           let(:merchant_account) do
             create(:merchant_account,
-                  charge_processor_id: StripeChargeProcessor.charge_processor_id,
-                  charge_processor_merchant_id: "acct_test123")
+                   charge_processor_id: StripeChargeProcessor.charge_processor_id,
+                   charge_processor_merchant_id: "acct_test123")
           end
 
           it "returns the Stripe account URL" do
@@ -95,7 +95,7 @@ describe Admin::MerchantAccountPresenter do
         context "when merchant account is for PayPal" do
           let(:merchant_account) do
             create(:merchant_account_paypal,
-                  charge_processor_merchant_id: "PAYPAL123")
+                   charge_processor_merchant_id: "PAYPAL123")
           end
 
           it "returns nil for stripe_account_url" do
@@ -112,7 +112,7 @@ describe Admin::MerchantAccountPresenter do
         end
 
         it "returns the correct attribute values" do
-          live_attrs = props[:live_attributes]
+          props[:live_attributes]
 
           expect(props[:live_attributes]).to match(
             "Charges enabled" => false,
@@ -153,4 +153,3 @@ describe Admin::MerchantAccountPresenter do
     end
   end
 end
-

@@ -30,36 +30,35 @@ class Admin::MerchantAccountPresenter
   end
 
   private
+    def country_name
+      merchant_account.country.presence && ISO3166::Country[merchant_account.country]&.common_name
+    end
 
-  def country_name
-    merchant_account.country.presence && ISO3166::Country[merchant_account.country]&.common_name
-  end
+    def stripe_account_url
+      return unless merchant_account.charge_processor_merchant_id?
+      return unless merchant_account.stripe_charge_processor?
 
-  def stripe_account_url
-    return unless merchant_account.charge_processor_merchant_id?
-    return unless merchant_account.stripe_charge_processor?
+      StripeUrl.connected_account_url(merchant_account.charge_processor_merchant_id)
+    end
 
-    StripeUrl.connected_account_url(merchant_account.charge_processor_merchant_id)
-  end
+    def live_attributes
+      return unless merchant_account.charge_processor_merchant_id.present?
 
-  def live_attributes
-    return unless merchant_account.charge_processor_merchant_id.present?
-
-    if merchant_account.stripe_charge_processor?
-      stripe_account = Stripe::Account.retrieve(merchant_account.charge_processor_merchant_id)
-      {
-        "Charges enabled" => stripe_account.charges_enabled,
-        "Payout enabled" => stripe_account.payouts_enabled,
-        "Disabled reason" => stripe_account.requirements.disabled_reason,
-        "Fields needed" => stripe_account.requirements.as_json
-      }
-    elsif merchant_account.paypal_charge_processor?
-      paypal_account_details = merchant_account.paypal_account_details
-      if paypal_account_details.present?
+      if merchant_account.stripe_charge_processor?
+        stripe_account = Stripe::Account.retrieve(merchant_account.charge_processor_merchant_id)
         {
-          "Email" => paypal_account_details["primary_email"]
+          "Charges enabled" => stripe_account.charges_enabled,
+          "Payout enabled" => stripe_account.payouts_enabled,
+          "Disabled reason" => stripe_account.requirements.disabled_reason,
+          "Fields needed" => stripe_account.requirements.as_json
         }
+      elsif merchant_account.paypal_charge_processor?
+        paypal_account_details = merchant_account.paypal_account_details
+        if paypal_account_details.present?
+          {
+            "Email" => paypal_account_details["primary_email"]
+          }
+        end
       end
     end
-  end
 end
