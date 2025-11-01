@@ -247,7 +247,7 @@ describe StripeChargeProcessor, :vcr do
     end
 
     it "returns a Stripe::Charge object for the given Stripe Connect purchase" do
-      merchant_account = create(:merchant_account_stripe_connect, charge_processor_merchant_id: "acct_1MeFbmKQKir5qdfM", currency: "usd")
+      merchant_account = create(:merchant_account_stripe_connect, charge_processor_merchant_id: "acct_1SOb0DEwFhlcVS6d", currency: "usd")
 
       allow_any_instance_of(Purchase).to receive(:id).and_return(88) # Charge on a Stripe Connect account
 
@@ -1258,7 +1258,7 @@ describe StripeChargeProcessor, :vcr do
       describe "with standard stripe connect account" do
         let!(:stripe_charge_id) { "ch_3OFXziKQKir5qdfM1dSA3Ui0" }
 
-        let!(:merchant_account) { create(:merchant_account_stripe_connect, charge_processor_merchant_id: "acct_1MeFbmKQKir5qdfM") }
+        let!(:merchant_account) { create(:merchant_account_stripe_connect, charge_processor_merchant_id: "acct_1SOb0DEwFhlcVS6d") }
 
         let!(:stripe_charge) do
           Stripe::Charge.retrieve(stripe_charge_id, { stripe_account: merchant_account.charge_processor_merchant_id })

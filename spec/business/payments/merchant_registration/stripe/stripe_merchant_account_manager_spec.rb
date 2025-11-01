@@ -3,6 +3,8 @@
 require "spec_helper"
 
 describe StripeMerchantAccountManager, :vcr do
+  include StripeMerchantAccountHelper
+
   API_VERSION = Stripe.api_version
 
   let(:user) { create(:user, unpaid_balance_cents: 10, email: "chuck@gum.com", username: "chuck") }
@@ -10492,7 +10494,7 @@ describe StripeMerchantAccountManager, :vcr do
         let(:user_compliance_info) { create(:user_compliance_info, user:) }
         let(:tos_agreement) { create(:tos_agreement, user:) }
         let(:bank_account) { create(:card_bank_account, user:, stripe_connect_account_id: nil, stripe_external_account_id: nil) }
-        let(:merchant_account) { create(:merchant_account_stripe, user:) }
+        let(:merchant_account) { create(:merchant_account, user:, charge_processor_merchant_id: create_verified_stripe_account(country: "US").id) }
 
         before do
           user

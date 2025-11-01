@@ -4,7 +4,7 @@ require "spec_helper"
 
 describe OauthCompletionsController, :vcr do
   describe "#stripe" do
-    let(:auth_uid) { "acct_1MFA1rCOxuflorGu" }
+    let(:auth_uid) { "acct_1SOb0DEwFhlcVS6d" }
     let(:referer) { settings_payments_path }
     let(:user) { create(:user) }
 

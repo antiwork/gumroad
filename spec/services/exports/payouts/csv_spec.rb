@@ -141,7 +141,7 @@ describe Exports::Payouts::Csv, :vcr do
     it "correctly adds the affiliate fee entries from Stripe Connect sales" do
       seller = create :user
       direct_affiliate = create(:direct_affiliate, affiliate_user: create(:user), seller:)
-      stripe_connect_account = create(:merchant_account_stripe_connect, user: seller, charge_processor_merchant_id: "acct_1MeFbmKQKir5qdfM")
+      stripe_connect_account = create(:merchant_account_stripe_connect, user: seller, charge_processor_merchant_id: "acct_1SOb0DEwFhlcVS6d")
 
       travel_to(1.month.ago) do
         affiliate_product = create :product, user: seller, name: "Some Affiliate Product", price_cents: 15000

@@ -36,6 +36,22 @@ describe "Non Tiered Membership Subscriptions", type: :system, js: true do
                                       price_cents: @quarterly_price.price_cents)
       end
 
+      allow_any_instance_of(Stripe::SetupIntentsController).to receive(:mandate_options_for_stripe).and_return({
+                                                                                                                 payment_method_options: {
+                                                                                                                   card: {
+                                                                                                                     mandate_options: {
+                                                                                                                       reference: StripeChargeProcessor::MANDATE_PREFIX + SecureRandom.hex,
+                                                                                                                       amount_type: "maximum",
+                                                                                                                       amount: 100_00,
+                                                                                                                       currency: "usd",
+                                                                                                                       start_date: Time.current.to_i,
+                                                                                                                       interval: "sporadic",
+                                                                                                                       supported_types: ["india"]
+                                                                                                                     }
+                                                                                                                   }
+                                                                                                                 }
+                                                                                                               })
+
       travel_to @originally_subscribed_at + 1.month
       setup_subscription_token(subscription: @subscription_with_purchaser)
     end

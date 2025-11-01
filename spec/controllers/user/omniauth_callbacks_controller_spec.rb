@@ -19,7 +19,7 @@ describe User::OmniauthCallbacksController do
   end
 
   describe "#stripe_connect", :vcr do
-    let(:stripe_uid) { "acct_1MFA1rCOxuflorGu" }
+    let(:stripe_uid) { "acct_1SOb0DEwFhlcVS6d" }
     let(:stripe_auth) do
       OmniAuth::AuthHash.new(
         uid: stripe_uid,
