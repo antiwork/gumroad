@@ -48,7 +48,7 @@ describe OauthCompletionsController, :vcr do
       end
 
       it "allows connecting a Stripe account from Czechia" do
-        session[:stripe_connect_data]["auth_uid"] = "acct_1OHj9mHWXIKSjzLW"
+        session[:stripe_connect_data]["auth_uid"] = "acct_1SOk5nRHVSLfjXtK"
 
         post :stripe
 
