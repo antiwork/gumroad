@@ -496,7 +496,7 @@ describe StripeChargeProcessor, :vcr do
       let(:manual_3ds_params) { { payment_method_options: { card: { request_three_d_secure: "any" } } } }
 
       context "for an Indian card with SCA support" do
-        let(:stripe_card) { StripePaymentMethodHelper.build(number: "4000003560000008") } # https://stripe.com/docs/testing#international-cards
+        let(:stripe_card) { StripePaymentMethodHelper.build(token: "tok_in") } # https://stripe.com/docs/testing#international-cards
 
         it "ignores the default Radar rules and always requests 3DS" do
           expect(Stripe::SetupIntent).to receive(:create).with(hash_including(manual_3ds_params)).and_call_original
@@ -645,7 +645,7 @@ describe StripeChargeProcessor, :vcr do
 
       context "when off-session" do
         context "for an Indian card with SCA support" do
-          let(:payment_method_id) { StripePaymentMethodHelper.build(number: "4000003560000008").to_stripejs_payment_method_id } # https://stripe.com/docs/testing#international-cards
+          let(:payment_method_id) { StripePaymentMethodHelper.build(token: "tok_in").to_stripejs_payment_method_id } # https://stripe.com/docs/testing#international-cards
 
           it "follows the default Radar rules and does not request 3DS manually" do
             expect(Stripe::PaymentIntent).to receive(:create).with(hash_excluding(manual_3ds_params)).and_call_original
@@ -668,7 +668,7 @@ describe StripeChargeProcessor, :vcr do
       context "when on-session" do
         context "when NOT setting up future usage" do
           context "for an Indian card with SCA support" do
-            let(:payment_method_id) { StripePaymentMethodHelper.build(number: "4000003560000008").to_stripejs_payment_method_id } # https://stripe.com/docs/testing#international-cards
+            let(:payment_method_id) { StripePaymentMethodHelper.build(token: "tok_in").to_stripejs_payment_method_id } # https://stripe.com/docs/testing#international-cards
 
             it "follows the default Radar rules and does not request 3DS manually" do
               expect(Stripe::PaymentIntent).to receive(:create).with(hash_excluding(manual_3ds_params)).and_call_original
@@ -690,7 +690,7 @@ describe StripeChargeProcessor, :vcr do
 
         context "when setting up future usage" do
           context "for an Indian card with SCA support" do
-            let(:payment_method_id) { StripePaymentMethodHelper.build(number: "4000003560000008").to_stripejs_payment_method_id } # https://stripe.com/docs/testing#international-cards
+            let(:payment_method_id) { StripePaymentMethodHelper.build(token: "tok_in").to_stripejs_payment_method_id } # https://stripe.com/docs/testing#international-cards
 
             it "ignores the default Radar rules and always requests 3DS" do
               expect(Stripe::PaymentIntent).to receive(:create).with(hash_including(manual_3ds_params)).and_call_original

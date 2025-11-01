@@ -20,7 +20,7 @@ describe "Tiered Membership Spec for Payment/Settings updates", type: :system, j
       visit "/subscriptions/#{@subscription.external_id}/manage?token=#{@subscription.token}"
 
       click_on "Use a different card?"
-      fill_in_credit_card(number: StripePaymentMethodHelper.success[:cc_number])
+      fill_in_credit_card(number: CardParamsSpecHelper.card_number(:success))
 
       click_on "Update membership"
 
@@ -38,7 +38,7 @@ describe "Tiered Membership Spec for Payment/Settings updates", type: :system, j
         expect(page).to_not have_text("Add your own payment method below to ensure that your membership renews.")
 
         click_on "Use a different card?"
-        fill_in_credit_card(number: StripePaymentMethodHelper.success[:cc_number])
+        fill_in_credit_card(number: CardParamsSpecHelper.card_number(:success))
 
         click_on "Update membership"
 
@@ -61,7 +61,7 @@ describe "Tiered Membership Spec for Payment/Settings updates", type: :system, j
           visit "/subscriptions/#{@subscription.external_id}/manage?token=#{@subscription.token}"
 
           click_on "Use a different card?"
-          fill_in_credit_card(number: StripePaymentMethodHelper.success[:cc_number])
+          fill_in_credit_card(number: CardParamsSpecHelper.card_number(:success))
 
           click_on "Update membership"
           expect(page).to have_alert(text: "Your membership has been updated.")
@@ -78,7 +78,7 @@ describe "Tiered Membership Spec for Payment/Settings updates", type: :system, j
           visit "/subscriptions/#{@subscription.external_id}/manage?token=#{@subscription.token}"
 
           click_on "Use a different card?"
-          fill_in_credit_card(number: StripePaymentMethodHelper.success[:cc_number])
+          fill_in_credit_card(number: CardParamsSpecHelper.card_number(:success))
 
           click_on "Update membership"
           expect(page).to have_alert(text: "Your membership has been updated.")
@@ -92,7 +92,7 @@ describe "Tiered Membership Spec for Payment/Settings updates", type: :system, j
         visit "/subscriptions/#{@subscription.external_id}/manage?token=#{@subscription.token}"
 
         click_on "Use a different card?"
-        fill_in_credit_card(number: StripePaymentMethodHelper.decline[:cc_number])
+        fill_in_credit_card(number: CardParamsSpecHelper.card_number(:decline))
 
         click_on "Update membership"
         wait_for_ajax
@@ -131,7 +131,7 @@ describe "Tiered Membership Spec for Payment/Settings updates", type: :system, j
       visit "/subscriptions/#{@subscription.external_id}/manage?token=#{@subscription.token}"
 
       click_on "Pay with card instead?"
-      fill_in_credit_card(number: StripePaymentMethodHelper.success[:cc_number])
+      fill_in_credit_card(number: CardParamsSpecHelper.card_number(:success))
       click_on "Update membership"
 
       expect(page).to have_alert(text: "Your membership has been updated.")
@@ -270,7 +270,7 @@ describe "Tiered Membership Spec for Payment/Settings updates", type: :system, j
 
     click_on "Use a different card?"
 
-    fill_in_credit_card(number: StripePaymentMethodHelper.success_indian_card_mandate[:cc_number])
+    fill_in_credit_card(number: CardParamsSpecHelper.card_number(:success_indian_card_mandate))
     click_on "Update membership"
     wait_for_ajax
     sleep 1
@@ -297,7 +297,7 @@ describe "Tiered Membership Spec for Payment/Settings updates", type: :system, j
 
       expect(@subscription.credit_card).to be_nil
 
-      fill_in_credit_card(number: StripePaymentMethodHelper.success[:cc_number])
+      fill_in_credit_card(number: CardParamsSpecHelper.card_number(:success))
 
       click_on "Update membership"
       expect(page).to have_alert(text: "Your membership has been updated.")

@@ -280,7 +280,7 @@ describe "Tiered Membership Offer code Spec", type: :system, js: true do
         visit "/subscriptions/#{@subscription.external_id}/manage?token=#{@subscription.token}"
 
         click_on "Use a different card?"
-        fill_in_credit_card(number: StripePaymentMethodHelper.success[:cc_number])
+        fill_in_credit_card(number: CardParamsSpecHelper.card_number(:success))
         click_on "Update membership"
         wait_for_ajax
 
