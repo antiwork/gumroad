@@ -1233,6 +1233,7 @@ describe("Workflows", js: true, type: :system) do
         end
         expect(page).to have_alert(text: "Workflow published!")
 
+        click_on "Details"
         expect(page).to_not have_disclosure("Publish")
         expect(page).to have_button("Unpublish")
         expect(page).to have_input_labelled "Name", with: "My workflow (edited)"
@@ -1276,6 +1277,7 @@ describe("Workflows", js: true, type: :system) do
         fill_in "Name", with: "My workflow (edited again)"
         click_on "Unpublish"
         expect(page).to have_alert(text: "Unpublished!")
+        click_on "Details"
         expect(page).to_not have_button("Unpublish")
         expect(page).to_not have_disclosure("Publish")
         expect(page).to have_input_labelled "Name", with: "My workflow (edited again)"
