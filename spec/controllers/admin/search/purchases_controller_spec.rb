@@ -31,7 +31,7 @@ describe Admin::Search::PurchasesController, type: :controller, inertia: true do
 
       expect(response).to be_successful
       expect(response.content_type).to match(%r{application/json})
-      expect(response.parsed_body["purchases"].map { _1["id"] }).to match_array([purchase_1.external_id, purchase_2.external_id])
+      expect(response.parsed_body["purchases"].map { _1["id"] }).to match_array([purchase_1.id, purchase_2.id])
       expect(response.parsed_body["pagination"]).to be_present
     end
 
