@@ -27,7 +27,7 @@ describe Admin::Search::PurchasesController, type: :controller, inertia: true do
     it "returns JSON response when requested" do
       purchase_1 = create(:purchase, email:)
       purchase_2 = create(:purchase, email:)
-      get :index, params: { query: "Doe" }, format: :json
+      get :index, params: { query: email }, format: :json
 
       expect(response).to be_successful
       expect(response.content_type).to match(%r{application/json})

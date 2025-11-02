@@ -34,7 +34,7 @@ describe "Admin::SearchController Scenario", type: :system, js: true do
 
         visit admin_search_purchases_path(query: "user@example.com", product_title_query:)
 
-        expect(page).to have_link("Clear")
+        expect(page).to have_button("Clear")
 
         click_link("Clear")
 

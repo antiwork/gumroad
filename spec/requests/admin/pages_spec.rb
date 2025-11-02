@@ -111,7 +111,7 @@ describe "Admin Pages Scenario", type: :system, js: true do
     end
 
     it "allows admins to page through purchase search results" do
-      stub_const("#{Admin::SearchController}::RECORDS_PER_PAGE", 2)
+      stub_const("#{Admin::Search::PurchasesController}::RECORDS_PER_PAGE", 2)
       email = "searchme@gumroad.com"
 
       3.times do |i|
@@ -126,8 +126,8 @@ describe "Admin Pages Scenario", type: :system, js: true do
 
       expect(page).to have_text("product #2")
       expect(page).to have_text("product #1")
+      expect(page).not_to have_text("product #0")
 
-      click_on("Next")
       expect(page).to have_text("product #0")
     end
   end
