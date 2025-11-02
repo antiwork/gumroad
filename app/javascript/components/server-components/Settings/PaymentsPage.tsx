@@ -891,7 +891,7 @@ const PaymentsPage = (props: Props) => {
               </div>
               <div className="mt-4 flex items-center">
                 <img src={logo} alt="Gum Coin" className="mr-2 h-5 w-5" />
-                <span className="text-muted text-sm">
+                <span className="text-sm text-muted">
                   Creator since{" "}
                   {new Date(props.user.joined_at).toLocaleDateString(userAgentInfo.locale, {
                     month: "long",

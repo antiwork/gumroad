@@ -33,9 +33,11 @@
   --color-background: rgb(var(--filled));
   --color-foreground: rgb(var(--color));
   --color-border: rgb(var(--color) / var(--border-alpha));
+  --color-backdrop: rgb(0 0 0 / 0.8);
   --color-accent: rgb(var(--accent));
   --color-accent-foreground: rgb(var(--contrast-accent));
-  --color-muted-foreground: rgb(var(--color) / var(--gray-1));
+  --color-active-bg: rgb(var(--color) / var(--gray-1));
+  --color-muted: rgb(var(--color) / var(--gray-3));
   --color-success: rgb(var(--success));
   --color-danger: rgb(var(--danger));
 
@@ -72,6 +74,7 @@
   .scoped-tailwind-preflight {
     @import "tailwindcss/preflight.css";
 
+    &,
     * {
       border-color: var(--color-border);
     }

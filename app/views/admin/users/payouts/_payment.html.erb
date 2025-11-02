@@ -78,8 +78,6 @@
     <% if payment.processor == PayoutProcessorType::PAYPAL && Payment::NON_TERMINAL_STATES.include?(payment.state) %>
       <%= admin_action label: "Sync with PayPal", url: sync_admin_payout_path(payment), done: "Synced!",
           confirm_message: "Are you sure you want to try and sync this payment with PayPal?" %>
-      <%= admin_action label: "Sync ALL stuck PayPal payouts", url: sync_all_admin_user_payouts_path(payment), done: "Enqueued!",
-          confirm_message: "We will enqueue a job to sync ALL stuck PayPal payouts. Do you want to continue?" %>
     <% end %>
   </div>
 </div>
