@@ -73,7 +73,7 @@ export const useConfigureEvaporate = (props: Props) => {
     mimeType: string;
     onComplete: () => void;
     onProgress: (progress: UploadProgress) => void;
-  }) => {
+  }): Promise<string | number | undefined> => {
     let previousProgress = 0;
 
     const status = evaporate.add({
@@ -101,7 +101,7 @@ export const useConfigureEvaporate = (props: Props) => {
       },
     });
 
-    return status;
+    return Promise.resolve(status);
   };
 
   const cancelUpload = (cancellationKey: string) => {
