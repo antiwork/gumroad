@@ -48,4 +48,3 @@ describe Admin::ProductPresenter::MultipleMatches do
     end
   end
 end
-
