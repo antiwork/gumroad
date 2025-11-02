@@ -13,10 +13,6 @@ type ProductMatchProps = {
   created_at: string;
 };
 
-type Props = {
-  product_matches: ProductMatchProps[];
-};
-
 const ProductMatch = ({ product }: { product: ProductMatchProps }) => {
   const userName = product.user.name && product.user.name.length > 0 ? product.user.name : `User ${product.user.id}`;
 
@@ -46,7 +42,7 @@ const ProductMatch = ({ product }: { product: ProductMatchProps }) => {
 };
 
 const AdminProductsMultipleMatches = () => {
-  const { product_matches } = usePage<Props>().props;
+  const { product_matches } = usePage<{ product_matches: ProductMatchProps[] }>().props;
 
   return (
     <table>
