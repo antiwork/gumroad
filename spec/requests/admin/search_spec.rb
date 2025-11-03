@@ -37,6 +37,7 @@ describe "Admin::SearchController Scenario", type: :system, js: true do
         expect(page).to have_link("Clear")
 
         click_link("Clear")
+        sleep 1
 
         expect(current_url).to include("query=user%40example.com")
         expect(current_url).not_to include("product_title_query")
