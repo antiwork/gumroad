@@ -34,10 +34,12 @@ describe "Admin::SearchController Scenario", type: :system, js: true do
 
         visit admin_search_purchases_path(query: "user@example.com", product_title_query:)
 
-        click_on("Clear")
+        expect(page).to have_link("Clear")
+
+        click_link("Clear")
 
         expect(current_url).to include("query=user%40example.com")
-        expect(current_url).not_to include(product_title_query)
+        expect(current_url).not_to include("product_title_query")
 
         expect(page).to have_content("Graphic Design Course")
         expect(page).to have_content("Different Product")

@@ -8,7 +8,7 @@ class Admin::Search::PurchasesController < Admin::BaseController
     @title = "Purchase results"
 
     @purchases = AdminSearchService.new.search_purchases(
-      query: params[:query].strip,
+      query: params[:query]&.strip,
       product_title_query: params[:product_title_query]&.strip,
       purchase_status: params[:purchase_status],
     )

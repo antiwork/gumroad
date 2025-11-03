@@ -72,13 +72,9 @@ export default function Purchases() {
               <Icon name="solid-search" />
             </button>
             {data.product_title_query || data.purchase_status ? (
-              <button
-                type="button"
-                className="button secondary"
-                onClick={() => setData({ product_title_query: "", purchase_status: "" })}
-              >
+              <Link href={Routes.admin_search_purchases_path({ query: data.query })} className="button secondary">
                 Clear
-              </button>
+              </Link>
             ) : null}
           </form>
           <table>
