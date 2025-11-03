@@ -212,6 +212,7 @@ const CommentContainer = ({ comment, upsertComment, confirmCommentDeletion }: Co
       });
       showAlert("Successfully updated the comment", "success");
       upsertComment(updated);
+      setEditDraft(null);
     } catch (e) {
       assertResponseError(e);
       showAlert(`An error occurred while updating the comment - ${e.message}`, "error");
@@ -359,7 +360,8 @@ const CommentTextarea = ({
   }, [props.value]);
 
   return (
-    <div className={classNames("override grid gap-3", showAvatar && "relative grid-cols-[max-content_1fr]")}>
+    <section className={classNames("override grid gap-3", showAvatar && "relative grid-cols-[max-content_1fr]")}>
+      <h3 className="sr-only">Write a comment</h3>
       {showAvatar ? (
         <UserAvatar
           size="large"
@@ -377,7 +379,7 @@ const CommentTextarea = ({
         </div>
       )}
       {loggedInUser != null || purchase_id != null ? <div className="flex justify-end gap-3">{children}</div> : null}
-    </div>
+    </section>
   );
 };
 

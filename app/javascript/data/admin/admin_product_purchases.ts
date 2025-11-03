@@ -33,7 +33,7 @@ export async function fetchProductPurchases(
 ) {
   const response = await request({
     method: "GET",
-    url: Routes.purchases_admin_product_path(productId, {
+    url: Routes.legacy_purchases_admin_product_path(productId, {
       format: "json",
       page,
       per_page: perPage,
