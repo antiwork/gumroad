@@ -21,8 +21,12 @@ class Admin::ProductPresenter::Card
       cover_placeholder_url: ActionController::Base.helpers.asset_url("cover_placeholder.png"),
       price_formatted: product.price_formatted,
       created_at: product.created_at,
-      user_name: product.user.name,
-      user_id: product.user_id.to_s,
+      user: {
+        id: product.user_id,
+        name: product.user.name,
+        suspended: product.user.suspended?,
+        flagged_for_tos_violation: product.user.flagged_for_tos_violation?
+      },
       admins_can_generate_url_redirects: product.admins_can_generate_url_redirects,
       alive_product_files: format_alive_product_files,
       html_safe_description: product.html_safe_description,

@@ -31,8 +31,7 @@ describe Admin::ProductPresenter::Card do
           :cover_placeholder_url,
           :price_formatted,
           :created_at,
-          :user_name,
-          :user_id,
+          :user,
           :admins_can_generate_url_redirects,
           :alive_product_files,
           :html_safe_description,
@@ -60,8 +59,12 @@ describe Admin::ProductPresenter::Card do
         expect(props[:cover_placeholder_url]).to match(/cover_placeholder.*\.png/)
         expect(props[:price_formatted]).to eq(product.price_formatted)
         expect(props[:created_at]).to eq(product.created_at)
-        expect(props[:user_name]).to eq(product.user.name)
-        expect(props[:user_id]).to eq(product.user_id.to_s)
+        expect(props[:user]).to eq(
+          id: product.user_id,
+          name: product.user.name,
+          suspended: false,
+          flagged_for_tos_violation: false
+        )
         expect(props[:admins_can_generate_url_redirects]).to eq(product.admins_can_generate_url_redirects)
         expect(props[:html_safe_description]).to eq(product.html_safe_description)
         expect(props[:alive]).to eq(product.alive?)
@@ -221,6 +224,49 @@ describe Admin::ProductPresenter::Card do
       context "when product has no alive product files" do
         it "returns admins_can_generate_url_redirects as false" do
           expect(props[:admins_can_generate_url_redirects]).to be(false)
+        end
+      end
+    end
+
+    describe "user object" do
+      it "includes all required user fields" do
+        expect(props[:user]).to include(
+          :id,
+          :name,
+          :suspended,
+          :flagged_for_tos_violation
+        )
+      end
+
+      it "returns correct user values" do
+        expect(props[:user][:id]).to eq(product.user_id)
+        expect(props[:user][:name]).to eq(product.user.name)
+        expect(props[:user][:suspended]).to eq(false)
+        expect(props[:user][:flagged_for_tos_violation]).to eq(false)
+      end
+
+      context "when user is suspended" do
+        let(:user) { create(:named_user, :suspended) }
+
+        it "returns suspended as true" do
+          expect(props[:user][:suspended]).to be(true)
+        end
+      end
+
+      context "when user is flagged for TOS violation" do
+        let(:user) { create(:named_user, :flagged_for_tos_violation) }
+
+        it "returns flagged_for_tos_violation as true" do
+          expect(props[:user][:flagged_for_tos_violation]).to be(true)
+        end
+      end
+
+      context "when user has both flags" do
+        let(:user) { create(:named_user, :suspended, :flagged_for_tos_violation) }
+
+        it "returns both flags as true" do
+          expect(props[:user][:suspended]).to be(true)
+          expect(props[:user][:flagged_for_tos_violation]).to be(true)
         end
       end
     end

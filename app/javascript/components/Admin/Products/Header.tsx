@@ -4,18 +4,16 @@ import React from "react";
 import DateTimeWithRelativeTooltip from "$app/components/Admin/DateTimeWithRelativeTooltip";
 import { type Product } from "$app/components/Admin/Products/Product";
 import AdminProductStats from "$app/components/Admin/Products/Stats";
-import { type User } from "$app/components/Admin/Users/User";
 import { Icon } from "$app/components/Icons";
 
 import coverPlaceholder from "$assets/images/cover_placeholder.png";
 
 type Props = {
-  user: User;
   product: Product;
   isCurrentUrl: boolean;
 };
 
-const AdminUsersProductsHeader = ({ product, user, isCurrentUrl }: Props) => (
+const AdminUsersProductsHeader = ({ product, isCurrentUrl }: Props) => (
   <div className="paragraphs">
     <div className="flex items-center gap-4">
       {product.preview_url ? (
@@ -42,7 +40,7 @@ const AdminUsersProductsHeader = ({ product, user, isCurrentUrl }: Props) => (
               <DateTimeWithRelativeTooltip date={product.created_at} utc />
             </li>
             <li>
-              <Link href={Routes.admin_user_path(user.id)}>{user.name}</Link>
+              <Link href={Routes.admin_user_path(product.user.id)}>{product.user.name}</Link>
             </li>
             <AdminProductStats product_id={product.id} />
           </ul>

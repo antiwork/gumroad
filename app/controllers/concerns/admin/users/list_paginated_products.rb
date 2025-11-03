@@ -16,10 +16,7 @@ module Admin::Users::ListPaginatedProducts
 
       render inertia: inertia_template,
              props: {
-               user: -> { Admin::UserPresenter::Card.new(
-                 user:,
-                 impersonatable: policy([:admin, :impersonators, user]).create?
-               ).props },
+               user: -> { { id: user.id } },
                products: products.includes(:ordered_alive_product_files, :active_integrations, :staff_picked_product, :taxonomy).map do |product|
                            Admin::ProductPresenter::Card.new(
                              product:,

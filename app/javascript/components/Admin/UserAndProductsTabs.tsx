@@ -1,24 +1,23 @@
 import { Link } from "@inertiajs/react";
 import React from "react";
 
-import { type User as UserType } from "$app/components/Admin/Users/User";
 import Tab from "$app/components/Tabs/Tab";
 import TabList from "$app/components/Tabs/TabList";
 
 type Props = {
   selectedTab: string;
-  user: UserType;
+  userId: number;
 };
 
-const AdminUserAndProductsTabs = ({ selectedTab, user }: Props) => (
+const AdminUserAndProductsTabs = ({ selectedTab, userId }: Props) => (
   <TabList>
     <Tab isSelected={selectedTab === "users"} asChild>
-      <Link href={Routes.admin_user_path(user.id)} className="block p-3 no-underline">
+      <Link href={Routes.admin_user_path(userId)} className="block p-3 no-underline">
         Profile
       </Link>
     </Tab>
     <Tab isSelected={selectedTab === "products"} asChild>
-      <Link href={Routes.admin_user_products_path(user.id)} prefetch className="block p-3 no-underline">
+      <Link href={Routes.admin_user_products_path(userId)} prefetch className="block p-3 no-underline">
         Products
       </Link>
     </Tab>

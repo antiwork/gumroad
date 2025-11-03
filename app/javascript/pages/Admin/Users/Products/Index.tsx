@@ -7,14 +7,12 @@ import { type User as UserType } from "$app/components/Admin/Users/User";
 import { Pagination, type PaginationProps } from "$app/components/Pagination";
 
 type AdminUsersProductsContentProps = {
-  user: UserType;
   products: ProductType[];
   isAffiliateUser?: boolean;
   pagination: PaginationProps;
 };
 
 const AdminUsersProductsContent = ({
-  user,
   products,
   isAffiliateUser = false,
   pagination,
@@ -30,7 +28,7 @@ const AdminUsersProductsContent = ({
   return (
     <div className="space-y-4">
       {products.map((product) => (
-        <AdminUsersProductsProduct key={product.id} user={user} product={product} isAffiliateUser={isAffiliateUser} />
+        <AdminUsersProductsProduct key={product.id} product={product} isAffiliateUser={isAffiliateUser} />
       ))}
     </div>
   );
@@ -52,9 +50,8 @@ const AdminUsersProducts = ({ isAffiliateUser = false }: Props) => {
 
   return (
     <div className="paragraphs">
-      <AdminUserAndProductsTabs selectedTab="products" user={user} />
+      <AdminUserAndProductsTabs selectedTab="products" userId={user.id} />
       <AdminUsersProductsContent
-        user={user}
         products={products}
         isAffiliateUser={isAffiliateUser}
         pagination={pagination}

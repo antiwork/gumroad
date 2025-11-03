@@ -8,7 +8,6 @@ import AdminFlagForTosViolationsContent, {
 } from "$app/components/Admin/Products/FlagForTosViolations/Content";
 import AdminFlagForTosViolationsForm from "$app/components/Admin/Products/FlagForTosViolations/Form";
 import type { Product } from "$app/components/Admin/Products/Product";
-import type { User } from "$app/components/Admin/Users/User";
 
 export type Compliance = {
   reasons: Record<string, string>;
@@ -16,14 +15,13 @@ export type Compliance = {
 };
 
 type FlagForTosViolationsProps = {
-  user: User;
   product: Product;
   compliance: Compliance;
 };
 
-const FlagForTosViolations = ({ user, product, compliance }: FlagForTosViolationsProps) => {
+const FlagForTosViolations = ({ product, compliance }: FlagForTosViolationsProps) => {
   const [open, setOpen] = React.useState(false);
-  const [flaggedForTosViolation, setFlaggedForTosViolation] = React.useState(user.flagged_for_tos_violation);
+  const [flaggedForTosViolation, setFlaggedForTosViolation] = React.useState(product.user.flagged_for_tos_violation);
 
   const {
     data: tos_violation_flags,
@@ -31,7 +29,7 @@ const FlagForTosViolations = ({ user, product, compliance }: FlagForTosViolation
     fetchData: fetchTosViolationFlags,
   } = useLazyFetch<TosViolationFlags[]>([], {
     fetchUnlessLoaded: open,
-    url: Routes.admin_user_product_tos_violation_flags_path(user.id, product.id, { format: "json" }),
+    url: Routes.admin_user_product_tos_violation_flags_path(product.user.id, product.id, { format: "json" }),
     responseParser: (data) => {
       const parsed = cast<{ tos_violation_flags: TosViolationFlags[] }>(data);
       return parsed.tos_violation_flags;
@@ -57,7 +55,7 @@ const FlagForTosViolations = ({ user, product, compliance }: FlagForTosViolation
 
   const suspendTosSuccessMessage = `User was flagged for TOS violation and product ${product.is_tiered_membership ? "unpublished" : "deleted"}.`;
   const suspendTosConfirmMessage = `Are you sure you want to flag the user and ${product.is_tiered_membership ? "unpublish" : "delete"} the product?`;
-  const shouldShowForm = !flaggedForTosViolation && product.alive && !user.suspended && !user.flagged_for_tos_violation;
+  const shouldShowForm = !flaggedForTosViolation && product.alive && !product.user.suspended && !product.user.flagged_for_tos_violation;
 
   return (
     <>
@@ -68,7 +66,7 @@ const FlagForTosViolations = ({ user, product, compliance }: FlagForTosViolation
         </summary>
         {shouldShowForm ? (
           <AdminFlagForTosViolationsForm
-            user_id={user.id}
+            user_id={product.user.id}
             product_id={product.id}
             success_message={suspendTosSuccessMessage}
             confirm_message={suspendTosConfirmMessage}
