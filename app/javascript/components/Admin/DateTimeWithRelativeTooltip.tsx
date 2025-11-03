@@ -6,7 +6,7 @@ import { formatDate } from "$app/utils/date";
 import { WithTooltip } from "$app/components/WithTooltip";
 
 type Props = {
-  date: string;
+  date: string | null;
   placeholder?: string | React.ReactNode;
   utc?: boolean;
 };

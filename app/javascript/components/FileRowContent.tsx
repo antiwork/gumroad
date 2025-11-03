@@ -3,7 +3,7 @@ import * as React from "react";
 import { FILE_TYPE_EXTENSIONS_MAP } from "$app/utils/file";
 
 import { Icon } from "$app/components/Icons";
-import { Progress } from "$app/components/Progress";
+import { LoadingSpinner } from "$app/components/LoadingSpinner";
 
 type Props = {
   extension: string | null;
@@ -15,7 +15,7 @@ type Props = {
 };
 export const FileRowContent = ({ extension, name, details, externalLinkUrl, isUploading, hideIcon }: Props) => (
   <>
-    {isUploading ? <Progress width="2em" /> : hideIcon ? null : <FileKindIcon extension={extension} />}
+    {isUploading ? <LoadingSpinner className="size-8" /> : hideIcon ? null : <FileKindIcon extension={extension} />}
     <div>
       <h4>
         {extension === "URL" && externalLinkUrl ? (

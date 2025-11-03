@@ -12,19 +12,19 @@ export type Props = {
 };
 
 const BlockedUserTooltip = ({ user, position = "bottom" }: Props) => {
-  const { form_email_block, form_email_domain, form_email_domain_block } = user;
+  const { blocked_by_form_email_object, blocked_by_form_email_domain_object } = user;
 
-  if (!form_email_block && !form_email_domain_block) {
+  if (!blocked_by_form_email_object && !blocked_by_form_email_domain_object) {
     return null;
   }
 
   const content = () => (
     <div className="paragraphs">
-      {form_email_block ? (
-        <span>{`Email blocked ${formatDate(new Date(form_email_block.blocked_at))} (block created ${formatDate(new Date(form_email_block.created_at))})`}</span>
+      {blocked_by_form_email_object?.blocked_at ? (
+        <span>{`Email blocked ${formatDate(new Date(blocked_by_form_email_object.blocked_at))} (block created ${formatDate(new Date(blocked_by_form_email_object.created_at))})`}</span>
       ) : null}
-      {form_email_domain_block ? (
-        <span>{`${form_email_domain} blocked ${formatDate(new Date(form_email_domain_block.blocked_at))} (block created ${formatDate(new Date(form_email_domain_block.created_at))})`}</span>
+      {blocked_by_form_email_domain_object?.blocked_at ? (
+        <span>{`${user.form_email_domain} blocked ${formatDate(new Date(blocked_by_form_email_domain_object.blocked_at))} (block created ${formatDate(new Date(blocked_by_form_email_domain_object.created_at))})`}</span>
       ) : null}
     </div>
   );

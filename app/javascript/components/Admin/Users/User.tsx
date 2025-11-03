@@ -5,7 +5,7 @@ import AdminUserActions from "$app/components/Admin/Users/Actions";
 import AdminUserAddCredit from "$app/components/Admin/Users/AddCredit";
 import AdminUserChangeEmail from "$app/components/Admin/Users/ChangeEmail";
 import AdminUserComments from "$app/components/Admin/Users/Comments";
-import AdminUserComplianceInfo, { ComplianceInfoProps } from "$app/components/Admin/Users/ComplianceInfo";
+import AdminUserComplianceInfo, { type ComplianceInfoProps } from "$app/components/Admin/Users/ComplianceInfo";
 import AdminUserCustomFee from "$app/components/Admin/Users/CustomFee";
 import AdminUserEmailChanges from "$app/components/Admin/Users/EmailChanges";
 import Footer from "$app/components/Admin/Users/Footer";
@@ -30,26 +30,31 @@ export type UserMembership = {
   created_at: string;
 };
 
+type BlockedObject = {
+  blocked_at: string | null;
+  created_at: string;
+};
+
 export type User = {
   id: number;
   email: string;
-  support_email?: string;
-  name: string;
+  support_email?: string | null;
+  name: string | null;
   avatar_url: string;
   username: string;
   profile_url: string;
   form_email: string;
-  form_email_block: { blocked_at: string; created_at: string } | null;
+  blocked_by_form_email_object: BlockedObject | null;
   form_email_domain: string;
-  form_email_domain_block: { blocked_at: string; created_at: string } | null;
+  blocked_by_form_email_domain_object: BlockedObject | null;
   subdomain_with_protocol: string;
   custom_fee_per_thousand: number | null;
   impersonatable: boolean;
-  verified: boolean;
+  verified: boolean | null;
   all_adult_products: boolean;
   admin_manageable_user_memberships: UserMembership[];
-  alive_user_compliance_info: ComplianceInfoProps | null;
-  compliant: boolean;
+  alive_user_compliance_info?: ComplianceInfoProps | null;
+  compliant?: boolean | null;
   suspended: boolean;
   unpaid_balance_cents: number;
   disable_paypal_sales: boolean;
@@ -58,24 +63,24 @@ export type User = {
   on_probation: boolean;
   user_risk_state: string;
   comments_count: number;
-  bio: string;
+  bio: string | null;
   created_at: string;
   updated_at: string;
-  deleted_at: string;
+  deleted_at: string | null;
 };
 
 export type Props = {
   user: User;
-  is_affiliate_user?: boolean;
+  isAffiliateUser?: boolean;
 };
 
-const UserCard = ({ user, is_affiliate_user = false }: Props) => {
+const UserCard = ({ user, isAffiliateUser = false }: Props) => {
   const page = usePage();
   const { url } = page;
 
   return (
     <div className="grid gap-4 rounded border border-border bg-background p-4" data-user-id={user.id}>
-      <Header user={user} is_affiliate_user={is_affiliate_user} url={url} />
+      <Header user={user} isAffiliateUser={isAffiliateUser} url={url} />
 
       <hr />
 

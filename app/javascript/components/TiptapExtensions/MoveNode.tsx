@@ -3,7 +3,7 @@ import { NodeSelection } from "@tiptap/pm/state";
 import { Extension } from "@tiptap/react";
 
 import { FileEmbed } from "$app/components/ProductEdit/ContentTab/FileEmbed";
-import { FileEmbedGroup } from "$app/components/TiptapExtensions/FileEmbedGroup";
+import { FileEmbedGroup } from "$app/components/ProductEdit/ContentTab/FileEmbedGroup";
 
 declare module "@tiptap/core" {
   interface Commands<ReturnType> {

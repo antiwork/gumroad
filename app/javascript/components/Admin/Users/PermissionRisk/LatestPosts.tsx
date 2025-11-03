@@ -3,8 +3,8 @@ import { cast } from "ts-safe-cast";
 
 import { request } from "$app/utils/request";
 
-import Loading from "$app/components/Admin/Loading";
 import type { User } from "$app/components/Admin/Users/User";
+import { LoadingSpinner } from "$app/components/LoadingSpinner";
 
 type LatestPostsProps = {
   user: User;
@@ -24,7 +24,7 @@ const Post = ({ name, created_at }: PostProps) => (
 );
 
 const LatestPostsContent = ({ posts, isLoading }: { posts: PostProps[]; isLoading: boolean }) => {
-  if (isLoading) return <Loading />;
+  if (isLoading) return <LoadingSpinner />;
   if (posts.length > 0)
     return (
       <div className="stack">

@@ -1,8 +1,9 @@
-import cx from "classnames";
 import * as React from "react";
 
 import { AssetPreview } from "$app/parsers/product";
+import { classNames } from "$app/utils/classNames";
 
+import { Icon } from "$app/components/Icons";
 import { useElementDimensions } from "$app/components/useElementDimensions";
 import { useOnChange } from "$app/components/useOnChange";
 import { useScrollableCarousel } from "$app/components/useScrollableCarousel";
@@ -47,12 +48,12 @@ export const Covers = ({
   );
 
   return (
-    <figure className={cx("carousel", className)} aria-label="Product preview">
+    <figure className={classNames("group relative col-[1/-1]", className)} aria-label="Product preview">
       {closeButton}
       {prevCover ? <PreviewArrow direction="previous" onClick={() => setActiveCoverId(prevCover.id)} /> : null}
       {nextCover ? <PreviewArrow direction="next" onClick={() => setActiveCoverId(nextCover.id)} /> : null}
       <div
-        className="items"
+        className="flex h-full snap-x snap-mandatory items-center overflow-x-scroll overflow-y-hidden [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
         ref={itemsRef}
         style={{
           aspectRatio,
@@ -64,7 +65,11 @@ export const Covers = ({
         ))}
       </div>
       {covers.length > 1 && activeCover?.type !== "oembed" && activeCover?.type !== "video" ? (
-        <div role="tablist" aria-label="Select a cover">
+        <div
+          role="tablist"
+          aria-label="Select a cover"
+          className="absolute bottom-0 flex w-full flex-wrap justify-center gap-2 p-3"
+        >
           {covers.map((cover, i) => (
             <div
               key={i}
@@ -76,6 +81,10 @@ export const Covers = ({
                 e.preventDefault();
                 setActiveCoverId(cover.id);
               }}
+              className={classNames(
+                "block rounded-full border border-current bg-background p-2",
+                i === activeCoverIndex && "bg-current",
+              )}
             />
           ))}
         </div>
@@ -84,16 +93,28 @@ export const Covers = ({
   );
 };
 
-const PreviewArrow = ({ direction, onClick }: { direction: "previous" | "next"; onClick: () => void }) => (
-  <button
-    className={cx("arrow", direction)}
-    onClick={(e) => {
-      e.preventDefault();
-      onClick();
-    }}
-    aria-label={direction === "previous" ? "Show previous cover" : "Show next cover"}
-  />
-);
+const PreviewArrow = ({ direction, onClick }: { direction: "previous" | "next"; onClick: () => void }) => {
+  const iconName = direction === "previous" ? "arrow-left" : "arrow-right";
+  const positionClass = direction === "previous" ? "left-0" : "right-0";
+
+  return (
+    <button
+      className={classNames(
+        "absolute top-1/2 z-1 mx-3 h-8 w-8 -translate-y-1/2 items-center justify-center",
+        "rounded-full border border-border bg-background",
+        "hidden group-legacy-hover:flex",
+        positionClass,
+      )}
+      onClick={(e) => {
+        e.preventDefault();
+        onClick();
+      }}
+      aria-label={direction === "previous" ? "Show previous cover" : "Show next cover"}
+    >
+      <Icon name={iconName} />
+    </button>
+  );
+};
 
 const CoverItem = ({ cover }: { cover: AssetPreview }) => {
   const containerRef = React.useRef<HTMLDivElement>(null);
@@ -131,7 +152,13 @@ const CoverItem = ({ cover }: { cover: AssetPreview }) => {
   }
 
   return (
-    <div key={cover.id} ref={containerRef} role="tabpanel" id={cover.id}>
+    <div
+      key={cover.id}
+      ref={containerRef}
+      role="tabpanel"
+      id={cover.id}
+      className="mt-0! flex min-h-[1px] flex-[1_0_100%] snap-start justify-center border-0! p-0!"
+    >
       {coverComponent}
     </div>
   );

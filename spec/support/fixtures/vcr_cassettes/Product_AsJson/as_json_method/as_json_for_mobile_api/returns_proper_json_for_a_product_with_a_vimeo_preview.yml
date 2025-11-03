@@ -1,0 +1,180 @@
+---
+http_interactions:
+- request:
+    method: get
+    uri: https://vimeo.com/api/oembed.json?maxwidth=670&url=https://vimeo.com/30698649
+    body:
+      encoding: US-ASCII
+      string: ''
+    headers:
+      Accept-Encoding:
+      - gzip;q=1.0,deflate;q=0.6,identity;q=0.3
+      Accept:
+      - "*/*"
+      User-Agent:
+      - Mozilla/5.0 (compatible; ruby-oembed/0.17.0)
+  response:
+    status:
+      code: 200
+      message: OK
+    headers:
+      Date:
+      - Tue, 28 Oct 2025 13:52:53 GMT
+      Content-Type:
+      - application/json
+      Transfer-Encoding:
+      - chunked
+      Connection:
+      - keep-alive
+      Access-Control-Allow-Origin:
+      - "*"
+      Access-Control-Allow-Headers:
+      - X-Requested-With
+      X-Content-Type-Options:
+      - nosniff
+      X-Frame-Options:
+      - sameorigin
+      Last-Modified:
+      - Tue, 28 Oct 2025 07:06:26 GMT
+      Etag:
+      - W/"57f0d8d54adde7bb7397e37573639197fc3fe7c2"
+      X-Ua-Compatible:
+      - IE=edge
+      X-Xss-Protection:
+      - 1; mode=block
+      Strict-Transport-Security:
+      - max-age=31536000; includeSubDomains; preload
+      Reporting-Endpoints:
+      - csp-endpoint="https://browser-intake-datadoghq.com/api/v2/logs?dd-api-key=puba92ed04ee7cceea44335c3d8c1ccc173&dd-evp-origin=content-security-policy&ddsource=csp-report&ddtags=service%3Acspreport%2Cenv%3Aproduction"
+      Content-Security-Policy-Report-Only:
+      - 'default-src ''self'' f.vimeocdn.com; connect-src ''self'' blob: data: ws:
+        wss: *.6sc.co *.6sense.com *.agora.io *.akamaized.net clientassets.sightera.com.s3.amazonaws.com
+        https://d263mgllkjh2k2.cloudfront.net http://d1ripsxh7es2qp.cloudfront.net
+        https://d3fclmoge30w0w.cloudfront.net cognito-identity.us-east-1.amazonaws.com
+        cognito-identity.us-west-1.amazonaws.com https://s3.amazonaws.com/beast.branding.sightera.com
+        https://s3.amazonaws.com/beast.business.sightera.com https://s3.amazonaws.com/beast.business.sightera.com/
+        https://s3.amazonaws.com/beast.branding.sightera.com/ https://s3.amazonaws.com/test.sightera.com/
+        https://s3.amazonaws.com/business.sightera.com/ https://s3.amazonaws.com/sound.sightera.com/
+        sqs.us-east-1.amazonaws.com sqs.us-west-1.amazonaws.com wirewax.s3.eu-west-1.amazonaws.com
+        *.amplitude.com vimeo.bynder.com bat.bing-int.com bat.bing.com bat.bing.net
+        www.bing.com api.branch.io cdn.builder.io https://d1ripsxh7es2qp.cloudfront.net
+        http://d1oca24q5dwo6d.cloudfront.net media.gettyimages.com d2by6sxflmuwyq.cloudfront.net
+        duysrfiajusdh.cloudfront.net dv7a7fjpjy29e.cloudfront.net cdn.cookielaw.org
+        browser-intake-datadoghq.com ad.doubleclick.net *.g.doubleclick.net *.elfsight.com
+        fp.service.expressplay.com pr.service.expressplay.com wv.service.expressplay.com
+        www.facebook.com s-usc1f-nss-6502.firebaseio.com tracking-api.g2.com *.getsmartling.com
+        *.google.ae *.google.com *.google.ca *.google.ch *.google.es *.google.fr *.google.ge
+        *.google.iq *.google.is *.google.it *.google.pl *.google.se *.google.si *.google.rs
+        *.google.co.jp *.google.co.kr *.google.co.nz *.google.co.th *.google.co.uk
+        *.google.com.ar *.google.com.au *.google.com.br *.google.com.mx *.google.com.pk
+        *.google.com.sa *.google.com.tr *.google.com.uk *.google.de *.analytics.google.com
+        *.google-analytics.com www.googleadservices.com *.googleapis.com csi.gstatic.com
+        pagead2.googlesyndication.com *.googletagmanager.com api.greenhouse.io *.hivestreaming.com
+        117151225.intellimizeio.com *.intellimize.co *.kollective.app *.kollective.app:31015
+        *.kollectivecd.com leatherback-dot-vimeo-prod.appspot.com snap.licdn.com px.ads.linkedin.com
+        linkedin.com *.litix.io *.cdn.magisto.com vimeo.magisto.com *.maze.co 582-gou-684.mktoresp.com
+        js-agent.newrelic.com t.paypal.com data.pendo.io *.pndsn.com privacyportal.onetrust.com
+        privacyportal-cdn.onetrust.com app.qualified.com *.qualtrics.com pixel-config.reddit.com
+        www.redditstatic.com *.riskified.com *.statscollector.ap.sd-rtn.com *.ap.sd-rtn.com
+        *.sd-rtn.com o209747.ingest.us.sentry.io sierra.chat simonsignal.com static.simonsignal.com
+        sdk-api-v1.singular.net web-sdk-cdn.singular.net telemetry.transcend.io transcend-cdn.com
+        https://drm.vhx.com/v2/fairplay/cert collector.vhx.tv *.cloud.vimeo.com interactive.create.vimeo.com
+        *.vimeo.com vimeo.com *.vimeo.work *.vimeocdn.com cdn.widerfunnel.com appds8093.blob.core.windows.net
+        *.wirewax.com *.wirewax.tv *.zdassets.com vimeosupport.zendesk.com *.zoom.us
+        zoom.us ws.zoominfo.com api.box.com public.boxcloud.com; font-src ''self''
+        data: d2by6sxflmuwyq.cloudfront.net dv7a7fjpjy29e.cloudfront.net fonts.gstatic.com
+        *.cdn.magisto.com privacyportal-cdn.onetrust.com www.paypalobjects.com cf-st.sc-cdn.net
+        use.typekit.net f.vimeocdn.com edge-assets.wirewax.com cdn01.boxcdn.net; frame-src
+        *; img-src * blob: data:; media-src ''self'' blob: data: *.akamaized.net https://d263mgllkjh2k2.cloudfront.net
+        http://d1oca24q5dwo6d.cloudfront.net duysrfiajusdh.cloudfront.net media.gettyimages.com
+        *.gvt1.com *.cdn.magisto.com *.eu.cloud.vimeo.com live-api.cloud.vimeo.com
+        player.vimeo.com *.vimeocdn.com app.qualified.com https://s3.amazonaws.com/sound.sightera.com/
+        https://s3.amazonaws.com/test.sightera.com/ https://s3.amazonaws.com/beast.business.sightera.com/
+        https://s3.amazonaws.com/beast.business.sightera.com https://s3.amazonaws.com/beast.branding.sightera.com/
+        https://storage.googleapis.com/vimeo-create-prod-files/ http://d1ripsxh7es2qp.cloudfront.net
+        https://d3fclmoge30w0w.cloudfront.net https://storage.googleapis.com/vimeo-prod-upload-create-us-east1/
+        https://storage.googleapis.com/vimeo-prod-upload-create-europe-west1/ https://storage.googleapis.com/vimeo-storage-dev-upload-create-us-east1/
+        https://storage.googleapis.com/vimeo-storage-dev-upload-create-europe-west1/;
+        object-src ''self'' *.vimeocdn.com *.akamaized.net; script-src ''unsafe-inline''
+        ''unsafe-eval'' ''self'' data: ws: wss: https://s0.2mdn.net/instream/video/
+        *.6sc.co wirewax.s3.eu-west-1.amazonaws.com app.link bat.bing-int.com bat.bing.com
+        cdnjs.cloudflare.com challenges.cloudflare.com www.datadoghq-browser-agent.com
+        *.g.doubleclick.net www.dropbox.com static.elfsight.com *.elfsightcdn.com
+        connect.facebook.net s-usc1b-nss-2112.firebaseio.com s-usc1b-nss-2113.firebaseio.com
+        s-usc1f-nss-6502.firebaseio.com s-usc1f-nss-6500.firebaseio.com vimeo-chat.firebaseio.com
+        tracking.g2crowd.com *.google.com www.googleadservices.com www.gstatic.com
+        *.google-analytics.com maps.googleapis.com pendo-io-static.storage.googleapis.com
+        pendo-static-6633483048714240.storage.googleapis.com pagead2.googlesyndication.com
+        www.googletagmanager.com www.googletagservices.com cdn.intellimize.co *.kollective.app
+        snap.licdn.com src.litix.io lp.livestream.com munchkin.marketo.net snippet.maze.co
+        privacyportal-cdn.onetrust.com www.paypalobjects.com cdn.pendo.io js.qualified.com
+        data.pendo.io *.qualtrics.com www.redditstatic.com beacon.riskified.com secured-pixel.com
+        sierra.chat static.simonsignal.com web-sdk-cdn.singular.net transcend-cdn.com
+        vimeo.com *.vimeo.com *.vimeocdn.com cdn.widerfunnel.com edge-assets.wirewax.com
+        embedder-sdk.wirewax.com embedder-sdk.wirewax.tv origin-4.xtlo.net static.zdassets.com
+        *.zoom.us zoom.us ws.zoominfo.com static.zuora.com https://www.dropbox.com/static/api/2/dropins.js
+        cdn01.boxcdn.net; style-src ''self'' ''unsafe-inline'' *.6sc.co cdn01.boxcdn.net
+        cdnjs.cloudflare.com accounts.google.com fonts.googleapis.com pendo-static-6633483048714240.storage.googleapis.com
+        www.gstatic.com lp.livestream.com privacyportal-cdn.onetrust.com www.paypalobjects.com
+        sierra.chat *.vimeo.com *.vimeocdn.com vimeopro.com transcend-cdn.com cdn.widerfunnel.com
+        edge-assets.wirewax.com edge-player5.wirewax.com origin-4.xtlo.net; worker-src
+        ''self'' blob:; report-to csp-endpoint; report-uri https://browser-intake-datadoghq.com/api/v2/logs?dd-api-key=puba92ed04ee7cceea44335c3d8c1ccc173&dd-evp-origin=content-security-policy&ddsource=csp-report&ddtags=service%3Acspreport%2Cenv%3Aproduction'
+      X-Bapp-Server:
+      - pweb-79c59bc85-vf9qb
+      Age:
+      - '0'
+      Via:
+      - 1.1 varnish (Varnish/6.0), 1.1 varnish, 1.1 varnish
+      Cache-Control:
+      - no-store, no-cache, must-revalidate, post-check=0, pre-check=0
+      X-Varnish-Cache:
+      - '0'
+      X-Vserver:
+      - web-varnish-77575bbdb5-dvfnn
+      X-Backend-Proxy:
+      - web-varnish-77575bbdb5-dvfnn
+      X-Served-By:
+      - cache-iad-kiad7000096-IAD, cache-nrt-rjtt7900025-NRT
+      X-Cache:
+      - MISS, MISS
+      X-Cache-Hits:
+      - 0, 0
+      X-Timer:
+      - S1761659573.362787,VS0,VE242
+      Vary:
+      - Accept-Encoding,x-http-method-override
+      Cf-Cache-Status:
+      - DYNAMIC
+      Set-Cookie:
+      - __cf_bm=TTP8ok65ULKawIHoGAMIAYHnCCNwBe9c1lTBJENhOrQ-1761659573-1.0.1.1-vPjXNGX1X2yqEB2LEy.55RaG9vON.txaGvD_MNVxkL4Oe8ONrttJd1Q28nf_pTDg;
+        path=/; expires=Tue, 28-Oct-25 14:22:53 GMT; domain=.vimeo.com; HttpOnly;
+        Secure; SameSite=None
+      - _cfuvid=3r6yR_nWGPy5s9wTJnq5jceKHL_n8u91pwXaOi_2f_Q-1761659573610-0.0.1.1-604800000;
+        path=/; domain=.vimeo.com; HttpOnly; Secure; SameSite=None
+      Server:
+      - cloudflare
+      Cf-Ray:
+      - 995aea8d6c1dd50f-NRT
+    body:
+      encoding: ASCII-8BIT
+      string: '{"type":"video","version":"1.0","provider_name":"Vimeo","provider_url":"https:\/\/vimeo.com\/","title":"The
+        Art of Making, The Carpenter","author_name":"Deep Green Sea","author_url":"https:\/\/vimeo.com\/deepgreensea","is_plus":"0","account_type":"basic","html":"<iframe
+        src=\"https:\/\/player.vimeo.com\/video\/30698649?app_id=122963\" width=\"670\"
+        height=\"335\" frameborder=\"0\" allow=\"autoplay; fullscreen; picture-in-picture;
+        clipboard-write; encrypted-media; web-share\" referrerpolicy=\"strict-origin-when-cross-origin\"
+        title=\"The Art of Making, The Carpenter\"><\/iframe>","width":670,"height":335,"duration":101,"description":"This
+        is where it all began. It was our first attempt to design and produce one
+        of our ideas for a film. Having done the shooting, we were not happy with
+        the result and so we had to scrap the initial idea and start all over. We
+        experimented and improvised with the music, the editing and the graphics until
+        we felt we had something. Having no expectations, we posted it on vimeo. The
+        feedback was quick and overwhelming. People\u2019s comments from around the
+        world, gave us the motivation to continue with more films for the series.\n\nhttp:\/\/deepgreensea.net\/projects\/the-carpenter.html\n\ndirected
+        \/ edited \/ vfx - Dimitris Ladopoulos, Spiros Rasidakis\ndirector of photography
+        - Nikos Mexis\nsound design - Nikos Tsines\nmusic - The Three Corners of the
+        Earth, The Fire Shall Devour Us\n\n(shot using available light, with Canon
+        5D+7D, edited in Final Cut Pro X, tracked with PFTrack, composited in After
+        Effects)","thumbnail_url":"https:\/\/i.vimeocdn.com\/video\/212645621-df44232fa6e6b46afd643f7e733a7bfe2cc7cb97486158998bfbc601231722e9-d_640?region=us","thumbnail_width":640,"thumbnail_height":320,"thumbnail_url_with_play_button":"https:\/\/i.vimeocdn.com\/filter\/overlay?src0=https%3A%2F%2Fi.vimeocdn.com%2Fvideo%2F212645621-df44232fa6e6b46afd643f7e733a7bfe2cc7cb97486158998bfbc601231722e9-d_640%3Fregion%3Dus&src1=http%3A%2F%2Ff.vimeocdn.com%2Fp%2Fimages%2Fcrawler_play.png","upload_date":"2011-10-17
+        17:15:28","video_id":30698649,"uri":"\/videos\/30698649"}'
+  recorded_at: Tue, 28 Oct 2025 13:52:53 GMT
+recorded_with: VCR 6.2.0

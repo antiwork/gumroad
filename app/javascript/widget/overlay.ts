@@ -8,7 +8,7 @@ const script = document.querySelector<HTMLScriptElement>("script[src*='/js/gumro
 const customDomain = script ? new URL(script.src).host : undefined;
 
 const overlay = document.createElement("div");
-overlay.className = "fixed inset-0 overflow-scroll bg-black/80";
+overlay.className = "fixed inset-0 overflow-scroll bg-backdrop";
 overlay.style.display = "none";
 
 const content = document.createElement("div");
@@ -26,7 +26,8 @@ content.appendChild(overlayIframe);
 
 const progressbar = document.createElement("div");
 progressbar.setAttribute("role", "progressbar");
-progressbar.className = "fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2";
+progressbar.className =
+  "fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 animate-spin bg-(image:--loading-spinner) bg-cover size-20";
 progressbar.style.display = "none";
 
 const registerButton = (button: HTMLAnchorElement) => {

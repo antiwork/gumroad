@@ -39,6 +39,7 @@ export const PasswordResetPage = ({ reset_password_token }: { reset_password_tok
     } catch (e) {
       assertResponseError(e);
       showAlert(e.message, "error");
+      setSubmitting(false);
     }
   };
 
