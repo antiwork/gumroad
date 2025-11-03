@@ -25,7 +25,7 @@ class Admin::MerchantAccountPresenter
       charge_processor_deleted_at: merchant_account.charge_processor_deleted_at,
       updated_at: merchant_account.updated_at,
       deleted_at: merchant_account.deleted_at,
-      live_attributes: live_attributes || {},
+      live_attributes: live_attributes || [],
     }
   end
 
@@ -46,18 +46,18 @@ class Admin::MerchantAccountPresenter
 
       if merchant_account.stripe_charge_processor?
         stripe_account = Stripe::Account.retrieve(merchant_account.charge_processor_merchant_id)
-        {
-          "Charges enabled" => stripe_account.charges_enabled,
-          "Payout enabled" => stripe_account.payouts_enabled,
-          "Disabled reason" => stripe_account.requirements.disabled_reason,
-          "Fields needed" => stripe_account.requirements.as_json
-        }
+        [
+          { label: "Charges enabled", value: stripe_account.charges_enabled },
+          { label: "Payout enabled", value: stripe_account.payouts_enabled },
+          { label: "Disabled reason", value: stripe_account.requirements.disabled_reason },
+          { label: "Fields needed", value: stripe_account.requirements.as_json }
+        ]
       elsif merchant_account.paypal_charge_processor?
         paypal_account_details = merchant_account.paypal_account_details
         if paypal_account_details.present?
-          {
-            "Email" => paypal_account_details["primary_email"]
-          }
+          [
+            { label: "Email", value: paypal_account_details["primary_email"] }
+          ]
         end
       end
     end

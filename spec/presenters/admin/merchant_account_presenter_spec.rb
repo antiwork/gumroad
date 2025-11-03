@@ -16,30 +16,6 @@ describe Admin::MerchantAccountPresenter do
         allow_any_instance_of(MerchantAccount).to receive(:paypal_account_details).and_return(nil)
       end
 
-      describe "basic structure" do
-        it "returns a hash with all expected keys" do
-          expect(props).to include(
-            :id,
-            :charge_processor_id,
-            :charge_processor_merchant_id,
-            :created_at,
-            :external_id,
-            :user_id,
-            :country,
-            :country_name,
-            :currency,
-            :holder_of_funds,
-            :stripe_account_url,
-            :charge_processor_alive_at,
-            :charge_processor_verified_at,
-            :charge_processor_deleted_at,
-            :updated_at,
-            :deleted_at,
-            :live_attributes
-          )
-        end
-      end
-
       describe "fields" do
         it "returns the correct field values" do
           expect(props[:id]).to eq(merchant_account.id)
@@ -114,14 +90,12 @@ describe Admin::MerchantAccountPresenter do
         it "returns the correct attribute values" do
           props[:live_attributes]
 
-          expect(props[:live_attributes]).to match(
-            "Charges enabled" => false,
-            "Payout enabled" => false,
-            "Disabled reason" => "rejected.fraud",
-            "Fields needed" => hash_including(
-              "pending_verification" => ["business_profile.url"]
-            )
-          )
+          expect(props[:live_attributes]).to match_array([
+            { label: "Charges enabled", value: false },
+            { label: "Payout enabled", value: false },
+            { label: "Disabled reason", value: "rejected.fraud" },
+            { label: "Fields needed", value: hash_including("pending_verification" => ["business_profile.url"]) }
+          ])
         end
       end
 
@@ -131,9 +105,9 @@ describe Admin::MerchantAccountPresenter do
         end
 
         it "returns the email address associated with the PayPal account" do
-          expect(props[:live_attributes]).to eq(
-            "Email" => "sb-byx2u2205460@business.example.com"
-          )
+          expect(props[:live_attributes]).to eq([
+            { label: "Email", value: "sb-byx2u2205460@business.example.com" }
+          ])
         end
       end
 
@@ -146,8 +120,8 @@ describe Admin::MerchantAccountPresenter do
           allow(merchant_account).to receive(:paypal_account_details).and_return(nil)
         end
 
-        it "returns an empty hash for live_attributes" do
-          expect(props[:live_attributes]).to eq({})
+        it "returns an empty array for live_attributes" do
+          expect(props[:live_attributes]).to eq([])
         end
       end
     end
