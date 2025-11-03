@@ -55,7 +55,8 @@ const FlagForTosViolations = ({ product, compliance }: FlagForTosViolationsProps
 
   const suspendTosSuccessMessage = `User was flagged for TOS violation and product ${product.is_tiered_membership ? "unpublished" : "deleted"}.`;
   const suspendTosConfirmMessage = `Are you sure you want to flag the user and ${product.is_tiered_membership ? "unpublish" : "delete"} the product?`;
-  const shouldShowForm = !flaggedForTosViolation && product.alive && !product.user.suspended && !product.user.flagged_for_tos_violation;
+  const shouldShowForm =
+    !flaggedForTosViolation && product.alive && !product.user.suspended && !product.user.flagged_for_tos_violation;
 
   return (
     <>

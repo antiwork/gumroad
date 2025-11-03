@@ -51,11 +51,7 @@ const AdminUsersProducts = ({ isAffiliateUser = false }: Props) => {
   return (
     <div className="paragraphs">
       <AdminUserAndProductsTabs selectedTab="products" userId={user.id} />
-      <AdminUsersProductsContent
-        products={products}
-        isAffiliateUser={isAffiliateUser}
-        pagination={pagination}
-      />
+      <AdminUsersProductsContent products={products} isAffiliateUser={isAffiliateUser} pagination={pagination} />
       {pagination.pages > 1 && <Pagination pagination={pagination} onChangePage={onChangePage} />}
     </div>
   );
