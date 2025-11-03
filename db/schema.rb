@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[7.1].define(version: 2025_10_03_165816) do
+ActiveRecord::Schema[7.1].define(version: 2025_10_14_161000) do
   create_table "active_storage_attachments", charset: "utf8mb4", collation: "utf8mb4_unicode_ci", force: :cascade do |t|
     t.string "name", limit: 191, null: false
     t.string "record_type", limit: 191, null: false
@@ -946,6 +946,16 @@ ActiveRecord::Schema[7.1].define(version: 2025_10_03_165816) do
     t.integer "installment_id"
     t.index ["event_id"], name: "index_installment_events_on_event_id"
     t.index ["installment_id", "event_id"], name: "index_installment_events_on_installment_id_and_event_id", unique: true
+  end
+
+  create_table "installment_plan_snapshots", charset: "utf8mb4", collation: "utf8mb4_unicode_ci", force: :cascade do |t|
+    t.integer "payment_option_id", null: false
+    t.integer "number_of_installments", null: false
+    t.string "recurrence", null: false
+    t.integer "total_price_cents", null: false
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.index ["payment_option_id"], name: "index_installment_plan_snapshots_on_payment_option_id", unique: true
   end
 
   create_table "installment_rules", id: :integer, charset: "utf8mb4", collation: "utf8mb4_unicode_ci", force: :cascade do |t|
@@ -2720,4 +2730,5 @@ ActiveRecord::Schema[7.1].define(version: 2025_10_03_165816) do
 
   add_foreign_key "active_storage_attachments", "active_storage_blobs", column: "blob_id"
   add_foreign_key "active_storage_variant_records", "active_storage_blobs", column: "blob_id"
+  add_foreign_key "installment_plan_snapshots", "payment_options"
 end

@@ -8,7 +8,7 @@ const script = document.querySelector<HTMLScriptElement>("script[src*='/js/gumro
 const customDomain = script ? new URL(script.src).host : undefined;
 
 const overlay = document.createElement("div");
-overlay.className = "fixed inset-0 overflow-scroll bg-black/80";
+overlay.className = "fixed inset-0 overflow-scroll bg-backdrop";
 overlay.style.display = "none";
 
 const content = document.createElement("div");

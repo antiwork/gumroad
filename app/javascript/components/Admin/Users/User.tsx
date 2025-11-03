@@ -31,7 +31,7 @@ export type UserMembership = {
 };
 
 type BlockedObject = {
-  blocked_at: string;
+  blocked_at: string | null;
   created_at: string;
 };
 
@@ -71,16 +71,16 @@ export type User = {
 
 export type Props = {
   user: User;
-  is_affiliate_user?: boolean;
+  isAffiliateUser?: boolean;
 };
 
-const UserCard = ({ user, is_affiliate_user = false }: Props) => {
+const UserCard = ({ user, isAffiliateUser = false }: Props) => {
   const page = usePage();
   const { url } = page;
 
   return (
     <div className="grid gap-4 rounded border border-border bg-background p-4" data-user-id={user.id}>
-      <Header user={user} is_affiliate_user={is_affiliate_user} url={url} />
+      <Header user={user} isAffiliateUser={isAffiliateUser} url={url} />
 
       <hr />
 
