@@ -39,9 +39,9 @@ RSpec.describe Onetime::CreateProductRefundPoliciesForUser do
     end
 
     it "creates refund policies for products without policies" do
-      expect {
+      expect do
         service.process
-      }.to change { ProductRefundPolicy.count }.by(2)
+      end.to change { ProductRefundPolicy.count }.by(2)
     end
 
     it "does not create policies for products that already have one" do
@@ -120,4 +120,3 @@ RSpec.describe Onetime::CreateProductRefundPoliciesForUser do
     end
   end
 end
-
