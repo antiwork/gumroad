@@ -28,7 +28,7 @@ class Admin::ProductPresenter::Card
         flagged_for_tos_violation: product.user.flagged_for_tos_violation?
       },
       admins_can_generate_url_redirects: product.admins_can_generate_url_redirects,
-      alive_product_files: format_alive_product_files,
+      alive_product_files: alive_product_files_props,
       html_safe_description: product.html_safe_description,
       alive: product.alive?,
       is_adult: product.is_adult?,
@@ -42,7 +42,7 @@ class Admin::ProductPresenter::Card
   end
 
   private
-    def format_alive_product_files
+    def alive_product_files_props
       product.ordered_alive_product_files.map do |file|
         {
           id: file.id,
