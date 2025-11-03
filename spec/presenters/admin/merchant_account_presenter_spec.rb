@@ -91,11 +91,11 @@ describe Admin::MerchantAccountPresenter do
           props[:live_attributes]
 
           expect(props[:live_attributes]).to match_array([
-            { label: "Charges enabled", value: false },
-            { label: "Payout enabled", value: false },
-            { label: "Disabled reason", value: "rejected.fraud" },
-            { label: "Fields needed", value: hash_including("pending_verification" => ["business_profile.url"]) }
-          ])
+                                                           { label: "Charges enabled", value: false },
+                                                           { label: "Payout enabled", value: false },
+                                                           { label: "Disabled reason", value: "rejected.fraud" },
+                                                           { label: "Fields needed", value: hash_including("pending_verification" => ["business_profile.url"]) }
+                                                         ])
         end
       end
 
@@ -106,8 +106,8 @@ describe Admin::MerchantAccountPresenter do
 
         it "returns the email address associated with the PayPal account" do
           expect(props[:live_attributes]).to eq([
-            { label: "Email", value: "sb-byx2u2205460@business.example.com" }
-          ])
+                                                  { label: "Email", value: "sb-byx2u2205460@business.example.com" }
+                                                ])
         end
       end
 
