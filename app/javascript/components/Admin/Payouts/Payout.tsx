@@ -93,14 +93,24 @@ const Payout = ({ payout }: Props) => (
         <>
           <dt>Stripe Transfer ID</dt>
           <dd>
-            <a href={payout.stripe_transfer_url ?? ""} target="_blank" rel="noopener noreferrer" title={`View Stripe transfer ${payout.stripe_transfer_id}`}>
+            <a
+              href={payout.stripe_transfer_url ?? ""}
+              target="_blank"
+              rel="noopener noreferrer"
+              title={`View Stripe transfer ${payout.stripe_transfer_id}`}
+            >
               {payout.stripe_transfer_id ?? "N/A"}
             </a>
           </dd>
 
           <dt>Stripe Account ID</dt>
           <dd>
-            <a href={payout.stripe_connected_account_url ?? ""} target="_blank" rel="noopener noreferrer" title={`View Stripe connected account ${payout.stripe_connect_account_id}`}>
+            <a
+              href={payout.stripe_connected_account_url ?? ""}
+              target="_blank"
+              rel="noopener noreferrer"
+              title={`View Stripe connected account ${payout.stripe_connect_account_id}`}
+            >
               {payout.stripe_connect_account_id ?? "N/A"}
             </a>
           </dd>
