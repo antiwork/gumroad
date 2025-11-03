@@ -258,6 +258,10 @@
   padding-block: spacer(1);
   z-index: z-index(overlay);
 
+  &.ghost {
+    @include bg-color(filled);
+  }
+
   .toolbar-item {
     padding: spacer(1) spacer(2);
     border-radius: border-radius(1);

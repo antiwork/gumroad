@@ -2433,7 +2433,7 @@ const BankAccountSection = ({
               </div>
             </>
           )}
-          <div className="text-muted text-sm">
+          <div className="text-sm text-muted">
             Payouts will be made in {user.payout_currency?.toUpperCase() || "your local currency"}.
           </div>
         </div>

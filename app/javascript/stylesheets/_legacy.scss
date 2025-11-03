@@ -133,19 +133,6 @@ form > main section {
   }
 }
 
-// Adds fallback styles to the .product-content class when @container
-// queries are not supported, ensuring consistent scrollbar behavior
-// across all browsers.
-.product-content {
-  .has-sidebar {
-    @include breakpoint-up(lg) {
-      & > :first-child {
-        max-height: min(100%, 100vh);
-      }
-    }
-  }
-}
-
 // Firefox-specific fix to avoid showing node content as selected text
 .rich-text .selected *::selection {
   background: none;

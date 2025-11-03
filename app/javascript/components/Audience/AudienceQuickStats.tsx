@@ -30,7 +30,7 @@ export const AudienceQuickStats = ({
         className="new-followers"
         title={
           <>
-            <Icon name="circle-fill" className="text-muted-foreground" />
+            <Icon name="circle-fill" className="text-active-bg" />
             New followers
             <div className="legend" />
           </>
