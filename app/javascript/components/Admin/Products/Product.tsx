@@ -76,7 +76,7 @@ const AdminUsersProductsProduct = ({ product, isAffiliateUser = false }: AdminUs
       <AdminProductInfo product={product} />
       <AdminProductActions product={product} />
       <AdminFlagForTosViolations product={product} compliance={compliance} />
-      <AdminProductPurchases product_id={product.id} isAffiliateUser={isAffiliateUser} user_id={product.user.id} />
+      <AdminProductPurchases productId={product.id} isAffiliateUser={isAffiliateUser} userId={product.user.id} />
       <AdminProductComments product={product} />
       <AdminProductFooter product={product} />
     </article>
