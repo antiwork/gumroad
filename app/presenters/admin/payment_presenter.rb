@@ -36,6 +36,8 @@ class Admin::PaymentPresenter
 
       # Stripe-specific
       stripe_transfer_id: payment.stripe_transfer_id,
+      stripe_transfer_url: StripeUrl.transfer_url(payment.stripe_transfer_id, account_id: payment.stripe_connect_account_id),
+      stripe_connected_account_url: StripeUrl.connected_account_url(payment.stripe_connect_account_id),
       stripe_connect_account_id: payment.stripe_connect_account_id,
       bank_account: payment.bank_account ? {
         formatted_account: payment.bank_account.formatted_account,

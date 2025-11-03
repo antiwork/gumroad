@@ -18,8 +18,10 @@ export type Payout = {
   state: string;
   is_stripe_processor: boolean;
   is_paypal_processor: boolean;
-  stripe_transfer_id: string;
-  stripe_connect_account_id: string;
+  stripe_transfer_id: string | null;
+  stripe_transfer_url: string | null;
+  stripe_connect_account_id: string | null;
+  stripe_connected_account_url: string | null;
   failed: boolean;
   humanized_failure_reason: string;
   bank_account: {
@@ -91,16 +93,16 @@ const Payout = ({ payout }: Props) => (
         <>
           <dt>Stripe Transfer ID</dt>
           <dd>
-            <Link href={Routes.admin_payout_path(payout.id)} title={payout.id.toString()}>
-              {payout.stripe_transfer_id}
-            </Link>
+            <a href={payout.stripe_transfer_url ?? ""} target="_blank" rel="noopener noreferrer" title={`View Stripe transfer ${payout.stripe_transfer_id}`}>
+              {payout.stripe_transfer_id ?? "N/A"}
+            </a>
           </dd>
 
           <dt>Stripe Account ID</dt>
           <dd>
-            <Link href={Routes.admin_payout_path(payout.id)} title={payout.id.toString()}>
-              {payout.stripe_connect_account_id}
-            </Link>
+            <a href={payout.stripe_connected_account_url ?? ""} target="_blank" rel="noopener noreferrer" title={`View Stripe connected account ${payout.stripe_connect_account_id}`}>
+              {payout.stripe_connect_account_id ?? "N/A"}
+            </a>
           </dd>
         </>
       ) : null}
