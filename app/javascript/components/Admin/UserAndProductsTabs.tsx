@@ -1,8 +1,8 @@
 import { Link } from "@inertiajs/react";
 import React from "react";
 
-import Tab from "$app/components/Tabs/Tab";
-import TabList from "$app/components/Tabs/TabList";
+import Tab from "$app/components/Admin/Tabs/Tab";
+import TabList from "$app/components/Admin/Tabs/TabList";
 
 type Props = {
   selectedTab: string;
