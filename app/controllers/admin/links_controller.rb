@@ -187,7 +187,9 @@ class Admin::LinksController < Admin::BaseController
 
       if @product_matches.size > 1
         @title = "Multiple products matched"
-        render "multiple_matches"
+        render inertia: "Admin/Products/MultipleMatches", legacy_template: "admin/links/multiple_matches", props: {
+          product_matches: @product_matches.map { |product| Admin::ProductPresenter::MultipleMatches.new(product:).props }
+        }
         return
       else
         @product = @product_matches.first || e404
