@@ -9,7 +9,6 @@ module Product::AsJson
 
   def as_json(options = {})
     return super(options) if options.delete(:original)
-    return as_json_for_admin_multiple_matches(**options) if options.delete(:admin_multiple_matches)
     return as_json_for_admin_info if options.delete(:admin_info)
     return as_json_for_admin(**options) if options.delete(:admin)
     return as_json_for_api(options) if options[:api_scopes].present?
@@ -40,15 +39,6 @@ module Product::AsJson
   end
 
   private
-    def as_json_for_admin_multiple_matches(**options)
-      as_json(
-        original: true,
-        only: %i[id name created_at],
-        methods: %i[long_url price_formatted],
-        include: { user: { original: true, only: %i[id name] } }
-      )
-    end
-
     def as_json_for_admin(admins_can_mark_as_staff_picked:, admins_can_unmark_as_staff_picked:)
       as_json(
         original: true,

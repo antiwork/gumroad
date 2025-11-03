@@ -3,8 +3,10 @@ import Placeholder from "@tiptap/extension-placeholder";
 import { EditorContent, useEditor } from "@tiptap/react";
 import * as React from "react";
 
+import { classNames } from "$app/utils/classNames";
 import { generatePageIcon } from "$app/utils/rich_content_page";
 
+import { PageListItem } from "$app/components/Download/PageListLayout";
 import { Icon } from "$app/components/Icons";
 import { Popover } from "$app/components/Popover";
 import { BlurOnEnter } from "$app/components/TiptapExtensions/BlurOnEnter";
@@ -66,10 +68,27 @@ export const PageTab = ({
     "outline-key": "Page has license key",
   };
   return (
-    <div role="tab" onClick={onClick} aria-selected={selected}>
-      {!disabled ? <div aria-grabbed={dragging} /> : null}
+    <PageListItem
+      onClick={onClick}
+      isSelected={selected}
+      // .sortable-* are created by react-sortablejs, and we can't add Tailwind classes to them directly.
+      className={classNames(
+        "group/tab relative [&_.sortable-drag]:border [&_.sortable-drag]:bg-muted [&.sortable-ghost]:outline [&.sortable-ghost]:outline-accent [&.sortable-ghost]:outline-dashed [&.sortable-ghost>_*]:opacity-30",
+        { "outline-2 -outline-offset-2 outline-accent": renaming },
+      )}
+      role="tab"
+    >
+      {!disabled ? (
+        <Icon
+          name="outline-drag"
+          className="invisible absolute left-0 text-muted group-hover/tab:visible"
+          aria-grabbed={dragging}
+        />
+      ) : null}
       <Icon name={icon} aria-label={iconLabels[icon]} />
-      <span className="content">{renaming ? <EditorContent editor={editor} /> : titleWithFallback(page.title)}</span>
+      <span className="flex-1">
+        {renaming ? <EditorContent editor={editor} className="cursor-text" /> : titleWithFallback(page.title)}
+      </span>
       {renaming || disabled ? null : (
         <span onClick={(e) => e.stopPropagation()}>
           <Popover trigger={<Icon name="three-dots" />}>
@@ -84,6 +103,6 @@ export const PageTab = ({
           </Popover>
         </span>
       )}
-    </div>
+    </PageListItem>
   );
 };
