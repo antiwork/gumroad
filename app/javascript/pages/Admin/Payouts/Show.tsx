@@ -1,6 +1,6 @@
 import { usePage } from "@inertiajs/react";
-import { cast } from "ts-safe-cast";
 import React from "react";
+import { cast } from "ts-safe-cast";
 
 import AdminPayout, { type Payout } from "$app/components/Admin/Payouts/Payout";
 
