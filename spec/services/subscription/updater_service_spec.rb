@@ -14,6 +14,22 @@ describe Subscription::UpdaterService, :vcr do
 
         @remote_ip = "11.22.33.44"
         @gumroad_guid = "abc123"
+
+        allow_any_instance_of(Purchase).to receive(:mandate_options_for_stripe).and_return({
+                                                                                             payment_method_options: {
+                                                                                               card: {
+                                                                                                 mandate_options: {
+                                                                                                   reference: StripeChargeProcessor::MANDATE_PREFIX + SecureRandom.hex,
+                                                                                                   amount_type: "maximum",
+                                                                                                   amount: 100_00,
+                                                                                                   start_date: Time.current.to_i,
+                                                                                                   interval: "sporadic",
+                                                                                                   supported_types: ["india"]
+                                                                                                 }
+                                                                                               }
+                                                                                             }
+                                                                                           })
+
         travel_to(@originally_subscribed_at + 1.month)
       end
 
@@ -405,7 +421,6 @@ describe Subscription::UpdaterService, :vcr do
             end
 
             it "charges the new card and returns proper SCA response" do
-              travel_to(Date.new(2025, 11, 1))
               expect(@subscription).not_to receive(:send_restart_notifications!)
               old_card = @original_purchase.credit_card
               PostToPingEndpointsWorker.jobs.clear
@@ -557,7 +572,6 @@ describe Subscription::UpdaterService, :vcr do
           end
 
           it "allows upgrading tier immediately when card on record requires an e-mandate" do
-            travel_to(Date.new(2025, 11, 1))
             indian_cc = create(:credit_card, user: @user, chargeable: create(:chargeable, card: StripePaymentMethodHelper.success_indian_card_mandate))
             @subscription.credit_card = indian_cc
             @subscription.save!
@@ -873,11 +887,10 @@ describe Subscription::UpdaterService, :vcr do
             end
 
             it "charges the difference and returns proper SCA response" do
-              travel_to(Date.new(2025, 11, 1))
               params = @params.merge(
                 price_range: 7_99,
                 perceived_price_cents: 7_99,
-                perceived_upgrade_price_cents: 7_99,
+                perceived_upgrade_price_cents: 3_38,
               )
               PostToPingEndpointsWorker.jobs.clear
 
@@ -901,11 +914,11 @@ describe Subscription::UpdaterService, :vcr do
               upgrade_purchase = @subscription.purchases.last
               expect(upgrade_purchase.id).not_to eq @original_purchase.id
               expect(upgrade_purchase.is_upgrade_purchase).to eq true
-              expect(upgrade_purchase.total_transaction_cents).to eq 7_99
-              expect(upgrade_purchase.displayed_price_cents).to eq 7_99
-              expect(upgrade_purchase.price_cents).to eq 7_99
-              expect(upgrade_purchase.total_transaction_cents).to eq 7_99
-              expect(upgrade_purchase.fee_cents).to eq 183
+              expect(upgrade_purchase.total_transaction_cents).to eq 3_38
+              expect(upgrade_purchase.displayed_price_cents).to eq 3_38
+              expect(upgrade_purchase.price_cents).to eq 3_38
+              expect(upgrade_purchase.total_transaction_cents).to eq 3_38
+              expect(upgrade_purchase.fee_cents).to eq 124
               expect(@subscription.reload.flat_fee_applicable?).to be true
 
               expect(response[:success]).to be true
