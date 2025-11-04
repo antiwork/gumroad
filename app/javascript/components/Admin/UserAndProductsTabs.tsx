@@ -11,7 +11,9 @@ type Props = {
 const AdminUserAndProductsTabs = ({ selectedTab, userId }: Props) => (
   <Tabs variant="buttons">
     <Tab isSelected={selectedTab === "profile"} variant="buttons" asChild>
-      <Link href={Routes.admin_user_path(userId)} prefetch>Profile</Link>
+      <Link href={Routes.admin_user_path(userId)} prefetch>
+        Profile
+      </Link>
     </Tab>
     <Tab isSelected={selectedTab === "products"} variant="buttons" asChild>
       <Link href={Routes.admin_user_products_path(userId)} prefetch>

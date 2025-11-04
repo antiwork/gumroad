@@ -1,6 +1,6 @@
 import { usePage } from "@inertiajs/react";
-import { cast } from "ts-safe-cast";
 import React from "react";
+import { cast } from "ts-safe-cast";
 
 import AdminUserAndProductsTabs from "$app/components/Admin/UserAndProductsTabs";
 import UserCard, { type User } from "$app/components/Admin/Users/User";
