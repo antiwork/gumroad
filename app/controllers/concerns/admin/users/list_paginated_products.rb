@@ -18,11 +18,7 @@ module Admin::Users::ListPaginatedProducts
              props: {
                user: -> { { id: user.id } },
                products: products.includes(:ordered_alive_product_files, :active_integrations, :staff_picked_product, :taxonomy).map do |product|
-                           Admin::ProductPresenter::Card.new(
-                             product:,
-                             admins_can_mark_as_staff_picked: ->(product) { policy([:admin, :products, :staff_picked, product]).create? },
-                             admins_can_unmark_as_staff_picked: ->(product) { policy([:admin, :products, :staff_picked, product]).destroy? }
-                           ).props
+                           Admin::ProductPresenter::Card.new(product:, pundit_user:).props
                          end,
                pagination: PagyPresenter.new(pagination).props
              }

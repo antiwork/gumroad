@@ -15,7 +15,11 @@ class Admin::PurchasePresenter
       gumroad_responsible_for_tax: purchase.gumroad_responsible_for_tax?,
       product: { id: purchase.link.id, name: purchase.link.name, long_url: purchase.link.long_url },
       variants_list: purchase.variants_list,
-      refund_policy: purchase.purchase_refund_policy.present? ? { title: purchase.purchase_refund_policy.title, current_refund_policy: purchase.purchase_refund_policy&.different_than_product_refund_policy? ? purchase.purchase_refund_policy.product_refund_policy&.title || "None" : nil } : nil,
+      refund_policy: purchase.purchase_refund_policy.present? ? {
+        title: purchase.purchase_refund_policy.title,
+        current_refund_policy: purchase.purchase_refund_policy&.different_than_product_refund_policy? ? purchase.purchase_refund_policy.product_refund_policy&.title || "None" : nil
+      }
+      : nil,
       seller: { email: purchase.seller.email, support_email: purchase.seller.support_email },
       email: purchase.email,
       created_at: purchase.created_at,
@@ -37,6 +41,8 @@ class Admin::PurchasePresenter
     email_info_text += " (on #{email_info.opened_at})" if email_info.try(:opened?)
     base_props[:refund_policy]&.merge!({ fine_print: purchase.purchase_refund_policy.fine_print, max_refund_period_in_days: purchase.purchase_refund_policy.max_refund_period_in_days })
     base_props.merge({
+                       updated_at: purchase.updated_at,
+                       deleted_at: purchase.deleted_at,
                        external_id: purchase.external_id,
                        merchant_account: purchase.merchant_account.present? ? {
                          id: purchase.merchant_account.id,
@@ -51,7 +57,10 @@ class Admin::PurchasePresenter
                        formatted_affiliate_credit_amount: purchase.affiliate.present? ? purchase.formatted_affiliate_credit_amount : nil,
                        formatted_total_transaction_amount: purchase.formatted_total_transaction_amount,
                        charge_processor_id: purchase.charge_processor_id,
-                       stripe_transaction: purchase.stripe_transaction_id ? { id: purchase.stripe_transaction_id, search_url: ChargeProcessor.transaction_url_for_admin(purchase.charge_processor_id, purchase.stripe_transaction_id, purchase.charged_using_gumroad_merchant_account?) } : nil,
+                       stripe_transaction: purchase.stripe_transaction_id ? {
+                         id: purchase.stripe_transaction_id,
+                         search_url: ChargeProcessor.transaction_url_for_admin(purchase.charge_processor_id, purchase.stripe_transaction_id, purchase.charged_using_gumroad_merchant_account?),
+                       } : nil,
                        external_id_numeric: purchase.external_id_numeric,
                        quantity: purchase.quantity,
                        refunds: purchase.refunds.map do |refund|
@@ -87,7 +96,10 @@ class Admin::PurchasePresenter
                          }
                        end,
                        url_redirect: purchase.url_redirect ? { download_page_url: purchase.url_redirect.download_page_url, uses: purchase.url_redirect.uses } : nil,
-                       offer_code: purchase.offer_code ? { code: purchase.offer_code.code, displayed_amount_off: purchase.offer_code.displayed_amount_off(purchase.link.price_currency_type, with_symbol: true) } : nil,
+                       offer_code: purchase.offer_code ? {
+                         code: purchase.offer_code.code,
+                         displayed_amount_off: purchase.offer_code.displayed_amount_off(purchase.link.price_currency_type, with_symbol: true),
+                       } : nil,
                        street_address: purchase.street_address,
                        full_name: purchase.full_name,
                        city: purchase.city,
@@ -99,7 +111,11 @@ class Admin::PurchasePresenter
                        license: purchase.license.present? ? { serial: purchase.license.serial } : nil,
                        affiliate_email: purchase.affiliate.present? ? purchase.affiliate.affiliate_user.form_email : nil,
                        can_contact: purchase.can_contact?,
-                       gift: purchase.is_gift_sender_purchase ? { is_sender_purchase: true, other_purchase_id: purchase.gift.giftee_purchase_id, other_email: purchase.giftee_email, note: purchase.gift_note } : purchase.is_gift_receiver_purchase ? { is_sender_purchase: false, other_purchase_id: purchase.gift.gifter_purchase_id, other_email: purchase.gifter_email, note: purchase.gift_note } : nil,
+                       gift: purchase.is_gift_sender_purchase ?
+                               { is_sender_purchase: true, other_purchase_id: purchase.gift.giftee_purchase_id, other_email: purchase.giftee_email, note: purchase.gift_note } :
+                               purchase.is_gift_receiver_purchase ?
+                                 { is_sender_purchase: false, other_purchase_id: purchase.gift.gifter_purchase_id, other_email: purchase.gifter_email, note: purchase.gift_note } :
+                                 nil,
                        successful: purchase.successful?,
                        can_force_update: purchase.can_force_update?,
                        failed: purchase.failed?,

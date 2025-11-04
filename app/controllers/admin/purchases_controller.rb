@@ -63,7 +63,11 @@ class Admin::PurchasesController < Admin::BaseController
     purchase = Admin::PurchasePresenter.new(@purchase).props
     render(
       inertia: "Admin/Purchases/Show",
-      props: { purchase:, product: @product.as_json(admin_user: pundit_user), user: Admin::UserPresenter::Card.new(user: @product.user, pundit_user:).props },
+      props: {
+        purchase:,
+        product: Admin::ProductPresenter::Card.new(product: @product, pundit_user:).props,
+        user: Admin::UserPresenter::Card.new(user: @product.user, pundit_user:).props
+      },
     )
   end
 

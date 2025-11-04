@@ -53,6 +53,8 @@ export type Purchase = PurchaseStatesInfo & {
   };
   variants_list: string;
   created_at: string;
+  updated_at: string;
+  deleted_at: string | null;
   email: string;
   purchase_state: string;
   formatted_total_transaction_amount: string;
@@ -714,6 +716,17 @@ const AdminPurchase = ({ purchase }: { purchase: Purchase }) => (
       endpoint={Routes.admin_purchase_comments_path(purchase.id)}
       commentableType="purchase"
     />
+    <hr />
+    <dl>
+      <dt>Updated</dt>
+      <dd>
+        <DateTimeWithRelativeTooltip date={purchase.updated_at} />
+      </dd>
+      <dt>Deleted</dt>
+      <dd>
+        <DateTimeWithRelativeTooltip date={purchase.deleted_at} placeholder={<NoIcon />} />
+      </dd>
+    </dl>
   </div>
 );
 
