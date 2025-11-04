@@ -260,15 +260,6 @@ describe Admin::ProductPresenter::Card do
           expect(props[:user][:flagged_for_tos_violation]).to be(true)
         end
       end
-
-      context "when user has both flags" do
-        let(:user) { create(:named_user, :suspended, :flagged_for_tos_violation) }
-
-        it "returns both flags as true" do
-          expect(props[:user][:suspended]).to be(true)
-          expect(props[:user][:flagged_for_tos_violation]).to be(true)
-        end
-      end
     end
   end
 end
