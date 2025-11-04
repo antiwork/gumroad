@@ -273,6 +273,22 @@ describe("File embeds in product content editor", type: :system, js: true) do
     expect(page).to have_alert(text: "Validation failed: Isbn is not a valid ISBN-10 or ISBN-13")
   end
 
+  it "allows setting ISBN on newly uploaded PDF files" do
+    product = create(:product, user: seller)
+    visit edit_link_path(product.unique_permalink) + "/content"
+    select_disclosure "Upload files" do
+      attach_product_file(file_fixture("Alice's Adventures in Wonderland.pdf"))
+    end
+    wait_for_file_embed_to_finish_uploading(name: "Alice's Adventures in Wonderland")
+    within find_embed(name: "Alice's Adventures in Wonderland") do
+      click_on "Edit"
+      fill_in "ISBN", with: "978-3-16-148410-0"
+    end
+    save_change
+    product.reload
+    expect(product.product_files.last.isbn).to eq "978-3-16-148410-0"
+  end
+
   it "allows to rename files multiple times", :sidekiq_inline do
     visit edit_link_path(@product.unique_permalink) + "/content"
     select_disclosure "Upload files" do

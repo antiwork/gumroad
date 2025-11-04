@@ -42,7 +42,7 @@
 }
 
 @mixin buttons {
-  button {
+  button:where(:not(.tailwind-override)) {
     all: unset;
     outline: revert;
     cursor: pointer;

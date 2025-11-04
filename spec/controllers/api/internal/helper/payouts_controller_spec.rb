@@ -3,7 +3,7 @@
 require "spec_helper"
 
 describe Api::Internal::Helper::PayoutsController do
-  let(:user) { create(:user) }
+  let(:user) { create(:compliant_user) }
   let(:helper_token) { GlobalConfig.get("HELPER_TOOLS_TOKEN") }
 
   before do
@@ -125,6 +125,25 @@ describe Api::Internal::Helper::PayoutsController do
           parsed_response = JSON.parse(response.body)
           expect(parsed_response["success"]).to be(false)
           expect(parsed_response["message"]).to eq("Cannot create payout. Last successful payout was less than a week ago.")
+        end
+      end
+
+      context "when user is not compliant" do
+        let(:user) { create(:user) }
+
+        before do
+          create(:payment_completed, user:, created_at: 8.days.ago)
+          create(:balance, user:, date: 10.days.ago, amount_cents: 20_00)
+          create(:ach_account_stripe_succeed, user:)
+          create(:merchant_account_stripe, user:)
+        end
+
+        it "returns error message", :vcr do
+          post :create, params: params
+          expect(response.status).to eq(422)
+          parsed_response = JSON.parse(response.body)
+          expect(parsed_response["success"]).to be(false)
+          expect(parsed_response["message"]).to include("User is not eligible for payout")
         end
       end
 

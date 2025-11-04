@@ -3,7 +3,7 @@
 <div>
   <h3><%= @comment.author_name %></h3>
 
-  <small class="text-muted"><%= l(@comment.created_at, format: "%B %-d, %Y %-I:%M%p") %></small>
+  <small><%= l(@comment.created_at, format: "%B %-d, %Y %-I:%M%p") %></small>
 
   <p style="white-space: pre-wrap"><%= raw Rinku.auto_link(strip_tags(@comment.content), :all, %(target="_blank" rel="noopener noreferrer nofollow")) %></p>
 

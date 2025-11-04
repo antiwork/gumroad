@@ -30,8 +30,9 @@ class ProductFile < ApplicationRecord
     value.strip.upcase.gsub(/[\s–—−]/, "-")
   end
 
-  before_save :set_filegroup
-  before_save :downcase_filetype
+  normalizes :filetype, with: proc(&:downcase)
+
+  before_validation :set_filegroup
   after_commit :schedule_file_analyze, on: :create
   after_commit :stamp_existing_pdfs_if_needed, on: :update
   after_create :reset_moderated_by_iffy_flag
@@ -349,11 +350,8 @@ class ProductFile < ApplicationRecord
         return
       end
 
-      determine_and_set_filegroup(s3_extension.delete("."))
-    end
-
-    def downcase_filetype
-      self.filetype = filetype.downcase if filetype.present?
+      extension = s3_extension&.delete(".")
+      determine_and_set_filegroup(extension) if extension.present?
     end
 
     def invalidate_product_cache
