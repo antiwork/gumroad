@@ -25,7 +25,9 @@ describe Admin::Search::PurchasesController, type: :controller, inertia: true do
     end
 
     it "returns JSON response when requested" do
-      purchase_1, purchase_2, purchase_3 = create_list(:purchase, 3, email:)
+      purchase_1 = create(:purchase, email:, created_at: 1.day.ago, updated_at: 1.day.ago)
+      purchase_2 = create(:purchase, email:, created_at: 2.days.ago, updated_at: 2.days.ago)
+      purchase_3 = create(:purchase, email:, created_at: 3.days.ago, updated_at: 3.days.ago)
       get :index, params: { query: email, per_page: 2 }, format: :json
 
       expect(response).to be_successful
