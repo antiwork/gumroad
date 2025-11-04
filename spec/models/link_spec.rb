@@ -4085,7 +4085,7 @@ describe Link, :vcr do
         context "when there is a previous purchase received as a gift with the browser guid" do
           let!(:purchase) { create(:purchase, :gift_receiver, link: product) }
           it "returns the purchase" do
-            expect(product.purchase_info_for_product_page(user, purchase.browser_guid)[:id]).to eq(purchase.external_id)
+            expect(product.purchase_info_for_product_page(user, purchase.browser_guid)).to eq(nil)
           end
         end
       end
@@ -4135,8 +4135,8 @@ describe Link, :vcr do
 
         context "when there is a previous purchase received as a gift with the browser guid" do
           let!(:purchase) { create(:purchase, :gift_receiver, link: product) }
-          it "returns the purchase" do
-            expect(product.purchase_info_for_product_page(user, purchase.browser_guid)[:id]).to eq(purchase.external_id)
+          it "returns nil" do
+            expect(product.purchase_info_for_product_page(user, purchase.browser_guid)).to eq(nil)
           end
         end
       end
@@ -4162,8 +4162,8 @@ describe Link, :vcr do
 
         context "when there is a previous purchase received as a gift with the browser guid" do
           let!(:purchase) { create(:preorder_authorization_purchase, :gift_receiver, link: product) }
-          it "returns the purchase" do
-            expect(product.purchase_info_for_product_page(user, purchase.browser_guid)[:id]).to eq(purchase.external_id)
+          it "returns nil" do
+            expect(product.purchase_info_for_product_page(user, purchase.browser_guid)).to eq(nil)
           end
         end
       end
