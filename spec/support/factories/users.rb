@@ -184,5 +184,13 @@ FactoryBot.define do
     trait :eligible_for_service_products do
       created_at { User::MIN_AGE_FOR_SERVICE_PRODUCTS.ago - 1.day }
     end
+
+    trait :suspended do
+      user_risk_state { "suspended_for_tos_violation" }
+    end
+
+    trait :flagged_for_tos_violation do
+      user_risk_state { "flagged_for_tos_violation" }
+    end
   end
 end

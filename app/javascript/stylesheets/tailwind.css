@@ -40,6 +40,7 @@
   --color-muted: rgb(var(--color) / var(--gray-3));
   --color-success: rgb(var(--success));
   --color-danger: rgb(var(--danger));
+  --color-warning: rgb(var(--warning));
 
   --shadow: 0.25rem 0.25rem 0 currentColor;
   --shadow-lg: 0.5rem 0.5rem 0 currentColor;

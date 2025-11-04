@@ -141,7 +141,7 @@ describe "Tiered Membership Spec", type: :system, js: true do
       expect(page).to have_text "You'll be charged US$5.99"
 
       click_on "Use a different card?"
-      fill_in_credit_card(number: StripePaymentMethodHelper.success[:cc_number])
+      fill_in_credit_card(number: CardParamsSpecHelper.card_number(:success))
       click_on "Update membership"
       wait_for_ajax
 
@@ -188,7 +188,7 @@ describe "Tiered Membership Spec", type: :system, js: true do
         expect(page).to have_text "You'll be charged US$3"
 
         click_on "Use a different card?"
-        fill_in_credit_card(number: CardParamsSpecHelper.success[:cc_number])
+        fill_in_credit_card(number: CardParamsSpecHelper.card_number(:success))
         click_on "Update membership"
         wait_for_ajax
 
