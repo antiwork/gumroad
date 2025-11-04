@@ -110,11 +110,10 @@ describe "Admin Pages Scenario", type: :system, js: true do
       expect(page).to have_no_content "MY_FINGERPRINT"
     end
 
-    it "allows admins to page through purchase search results" do
-      stub_const("#{Admin::SearchController}::RECORDS_PER_PAGE", 2)
+    it "allows admins to infinitely scroll through purchase search results" do
       email = "searchme@gumroad.com"
 
-      3.times do |i|
+      30.times do |i|
         link = create(:product, name: "product ##{i}")
         create(:purchase, link:, email:, created_at: Time.current + i.hours)
       end
@@ -124,10 +123,11 @@ describe "Admin Pages Scenario", type: :system, js: true do
 
       fill_in "Search purchases (email, IP, card, external ID)", with: "#{email}\n"
 
-      expect(page).to have_text("product #2")
-      expect(page).to have_text("product #1")
+      expect(page).to have_text("product #29")
+      expect(page).to have_text("product #28")
+      expect(page).not_to have_text("product #0")
+      first("main").scroll_to :bottom
 
-      click_on("Next")
       expect(page).to have_text("product #0")
     end
   end

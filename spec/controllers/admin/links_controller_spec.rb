@@ -2,8 +2,9 @@
 
 require "spec_helper"
 require "shared_examples/admin_base_controller_concern"
+require "inertia_rails/rspec"
 
-describe Admin::LinksController do
+describe Admin::LinksController, type: :controller, inertia: true do
   render_views
 
   it_behaves_like "inherits from Admin::BaseController"
@@ -82,6 +83,7 @@ describe Admin::LinksController do
       get :show, params: { id: product.unique_permalink }
 
       expect(response).to be_successful
+      expect(inertia.component).to eq("Admin/Products/Show")
     end
 
     it "redirects to a unique permalink URL if looked up via ID" do
@@ -116,8 +118,9 @@ describe Admin::LinksController do
 
       get :show, params: { id: "match" }
 
-      expect(assigns(:product_matches)).to match_array([product_1, product_2])
       expect(response).to be_successful
+      expect(inertia.component).to eq("Admin/Products/MultipleMatches")
+      expect(inertia.props[:product_matches].map { _1[:id] }).to match_array([product_1.id, product_2.id])
     end
   end
 end

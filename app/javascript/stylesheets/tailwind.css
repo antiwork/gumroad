@@ -42,6 +42,7 @@
   --color-danger: rgb(var(--danger));
   --color-primary: rgb(var(--primary));
   --color-primary-foreground: rgb(var(--contrast-primary));
+  --color-warning: rgb(var(--warning));
 
   --shadow: 0.25rem 0.25rem 0 currentColor;
   --shadow-lg: 0.5rem 0.5rem 0 currentColor;

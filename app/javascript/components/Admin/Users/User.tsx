@@ -31,7 +31,7 @@ export type UserMembership = {
 };
 
 type BlockedObject = {
-  blocked_at: string;
+  blocked_at: string | null;
   created_at: string;
 };
 
