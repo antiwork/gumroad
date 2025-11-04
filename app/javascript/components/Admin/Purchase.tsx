@@ -29,7 +29,7 @@ export type Purchase = PurchaseStatesInfo & {
   id: number;
   external_id: string;
   seller: {
-    support_email: string;
+    support_email: string | null;
     email: string;
   };
   merchant_account: {
@@ -42,7 +42,7 @@ export type Purchase = PurchaseStatesInfo & {
   formatted_seller_tax_amount: string | null;
   gumroad_tax_cents: number;
   formatted_display_price: string;
-  formatted_gumroad_tax_amount: string;
+  formatted_gumroad_tax_amount: string | null;
   formatted_shipping_amount: string | null;
   formatted_affiliate_credit_amount: string | null;
   gumroad_responsible_for_tax: boolean;
@@ -58,7 +58,7 @@ export type Purchase = PurchaseStatesInfo & {
   email: string;
   purchase_state: string;
   formatted_total_transaction_amount: string;
-  charge_processor_id: string;
+  charge_processor_id: string | null;
   stripe_transaction: { id: string; search_url: string } | null;
   external_id_numeric: number;
   quantity: number;
@@ -83,7 +83,7 @@ export type Purchase = PurchaseStatesInfo & {
     ended_at: string | null;
     failed_at: string | null;
   } | null;
-  email_info: string;
+  email_info: string | null;
   is_bundle_purchase: boolean;
   product_purchases: {
     product: { name: string };
@@ -111,7 +111,7 @@ export type Purchase = PurchaseStatesInfo & {
   successful: boolean;
   can_force_update: boolean;
   failed: boolean;
-  stripe_fingerprint: string;
+  stripe_fingerprint: string | null;
   is_free_trial_purchase: boolean;
   buyer_blocked: boolean;
   is_deleted_by_buyer: boolean;
@@ -372,8 +372,12 @@ const AdminPurchase = ({ purchase }: { purchase: Purchase }) => (
           </>
         ) : null}
 
-        <dt>{purchase.is_preorder_authorization ? "Pre-order Receipt" : "Receipt"}</dt>
-        <dd>{purchase.email_info}</dd>
+        {purchase.email_info ? (
+          <>
+            <dt>{purchase.is_preorder_authorization ? "Pre-order Receipt" : "Receipt"}</dt>
+            <dd>{purchase.email_info}</dd>
+          </>
+        ) : null}
 
         {purchase.is_bundle_purchase ? (
           purchase.product_purchases.map((product_purchase) =>

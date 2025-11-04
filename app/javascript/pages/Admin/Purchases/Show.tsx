@@ -1,5 +1,6 @@
 import { usePage } from "@inertiajs/react";
 import React from "react";
+import { cast } from "ts-safe-cast";
 
 import Product, { type Product as ProductType } from "$app/components/Admin/Products/Product";
 import Purchase, { type Purchase as PurchaseType } from "$app/components/Admin/Purchase";
@@ -12,7 +13,7 @@ type AdminPurchaseProps = {
 };
 
 const AdminPurchasesShow = () => {
-  const { user, product, purchase } = usePage<AdminPurchaseProps>().props;
+  const { user, product, purchase } = cast<AdminPurchaseProps>(usePage().props);
 
   return (
     <div className="paragraphs">
