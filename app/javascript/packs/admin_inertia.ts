@@ -68,6 +68,7 @@ const urlsMigratedtoInertia = [
   /\/admin\/users\/\w+\/products/u, // Routes.admin_user_products_url
   /\/admin\/payouts\/\w+/u, // Routes.admin_payout_url
   /\/admin\/users\/\w+\/payouts/u, // Routes.admin_user_payouts_url
+  /\/admin\/purchases\/\w+/u, // Routes.admin_purchase_url
   Routes.admin_affiliates_url(),
   // Add other urls here when they are migrated to inertia
 ];
