@@ -18,19 +18,21 @@ export type Payout = {
   state: string;
   is_stripe_processor: boolean;
   is_paypal_processor: boolean;
-  stripe_transfer_id: string;
-  stripe_connect_account_id: string;
+  stripe_transfer_id: string | null;
+  stripe_transfer_url: string | null;
+  stripe_connect_account_id: string | null;
+  stripe_connected_account_url: string | null;
   failed: boolean;
-  humanized_failure_reason: string;
+  humanized_failure_reason: string | null;
   bank_account: {
     credit_card: { visual: string };
     formatted_account: string;
   } | null;
-  payment_address: string;
-  txn_id: string;
-  correlation_id: string;
+  payment_address: string | null;
+  txn_id: string | null;
+  correlation_id: string | null;
   was_created_in_split_mode: boolean;
-  split_payments_info: Record<string, unknown>[];
+  split_payments_info: Record<string, unknown>[] | null;
   cancelled: boolean;
   returned: boolean;
   processing: boolean;
@@ -91,16 +93,26 @@ const Payout = ({ payout }: Props) => (
         <>
           <dt>Stripe Transfer ID</dt>
           <dd>
-            <Link href={Routes.admin_payout_path(payout.id)} title={payout.id.toString()}>
-              {payout.stripe_transfer_id}
-            </Link>
+            <a
+              href={payout.stripe_transfer_url ?? ""}
+              target="_blank"
+              rel="noopener noreferrer"
+              title={`View Stripe transfer ${payout.stripe_transfer_id}`}
+            >
+              {payout.stripe_transfer_id ?? "N/A"}
+            </a>
           </dd>
 
           <dt>Stripe Account ID</dt>
           <dd>
-            <Link href={Routes.admin_payout_path(payout.id)} title={payout.id.toString()}>
-              {payout.stripe_connect_account_id}
-            </Link>
+            <a
+              href={payout.stripe_connected_account_url ?? ""}
+              target="_blank"
+              rel="noopener noreferrer"
+              title={`View Stripe connected account ${payout.stripe_connect_account_id}`}
+            >
+              {payout.stripe_connect_account_id ?? "N/A"}
+            </a>
           </dd>
         </>
       ) : null}
@@ -108,7 +120,7 @@ const Payout = ({ payout }: Props) => (
       {payout.failed ? (
         <>
           <dt>Failure reason</dt>
-          <dd>{payout.humanized_failure_reason}</dd>
+          <dd>{payout.humanized_failure_reason ?? "None provided"}</dd>
         </>
       ) : null}
 
@@ -123,19 +135,19 @@ const Payout = ({ payout }: Props) => (
       ) : (
         <>
           <dt>PayPal email</dt>
-          <dd>{payout.payment_address}</dd>
+          <dd>{payout.payment_address ?? "None provided"}</dd>
 
           <dt>PayPal Transaction ID</dt>
-          <dd>{payout.txn_id}</dd>
+          <dd>{payout.txn_id ?? "None provided"}</dd>
 
           <dt>PayPal Correlation ID</dt>
-          <dd>{payout.correlation_id}</dd>
+          <dd>{payout.correlation_id ?? "None provided"}</dd>
 
           {payout.was_created_in_split_mode ? (
             <>
               <dt>Split payment info</dt>
               <dd>
-                <pre>{JSON.stringify(payout.split_payments_info, null, 2)}</pre>
+                <pre>{JSON.stringify(payout.split_payments_info ?? [], null, 2)}</pre>
               </dd>
             </>
           ) : null}
