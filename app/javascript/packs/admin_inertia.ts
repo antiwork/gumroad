@@ -62,7 +62,7 @@ const urlsMigratedtoInertia = [
   Routes.admin_search_purchases_url(),
   // Routes.admin_search_purchases_url(),
   /\/admin\/guids\/\w+/u, // Routes.admin_guid_url
-  // Routes.admin_compliance_cards_url(),
+  Routes.admin_cards_url(),
   // Routes.admin_user_url(),
   /\/admin\/products\/\w+/u, // Routes.admin_product_url
   /\/admin\/users\/\w+\/products/u, // Routes.admin_user_products_url

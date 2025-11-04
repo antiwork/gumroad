@@ -2,12 +2,10 @@
 
 require "spec_helper"
 
-describe AdminSearchService do
-  describe "#search_purchases" do
+describe Admin::Search::PurchasesService do
+  describe "#perform" do
     it "returns no Purchases if query is invalid" do
-      purchases = AdminSearchService.new.search_purchases(query: "invalidquery")
-
-      expect(purchases.size).to eq(0)
+      expect(Admin::Search::PurchasesService.new(query: "invalidquery").perform.size).to eq(0)
     end
 
     it "returns purchases matching email, directly and through gifts" do
@@ -16,8 +14,7 @@ describe AdminSearchService do
       purchase_2 = create(:gift, gifter_email: email, gifter_purchase: create(:purchase)).gifter_purchase
       purchase_3 = create(:gift, giftee_email: email, giftee_purchase: create(:purchase)).giftee_purchase
 
-      purchases = AdminSearchService.new.search_purchases(query: email)
-      expect(purchases).to include(purchase_1, purchase_2, purchase_3)
+      expect(Admin::Search::PurchasesService.new(query: email).perform).to include(purchase_1, purchase_2, purchase_3)
     end
 
     it "returns purchases for products created by a seller" do
@@ -25,29 +22,24 @@ describe AdminSearchService do
       purchase = create(:purchase, link: create(:product, user: seller))
       create(:purchase)
 
-      purchases = AdminSearchService.new.search_purchases(creator_email: seller.email)
-      expect(purchases).to eq([purchase])
+      expect(Admin::Search::PurchasesService.new(creator_email: seller.email).perform).to eq([purchase])
     end
 
     it "returns no purchases when creator email is not found" do
       create(:purchase)
-      purchases = AdminSearchService.new.search_purchases(creator_email: "nonexistent@example.com")
-      expect(purchases.size).to eq(0)
+      expect(Admin::Search::PurchasesService.new(creator_email: "nonexistent@example.com").perform.size).to eq(0)
     end
 
     it "returns purchase associated with a license key" do
       purchase = create(:purchase)
-      license = create(:license, purchase:)
       create(:purchase)
 
-      purchases = AdminSearchService.new.search_purchases(license_key: license.serial)
-      expect(purchases).to eq([purchase])
+      expect(Admin::Search::PurchasesService.new(license_key: create(:license, purchase:).serial).perform).to eq([purchase])
     end
 
     it "returns no purchases when license key is not found" do
       create(:purchase)
-      purchases = AdminSearchService.new.search_purchases(license_key: "nonexistent-key")
-      expect(purchases.size).to eq(0)
+      expect(Admin::Search::PurchasesService.new(license_key: "nonexistent-key").perform.size).to eq(0)
     end
 
     describe "searching by card" do
@@ -72,42 +64,38 @@ describe AdminSearchService do
       end
 
       context "when transaction_date value is not a date" do
-        it "raises an error" do
-          expect do
-            AdminSearchService.new.search_purchases(transaction_date: "2021-01", card_type: "other")
-          end.to raise_error(AdminSearchService::InvalidDateError)
+        it "returns empty relation and has validation errors" do
+          service = Admin::Search::PurchasesService.new(transaction_date: "2021-01", card_type: "other")
+          result = service.perform
+
+          expect(result).to eq(Purchase.none)
+          expect(result).to be_empty
+          expect(service.errors[:transaction_date]).to include("must use YYYY-MM-DD format.")
         end
       end
 
       it "supports filtering by card_type" do
-        purchases = AdminSearchService.new.search_purchases(card_type: "visa")
-        expect(purchases).to eq [purchase_visa]
+        expect(Admin::Search::PurchasesService.new(card_type: "visa").perform).to eq [purchase_visa]
       end
 
       it "supports filtering by card_visual" do
-        purchases = AdminSearchService.new.search_purchases(last_4: "7531")
-        expect(purchases).to eq [purchase_amex]
+        expect(Admin::Search::PurchasesService.new(last_4: "7531").perform).to eq [purchase_amex]
       end
 
       it "supports filtering by expiry date" do
-        purchases = AdminSearchService.new.search_purchases(expiry_date: "7/21")
-        expect(purchases).to eq [purchase_amex]
+        expect(Admin::Search::PurchasesService.new(expiry_date: "7/21").perform).to eq [purchase_amex]
       end
 
       it "supports filtering by price" do
-        purchases = AdminSearchService.new.search_purchases(price: "7")
-        expect(purchases).to eq [purchase_visa]
+        expect(Admin::Search::PurchasesService.new(price: "7").perform).to eq [purchase_visa]
       end
 
       it "supports filtering by decimal price" do
-        purchase_decimal = create(:purchase, price_cents: 1999, stripe_fingerprint: "test_fingerprint")
-        purchases = AdminSearchService.new.search_purchases(price: "19.99")
-        expect(purchases).to eq [purchase_decimal]
+        expect(Admin::Search::PurchasesService.new(price: "19.99").perform).to eq [create(:purchase, price_cents: 1999, stripe_fingerprint: "test_fingerprint")]
       end
 
       it "supports filtering by combination of params" do
-        purchases = AdminSearchService.new.search_purchases(card_type: "visa", last_4: "1234", price: "7", transaction_date: "2019-01-17", expiry_date: "10/22")
-        expect(purchases).to eq [purchase_visa]
+        expect(Admin::Search::PurchasesService.new(card_type: "visa", last_4: "1234", price: "7", transaction_date: "2019-01-17", expiry_date: "10/22").perform).to eq [purchase_visa]
       end
     end
 
@@ -117,17 +105,11 @@ describe AdminSearchService do
       let(:other_ip) { "198.51.100.10" }
 
       it "returns purchases matching ip_address" do
-        purchase_from_ip_v4 = create(:purchase, ip_address: ip_v4)
-        purchase_from_ip_v6 = create(:purchase, ip_address: ip_v6)
+        expect(Admin::Search::PurchasesService.new(query: ip_v4).perform).to contain_exactly(create(:purchase, ip_address: ip_v4))
 
-        purchases = AdminSearchService.new.search_purchases(query: ip_v4)
-        expect(purchases).to contain_exactly(purchase_from_ip_v4)
+        expect(Admin::Search::PurchasesService.new(query: ip_v6).perform).to contain_exactly(create(:purchase, ip_address: ip_v6))
 
-        purchases = AdminSearchService.new.search_purchases(query: ip_v6)
-        expect(purchases).to contain_exactly(purchase_from_ip_v6)
-
-        purchases = AdminSearchService.new.search_purchases(query: other_ip)
-        expect(purchases).to be_empty
+        expect(Admin::Search::PurchasesService.new(query: other_ip).perform).to be_empty
       end
     end
 
@@ -143,8 +125,7 @@ describe AdminSearchService do
 
       context "when query is set" do
         it "filters by product title" do
-          purchases = AdminSearchService.new.search_purchases(query:, product_title_query:)
-          expect(purchases).to eq [purchase]
+          expect(Admin::Search::PurchasesService.new(query:, product_title_query:).perform).to eq [purchase]
         end
       end
 
@@ -152,8 +133,7 @@ describe AdminSearchService do
         let(:query) { nil }
 
         it "ignores product_title_query" do
-          purchases = AdminSearchService.new.search_purchases(query:, product_title_query:)
-          expect(purchases).to include(purchase)
+          expect(Admin::Search::PurchasesService.new(query:, product_title_query:).perform).to include(purchase)
         end
       end
     end
@@ -173,39 +153,33 @@ describe AdminSearchService do
 
       context "when query is set" do
         it "filters by successful status" do
-          purchases = AdminSearchService.new.search_purchases(query: successful_purchase.email, purchase_status: "successful")
-          expect(purchases).to contain_exactly(successful_purchase)
+          expect(Admin::Search::PurchasesService.new(query: successful_purchase.email, purchase_status: "successful").perform).to contain_exactly(successful_purchase)
         end
 
         it "filters by failed status" do
-          purchases = AdminSearchService.new.search_purchases(query: failed_purchase.email, purchase_status: "failed")
-          expect(purchases).to contain_exactly(failed_purchase)
+          expect(Admin::Search::PurchasesService.new(query: failed_purchase.email, purchase_status: "failed").perform).to contain_exactly(failed_purchase)
         end
 
         it "filters by not_charged status" do
-          purchases = AdminSearchService.new.search_purchases(query: not_charged_purchase.email, purchase_status: "not_charged")
-          expect(purchases).to contain_exactly(not_charged_purchase)
+          expect(Admin::Search::PurchasesService.new(query: not_charged_purchase.email, purchase_status: "not_charged").perform).to contain_exactly(not_charged_purchase)
         end
 
         it "filters by chargeback status (excluding reversed)" do
-          purchases = AdminSearchService.new.search_purchases(query: chargebacked_purchase.email, purchase_status: "chargeback")
+          purchases = Admin::Search::PurchasesService.new(query: chargebacked_purchase.email, purchase_status: "chargeback").perform
           expect(purchases).to contain_exactly(chargebacked_purchase)
           expect(purchases).not_to include(chargebacked_reversed_purchase)
         end
 
         it "filters by refunded status" do
-          purchases = AdminSearchService.new.search_purchases(query: refunded_purchase.email, purchase_status: "refunded")
-          expect(purchases).to contain_exactly(refunded_purchase)
+          expect(Admin::Search::PurchasesService.new(query: refunded_purchase.email, purchase_status: "refunded").perform).to contain_exactly(refunded_purchase)
         end
 
         it "ignores invalid purchase_status values" do
-          purchases = AdminSearchService.new.search_purchases(query: successful_purchase.email, purchase_status: "invalid_status")
-          expect(purchases).to contain_exactly(successful_purchase)
+          expect(Admin::Search::PurchasesService.new(query: successful_purchase.email, purchase_status: "invalid_status").perform).to contain_exactly(successful_purchase)
         end
 
         it "works with other parameters" do
-          purchases = AdminSearchService.new.search_purchases(query: successful_purchase.email, purchase_status: "successful")
-          expect(purchases).to contain_exactly(successful_purchase)
+          expect(Admin::Search::PurchasesService.new(query: successful_purchase.email, purchase_status: "successful").perform).to contain_exactly(successful_purchase)
         end
       end
 
@@ -213,8 +187,7 @@ describe AdminSearchService do
         let(:query) { nil }
 
         it "ignores purchase_status" do
-          purchases = AdminSearchService.new.search_purchases(query:, purchase_status: "successful")
-          expect(purchases).to include(successful_purchase, failed_purchase, not_charged_purchase, chargebacked_purchase, chargebacked_reversed_purchase, refunded_purchase)
+          expect(Admin::Search::PurchasesService.new(query:, purchase_status: "successful").perform).to include(successful_purchase, failed_purchase, not_charged_purchase, chargebacked_purchase, chargebacked_reversed_purchase, refunded_purchase)
         end
       end
     end

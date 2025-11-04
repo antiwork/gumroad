@@ -131,6 +131,34 @@ describe Admin::PurchasesController, :vcr, inertia: true do
     end
   end
 
+  describe "POST refund_for_fraud_by_card" do
+    context "when stripe_fingerprint is blank" do
+      it "returns an error" do
+        post :refund_for_fraud_by_card
+        expect(response.parsed_body["success"]).to eq(false)
+      end
+    end
+
+    context "when stripe_fingerprint is not blank" do
+      let(:stripe_fingerprint) { "FakeFingerprint" }
+      let!(:successful_purchase) { create(:purchase, stripe_fingerprint:, purchase_state: "successful") }
+      let!(:failed_purchase) { create(:purchase, stripe_fingerprint:, purchase_state: "failed") }
+      let!(:disputed_purchase) { create(:purchase, stripe_fingerprint:, chargeback_date: Time.current) }
+      let!(:refunded_purchase) { create(:refunded_purchase, stripe_fingerprint:) }
+
+      it "enqueues jobs" do
+        post :refund_for_fraud_by_card, params: { stripe_fingerprint: }
+
+        expect(RefundPurchaseWorker).to have_enqueued_sidekiq_job(successful_purchase.id, @admin_user.id, Refund::FRAUD)
+        expect(RefundPurchaseWorker).to_not have_enqueued_sidekiq_job(failed_purchase.id, @admin_user.id, Refund::FRAUD)
+        expect(RefundPurchaseWorker).to_not have_enqueued_sidekiq_job(disputed_purchase.id, @admin_user.id, Refund::FRAUD)
+        expect(RefundPurchaseWorker).to_not have_enqueued_sidekiq_job(refunded_purchase.id, @admin_user.id, Refund::FRAUD)
+
+        expect(response.parsed_body["success"]).to eq(true)
+      end
+    end
+  end
+
   describe "POST undelete" do
     before do
       @purchase = create(:purchase, purchaser: create(:user), is_deleted_by_buyer: true)

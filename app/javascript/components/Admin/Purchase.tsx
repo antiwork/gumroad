@@ -174,7 +174,7 @@ export const RefundPolicyTitle = ({ refundPolicy }: { refundPolicy: RefundPolicy
   </>
 );
 
-const AdminPurchase = ({ purchase }: { purchase: Purchase }) => (
+export const AdminPurchase = ({ purchase }: { purchase: Purchase }) => (
   <div className="grid gap-4 rounded border border-border bg-background p-4">
     <div className="grid gap-2">
       <h2>
@@ -638,7 +638,9 @@ const AdminPurchase = ({ purchase }: { purchase: Purchase }) => (
           />
           <AdminActionButton
             label="Refund Card for Fraud"
-            url={Routes.refund_admin_cards_path({ stripe_fingerprint: purchase.stripe_fingerprint })}
+            url={Routes.refund_for_fraud_by_card_admin_purchases_path({
+              stripe_fingerprint: purchase.stripe_fingerprint,
+            })}
             loading="Refunding..."
             done="Refunding purchases!"
             confirm_message="Are you sure you want to Mass-refund for fraud all purchases associated with this purchase's card?"

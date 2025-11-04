@@ -39,6 +39,19 @@ class Admin::PurchasesController < Admin::BaseController
     end
   end
 
+  def refund_for_fraud_by_card
+    if params[:stripe_fingerprint].blank?
+      render json: { success: false }
+    else
+      purchases = Purchase.not_chargedback_or_chargedback_reversed.paid.where(stripe_fingerprint: params[:stripe_fingerprint]).select(:id)
+      purchases.find_each do |purchase|
+        RefundPurchaseWorker.perform_async(purchase.id, current_user.id, Refund::FRAUD)
+      end
+
+      render json: { success: true }
+    end
+  end
+
   def resend_receipt
     if @purchase
       if params[:resend_receipt][:email_address].present?

@@ -1,38 +1,30 @@
 # frozen_string_literal: true
 
 class Admin::Search::PurchasesController < Admin::BaseController
-  include Pagy::Backend
-  RECORDS_PER_PAGE = 25
+  include Admin::ListPaginatedPurchases
 
   def index
-    @title = "Purchase results"
-
-    @purchases = AdminSearchService.new.search_purchases(
-      query: params[:query]&.strip,
-      product_title_query: params[:product_title_query]&.strip,
-      purchase_status: params[:purchase_status],
-    )
-
-    pagination, purchases = pagy_countless(
-      @purchases,
-      limit: params[:per_page] || RECORDS_PER_PAGE,
-      page: params[:page],
-      countless_minimal: true
-    )
-
-    return redirect_to admin_purchase_path(purchases.first) if purchases.one? && pagination.page == 1
-    purchases = purchases.map do |purchase|
-      Admin::PurchasePresenter.new(purchase).list_props
-    end
-
-    respond_to do |format|
-      format.html do
-        render(
-          inertia: "Admin/Search/Purchases/Index",
-          props: { purchases: InertiaRails.merge { purchases }, pagination: },
-        )
+    super do |pagination, purchases|
+      if purchases.one? && params[:page].blank?
+        return redirect_to admin_purchase_path(purchases.first)
       end
-      format.json { render json: { purchases:, pagination: } }
     end
   end
+
+  private
+    def page_title
+      params[:query].present? ? "Purchase results for #{params[:query].strip}" : "Purchase results"
+    end
+
+    def search_params
+      {
+        query: params[:query].to_s.strip,
+        product_title_query: params[:product_title_query].to_s.strip.presence,
+        purchase_status: params[:purchase_status]
+      }
+    end
+
+    def inertia_template
+      "Admin/Search/Purchases/Index"
+    end
 end

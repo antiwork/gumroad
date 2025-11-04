@@ -46,16 +46,16 @@ describe Admin::Search::PurchasesController, type: :controller, inertia: true do
       expect(response).to redirect_to admin_purchase_path(purchase_by_ip)
     end
 
-    it "returns purchases from AdminSearchService" do
+    it "returns purchases from Admin::Search::PurchasesService" do
       purchase_1 = create(:purchase, email:)
       purchase_2 = create(:gift, gifter_email: email, gifter_purchase: create(:purchase)).gifter_purchase
       purchase_3 = create(:gift, giftee_email: email, giftee_purchase: create(:purchase)).giftee_purchase
 
-      expect_any_instance_of(AdminSearchService).to receive(:search_purchases).with(query: email, product_title_query: nil, purchase_status: nil).and_call_original
+      expect(Admin::Search::PurchasesService).to receive(:new).with(query: email, product_title_query: nil, purchase_status: nil).and_call_original
       get :index, params: { query: email }
 
       assert_response :success
-      expect(assigns(:purchases)).to include(purchase_1, purchase_2, purchase_3)
+      expect(inertia.props[:purchases]).to include(hash_including(id: purchase_1.id), hash_including(id: purchase_2.id), hash_including(id: purchase_3.id))
     end
 
     describe "product_title_query" do
@@ -72,23 +72,23 @@ describe Admin::Search::PurchasesController, type: :controller, inertia: true do
           # Create another purchase with same email and same product to avoid redirect
           create(:purchase, email: email, link: product)
 
-          expect_any_instance_of(AdminSearchService).to receive(:search_purchases).with(query: email, product_title_query:, purchase_status: nil).and_call_original
+          expect(Admin::Search::PurchasesService).to receive(:new).with(query: email, product_title_query: product_title_query, purchase_status: nil).and_call_original
 
           get :index, params: { query: email, product_title_query: product_title_query }
 
           assert_response :success
-          expect(assigns(:purchases)).to include(purchase)
+          expect(inertia.props[:purchases]).to include(hash_including(id: purchase.id))
         end
       end
 
       context "when query is not set" do
         it "ignores product_title_query" do
-          expect_any_instance_of(AdminSearchService).to receive(:search_purchases).with(query: "", product_title_query:, purchase_status: nil).and_call_original
+          expect(Admin::Search::PurchasesService).to receive(:new).with(query: "", product_title_query: product_title_query, purchase_status: nil).and_call_original
 
           get :index, params: { query: "", product_title_query: product_title_query }
 
           assert_response :success
-          expect(assigns(:purchases)).to include(purchase)
+          expect(inertia.props[:purchases]).to include(hash_including(id: purchase.id))
         end
       end
     end
@@ -106,23 +106,23 @@ describe Admin::Search::PurchasesController, type: :controller, inertia: true do
           # Create another purchase with same email and same status to avoid redirect
           create(:purchase, purchase_state: "successful", email: email)
 
-          expect_any_instance_of(AdminSearchService).to receive(:search_purchases).with(query: email, product_title_query: nil, purchase_status:).and_call_original
+          expect(Admin::Search::PurchasesService).to receive(:new).with(query: email, product_title_query: nil, purchase_status: purchase_status).and_call_original
 
           get :index, params: { query: email, purchase_status: purchase_status }
 
           assert_response :success
-          expect(assigns(:purchases)).to include(successful_purchase)
+          expect(inertia.props[:purchases]).to include(hash_including(id: successful_purchase.id))
         end
       end
 
       context "when query is not set" do
         it "ignores purchase_status" do
-          expect_any_instance_of(AdminSearchService).to receive(:search_purchases).with(query: "", product_title_query: nil, purchase_status:).and_call_original
+          expect(Admin::Search::PurchasesService).to receive(:new).with(query: "", product_title_query: nil, purchase_status: purchase_status).and_call_original
 
           get :index, params: { query: "", purchase_status: purchase_status }
 
           assert_response :success
-          expect(assigns(:purchases)).to include(successful_purchase)
+          expect(inertia.props[:purchases]).to include(hash_including(id: successful_purchase.id))
         end
       end
     end

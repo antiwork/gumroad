@@ -115,6 +115,9 @@ namespace :admin do
     scope module: :purchases do
       concerns :commentable
     end
+    collection do
+      post :refund_for_fraud_by_card
+    end
     member do
       post :refund
       post :refund_for_fraud
@@ -159,11 +162,7 @@ namespace :admin do
   # Compliance
   resources :guids, only: [:show]
   scope module: "compliance" do
-    resources :cards, only: [:index] do
-      collection do
-        post :refund
-      end
-    end
+    resources :cards, only: [:index]
   end
 
   constraints(lambda { |request| request.env["warden"].authenticate? && request.env["warden"].user.is_team_member? }) do
