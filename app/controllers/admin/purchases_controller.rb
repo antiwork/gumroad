@@ -60,6 +60,11 @@ class Admin::PurchasesController < Admin::BaseController
     e404 if @purchase.nil?
     @product = @purchase.link
     @title = "Purchase #{@purchase.id}"
+    purchase = Admin::PurchasePresenter.new(@purchase).props
+    render(
+      inertia: "Admin/Purchases/Show",
+      props: { purchase:, product: @product.as_json(admin_user: pundit_user), user: Admin::UserPresenter::Card.new(user: @product.user, pundit_user:).props },
+    )
   end
 
   def sync_status_with_charge_processor

@@ -1,16 +1,16 @@
 # frozen_string_literal: true
 
 class Admin::UserPresenter::Card
-  attr_reader :user, :impersonatable
+  attr_reader :user, :pundit_user
 
-  def initialize(user:, impersonatable:)
+  def initialize(user:, pundit_user:)
     @user = user
-    @impersonatable = impersonatable
+    @pundit_user = pundit_user
   end
 
   def props
     {
-      impersonatable:,
+      impersonatable: Admin::Impersonators::UserPolicy.new(pundit_user, @user).create?,
 
       # Identification
       id: user.id,

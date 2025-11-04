@@ -6,8 +6,8 @@ describe Admin::UserPresenter::Card do
   describe "#props" do
     let(:user) { create(:named_user, *user_traits) }
     let(:user_traits) { [] }
-    let(:impersonatable) { false }
-    let(:presenter) { described_class.new(user:, impersonatable:) }
+    let(:pundit_user) { false }
+    let(:presenter) { described_class.new(user:, pundit_user:) }
 
     subject(:props) { presenter.props }
 
@@ -38,7 +38,7 @@ describe Admin::UserPresenter::Card do
           :flagged_for_tos_violation,
           :on_probation,
           :all_adult_products,
-          :impersonatable,
+          :pundit_user,
           :user_risk_state,
           :comments_count,
           :compliant,
