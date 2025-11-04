@@ -6,7 +6,7 @@ import { confirmLineItem } from "$app/data/purchase";
 import { cancelSubscriptionByUser, updateSubscription } from "$app/data/subscription";
 import { SavedCreditCard } from "$app/parsers/card";
 import { Discount } from "$app/parsers/checkout";
-import { CustomFieldDescriptor, ProductNativeType } from "$app/parsers/product";
+import { ProductNativeType } from "$app/parsers/product";
 import {
   CurrencyCode,
   formatPriceCentsWithCurrencySymbol,
@@ -46,7 +46,6 @@ type Props = {
     name: string;
     native_type: ProductNativeType;
     require_shipping: boolean;
-    custom_fields: CustomFieldDescriptor[];
     supports_paypal: "native" | "braintree" | null;
     creator: Creator;
     currency_code: CurrencyCode;
@@ -194,7 +193,7 @@ const SubscriptionManager = ({
     price: Math.round(amountDueToday / product.exchange_rate),
     payInInstallments: subscription.is_installment_plan,
     requireShipping: product.require_shipping,
-    customFields: product.custom_fields,
+    customFields: [],
     bundleProductCustomFields: [],
     supportsPaypal: product.supports_paypal,
     testPurchase: subscription.is_test,

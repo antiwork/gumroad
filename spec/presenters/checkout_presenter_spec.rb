@@ -576,7 +576,6 @@ describe CheckoutPresenter do
                                  },
                                  require_shipping: false,
                                  shippable_country_codes: [],
-                                 custom_fields: [],
                                  currency_code: "usd",
                                  permalink: @product.unique_permalink,
                                  options: [{

@@ -182,7 +182,7 @@ class CheckoutPresenter
     {
       **checkout_common,
       product: {
-        **product_common(product, recommended_by: nil),
+        **product_common(product, recommended_by: nil).except(:custom_fields),
         native_type: product.native_type,
         require_shipping: product.require_shipping?,
         recurrences: subscription.is_installment_plan ? [] : prices
