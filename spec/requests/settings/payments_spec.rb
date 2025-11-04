@@ -663,6 +663,49 @@ describe("Payments Settings Scenario", type: :system, js: true) do
       end
     end
 
+    describe "AU creator without and with state selection" do
+      before do
+        create(:australian_bank_account, user: @user)
+        create(:tos_agreement, user: @user)
+        create(:merchant_account, user: @user, country: "AU", currency: "aud")
+        old_user_compliance_info = @user.alive_user_compliance_info
+        new_user_compliance_info = old_user_compliance_info.dup
+        new_user_compliance_info.country = "Australia"
+        ActiveRecord::Base.transaction do
+          old_user_compliance_info.mark_deleted!
+          new_user_compliance_info.save!
+        end
+      end
+
+      it "prevents submission when state placeholder is not changed" do
+        visit settings_payments_path
+
+        fill_in("First name", with: "barnabas")
+        fill_in("Last name", with: "barnabastein")
+        fill_in("Address", with: "address_full_match")
+        fill_in("City", with: "barnabasville")
+        fill_in("Postal code", with: "2000")
+        fill_in("Phone number", with: "212345678")
+
+        select("1", from: "Day")
+        select("January", from: "Month")
+        select("1980", from: "Year")
+
+        click_on("Update settings")
+
+        expect(page).to_not have_alert(text: "Thanks! You're all set.")
+        expect(page).to have_status(text: "Please select a valid state or province.")
+        expect(find_field("State")["aria-invalid"]).to eq "true"
+
+        select("New South Wales", from: "State")
+        click_on("Update settings")
+
+        expect(page).to have_alert(text: "Thanks! You're all set.")
+        compliance_info = @user.alive_user_compliance_info
+        expect(compliance_info.state).to eq("NSW")
+      end
+    end
+
     describe "CA corporation requiring company registration verification document" do
       before do
         old_user_compliance_info = @user.alive_user_compliance_info
