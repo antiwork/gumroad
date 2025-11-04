@@ -165,6 +165,8 @@ describe Admin::UserPresenter::Card do
 
           expect(membership_data).to include(
             id: membership.id,
+            role: membership.role,
+            last_accessed_at: membership.last_accessed_at,
             created_at: membership.created_at,
             updated_at: membership.updated_at
           )
