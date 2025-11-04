@@ -31,6 +31,8 @@ describe Admin::PaymentPresenter do
           :is_paypal_processor,
           :processor_fee_cents,
           :stripe_transfer_id,
+          :stripe_transfer_url,
+          :stripe_connected_account_url,
           :stripe_connect_account_id,
           :bank_account,
           :txn_id,
@@ -198,6 +200,12 @@ describe Admin::PaymentPresenter do
         it "includes Stripe-specific information" do
           expect(props[:stripe_transfer_id]).to eq("tr_123456")
           expect(props[:stripe_connect_account_id]).to eq("acct_123456")
+          expect(props[:stripe_transfer_url]).to eq(
+            StripeUrl.transfer_url("tr_123456", account_id: "acct_123456")
+          )
+          expect(props[:stripe_connected_account_url]).to eq(
+            StripeUrl.connected_account_url("acct_123456")
+          )
         end
 
         it "identifies Stripe processor correctly" do

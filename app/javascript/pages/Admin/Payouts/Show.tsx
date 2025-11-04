@@ -1,5 +1,6 @@
 import { usePage } from "@inertiajs/react";
 import React from "react";
+import { cast } from "ts-safe-cast";
 
 import AdminPayout, { type Payout } from "$app/components/Admin/Payouts/Payout";
 
@@ -8,7 +9,7 @@ type Props = {
 };
 
 const AdminPayoutsShow = () => {
-  const { payout } = usePage<Props>().props;
+  const { payout } = cast<Props>(usePage().props);
 
   return (
     <div className="paragraphs">
