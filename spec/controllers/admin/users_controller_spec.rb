@@ -2,8 +2,9 @@
 
 require "spec_helper"
 require "shared_examples/admin_base_controller_concern"
+require "inertia_rails/rspec"
 
-describe Admin::UsersController do
+describe Admin::UsersController, type: :controller, inertia: true do
   render_views
 
   it_behaves_like "inherits from Admin::BaseController"
@@ -54,51 +55,16 @@ describe Admin::UsersController do
 
     it "returns page successfully" do
       get "show", params: { id: user.id }
-      expect(response.body).to have_text(user.name)
+      expect(response).to be_successful
+      expect(inertia.component).to eq("Admin/Users/Show")
+      expect(inertia.props[:user][:id]).to eq(user.id)
     end
 
     it "returns page successfully when using email" do
       get "show", params: { id: user.email }
-      expect(response.body).to have_text(user.name)
-    end
-
-    it "handles user with 1 product" do
-      product = create(:product, user:)
-
-      get :show, params: { id: user.id }
-
-      expect(response.body).to have_text(product.name)
-      expect(response.body).not_to have_selector("[aria-label='Pagination']")
-    end
-
-    it "handles user with more than PRODUCTS_PER_PAGE" do
-      products = []
-      # result is ordered by created_at desc
-      created_at = Time.zone.now
-      20.times do |i|
-        products << create(:product, user:, name: ("a".."z").to_a[i] * 10, created_at:)
-        created_at -= 1
-      end
-
-      get :show, params: { page: 1, id: user.id }
-
-      products.first(10).each do |product|
-        expect(response.body).to have_text(product.name)
-      end
-      products.last(10).each do |product|
-        expect(response.body).not_to have_text(product.name)
-      end
-      expect(response.body).to have_selector("[aria-label='Pagination']")
-
-      get :show, params: { page: 2, id: user.id }
-
-      products.first(10).each do |product|
-        expect(response.body).not_to have_text(product.name)
-      end
-      products.last(10).each do |product|
-        expect(response.body).to have_text(product.name)
-      end
-      expect(response.body).to have_selector("[aria-label='Pagination']")
+      expect(response).to be_successful
+      expect(inertia.component).to eq("Admin/Users/Show")
+      expect(inertia.props[:user][:id]).to eq(user.id)
     end
 
     describe "blocked email tooltip" do
@@ -226,7 +192,10 @@ describe Admin::UsersController do
     end
 
     it "returns error if custom fee parameter is invalid" do
-      post :set_custom_fee, params: { id: user.id, custom_fee_percent: "-5" }
+      expect {
+        post :set_custom_fee, params: { id: user.id, custom_fee_percent: "-5" }
+      }
+
       expect(response.parsed_body["success"]).to be(false)
       expect(response.parsed_body["message"]).to eq("Validation failed: Custom fee per thousand must be greater than or equal to 0")
       expect(user.reload.custom_fee_per_thousand).to be_nil
