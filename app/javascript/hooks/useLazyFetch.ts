@@ -134,6 +134,9 @@ export const useLazyPaginatedFetch = <T extends unknown[]>(
   initialData: T,
   options: UseLazyPaginatedFetchOptions<T>,
 ): UseLazyPaginatedFetchResult<T> => {
+  const mode = options.mode ?? "append";
+  const perPage = options.perPage ?? 20;
+
   const [hasMore, setHasMore] = React.useState(false);
   const [pagination, setPagination] = React.useState<Pagination>({
     count: 0,
@@ -142,10 +145,6 @@ export const useLazyPaginatedFetch = <T extends unknown[]>(
     limit: 0,
   });
   const [currentData, setCurrentData] = React.useState<T>(initialData);
-
-  const mode = options.mode || "replace";
-  const perPage = options.perPage ?? 20;
-
   const core = useLazyFetchCore(initialData, options, (responseData, parsedData) => {
     const { pagination: paginationData } = cast<PaginatedResponse>(responseData);
     setPagination(paginationData);
