@@ -1,8 +1,7 @@
 import { Link } from "@inertiajs/react";
 import React from "react";
 
-import Tab from "$app/components/Admin/Tabs/Tab";
-import TabList from "$app/components/Admin/Tabs/TabList";
+import { Tab, Tabs } from "$app/components/ui/Tabs";
 
 type Props = {
   selectedTab: string;
@@ -10,18 +9,16 @@ type Props = {
 };
 
 const AdminUserAndProductsTabs = ({ selectedTab, userId }: Props) => (
-  <TabList>
-    <Tab isSelected={selectedTab === "users"} asChild>
-      <Link href={Routes.admin_user_path(userId)} className="block p-3 no-underline">
-        Profile
-      </Link>
+  <Tabs variant="buttons">
+    <Tab isSelected={selectedTab === "users"} variant="buttons" asChild>
+      <Link href={Routes.admin_user_path(userId)}>Profile</Link>
     </Tab>
-    <Tab isSelected={selectedTab === "products"} asChild>
-      <Link href={Routes.admin_user_products_path(userId)} prefetch className="block p-3 no-underline">
+    <Tab isSelected={selectedTab === "products"} variant="buttons" asChild>
+      <Link href={Routes.admin_user_products_path(userId)} prefetch>
         Products
       </Link>
     </Tab>
-  </TabList>
+  </Tabs>
 );
 
 export default AdminUserAndProductsTabs;
