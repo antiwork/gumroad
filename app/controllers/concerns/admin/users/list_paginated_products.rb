@@ -3,13 +3,13 @@
 module Admin::Users::ListPaginatedProducts
   include Pagy::Backend
 
-  PRODUCTS_ORDER = "ISNULL(COALESCE(purchase_disabled_at, banned_at, links.deleted_at)) DESC, created_at DESC"
+  PRODUCTS_ORDER = Arel.sql("ISNULL(COALESCE(purchase_disabled_at, banned_at, links.deleted_at)) DESC, created_at DESC")
   PRODUCTS_PER_PAGE = 10
 
   private
     def list_paginated_products(user:, products:, inertia_template:)
       pagination, products = pagy(
-        products.order(Arel.sql(PRODUCTS_ORDER)),
+        products.order(PRODUCTS_ORDER),
         page: params[:page],
         limit: params[:per_page] || PRODUCTS_PER_PAGE,
       )
