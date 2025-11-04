@@ -1,5 +1,4 @@
 import { Link } from "@inertiajs/react";
-import { capitalize } from "lodash";
 import React from "react";
 
 import { formatPriceCentsWithCurrencySymbol } from "$app/utils/currency";
@@ -8,7 +7,7 @@ import AdminActionButton from "$app/components/Admin/ActionButton";
 import Comments from "$app/components/Admin/Commentable";
 import DateTimeWithRelativeTooltip from "$app/components/Admin/DateTimeWithRelativeTooltip";
 import { Form } from "$app/components/Admin/Form";
-import { YesIcon, NoIcon, BooleanIcon } from "$app/components/Admin/Icons";
+import { NoIcon, BooleanIcon } from "$app/components/Admin/Icons";
 import { CopyToClipboard } from "$app/components/CopyToClipboard";
 import { Icon } from "$app/components/Icons";
 import { AdminResendReceiptForm } from "$app/components/server-components/Admin/ResendReceiptForm";
@@ -59,7 +58,7 @@ export type Purchase = PurchaseStatesInfo & {
   purchase_state: string;
   formatted_total_transaction_amount: string;
   charge_processor_id: string | null;
-  stripe_transaction: { id: string; search_url: string } | null;
+  stripe_transaction: { id: string; search_url: string | null } | null;
   external_id_numeric: number;
   quantity: number;
   refunds: {
@@ -181,14 +180,17 @@ const AdminPurchase = ({ purchase }: { purchase: Purchase }) => (
       <h2>
         <Link href={Routes.admin_purchase_path(purchase.id)}>{purchase.formatted_display_price}</Link>
         {purchase.gumroad_responsible_for_tax ? ` + ${purchase.formatted_gumroad_tax_amount} VAT` : null} for{" "}
-        <Link href={Routes.admin_link_path(purchase.product.id)}>{purchase.product.name}</Link> {purchase.variants_list}{" "}
+        <Link href={Routes.admin_link_path(purchase.product.id)} title={purchase.product.id.toString()}>
+          {purchase.product.name}
+        </Link>{" "}
+        {purchase.variants_list}{" "}
         <Link href={purchase.product.long_url}>
           <Icon name="arrow-up-right-square" />
         </Link>
       </h2>
       <ul className="inline">
         <li>
-          <DateTimeWithRelativeTooltip date={purchase.created_at} utc />
+          <DateTimeWithRelativeTooltip date={purchase.created_at} />
         </li>
         <li>
           <Link href={Routes.admin_search_purchases_path({ query: purchase.email })}>{purchase.email}</Link>
@@ -224,7 +226,7 @@ const AdminPurchase = ({ purchase }: { purchase: Purchase }) => (
             <dt>Merchant account</dt>
             <dd>
               <Link href={Routes.admin_merchant_account_path(purchase.merchant_account.id)}>
-                {purchase.merchant_account.id} – {capitalize(purchase.merchant_account.charge_processor_id)}
+                {purchase.merchant_account.id} – {purchase.merchant_account.charge_processor_id}
               </Link>
             </dd>
             <dt>Funds held by</dt>
@@ -286,9 +288,13 @@ const AdminPurchase = ({ purchase }: { purchase: Purchase }) => (
         <dt>{purchase.charge_processor_id} transaction ID</dt>
         <dd>
           {purchase.stripe_transaction ? (
-            <Link href={purchase.stripe_transaction.search_url} target="_blank">
-              {purchase.stripe_transaction.id}
-            </Link>
+            purchase.stripe_transaction.search_url ? (
+              <Link href={purchase.stripe_transaction.search_url} target="_blank">
+                {purchase.stripe_transaction.id}
+              </Link>
+            ) : (
+              purchase.stripe_transaction.id
+            )
           ) : null}
           {" | "}
           <Link href={Routes.admin_purchase_path(purchase.id)}>{purchase.id}</Link>
@@ -346,9 +352,8 @@ const AdminPurchase = ({ purchase }: { purchase: Purchase }) => (
             <dt>Card</dt>
             <dd>
               <Link href={Routes.admin_search_purchases_path({ query: purchase.stripe_fingerprint })}>
-                {purchase.card.type.toUpperCase()}
-                *#{purchase.card.visual.replace("*", "").replace(" ", "")}{" "}
-                {purchase.card.country ? `(${purchase.card.country})` : null}
+                {purchase.card.type}
+                *#{purchase.card.visual} {purchase.card.country ? `(${purchase.card.country})` : null}
               </Link>
               {purchase.card.fingerprint_search_url ? (
                 <>
@@ -444,39 +449,22 @@ const AdminPurchase = ({ purchase }: { purchase: Purchase }) => (
           <>
             <dt>Cancelled</dt>
             <dd>
-              {purchase.subscription.cancelled ? (
-                <>
-                  <YesIcon />
-                  (on {purchase.subscription.cancelled.at} by{" "}
-                  {purchase.subscription.cancelled.by_buyer ? "buyer" : "seller"})
-                </>
-              ) : (
-                <NoIcon />
-              )}
+              <BooleanIcon value={!!purchase.subscription.cancelled} />
+              {purchase.subscription.cancelled
+                ? ` (on ${purchase.subscription.cancelled.at} by ${purchase.subscription.cancelled.by_buyer ? "buyer" : "seller"})`
+                : null}
             </dd>
 
             <dt>Ended</dt>
             <dd>
-              {purchase.subscription.ended_at ? (
-                <>
-                  <YesIcon />
-                  (on {purchase.subscription.ended_at})
-                </>
-              ) : (
-                <NoIcon />
-              )}
+              <BooleanIcon value={!!purchase.subscription.ended_at} />
+              {purchase.subscription.ended_at ? ` (on ${purchase.subscription.ended_at})` : null}
             </dd>
 
             <dt>Failed</dt>
             <dd>
-              {purchase.subscription.failed_at ? (
-                <>
-                  <YesIcon />
-                  (on {purchase.subscription.failed_at})
-                </>
-              ) : (
-                <NoIcon />
-              )}
+              <BooleanIcon value={!!purchase.subscription.failed_at} />
+              {purchase.subscription.failed_at ? ` (on ${purchase.subscription.failed_at})` : null}
             </dd>
           </>
         ) : null}
@@ -508,7 +496,7 @@ const AdminPurchase = ({ purchase }: { purchase: Purchase }) => (
                 {purchase.refund_policy.fine_print ? (
                   <>
                     <br />
-                    {purchase.refund_policy.fine_print}
+                    <div className="whitespace-pre-wrap">{purchase.refund_policy.fine_print}</div>
                   </>
                 ) : null}
                 {purchase.refund_policy.max_refund_period_in_days ? (
@@ -564,12 +552,12 @@ const AdminPurchase = ({ purchase }: { purchase: Purchase }) => (
                 onSuccess={() => showAlert("Successfully updated the giftee email.", "success")}
               >
                 {(isLoading) => (
-                  <>
+                  <div className="input-with-button">
                     <input type="text" name="giftee_email" placeholder="Enter new giftee email" required />
                     <button type="submit" className="button" disabled={isLoading}>
                       {isLoading ? "Updating..." : "Update"}
                     </button>
-                  </>
+                  </div>
                 )}
               </Form>
             </details>
@@ -665,7 +653,7 @@ const AdminPurchase = ({ purchase }: { purchase: Purchase }) => (
         <>
           <AdminActionButton
             label="Cancel subscription for buyer"
-            url={Routes.cancel_subscription_admin_purchase_path(purchase)}
+            url={Routes.cancel_subscription_admin_purchase_path(purchase, { by_seller: false })}
             loading="Canceling..."
             done="Canceled!"
             confirm_message="Are you sure you want to cancel this subscription on behalf of the buyer?"
@@ -673,7 +661,7 @@ const AdminPurchase = ({ purchase }: { purchase: Purchase }) => (
           />
           <AdminActionButton
             label="Cancel subscription for seller"
-            url={Routes.cancel_subscription_admin_purchase_path(purchase)}
+            url={Routes.cancel_subscription_admin_purchase_path(purchase, { by_seller: true })}
             loading="Canceling..."
             done="Canceled!"
             confirm_message="Are you sure you want to cancel this subscription on behalf of the seller?"

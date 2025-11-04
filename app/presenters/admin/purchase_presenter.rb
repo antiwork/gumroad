@@ -39,15 +39,18 @@ class Admin::PurchasePresenter
     email_info_text = email_info.try(:state).try(:capitalize)
     email_info_text += " (on #{email_info.delivered_at})" if email_info.try(:delivered?)
     email_info_text += " (on #{email_info.opened_at})" if email_info.try(:opened?)
-    base_props[:refund_policy]&.merge!({ fine_print: purchase.purchase_refund_policy.fine_print, max_refund_period_in_days: purchase.purchase_refund_policy.max_refund_period_in_days })
+    base_props[:refund_policy]&.merge!({
+                                         fine_print: purchase.purchase_refund_policy.fine_print.presence || purchase.link.product_refund_policy&.fine_print,
+                                         max_refund_period_in_days: purchase.purchase_refund_policy.max_refund_period_in_days
+                                       })
     base_props.merge({
                        updated_at: purchase.updated_at,
                        deleted_at: purchase.deleted_at,
                        external_id: purchase.external_id,
                        merchant_account: purchase.merchant_account.present? ? {
                          id: purchase.merchant_account.id,
-                         charge_processor_id: purchase.merchant_account.charge_processor_id,
-                         holder_of_funds: purchase.merchant_account.holder_of_funds,
+                         charge_processor_id: purchase.merchant_account.charge_processor_id&.capitalize,
+                         holder_of_funds: purchase.merchant_account.holder_of_funds.capitalize,
                        } : nil,
                        fee_cents: purchase.fee_cents,
                        tip: purchase.tip,
@@ -56,7 +59,7 @@ class Admin::PurchasePresenter
                        formatted_shipping_amount: purchase.shipping_cents > 0 ? purchase.formatted_shipping_amount : nil,
                        formatted_affiliate_credit_amount: purchase.affiliate.present? ? purchase.formatted_affiliate_credit_amount : nil,
                        formatted_total_transaction_amount: purchase.formatted_total_transaction_amount,
-                       charge_processor_id: purchase.charge_processor_id,
+                       charge_processor_id: purchase.charge_processor_id&.capitalize,
                        stripe_transaction: purchase.stripe_transaction_id ? {
                          id: purchase.stripe_transaction_id,
                          search_url: ChargeProcessor.transaction_url_for_admin(purchase.charge_processor_id, purchase.stripe_transaction_id, purchase.charged_using_gumroad_merchant_account?),
@@ -74,7 +77,6 @@ class Admin::PurchasePresenter
                          type: purchase.card_type.upcase,
                          visual: purchase.card_visual.delete("*").delete(" "),
                          country: purchase.card_country,
-                         stripe_fingerprint: purchase.stripe_fingerprint,
                          fingerprint_search_url: purchase.stripe_charge_processor? ? StripeChargeProcessor.fingerprint_search_url(purchase.stripe_fingerprint) : nil,
                        } : nil,
                        ip_address: purchase.ip_address,
@@ -92,10 +94,10 @@ class Admin::PurchasePresenter
                        product_purchases: purchase.product_purchases.map do |product_purchase|
                          {
                            product: { name: product_purchase.link.name },
-                           url_redirect: product_purchase.url_redirect ? { download_page_url: product_purchase.url_redirect.download_page_url, uses: product_purchase.url_redirect.uses } : nil,
+                           url_redirect: product_purchase.url_redirect ? url_redirect_props(product_purchase.url_redirect) : nil,
                          }
                        end,
-                       url_redirect: purchase.url_redirect ? { download_page_url: purchase.url_redirect.download_page_url, uses: purchase.url_redirect.uses } : nil,
+                       url_redirect: purchase.url_redirect ? url_redirect_props(purchase.url_redirect) : nil,
                        offer_code: purchase.offer_code ? {
                          code: purchase.offer_code.code,
                          displayed_amount_off: purchase.offer_code.displayed_amount_off(purchase.link.price_currency_type, with_symbol: true),
@@ -126,4 +128,9 @@ class Admin::PurchasePresenter
                        comments_count: purchase.comments.count,
                      })
   end
+
+  private
+    def url_redirect_props(url_redirect)
+      { download_page_url: url_redirect.download_page_url, uses: url_redirect.uses }
+    end
 end
