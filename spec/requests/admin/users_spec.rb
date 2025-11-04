@@ -23,10 +23,11 @@ describe "Admin::UsersController Scenario", type: :system, js: true do
 
   context "when user has products" do
     before do
-      %w(a b c).each_with_index do |l, i|
-        create(:product, user:, unique_permalink: l, name: "Product #{l}", created_at: i.minutes.ago)
-      end
-      stub_const("Admin::UsersController::PRODUCTS_PER_PAGE", 2)
+      create(:product, user:, unique_permalink: "a", name: "Product a", created_at: 1.minute.ago)
+      create(:product, user:, unique_permalink: "b", name: "Product b", created_at: 2.minutes.ago)
+      create(:product, user:, unique_permalink: "c", name: "Product c", created_at: 3.minutes.ago)
+
+      stub_const("Admin::Users::ListPaginatedProducts::PRODUCTS_PER_PAGE", 2)
     end
 
     it "shows products" do
@@ -41,7 +42,7 @@ describe "Admin::UsersController Scenario", type: :system, js: true do
       expect(page).not_to have_text("Product a")
       expect(page).not_to have_text("Product b")
       expect(page).to have_text("Product c")
-      within("[aria-label='Pagination']") { expect(page).to have_link("1") }
+      within("[aria-label='Pagination']") { expect(page).to have_button("1") }
     end
   end
 
@@ -77,7 +78,7 @@ describe "Admin::UsersController Scenario", type: :system, js: true do
   describe "custom fees" do
     context "when the user has a custom fee set" do
       before do
-        user.update(custom_fee_per_thousand: 50)
+        user.update!(custom_fee_per_thousand: 50)
       end
 
       it "shows the custom fee percentage" do
