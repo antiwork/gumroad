@@ -4,7 +4,7 @@ import React from "react";
 import DateTimeWithRelativeTooltip from "$app/components/Admin/DateTimeWithRelativeTooltip";
 import EmptyState from "$app/components/Admin/EmptyState";
 import PaginatedLoader, { Pagination } from "$app/components/Admin/PaginatedLoader";
-import { RefundPolicyTitle, type RefundPolicy } from "$app/components/Admin/Purchase";
+import { PurchaseStates, RefundPolicyTitle, type RefundPolicy } from "$app/components/Admin/Purchase";
 import { CopyToClipboard } from "$app/components/CopyToClipboard";
 import { Icon } from "$app/components/Icons";
 import { useOriginalLocation } from "$app/components/useOriginalLocation";
@@ -16,7 +16,7 @@ type Purchase = {
   gumroad_responsible_for_tax: boolean;
   product: { id: string; name: string; long_url: string };
   variants_list: string;
-  refund_policy: RefundPolicy;
+  refund_policy: RefundPolicy | null;
   product_refund_policy: string | null;
   seller: { email: string; support_email: string };
   email: string;
@@ -97,6 +97,7 @@ export default function Purchases() {
                     <Link href={purchase.product.long_url} target="_blank" rel="noopener noreferrer nofollow">
                       <Icon name="arrow-up-right-square" />
                     </Link>{" "}
+                    <PurchaseStates purchase={purchase} />
                     <div className="text-sm">
                       <ul className="inline">
                         {purchase.refund_policy ? (
