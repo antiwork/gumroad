@@ -299,6 +299,28 @@ describe("Posts on seller profile", type: :system, js: true) do
             expect(page).to have_selector("article:nth-child(2)", text: "Good article")
           end
         end
+
+        it "updates comment count correctly when deleting a comment with replies" do
+          create(:comment, parent: own_comment, commentable: post, author: commenter)
+
+          visit "#{seller.subdomain_with_protocol}/p/#{post.slug}"
+          expect(page).to have_text("3 comments")
+
+          within_section "3 comments" do
+            within all("article")[1] do
+              select_disclosure "Open comment action menu", match: :first do
+                click_on("Delete")
+              end
+            end
+          end
+
+          expect(page).to have_text("Are you sure?")
+          click_on("Confirm")
+          wait_for_ajax
+
+          expect(page).to have_alert(text: "Successfully deleted the comment")
+          expect(page).to have_text("1 comment")
+        end
       end
 
       shared_examples_for "delete and update as seller or team member" do

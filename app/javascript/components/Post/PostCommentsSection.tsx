@@ -73,7 +73,7 @@ export const PostCommentsSection = ({ paginated_comments }: Props) => {
   const deleteComment = async () => {
     if (!commentToDelete) return;
     try {
-      await deleteCommentRequest({
+      const deletedCommentIds = await deleteCommentRequest({
         commentable_id,
         purchase_id,
         id: commentToDelete.comment.id,
@@ -83,7 +83,7 @@ export const PostCommentsSection = ({ paginated_comments }: Props) => {
       setData((data) => ({
         ...data,
         comments: data.comments.filter((comment) => comment.id !== commentToDelete.comment.id),
-        count: data.count - 1,
+        count: data.count - deletedCommentIds.length,
       }));
     } catch (e) {
       assertResponseError(e);

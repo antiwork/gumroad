@@ -1,6 +1,6 @@
 {
   "provider": "stripe_connect",
-  "uid": "acct_1Nh9n7IEYOlyTu0E",
+  "uid": "acct_1SOb0DEwFhlcVS6d",
   "info": {
     "name": null,
     "email": null,
@@ -19,11 +19,11 @@
       "livemode": false,
       "token_type": "bearer",
       "stripe_publishable_key": "pk_test_51Nh9n7IEYOlyTu0EWPTYIMQANfwzb6RWcq6Bzn5Am1yyOKYnaNJVRP0P0tKsVNKJlCcSnHehxYSfwKQkvFGJ3RNQ00adYo3l6i",
-      "stripe_user_id": "acct_1Nh9n7IEYOlyTu0E",
+      "stripe_user_id": "acct_1SOb0DEwFhlcVS6d",
       "scope": "read_write"
     },
     "extra_info": {
-      "id": "acct_1Nh9n7IEYOlyTu0E",
+      "id": "acct_1SOb0DEwFhlcVS6d",
       "object": "account",
       "business_profile": {
         "mcc": "5192",
@@ -50,7 +50,7 @@
         "data": [],
         "has_more": false,
         "total_count": 0,
-        "url": "/v1/accounts/acct_1Nh9n7IEYOlyTu0E/external_accounts"
+        "url": "/v1/accounts/acct_1SOb0DEwFhlcVS6d/external_accounts"
       },
       "future_requirements": {
         "alternatives": [],

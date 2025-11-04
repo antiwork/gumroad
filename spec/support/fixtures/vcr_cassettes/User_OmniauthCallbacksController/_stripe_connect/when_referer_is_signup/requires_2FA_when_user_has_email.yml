@@ -2,7 +2,7 @@
 http_interactions:
 - request:
     method: get
-    uri: https://api.stripe.com/v1/accounts/acct_1MFA1rCOxuflorGu
+    uri: https://api.stripe.com/v1/accounts/acct_1SOb0DEwFhlcVS6d
     body:
       encoding: US-ASCII
       string: ''
@@ -14,13 +14,14 @@ http_interactions:
       Content-Type:
       - application/x-www-form-urlencoded
       X-Stripe-Client-Telemetry:
-      - '{"last_request_metrics":{"request_id":"req_5Uj7EaxjNpgwve","request_duration_ms":421}}'
+      - '{"last_request_metrics":{"request_id":"req_S3j4aoa2OzNQKJ","request_duration_ms":810}}'
       Stripe-Version:
-      - 2023-10-16; risk_in_requirements_beta=v1
+      - '2023-10-16'
       X-Stripe-Client-User-Agent:
-      - '{"bindings_version":"12.5.0","lang":"ruby","lang_version":"3.3.4 p94 (2024-07-09)","platform":"arm64-darwin23","engine":"ruby","publisher":"stripe","uname":"Darwin
-        Ershads-MacBook-Pro.local 23.5.0 Darwin Kernel Version 23.5.0: Wed May  1
-        20:12:58 PDT 2024; root:xnu-10063.121.3~5/RELEASE_ARM64_T6000 arm64","hostname":"Ershads-MacBook-Pro.local"}'
+      - '{"bindings_version":"12.5.0","lang":"ruby","lang_version":"3.4.3 p32 (2025-04-14)","platform":"x86_64-linux","engine":"ruby","publisher":"stripe","uname":"Linux
+        version 6.14.0-33-generic (buildd@lcy02-amd64-026) (x86_64-linux-gnu-gcc-13
+        (Ubuntu 13.3.0-6ubuntu2~24.04) 13.3.0, GNU ld (GNU Binutils for Ubuntu) 2.42)
+        #33~24.04.1-Ubuntu SMP PREEMPT_DYNAMIC Fri Sep 19 17:02:30 UTC 2","hostname":"hsc-desk"}'
       Accept-Encoding:
       - gzip;q=1.0,deflate;q=0.6,identity;q=0.3
       Accept:
@@ -33,11 +34,11 @@ http_interactions:
       Server:
       - nginx
       Date:
-      - Tue, 11 Feb 2025 20:23:55 GMT
+      - Sat, 01 Nov 2025 19:00:48 GMT
       Content-Type:
       - application/json
       Content-Length:
-      - '3053'
+      - '6699'
       Connection:
       - keep-alive
       Access-Control-Allow-Credentials:
@@ -55,20 +56,15 @@ http_interactions:
       - no-cache, no-store
       Content-Security-Policy:
       - base-uri 'none'; default-src 'none'; form-action 'none'; frame-ancestors 'none';
-        img-src 'self'; script-src 'self' 'report-sample'; style-src 'self'; worker-src
-        'none'; upgrade-insecure-requests; report-uri https://q.stripe.com/csp-violation?q=jpGdhGc1P7jPktAz-iDqYzJN3QLwPLqI8cyAz3ToqgxXW6608eVQtLI37k_W2r8Oaaok4Sryslq7D52o
-      Cross-Origin-Opener-Policy-Report-Only:
-      - same-origin; report-to="coop"
-      Report-To:
-      - '{"group":"coop","max_age":8640,"endpoints":[{"url":"https://q.stripe.com/coop-report"}],"include_subdomains":true}'
-      Reporting-Endpoints:
-      - coop="https://q.stripe.com/coop-report"
+        img-src 'self'; script-src 'self' 'report-<RPUSH_CONSUMER_FCM_FIREBASE_PROJECT_ID>';
+        style-src 'self'; worker-src 'none'; upgrade-insecure-requests; report-uri
+        https://q.stripe.com/csp-violation?q=XM2gL-jSTEX7Joh2OEplMLD9hts4M7lzv_RRu_kpwLuL2h_s6khJQtJA1x0da5j61LAgwQuksHUJGgUC
       Request-Id:
-      - req_rkT7nWEJyjigBr
+      - req_MqJZ3U0l3WFH0X
       Stripe-Account:
-      - acct_1MFA1rCOxuflorGu
+      - acct_1SOb0DEwFhlcVS6d
       Stripe-Version:
-      - 2023-10-16; risk_in_requirements_beta=v1
+      - '2023-10-16'
       Vary:
       - Origin
       X-Stripe-Priority-Routing-Enabled:
@@ -76,28 +72,86 @@ http_interactions:
       X-Stripe-Routing-Context-Priority-Tier:
       - api-testmode
       X-Wc:
-      - AB
+      - ABGHIJ
       Strict-Transport-Security:
       - max-age=63072000; includeSubDomains; preload
     body:
       encoding: UTF-8
       string: |-
         {
-          "id": "acct_1MFA1rCOxuflorGu",
+          "id": "acct_1SOb0DEwFhlcVS6d",
           "object": "account",
           "business_profile": {
             "annual_revenue": null,
             "estimated_worker_count": null,
-            "mcc": "5192",
-            "name": "Gumroad",
+            "mcc": null,
+            "minority_owned_business_designation": null,
+            "name": null,
+            "product_description": null,
             "support_address": null,
             "support_email": null,
             "support_phone": null,
             "support_url": null,
             "url": null
           },
-          "capabilities": {},
+          "business_type": "individual",
+          "capabilities": {
+            "acss_debit_payments": "inactive",
+            "affirm_payments": "inactive",
+            "afterpay_clearpay_payments": "inactive",
+            "amazon_pay_payments": "inactive",
+            "bancontact_payments": "inactive",
+            "card_payments": "inactive",
+            "cartes_bancaires_payments": "inactive",
+            "cashapp_payments": "inactive",
+            "eps_payments": "inactive",
+            "giropay_payments": "inactive",
+            "ideal_payments": "inactive",
+            "kakao_pay_payments": "inactive",
+            "klarna_payments": "inactive",
+            "kr_card_payments": "inactive",
+            "link_payments": "inactive",
+            "mb_way_payments": "inactive",
+            "multibanco_payments": "inactive",
+            "naver_pay_payments": "inactive",
+            "p24_payments": "inactive",
+            "payco_payments": "inactive",
+            "pix_payments": "inactive",
+            "samsung_pay_payments": "inactive",
+            "sepa_bank_transfer_payments": "inactive",
+            "sepa_debit_payments": "inactive",
+            "sofort_payments": "inactive",
+            "tax_reporting_us_1099_k": "active",
+            "tax_reporting_us_1099_misc": "active",
+            "transfers": "inactive",
+            "us_bank_account_ach_payments": "inactive",
+            "us_bank_transfer_payments": "inactive",
+            "zip_payments": "inactive"
+          },
           "charges_enabled": false,
+          "company": {
+            "address": {
+              "city": null,
+              "country": "US",
+              "line1": null,
+              "line2": null,
+              "postal_code": null,
+              "state": null
+            },
+            "directors_provided": true,
+            "executives_provided": true,
+            "name": null,
+            "owners_provided": true,
+            "tax_id_provided": false,
+            "verification": {
+              "document": {
+                "back": null,
+                "details": null,
+                "details_code": null,
+                "front": null
+              }
+            }
+          },
           "controller": {
             "fees": {
               "payer": "account"
@@ -112,9 +166,9 @@ http_interactions:
             },
             "type": "application"
           },
-          "country": "SG",
-          "created": 1671082248,
-          "default_currency": "sgd",
+          "country": "US",
+          "created": 1761988902,
+          "default_currency": "usd",
           "details_submitted": false,
           "email": null,
           "external_accounts": {
@@ -122,7 +176,7 @@ http_interactions:
             "data": [],
             "has_more": false,
             "total_count": 0,
-            "url": "/v1/accounts/acct_1MFA1rCOxuflorGu/external_accounts"
+            "url": "/v1/accounts/acct_1SOb0DEwFhlcVS6d/external_accounts"
           },
           "future_requirements": {
             "alternatives": [],
@@ -138,26 +192,81 @@ http_interactions:
           "payouts_enabled": false,
           "requirements": {
             "alternatives": [],
-            "current_deadline": null,
+            "current_deadline": 1763208247,
             "currently_due": [
+              "business_profile.mcc",
               "business_profile.product_description",
+              "business_profile.support_email",
               "business_profile.support_phone",
               "business_profile.url",
               "external_account",
+              "individual.address.city",
+              "individual.address.line1",
+              "individual.address.postal_code",
+              "individual.address.state",
+              "individual.dob.day",
+              "individual.dob.month",
+              "individual.dob.year",
+              "individual.email",
+              "individual.first_name",
+              "individual.last_name",
+              "individual.phone",
+              "individual.ssn_last_4",
+              "individual.verification.proof_of_liveness",
+              "settings.payments.statement_descriptor",
               "tos_acceptance.date",
               "tos_acceptance.ip"
             ],
             "disabled_reason": "requirements.past_due",
             "errors": [],
             "eventually_due": [
+              "business_profile.mcc",
               "business_profile.product_description",
+              "business_profile.support_email",
               "business_profile.support_phone",
               "business_profile.url",
               "external_account",
+              "individual.address.city",
+              "individual.address.line1",
+              "individual.address.postal_code",
+              "individual.address.state",
+              "individual.dob.day",
+              "individual.dob.month",
+              "individual.dob.year",
+              "individual.email",
+              "individual.first_name",
+              "individual.last_name",
+              "individual.phone",
+              "individual.ssn_last_4",
+              "individual.verification.proof_of_liveness",
+              "settings.payments.statement_descriptor",
               "tos_acceptance.date",
               "tos_acceptance.ip"
             ],
-            "past_due": [],
+            "past_due": [
+              "business_profile.mcc",
+              "business_profile.product_description",
+              "business_profile.support_email",
+              "business_profile.support_phone",
+              "business_profile.url",
+              "external_account",
+              "individual.address.city",
+              "individual.address.line1",
+              "individual.address.postal_code",
+              "individual.address.state",
+              "individual.dob.day",
+              "individual.dob.month",
+              "individual.dob.year",
+              "individual.email",
+              "individual.first_name",
+              "individual.last_name",
+              "individual.phone",
+              "individual.ssn_last_4",
+              "individual.verification.proof_of_liveness",
+              "settings.payments.statement_descriptor",
+              "tos_acceptance.date",
+              "tos_acceptance.ip"
+            ],
             "pending_verification": []
           },
           "settings": {
@@ -171,7 +280,6 @@ http_interactions:
               "primary_color": null,
               "secondary_color": null
             },
-            "capital": {},
             "card_issuing": {
               "tos_acceptance": {
                 "date": null,
@@ -192,7 +300,8 @@ http_interactions:
               "timezone": "Etc/UTC"
             },
             "invoices": {
-              "default_account_tax_ids": null
+              "default_account_tax_ids": null,
+              "hosted_payment_method_save": "offer"
             },
             "payments": {
               "statement_descriptor": null,
@@ -202,7 +311,7 @@ http_interactions:
             "payouts": {
               "debit_negative_balances": true,
               "schedule": {
-                "delay_days": 7,
+                "delay_days": 2,
                 "interval": "daily"
               },
               "statement_descriptor": null
@@ -210,9 +319,11 @@ http_interactions:
             "sepa_debit_payments": {}
           },
           "tos_acceptance": {
-            "date": null
+            "date": null,
+            "ip": null,
+            "user_agent": null
           },
           "type": "standard"
         }
-  recorded_at: Tue, 11 Feb 2025 20:23:55 GMT
+  recorded_at: Sat, 01 Nov 2025 19:00:48 GMT
 recorded_with: VCR 6.2.0

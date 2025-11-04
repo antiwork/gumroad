@@ -12,26 +12,16 @@
 # use the to_stripejs_params
 
 module CardParamsSpecHelper
-  EXPIRY_MM = "12"
-  EXPIRY_YYYY = Time.current.strftime("%Y")
-  EXPIRY_YY = Time.current.strftime("%y")
-  EXPIRY_MMYY = "#{EXPIRY_MM}/#{EXPIRY_YY}"
-
   module ExtensionMethods
     def to_stripe_card_hash
-      expiry_month, expiry_year = CreditCardUtility.extract_month_and_year(self[:expiry_date]) if self[:expiry_date]
-      stripe_params = {}
-      stripe_params[:number] = self[:cc_number] if self[:cc_number]
-      stripe_params[:exp_month] = expiry_month if expiry_month
-      stripe_params[:exp_year] = expiry_year if expiry_year
-      stripe_params[:cvc] = self[:cvc] if self[:cvc]
+      stripe_params = { token: self[:token] }
       stripe_params[:address_zip] = self[:cc_zipcode] if self[:cc_zipcode]
       stripe_params[:currency] = "usd"
       stripe_params
     end
 
     def to_stripejs_token_obj
-      Stripe::Token.create(card: to_stripe_card_hash)
+      Stripe::Token.retrieve(self[:token])
     end
 
     def to_stripejs_token
@@ -92,11 +82,9 @@ module CardParamsSpecHelper
 
   module_function
 
-  def build(number: "4242 4242 4242 4242", expiry_month: EXPIRY_MM, expiry_year: EXPIRY_YYYY, cvc: "123")
+  def build(token: "tok_visa")
     card_params = {
-      cc_number: number,
-      expiry_date: "#{expiry_month} / #{expiry_year}",
-      cvc:
+      token:
     }
     card_params.extend(ExtensionMethods)
     card_params
@@ -107,6 +95,23 @@ module CardParamsSpecHelper
   end
 
   def success_debit_visa
-    build(number: "4000 0566 5566 5556")
+    build(token: "tok_visa_debit")
+  end
+
+  def card_number(card_type)
+    case card_type
+    when :success
+      "4242 4242 4242 4242"
+    when :success_with_sca
+      "4000 0025 0000 3155"
+    when :success_indian_card_mandate
+      "4000 0035 6000 0123"
+    when :success_charge_decline
+      "4000 0000 0000 0341"
+    when :decline
+      "4000 0000 0000 0002"
+    else
+      "4242 4242 4242 4242"
+    end
   end
 end
