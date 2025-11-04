@@ -26,7 +26,7 @@ describe "Admin::AffiliatesController Scenario", type: :system, js: true do
 
   context "when user has affiliated products" do
     before do
-      products = []
+      []
       product_a = create(:product, unique_permalink: "a", name: "Product a", created_at: 1.minute.ago, updated_at: 1.minute.ago)
       product_b = create(:product, unique_permalink: "b", name: "Product b", created_at: 2.minutes.ago, updated_at: 2.minutes.ago)
       product_c = create(:product, unique_permalink: "c", name: "Product c", created_at: 3.minutes.ago, updated_at: 3.minutes.ago)
