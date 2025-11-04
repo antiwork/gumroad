@@ -149,8 +149,9 @@ namespace :admin do
   # Search
   namespace :search do
     resources :users, only: :index
+    resources :purchases, only: :index
   end
-  get "/search_purchases", to: "search#purchases", as: :search_purchases
+  get "/search_purchases", to: "search#purchases"
 
   # Compliance
   resources :guids, only: [:show]
