@@ -50,7 +50,7 @@ describe "Admin Pages Scenario", type: :system, js: true do
 
     it "searches users by query field" do
       fill_in "Search users (email, name, ID)", with: "joe@example.com\n"
-      expect(page).to have_selector("h1", "Search for joe@example.com")
+      expect(page).to have_selector("h1", text: "Search for joe@example.com")
     end
 
     it "searches cards by all fields" do

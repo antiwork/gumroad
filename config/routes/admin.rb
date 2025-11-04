@@ -112,7 +112,9 @@ namespace :admin do
   resources :comments, only: :create
 
   resources :purchases, only: [:show] do
-    concerns :commentable
+    scope module: :purchases do
+      concerns :commentable
+    end
     member do
       post :refund
       post :refund_for_fraud
