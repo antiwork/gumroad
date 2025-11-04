@@ -20,10 +20,10 @@ const BlockedUserTooltip = ({ user, position = "bottom" }: Props) => {
 
   const content = () => (
     <div className="paragraphs">
-      {blocked_by_form_email_object ? (
+      {blocked_by_form_email_object?.blocked_at ? (
         <span>{`Email blocked ${formatDate(new Date(blocked_by_form_email_object.blocked_at))} (block created ${formatDate(new Date(blocked_by_form_email_object.created_at))})`}</span>
       ) : null}
-      {blocked_by_form_email_domain_object ? (
+      {blocked_by_form_email_domain_object?.blocked_at ? (
         <span>{`${user.form_email_domain} blocked ${formatDate(new Date(blocked_by_form_email_domain_object.blocked_at))} (block created ${formatDate(new Date(blocked_by_form_email_domain_object.created_at))})`}</span>
       ) : null}
     </div>

@@ -184,7 +184,7 @@ class Api::Internal::Helper::PayoutsController < Api::Internal::Helper::BaseCont
       return
     end
 
-    if Payouts.is_user_payable(@user, payout_date, processor_type: payout_processor_type, add_comment: true, from_admin: true)
+    if Payouts.is_user_payable(@user, payout_date, processor_type: payout_processor_type, add_comment: true)
       payments = PayoutUsersService.new(date_string: payout_date,
                                         processor_type: payout_processor_type,
                                         user_ids: [@user.id]).process
