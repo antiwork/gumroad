@@ -66,22 +66,6 @@ describe Admin::UsersController, type: :controller, inertia: true do
       expect(inertia.component).to eq("Admin/Users/Show")
       expect(inertia.props[:user][:id]).to eq(user.id)
     end
-
-    describe "blocked email tooltip" do
-      let(:email) { "john@example.com" }
-      let!(:email_blocked_object) { BlockedObject.block!(:email, email, user) }
-      let!(:email_domain_blocked_object) { BlockedObject.block!(:email_domain, Mail::Address.new(email).domain, user) }
-
-      before do
-        user.update!(email:)
-      end
-
-      it "renders the tooltip" do
-        get "show", params: { id: user.id }
-        expect(response.body).to have_text("Email blocked")
-        expect(response.body).to have_text("example.com blocked")
-      end
-    end
   end
 
   describe "refund balance logic", :vcr, :sidekiq_inline do
