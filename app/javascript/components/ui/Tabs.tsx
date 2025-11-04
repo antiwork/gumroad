@@ -50,9 +50,7 @@ export const Tabs = ({ children, className, variant, ...props }: TabsProps) => (
   </div>
 );
 
-interface TabProps
-  extends Omit<React.HTMLProps<HTMLAnchorElement>, "selected">,
-    VariantProps<typeof tabVariants> {
+interface TabProps extends Omit<React.HTMLProps<HTMLAnchorElement>, "selected">, VariantProps<typeof tabVariants> {
   children: React.ReactNode;
   asChild?: boolean;
   isSelected: boolean;
