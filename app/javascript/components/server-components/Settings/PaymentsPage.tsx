@@ -596,7 +596,7 @@ const PaymentsPage = (props: Props) => {
     if (!complianceInfo.city) {
       markFieldInvalid("city");
     }
-    if (complianceInfo.country !== null && complianceInfo.country in props.states && !complianceInfo.state) {
+    if (complianceInfo.country !== null && complianceInfo.country in props.states && (!complianceInfo.state || complianceInfo.state === "State")) {
       markFieldInvalid("state");
     }
     if (!complianceInfo.zip_code && complianceInfo.country !== "BW") {
@@ -668,7 +668,7 @@ const PaymentsPage = (props: Props) => {
       if (
         complianceInfo.business_country !== null &&
         complianceInfo.business_country in props.states &&
-        !complianceInfo.business_state
+        (!complianceInfo.business_state || complianceInfo.business_state === "State")
       ) {
         markFieldInvalid("business_state");
       }

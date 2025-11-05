@@ -316,7 +316,7 @@ const AccountDetailsSection = ({
                   value={complianceInfo.business_state || "State"}
                   onChange={(evt) => updateComplianceInfo({ business_state: evt.target.value })}
                 >
-                  <option disabled>State</option>
+                  <option disabled value="State">State</option>
                   {states.us.map((state) => (
                     <option key={state.code} value={state.code}>
                       {state.name}
@@ -358,7 +358,7 @@ const AccountDetailsSection = ({
                   value={complianceInfo.business_state || "State"}
                   onChange={(evt) => updateComplianceInfo({ business_state: evt.target.value })}
                 >
-                  <option disabled>State</option>
+                  <option disabled value="State">State</option>
                   {states.au.map((state) => (
                     <option key={state.code} value={state.code}>
                       {state.name}
@@ -379,7 +379,7 @@ const AccountDetailsSection = ({
                   value={complianceInfo.business_state || "State"}
                   onChange={(evt) => updateComplianceInfo({ business_state: evt.target.value })}
                 >
-                  <option disabled>State</option>
+                  <option disabled value="State">State</option>
                   {states.mx.map((state) => (
                     <option key={state.code} value={state.code}>
                       {state.name}
@@ -834,7 +834,7 @@ const AccountDetailsSection = ({
               value={complianceInfo.state || "State"}
               onChange={(evt) => updateComplianceInfo({ state: evt.target.value })}
             >
-              <option disabled>State</option>
+              <option disabled value="State">State</option>
               {states.us.map((state) => (
                 <option key={state.code} value={state.code}>
                   {state.name}
@@ -876,7 +876,7 @@ const AccountDetailsSection = ({
               value={complianceInfo.state || "State"}
               onChange={(evt) => updateComplianceInfo({ state: evt.target.value })}
             >
-              <option disabled>State</option>
+              <option disabled value="State">State</option>
               {states.au.map((state) => (
                 <option key={state.code} value={state.code}>
                   {state.name}
@@ -897,7 +897,7 @@ const AccountDetailsSection = ({
               value={complianceInfo.state || "State"}
               onChange={(evt) => updateComplianceInfo({ state: evt.target.value })}
             >
-              <option disabled>State</option>
+              <option disabled value="State">State</option>
               {states.mx.map((state) => (
                 <option key={state.code} value={state.code}>
                   {state.name}
@@ -960,7 +960,7 @@ const AccountDetailsSection = ({
               value={complianceInfo.state || "State"}
               onChange={(evt) => updateComplianceInfo({ state: evt.target.value })}
             >
-              <option disabled>State</option>
+              <option disabled value="State">State</option>
               {states.br.map((state) => (
                 <option key={state.code} value={state.code}>
                   {state.name}
