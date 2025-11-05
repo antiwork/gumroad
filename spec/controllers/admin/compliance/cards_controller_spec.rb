@@ -106,4 +106,3 @@ describe Admin::Compliance::CardsController, type: :controller, inertia: true do
     end
   end
 end
-

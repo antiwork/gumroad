@@ -295,7 +295,7 @@ class Api::Internal::Helper::PurchasesController < Api::Internal::Helper::BaseCo
     end
 
     render json: { success: true, message: "Purchase found", purchase: purchase_json }
-  rescue Admin::Search::BaseService::InvalidDateError
+  rescue Admin::Search::PurchasesService::InvalidDateError
     render json: { success: false, message: "purchase_date must use YYYY-MM-DD format." }, status: :bad_request
   end
 
