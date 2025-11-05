@@ -109,6 +109,7 @@ export const TestimonialSelectModal = ({
           ) : null}
         </>
       }
+      className="max-h-[100vh] overflow-y-auto"
     >
       <div>
         {isLoading && state.reviews.length === 0 ? (

@@ -2,6 +2,7 @@ import * as Dialog from "@radix-ui/react-dialog";
 import * as React from "react";
 
 import { Icon } from "$app/components/Icons";
+import { classNames } from "$app/utils/classNames";
 
 export const Modal = ({
   title,
@@ -11,6 +12,7 @@ export const Modal = ({
   onClose,
   modal = true,
   usePortal,
+  className,
   ...props
 }: {
   title?: string;
@@ -18,13 +20,14 @@ export const Modal = ({
   footer?: React.ReactNode;
   allowClose?: boolean;
   usePortal?: boolean;
+  className?: string;
   onClose?: () => void;
 } & Omit<React.ComponentProps<typeof Dialog.Root>, "onOpenChange">) => {
   const content = (
     <>
       <Dialog.Content
         aria-modal={modal}
-        className="bg-filled fixed top-[50%] left-[50%] z-31 flex max-w-175 min-w-80 translate-[-50%] flex-col gap-4 rounded border border-border p-8 shadow-lg dark:shadow-none"
+        className={classNames( "bg-filled fixed top-[50%] left-[50%] z-31 flex max-w-175 min-w-80 translate-[-50%] flex-col gap-4 rounded border border-border p-8 shadow-lg dark:shadow-none", className)}
         onOpenAutoFocus={(e) => {
           if (!modal) e.preventDefault();
         }}
