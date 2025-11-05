@@ -6,14 +6,21 @@ import { Icon } from "$app/components/Icons";
 export const Sheet = ({
   children,
   className,
+  title,
   ...props
-}: { className?: string } & React.ComponentProps<typeof Dialog.Root>) => (
+}: { className?: string; title?: React.ReactNode } & React.ComponentProps<typeof Dialog.Root>) => (
   <Dialog.Root {...props}>
     <Dialog.Portal>
-      <Dialog.Content className="bg-filled fixed inset-y-0 right-0 z-40 flex w-[40vw] flex-col gap-4 overflow-auto p-6">
-        <Dialog.Close className="absolute top-4 right-4">
-          <Icon name="x" />
-        </Dialog.Close>
+      <Dialog.Content
+        className="bg-filled fixed inset-y-0 right-0 z-40 flex w-[40vw] flex-col gap-4 overflow-auto p-6"
+        aria-modal
+      >
+        <div className="flex items-start gap-4">
+          {title ? <Dialog.Title>{title}</Dialog.Title> : null}
+          <Dialog.Close className="ml-auto">
+            <Icon name="x" />
+          </Dialog.Close>
+        </div>
         {children}
       </Dialog.Content>
       <Dialog.Overlay className="fixed inset-0 z-30 bg-backdrop" />

@@ -32,6 +32,7 @@ import { useLoggedInUser } from "$app/components/LoggedInUser";
 import { Modal } from "$app/components/Modal";
 import { Pagination, PaginationProps } from "$app/components/Pagination";
 import { Popover } from "$app/components/Popover";
+import { WithPreviewSidebar } from "$app/components/PreviewSidebar";
 import { applySelection } from "$app/components/Product/ConfigurationSelector";
 import { Select } from "$app/components/Select";
 import { CrossSellModal, UpsellModal } from "$app/components/server-components/CheckoutPage";
@@ -395,8 +396,7 @@ const UpsellDrawer = ({
   const loggedInUser = useLoggedInUser();
   const isReadOnly = !loggedInUser?.policies.upsell.create;
   return (
-    <Sheet open onOpenChange={onClose}>
-      <h2>{selectedUpsell.name}</h2>
+    <Sheet open onOpenChange={onClose} title={selectedUpsell.name}>
       <section className="stack">
         <h3>Details</h3>
         <div>
@@ -694,7 +694,7 @@ const Form = ({
           </>
         }
       />
-      <div className="squished flex-1 lg:grid lg:grid-cols-[1fr_30vw]">
+      <WithPreviewSidebar className="flex-1">
         <form>
           <section className="p-8!">
             <p>
@@ -1003,7 +1003,7 @@ const Form = ({
             )}
           </Modal>
         </CheckoutPreview>
-      </div>
+      </WithPreviewSidebar>
     </>
   );
 };

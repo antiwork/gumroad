@@ -414,8 +414,7 @@ const UtmLinkDetails = ({
   const userAgentInfo = useUserAgentInfo();
 
   return (
-    <Sheet open onOpenChange={onClose}>
-      <h2>{utmLink.title}</h2>
+    <Sheet open onOpenChange={onClose} title={utmLink.title}>
       <section className="stack">
         <div>
           <h3>Details</h3>

@@ -70,9 +70,7 @@ const IncomingCollaboratorDetails = ({
   onRemove: () => void;
   disabled: boolean;
 }) => (
-  <Sheet open onOpenChange={onClose}>
-    <h2>{selected.seller_name}</h2>
-
+  <Sheet open onOpenChange={onClose} title={selected.seller_name}>
     <section className="stack">
       <h3>Email</h3>
       <div>

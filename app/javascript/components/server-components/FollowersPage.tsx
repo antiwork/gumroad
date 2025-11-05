@@ -206,8 +206,7 @@ export const FollowersPage = ({ followers: initialFollowers, per_page, total }: 
               </Button>
             ) : null}
             {selectedFollower ? (
-              <Sheet open onOpenChange={() => setSelectedFollowerId(null)}>
-                <h2>Details</h2>
+              <Sheet open onOpenChange={() => setSelectedFollowerId(null)} title="Details">
                 <div className="stack">
                   <div>
                     <div>

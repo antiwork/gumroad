@@ -350,7 +350,6 @@ const FormPage = ({
           </section>
         </div>
         <CheckoutPreview
-          className="hidden lg:block"
           cartItem={{
             ...cartItem,
             product: {

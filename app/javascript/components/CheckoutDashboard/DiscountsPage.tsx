@@ -475,8 +475,11 @@ const DiscountsPage = ({ offer_codes, pages, products, pagination: initialPagina
           </Placeholder>
         )}
         {selectedOfferCode ? (
-          <Sheet open onOpenChange={() => setSelectedOfferCodeId(null)}>
-            <h2>{selectedOfferCode.name || selectedOfferCode.code.toUpperCase()}</h2>
+          <Sheet
+            open
+            onOpenChange={() => setSelectedOfferCodeId(null)}
+            title={selectedOfferCode.name || selectedOfferCode.code.toUpperCase()}
+          >
             <section className="stack">
               <h3>Details</h3>
               <div>

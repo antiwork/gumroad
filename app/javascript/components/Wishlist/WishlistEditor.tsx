@@ -44,8 +44,7 @@ export const WishlistEditor = ({
   };
 
   return (
-    <Sheet open onOpenChange={close}>
-      <h2>{newName || "Untitled"}</h2>
+    <Sheet open onOpenChange={close} title={newName || "Untitled"}>
       {isDiscoverable ? (
         <small className="mt-1 text-muted">
           <Icon name="solid-check-circle" /> Discoverable

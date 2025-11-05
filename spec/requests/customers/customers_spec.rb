@@ -321,7 +321,7 @@ describe "Sales page", type: :system, js: true do
           expect(page).to have_text("UTM")
         end
         row.click
-        within_section "Product 1", section_element: :aside do
+        within_modal "Product 1" do
           within_section "UTM link", section_element: :section, match: :first do
             expect(page).to have_text("This sale was driven by a UTM link.")
             expect(page).to have_link("UTM link", href: utm_link.utm_url)
@@ -353,7 +353,7 @@ describe "Sales page", type: :system, js: true do
         end
         row.click
 
-        within_section product_with_installment_plan.name, section_element: :aside do
+        within_modal product_with_installment_plan.name do
           within_section "Order information" do
             expect(page).to have_text("Installment plan status In progress", normalize_ws: true)
           end
@@ -377,7 +377,7 @@ describe "Sales page", type: :system, js: true do
       visit customers_path
 
       find(:table_row, { "Email" => "customer1@gumroad.com" }).click
-      within_section "Product 1", section_element: :aside do
+      within_modal "Product 1" do
         within_section "Order information" do
           expect(page).to have_link("Transaction", href: "https://www.google.com")
           expect(page).to have_text("Customer name Customer 1", normalize_ws: true)
@@ -402,7 +402,7 @@ describe "Sales page", type: :system, js: true do
       click_on "Close"
 
       find(:table_row, { "Email" => "customer2@gumroad.com" }).click
-      within_section "Membership", section_element: :aside do
+      within_modal "Membership" do
         within_section "Order information" do
           expect(page).to have_text("Customer name Customer 2", normalize_ws: true)
           expect(page).to have_text("Seats 2", normalize_ws: true)
@@ -476,7 +476,7 @@ describe "Sales page", type: :system, js: true do
         post = posts.last
         visit customers_path
         find(:table_row, { "Name" => "Customer 1" }).click
-        within_section "Product 1", section_element: :aside do
+        within_modal "Product 1" do
           within_section "Send missed posts", section_element: :section do
             10.times do |i|
               expect(page).to have_section("Post #{i}")
@@ -498,7 +498,7 @@ describe "Sales page", type: :system, js: true do
 
         visit customers_path
         find(:table_row, { "Name" => "Customer 1" }).click
-        within_section "Product 1", section_element: :aside do
+        within_modal "Product 1" do
           within_section "Send missed posts", section_element: :section do
             expect(page).to_not have_button("Show more")
             expect(page).to_not have_section("Post 10")
@@ -519,7 +519,7 @@ describe "Sales page", type: :system, js: true do
       it "does not allow re-sending an email if the seller is not eligible to send emails" do
         visit customers_path
         find(:table_row, { "Name" => "Customer 1" }).click
-        within_section "Product 1", section_element: :aside do
+        within_modal "Product 1" do
           within_section "Send missed posts", section_element: :section do
             click_on "Show more"
             within_section "Post 10" do
@@ -539,7 +539,7 @@ describe "Sales page", type: :system, js: true do
       it "displays the receipts and allows re-sending them" do
         visit customers_path
         find(:table_row, { "Name" => "Customer 2" }).click
-        within_section "Membership", section_element: :aside do
+        within_modal "Membership" do
           within_section "Emails received", section_element: :section do
             expect(page).to have_section("Receipt", text: "Delivered #{purchase2.created_at.strftime("%b %-d")}")
             within_section "Receipt", text: "Delivered #{membership_purchase.created_at.strftime("%b %-d")}" do
@@ -565,7 +565,7 @@ describe "Sales page", type: :system, js: true do
       it "includes an additional contribution status" do
         visit customers_path
         find(:table_row, { "Name" => "Customer 1" }).click
-        within_section "Product 1", section_element: :aside do
+        within_modal "Product 1" do
           expect(page).to have_selector("[role='status']", text: "Additional amount: This is an additional contribution, added to a previous purchase of this product.")
         end
       end
@@ -580,7 +580,7 @@ describe "Sales page", type: :system, js: true do
       it "includes a PPP status" do
         visit customers_path
         find(:table_row, { "Name" => "Customer 1" }).click
-        within_section "Product 1", section_element: :aside do
+        within_modal "Product 1" do
           expect(page).to have_selector("[role='status']", text: "This customer received a purchasing power parity discount of 50% because they are located in United States.")
         end
       end
@@ -599,7 +599,7 @@ describe "Sales page", type: :system, js: true do
       it "includes gift statuses" do
         visit customers_path
         find(:table_row, { "Name" => "Customer 2" }).click
-        within_section "Membership", section_element: :aside do
+        within_modal "Membership" do
           expect(page).to have_selector("[role='status']", text: "customer2@gumroad.com purchased this for customer1@gumroad.com.")
         end
       end
@@ -611,7 +611,7 @@ describe "Sales page", type: :system, js: true do
         visit customers_path
         find(:table_row, { "Name" => "Customer 2" }).click
 
-        within_section "Membership", section_element: :aside do
+        within_modal "Membership" do
           within_section "Review" do
             within_section "Rating" do
               expect(page).to have_selector("[aria-label='1 star']")
@@ -635,7 +635,7 @@ describe "Sales page", type: :system, js: true do
       it "includes a preorder status" do
         visit customers_path
         find(:table_row, { "Name" => "Customer 1" }).click
-        within_section "Product 1", section_element: :aside do
+        within_modal "Product 1" do
           expect(page).to have_selector("[role='status']", text: "Pre-order: This is a pre-order authorization. The customer's card has not been charged yet.")
         end
       end
@@ -647,7 +647,7 @@ describe "Sales page", type: :system, js: true do
 
         visit customers_path
         find(:table_row, { "Name" => "Customer 1" }).click
-        within_section "Product 1", section_element: :aside do
+        within_modal "Product 1" do
           expect(page).to have_selector("[role='status']", text: "Affiliate: An affiliate (#{purchase1.affiliate.affiliate_user.form_email}) helped you make this sale and received $0.")
         end
       end
@@ -657,7 +657,7 @@ describe "Sales page", type: :system, js: true do
 
         visit customers_path
         find(:table_row, { "Name" => "Customer 1" }).click
-        within_section "Product 1", section_element: :aside do
+        within_modal "Product 1" do
           expect(page).not_to have_selector("[role='status']", text: "Affiliate: An affiliate (#{purchase1.affiliate.affiliate_user.form_email}) helped you make this sale and received $0.")
         end
       end
@@ -673,7 +673,7 @@ describe "Sales page", type: :system, js: true do
         visit customers_path
         find(:table_row, { "Name" => "Customer 2" }).click
 
-        within_section "Membership", section_element: :aside do
+        within_modal "Membership" do
           within_section "Email", section_element: :section do
             expect(page).to have_text("customer2@gumroad.com")
             click_on "Edit"
@@ -683,7 +683,7 @@ describe "Sales page", type: :system, js: true do
         end
         expect(page).to have_alert(text: "Email updated successfully.")
 
-        within_section "Membership", section_element: :aside do
+        within_modal "Membership" do
           within_section "Email", section_element: :section do
             expect(page).to have_button("Edit")
             expect(page).to have_text("newcustomer2@gumroad.com")
@@ -698,7 +698,7 @@ describe "Sales page", type: :system, js: true do
         end
         expect(page).to have_alert(text: "Your customer will no longer receive your posts.")
 
-        within_section "Membership", section_element: :aside do
+        within_modal "Membership" do
           within_section "Giftee email", section_element: :section do
             expect(page).to have_text("customer1@gumroad.com")
             click_on "Edit"
@@ -717,7 +717,7 @@ describe "Sales page", type: :system, js: true do
         visit customers_path
         find(:table_row, { "Name" => "Customer 2" }).click
 
-        within_section "Membership", section_element: :aside do
+        within_modal "Membership" do
           within_section "Email", section_element: :section do
             check "Receives emails", unchecked: true
           end
@@ -731,7 +731,7 @@ describe "Sales page", type: :system, js: true do
         visit customers_path
         find(:table_row, { "Name" => "Customer 2" }).click
 
-        within_section "Membership", section_element: :aside do
+        within_modal "Membership" do
           within_section "Email", section_element: :section do
             expect(page).to have_text("customer2@gumroad.com")
             click_on "Edit"
@@ -749,7 +749,7 @@ describe "Sales page", type: :system, js: true do
         it "doesn't allow updating the email" do
           visit customers_path
           find(:table_row, { "Name" => "Customer 3" }).click
-          within_section "Product 2", section_element: :aside do
+          within_modal "Product 2" do
             within_section "Email", section_element: :section do
               expect(page).to have_text("customer3hasaninsanelylongemailaddress@gumroad.com")
               expect(page).to have_text("You cannot change the email of this purchase, because it was made by an existing user. Please ask them to go to gumroad.com/settings to update their email.")
@@ -780,7 +780,7 @@ describe "Sales page", type: :system, js: true do
 
         expect(page).to have_section("Emails received")
 
-        within_section "Bundle", section_element: :aside do
+        within_modal "Bundle" do
           within_section "Content", section_element: :section do
             within_section "Bundle Product 1" do
               click_on "Manage"
@@ -793,7 +793,7 @@ describe "Sales page", type: :system, js: true do
 
         click_on "Return to bundle"
 
-        within_section "Bundle", section_element: :aside do
+        within_modal "Bundle" do
           within_section "Content", section_element: :section do
             within_section "Bundle Product 2" do
               click_on "Manage"
@@ -801,7 +801,7 @@ describe "Sales page", type: :system, js: true do
           end
         end
 
-        within_section "Bundle Product 2", section_element: :aside do
+        within_modal "Bundle Product 2" do
           expect(page).to_not have_section("Emails received")
           click_on "Edit"
           fill_in "Email", with: "stoleyourbundle@gumroad.com"
@@ -825,7 +825,7 @@ describe "Sales page", type: :system, js: true do
 
         find(:table_row, { "Name" => "Customer 1" }).click
 
-        within_section "Bundle", section_element: :aside do
+        within_modal "Bundle" do
           within_section "Email", section_element: :section do
             expect(page).to have_text("customer1@gumroad.com")
             click_on "Edit"
@@ -837,28 +837,28 @@ describe "Sales page", type: :system, js: true do
 
         refresh
         find(:table_row, { "Name" => "Customer 1" }).click
-        within_section "Bundle", section_element: :aside do
+        within_modal "Bundle" do
           within_section "Content", section_element: :section do
             within_section "Bundle Product 1" do
               click_on "Manage"
             end
           end
         end
-        within_section "Bundle Product 1", section_element: :aside do
+        within_modal "Bundle Product 1" do
           within_section "Email", section_element: :section do
             expect(page).to have_text("customer2@gumroad.com")
           end
         end
 
         click_on "Return to bundle"
-        within_section "Bundle", section_element: :aside do
+        within_modal "Bundle" do
           within_section "Content", section_element: :section do
             within_section "Bundle Product 2" do
               click_on "Manage"
             end
           end
         end
-        within_section "Bundle Product 2", section_element: :aside do
+        within_modal "Bundle Product 2" do
           within_section "Email", section_element: :section do
             expect(page).to have_text("customer2@gumroad.com")
           end
@@ -874,7 +874,7 @@ describe "Sales page", type: :system, js: true do
         visit customers_path
         find(:table_row, { "Product" => "Membership" }).click
 
-        within_section "Membership", section_element: :aside do
+        within_modal "Membership" do
           within_section "License key", section_element: :section do
             click_on "Disable"
           end
@@ -883,7 +883,7 @@ describe "Sales page", type: :system, js: true do
         expect(page).to have_alert(text: "Changes saved!")
         expect(purchase2.license.reload.disabled_at).to_not be_nil
 
-        within_section "Membership", section_element: :aside do
+        within_modal "Membership" do
           within_section "License key", section_element: :section do
             click_on "Enable"
           end
@@ -892,7 +892,7 @@ describe "Sales page", type: :system, js: true do
         expect(page).to have_alert(text: "Changes saved!")
         expect(purchase2.license.reload.disabled_at).to be_nil
 
-        within_section "Membership", section_element: :aside do
+        within_modal "Membership" do
           within_section "Seats", section_element: :section do
             expect(page).to have_text("2")
             click_on "Edit"
@@ -903,7 +903,7 @@ describe "Sales page", type: :system, js: true do
         wait_for_ajax
         expect(page).to have_alert(text: "Successfully updated seats!")
 
-        within_section "Membership", section_element: :aside do
+        within_modal "Membership" do
           within_section "Seats", section_element: :section do
             expect(page).to have_text("3")
           end
@@ -924,7 +924,7 @@ describe "Sales page", type: :system, js: true do
         icon = table_row.find("[aria-label='Not Shipped']")
         expect(icon).to have_tooltip(text: "Not Shipped", visible: false)
         table_row.click
-        within_section "Product 1", section_element: :aside do
+        within_modal "Product 1" do
           within_section "Order information", section_element: :section do
             expect(page).to have_text("SKU #{purchase1.sku.custom_name_or_external_id}", normalize_ws: true)
             expect(page).to have_text("Order number #{purchase1.external_id_numeric}", normalize_ws: true)
@@ -958,7 +958,7 @@ describe "Sales page", type: :system, js: true do
         expect(purchase1.zip_code).to eq("10001")
         expect(purchase1.country).to eq("United States Minor Outlying Islands")
 
-        within_section "Product 1", section_element: :aside do
+        within_modal "Product 1" do
           within_section "Shipping address", section_element: :section do
             expect(page).to have_text("New Customer 1")
             expect(page).to have_text("456 Main St")
@@ -967,7 +967,7 @@ describe "Sales page", type: :system, js: true do
           end
         end
 
-        within_section "Product 1", section_element: :aside do
+        within_modal "Product 1" do
           within_section "Tracking information", section_element: :section do
             fill_in "Tracking URL (optional)", with: "https://www.google.com"
             click_on "Mark as shipped"
@@ -979,7 +979,7 @@ describe "Sales page", type: :system, js: true do
         expect(shipment.shipped?).to eq(true)
         expect(shipment.tracking_url).to eq("https://www.google.com")
 
-        within_section "Product 1", section_element: :aside do
+        within_modal "Product 1" do
           within_section "Tracking information", section_element: :section do
             expect(page).to have_link("Track shipment", href: "https://www.google.com", target: "_blank")
           end
@@ -994,7 +994,7 @@ describe "Sales page", type: :system, js: true do
         it "displays a status" do
           visit customers_path
           find(:table_row, { "Name" => "Customer 1" }).click
-          within_section "Product 1", section_element: :aside do
+          within_modal "Product 1" do
             within_section "Tracking information", section_element: :section do
               expect(page).to have_selector("[role='status']", text: "Shipped")
             end
@@ -1008,7 +1008,7 @@ describe "Sales page", type: :system, js: true do
         visit customers_path
 
         find(:table_row, { "Name" => "Customer 2" }).click
-        within_section "Membership", section_element: :aside do
+        within_modal "Membership" do
           click_on "Cancel subscription"
           within_modal("Cancel subscription") { click_on "Close" }
           expect(page).to_not have_modal("Cancel subscription")
@@ -1020,7 +1020,7 @@ describe "Sales page", type: :system, js: true do
         end
 
         expect(page).to have_alert(text: "Changes saved!")
-        within_section "Membership", section_element: :aside do
+        within_modal "Membership" do
           within_section "Order information", section_element: :section do
             expect(page).to have_text("Membership status Cancellation pending", normalize_ws: true)
           end
@@ -1086,7 +1086,7 @@ describe "Sales page", type: :system, js: true do
         visit customers_path
 
         find(:table_row, { "Name" => "Customer 1" }).click
-        within_section "Product 1", section_element: :aside do
+        within_modal "Product 1" do
           within_section "Information provided", section_element: :section do
             expect(page).to have_text("String field I'm a string", normalize_ws: true)
             expect(page).to have_text("Boolean field false", normalize_ws: true)
@@ -1113,7 +1113,7 @@ describe "Sales page", type: :system, js: true do
         end
         row.click
 
-        within_section "Membership", section_element: :aside do
+        within_modal "Membership" do
           within_section "Charges", section_element: :section do
             expect(page).to have_selector("[role='status']", text: "1 charge remaining")
             expect(page).to have_text("$4 on 1/1/2022")
@@ -1145,7 +1145,7 @@ describe "Sales page", type: :system, js: true do
         expect(purchase2.stripe_partially_refunded?).to eq(true)
         expect(purchase2.stripe_refunded?).to eq(false)
 
-        within_section "Membership", section_element: :aside do
+        within_modal "Membership" do
           within_section "Charges", section_element: :section do
             click_on "Refund Options"
             expect(page).to have_selector("[role='status']", text: "Going forward, Gumroad does not return any fees when a payment is refunded. Learn more")
@@ -1168,7 +1168,7 @@ describe "Sales page", type: :system, js: true do
           click_on "Confirm refund"
         end
         expect(page).to have_alert(text: "Purchase successfully refunded.")
-        within_section "Membership", section_element: :aside do
+        within_modal "Membership" do
           within_section "Charges", section_element: :section do
             expect(page).to have_text("Refunded")
           end
@@ -1193,7 +1193,7 @@ describe "Sales page", type: :system, js: true do
         end
         row.click
 
-        within_section "Membership", section_element: :aside do
+        within_modal "Membership" do
           within_section "Charges", section_element: :section do
             expect(page).to have_text("Chargedback")
             expect(page).to have_link("Transaction", href: "https://www.google.com", target: "_blank")
@@ -1210,7 +1210,7 @@ describe "Sales page", type: :system, js: true do
         it "disables the refund button and displays a tooltip" do
           visit customers_path
           find(:table_row, { "Name" => "Customer 2" }).click
-          within_section "Membership", section_element: :aside do
+          within_modal "Membership" do
             within_section "Charges", section_element: :section do
               click_on "Refund Options"
               refund_button = find_button("Refund fully", disabled: true)
@@ -1236,7 +1236,7 @@ describe "Sales page", type: :system, js: true do
         visit customers_path
         find(:table_row, { "Name" => "Commissionee" }).click
 
-        within_section "Commission", section_element: :aside do
+        within_modal "Commission" do
           within_section "Files", section_element: :section do
             expect(page).to have_text("Files")
             expect(page).not_to have_selector("[role='tree']")
@@ -1249,7 +1249,7 @@ describe "Sales page", type: :system, js: true do
         expect(commission.files.first.filename).to eq("smilie.png")
         expect(commission.files.last.filename).to eq("test.pdf")
 
-        within_section "Commission", section_element: :aside do
+        within_modal "Commission" do
           within_section "Files", section_element: :section do
             within "[role='tree']" do
               expect(page).to have_selector("[role='treeitem']", count: 2)
@@ -1278,7 +1278,7 @@ describe "Sales page", type: :system, js: true do
         expect(commission.files.count).to eq(1)
         expect(commission.files.first.filename).to eq("test.pdf")
 
-        within_section "Commission", section_element: :aside do
+        within_modal "Commission" do
           within_section "Files", section_element: :section do
             within "[role='tree']" do
               expect(page).to have_selector("[role='treeitem']", count: 1)
@@ -1292,17 +1292,17 @@ describe "Sales page", type: :system, js: true do
       it "allows completing a commission" do
         visit customers_path
         find(:table_row, { "Name" => "Commissionee" }).click
-        within_section "Commission", section_element: :aside do
+        within_modal "Commission" do
           expect(page).to have_text("In progress")
           click_on "Submit and mark as complete"
         end
         expect(page).to have_alert(text: "Commission completed!")
-        within_section "Commission", section_element: :aside do
+        within_modal "Commission" do
           expect(page).to have_text("Completed")
         end
         click_on "Close"
         find(:table_row, { "Name" => "Commissionee" }).click
-        within_section "Commission", section_element: :aside do
+        within_modal "Commission" do
           expect(page).to have_text("Completed")
         end
 
@@ -1325,7 +1325,7 @@ describe "Sales page", type: :system, js: true do
         it "allows refunding commission purchases" do
           visit customers_path
           find(:table_row, { "Name" => "Commissionee" }).click
-          within_section "Commission", section_element: :aside do
+          within_modal "Commission" do
             within_section "Charges", section_element: :section do
               within_section "$1", match: :first do
                 click_on "Refund Options"
@@ -1343,7 +1343,7 @@ describe "Sales page", type: :system, js: true do
           expect(deposit_purchase.stripe_partially_refunded?).to eq(false)
           expect(deposit_purchase.stripe_refunded?).to eq(true)
 
-          within_section "Commission", section_element: :aside do
+          within_modal "Commission" do
             within_section "Charges", section_element: :section do
               within_section "$1", match: :first do
                 click_on "Refund Options"
@@ -1376,7 +1376,7 @@ describe "Sales page", type: :system, js: true do
         it "displays custom field values and files" do
           visit customers_path
           find(:table_row, { "Name" => "Commissionee" }).click
-          within_section "Commission", section_element: :aside do
+          within_modal "Commission" do
             within_section "Information provided", section_element: :section do
               within_section "What's your pet's name?", section_element: :section do
                 expect(page).to have_text("Fido")
@@ -1445,7 +1445,7 @@ describe "Sales page", type: :system, js: true do
         visit customers_path
         find(:table_row, { "Name" => "Customer 3" }).click
 
-        within_section "Product 2", section_element: :aside do
+        within_modal "Product 2" do
           within_section "Refund", section_element: :section do
             fill_in "3", with: "1"
             click_on "Issue partial refund"
@@ -1473,7 +1473,7 @@ describe "Sales page", type: :system, js: true do
         expect(purchase3.stripe_refunded?).to eq(false)
         expect(purchase3.amount_refundable_cents).to eq(200)
 
-        within_section "Product 2", section_element: :aside do
+        within_modal "Product 2" do
           within_section "Refund", section_element: :section do
             find_field("2", with: "2").fill_in with: "3"
             click_on "Refund fully"
@@ -1501,7 +1501,7 @@ describe "Sales page", type: :system, js: true do
         expect(purchase3.stripe_partially_refunded?).to eq(false)
         expect(purchase3.stripe_refunded?).to eq(true)
         expect(purchase3.amount_refundable_cents).to eq(0)
-        within_section "Product 2", section_element: :aside do
+        within_modal "Product 2" do
           expect(page).to_not have_section("Refund")
         end
 
@@ -1512,11 +1512,11 @@ describe "Sales page", type: :system, js: true do
           expect(page).to have_text("Chargedback")
         end
         row.click
-        within_section "Product 1", section_element: :aside do
+        within_modal "Product 1" do
           expect(page).to_not have_section("Refund")
         end
         find(:table_row, { "Name" => "Customer 2" }).click
-        within_section "Membership", section_element: :aside do
+        within_modal "Membership" do
           expect(page).to_not have_section("Refund")
         end
       end
@@ -1533,7 +1533,7 @@ describe "Sales page", type: :system, js: true do
           visit customers_path
           find(:table_row, { "Name" => "Customer 1" }).click
 
-          within_section "Product 1", section_element: :aside do
+          within_modal "Product 1" do
             within_section "Refund", section_element: :section do
               expect(page).to have_field("1", with: "1")
               click_on "Refund fully"
@@ -1556,7 +1556,7 @@ describe "Sales page", type: :system, js: true do
           visit customers_path
           find(:table_row, { "Name" => "Customer 1" }).click
 
-          within_section "Product 1", section_element: :aside do
+          within_modal "Product 1" do
             within_section "Refund", section_element: :section do
               expect(page).to have_field("1", with: "1")
               click_on "Refund fully"
@@ -1583,7 +1583,7 @@ describe "Sales page", type: :system, js: true do
         it "disables the refund button and displays a tooltip" do
           visit customers_path
           find(:table_row, { "Name" => "Customer 3" }).click
-          within_section "Product 2", section_element: :aside do
+          within_modal "Product 2" do
             within_section "Refund", section_element: :section do
               refund_button = find_button("Refund fully", disabled: true)
               refund_button.hover
@@ -1600,7 +1600,7 @@ describe "Sales page", type: :system, js: true do
 
         find(:table_row, { "Name" => "Customer 2" }).click
 
-        within_section "Membership", section_element: :aside do
+        within_modal "Membership" do
           within_section "Tier", section_element: :section do
             expect(page).to have_section("First Tier")
             click_on "Edit"
@@ -1615,7 +1615,7 @@ describe "Sales page", type: :system, js: true do
 
         expect(page).to have_alert(text: "Saved variant")
 
-        within_section "Membership", section_element: :aside do
+        within_modal "Membership" do
           within_section "Tier", section_element: :section do
             expect(page).to have_section("Second Tier")
           end
@@ -1633,7 +1633,7 @@ describe "Sales page", type: :system, js: true do
           visit customers_path
           find(:table_row, { "Name" => "Customer 2" }).click
 
-          within_section "Membership", section_element: :aside do
+          within_modal "Membership" do
             within_section "Tier", section_element: :section do
               expect(page).to have_section("None selected")
               click_on "Edit"
@@ -1650,7 +1650,7 @@ describe "Sales page", type: :system, js: true do
 
           expect(page).to have_alert(text: "Saved variant")
 
-          within_section "Membership", section_element: :aside do
+          within_modal "Membership" do
             within_section "Tier", section_element: :section do
               expect(page).to have_section("Second Tier")
             end

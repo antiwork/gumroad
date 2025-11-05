@@ -174,8 +174,7 @@ export const ScheduledTab = () => {
               </Button>
             ) : null}
             {selectedInstallment ? (
-              <Sheet open onOpenChange={() => setSelectedInstallmentId(null)}>
-                <h2>{selectedInstallment.name}</h2>
+              <Sheet open onOpenChange={() => setSelectedInstallmentId(null)} title={selectedInstallment.name}>
                 <div className="stack">
                   <div>
                     <h5>Sent to</h5>

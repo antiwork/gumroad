@@ -12,12 +12,10 @@ export const CheckoutPreview = ({
   children,
   cartItem,
   recommendedProduct,
-  className,
 }: {
   children?: React.ReactNode;
   cartItem: CartItem;
   recommendedProduct?: CardProduct | undefined;
-  className?: string;
 }) => {
   const paymentState = React.useMemo<ReturnType<typeof createReducer>>(
     () => [
@@ -77,7 +75,7 @@ export const CheckoutPreview = ({
   );
 
   return (
-    <PreviewSidebar title="Preview" className={className}>
+    <PreviewSidebar title="Preview">
       <Preview scaleFactor={0.4} style={{ border: "var(--border)" }}>
         <PaymentStateContext.Provider value={paymentState}>
           <Checkout

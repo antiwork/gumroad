@@ -603,8 +603,7 @@ const AffiliateDetails = ({
   const navigation = useNavigation();
 
   return (
-    <Sheet open onOpenChange={onClose}>
-      <h2>{selectedAffiliate.affiliate_user_name}</h2>
+    <Sheet open onOpenChange={onClose} title={selectedAffiliate.affiliate_user_name}>
       {selectedAffiliate.products.map((product) => {
         const productStatistics = statistics?.products[product.id];
 

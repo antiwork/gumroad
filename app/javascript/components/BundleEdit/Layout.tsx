@@ -197,20 +197,7 @@ export const Layout = ({
             previewLink={(props) => (
               <Button {...props} onClick={() => void handleSave().then(() => window.open(url))} disabled={isBusy} />
             )}
-            className="sticky! top-0 min-h-screen self-start"
           >
-            <div className="flex items-start justify-between gap-4">
-              <h2>Preview</h2>
-              <WithTooltip tip="Preview">
-                <Button
-                  onClick={() => void handleSave().then(() => window.open(url))}
-                  disabled={isBusy}
-                  aria-label="Preview"
-                >
-                  <Icon name="arrow-diagonal-up-right" />
-                </Button>
-              </WithTooltip>
-            </div>
             <Preview
               scaleFactor={0.4}
               style={{

@@ -84,9 +84,7 @@ const CollaboratorDetails = ({
   const navigation = useNavigation();
 
   return (
-    <Sheet open onOpenChange={onClose}>
-      <h2>{selectedCollaborator.name}</h2>
-
+    <Sheet open onOpenChange={onClose} title={selectedCollaborator.name}>
       {selectedCollaborator.setup_incomplete ? (
         <div role="alert" className="warning">
           Collaborators won't receive their cut until they set up a payout account in their Gumroad settings.
