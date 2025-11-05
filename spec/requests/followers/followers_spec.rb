@@ -79,8 +79,7 @@ describe("Followers", js: true, type: :system) do
     it "shows and hides a drawer with the follower's information" do
       expect(page).to_not have_selector("aside")
       find(:table_row, text: "test@example.com").click
-      within "aside" do
-        expect(page).to have_selector("h2", text: "Details")
+      within_modal "Details" do
         expect(page).to have_content("test@example.com")
         click_on "Close"
       end

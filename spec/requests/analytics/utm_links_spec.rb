@@ -103,7 +103,7 @@ describe "UTM links", :js, type: :system do
           end
           wait_for_ajax
           expect(page).to have_alert(text: "Link deleted!")
-          expect(page).to_not have_section(utm_link.title, section_element: :aside)
+          expect(page).to_not have_modal
           expect(page).to_not have_table_row({ "Link" => utm_link.title })
           expect(utm_link.reload).to be_deleted
         end

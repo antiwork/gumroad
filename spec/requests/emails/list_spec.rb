@@ -75,7 +75,7 @@ describe("Email List", :js, :sidekiq_inline, :elasticsearch_wait_for_refresh, ty
         within_modal "Email 1 (sent)" do
           click_on "Close"
         end
-        expect(page).to_not have_section("Email 1 (sent)", section_element: :aside)
+        expect(page).to_not have_modal
 
         find(:table_row, { name: "Email 3 (sent)" }).click
         within_modal "Email 3 (sent)" do

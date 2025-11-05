@@ -788,7 +788,7 @@ describe "Sales page", type: :system, js: true do
           end
         end
 
-        expect(page).to have_section("Bundle Product 1", section_element: :aside)
+        expect(page).to have_modal "Bundle Product 1"
         expect(page).to_not have_section("Emails received")
 
         click_on "Return to bundle"
@@ -816,7 +816,7 @@ describe "Sales page", type: :system, js: true do
         expect(page).to_not have_selector("aside")
 
         find(:table_row, { "Product" => "BundleBundle" }).click
-        expect(page).to have_section("Bundle", section_element: :aside)
+        expect(page).to have_modal "Bundle"
       end
 
       it "updates the email for all bundle purchases" do

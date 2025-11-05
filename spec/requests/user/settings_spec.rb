@@ -29,7 +29,7 @@ describe "User profile settings page", type: :system, js: true do
     it "renders the profile" do
       visit settings_profile_path
 
-      within_modal "Preview" do
+      within_section "Preview", section_element: :aside do
         expect(page).to have_text @user.name
         expect(page).to have_text @user.bio
       end
@@ -57,7 +57,7 @@ describe "User profile settings page", type: :system, js: true do
       visit settings_profile_path
       fill_in "Name", with: "Creator name"
       fill_in "Bio", with: "Creator bio"
-      within_modal "Preview" do
+      within_section "Preview", section_element: :aside do
         expect(page).to have_text("Creator name")
         expect(page).to have_text("Creator bio")
       end

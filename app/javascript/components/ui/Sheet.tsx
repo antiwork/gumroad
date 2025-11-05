@@ -17,7 +17,7 @@ export const Sheet = ({
       >
         <div className="flex items-start gap-4">
           {title ? <Dialog.Title>{title}</Dialog.Title> : null}
-          <Dialog.Close className="ml-auto">
+          <Dialog.Close className="ml-auto" aria-label="Close">
             <Icon name="x" />
           </Dialog.Close>
         </div>

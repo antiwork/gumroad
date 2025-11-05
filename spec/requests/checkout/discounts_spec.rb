@@ -293,7 +293,7 @@ describe("Checkout discounts page", type: :system, js: true) do
             expect(page).to have_selector("[aria-label='Offer code']", text: code.upcase)
           end
 
-          expect(page).to have_section("Black Friday", section_element: :aside)
+          expect(page).to have_modal "Black Friday"
 
           visit checkout_discounts_path
           within find(:table_row, { "Discount" => "Black Friday", "Revenue" => "$0", "Uses" => "0/∞" }) do
@@ -466,6 +466,7 @@ describe("Checkout discounts page", type: :system, js: true) do
       end
       expect(page).to have_section("Edit discount")
       click_on "Cancel"
+      click_on "Close"
 
       table_row.click
       within_modal "Discount 2" do
@@ -565,7 +566,7 @@ describe("Checkout discounts page", type: :system, js: true) do
           expect(page).to have_selector("[aria-label='Offer code']", text: "CODE1")
         end
 
-        expect(page).to have_section("Black Friday", section_element: :aside)
+        expect(page).to have_modal "Black Friday"
 
         visit checkout_discounts_path
         within find(:table_row, { "Discount" => "Black Friday", "Revenue" => "$123.30", "Uses" => "10/∞" }) do
