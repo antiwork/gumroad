@@ -4,8 +4,7 @@ require "spec_helper"
 
 describe Admin::MerchantAccountPresenter do
   describe "#props" do
-    let(:merchant_account) { create(:merchant_account, *merchant_account_traits) }
-    let(:merchant_account_traits) { [] }
+    let(:merchant_account) { create(:merchant_account) }
     let(:presenter) { described_class.new(merchant_account:) }
 
     subject(:props) { presenter.props }
@@ -18,20 +17,25 @@ describe Admin::MerchantAccountPresenter do
 
       describe "fields" do
         it "returns the correct field values" do
-          expect(props[:id]).to eq(merchant_account.id)
-          expect(props[:charge_processor_id]).to eq(merchant_account.charge_processor_id)
-          expect(props[:charge_processor_merchant_id]).to eq(merchant_account.charge_processor_merchant_id)
-          expect(props[:created_at]).to eq(merchant_account.created_at)
-          expect(props[:external_id]).to eq(merchant_account.external_id)
-          expect(props[:user_id]).to eq(merchant_account.user_id)
-          expect(props[:country]).to eq(merchant_account.country)
-          expect(props[:currency]).to eq(merchant_account.currency)
-          expect(props[:holder_of_funds]).to eq(merchant_account.holder_of_funds)
-          expect(props[:charge_processor_alive_at]).to eq(merchant_account.charge_processor_alive_at)
-          expect(props[:charge_processor_verified_at]).to eq(merchant_account.charge_processor_verified_at)
-          expect(props[:charge_processor_deleted_at]).to eq(merchant_account.charge_processor_deleted_at)
-          expect(props[:updated_at]).to eq(merchant_account.updated_at)
-          expect(props[:deleted_at]).to eq(merchant_account.deleted_at)
+          expect(props).to match(
+            id: merchant_account.id,
+            charge_processor_id: merchant_account.charge_processor_id,
+            charge_processor_merchant_id: merchant_account.charge_processor_merchant_id,
+            created_at: merchant_account.created_at,
+            external_id: merchant_account.external_id,
+            user_id: merchant_account.user_id,
+            country: merchant_account.country,
+            country_name: "United States",
+            currency: merchant_account.currency,
+            holder_of_funds: merchant_account.holder_of_funds,
+            stripe_account_url: include("dashboard.stripe.com"),
+            charge_processor_alive_at: merchant_account.charge_processor_alive_at,
+            charge_processor_verified_at: merchant_account.charge_processor_verified_at,
+            charge_processor_deleted_at: merchant_account.charge_processor_deleted_at,
+            updated_at: merchant_account.updated_at,
+            deleted_at: merchant_account.deleted_at,
+            live_attributes: include({ label: "Charges enabled", value: false }),
+          )
         end
       end
 
