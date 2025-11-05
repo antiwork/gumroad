@@ -18,7 +18,7 @@ const AdminPurchasesShow = () => {
   return (
     <div className="paragraphs">
       <Purchase purchase={purchase} />
-      <Product key={product.id} product={product} isAffiliateUser={false} />
+      <Product product={product} />
       <User user={user} />
     </div>
   );
