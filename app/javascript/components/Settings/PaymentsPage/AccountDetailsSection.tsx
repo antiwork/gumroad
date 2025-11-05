@@ -313,10 +313,10 @@ const AccountDetailsSection = ({
                   required={complianceInfo.is_business}
                   disabled={isFormDisabled}
                   aria-invalid={errorFieldNames.has("business_state")}
-                  value={complianceInfo.business_state || "State"}
+                  value={complianceInfo.business_state || ""}
                   onChange={(evt) => updateComplianceInfo({ business_state: evt.target.value })}
                 >
-                  <option disabled>State</option>
+                  <option value="" disabled>State</option>
                   {states.us.map((state) => (
                     <option key={state.code} value={state.code}>
                       {state.name}
@@ -334,10 +334,10 @@ const AccountDetailsSection = ({
                   required={complianceInfo.is_business}
                   disabled={isFormDisabled}
                   aria-invalid={errorFieldNames.has("business_state")}
-                  value={complianceInfo.business_state || "Province"}
+                  value={complianceInfo.business_state || ""}
                   onChange={(evt) => updateComplianceInfo({ business_state: evt.target.value })}
                 >
-                  <option disabled>Province</option>
+                  <option value="" disabled>Province</option>
                   {states.ca.map((state) => (
                     <option key={state.code} value={state.code}>
                       {state.name}
@@ -355,10 +355,10 @@ const AccountDetailsSection = ({
                   required={complianceInfo.is_business}
                   disabled={isFormDisabled}
                   aria-invalid={errorFieldNames.has("business_state")}
-                  value={complianceInfo.business_state || "State"}
+                  value={complianceInfo.business_state || ""}
                   onChange={(evt) => updateComplianceInfo({ business_state: evt.target.value })}
                 >
-                  <option disabled>State</option>
+                  <option value="" disabled>State</option>
                   {states.au.map((state) => (
                     <option key={state.code} value={state.code}>
                       {state.name}
@@ -376,10 +376,10 @@ const AccountDetailsSection = ({
                   required={complianceInfo.is_business}
                   disabled={isFormDisabled}
                   aria-invalid={errorFieldNames.has("business_state")}
-                  value={complianceInfo.business_state || "State"}
+                  value={complianceInfo.business_state || ""}
                   onChange={(evt) => updateComplianceInfo({ business_state: evt.target.value })}
                 >
-                  <option disabled>State</option>
+                  <option value="" disabled>State</option>
                   {states.mx.map((state) => (
                     <option key={state.code} value={state.code}>
                       {state.name}
@@ -397,10 +397,10 @@ const AccountDetailsSection = ({
                   required={complianceInfo.is_business}
                   disabled={isFormDisabled}
                   aria-invalid={errorFieldNames.has("business_state")}
-                  value={complianceInfo.business_state || "Province"}
+                  value={complianceInfo.business_state || ""}
                   onChange={(evt) => updateComplianceInfo({ business_state: evt.target.value })}
                 >
-                  <option disabled>Province</option>
+                  <option value="" disabled>Province</option>
                   {states.ae.map((state) => (
                     <option key={state.code} value={state.code}>
                       {state.name}
@@ -418,10 +418,10 @@ const AccountDetailsSection = ({
                   required={complianceInfo.is_business}
                   disabled={isFormDisabled}
                   aria-invalid={errorFieldNames.has("business_state")}
-                  value={complianceInfo.business_state || "County"}
+                  value={complianceInfo.business_state || ""}
                   onChange={(evt) => updateComplianceInfo({ business_state: evt.target.value })}
                 >
-                  <option disabled>County</option>
+                  <option value="" disabled>County</option>
                   {states.ir.map((state) => (
                     <option key={state.code} value={state.code}>
                       {state.name}
@@ -831,10 +831,10 @@ const AccountDetailsSection = ({
               required
               disabled={isFormDisabled}
               aria-invalid={errorFieldNames.has("state")}
-              value={complianceInfo.state || "State"}
+              value={complianceInfo.state || ""}
               onChange={(evt) => updateComplianceInfo({ state: evt.target.value })}
             >
-              <option disabled>State</option>
+              <option value="" disabled>State</option>
               {states.us.map((state) => (
                 <option key={state.code} value={state.code}>
                   {state.name}
@@ -852,10 +852,10 @@ const AccountDetailsSection = ({
               required
               disabled={isFormDisabled}
               aria-invalid={errorFieldNames.has("state")}
-              value={complianceInfo.state || "Province"}
+              value={complianceInfo.state || ""}
               onChange={(evt) => updateComplianceInfo({ state: evt.target.value })}
             >
-              <option disabled>Province</option>
+              <option value="" disabled>Province</option>
               {states.ca.map((state) => (
                 <option key={state.code} value={state.code}>
                   {state.name}
@@ -873,10 +873,10 @@ const AccountDetailsSection = ({
               required
               disabled={isFormDisabled}
               aria-invalid={errorFieldNames.has("state")}
-              value={complianceInfo.state || "State"}
+              value={complianceInfo.state || ""}
               onChange={(evt) => updateComplianceInfo({ state: evt.target.value })}
             >
-              <option disabled>State</option>
+              <option value="" disabled>State</option>
               {states.au.map((state) => (
                 <option key={state.code} value={state.code}>
                   {state.name}
@@ -894,10 +894,10 @@ const AccountDetailsSection = ({
               required
               disabled={isFormDisabled}
               aria-invalid={errorFieldNames.has("state")}
-              value={complianceInfo.state || "State"}
+              value={complianceInfo.state || ""}
               onChange={(evt) => updateComplianceInfo({ state: evt.target.value })}
             >
-              <option disabled>State</option>
+              <option value="" disabled>State</option>
               {states.mx.map((state) => (
                 <option key={state.code} value={state.code}>
                   {state.name}
@@ -915,10 +915,10 @@ const AccountDetailsSection = ({
               required
               disabled={isFormDisabled}
               aria-invalid={errorFieldNames.has("state")}
-              value={complianceInfo.state || "Province"}
+              value={complianceInfo.state || ""}
               onChange={(evt) => updateComplianceInfo({ state: evt.target.value })}
             >
-              <option disabled>Province</option>
+              <option value="" disabled>Province</option>
               {states.ae.map((state) => (
                 <option key={state.code} value={state.code}>
                   {state.name}
@@ -936,10 +936,10 @@ const AccountDetailsSection = ({
               required
               disabled={isFormDisabled}
               aria-invalid={errorFieldNames.has("state")}
-              value={complianceInfo.state || "County"}
+              value={complianceInfo.state || ""}
               onChange={(evt) => updateComplianceInfo({ state: evt.target.value })}
             >
-              <option disabled>County</option>
+              <option value="" disabled>County</option>
               {states.ir.map((state) => (
                 <option key={state.code} value={state.code}>
                   {state.name}
@@ -957,10 +957,10 @@ const AccountDetailsSection = ({
               required
               disabled={isFormDisabled}
               aria-invalid={errorFieldNames.has("state")}
-              value={complianceInfo.state || "State"}
+              value={complianceInfo.state || ""}
               onChange={(evt) => updateComplianceInfo({ state: evt.target.value })}
             >
-              <option disabled>State</option>
+              <option value="" disabled>State</option>
               {states.br.map((state) => (
                 <option key={state.code} value={state.code}>
                   {state.name}
