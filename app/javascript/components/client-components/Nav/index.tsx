@@ -72,7 +72,7 @@ const CloseOnNavigate = () => {
 
   React.useEffect(() => {
     if (!close) return;
-    return router.on("navigate", close);
+    return router.on("before", close);
   }, [close]);
 
   return null;

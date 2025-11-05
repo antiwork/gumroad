@@ -819,7 +819,7 @@ describe OrdersController, :vcr do
 
           it "creates an in_progress purchase and renders a proper response for stripe connect account" do
             allow_any_instance_of(User).to receive(:check_merchant_account_is_linked).and_return(true)
-            create(:merchant_account_stripe_connect, charge_processor_merchant_id: "acct_1MeFbmKQKir5qdfM", user: product.user)
+            create(:merchant_account_stripe_connect, charge_processor_merchant_id: "acct_1SOb0DEwFhlcVS6d", user: product.user)
 
             expect do
               expect do
@@ -832,7 +832,7 @@ describe OrdersController, :vcr do
                 expect(response.parsed_body["line_items"]["unique-uid-0"]["requires_card_action"]).to be(true)
                 expect(response.parsed_body["line_items"]["unique-uid-0"]["client_secret"]).to be_present
                 expect(response.parsed_body["line_items"]["unique-uid-0"]["order"]["id"]).to eq(Order.last.external_id)
-                expect(response.parsed_body["line_items"]["unique-uid-0"]["order"]["stripe_connect_account_id"]).to eq("acct_1MeFbmKQKir5qdfM")
+                expect(response.parsed_body["line_items"]["unique-uid-0"]["order"]["stripe_connect_account_id"]).to eq("acct_1SOb0DEwFhlcVS6d")
                 expect(response.parsed_body["can_buyer_sign_up"]).to eq(true)
               end.to change(Purchase.in_progress, :count).by(1)
             end.to change(Order, :count).by(1)

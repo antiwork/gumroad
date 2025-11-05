@@ -11,13 +11,17 @@ module Admin::ListPaginatedUsers
   RECORDS_PER_PAGE = 5
 
   private
-    def list_paginated_users(users:, template:, legacy_template:)
+    def list_paginated_users(users:, template:, legacy_template:, single_result_redirect_path: nil)
       pagination, users = pagy_countless(
         users,
         limit: params[:per_page] || RECORDS_PER_PAGE,
         page: params[:page],
         countless_minimal: true
       )
+
+      if single_result_redirect_path && pagination.page == 1 && users.length == 1
+        return redirect_to single_result_redirect_path.call(users.first)
+      end
 
       respond_to do |format|
         format.html do

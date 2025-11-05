@@ -37,7 +37,7 @@ export function Calendar({ defaultMonth, ...props }: React.ComponentProps<typeof
       }}
       components={{
         Chevron: ({ className, orientation, disabled }) => (
-          <div className={classNames({ "text-muted cursor-not-allowed": disabled }, className)}>
+          <div className={classNames({ "cursor-not-allowed text-muted": disabled }, className)}>
             {/* Force the chevrons to be rendered as text rather than emoji images */}
             {`${orientation === "left" ? "◀" : "▶"}\u{FE0E}`}
           </div>

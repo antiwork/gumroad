@@ -99,7 +99,7 @@ describe("Successful purchases from a product page with SCA and mandate creation
 
   context "via stripe connect" do
     before { allow_any_instance_of(User).to receive(:check_merchant_account_is_linked).and_return(true) }
-    let!(:stripe_connect_account) { create(:merchant_account_stripe_connect, charge_processor_merchant_id: "acct_1MeFbmKQKir5qdfM", user: creator) }
+    let!(:stripe_connect_account) { create(:merchant_account_stripe_connect, charge_processor_merchant_id: "acct_1SOb0DEwFhlcVS6d", user: creator) }
 
     it "allows making a regular product purchase and does not set up a mandate on Stripe" do
       visit product.long_url

@@ -14,8 +14,8 @@ const AdminProductsShow = () => {
 
   return (
     <div className="paragraphs">
-      <Product key={product.id} product={product} is_affiliate_user={false} />
-      <User user={user} is_affiliate_user={false} />
+      <Product key={product.id} product={product} />
+      <User user={user} />
     </div>
   );
 };

@@ -12,7 +12,6 @@ import AdminProductFooter from "$app/components/Admin/Products/Footer";
 import AdminProductHeader from "$app/components/Admin/Products/Header";
 import AdminProductInfo from "$app/components/Admin/Products/Info";
 import AdminProductPurchases from "$app/components/Admin/Products/Purchases";
-import { type User } from "$app/components/Admin/Users/User";
 
 type ProductFile = {
   id: number;
@@ -22,6 +21,13 @@ type ProductFile = {
 
 export type ActiveIntegration = {
   type: string;
+};
+
+export type ProductUser = {
+  id: number;
+  name: string;
+  suspended: boolean;
+  flagged_for_tos_violation: boolean;
 };
 
 export type Product = {
@@ -35,8 +41,7 @@ export type Product = {
   cover_placeholder_url: string;
   price_formatted: string;
   created_at: string;
-  user_name: string;
-  user_id: string;
+  user: ProductUser;
   admins_can_generate_url_redirects: boolean;
   alive_product_files: ProductFile[];
   html_safe_description: string;
@@ -52,14 +57,12 @@ export type Product = {
 
 type AdminUsersProductsProductProps = {
   product: Product;
-  is_affiliate_user?: boolean;
+  isAffiliateUser?: boolean;
 };
 
-const AdminUsersProductsProduct = ({ product, is_affiliate_user = false }: AdminUsersProductsProductProps) => {
+const AdminUsersProductsProduct = ({ product, isAffiliateUser = false }: AdminUsersProductsProductProps) => {
   const { url, props } = usePage();
-  const user: User = cast<User>(props.user);
   const compliance: Compliance = cast<Compliance>(props.compliance);
-
   const isCurrentUrl = url === Routes.admin_product_path(product.unique_permalink);
 
   return (
@@ -67,13 +70,13 @@ const AdminUsersProductsProduct = ({ product, is_affiliate_user = false }: Admin
       className="grid gap-4 rounded border border-border bg-background p-4"
       data-product-id={product.unique_permalink}
     >
-      <AdminProductHeader product={product} user={user} isCurrentUrl={isCurrentUrl} />
+      <AdminProductHeader product={product} isCurrentUrl={isCurrentUrl} />
       <AdminProductDescription product={product} />
       <AdminProductDetails product={product} />
       <AdminProductInfo product={product} />
       <AdminProductActions product={product} />
-      <AdminFlagForTosViolations user={user} product={product} compliance={compliance} />
-      <AdminProductPurchases product_id={product.id} is_affiliate_user={is_affiliate_user} user_id={user.id} />
+      <AdminFlagForTosViolations product={product} compliance={compliance} />
+      <AdminProductPurchases productId={product.id} isAffiliateUser={isAffiliateUser} userId={product.user.id} />
       <AdminProductComments product={product} />
       <AdminProductFooter product={product} />
     </article>

@@ -51,7 +51,7 @@ describe Api::Internal::Helper::UsersController do
         expect(customer_info["value"]).to eq(0)
         expect(customer_info["actions"]).to eq({
                                                  "Admin (user)" => "http://app.test.gumroad.com:31337/admin/users/#{user.id}",
-                                                 "Admin (purchases)" => "http://app.test.gumroad.com:31337/admin/search_purchases?query=#{CGI.escape(user.email)}",
+                                                 "Admin (purchases)" => "http://app.test.gumroad.com:31337/admin/search/purchases?query=#{CGI.escape(user.email)}",
                                                  "Impersonate" => "http://app.test.gumroad.com:31337/admin/helper_actions/impersonate/#{user.external_id}",
                                                })
 
