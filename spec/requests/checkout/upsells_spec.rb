@@ -613,6 +613,7 @@ describe("Checkout upsells page", type: :system, js: true) do
         expect(page).to have_text("Status Live", normalize_ws: true)
       end
       click_on "Pause upsell"
+      click_on "Close"
     end
 
     expect(page).to have_alert(text: "Upsell paused and will not appear at checkout.")

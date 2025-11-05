@@ -425,16 +425,14 @@ describe "Sales page", type: :system, js: true do
 
         # Test regular product - should show download count
         find(:table_row, { "Email" => "customer1@gumroad.com" }).click
-        expect(page).to have_css("aside")
-        within("aside") do
+        within_modal do
           expect(page).to have_text("Download count 42", normalize_ws: true)
         end
         click_on "Close"
 
         # Test bundle purchase - should NOT show download count
         find(:table_row, { "Email" => "customer3hasaninsanelylonge..." }).click
-        expect(page).to have_css("aside")
-        within("aside") do
+        within_modal do
           expect(page).not_to have_text("Download count")
         end
       end
@@ -450,8 +448,7 @@ describe "Sales page", type: :system, js: true do
 
         # Test coffee product - should NOT show download count
         find(:table_row, { "Email" => "coffee@example.com" }).click
-        expect(page).to have_css("aside")
-        within("aside") do
+        within_modal do
           expect(page).not_to have_text("Download count")
         end
       end
@@ -1514,6 +1511,7 @@ describe "Sales page", type: :system, js: true do
         row.click
         within_modal "Product 1" do
           expect(page).to_not have_section("Refund")
+          click_on "Close"
         end
         find(:table_row, { "Name" => "Customer 2" }).click
         within_modal "Membership" do
