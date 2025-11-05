@@ -37,7 +37,7 @@ const SearchPopover = () => {
 
   const initialQueries = getInitialQuery();
 
-  const { data, setData, get } = useForm({
+  const { data, setData } = useForm({
     user_query: initialQueries.user_query,
     purchase_query: initialQueries.purchase_query,
     affiliate_query: initialQueries.affiliate_query,
@@ -74,10 +74,8 @@ const SearchPopover = () => {
       url.searchParams.set(key, value);
     });
 
-    get(url.toString(), {
-      onBefore: () => resetOtherQueryFields(queryParam),
-      onSuccess: () => setOpen(false),
-    });
+    resetOtherQueryFields(queryParam);
+    window.location.href = url.toString();
   };
 
   const submitForm = (e: React.FormEvent<HTMLFormElement>, endpoint: string, attribute: keyof typeof data | null) => {
