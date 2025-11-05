@@ -6111,6 +6111,5 @@ describe("Payments Settings Scenario", type: :system, js: true) do
         expect(user.reload.payout_frequency).to eq(User::PayoutSchedule::QUARTERLY)
       end
     end
-
   end
 end
