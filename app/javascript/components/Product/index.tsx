@@ -288,6 +288,21 @@ export const Product = ({
       addThirdPartyAnalytics({ permalink: product.permalink, location: "product" });
   });
 
+  // Fix for Safari review cards not loading
+  React.useEffect(() => {
+    if (pageLoaded && descriptionEditor && product.description_html) {
+      const isSafari = /^((?!chrome|android).)*safari/i.test(navigator.userAgent);
+      if (isSafari) {
+        // Safari needs a small delay to properly initialize review cards
+        const timeoutId = setTimeout(() => {
+          // Force re-initialization of content to ensure review cards are processed
+          descriptionEditor.commands.setContent(product.description_html);
+        }, 50);
+        return () => clearTimeout(timeoutId);
+      }
+    }
+  }, [pageLoaded, descriptionEditor, product.description_html]);
+
   const isBundle = product.bundle_products.length > 0;
   if (isBundle) basePriceCents = getStandalonePrice(product);
 

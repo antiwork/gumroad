@@ -110,7 +110,7 @@ export const TestimonialSelectModal = ({
         </>
       }
     >
-      <div>
+      <div className="flex max-h-[60vh] flex-col">
         {isLoading && state.reviews.length === 0 ? (
           <div className="flex items-center justify-center">
             <LoadingSpinner className="size-8" />
@@ -119,7 +119,7 @@ export const TestimonialSelectModal = ({
           <p>No reviews with text or video yet.</p>
         ) : (
           <>
-            <div className="flex flex-row items-center gap-2">
+            <div className="flex flex-row items-center gap-2 pb-2">
               <input
                 type="checkbox"
                 role="checkbox"
@@ -129,7 +129,7 @@ export const TestimonialSelectModal = ({
               />
               <p>Select all</p>
             </div>
-            <section className="paragraphs" style={{ marginTop: "var(--spacer-2)" }}>
+            <section className="paragraphs overflow-y-auto" style={{ marginTop: "var(--spacer-2)" }}>
               {state.reviews.map((review) => (
                 <SelectableReviewCard
                   key={review.id}

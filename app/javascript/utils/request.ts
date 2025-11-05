@@ -59,6 +59,7 @@ export const request = async (settings: RequestSettings): Promise<Response> => {
       body: data,
       headers,
       signal: settings.abortSignal ?? null,
+      credentials: "same-origin",
     });
     if (response.status >= 500) throw new ResponseError();
     // We rate limit some endpoints to prevent brute force attacks. See config/initializers/rack_attack.rb
