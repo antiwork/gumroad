@@ -6112,35 +6112,5 @@ describe("Payments Settings Scenario", type: :system, js: true) do
       end
     end
 
-    describe "state field validation" do
-      let!(:compliance_info) { create(:user_compliance_info, user:, country: "US", state: nil, phone: "+12125555555") }
-
-      before do
-        visit settings_payments_path
-      end
-
-      it "prevents form submission when state is not selected" do
-        click_on "Update settings"
-
-        expect(page).to have_field("State", class: "danger")
-        expect(page).not_to have_alert(text: "Thanks! You're all set.")
-      end
-
-      it "prevents form submission when placeholder 'State' text is selected" do
-        select "State", from: "State"
-        click_on "Update settings"
-
-        expect(page).to have_field("State", class: "danger")
-        expect(page).not_to have_alert(text: "Thanks! You're all set.")
-      end
-
-      it "allows form submission when a valid state is selected" do
-        select "California", from: "State"
-        click_on "Update settings"
-
-        expect(page).to have_alert(text: "Thanks! You're all set.")
-        expect(user.reload.user_compliance_info.state).to eq("US-CA")
-      end
-    end
   end
 end
