@@ -110,7 +110,7 @@ const FormPage = ({
       }
       hasAside
     >
-      <div className="fixed-aside flex-1 lg:grid lg:grid-cols-[1fr_30vw]">
+      <div className="flex-1 lg:grid lg:grid-cols-[1fr_30vw]">
         <div>
           <section className="space-y-4 border-b border-border p-4 md:p-8">
             <header className="flex items-center justify-between">

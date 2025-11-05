@@ -37,6 +37,7 @@ import { Select } from "$app/components/Select";
 import { CrossSellModal, UpsellModal } from "$app/components/server-components/CheckoutPage";
 import { PageHeader } from "$app/components/ui/PageHeader";
 import Placeholder from "$app/components/ui/Placeholder";
+import { Sheet } from "$app/components/ui/Sheet";
 import { useDebouncedCallback } from "$app/components/useDebouncedCallback";
 import { Sort, useSortingTableDriver } from "$app/components/useSortingTableDriver";
 
@@ -394,11 +395,8 @@ const UpsellDrawer = ({
   const loggedInUser = useLoggedInUser();
   const isReadOnly = !loggedInUser?.policies.upsell.create;
   return (
-    <aside>
-      <header>
-        <h2>{selectedUpsell.name}</h2>
-        <button className="close" aria-label="Close" onClick={onClose} />
-      </header>
+    <Sheet open onOpenChange={onClose}>
+      <h2>{selectedUpsell.name}</h2>
       <section className="stack">
         <h3>Details</h3>
         <div>
@@ -504,7 +502,7 @@ const UpsellDrawer = ({
           {isLoading ? "Deleting..." : "Delete"}
         </Button>
       </section>
-    </aside>
+    </Sheet>
   );
 };
 
@@ -696,7 +694,7 @@ const Form = ({
           </>
         }
       />
-      <div className="squished fixed-aside flex-1 lg:grid lg:grid-cols-[1fr_30vw]">
+      <div className="squished flex-1 lg:grid lg:grid-cols-[1fr_30vw]">
         <form>
           <section className="p-8!">
             <p>

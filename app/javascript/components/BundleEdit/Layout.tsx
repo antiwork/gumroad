@@ -13,6 +13,7 @@ import { useCurrentSeller } from "$app/components/CurrentSeller";
 import { useDomains } from "$app/components/DomainSettings";
 import { Icon } from "$app/components/Icons";
 import { Preview } from "$app/components/Preview";
+import { PreviewSidebar, WithPreviewSidebar } from "$app/components/PreviewSidebar";
 import { showAlert } from "$app/components/server-components/Alert";
 import { PageHeader } from "$app/components/ui/PageHeader";
 import { Tabs, Tab } from "$app/components/ui/Tabs";
@@ -189,11 +190,16 @@ export const Layout = ({
           </Tab>
         </Tabs>
       </PageHeader>
-      <div className={preview ? "squished fixed-aside flex-1 lg:grid lg:grid-cols-[1fr_30vw]" : "flex-1"}>
-        {children}
-        {preview ? (
-          <aside aria-label="Preview" className="sticky! top-0 min-h-screen self-start overflow-y-auto">
-            <header>
+      {preview ? (
+        <WithPreviewSidebar className="flex-1">
+          <PreviewSidebar
+            title="Preview"
+            previewLink={(props) => (
+              <Button {...props} onClick={() => void handleSave().then(() => window.open(url))} disabled={isBusy} />
+            )}
+            className="sticky! top-0 min-h-screen self-start"
+          >
+            <div className="flex items-start justify-between gap-4">
               <h2>Preview</h2>
               <WithTooltip tip="Preview">
                 <Button
@@ -204,7 +210,7 @@ export const Layout = ({
                   <Icon name="arrow-diagonal-up-right" />
                 </Button>
               </WithTooltip>
-            </header>
+            </div>
             <Preview
               scaleFactor={0.4}
               style={{
@@ -214,9 +220,10 @@ export const Layout = ({
             >
               {preview}
             </Preview>
-          </aside>
-        ) : null}
-      </div>
+          </PreviewSidebar>
+        </WithPreviewSidebar>
+      ) : null}
+      <div className={preview ? "squished flex-1 lg:grid lg:grid-cols-[1fr_30vw]" : "flex-1"}>{children}</div>
     </>
   );
 };

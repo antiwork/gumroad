@@ -34,6 +34,7 @@ import { Select, Option } from "$app/components/Select";
 import { TypeSafeOptionSelect } from "$app/components/TypeSafeOptionSelect";
 import { PageHeader } from "$app/components/ui/PageHeader";
 import Placeholder from "$app/components/ui/Placeholder";
+import { Sheet } from "$app/components/ui/Sheet";
 import { useDebouncedCallback } from "$app/components/useDebouncedCallback";
 import { useGlobalEventListener } from "$app/components/useGlobalEventListener";
 import { useOriginalLocation } from "$app/components/useOriginalLocation";
@@ -474,11 +475,8 @@ const DiscountsPage = ({ offer_codes, pages, products, pagination: initialPagina
           </Placeholder>
         )}
         {selectedOfferCode ? (
-          <aside>
-            <header>
-              <h2>{selectedOfferCode.name || selectedOfferCode.code.toUpperCase()}</h2>
-              <button className="close" aria-label="Close" onClick={() => setSelectedOfferCodeId(null)} />
-            </header>
+          <Sheet open onOpenChange={() => setSelectedOfferCodeId(null)}>
+            <h2>{selectedOfferCode.name || selectedOfferCode.code.toUpperCase()}</h2>
             <section className="stack">
               <h3>Details</h3>
               <div>
@@ -592,7 +590,7 @@ const DiscountsPage = ({ offer_codes, pages, products, pagination: initialPagina
                 {isLoading ? "Deleting..." : "Delete"}
               </Button>
             </section>
-          </aside>
+          </Sheet>
         ) : null}
       </section>
     </Layout>

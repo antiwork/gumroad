@@ -6,6 +6,7 @@ import { Checkout } from "$app/components/Checkout";
 import { CartItem } from "$app/components/Checkout/cartState";
 import { StateContext as PaymentStateContext, createReducer } from "$app/components/Checkout/payment";
 import { Preview } from "$app/components/Preview";
+import { PreviewSidebar } from "$app/components/PreviewSidebar";
 
 export const CheckoutPreview = ({
   children,
@@ -76,10 +77,7 @@ export const CheckoutPreview = ({
   );
 
   return (
-    <aside aria-label="Preview" className={className}>
-      <header>
-        <h2>Preview</h2>
-      </header>
+    <PreviewSidebar title="Preview" className={className}>
       <Preview scaleFactor={0.4} style={{ border: "var(--border)" }}>
         <PaymentStateContext.Provider value={paymentState}>
           <Checkout
@@ -93,6 +91,6 @@ export const CheckoutPreview = ({
           {children}
         </PaymentStateContext.Provider>
       </Preview>
-    </aside>
+    </PreviewSidebar>
   );
 };
