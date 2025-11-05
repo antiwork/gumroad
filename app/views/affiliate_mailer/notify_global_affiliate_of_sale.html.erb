@@ -1,9 +1,21 @@
 <%= header_section(@subject) %>
 <div>
+  <p>Hey there!</p>
+
+  <p>Great news - <%= @seller_name %> just sold a copy of <%= @product_name %> thanks to your referral.</p>
+
+  <p>Here's the breakdown:</p>
+  <ul>
+    <li>💰 Purchase amount: <%= @purchase_price_formatted %></li>
+    <li>💼 Your commission rate: <%= @affiliate_percentage_text %></li>
+    <li>🧾 Your earnings (after fees): <%= @affiliate_amount_formatted %></li>
+  </ul>
+
   <% if @purchase.is_free_trial_purchase? %>
-    <p>A creator just made a sale thanks to you! The purchase price was <%= @purchase_price_formatted %>. If the subscriber continues with their subscription after their free trial has expired on <%= @free_trial_end_date %>, we will update your balance to reflect your <%= @affiliate_percentage_text %> commission net of fees (<%= @affiliate_amount_formatted %>). <%= @recurring_commission_text %></p>
+    <p>If the subscriber continues with their subscription after their free trial has expired on <%= @free_trial_end_date %>, we'll add your commission to your balance. <%= @recurring_commission_text %></p>
   <% else %>
-    <p>A creator just made a sale thanks to you! The purchase price was <%= @purchase_price_formatted %>. We've updated your balance to reflect your <%= @affiliate_percentage_text %> commission net of fees (<%= @affiliate_amount_formatted %>). <%= @recurring_commission_text %></p>
+    <p>We've added your commission to your balance. <%= @recurring_commission_text %></p>
   <% end %>
-  <p>Thanks for being a part of the team.</p>
+
+  <p>Thanks for being part of the team and helping make another sale happen!</p>
 </div>

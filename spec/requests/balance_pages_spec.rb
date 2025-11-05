@@ -6,6 +6,7 @@ require "shared_examples/authorize_called"
 
 describe "Balance Pages Scenario", js: true, type: :system do
   include CollabProductHelper
+  include StripeMerchantAccountHelper
 
   let(:seller) { create(:named_seller) }
   let(:get_label_value) do
@@ -715,14 +716,23 @@ describe "Balance Pages Scenario", js: true, type: :system do
           create(:ach_account_stripe_succeed,
                  user: seller,
                  routing_number: "110000000",
-                 stripe_connect_account_id: "acct_1Qplf7S17V0i16U7",
-                 stripe_external_account_id: "ba_1Qplf7S17V0i16U7S5L4chWo",
-                 stripe_fingerprint: "dx7dqwoGHEQDKLLK",
+                 stripe_connect_account_id: "acct_12345",
+                 stripe_external_account_id: "ba_12345",
+                 stripe_fingerprint: "fingerprint",
                  )
-          create(:merchant_account, user: seller, charge_processor_merchant_id: "acct_1Qplf7S17V0i16U7")
+          create(:merchant_account, user: seller, charge_processor_merchant_id: "acct_12345")
 
           Credit.create_for_credit!(user: seller, amount_cents: 1000, crediting_user: seller)
           allow_any_instance_of(User).to receive(:compliant?).and_return(true)
+          allow_any_instance_of(User).to receive(:eligible_for_instant_payouts?).and_return(true)
+          allow_any_instance_of(BankAccount).to receive(:supports_instant_payouts?).and_return(true)
+          allow(StripePayoutProcessor).to receive(:instantly_payable_amount_cents_on_stripe).and_return(9_70)
+          allow_any_instance_of(InstantPayoutsService).to receive(:perform) do |_instance, *_args|
+            create(:payment, user: seller, bank_account: seller.active_bank_account, amount_cents: 9_70,
+                             json_data: { payout_type: Payouts::PAYOUT_TYPE_INSTANT, gumroad_fee_cents: 29, arrival_date: Time.current.to_i },
+                             balances: seller.unpaid_balances)
+            { success: true }
+          end
         end
 
         it "allows the user to trigger an instant payout" do
@@ -886,7 +896,7 @@ describe "Balance Pages Scenario", js: true, type: :system do
       let(:payout_processor_type) { PayoutProcessorType::STRIPE }
 
       before do
-        create(:merchant_account_stripe, user: seller)
+        create(:merchant_account, user: seller, charge_processor_merchant_id: create_verified_stripe_account(country: "US").id)
 
         affiliate_product = create :product, price_cents: 1500
         creator_as_affiliate = create :direct_affiliate, affiliate_user: seller, seller: affiliate_product.user, affiliate_basis_points: 4000, products: [affiliate_product]

@@ -18,7 +18,7 @@ describe("Successful purchases from a product page with SCA (Strong Customer Aut
 
     it "allows to purchase a classic product via stripe connect account" do
       allow_any_instance_of(User).to receive(:check_merchant_account_is_linked).and_return(true)
-      stripe_connect_account = create(:merchant_account_stripe_connect, charge_processor_merchant_id: "acct_1MeFbmKQKir5qdfM", user: @product.user)
+      stripe_connect_account = create(:merchant_account_stripe_connect, charge_processor_merchant_id: "acct_1SOb0DEwFhlcVS6d", user: @product.user)
 
       visit @product.long_url
       add_to_cart(@product)
@@ -44,7 +44,7 @@ describe("Successful purchases from a product page with SCA (Strong Customer Aut
 
     it "allows to purchase a classic product via stripe connect account" do
       allow_any_instance_of(User).to receive(:check_merchant_account_is_linked).and_return(true)
-      stripe_connect_account = create(:merchant_account_stripe_connect, charge_processor_merchant_id: "acct_1MeFbmKQKir5qdfM", user: @product.user)
+      stripe_connect_account = create(:merchant_account_stripe_connect, charge_processor_merchant_id: "acct_1SOb0DEwFhlcVS6d", user: @product.user)
 
       visit @product.long_url
       add_to_cart(@product)

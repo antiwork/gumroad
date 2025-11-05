@@ -14,6 +14,22 @@ describe Subscription::UpdaterService, :vcr do
 
         @remote_ip = "11.22.33.44"
         @gumroad_guid = "abc123"
+
+        allow_any_instance_of(Purchase).to receive(:mandate_options_for_stripe).and_return({
+                                                                                             payment_method_options: {
+                                                                                               card: {
+                                                                                                 mandate_options: {
+                                                                                                   reference: StripeChargeProcessor::MANDATE_PREFIX + SecureRandom.hex,
+                                                                                                   amount_type: "maximum",
+                                                                                                   amount: 100_00,
+                                                                                                   start_date: Time.current.to_i,
+                                                                                                   interval: "sporadic",
+                                                                                                   supported_types: ["india"]
+                                                                                                 }
+                                                                                               }
+                                                                                             }
+                                                                                           })
+
         travel_to(@originally_subscribed_at + 1.month)
       end
 

@@ -4,7 +4,7 @@ require "spec_helper"
 
 describe OauthCompletionsController, :vcr do
   describe "#stripe" do
-    let(:auth_uid) { "acct_1MFA1rCOxuflorGu" }
+    let(:auth_uid) { "acct_1SOb0DEwFhlcVS6d" }
     let(:referer) { settings_payments_path }
     let(:user) { create(:user) }
 
@@ -48,7 +48,7 @@ describe OauthCompletionsController, :vcr do
       end
 
       it "allows connecting a Stripe account from Czechia" do
-        session[:stripe_connect_data]["auth_uid"] = "acct_1OHj9mHWXIKSjzLW"
+        session[:stripe_connect_data]["auth_uid"] = "acct_1SOk5nRHVSLfjXtK"
 
         post :stripe
 

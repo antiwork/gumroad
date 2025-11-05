@@ -128,12 +128,12 @@ const AdminProductInfo = ({ product }: Props) => {
             <BooleanIcon value={info.is_adult} />
           </dd>
 
-          <dt>Is Adult (on user)</dt>
+          <dt>Is Adult (on user profile)</dt>
           <dd>
             <BooleanIcon value={info.user.all_adult_products} />
           </dd>
 
-          <dt>Has adult keywords</dt>
+          <dt>Is Adult (keywords)</dt>
           <dd>
             <BooleanIcon value={info.has_adult_keywords} />
           </dd>

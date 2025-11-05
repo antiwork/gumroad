@@ -30,7 +30,7 @@ namespace :admin do
       resource :payout_info, only: :show
       resources :latest_posts, only: :index
       resources :stats, only: :index
-      resources :products, only: [] do
+      resources :products, only: :index do
         scope module: :products do
           resources :tos_violation_flags, only: [:index, :create]
           resources :purchases, only: :index
@@ -149,8 +149,9 @@ namespace :admin do
   # Search
   namespace :search do
     resources :users, only: :index
+    resources :purchases, only: :index
   end
-  get "/search_purchases", to: "search#purchases", as: :search_purchases
+  get "/search_purchases", to: "search#purchases"
 
   # Compliance
   resources :guids, only: [:show]
