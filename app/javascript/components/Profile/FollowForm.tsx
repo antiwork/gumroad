@@ -74,7 +74,7 @@ export const FollowForm = ({
 };
 
 export const FollowFormBlock = ({ creatorProfile }: { creatorProfile: CreatorProfile }) => (
-  <div className="flex grow flex-col justify-center gap-16 px-4 lg:px-0">
+  <div className="mx-auto flex w-full max-w-6xl grow flex-col justify-center gap-16 px-4 lg:px-0">
     <h1>Subscribe to receive email updates from {creatorProfile.name}.</h1>
     <div className="max-w-lg">
       <FollowForm creatorProfile={creatorProfile} buttonColor="primary" />

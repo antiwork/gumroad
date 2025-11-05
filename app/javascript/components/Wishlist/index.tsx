@@ -51,7 +51,7 @@ export type WishlistProps = {
   discover_opted_out: boolean | null;
   checkout_enabled: boolean;
   items: WishlistItem[];
-  isDiscover?: boolean;
+  layout?: "discover" | "profile";
   pagination: {
     count: number;
     items: number;
@@ -185,7 +185,7 @@ export const Wishlist = ({
   discover_opted_out,
   checkout_enabled,
   items: initialItems,
-  isDiscover,
+  layout,
   pagination: initialPagination,
 }: WishlistProps) => {
   const [name, setName] = React.useState(initialName);
@@ -227,7 +227,10 @@ export const Wishlist = ({
   return (
     <>
       <PageHeader
-        className={isDiscover ? "lg:px-16" : ""}
+        className={classNames(
+          { "lg:px-16": layout === "discover" },
+          { "mx-auto w-full max-w-6xl border-0 md:px-0": layout === "profile" },
+        )}
         title={name}
         actions={
           <>
@@ -259,29 +262,37 @@ export const Wishlist = ({
         }
       >
         {user ? (
-          <a style={{ display: "flex", alignItems: "center", gap: "var(--spacer-2)" }} href={user.profile_url}>
-            <img className="user-avatar" src={user.avatar_url} style={{ width: "var(--spacer-5)" }} />
+          <a className="flex items-center gap-2" href={user.profile_url}>
+            <img className="user-avatar w-6" src={user.avatar_url} />
             <h4>{user.name}</h4>
           </a>
         ) : null}
         {description ? <h4>{description}</h4> : null}
       </PageHeader>
-      <section className={classNames("p-4 md:p-8", isDiscover && "lg:px-16")}>
-        <ProductCardGrid ref={gridRef}>
-          {items.map((item) => (
-            <WishlistItemCard
-              key={item.id}
-              wishlistId={id}
-              item={item}
-              canEdit={can_edit}
-              onDelete={() => {
-                setItems((prev) => prev.filter((i) => i.id !== item.id));
-                // Go back to first page to avoid empty last page
-                setPagination(initialPagination);
-              }}
-            />
-          ))}
-        </ProductCardGrid>
+      <section
+        className={classNames(
+          "p-4 md:p-8",
+          { "lg:px-16": layout === "discover" },
+          { "border-t border-border md:px-0": layout === "profile" },
+        )}
+      >
+        <div className={classNames({ "mx-auto w-full max-w-6xl": layout === "profile" })}>
+          <ProductCardGrid ref={gridRef}>
+            {items.map((item) => (
+              <WishlistItemCard
+                key={item.id}
+                wishlistId={id}
+                item={item}
+                canEdit={can_edit}
+                onDelete={() => {
+                  setItems((prev) => prev.filter((i) => i.id !== item.id));
+                  // Go back to first page to avoid empty last page
+                  setPagination(initialPagination);
+                }}
+              />
+            ))}
+          </ProductCardGrid>
+        </div>
 
         {items.length === 0 ? (
           <Placeholder>
