@@ -6,46 +6,29 @@ class Admin::Compliance::CardsController < Admin::BaseController
   MAX_RESULT_LIMIT = 100
 
   def index
-    search_params_hash = params.permit(:transaction_date, :last_4, :card_type, :price, :expiry_date)
-                               .to_hash.symbolize_keys
-
-    date_parse_failed = false
-    if search_params_hash[:transaction_date].present?
-      begin
-        search_params_hash[:transaction_date] = Date.strptime(search_params_hash[:transaction_date], "%m/%d/%Y").to_s
-      rescue ArgumentError
-        flash[:alert] = "Please enter the date using the MM/DD/YYYY format."
-        date_parse_failed = true
+    super do |pagination, purchases|
+      if purchases.one? && params[:page].blank?
+        return redirect_to admin_purchase_path(purchases.first)
       end
-    end
-
-    if date_parse_failed
-      render(
-        inertia: inertia_template,
-        props: {
-          purchases: [],
-          pagination: { page: 1, limit: 25 },
-          query: nil,
-          product_title_query: nil,
-          purchase_status: nil
-        }
-      )
-    else
-      super
     end
   end
 
   private
     def page_title
-      "Transaction results"
+      params[:query].present? ? "Transaction results for #{params[:query].strip}" : "Transaction results"
     end
 
     def search_params
       search_params_hash = params.permit(:transaction_date, :last_4, :card_type, :price, :expiry_date)
-                                 .to_hash.symbolize_keys
+                                .to_hash.symbolize_keys
 
       if search_params_hash[:transaction_date].present?
-        search_params_hash[:transaction_date] = Date.strptime(search_params_hash[:transaction_date], "%m/%d/%Y").to_s
+        begin
+          search_params_hash[:transaction_date] = Date.strptime(search_params_hash[:transaction_date], "%m/%d/%Y").to_s
+        rescue ArgumentError
+          flash[:alert] = "Please enter the date using the MM/DD/YYYY format."
+          search_params_hash.delete(:transaction_date)
+        end
       end
 
       search_params_hash.merge(limit: MAX_RESULT_LIMIT)
