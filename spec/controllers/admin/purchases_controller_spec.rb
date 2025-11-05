@@ -18,6 +18,7 @@ describe Admin::PurchasesController, :vcr, inertia: true do
     end
 
     it "returns successful response with Inertia page data" do
+      expect(Admin::PurchasePresenter).to receive(:new).with(@purchase).and_call_original
       get :show, params: { id: @purchase.id }
 
       expect(response).to be_successful
