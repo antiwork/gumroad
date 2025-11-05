@@ -42,7 +42,7 @@ export const ImageUploader = ({
           <LoadingSpinner className="size-8" />
         </Placeholder>
       ) : imageUrl == null ? (
-        <Placeholder className="aspect-square items-center" style={{ background }}>
+        <Placeholder className="aspect-square items-center" noBackground style={{ background }}>
           <label className="button primary">
             <input
               type="file"

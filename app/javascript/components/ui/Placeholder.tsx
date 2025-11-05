@@ -7,12 +7,14 @@ type PlaceholderProps = React.PropsWithChildren<{
   role?: string;
   "aria-label"?: string;
   style?: React.CSSProperties;
+  noBackground?: boolean;
 }>;
 
-const Placeholder: React.FC<PlaceholderProps> = ({ className, children, ...rest }) => (
+const Placeholder: React.FC<PlaceholderProps> = ({ className, children, noBackground, ...rest }) => (
   <div
     className={classNames(
-      "bg-filled grid justify-items-center gap-3 rounded border border-dashed border-border p-6 text-center",
+      "grid justify-items-center gap-3 rounded border border-dashed border-border p-6 text-center",
+      !noBackground && "bg-filled",
       "[&>.icon]:text-xl",
       className,
     )}
