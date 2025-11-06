@@ -20,6 +20,13 @@
     </p>
   <% end %>
 
+  <% if item_props[:custom_receipt_note].present? %>
+    <div style="margin: 1em 0; padding: 1em; background-color: #f9f9f9; border-left: 3px solid #ddd;">
+      <p style="margin: 0 0 0.5em; font-size: 12px; color: #666; font-weight: bold;">Message from creator:</p>
+      <%= simple_format(item_props[:custom_receipt_note], style: "margin: 0;") %>
+    </div>
+  <% end %>
+
   <% if item_props[:license_key].present? %>
     <h4>License key</h4>
     <pre style="text-align: center; white-space: pre-wrap;">

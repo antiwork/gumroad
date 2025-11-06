@@ -197,6 +197,7 @@ class Link < ApplicationRecord
   validate :alive_category_variants_presence, on: :update
   validate :content_has_no_adult_keywords, if: -> { description_changed? || name_changed? }
   validate :custom_view_content_button_text_length
+  validate :custom_receipt_text_length
   validates_presence_of :filetype
   validates_presence_of :filegroup
   validate :bundle_is_not_in_bundle, if: :is_bundle_changed?
@@ -225,6 +226,8 @@ class Link < ApplicationRecord
   attr_json_data_accessor :excluded_sales_tax_regions, default: -> { [] }
   attr_json_data_accessor :sections, default: -> { [] }
   attr_json_data_accessor :main_section_index, default: -> { 0 }
+  attr_json_data_accessor :custom_view_content_button_text
+  attr_json_data_accessor :custom_receipt_text
 
   scope :alive,                           -> { where(purchase_disabled_at: nil, banned_at: nil, deleted_at: nil) }
   scope :visible,                         -> { where(deleted_at: nil) }

@@ -4,6 +4,7 @@ module Product::Validations
   include ActionView::Helpers::TextHelper
 
   MAX_VIEW_CONTENT_BUTTON_TEXT_LENGTH = 26
+  MAX_CUSTOM_RECEIPT_TEXT_LENGTH = 500
 
   private
     def max_purchase_count_is_greater_than_or_equal_to_inventory_sold
@@ -34,6 +35,13 @@ module Product::Validations
 
       over_limit = custom_view_content_button_text.length - MAX_VIEW_CONTENT_BUTTON_TEXT_LENGTH
       errors.add(:base, "Button: #{pluralize(over_limit, 'character')} over limit (max: #{MAX_VIEW_CONTENT_BUTTON_TEXT_LENGTH})")
+    end
+
+    def custom_receipt_text_length
+      return if custom_receipt_text.blank? || custom_receipt_text.length <= MAX_CUSTOM_RECEIPT_TEXT_LENGTH
+
+      over_limit = custom_receipt_text.length - MAX_CUSTOM_RECEIPT_TEXT_LENGTH
+      errors.add(:base, "Custom receipt text: #{pluralize(over_limit, 'character')} over limit (max: #{MAX_CUSTOM_RECEIPT_TEXT_LENGTH})")
     end
 
     def content_has_no_adult_keywords

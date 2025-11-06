@@ -279,6 +279,11 @@ export const Layout = ({
                 </Link>
               </Tab>
             ) : null}
+            <Tab asChild isSelected={tab === "receipt"}>
+              <Link to={`${rootPath}/receipt`} onClick={onTabClick}>
+                Receipt
+              </Link>
+            </Tab>
             <Tab asChild isSelected={tab === "share"}>
               <Link
                 to={`${rootPath}/share`}
