@@ -12,7 +12,7 @@ export const Sheet = ({
   <Dialog.Root {...props}>
     <Dialog.Portal>
       <Dialog.Content
-        className="bg-filled fixed inset-y-0 right-0 z-40 flex w-[40vw] flex-col gap-4 overflow-auto p-6"
+        className="bg-filled fixed inset-0 z-40 flex flex-col gap-4 overflow-auto border-border p-6 md:left-[unset] md:w-[40vw] md:border-l"
         aria-modal
       >
         <div className="flex items-start gap-4">
