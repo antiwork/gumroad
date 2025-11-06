@@ -42,7 +42,7 @@ export const Layout = ({ title, actions, navigation, children, preview }: Layout
     {preview ? (
       <WithPreviewSidebar className="flex-1">
         <div>{children}</div>
-        <PreviewSidebar title="Preview">{preview}</PreviewSidebar>
+        <PreviewSidebar>{preview}</PreviewSidebar>
       </WithPreviewSidebar>
     ) : (
       <div>{children}</div>

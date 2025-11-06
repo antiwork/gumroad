@@ -75,7 +75,7 @@ export const CheckoutPreview = ({
   );
 
   return (
-    <PreviewSidebar title="Preview">
+    <PreviewSidebar>
       <Preview scaleFactor={0.4} style={{ border: "var(--border)" }}>
         <PaymentStateContext.Provider value={paymentState}>
           <Checkout

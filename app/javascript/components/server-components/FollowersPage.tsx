@@ -206,7 +206,12 @@ export const FollowersPage = ({ followers: initialFollowers, per_page, total }: 
               </Button>
             ) : null}
             {selectedFollower ? (
-              <Sheet open onOpenChange={() => setSelectedFollowerId(null)} title="Details">
+              <Sheet
+                open
+                onOpenChange={() => setSelectedFollowerId(null)}
+                title="Details"
+                className={selectedFollower.can_update ? "" : "js-team-member-read-only"}
+              >
                 <div className="stack">
                   <div>
                     <div>

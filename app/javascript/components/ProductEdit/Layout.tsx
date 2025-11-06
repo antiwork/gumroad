@@ -306,7 +306,6 @@ export const Layout = ({
         <WithPreviewSidebar className="flex-1">
           {children}
           <PreviewSidebar
-            title="Preview"
             previewLink={(props) => (
               <NavigationButton
                 disabled={isBusy}

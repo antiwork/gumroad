@@ -218,7 +218,6 @@ const SettingsPage = ({ creator_profile, profile_settings, settings_pages, ...pr
           </section>
         </form>
         <PreviewSidebar
-          title="Preview"
           previewLink={(props) => (
             <a
               {...props}

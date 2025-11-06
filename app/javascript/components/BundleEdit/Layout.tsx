@@ -194,7 +194,6 @@ export const Layout = ({
         <WithPreviewSidebar className="flex-1">
           {children}
           <PreviewSidebar
-            title="Preview"
             previewLink={(props) => (
               <Button {...props} onClick={() => void handleSave().then(() => window.open(url))} disabled={isBusy} />
             )}
