@@ -31,7 +31,7 @@ describe "Admin::UsersController Scenario", type: :system, js: true do
     end
 
     it "shows products" do
-      visit admin_user_products_path(user.id)
+      visit admin_user_path(user.id)
       click_on "Products"
 
       expect(page).to have_text("Product a")
