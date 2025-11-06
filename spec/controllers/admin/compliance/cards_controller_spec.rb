@@ -5,7 +5,7 @@ require "shared_examples/admin_base_controller_concern"
 require "inertia_rails/rspec"
 
 describe Admin::Compliance::CardsController, type: :controller, inertia: true do
-  render_views
+  # render_views
 
   it_behaves_like "inherits from Admin::BaseController"
 
@@ -30,10 +30,6 @@ describe Admin::Compliance::CardsController, type: :controller, inertia: true do
                               card_expiry_month: 10)
     end
 
-    after do
-      expect(response).to be_successful
-    end
-
     it "passes purchases in Inertia props" do
       purchases_service = instance_double(Admin::Search::PurchasesService, perform: Purchase.none, valid?: true)
       allow(Admin::Search::PurchasesService).to receive(:new).with(card_type:, transaction_date: "2022-02-22", limit:).and_return(purchases_service)
@@ -50,8 +46,8 @@ describe Admin::Compliance::CardsController, type: :controller, inertia: true do
       let(:transaction_date) { "02/22" }
 
       it "shows error flash message and no purchases" do
-        purchases_service = instance_double(Admin::Search::PurchasesService, perform: Purchase.none, valid?: true)
-        allow(Admin::Search::PurchasesService).to receive(:new).with(card_type:, limit:).and_return(purchases_service)
+        purchases_service = instance_double(Admin::Search::PurchasesService, perform: Purchase.none, valid?: false)
+        allow(Admin::Search::PurchasesService).to receive(:new).with(card_type:, transaction_date: "12/31", limit:).and_return(purchases_service)
 
         get :index, params: { card_type:, transaction_date: "12/31" }
 
@@ -62,33 +58,40 @@ describe Admin::Compliance::CardsController, type: :controller, inertia: true do
       end
     end
 
-    context "when there is no results" do
-      it "passes empty arrays in Inertia props" do
-        purchases_service = instance_double(Admin::Search::PurchasesService, perform: Purchase.none, valid?: true)
-        allow(Admin::Search::PurchasesService).to receive(:new).with(card_type:, limit:).and_return(purchases_service)
+    it "when there is no results passes empty arrays in Inertia props" do
+      purchases_service = instance_double(Admin::Search::PurchasesService, perform: Purchase.none, valid?: true)
+      allow(Admin::Search::PurchasesService).to receive(:new).with(card_type:, limit:).and_return(purchases_service)
 
-        get :index, params: { card_type: }
+      get :index, params: { card_type: }
 
-        assert_response :success
-        expect(inertia.component).to eq("Admin/Compliance/Cards/Index")
-        expect(inertia.props[:purchases]).to eq([])
-        expect(inertia.props[:pagination]).to be_present
-      end
+      assert_response :success
+      expect(inertia.component).to eq("Admin/Compliance/Cards/Index")
+      expect(inertia.props[:purchases]).to eq([])
+      expect(inertia.props[:pagination]).to be_present
     end
 
-    context "when a purchase is found" do
-      it "passes purchases in Inertia props" do
-        card_type = "visa"
-        purchases_service = instance_double(Admin::Search::PurchasesService, perform: Purchase.where(id: @purchase_visa.id), valid?: true)
-        allow(Admin::Search::PurchasesService).to receive(:new).with(card_type:, limit:).and_return(purchases_service)
+    it "when a single purchase is found redirects to the admin purchase page when one purchase is found" do
+      card_type = "visa"
+      purchases_service = instance_double(Admin::Search::PurchasesService, perform: Purchase.where(id: @purchase_visa.id), valid?: true)
+      allow(Admin::Search::PurchasesService).to receive(:new).with(card_type:, limit:).and_return(purchases_service)
 
-        get :index, params: { card_type: }
+      get :index, params: { card_type: }
 
-        assert_response :success
-        expect(inertia.component).to eq("Admin/Compliance/Cards/Index")
-        expect(inertia.props[:purchases]).to contain_exactly(hash_including(id: @purchase_visa.id))
-        expect(inertia.props[:pagination]).to be_present
-      end
+      expect(response).to redirect_to admin_purchase_path(@purchase_visa)
+    end
+
+    it "when a multiple purchases are found, passes purchases in Inertia props" do
+      card_type = "visa"
+      purchase_2 = create(:purchase, card_type: "visa")
+      purchases_service = instance_double(Admin::Search::PurchasesService, perform: Purchase.where(id: [@purchase_visa.id, purchase_2.id]), valid?: true)
+      allow(Admin::Search::PurchasesService).to receive(:new).with(card_type:, limit:).and_return(purchases_service)
+
+      get :index, params: { card_type: }
+
+      assert_response :success
+      expect(inertia.component).to eq("Admin/Compliance/Cards/Index")
+      expect(inertia.props[:purchases]).to contain_exactly(hash_including(id: @purchase_visa.id), hash_including(id: purchase_2.id))
+      expect(inertia.props[:pagination]).to be_present
     end
 
     context "when requesting JSON format" do

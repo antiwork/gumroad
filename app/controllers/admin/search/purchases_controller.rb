@@ -27,4 +27,8 @@ class Admin::Search::PurchasesController < Admin::BaseController
     def inertia_template
       "Admin/Search/Purchases/Index"
     end
+
+    def show_validation_errors?
+      true
+    end
 end

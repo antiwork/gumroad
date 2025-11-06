@@ -15,19 +15,17 @@ class Admin::Compliance::CardsController < Admin::BaseController
 
   private
     def page_title
-      params[:query].present? ? "Transaction results for #{params[:query].strip}" : "Transaction results"
+      "Transaction results"
     end
 
     def search_params
-      search_params_hash = params.permit(:transaction_date, :last_4, :card_type, :price, :expiry_date)
-                                .to_hash.symbolize_keys
+      search_params_hash = params.permit(:transaction_date, :last_4, :card_type, :price, :expiry_date).to_hash.symbolize_keys
 
       if search_params_hash[:transaction_date].present?
         begin
           search_params_hash[:transaction_date] = Date.strptime(search_params_hash[:transaction_date], "%m/%d/%Y").to_s
         rescue ArgumentError
           flash[:alert] = "Please enter the date using the MM/DD/YYYY format."
-          search_params_hash.delete(:transaction_date)
         end
       end
 

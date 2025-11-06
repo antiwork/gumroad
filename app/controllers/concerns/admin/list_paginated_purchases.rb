@@ -13,7 +13,7 @@ module Admin::ListPaginatedPurchases
     service = Admin::Search::PurchasesService.new(**search_params)
     records = service.perform
 
-    unless service.valid?
+    if show_validation_errors? && !service.valid?
       flash[:alert] = service.errors.full_messages.to_sentence
     end
 
@@ -62,5 +62,9 @@ module Admin::ListPaginatedPurchases
 
     def presenter_method
       :list_props
+    end
+
+    def show_validation_errors?
+      false
     end
 end

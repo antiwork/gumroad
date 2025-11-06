@@ -270,7 +270,12 @@ class Api::Internal::Helper::PurchasesController < Api::Internal::Helper::BaseCo
     }
     return render json: { success: false, message: "At least one of the parameters is required." }, status: :bad_request if search_params.compact.blank?
 
-    purchase = Admin::Search::PurchasesService.new(**search_params, limit: 1).perform.first
+    service = Admin::Search::PurchasesService.new(**search_params, limit: 1)
+    unless service.valid?
+      return render json: { success: false, message: service.errors.full_messages.to_sentence }, status: :bad_request
+    end
+
+    purchase = service.perform.first
     return render json: { success: false, message: "Purchase not found" }, status: :not_found if purchase.nil?
 
     purchase_json = purchase.slice(:email, :link_name, :price_cents, :purchase_state, :created_at)
@@ -295,8 +300,6 @@ class Api::Internal::Helper::PurchasesController < Api::Internal::Helper::BaseCo
     end
 
     render json: { success: true, message: "Purchase found", purchase: purchase_json }
-  rescue Admin::Search::PurchasesService::InvalidDateError
-    render json: { success: false, message: "purchase_date must use YYYY-MM-DD format." }, status: :bad_request
   end
 
   RESEND_RECEIPT_BY_NUMBER_OPENAPI = {

@@ -5,8 +5,6 @@ require "shared_examples/admin_base_controller_concern"
 require "inertia_rails/rspec"
 
 describe Admin::Search::PurchasesController, type: :controller, inertia: true do
-  render_views
-
   it_behaves_like "inherits from Admin::BaseController"
 
   before do
@@ -72,7 +70,7 @@ describe Admin::Search::PurchasesController, type: :controller, inertia: true do
           # Create another purchase with same email and same product to avoid redirect
           create(:purchase, email: email, link: product)
 
-          expect(Admin::Search::PurchasesService).to receive(:new).with(query: email, product_title_query: product_title_query, purchase_status: nil).and_call_original
+          expect(Admin::Search::PurchasesService).to receive(:new).with(query: email, product_title_query:, purchase_status: nil).and_call_original
 
           get :index, params: { query: email, product_title_query: product_title_query }
 
@@ -83,7 +81,7 @@ describe Admin::Search::PurchasesController, type: :controller, inertia: true do
 
       context "when query is not set" do
         it "ignores product_title_query" do
-          expect(Admin::Search::PurchasesService).to receive(:new).with(query: "", product_title_query: product_title_query, purchase_status: nil).and_call_original
+          expect(Admin::Search::PurchasesService).to receive(:new).with(query: "", product_title_query:, purchase_status: nil).and_call_original
 
           get :index, params: { query: "", product_title_query: product_title_query }
 
@@ -106,7 +104,7 @@ describe Admin::Search::PurchasesController, type: :controller, inertia: true do
           # Create another purchase with same email and same status to avoid redirect
           create(:purchase, purchase_state: "successful", email: email)
 
-          expect(Admin::Search::PurchasesService).to receive(:new).with(query: email, product_title_query: nil, purchase_status: purchase_status).and_call_original
+          expect(Admin::Search::PurchasesService).to receive(:new).with(query: email, product_title_query: nil, purchase_status:).and_call_original
 
           get :index, params: { query: email, purchase_status: purchase_status }
 
@@ -117,7 +115,7 @@ describe Admin::Search::PurchasesController, type: :controller, inertia: true do
 
       context "when query is not set" do
         it "ignores purchase_status" do
-          expect(Admin::Search::PurchasesService).to receive(:new).with(query: "", product_title_query: nil, purchase_status: purchase_status).and_call_original
+          expect(Admin::Search::PurchasesService).to receive(:new).with(query: "", product_title_query: nil, purchase_status:).and_call_original
 
           get :index, params: { query: "", purchase_status: purchase_status }
 

@@ -1,8 +1,6 @@
 # frozen_string_literal: true
 
 class Admin::Search::PurchasesService
-  class InvalidDateError < StandardError; end
-
   include ActiveModel::Validations
 
   attr_reader :search_attributes, :transaction_date, :formatted_transaction_date, :query, :product_title_query, :purchase_status, :creator_email, :license_key, :last_4, :card_type, :price, :expiry_date, :limit
@@ -26,9 +24,7 @@ class Admin::Search::PurchasesService
   end
 
   def perform
-    is_valid = valid?
-    raise InvalidDateError, errors[:transaction_date].first if errors[:transaction_date].any?
-    return Purchase.none unless is_valid
+    return Purchase.none unless valid?
 
     purchases = Purchase.order(created_at: :desc)
 
