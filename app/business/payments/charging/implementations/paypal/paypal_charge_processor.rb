@@ -574,12 +574,11 @@ class PaypalChargeProcessor
   end
 
   def fight_chargeback(paypal_transaction_id, dispute_evidence, merchant_account: nil)
-    # Get the dispute ID from the transaction
-    dispute = Dispute.find_by(charge_processor_transaction_id: paypal_transaction_id) ||
-              Dispute.joins(:purchase).find_by(purchases: { stripe_transaction_id: paypal_transaction_id })
+    # Get the dispute from the dispute evidence
+    dispute = dispute_evidence.dispute
 
     unless dispute&.charge_processor_dispute_id
-      Rails.logger.error "PayPal fight_chargeback: No dispute found for transaction #{paypal_transaction_id}"
+      Rails.logger.error "PayPal fight_chargeback: No PayPal dispute ID found for transaction #{paypal_transaction_id}"
       return
     end
 
@@ -593,6 +592,8 @@ class PaypalChargeProcessor
     evidence_files = prepare_evidence_files(dispute_evidence)
 
     # Get merchant account ID if charging via PayPal Connect
+    # The merchant_account can be passed as parameter or accessed from the disputable
+    merchant_account ||= dispute_evidence.disputable.merchant_account if dispute_evidence.disputable.respond_to?(:merchant_account)
     merchant_account_id = merchant_account&.charge_processor_merchant_id
 
     # Submit evidence via PayPal Disputes API
