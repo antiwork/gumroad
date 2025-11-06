@@ -194,7 +194,7 @@ const SubscriptionManager = ({
     price: Math.round(amountDueToday / product.exchange_rate),
     payInInstallments: subscription.is_installment_plan,
     requireShipping: product.require_shipping,
-    customFields: product.custom_fields,
+    customFields: [], // Don't show custom fields on manage membership page
     bundleProductCustomFields: [],
     supportsPaypal: product.supports_paypal,
     testPurchase: subscription.is_test,
