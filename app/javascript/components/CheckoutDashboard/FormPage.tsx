@@ -16,6 +16,7 @@ import { Layout, Page } from "$app/components/CheckoutDashboard/Layout";
 import { useClientAlert } from "$app/components/ClientAlertProvider";
 import { Icon } from "$app/components/Icons";
 import { useLoggedInUser } from "$app/components/LoggedInUser";
+import { WithPreviewSidebar } from "$app/components/PreviewSidebar";
 import { Select } from "$app/components/Select";
 import { Toggle } from "$app/components/Toggle";
 import { TypeSafeOptionSelect } from "$app/components/TypeSafeOptionSelect";
@@ -108,9 +109,8 @@ const FormPage = ({
           {isSaving ? "Saving changes..." : "Save changes"}
         </Button>
       }
-      hasAside
     >
-      <div className="flex-1 lg:grid lg:grid-cols-[1fr_30vw]">
+      <WithPreviewSidebar className="flex-1">
         <div>
           <section className="space-y-4 border-b border-border p-4 md:p-8">
             <header className="flex items-center justify-between">
@@ -361,7 +361,7 @@ const FormPage = ({
           }}
           recommendedProduct={recommendationType !== "no_recommendations" ? cardProduct : undefined}
         />
-      </div>
+      </WithPreviewSidebar>
     </Layout>
   );
 };

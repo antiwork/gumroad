@@ -17,25 +17,17 @@ export const Layout = ({
   children,
   pages,
   actions,
-  hasAside,
 }: {
   currentPage: Page;
   children: React.ReactNode;
   pages: Page[];
   actions?: React.ReactNode;
-  hasAside?: boolean;
-}) =>
-  hasAside ? (
-    <>
-      <Header actions={actions} pages={pages} currentPage={currentPage} sticky />
-      <div className="squished">{children}</div>
-    </>
-  ) : (
-    <div>
-      <Header actions={actions} pages={pages} currentPage={currentPage} />
-      {children}
-    </div>
-  );
+}) => (
+  <div>
+    <Header actions={actions} pages={pages} currentPage={currentPage} />
+    {children}
+  </div>
+);
 
 const Header = ({
   actions,
