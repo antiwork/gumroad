@@ -57,7 +57,10 @@ export const VideoStreamPlayer = ({
 
       let lastPlayedId: number | undefined;
       let isInitialSeekDone = false;
+      let lastPauseTime: number | null = null;
+      let isSeekingFromPause = false;
       const playlist = initialPlaylist;
+      const LONG_PAUSE_THRESHOLD = 5 * 60 * 1000; // 5 minutes in ms
 
       const player = await createJWPlayer(playerId, {
         width: "100%",
@@ -120,9 +123,26 @@ export const VideoStreamPlayer = ({
         updateLocalMediaLocation(player.getDuration(), player.getDuration());
       });
 
+      player.on("pause", () => {
+        lastPauseTime = Date.now();
+      });
+
       player.on("play", () => {
         const itemId = player.getPlaylistIndex();
         const videoFile = playlist[itemId];
+        
+        // Check if resuming from a long pause
+        if (lastPauseTime && Date.now() - lastPauseTime > LONG_PAUSE_THRESHOLD) {
+          isSeekingFromPause = true;
+          const currentPosition = player.getPosition();
+          
+          // If position is at the beginning, seek to last saved position
+          if (currentPosition < 1 && videoFile?.latest_media_location?.location) {
+            player.seek(videoFile.latest_media_location.location);
+          }
+        }
+        lastPauseTime = null;
+        
         if (videoFile !== undefined && lastPlayedId !== itemId) {
           void createConsumptionEvent({
             eventType: "watch",
@@ -136,15 +156,42 @@ export const VideoStreamPlayer = ({
       });
 
       player.on("visualQuality", () => {
-        if (isInitialSeekDone && lastPlayedId === player.getPlaylistIndex()) return;
+        if (isInitialSeekDone && lastPlayedId === player.getPlaylistIndex() && !isSeekingFromPause) return;
+        
         const videoFile = playlist[player.getPlaylistIndex()];
         if (
           videoFile?.latest_media_location != null &&
-          videoFile.latest_media_location.location !== videoFile.content_length
+          videoFile.latest_media_location.location !== videoFile.content_length &&
+          !isSeekingFromPause // Don't seek if we're already seeking from pause
         ) {
           player.seek(videoFile.latest_media_location.location);
         }
+        
         isInitialSeekDone = true;
+        isSeekingFromPause = false;
+      });
+
+      // Handle stream errors that might occur after long pauses
+      player.on("error", (error) => {
+        console.error("JWPlayer error:", error);
+        
+        // If error occurs, try to resume from saved position
+        const videoFile = playlist[player.getPlaylistIndex()];
+        if (videoFile?.latest_media_location?.location) {
+          // Reload the player at the saved position
+          player.load(playlist.map((video) => ({
+            sources: video.sources.map((source) => ({
+              file: source.replace(fakeVideoUrlGuidForObfuscation, video.guid),
+            })),
+            tracks: video.tracks,
+            title: video.title,
+          })));
+          
+          player.once("ready", () => {
+            player.playlistItem(player.getPlaylistIndex());
+            player.seek(videoFile.latest_media_location!.location);
+          });
+        }
       });
     };
 
