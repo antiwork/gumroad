@@ -78,7 +78,7 @@ describe Admin::Search::PurchasesService do
 
           expect(result).to eq(Purchase.none)
           expect(result).to be_empty
-          expect(service.errors[:transaction_date]).to include("must use YYYY-MM-DD format.")
+          expect(service.errors[:transaction_date]).to include("transaction_date must use YYYY-MM-DD format.")
         end
       end
 

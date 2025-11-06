@@ -85,7 +85,12 @@ class Admin::Search::PurchasesService
         purchases = purchases.where("created_at between ? and ?", start_date, end_date)
       end
       purchases = purchases.where(card_type:) if card_type.present?
-      purchases = purchases.where(card_visual_sql_finder(last_4)) if last_4.present?
+      if last_4.present?
+        purchases = purchases.where(
+          (["card_visual = ?"] * ChargeableVisual::LENGTH_TO_FORMAT.size).join(" OR "),
+          *ChargeableVisual::LENGTH_TO_FORMAT.values.map { |visual_format| format(visual_format, last_4) }
+        )
+      end
       purchases = purchases.where("price_cents between ? and ?", (price.to_d * 75).to_i, (price.to_d * 125).to_i) if price.present?
       if expiry_date.present?
         expiry_month, expiry_year = CreditCardUtility.extract_month_and_year(expiry_date)
