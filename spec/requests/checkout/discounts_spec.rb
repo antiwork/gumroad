@@ -671,7 +671,6 @@ describe("Checkout discounts page", type: :system, js: true) do
       select_disclosure "Open discount action menu"  do
         click_on "Delete"
       end
-      click_on "Close"
     end
     expect(page).to have_alert(text: "Successfully deleted discount!")
     expect(page).to_not have_selector(:table_row, { "Discount" => "Discount 1" })
@@ -703,6 +702,7 @@ describe("Checkout discounts page", type: :system, js: true) do
 
     expect(page).to have_section("Create discount")
     click_on "Cancel"
+    click_on "Close"
 
     table_row.click
     within_modal "Discount 1" do

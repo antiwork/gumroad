@@ -192,6 +192,7 @@ export const Layout = ({
       </PageHeader>
       {preview ? (
         <WithPreviewSidebar className="flex-1">
+          {children}
           <PreviewSidebar
             title="Preview"
             previewLink={(props) => (
@@ -209,8 +210,9 @@ export const Layout = ({
             </Preview>
           </PreviewSidebar>
         </WithPreviewSidebar>
-      ) : null}
-      <div className={preview ? "squished flex-1 lg:grid lg:grid-cols-[1fr_30vw]" : "flex-1"}>{children}</div>
+      ) : (
+        <div className="flex-1">{children}</div>
+      )}
     </>
   );
 };
