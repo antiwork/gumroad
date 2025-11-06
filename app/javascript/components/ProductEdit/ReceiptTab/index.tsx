@@ -7,14 +7,6 @@ import { useProductEditContext } from "$app/components/ProductEdit/state";
 export const ReceiptTab = () => {
   const { product, updateProduct } = useProductEditContext();
 
-  const handleCustomReceiptTextChange = (value: string) => {
-    updateProduct({ custom_receipt_text: value });
-  };
-
-  const handleCustomButtonTextChange = (value: string) => {
-    updateProduct({ custom_view_content_button_text: value });
-  };
-
   return (
     <Layout preview={<ReceiptPreview />}>
       <div className="squished">
@@ -33,7 +25,7 @@ export const ReceiptTab = () => {
                   id="custom-receipt-text"
                   placeholder="e.g., Thanks for your purchase! Check your email for access instructions."
                   value={product.custom_receipt_text ?? ""}
-                  onChange={(e) => handleCustomReceiptTextChange(e.target.value)}
+                  onChange={(e) => updateProduct({ custom_receipt_text: e.target.value })}
                   rows={5}
                   maxLength={product.custom_receipt_text_max_length}
                 />
@@ -52,7 +44,7 @@ export const ReceiptTab = () => {
                   type="text"
                   placeholder="View content"
                   value={product.custom_view_content_button_text ?? ""}
-                  onChange={(e) => handleCustomButtonTextChange(e.target.value)}
+                  onChange={(e) => updateProduct({ custom_view_content_button_text: e.target.value })}
                   maxLength={product.custom_view_content_button_text_max_length}
                 />
                 <small>

@@ -9,8 +9,8 @@ export const ReceiptPreview = () => {
 
   if (!currentSeller) return null;
 
-  const buttonText = product.custom_view_content_button_text?.trim() || "View content";
-  const customMessage = product.custom_receipt_text?.trim();
+  const buttonText = (product.custom_view_content_button_text || "").trim() || "View content";
+  const customMessage = (product.custom_receipt_text || "").trim();
 
   return (
     <div className="paragraphs" style={{ padding: "var(--spacer-6)" }}>
