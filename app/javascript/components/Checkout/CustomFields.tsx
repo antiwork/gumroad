@@ -12,13 +12,20 @@ const CustomField = ({ field, fieldKey }: { field: CustomFieldDescriptor; fieldK
   const uid = React.useId();
   const hasError = getErrors(state).has(`customFields.${fieldKey}`);
   const value = state.customFieldValues[fieldKey];
+  
+  // Check if we're on manage membership page (has subscription_id)
+  const isManageSubscription = !!state.products[0]?.subscription_id;
+  const isReadOnly = isManageSubscription || isProcessing(state);
 
   switch (field.type) {
     case "text": {
       return (
         <fieldset className={cx({ danger: hasError })}>
           <legend>
-            <label htmlFor={uid}>{field.name}</label>
+            <label htmlFor={uid}>
+              {field.name}
+              {isManageSubscription && <span className="text-muted"> (from original purchase)</span>}
+            </label>
           </legend>
           <input
             id={uid}
@@ -26,8 +33,10 @@ const CustomField = ({ field, fieldKey }: { field: CustomFieldDescriptor; fieldK
             aria-invalid={hasError}
             placeholder={`${field.name}${field.required ? "" : " (optional)"}`}
             value={value ?? ""}
-            onChange={(e) => dispatch({ type: "set-custom-field", key: fieldKey, value: e.target.value })}
-            disabled={isProcessing(state)}
+            onChange={(e) => !isManageSubscription && dispatch({ type: "set-custom-field", key: fieldKey, value: e.target.value })}
+            disabled={isReadOnly}
+            readOnly={isManageSubscription}
+            className={isManageSubscription ? "read-only" : ""}
           />
         </fieldset>
       );
@@ -35,18 +44,20 @@ const CustomField = ({ field, fieldKey }: { field: CustomFieldDescriptor; fieldK
     case "checkbox": {
       return (
         <fieldset className={cx({ danger: hasError })}>
-          <label>
+          <label className={isManageSubscription ? "read-only" : ""}>
             <input
               type="checkbox"
               checked={value === "true"}
               aria-invalid={hasError}
               onChange={(e) =>
-                dispatch({ type: "set-custom-field", key: fieldKey, value: e.target.checked ? "true" : "" })
+                !isManageSubscription && dispatch({ type: "set-custom-field", key: fieldKey, value: e.target.checked ? "true" : "" })
               }
               style={{ margin: 0 }}
-              disabled={isProcessing(state)}
+              disabled={isReadOnly}
+              readOnly={isManageSubscription}
             />
             {field.required ? field.name : `${field.name} (optional)`}
+            {isManageSubscription && <span className="text-muted"> (from original purchase)</span>}
           </label>
         </fieldset>
       );
@@ -54,16 +65,17 @@ const CustomField = ({ field, fieldKey }: { field: CustomFieldDescriptor; fieldK
     case "terms": {
       return (
         <fieldset className={cx({ danger: hasError })}>
-          <label>
+          <label className={isManageSubscription ? "read-only" : ""}>
             <input
               type="checkbox"
               checked={value === "true"}
               aria-invalid={hasError}
               onChange={(e) =>
-                dispatch({ type: "set-custom-field", key: fieldKey, value: e.target.checked ? "true" : "" })
+                !isManageSubscription && dispatch({ type: "set-custom-field", key: fieldKey, value: e.target.checked ? "true" : "" })
               }
               style={{ margin: 0 }}
-              disabled={isProcessing(state)}
+              disabled={isReadOnly}
+              readOnly={isManageSubscription}
             />
             I accept
             <a href={field.name} target="_blank" rel="noreferrer">
@@ -183,6 +195,19 @@ export const CustomFields = () => {
     state.products.map(({ creator }) => creator),
     "id",
   );
+  
+  const isManageSubscription = !!state.products[0]?.subscription_id;
+  const customFieldsContent = sellers.map((seller) => <SellerCustomFields key={seller.id} seller={seller} />);
+  
+  if (isManageSubscription && sellers.some(seller => state.products.some(p => p.creator.id === seller.id && (p.customFields.length > 0 || p.bundleProductCustomFields.length > 0)))) {
+    return (
+      <section className="purchase-info-section">
+        <h3>Purchase Information</h3>
+        <p className="text-muted">These details were provided during your original purchase and cannot be modified.</p>
+        {customFieldsContent}
+      </section>
+    );
+  }
 
-  return sellers.map((seller) => <SellerCustomFields key={seller.id} seller={seller} />);
+  return customFieldsContent;
 };
