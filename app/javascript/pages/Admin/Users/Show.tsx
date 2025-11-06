@@ -9,17 +9,13 @@ type PageProps = {
   user: User;
 };
 
-type Props = {
-  isAffiliateUser?: boolean;
-};
-
-const AdminUsersShow = ({ isAffiliateUser = false }: Props) => {
+const AdminUsersShow = () => {
   const { user } = cast<PageProps>(usePage().props);
 
   return (
     <div className="paragraphs">
       <AdminUserAndProductsTabs selectedTab="profile" userId={user.id} />
-      <UserCard user={user} isAffiliateUser={isAffiliateUser} />
+      <UserCard user={user} />
     </div>
   );
 };
