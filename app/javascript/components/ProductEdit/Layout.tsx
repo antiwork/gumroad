@@ -308,13 +308,13 @@ export const Layout = ({
           <PreviewSidebar
             previewLink={(props) => (
               <NavigationButton
+                {...props}
                 disabled={isBusy}
                 href={url}
                 onClick={(evt) => {
                   evt.preventDefault();
                   void save().then(() => window.open(url, "_blank"));
                 }}
-                {...props}
               />
             )}
           >
