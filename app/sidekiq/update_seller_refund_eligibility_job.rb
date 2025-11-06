@@ -10,8 +10,10 @@ class UpdateSellerRefundEligibilityJob
 
     if unpaid_balance_cents > 0 && user.refunds_disabled?
       user.enable_refunds!
-    elsif unpaid_balance_cents < -10000 && !user.refunds_disabled?
+    elsif unpaid_balance_cents < User::LowBalanceFraudCheck::LOW_BALANCE_THRESHOLD && !user.refunds_disabled?
       user.disable_refunds!
     end
+
+    user.mark_compliant_if_balance_recovered!
   end
 end

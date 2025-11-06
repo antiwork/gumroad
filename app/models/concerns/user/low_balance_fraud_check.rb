@@ -4,7 +4,9 @@ module User::LowBalanceFraudCheck
   extend ActiveSupport::Concern
 
   LOW_BALANCE_THRESHOLD = -100_00 # USD -100
-  private_constant :LOW_BALANCE_THRESHOLD
+
+  LOW_BALANCE_RECOVERY_THRESHOLD = 100_00 # USD 100
+  private_constant :LOW_BALANCE_RECOVERY_THRESHOLD
 
   LOW_BALANCE_PROBATION_WAIT_TIME = 2.months
   private_constant :LOW_BALANCE_PROBATION_WAIT_TIME
@@ -29,7 +31,23 @@ module User::LowBalanceFraudCheck
     disable_refunds_and_put_on_probation! unless recently_probated_for_low_balance?
   end
 
+  def mark_compliant_if_balance_recovered!
+    return unless can_recover_from_automatic_fraud_probation?
+
+    content = "Marked compliant automatically on #{Time.current.to_fs(:formatted_date_full_month)} as balance is recovered to #{MoneyFormatter.format(LOW_BALANCE_RECOVERY_THRESHOLD, :usd, no_cents_if_whole: true, symbol: true)}"
+    mark_compliant!(author_name: LOW_BALANCE_FRAUD_CHECK_AUTHOR_NAME, content:)
+  end
+
   private
+    def can_recover_from_automatic_fraud_probation?
+      return false unless on_probation?
+
+      comments.with_type_on_probation
+              .order(created_at: :desc, id: :desc)
+              .first&.author_name == LOW_BALANCE_FRAUD_CHECK_AUTHOR_NAME &&
+        unpaid_balance_cents >= LOW_BALANCE_RECOVERY_THRESHOLD
+    end
+
     def disable_refunds_and_put_on_probation!
       disable_refunds!
 

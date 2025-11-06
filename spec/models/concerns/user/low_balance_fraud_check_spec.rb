@@ -108,4 +108,33 @@ describe User::LowBalanceFraudCheck do
       end
     end
   end
+
+  describe "#mark_compliant_if_balance_recovered!" do
+    it "when user is not on probation does nothing" do
+      allow(@creator).to receive(:unpaid_balance_cents).and_return(50_00)
+      expect { @creator.mark_compliant_if_balance_recovered! }.not_to change { @creator.reload.user_risk_state }
+    end
+
+    context "when user is on probation for low balance" do
+      before do
+        @creator.send(:disable_refunds_and_put_on_probation!)
+      end
+
+      it "when balance is below $100 does nothing" do
+        allow(@creator).to receive(:unpaid_balance_cents).and_return(99_99)
+        expect { @creator.mark_compliant_if_balance_recovered! }.not_to change { @creator.reload.user_risk_state }
+      end
+
+      it "when balance is at or above $100 marks user compliant, creates compliant comment, and enables refunds" do
+        allow(@creator).to receive(:unpaid_balance_cents).and_return(100_00)
+        expect { @creator.mark_compliant_if_balance_recovered! }
+          .to change { @creator.reload.user_risk_state }.from("on_probation").to("compliant")
+
+        compliant_comment = @creator.comments.where(comment_type: Comment::COMMENT_TYPE_COMPLIANT).order(created_at: :desc).first
+        expect(compliant_comment.author_name).to eq("LowBalanceFraudCheck")
+        expect(compliant_comment.content).to include("Marked compliant automatically", "balance is recovered to $100")
+        expect(@creator.reload.refunds_disabled?).to eq(false)
+      end
+    end
+  end
 end
