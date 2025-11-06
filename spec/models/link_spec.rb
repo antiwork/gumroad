@@ -1764,6 +1764,53 @@ describe Link, :vcr do
     end
   end
 
+  describe "#custom_receipt_text" do
+    it "saves successfully with valid text" do
+      link.custom_receipt_text = "Thanks for your purchase! We hope you enjoy it."
+      expect(link.save).to be true
+      expect(link.custom_receipt_text).to eq "Thanks for your purchase! We hope you enjoy it."
+    end
+
+    it "saves successfully with maximum allowed characters" do
+      text = "a" * 500
+      link.custom_receipt_text = text
+      expect(link.save).to be true
+      expect(link.custom_receipt_text).to eq text
+    end
+
+    it "errors if text is longer than 500 characters" do
+      product = create(:product)
+      text = "a" * 501
+      product.custom_receipt_text = text
+      expect do
+        product.save!
+      end.to raise_error(ActiveRecord::RecordInvalid)
+      expect(product.errors.full_messages.to_sentence).to eq("Custom receipt text: 1 character over limit (max: 500)")
+    end
+
+    it "errors with correct pluralization for multiple characters over limit" do
+      product = create(:product)
+      text = "a" * 510
+      product.custom_receipt_text = text
+      expect do
+        product.save!
+      end.to raise_error(ActiveRecord::RecordInvalid)
+      expect(product.errors.full_messages.to_sentence).to eq("Custom receipt text: 10 characters over limit (max: 500)")
+    end
+
+    it "saves successfully with nil value" do
+      link.custom_receipt_text = nil
+      expect(link.save).to be true
+      expect(link.custom_receipt_text).to be_nil
+    end
+
+    it "saves successfully with blank string" do
+      link.custom_receipt_text = ""
+      expect(link.save).to be true
+      expect(link.custom_receipt_text).to eq ""
+    end
+  end
+
   describe "#content_cannot_contain_adult_keywords" do
     let(:product) { create(:product) }
 

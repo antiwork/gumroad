@@ -96,29 +96,42 @@ describe ReceiptPresenter::ItemInfo do
     end
 
     describe "custom_receipt_note" do
-      context "when the product does not have a custom receipt note" do
+      context "when the product does not have a custom receipt text" do
         it "returns nil" do
           expect(props[:custom_receipt_note]).to be_nil
         end
       end
 
-      context "when the product has a custom receipt note" do
+      context "when the product has custom receipt text" do
         before do
-          purchase.link.update!(custom_receipt: "Here is a link to https://example.com")
+          purchase.link.custom_receipt_text = "Thanks for your purchase! Check your email for access."
+          purchase.link.save!
+        end
+
+        it "returns the custom receipt text" do
+          expect(props[:custom_receipt_note]).to eq("Thanks for your purchase! Check your email for access.")
+        end
+      end
+
+      context "when the product has blank custom receipt text" do
+        before do
+          purchase.link.custom_receipt_text = ""
+          purchase.link.save!
         end
 
         it "returns nil" do
           expect(props[:custom_receipt_note]).to be_nil
         end
+      end
 
-        context "when the purchase has a gift note" do
-          let(:gift) { create(:gift, gift_note: "Gift note") }
-          let!(:gifter_purchase) { create(:purchase, link: gift.link, gift_given: gift, is_gift_sender_purchase: true) }
-          let(:purchase) { create(:purchase, link: gift.link, gift_received: gift, is_gift_receiver_purchase: true) }
+      context "when the product has whitespace-only custom receipt text" do
+        before do
+          purchase.link.custom_receipt_text = "   "
+          purchase.link.save!
+        end
 
-          it "returns nil" do
-            expect(props[:custom_receipt_note]).to be_nil
-          end
+        it "returns nil" do
+          expect(props[:custom_receipt_note]).to be_nil
         end
       end
     end
