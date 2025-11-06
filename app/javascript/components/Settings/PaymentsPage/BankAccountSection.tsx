@@ -1454,9 +1454,9 @@ const BankAccountSection = ({
                       disabled={isFormDisabled}
                       aria-invalid={errorFieldNames.has("account_type")}
                       onChange={(evt) => updateBankAccount({ account_type: evt.target.value })}
-                      value={(bankAccount?.type === "ChileBankAccount" && bankAccount.account_type) || "Select"}
+                      value={(bankAccount?.type === "ChileBankAccount" && bankAccount.account_type) || ""}
                     >
-                      <option disabled>Select</option>
+                      <option value="" disabled>Select</option>
                       <option key="checking" value="checking">
                         Checking
                       </option>
@@ -1493,9 +1493,9 @@ const BankAccountSection = ({
                       disabled={isFormDisabled}
                       aria-invalid={errorFieldNames.has("account_type")}
                       onChange={(evt) => updateBankAccount({ account_type: evt.target.value })}
-                      value={(bankAccount?.type === "ColombiaBankAccount" && bankAccount.account_type) || "Select"}
+                      value={(bankAccount?.type === "ColombiaBankAccount" && bankAccount.account_type) || ""}
                     >
-                      <option disabled>Select</option>
+                      <option value="" disabled>Select</option>
                       <option key="savings" value="savings">
                         Savings
                       </option>

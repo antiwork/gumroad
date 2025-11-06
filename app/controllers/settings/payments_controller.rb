@@ -13,6 +13,14 @@ class Settings::PaymentsController < Sellers::BaseController
   def update
     return render(json: { success: false, error_message: "You have to confirm your email address before you can do that." }) unless current_seller.email.present?
     return unless current_seller.fetch_or_build_user_compliance_info.country.present?
+    
+    # Validate state placeholders
+    if params.dig(:user, :state).in?(["State", "Province", "County"])
+      return render(json: { success: false, error_message: "Please select a valid state or province." })
+    end
+    if params.dig(:user, :business_state).in?(["State", "Province", "County"])
+      return render(json: { success: false, error_message: "Please select a valid state or province for your business address." })
+    end
 
     compliance_info = current_seller.fetch_or_build_user_compliance_info
 

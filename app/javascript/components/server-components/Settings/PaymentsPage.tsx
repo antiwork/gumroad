@@ -596,7 +596,14 @@ const PaymentsPage = (props: Props) => {
     if (!complianceInfo.city) {
       markFieldInvalid("city");
     }
-    if (complianceInfo.country !== null && complianceInfo.country in props.states && !complianceInfo.state) {
+    if (
+      complianceInfo.country !== null && 
+      complianceInfo.country in props.states && 
+      (!complianceInfo.state || 
+       complianceInfo.state === "State" || 
+       complianceInfo.state === "Province" || 
+       complianceInfo.state === "County")
+    ) {
       markFieldInvalid("state");
     }
     if (!complianceInfo.zip_code && complianceInfo.country !== "BW") {
@@ -606,13 +613,13 @@ const PaymentsPage = (props: Props) => {
       markFieldInvalid("phone");
       setErrorMessage({ message: 'Please enter your full phone number, starting with a "+" and your country code.' });
     }
-    if (complianceInfo.dob_day === 0) {
+    if (complianceInfo.dob_day === 0 || complianceInfo.dob_day === "Day") {
       markFieldInvalid("dob_day");
     }
-    if (complianceInfo.dob_month === 0) {
+    if (complianceInfo.dob_month === 0 || complianceInfo.dob_month === "Month") {
       markFieldInvalid("dob_month");
     }
-    if (complianceInfo.dob_year === 0) {
+    if (complianceInfo.dob_year === 0 || complianceInfo.dob_year === "Year") {
       markFieldInvalid("dob_year");
     }
     if (
@@ -624,7 +631,7 @@ const PaymentsPage = (props: Props) => {
       markFieldInvalid("individual_tax_id");
     }
     if (complianceInfo.is_business) {
-      if (!complianceInfo.business_type) {
+      if (!complianceInfo.business_type || complianceInfo.business_type === "Type") {
         markFieldInvalid("business_type");
       }
       if (!complianceInfo.business_name) {
@@ -668,7 +675,10 @@ const PaymentsPage = (props: Props) => {
       if (
         complianceInfo.business_country !== null &&
         complianceInfo.business_country in props.states &&
-        !complianceInfo.business_state
+        (!complianceInfo.business_state ||
+         complianceInfo.business_state === "State" ||
+         complianceInfo.business_state === "Province" ||
+         complianceInfo.business_state === "County")
       ) {
         markFieldInvalid("business_state");
       }
