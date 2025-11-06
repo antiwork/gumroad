@@ -573,6 +573,50 @@ class PaypalChargeProcessor
     raise ChargeProcessorUnavailableError, e
   end
 
+  def fight_chargeback(paypal_transaction_id, dispute_evidence, merchant_account: nil)
+    # Get the dispute ID from the transaction
+    dispute = Dispute.find_by(charge_processor_transaction_id: paypal_transaction_id) ||
+              Dispute.joins(:purchase).find_by(purchases: { stripe_transaction_id: paypal_transaction_id })
+
+    unless dispute&.charge_processor_dispute_id
+      Rails.logger.error "PayPal fight_chargeback: No dispute found for transaction #{paypal_transaction_id}"
+      return
+    end
+
+    paypal_dispute_id = dispute.charge_processor_dispute_id
+
+    # Build comprehensive evidence notes from all available evidence
+    notes = build_dispute_evidence_notes(dispute_evidence)
+
+    # Prepare evidence files (not yet implemented in the API call, but prepared for future use)
+    # File uploads would require multipart/form-data which can be added in future iterations
+    evidence_files = prepare_evidence_files(dispute_evidence)
+
+    # Get merchant account ID if charging via PayPal Connect
+    merchant_account_id = merchant_account&.charge_processor_merchant_id
+
+    # Submit evidence via PayPal Disputes API
+    paypal_rest_api = PaypalRestApi.new
+    api_response = paypal_rest_api.provide_dispute_evidence(
+      dispute_id: paypal_dispute_id,
+      notes:,
+      evidence_files:, # Prepared but not yet sent - will be implemented with multipart support
+      merchant_account_id:
+    )
+
+    PaypalChargeProcessor.log_paypal_api_response("Provide Dispute Evidence", paypal_dispute_id, api_response)
+
+    unless paypal_rest_api.successful_response?(api_response)
+      error_message = PaypalChargeProcessor.build_error_message(
+        "Failed to provide evidence for PayPal dispute #{paypal_dispute_id}",
+        api_response.result.dig("message") || "Unknown error"
+      )
+      raise ChargeProcessorInvalidRequestError, error_message
+    end
+  rescue *INTERNET_EXCEPTIONS => e
+    raise ChargeProcessorUnavailableError, e
+  end
+
   def holder_of_funds(_merchant_account)
     HolderOfFunds::GUMROAD
   end
@@ -732,5 +776,136 @@ class PaypalChargeProcessor
 
     def self.sanitize_for_paypal(string, max_length)
       string.gsub(PAYPAL_VALID_CHARACTERS_REGEX, "").to_s.strip[0...max_length]
+    end
+
+    def build_dispute_evidence_notes(dispute_evidence)
+      notes = []
+
+      # Add merchant's reason for winning
+      if dispute_evidence.reason_for_winning.present?
+        notes << "REASON FOR WINNING:"
+        notes << dispute_evidence.reason_for_winning
+        notes << ""
+      end
+
+      # Add customer information
+      notes << "CUSTOMER INFORMATION:"
+      notes << "Email: #{dispute_evidence.customer_email}" if dispute_evidence.customer_email.present?
+      notes << "Name: #{dispute_evidence.customer_name}" if dispute_evidence.customer_name.present?
+      notes << "IP Address: #{dispute_evidence.customer_purchase_ip}" if dispute_evidence.customer_purchase_ip.present?
+      notes << ""
+
+      # Add purchase details
+      if dispute_evidence.purchased_at.present?
+        notes << "PURCHASE DETAILS:"
+        notes << "Purchase Date: #{dispute_evidence.purchased_at.strftime('%B %d, %Y at %I:%M %p %Z')}"
+        notes << ""
+      end
+
+      # Add product description
+      if dispute_evidence.product_description.present?
+        notes << "PRODUCT DESCRIPTION:"
+        notes << dispute_evidence.product_description
+        notes << ""
+      end
+
+      # Add shipping information
+      if dispute_evidence.shipping_address.present?
+        notes << "SHIPPING INFORMATION:"
+        notes << "Address: #{dispute_evidence.shipping_address}"
+        notes << "Carrier: #{dispute_evidence.shipping_carrier}" if dispute_evidence.shipping_carrier.present?
+        notes << "Tracking: #{dispute_evidence.shipping_tracking_number}" if dispute_evidence.shipping_tracking_number.present?
+        notes << "Shipped: #{dispute_evidence.shipped_at.strftime('%B %d, %Y')}" if dispute_evidence.shipped_at.present?
+        notes << ""
+      end
+
+      # Add refund policy disclosure
+      if dispute_evidence.refund_policy_disclosure.present?
+        notes << "REFUND POLICY:"
+        notes << dispute_evidence.refund_policy_disclosure
+        notes << ""
+      end
+
+      # Add cancellation policy disclosure
+      if dispute_evidence.cancellation_policy_disclosure.present?
+        notes << "CANCELLATION POLICY:"
+        notes << dispute_evidence.cancellation_policy_disclosure
+        notes << ""
+      end
+
+      # Add access activity logs
+      if dispute_evidence.access_activity_log.present?
+        notes << "ACCESS ACTIVITY:"
+        notes << dispute_evidence.access_activity_log
+        notes << ""
+      end
+
+      # Add cancellation rebuttal
+      if dispute_evidence.cancellation_rebuttal.present?
+        notes << "CANCELLATION REBUTTAL:"
+        notes << dispute_evidence.cancellation_rebuttal
+        notes << ""
+      end
+
+      # Add refund refusal explanation
+      if dispute_evidence.refund_refusal_explanation.present?
+        notes << "REFUND REFUSAL EXPLANATION:"
+        notes << dispute_evidence.refund_refusal_explanation
+        notes << ""
+      end
+
+      # Add uncategorized text
+      if dispute_evidence.uncategorized_text.present?
+        notes << "ADDITIONAL INFORMATION:"
+        notes << dispute_evidence.uncategorized_text
+        notes << ""
+      end
+
+      # Add billing address
+      if dispute_evidence.billing_address.present?
+        notes << "BILLING ADDRESS:"
+        notes << dispute_evidence.billing_address
+      end
+
+      notes.join("\n").strip[0...2000] # PayPal max notes length is 2000 characters
+    end
+
+    def prepare_evidence_files(dispute_evidence)
+      files = []
+
+      # Add receipt image
+      if dispute_evidence.receipt_image.attached?
+        files << {
+          content: dispute_evidence.receipt_image.download,
+          filename: "receipt.#{dispute_evidence.receipt_image.filename.extension}",
+          content_type: dispute_evidence.receipt_image.content_type
+        }
+      end
+
+      # Add refund/cancellation policy image
+      if dispute_evidence.refund_policy_image.attached?
+        files << {
+          content: dispute_evidence.refund_policy_image.download,
+          filename: "refund_policy.#{dispute_evidence.refund_policy_image.filename.extension}",
+          content_type: dispute_evidence.refund_policy_image.content_type
+        }
+      elsif dispute_evidence.cancellation_policy_image.attached?
+        files << {
+          content: dispute_evidence.cancellation_policy_image.download,
+          filename: "cancellation_policy.#{dispute_evidence.cancellation_policy_image.filename.extension}",
+          content_type: dispute_evidence.cancellation_policy_image.content_type
+        }
+      end
+
+      # Add customer communication file
+      if dispute_evidence.customer_communication_file.attached?
+        files << {
+          content: dispute_evidence.customer_communication_file.download,
+          filename: "customer_communication.#{dispute_evidence.customer_communication_file.filename.extension}",
+          content_type: dispute_evidence.customer_communication_file.content_type
+        }
+      end
+
+      files
     end
 end

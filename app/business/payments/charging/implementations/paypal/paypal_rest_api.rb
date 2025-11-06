@@ -123,6 +123,37 @@ class PaypalRestApi
     execute_request
   end
 
+  def fetch_dispute(dispute_id:)
+    @request = new_request(path: "/v1/customer/disputes/#{dispute_id}", verb: "GET")
+    execute_request
+  end
+
+  def provide_dispute_evidence(dispute_id:, notes:, evidence_files: [], merchant_account_id: nil)
+    # Use the provide-evidence endpoint with JSON body
+    # Note: The PayPal API supports both multipart/form-data and JSON
+    # We're using JSON for simplicity and compatibility
+    @request = new_request(path: "/v1/customer/disputes/#{dispute_id}/provide-evidence", verb: "POST")
+
+    # Add auth assertion if providing evidence on behalf of merchant
+    if merchant_account_id.present?
+      @request.headers["PayPal-Auth-Assertion"] = paypal_auth_assertion_header(merchant_account_id)
+    end
+
+    # Build evidence body
+    evidence_info = {
+      evidence_type: "PROOF_OF_FULFILLMENT",
+      notes:,
+      evidence_info: {}
+    }
+
+    # Add tracking information if available in notes (parsed from structured data)
+    # For now, we're primarily submitting comprehensive notes
+    # File uploads would require multipart/form-data which can be added in future iterations
+
+    @request.body = evidence_info
+    execute_request
+  end
+
   def successful_response?(api_response)
     (200...300).include?(api_response.status_code)
   end
