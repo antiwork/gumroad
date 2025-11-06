@@ -1039,6 +1039,7 @@ describe "Sales page", type: :system, js: true do
           find(:table_row, { "Name" => "Customer 1" }).click
 
           click_on "Resend ping"
+          click_on "Close"
           expect(page).to have_alert(text: "Ping resent.")
           expect(PostToPingEndpointsWorker).to have_enqueued_sidekiq_job(purchase1.id, nil)
 
@@ -1064,6 +1065,7 @@ describe "Sales page", type: :system, js: true do
           visit customers_path
           find(:table_row, { "Name" => "Customer 1" }).click
           expect(page).to_not have_button("Resend ping")
+          click_on "Close"
 
           find(:table_row, { "Name" => "Customer 2" }).click
           expect(page).to_not have_button("Resend ping")

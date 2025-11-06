@@ -79,6 +79,7 @@ describe("Checkout discounts page", type: :system, js: true) do
         expect(page).to have_button("Duplicate")
         expect(page).to have_button("Edit")
         expect(page).to have_button("Delete")
+        click_on "Close"
       end
 
       find(:table_row, { "Discount" => "Discount 2" }).click
@@ -103,6 +104,7 @@ describe("Checkout discounts page", type: :system, js: true) do
         expect(page).to have_button("Duplicate")
         expect(page).to have_button("Edit")
         expect(page).to have_button("Delete")
+        click_on "Close"
       end
 
       find(:table_row, { "Discount" => "Discount 3" }).click
@@ -669,6 +671,7 @@ describe("Checkout discounts page", type: :system, js: true) do
       select_disclosure "Open discount action menu"  do
         click_on "Delete"
       end
+      click_on "Close"
     end
     expect(page).to have_alert(text: "Successfully deleted discount!")
     expect(page).to_not have_selector(:table_row, { "Discount" => "Discount 1" })

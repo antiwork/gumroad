@@ -90,6 +90,7 @@ describe "Collaborators", type: :system, js: true do
             expect(page).to have_link("Edit")
             expect(page).to have_button("Remove")
             expect(page).not_to have_text("Collaborators won't receive their cut until they set up a payout account in their Gumroad settings.")
+            click_on "Close"
           end
 
           find(:table_row, { "Name" => collaborator_two.affiliate_user.username, "Products" => "None", "Cut" => "30%" }).click
