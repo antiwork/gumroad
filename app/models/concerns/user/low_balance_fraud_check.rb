@@ -10,7 +10,6 @@ module User::LowBalanceFraudCheck
   private_constant :LOW_BALANCE_PROBATION_WAIT_TIME
 
   LOW_BALANCE_FRAUD_CHECK_AUTHOR_NAME = "LowBalanceFraudCheck"
-  private_constant :LOW_BALANCE_FRAUD_CHECK_AUTHOR_NAME
 
   def enable_refunds!
     self.refunds_disabled = false
