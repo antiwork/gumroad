@@ -379,6 +379,7 @@ const Info = ({ purchase }: { purchase: Purchase }) => (
           <dd>{field.value} (custom field)</dd>
         </>
       ))}
+
       {purchase.purchase_state === "preorder_authorization_successful" ? (
         <AdminActionButton
           label="Cancel Pre-order"
@@ -454,6 +455,7 @@ const Info = ({ purchase }: { purchase: Purchase }) => (
           </dd>
         </>
       ) : null}
+
       <dt>Can email</dt>
       <dd aria-label="Can email">
         <BooleanIcon value={purchase.can_contact} />
