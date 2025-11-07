@@ -5,6 +5,7 @@ import { cast } from "ts-safe-cast";
 
 import { createConsumptionEvent } from "$app/data/consumption_analytics";
 import { trackMediaLocationChanged } from "$app/data/media_location";
+import { classNames } from "$app/utils/classNames";
 import { humanizedDuration } from "$app/utils/duration";
 import FileUtils from "$app/utils/file";
 import { createJWPlayer } from "$app/utils/jwPlayer";
@@ -24,6 +25,7 @@ import {
   useMediaUrls,
   usePurchaseInfo,
 } from "$app/components/server-components/DownloadPage/WithContent";
+import { Row, RowActions, RowContent, Rows } from "$app/components/ui/Rows";
 import { useOnOutsideClick } from "$app/components/useOnOutsideClick";
 import { useRefToLatest } from "$app/components/useRefToLatest";
 import { WithTooltip } from "$app/components/WithTooltip";
@@ -86,7 +88,7 @@ export const FileList = ({ content_items }: Props) => {
   );
 
   return (
-    <div role="tree" aria-label="Files">
+    <Rows role="tree" aria-label="Files">
       {content_items.map((item) =>
         item.type === "folder" ? (
           <FolderRow key={`folder${item.id}`} folder={item}>
@@ -96,7 +98,7 @@ export const FileList = ({ content_items }: Props) => {
           getFileRow(item)
         ),
       )}
-    </div>
+    </Rows>
   );
 };
 
@@ -104,13 +106,21 @@ const FolderRow = ({ folder, children }: { folder: FolderItem; children: React.R
   const [isExpanded, setIsExpanded] = React.useState(false);
 
   return (
-    <div role="treeitem" aria-expanded={isExpanded}>
-      <div className="content" onClick={() => setIsExpanded(!isExpanded)}>
-        <Icon name="solid-folder-open" className="type-icon" />
+    <Row role="treeitem" aria-expanded={isExpanded}>
+      <RowContent
+        className={classNames({ "cursor-pointer": isExpanded })}
+        onClick={() => setIsExpanded((prev) => !prev)}
+      >
+        <Icon name={isExpanded ? "outline-cheveron-down" : "outline-cheveron-right"} />
+        <Icon name="solid-folder-open" className="text-xl" />
         <h4>{folder.name}</h4>
-      </div>
-      <div role="group">{children}</div>
-    </div>
+      </RowContent>
+      {isExpanded ? (
+        <div role="group" className="grid basis-full gap-4">
+          {children}
+        </div>
+      ) : null}
+    </Row>
   );
 };
 
@@ -489,7 +499,7 @@ const MobileAppAudioFileRow = ({ file }: { file: FileItem }) => {
         {file.download_url ? (
           <TrackClick eventName="download_click" resourceId={file.id}>
             <button aria-label="Download">
-              <Icon name="download" className="type-icon" />
+              <Icon name="download" className="text-xl" />
             </button>
           </TrackClick>
         ) : null}
@@ -504,7 +514,7 @@ const MobileAppAudioFileRow = ({ file }: { file: FileItem }) => {
           {isPlaying ? (
             <button aria-label="Pause" disabled={isProcessing}>
               <Icon
-                className="type-icon"
+                className="text-xl"
                 name="circle-pause"
                 style={{ width: "var(--big-icon-size)", height: "var(--big-icon-size)" }}
               />
@@ -512,7 +522,7 @@ const MobileAppAudioFileRow = ({ file }: { file: FileItem }) => {
           ) : isCompleted ? (
             <button aria-label="Play" disabled={isProcessing}>
               <Icon
-                className="type-icon text-muted"
+                className="text-xl text-muted"
                 name="outline-check-circle"
                 style={{ width: "var(--big-icon-size)", height: "var(--big-icon-size)" }}
               />
@@ -520,7 +530,7 @@ const MobileAppAudioFileRow = ({ file }: { file: FileItem }) => {
           ) : (
             <button aria-label="Play" disabled={isProcessing}>
               <Icon
-                className="type-icon"
+                className="text-xl"
                 name={latestMediaLocation && latestMediaLocation > 0 ? "outline-circle-play" : "circle-play"}
                 style={{ width: "var(--big-icon-size)", height: "var(--big-icon-size)" }}
               />
@@ -752,18 +762,18 @@ const SendToKindleContainer = ({
 };
 
 const SubtitleRow = ({ subtitleFile }: { subtitleFile: SubtitleFile }) => (
-  <div role="treeitem">
-    <div className="content">
+  <Row role="treeitem">
+    <RowContent>
       <FileRowContent
         extension={subtitleFile.extension}
         name={`${subtitleFile.file_name} (${subtitleFile.language})`}
         externalLinkUrl={null}
         details={subtitleFile.file_size ? <li>{FileUtils.getFullFileSizeString(subtitleFile.file_size)}</li> : null}
       />
-    </div>
+    </RowContent>
 
-    <div className="actions">
+    <RowActions>
       <NavigationButton href={subtitleFile.download_url}>Download</NavigationButton>
-    </div>
-  </div>
+    </RowActions>
+  </Row>
 );

@@ -248,7 +248,7 @@ export const ExternalMediaFileEmbed = TiptapNode.create({
         <div className="embed">
           <div className="preview" dangerouslySetInnerHTML={{ __html: sanitizeHtml(cast(node.attrs.html)) }}></div>
           <div className="content">
-            <Icon name="file-earmark-play-fill" className="type-icon" />
+            <Icon name="file-earmark-play-fill" className="text-xl" />
             <div>
               <h4 className="text-singleline">{node.attrs.title}</h4>
               {node.attrs.url ? (

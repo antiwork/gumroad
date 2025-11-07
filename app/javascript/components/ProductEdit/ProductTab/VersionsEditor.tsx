@@ -10,6 +10,7 @@ import { Version, useProductEditContext } from "$app/components/ProductEdit/stat
 import { Drawer, ReorderingHandle, SortableList } from "$app/components/SortableList";
 import { Toggle } from "$app/components/Toggle";
 import Placeholder from "$app/components/ui/Placeholder";
+import { Row, RowActions, RowContent, Rows } from "$app/components/ui/Rows";
 import { WithTooltip } from "$app/components/WithTooltip";
 
 let newVersionId = 0;
@@ -128,13 +129,13 @@ const VersionEditor = ({
     .map(([name]) => name);
 
   return (
-    <div role="listitem">
-      <div className="content">
+    <Row role="listitem">
+      <RowContent>
         <ReorderingHandle />
         <Icon name="stack-fill" />
         <h3>{version.name || "Untitled"}</h3>
-      </div>
-      <div className="actions">
+      </RowContent>
+      <RowActions>
         <WithTooltip tip={isOpen ? "Close drawer" : "Open drawer"}>
           <Button onClick={() => setIsOpen((prevIsOpen) => !prevIsOpen)}>
             <Icon name={isOpen ? "outline-cheveron-up" : "outline-cheveron-down"} />
@@ -145,7 +146,7 @@ const VersionEditor = ({
             <Icon name="trash2" />
           </Button>
         </WithTooltip>
-      </div>
+      </RowActions>
       {isOpen ? (
         <Drawer className="grid gap-6">
           <fieldset>
@@ -212,15 +213,15 @@ const VersionEditor = ({
           ) : null}
         </Drawer>
       ) : null}
-    </div>
+    </Row>
   );
 };
 
 export const SortableVersionEditors = React.forwardRef<HTMLDivElement, React.HTMLProps<HTMLDivElement>>(
   ({ children }, ref) => (
-    <div ref={ref} className="rows" role="list" aria-label="Version editor">
+    <Rows ref={ref} role="list" aria-label="Version editor">
       {children}
-    </div>
+    </Rows>
   ),
 );
 SortableVersionEditors.displayName = "SortableVersionEditors";

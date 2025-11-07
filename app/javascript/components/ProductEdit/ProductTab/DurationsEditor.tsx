@@ -8,6 +8,7 @@ import { PriceInput } from "$app/components/PriceInput";
 import { Duration, useProductEditContext } from "$app/components/ProductEdit/state";
 import { Drawer, ReorderingHandle, SortableList } from "$app/components/SortableList";
 import Placeholder from "$app/components/ui/Placeholder";
+import { Row, RowActions, RowContent, Rows } from "$app/components/ui/Rows";
 import { WithTooltip } from "$app/components/WithTooltip";
 
 let newDurationId = 0;
@@ -121,13 +122,13 @@ const DurationEditor = ({
   const [isOpen, setIsOpen] = React.useState(true);
 
   return (
-    <div role="listitem">
-      <div className="content">
+    <Row role="listitem">
+      <RowContent>
         <ReorderingHandle />
         <Icon name="outline-clock" />
         <h3>{duration.name}</h3>
-      </div>
-      <div className="actions">
+      </RowContent>
+      <RowActions>
         <WithTooltip tip={isOpen ? "Close drawer" : "Open drawer"}>
           <Button onClick={() => setIsOpen((prevIsOpen) => !prevIsOpen)}>
             <Icon name={isOpen ? "outline-cheveron-up" : "outline-cheveron-down"} />
@@ -138,7 +139,7 @@ const DurationEditor = ({
             <Icon name="trash2" />
           </Button>
         </WithTooltip>
-      </div>
+      </RowActions>
       {isOpen ? (
         <Drawer className="grid gap-6">
           <fieldset>
@@ -195,15 +196,15 @@ const DurationEditor = ({
           </section>
         </Drawer>
       ) : null}
-    </div>
+    </Row>
   );
 };
 
 export const SortableDurationEditors = React.forwardRef<HTMLDivElement, React.HTMLProps<HTMLDivElement>>(
   ({ children }, ref) => (
-    <div ref={ref} className="rows" role="list" aria-label="Duration editor">
+    <Rows ref={ref} role="list" aria-label="Duration editor">
       {children}
-    </div>
+    </Rows>
   ),
 );
 SortableDurationEditors.displayName = "SortableDurationEditors";

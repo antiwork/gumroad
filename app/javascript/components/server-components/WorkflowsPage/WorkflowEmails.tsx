@@ -55,6 +55,7 @@ import {
   WorkflowTrigger,
 } from "$app/components/server-components/WorkflowsPage/WorkflowForm";
 import Placeholder from "$app/components/ui/Placeholder";
+import { Row, RowActions, RowContent, Rows } from "$app/components/ui/Rows";
 import { useConfigureEvaporate } from "$app/components/useConfigureEvaporate";
 import { useDebouncedCallback } from "$app/components/useDebouncedCallback";
 import { WithTooltip } from "$app/components/WithTooltip";
@@ -359,7 +360,7 @@ const WorkflowEmails = () => {
                       </Placeholder>
                     ) : (
                       <>
-                        <div className="rows">
+                        <Rows>
                           {sortedEmails.map((email) => (
                             <EmailRow
                               key={email.id}
@@ -390,7 +391,7 @@ const WorkflowEmails = () => {
                               hasUploadingImages={imagesUploading.size > 0 && email.message.includes('src="blob:')}
                             />
                           ))}
-                        </div>
+                        </Rows>
                         {isAbandonedCartWorkflow ? null : (
                           <div>
                             <Button color="primary" onClick={handleAddEmail}>
@@ -484,12 +485,12 @@ const EmailRow = ({
     );
 
   return (
-    <div ref={selfRef} aria-label="Email">
-      <div className="content">
-        <Icon name="envelope-fill" className="type-icon" />
+    <Row ref={selfRef} aria-label="Email">
+      <RowContent>
+        <Icon name="envelope-fill" className="text-xl" />
         <h3>{email.name.trim() === "" ? "Untitled" : email.name}</h3>
-      </div>
-      <div className="actions">
+      </RowContent>
+      <RowActions>
         {isAbandonedCartWorkflow ? null : (
           <Button
             outline
@@ -512,9 +513,9 @@ const EmailRow = ({
             </Button>
           </WithTooltip>
         )}
-      </div>
+      </RowActions>
       {expanded ? (
-        <form className="paragraphs">
+        <form className="paragraphs col-span-full">
           {isAbandonedCartWorkflow ? null : (
             <div
               style={{
@@ -582,7 +583,7 @@ const EmailRow = ({
           )}
         </form>
       ) : null}
-    </div>
+    </Row>
   );
 };
 

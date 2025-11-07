@@ -7,6 +7,7 @@ import { cast } from "ts-safe-cast";
 
 import { RichContent } from "$app/parsers/richContent";
 import { assertDefined } from "$app/utils/assert";
+import { classNames } from "$app/utils/classNames";
 import { asyncVoid } from "$app/utils/promise";
 import { assertResponseError } from "$app/utils/request";
 
@@ -26,6 +27,7 @@ import { ExternalMediaFileEmbed } from "$app/components/TiptapExtensions/MediaEm
 import { MoreLikeThis } from "$app/components/TiptapExtensions/MoreLikeThis";
 import { Posts } from "$app/components/TiptapExtensions/Posts";
 import { ShortAnswer } from "$app/components/TiptapExtensions/ShortAnswer";
+import { Row, RowActions, RowContent, Rows } from "$app/components/ui/Rows";
 import { useRunOnce } from "$app/components/useRunOnce";
 
 type SaleInfo = { sale_id: string; product_id: string | null; product_permalink: string | null };
@@ -277,28 +279,32 @@ const FileEmbedGroupNodeView = ({ node }: NodeViewProps) => {
 
   return (
     <NodeViewWrapper>
-      <div role="tree" ref={ref}>
-        <div role="treeitem" aria-expanded={expanded}>
-          <div className="content" onClick={() => setExpanded(!expanded)} contentEditable={false}>
-            <Icon name="solid-folder-open" className="type-icon" />
+      <Rows role="tree" ref={ref}>
+        <Row role="treeitem" aria-expanded={expanded}>
+          <RowContent onClick={() => setExpanded((prev) => !prev)} contentEditable={false}>
+            <Icon name="solid-folder-open" className="text-xl" />
             <div>
               <h4>{folderTitle}</h4>
             </div>
-          </div>
+          </RowContent>
           {downloadAllButtonIsVisible ? (
-            <div className="actions">
+            <RowActions>
               <FileGroupDownloadAllButton folderId={folderId} files={downloadableFilesInFolder} />
-            </div>
+            </RowActions>
           ) : null}
           {hasStreamable ? (
-            <NodeViewContent id={uid} role="group" />
+            <NodeViewContent
+              id={uid}
+              role="group"
+              className={classNames("grid basis-full gap-4", { hidden: !expanded })}
+            />
           ) : (
-            <div role="group">
-              <NodeViewContent id={uid} className="rows" />
+            <div role="group" className={classNames("grid basis-full gap-4", { hidden: !expanded })}>
+              <NodeViewContent id={uid} className="rounded-sm border border-border bg-background text-foreground" />
             </div>
           )}
-        </div>
-      </div>
+        </Row>
+      </Rows>
     </NodeViewWrapper>
   );
 };

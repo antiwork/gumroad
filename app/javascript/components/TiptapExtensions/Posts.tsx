@@ -72,7 +72,7 @@ const PostsNodeView = ({ editor, selected }: NodeViewProps) => {
           contentEditable={false}
         >
           {total > 0 ? expanded ? <Icon name="outline-cheveron-down" /> : <Icon name="outline-cheveron-right" /> : null}
-          <Icon name="file-earmark-medical-fill" className={cx("type-icon", { "text-muted": total === 0 })} />
+          <Icon name="file-earmark-medical-fill" className={cx("text-xl", { "text-muted": total === 0 })} />
           <div>
             {isLoading || total > 0 ? (
               <>
@@ -108,7 +108,7 @@ const PostsNodeView = ({ editor, selected }: NodeViewProps) => {
           <Drawer id={uid}>
             {posts.map((post) => (
               <div className="content" key={post.id}>
-                <Icon name="file-earmark-medical-fill" className="type-icon" />
+                <Icon name="file-earmark-medical-fill" className="text-xl" />
                 <div>
                   {editor.isEditable ? (
                     <a href={post.url} target="_blank" rel="noreferrer">

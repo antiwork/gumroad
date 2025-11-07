@@ -57,6 +57,7 @@ import { MoveNode } from "$app/components/TiptapExtensions/MoveNode";
 import { Posts, PostsProvider } from "$app/components/TiptapExtensions/Posts";
 import { ShortAnswer } from "$app/components/TiptapExtensions/ShortAnswer";
 import { UpsellCard } from "$app/components/TiptapExtensions/UpsellCard";
+import { Row, RowContent, Rows } from "$app/components/ui/Rows";
 import { Tabs, Tab } from "$app/components/ui/Tabs";
 import { UpsellSelectModal, Product, ProductOption } from "$app/components/UpsellSelectModal";
 import { useConfigureEvaporate } from "$app/components/useConfigureEvaporate";
@@ -550,19 +551,15 @@ const ContentTabContent = ({ selectedVariantId }: { selectedVariantId: string | 
                           setSelectingExistingFiles({ ...selectingExistingFiles, query: evt.target.value })
                         }
                       />
-                      <div
-                        className="rows overflow-auto"
-                        role="listbox"
-                        style={{ maxHeight: "20rem", textAlign: "initial" }}
-                      >
+                      <Rows className="max-h-80 overflow-auto [text-align:initial]" role="listbox">
                         {selectingExistingFiles.isLoading ? (
-                          <div className="flex min-h-40 justify-center">
+                          <Row className="flex min-h-40 justify-center">
                             <LoadingSpinner className="size-8" />
-                          </div>
+                          </Row>
                         ) : (
                           filteredExistingFiles.map((file) => (
-                            <label key={file.id} role="option" style={{ cursor: "pointer" }}>
-                              <div className="content">
+                            <Row key={file.id} role="option" className="cursor-pointer">
+                              <RowContent>
                                 <FileKindIcon extension={file.extension} />
                                 <div>
                                   <h4>{file.display_name}</h4>
@@ -579,13 +576,13 @@ const ContentTabContent = ({ selectedVariantId }: { selectedVariantId: string | 
                                         : [...selectingExistingFiles.selected, file],
                                     });
                                   }}
-                                  style={{ marginLeft: "auto" }}
+                                  className="ml-auto"
                                 />
-                              </div>
-                            </label>
+                              </RowContent>
+                            </Row>
                           ))
                         )}
-                      </div>
+                      </Rows>
                     </div>
                   </Modal>
                 ) : null}

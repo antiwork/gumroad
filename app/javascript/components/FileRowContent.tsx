@@ -44,6 +44,6 @@ export const FileKindIcon = ({ extension }: { extension: string | null }) => (
         Object.entries(ICON_EXTENSIONS_MAP).find(([_, extensions]) => extensions.includes(extension))?.[0]) ||
       "file-earmark-text-fill"
     }
-    className="type-icon"
+    className="text-xl"
   />
 );

@@ -1,5 +1,7 @@
 import * as React from "react";
 
+import { Rows } from "$app/components/ui/Rows";
+
 import { Row, SubtitleFile } from "./Row";
 
 type Props = {
@@ -17,7 +19,7 @@ export const SubtitleList = ({
   if (subtitleFiles.length === 0) return null;
 
   return (
-    <div className="subtitle-list" role="tree">
+    <Rows className="subtitle-list" role="tree">
       {subtitleFiles.map((subtitleFile) => (
         <Row
           key={subtitleFile.url}
@@ -27,6 +29,6 @@ export const SubtitleList = ({
           onChangeLanguage={(language) => onChangeSubtitleLanguage(subtitleFile.url, language)}
         />
       ))}
-    </div>
+    </Rows>
   );
 };

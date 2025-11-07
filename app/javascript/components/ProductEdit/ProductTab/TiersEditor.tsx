@@ -28,6 +28,7 @@ import { showAlert } from "$app/components/server-components/Alert";
 import { Drawer, ReorderingHandle, SortableList } from "$app/components/SortableList";
 import { Toggle } from "$app/components/Toggle";
 import Placeholder from "$app/components/ui/Placeholder";
+import { Row, RowActions, RowContent, Rows } from "$app/components/ui/Rows";
 import { useDebouncedCallback } from "$app/components/useDebouncedCallback";
 import { useRunOnce } from "$app/components/useRunOnce";
 import { WithTooltip } from "$app/components/WithTooltip";
@@ -176,8 +177,8 @@ const TierEditor = ({
     .map(([name]) => name);
 
   return (
-    <div role="listitem">
-      <div className="content">
+    <Row role="listitem">
+      <RowContent>
         <ReorderingHandle />
         <Icon name="stack-fill" />
         <div>
@@ -188,8 +189,8 @@ const TierEditor = ({
             </small>
           ) : null}
         </div>
-      </div>
-      <div className="actions">
+      </RowContent>
+      <RowActions>
         <WithTooltip tip={isOpen ? "Close drawer" : "Open drawer"}>
           <Button onClick={() => setIsOpen((prevIsOpen) => !prevIsOpen)}>
             <Icon name={isOpen ? "outline-cheveron-up" : "outline-cheveron-down"} />
@@ -200,7 +201,7 @@ const TierEditor = ({
             <Icon name="trash2" />
           </Button>
         </WithTooltip>
-      </div>
+      </RowActions>
       {isOpen ? (
         <Drawer className="grid gap-6">
           <fieldset>
@@ -345,7 +346,7 @@ const TierEditor = ({
           ) : null}
         </Drawer>
       ) : null}
-    </div>
+    </Row>
   );
 };
 
@@ -499,9 +500,9 @@ You can modify or cancel your membership at any time.`;
 
 export const SortableTierEditors = React.forwardRef<HTMLDivElement, React.HTMLProps<HTMLDivElement>>(
   ({ children }, ref) => (
-    <div ref={ref} className="rows" role="list" aria-label="Tier editor">
+    <Rows ref={ref} role="list" aria-label="Tier editor">
       {children}
-    </div>
+    </Rows>
   ),
 );
 SortableTierEditors.displayName = "SortableTierEditors";
