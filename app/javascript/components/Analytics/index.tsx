@@ -98,9 +98,10 @@ export type AnalyticsProps = {
   products: Product[];
   country_codes: Record<string, string>;
   state_names: Record<string, string>;
+  has_subscription_products?: boolean;
 };
 
-const Analytics = ({ products: initialProducts, country_codes, state_names }: AnalyticsProps) => {
+const Analytics = ({ products: initialProducts, country_codes, state_names, has_subscription_products }: AnalyticsProps) => {
   const [products, setProducts] = React.useState(
     initialProducts.map((product) => ({ ...product, selected: product.alive })),
   );
@@ -147,6 +148,7 @@ const Analytics = ({ products: initialProducts, country_codes, state_names }: An
   return (
     <AnalyticsLayout
       selectedTab="sales"
+      hasSubscriptionProducts={has_subscription_products}
       actions={
         hasContent ? (
           <>

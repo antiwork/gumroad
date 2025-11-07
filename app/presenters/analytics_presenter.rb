@@ -6,10 +6,15 @@ class AnalyticsPresenter
   end
 
   def page_props
+    subscription_products = seller.products_for_creator_analytics.select do |product|
+      product.link&.recurrence.present? || product.subscription_duration.present?
+    end
+
     {
       products: seller.products_for_creator_analytics.map { product_props(_1) },
       country_codes: Compliance::Countries.mapping.invert,
-      state_names: STATES_SUPPORTED_BY_ANALYTICS.map { |state_code| Compliance::Countries::USA.subdivisions[state_code]&.name || "Other" }
+      state_names: STATES_SUPPORTED_BY_ANALYTICS.map { |state_code| Compliance::Countries::USA.subdivisions[state_code]&.name || "Other" },
+      has_subscription_products: subscription_products.any?
     }
   end
 

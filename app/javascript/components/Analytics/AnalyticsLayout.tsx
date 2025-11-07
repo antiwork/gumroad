@@ -10,10 +10,12 @@ export const AnalyticsLayout = ({
   selectedTab,
   children,
   actions,
+  hasSubscriptionProducts,
 }: {
-  selectedTab: "following" | "sales" | "utm_links";
+  selectedTab: "following" | "sales" | "utm_links" | "churn";
   children: React.ReactNode;
   actions?: React.ReactNode;
+  hasSubscriptionProducts?: boolean;
 }) => {
   const user = assertDefined(useLoggedInUser());
 
@@ -27,6 +29,11 @@ export const AnalyticsLayout = ({
           <Tab href={Routes.sales_dashboard_path()} isSelected={selectedTab === "sales"}>
             Sales
           </Tab>
+          {hasSubscriptionProducts ? (
+            <Tab href={Routes.churn_dashboard_path()} isSelected={selectedTab === "churn"}>
+              Churn
+            </Tab>
+          ) : null}
           {user.policies.utm_link.index ? (
             <Tab href={Routes.utm_links_dashboard_path()} isSelected={selectedTab === "utm_links"}>
               Links

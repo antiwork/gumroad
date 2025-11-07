@@ -154,4 +154,161 @@ describe AnalyticsController do
       end
     end
   end
+
+  describe "GET churn" do
+    it_behaves_like "authorize called for action", :get, :churn do
+      let(:record) { :analytics }
+    end
+
+    context "when user has subscription products" do
+      before do
+        @subscription_product = create(:subscription_product, user: seller, subscription_duration: "monthly")
+        create(:product, user: seller) # non-subscription product
+      end
+
+      it "renders churn page with subscription products" do
+        get :churn
+
+        expect(response).to be_successful
+        expect(assigns(:churn_props)).to_not be(nil)
+        expect(assigns(:churn_props)[:has_subscription_products]).to be(true)
+        expect(assigns(:churn_props)[:products].length).to eq(1)
+      end
+
+      it "includes only subscription products in props" do
+        get :churn
+
+        product_permalinks = assigns(:churn_props)[:products].map { |p| p[:unique_permalink] }
+        expect(product_permalinks).to include(@subscription_product.unique_permalink)
+      end
+    end
+
+    context "when user has no subscription products" do
+      before do
+        create(:product, user: seller) # non-subscription product only
+      end
+
+      it "renders churn page with empty state" do
+        get :churn
+
+        expect(response).to be_successful
+        expect(assigns(:churn_props)[:has_subscription_products]).to be(false)
+        expect(assigns(:churn_props)[:products]).to be_empty
+      end
+    end
+  end
+
+  describe "GET churn_data" do
+    it_behaves_like "supports start and end times", :churn_data
+
+    it_behaves_like "authorize called for action", :get, :churn_data do
+      let(:record) { :analytics }
+      let(:policy_method) { :index? }
+    end
+
+    context "when user has subscription products" do
+      before do
+        @subscription_product = create(:subscription_product, user: seller, subscription_duration: "monthly")
+      end
+
+      it "returns churn data in json format" do
+        get :churn_data, params: {
+          start_time: "Mon Jan 1 2021 00:00:00 GMT-0000 (UTC)",
+          end_time: "Mon Jan 3 2021 23:59:59 GMT-0000 (UTC)"
+        }
+
+        expect(response).to be_successful
+        json_response = JSON.parse(response.body)
+        expect(json_response).to have_key("by_product_and_date")
+        expect(json_response).to have_key("start_date")
+        expect(json_response).to have_key("end_date")
+      end
+
+      it "calls churn service with correct parameters" do
+        start_time = "Mon Jan 1 2021 00:00:00 GMT-0000 (UTC)"
+        end_time = "Mon Jan 3 2021 23:59:59 GMT-0000 (UTC)"
+
+        churn_service = instance_double(CreatorAnalytics::Churn)
+        allow(CreatorAnalytics::Churn).to receive(:new).and_return(churn_service)
+        allow(churn_service).to receive(:by_product_and_date).and_return({})
+
+        get :churn_data, params: { start_time:, end_time: }
+
+        expect(CreatorAnalytics::Churn).to have_received(:new).with(
+          user: seller,
+          products: kind_of(Array),
+          dates: kind_of(Array)
+        )
+      end
+    end
+
+    context "when user has no subscription products" do
+      before do
+        create(:product, user: seller) # non-subscription product only
+      end
+
+      it "returns 404 with error message" do
+        get :churn_data
+
+        expect(response).to have_http_status(:not_found)
+        json_response = JSON.parse(response.body)
+        expect(json_response["error"]).to eq("No subscription products found")
+      end
+    end
+  end
+
+  describe "GET churn_summary" do
+    it_behaves_like "supports start and end times", :churn_summary
+
+    it_behaves_like "authorize called for action", :get, :churn_summary do
+      let(:record) { :analytics }
+      let(:policy_method) { :index? }
+    end
+
+    context "when user has subscription products" do
+      before do
+        @subscription_product = create(:subscription_product, user: seller, subscription_duration: "monthly")
+        create(:subscription, link: @subscription_product, seller: seller, created_at: 1.month.ago)
+      end
+
+      it "returns churn summary in json format" do
+        get :churn_summary, params: {
+          start_time: "Mon Jan 1 2021 00:00:00 GMT-0000 (UTC)",
+          end_time: "Mon Jan 3 2021 23:59:59 GMT-0000 (UTC)"
+        }
+
+        expect(response).to be_successful
+        json_response = JSON.parse(response.body)
+        expect(json_response).to have_key("current_period")
+        expect(json_response).to have_key("last_period")
+        expect(json_response).to have_key("has_subscription_products")
+        expect(json_response["has_subscription_products"]).to be(true)
+      end
+
+      it "returns correct summary structure" do
+        get :churn_summary
+
+        json_response = JSON.parse(response.body)
+        expect(json_response["current_period"]).to have_key("churn_rate")
+        expect(json_response["current_period"]).to have_key("churned_users")
+        expect(json_response["current_period"]).to have_key("revenue_lost_cents")
+        expect(json_response["last_period"]).to have_key("churn_rate")
+      end
+    end
+
+    context "when user has no subscription products" do
+      before do
+        create(:product, user: seller) # non-subscription product only
+      end
+
+      it "returns summary with zero values" do
+        get :churn_summary
+
+        expect(response).to be_successful
+        json_response = JSON.parse(response.body)
+        expect(json_response["has_subscription_products"]).to be(false)
+        expect(json_response["current_period"]["churn_rate"]).to eq(0.0)
+      end
+    end
+  end
 end
