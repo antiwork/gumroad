@@ -5,9 +5,9 @@ import { cast } from "ts-safe-cast";
 import { CurrentUser } from "$app/types/user";
 import { assertResponseError } from "$app/utils/request";
 
-import { DashboardNavProfilePopover } from "$app/components/Admin/Nav/ProfilePopover";
 import { Icon } from "$app/components/Icons";
 import { useLoggedInUser } from "$app/components/LoggedInUser";
+import { DashboardNavProfilePopover } from "$app/components/ProfilePopover";
 import { showAlert } from "$app/components/server-components/Alert";
 
 type ResponseData = {

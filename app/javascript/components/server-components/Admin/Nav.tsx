@@ -3,7 +3,6 @@ import { createCast } from "ts-safe-cast";
 
 import { register } from "$app/utils/serverComponentUtil";
 
-import { DashboardNavProfilePopover } from "$app/components/Admin/Nav/ProfilePopover";
 import { useAppDomain } from "$app/components/DomainSettings";
 import { useLoggedInUser } from "$app/components/LoggedInUser";
 import {
@@ -13,6 +12,7 @@ import {
   NavSection,
   UnbecomeDropdownItem,
 } from "$app/components/Nav";
+import { DashboardNavProfilePopover } from "$app/components/ProfilePopover";
 
 type ImpersonatedUser = {
   name: string;

@@ -5,7 +5,6 @@ import { createCast } from "ts-safe-cast";
 import { register } from "$app/utils/serverComponentUtil";
 import { initTeamMemberReadOnlyAccess } from "$app/utils/team_member_read_only";
 
-import { DashboardNavProfilePopover } from "$app/components/Admin/Nav/ProfilePopover";
 import { useCurrentSeller } from "$app/components/CurrentSeller";
 import { useAppDomain, useDiscoverUrl } from "$app/components/DomainSettings";
 import { useLoggedInUser } from "$app/components/LoggedInUser";
@@ -17,6 +16,7 @@ import {
   NavLinkDropdownMembershipItem,
   NavSection,
 } from "$app/components/Nav";
+import { DashboardNavProfilePopover } from "$app/components/ProfilePopover";
 import { UnreadTicketsBadge } from "$app/components/support/UnreadTicketsBadge";
 import { useRunOnce } from "$app/components/useRunOnce";
 

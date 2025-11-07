@@ -125,9 +125,7 @@ export const Nav = ({ title, children, footer }: Props) => {
         aria-label="Main"
         className={classNames(
           "flex flex-col overflow-x-hidden overflow-y-auto bg-black text-white lg:static lg:w-52 dark:text-foreground",
-          {
-            "fixed z-10 size-full lg:static lg:w-52": open,
-          },
+          { "fixed z-10 size-full": open },
         )}
       >
         <div className="override grid grid-cols-[auto_1fr_auto] items-center gap-3 p-4 text-lg leading-6 lg:hidden">
@@ -141,6 +139,7 @@ export const Nav = ({ title, children, footer }: Props) => {
         </div>
         <header className="hidden p-6 lg:grid">
           <a href={Routes.root_url()} aria-label="Dashboard" className="no-underline">
+            {/* This custom text and line height size is required so the header's bottom border aligns with the main page header’s bottom border */}
             <span className="logo-full w-full text-[2.5rem] leading-[1.2]" />
           </a>
         </header>
@@ -206,18 +205,13 @@ export const NavLinkDropdownMembershipItem = ({ teamMembership }: { teamMembersh
       href={Routes.sellers_switch_path()}
       onClick={onClick}
       aria-checked={teamMembership.is_selected}
+      className="flex items-center gap-2"
     >
+      <img className="user-avatar" src={teamMembership.seller_avatar_url} alt={teamMembership.seller_name} />
+      <span title={teamMembership.seller_name}>{teamMembership.seller_name}</span>
       {teamMembership.is_selected ? (
-        <Icon name="solid-check-circle" className="float-right mr-3 ml-2 h-5 text-accent" />
+        <Icon name="solid-check-circle" className="float-right mr-3 ml-auto h-5 text-accent" />
       ) : null}
-      <img
-        className="user-avatar align-middle"
-        src={teamMembership.seller_avatar_url}
-        alt={teamMembership.seller_name}
-      />
-      <span className="align-middle" title={teamMembership.seller_name}>
-        {teamMembership.seller_name}
-      </span>
     </a>
   );
 };
