@@ -41,7 +41,8 @@ export type OfferCodeResponseData =
         | "invalid_offer"
         | "insufficient_times_of_use"
         | "inactive"
-        | "unmet_minimum_purchase_quantity";
+        | "unmet_minimum_purchase_quantity"
+        | "missing_required_product";
       error_message: string;
     }
   | { valid: true; products_data: Record<string, Discount> };
@@ -59,6 +60,9 @@ type DiscountPayload = {
   minimumQuantity: number | null;
   durationInBillingCycles: Duration | null;
   minimumAmount: number | null;
+  requiredProductId: string | null;
+  requiredProductOwnershipMonths: number | null;
+  fallbackDiscount: { type: "cents" | "percent"; value: number } | null;
 };
 
 export const getPagedDiscounts = (page: number, query: string | null, sort: Sort<SortKey> | null) => {
@@ -91,6 +95,9 @@ export const createDiscount = async ({
   minimumQuantity,
   durationInBillingCycles,
   minimumAmount,
+  requiredProductId,
+  requiredProductOwnershipMonths,
+  fallbackDiscount,
 }: DiscountPayload) => {
   const response = await request({
     method: "POST",
@@ -110,6 +117,10 @@ export const createDiscount = async ({
       minimum_quantity: minimumQuantity,
       duration_in_billing_cycles: durationInBillingCycles,
       minimum_amount_cents: minimumAmount,
+      required_product_id: requiredProductId,
+      required_product_ownership_months: requiredProductOwnershipMonths,
+      fallback_discount_percentage: fallbackDiscount?.type === "percent" ? fallbackDiscount.value : undefined,
+      fallback_discount_cents: fallbackDiscount?.type === "cents" ? fallbackDiscount.value : undefined,
     },
   });
   const responseData = cast<
@@ -134,6 +145,9 @@ export const updateDiscount = async (
     minimumQuantity,
     durationInBillingCycles,
     minimumAmount,
+    requiredProductId,
+    requiredProductOwnershipMonths,
+    fallbackDiscount,
   }: DiscountPayload,
 ) => {
   const response = await request({
@@ -154,6 +168,10 @@ export const updateDiscount = async (
       minimum_quantity: minimumQuantity,
       duration_in_billing_cycles: durationInBillingCycles,
       minimum_amount_cents: minimumAmount,
+      required_product_id: requiredProductId,
+      required_product_ownership_months: requiredProductOwnershipMonths,
+      fallback_discount_percentage: fallbackDiscount?.type === "percent" ? fallbackDiscount.value : undefined,
+      fallback_discount_cents: fallbackDiscount?.type === "cents" ? fallbackDiscount.value : undefined,
     },
   });
   const responseData = cast<

@@ -53,6 +53,7 @@ class Checkout::DiscountsController < Sellers::BaseController
     authorize [:checkout, OfferCode]
 
     parse_date_times
+    parse_required_product
     offer_code = current_seller.offer_codes.build(products: current_seller.products.by_external_ids(offer_code_params[:selected_product_ids]), **offer_code_params.except(:selected_product_ids))
 
     if offer_code.save
@@ -69,6 +70,7 @@ class Checkout::DiscountsController < Sellers::BaseController
     authorize [:checkout, offer_code]
 
     parse_date_times
+    parse_required_product
     if offer_code.update(**offer_code_params.except(:selected_product_ids, :code), products: current_seller.products.by_external_ids(offer_code_params[:selected_product_ids]))
       pagination, offer_codes = fetch_offer_codes
       presenter = Checkout::DiscountsPresenter.new(pundit_user:)
@@ -91,7 +93,7 @@ class Checkout::DiscountsController < Sellers::BaseController
 
   private
     def offer_code_params
-      params.permit(:name, :code, :universal, :max_purchase_count, :amount_cents, :amount_percentage, :currency_type, :valid_at, :expires_at, :minimum_quantity, :duration_in_billing_cycles, :minimum_amount_cents, selected_product_ids: [])
+      params.permit(:name, :code, :universal, :max_purchase_count, :amount_cents, :amount_percentage, :currency_type, :valid_at, :expires_at, :minimum_quantity, :duration_in_billing_cycles, :minimum_amount_cents, :required_product_id, :required_product_ownership_months, :fallback_discount_percentage, :fallback_discount_cents, selected_product_ids: [])
     end
 
     def paged_params
@@ -111,6 +113,14 @@ class Checkout::DiscountsController < Sellers::BaseController
     def parse_date_times
       offer_code_params[:valid_at] = Time.zone.parse(offer_code_params[:valid_at]) if offer_code_params[:valid_at].present?
       offer_code_params[:expires_at] = Time.zone.parse(offer_code_params[:expires_at]) if offer_code_params[:expires_at].present?
+    end
+
+    def parse_required_product
+      return if offer_code_params[:required_product_id].blank?
+
+      # Convert external_id to internal id
+      required_product = current_seller.products.find_by_external_id(offer_code_params[:required_product_id])
+      params[:required_product_id] = required_product&.id
     end
 
     def fetch_offer_codes

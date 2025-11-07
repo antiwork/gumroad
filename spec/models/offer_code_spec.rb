@@ -453,13 +453,13 @@ describe OfferCode do
       let(:offer_code) { create(:universal_offer_code, user: @product.user, amount_percentage: 100, amount_cents: nil, currency_type: @product.price_currency_type, max_purchase_count: 10) }
 
       it "counts successful purchases" do
-        create(:purchase, link: @product, offer_code:, seller: @product.user, price_cents: @product.price_cents)
+        create(:free_purchase, link: @product, offer_code:, seller: @product.user, quantity: 1)
 
         expect(offer_code.quantity_left).to eq offer_code.max_purchase_count - 1
       end
 
       it "sums the quantities of applicable purchases" do
-        create(:purchase, link: @product, offer_code:, seller: @product.user, price_cents: @product.price_cents * 10, quantity: 10)
+        create(:free_purchase, link: @product, offer_code:, seller: @product.user, quantity: 10)
 
         expect(offer_code.quantity_left).to eq 0
       end
@@ -469,13 +469,13 @@ describe OfferCode do
       let(:offer_code) { create(:percentage_offer_code, products: [@product], amount_percentage: 50, max_purchase_count: 20) }
 
       it "counts successful purchases" do
-        create(:purchase, link: @product, offer_code:, seller: @product.user, price_cents: @product.price_cents)
+        create(:free_purchase, link: @product, offer_code:, seller: @product.user, quantity: 1)
 
         expect(offer_code.quantity_left).to eq offer_code.max_purchase_count - 1
       end
 
       it "sums the quantities of applicable purchases" do
-        create(:purchase, link: @product, offer_code:, seller: @product.user, price_cents: @product.price_cents * 20, quantity: 20)
+        create(:free_purchase, link: @product, offer_code:, seller: @product.user, quantity: 20)
 
         expect(offer_code.quantity_left).to eq 0
       end
@@ -694,6 +694,117 @@ describe OfferCode do
       it "returns true for the associated product and false otherwise" do
         expect(offer_code.applicable?(@product)).to eq(true)
         expect(offer_code.applicable?(other_product)).to eq(false)
+      end
+    end
+  end
+
+  describe "required product functionality" do
+    let(:required_product) { create(:product, user: @product.user, price_cents: 1000, price_currency_type: "usd") }
+    let(:other_user_product) { create(:product, price_cents: 1000, price_currency_type: "usd") }
+
+    describe "#has_fallback_discount?" do
+      it "returns true when fallback discount percentage is present" do
+        offer_code = build(:offer_code, user: @product.user, products: [@product], fallback_discount_percentage: 25)
+        expect(offer_code.has_fallback_discount?).to eq(true)
+      end
+
+      it "returns true when fallback discount cents is present" do
+        offer_code = build(:offer_code, user: @product.user, products: [@product], fallback_discount_cents: 500)
+        expect(offer_code.has_fallback_discount?).to eq(true)
+      end
+
+      it "returns false when no fallback discount is set" do
+        offer_code = build(:offer_code, user: @product.user, products: [@product])
+        expect(offer_code.has_fallback_discount?).to eq(false)
+      end
+    end
+
+    describe "#fallback_discount_amount_off" do
+      it "returns fallback discount cents when set" do
+        offer_code = build(:offer_code, user: @product.user, products: [@product], fallback_discount_cents: 500)
+        expect(offer_code.fallback_discount_amount_off(2000)).to eq(500)
+      end
+
+      it "calculates fallback discount percentage when set" do
+        offer_code = build(:offer_code, user: @product.user, products: [@product], fallback_discount_percentage: 25)
+        expect(offer_code.fallback_discount_amount_off(2000)).to eq(500)
+      end
+
+      it "returns nil when no fallback discount is set" do
+        offer_code = build(:offer_code, user: @product.user, products: [@product])
+        expect(offer_code.fallback_discount_amount_off(2000)).to eq(nil)
+      end
+    end
+
+    describe "validations" do
+      describe "validate_required_product_configuration" do
+        it "allows offer code without required product" do
+          offer_code = build(:offer_code, user: @product.user, products: [@product])
+          expect(offer_code).to be_valid
+        end
+
+        it "allows offer code with required product from same user" do
+          offer_code = build(:offer_code, user: @product.user, products: [@product], required_product: required_product)
+          expect(offer_code).to be_valid
+        end
+
+        it "rejects offer code with required product from different user" do
+          offer_code = build(:offer_code, user: @product.user, products: [@product], required_product: other_user_product)
+          expect(offer_code).to_not be_valid
+          expect(offer_code.errors.full_messages).to include("Required product must belong to you")
+        end
+
+        it "requires fallback discount when ownership duration is specified" do
+          offer_code = build(:offer_code, user: @product.user, products: [@product], required_product: required_product, required_product_ownership_months: 6)
+          expect(offer_code).to_not be_valid
+          expect(offer_code.errors.full_messages).to include("Fallback discount is required when setting ownership duration threshold")
+        end
+
+        it "allows ownership duration with fallback discount" do
+          offer_code = build(:offer_code, user: @product.user, products: [@product], required_product: required_product, required_product_ownership_months: 6, fallback_discount_percentage: 50)
+          expect(offer_code).to be_valid
+
+          offer_code = build(:offer_code, user: @product.user, products: [@product], required_product: required_product, required_product_ownership_months: 6, fallback_discount_cents: 500, currency_type: "usd")
+          expect(offer_code).to be_valid
+        end
+      end
+
+      describe "validate_fallback_discount" do
+        it "requires required product when fallback discount is set" do
+          offer_code = build(:offer_code, user: @product.user, products: [@product], fallback_discount_percentage: 50)
+          expect(offer_code).to_not be_valid
+          expect(offer_code.errors.full_messages).to include("Fallback discount can only be used with required product ownership")
+        end
+
+        it "requires ownership duration when fallback discount is set" do
+          offer_code = build(:offer_code, user: @product.user, products: [@product], required_product: required_product, fallback_discount_percentage: 50)
+          expect(offer_code).to_not be_valid
+          expect(offer_code.errors.full_messages).to include("Ownership duration threshold is required when setting fallback discount")
+        end
+
+        it "validates fallback discount percentage range" do
+          offer_code = build(:offer_code, user: @product.user, products: [@product], required_product: required_product, required_product_ownership_months: 6, fallback_discount_percentage: 150)
+          expect(offer_code).to_not be_valid
+          expect(offer_code.errors.full_messages).to include("Fallback discount percentage must be between 0 and 100")
+
+          offer_code.fallback_discount_percentage = -10
+          expect(offer_code).to_not be_valid
+          expect(offer_code.errors.full_messages).to include("Fallback discount percentage must be between 0 and 100")
+        end
+
+        it "validates fallback discount cents is positive" do
+          offer_code = build(:offer_code, user: @product.user, products: [@product], required_product: required_product, required_product_ownership_months: 6, fallback_discount_cents: -100)
+          expect(offer_code).to_not be_valid
+          expect(offer_code.errors.full_messages).to include("Fallback discount amount must be positive")
+        end
+
+        it "allows valid fallback discount configuration" do
+          offer_code = build(:offer_code, user: @product.user, products: [@product], required_product: required_product, required_product_ownership_months: 6, fallback_discount_percentage: 50)
+          expect(offer_code).to be_valid
+
+          offer_code = build(:offer_code, user: @product.user, products: [@product], required_product: required_product, required_product_ownership_months: 6, fallback_discount_cents: 500, currency_type: "usd")
+          expect(offer_code).to be_valid
+        end
       end
     end
   end

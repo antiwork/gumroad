@@ -53,6 +53,13 @@ class Checkout::DiscountsPresenter
       minimum_quantity: offer_code.minimum_quantity,
       duration_in_billing_cycles: offer_code.duration_in_billing_cycles,
       minimum_amount_cents: offer_code.minimum_amount_cents,
+      required_product_id: offer_code.required_product&.external_id,
+      required_product_ownership_months: offer_code.required_product_ownership_months,
+      fallback_discount: offer_code.has_fallback_discount? ? (
+        offer_code.fallback_discount_cents.present? ?
+          { type: "cents", value: offer_code.fallback_discount_cents } :
+          { type: "percent", value: offer_code.fallback_discount_percentage }
+      ) : nil,
     }
   end
 end

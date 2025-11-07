@@ -11,9 +11,10 @@ class OfferCodeDiscountComputingService
   #   => A[2], B[3], C[2] --> A[2], C[2]
   #   => A[2], C[3]       --> A[2]
 
-  def initialize(code, products)
+  def initialize(code, products, purchaser: nil)
     @code = code
     @products = products
+    @purchaser = purchaser
   end
 
   def process
@@ -26,9 +27,10 @@ class OfferCodeDiscountComputingService
       next unless offer_code
       track_applicable_offer_code(offer_code)
 
-      if eligible?(offer_code, purchase_quantity)
+      if eligible?(offer_code, purchase_quantity, link)
         track_usage(offer_code, purchase_quantity)
-        products_data[link.unique_permalink] = { discount: offer_code.discount }
+        discount = compute_discount_for_offer_code(offer_code, link)
+        products_data[link.unique_permalink] = { discount: }
         optimistically_apply_to_applicable_cross_sells(products_data, link)
       else
         track_ineligibility(offer_code, purchase_quantity)
@@ -42,7 +44,7 @@ class OfferCodeDiscountComputingService
   end
 
   private
-    attr_reader :code, :products
+    attr_reader :code, :products, :purchaser
 
     def links
       @_links ||= Link.visible
@@ -68,8 +70,9 @@ class OfferCodeDiscountComputingService
         &.find { |offer_code| offer_code.applicable?(link) }
     end
 
-    def eligible?(offer_code, purchase_quantity)
+    def eligible?(offer_code, purchase_quantity, _link)
       return false if offer_code.inactive?
+      return false unless meets_required_product_requirement?(offer_code)
       return false unless meets_minimum_purchase_quantity?(offer_code, purchase_quantity)
       return false unless has_sufficient_times_of_use?(offer_code, purchase_quantity)
 
@@ -119,6 +122,7 @@ class OfferCodeDiscountComputingService
     end
 
     PRODUCT_LEVEL_INELIGIBILITIES_BY_DISPLAY_PRIORITY = [
+      :missing_required_product,
       :unmet_minimum_purchase_quantity,
       :insufficient_times_of_use,
       :sold_out,
@@ -145,5 +149,74 @@ class OfferCodeDiscountComputingService
 
         products_data[cross_sell.product.unique_permalink] = { discount: offer_code.discount }
       end
+    end
+
+    def meets_required_product_requirement?(offer_code)
+      return true if offer_code.required_product_id.blank?
+
+      info = required_product_purchase_info(offer_code)
+
+      return true if info[:owned]
+
+      mark_missing_required_product
+      false
+    end
+
+    def mark_missing_required_product
+      @product_level_ineligibilities ||= {}
+      @product_level_ineligibilities[:missing_required_product] = true
+    end
+
+    def required_product_purchase_info(offer_code)
+      @required_product_purchase_info ||= {}
+      @required_product_purchase_info[offer_code.id] ||= begin
+        return { owned: false, latest_purchase_at: nil } if purchaser.blank?
+
+        purchases = Purchase
+          .where(purchaser_id: purchaser.id, link_id: offer_code.required_product_id)
+          .where(purchase_state: Purchase::ALL_SUCCESS_STATES)
+
+        {
+          owned: purchases.exists?,
+          latest_purchase_at: purchases.maximum(:created_at)
+        }
+      end
+    end
+
+    def compute_discount_for_offer_code(offer_code, _link)
+      discount = offer_code.discount
+      return discount if offer_code.required_product_id.blank?
+
+      info = required_product_purchase_info(offer_code)
+      return discount unless info[:owned]
+
+      ownership_threshold = offer_code.required_product_ownership_months
+      return discount if ownership_threshold.blank?
+
+      latest_purchase_at = info[:latest_purchase_at]
+      return discount if latest_purchase_at.blank?
+
+      cutoff_time = ownership_threshold.months.ago
+
+      return discount if latest_purchase_at >= cutoff_time
+      return discount unless offer_code.has_fallback_discount?
+
+      build_fallback_discount(offer_code, discount)
+    end
+
+    def build_fallback_discount(offer_code, base_discount)
+      fallback_discount = base_discount.dup
+      fallback_discount.delete(:cents)
+      fallback_discount.delete(:percents)
+
+      if offer_code.fallback_discount_percentage.present?
+        fallback_discount[:type] = "percent"
+        fallback_discount[:percents] = offer_code.fallback_discount_percentage
+      else
+        fallback_discount[:type] = "fixed"
+        fallback_discount[:cents] = offer_code.fallback_discount_cents
+      end
+
+      fallback_discount
     end
 end

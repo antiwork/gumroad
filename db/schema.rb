@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[7.1].define(version: 2025_10_14_161000) do
+ActiveRecord::Schema[7.1].define(version: 2025_11_07_085140) do
   create_table "active_storage_attachments", charset: "utf8mb4", collation: "utf8mb4_unicode_ci", force: :cascade do |t|
     t.string "name", limit: 191, null: false
     t.string "record_type", limit: 191, null: false
@@ -1231,9 +1231,14 @@ ActiveRecord::Schema[7.1].define(version: 2025_10_14_161000) do
     t.integer "duration_in_months"
     t.integer "minimum_amount_cents"
     t.bigint "flags", default: 0, null: false
+    t.integer "required_product_id"
+    t.integer "required_product_ownership_months"
+    t.integer "fallback_discount_percentage"
+    t.integer "fallback_discount_cents"
     t.index ["code", "link_id"], name: "index_offer_codes_on_code_and_link_id"
     t.index ["link_id"], name: "index_offer_codes_on_link_id"
     t.index ["name", "link_id"], name: "index_offer_codes_on_name_and_link_id", length: { name: 191 }
+    t.index ["required_product_id"], name: "index_offer_codes_on_required_product_id"
     t.index ["universal"], name: "index_offer_codes_on_universal"
     t.index ["user_id"], name: "index_offer_codes_on_user_id"
   end

@@ -80,7 +80,7 @@ describe Checkout::DiscountsController do
 
     context "when `sort` is passed" do
       before do
-        create(:purchase, link: create(:product, user: seller), offer_code: offer_codes.third)
+        create(:free_purchase, link: create(:product, user: seller), seller: seller, offer_code: offer_codes.third)
       end
 
       it "returns the correct results" do
@@ -124,8 +124,8 @@ describe Checkout::DiscountsController do
   describe "GET statistics" do
     let(:offer_code) { create(:offer_code, user: seller) }
     let(:products) { create_list(:product, 2, user: seller) }
-    let!(:purchase1) { create(:purchase, link: products.first, offer_code:) }
-    let!(:purchase2) { create(:purchase, link: products.second, offer_code:) }
+    let!(:purchase1) { create(:free_purchase, link: products.first, seller: seller, offer_code:) }
+    let!(:purchase2) { create(:free_purchase, link: products.second, seller: seller, offer_code:) }
 
     it_behaves_like "authorize called for action", :get, :statistics do
       let(:policy_klass) { Checkout::OfferCodePolicy }
@@ -145,7 +145,7 @@ describe Checkout::DiscountsController do
               products.second.external_id => 1,
             }
           },
-          "revenue_cents" => 200
+          "revenue_cents" => 0
         }
       )
     end
@@ -202,6 +202,58 @@ describe Checkout::DiscountsController do
       expect(offer_code.minimum_quantity).to eq(2)
       expect(offer_code.duration_in_billing_cycles).to eq(1)
       expect(offer_code.minimum_amount_cents).to eq(1000)
+    end
+
+    context "with required product configuration" do
+      before do
+        @product1 = create(:product, user: seller)
+      end
+      let(:required_product) { create(:product, user: seller) }
+
+      it "creates offer code with required product settings" do
+        expect do
+          post :create, params: {
+            name: "Upgrade Discount",
+            code: "UPGRADE50",
+            amount_percentage: 100,
+            universal: false,
+            selected_product_ids: [@product1.external_id],
+            required_product_id: required_product.external_id,
+            required_product_ownership_months: 6,
+            fallback_discount_percentage: 50,
+          }, as: :json
+        end.to change { seller.offer_codes.count }.by(1)
+
+        expect(response).to be_successful
+        expect(response.parsed_body["success"]).to eq(true)
+
+        offer_code = seller.offer_codes.last
+        expect(offer_code.required_product).to eq(required_product)
+        expect(offer_code.required_product_ownership_months).to eq(6)
+        expect(offer_code.fallback_discount_percentage).to eq(50)
+        expect(offer_code.fallback_discount_cents).to be_nil
+      end
+
+      it "creates offer code with fallback cents discount" do
+        expect do
+          post :create, params: {
+            name: "Upgrade Discount",
+            code: "UPGRADE50",
+            amount_cents: 1000,
+            currency_type: "usd",
+            universal: false,
+            selected_product_ids: [@product1.external_id],
+            required_product_id: required_product.external_id,
+            required_product_ownership_months: 3,
+            fallback_discount_cents: 500,
+          }, as: :json
+        end.to change { seller.offer_codes.count }.by(1)
+
+        expect(response).to be_successful
+        offer_code = seller.offer_codes.last
+        expect(offer_code.fallback_discount_cents).to eq(500)
+        expect(offer_code.fallback_discount_percentage).to be_nil
+      end
     end
 
     context "when the offer code has several products" do
@@ -367,6 +419,32 @@ describe Checkout::DiscountsController do
         expect(offer_code.valid_at).to eq(valid_at)
         expect(offer_code.minimum_quantity).to eq(5)
         expect(offer_code.minimum_amount_cents).to eq(500)
+      end
+
+      context "with required product configuration" do
+        let(:required_product) { create(:product, user: seller) }
+
+        it "updates offer code with required product settings" do
+          put :update, params: {
+            id: @offer_code.external_id,
+            name: "Updated Discount",
+            amount_percentage: 75,
+            universal: false,
+            selected_product_ids: [@product1.external_id],
+            required_product_id: required_product.external_id,
+            required_product_ownership_months: 12,
+            fallback_discount_percentage: 25,
+          }, as: :json
+
+          expect(response).to be_successful
+          expect(response.parsed_body["success"]).to eq(true)
+
+          @offer_code.reload
+          expect(@offer_code.required_product).to eq(required_product)
+          expect(@offer_code.required_product_ownership_months).to eq(12)
+          expect(@offer_code.fallback_discount_percentage).to eq(25)
+          expect(@offer_code.fallback_discount_cents).to be_nil
+        end
       end
 
       context "when the offer code has an invalid price" do

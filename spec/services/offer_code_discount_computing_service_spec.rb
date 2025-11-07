@@ -405,4 +405,154 @@ describe OfferCodeDiscountComputingService do
       end
     end
   end
+
+  describe "required product functionality" do
+    let(:purchaser) { create(:user) }
+    let(:required_product) { create(:product, user: seller, price_cents: 1000, price_currency_type: "usd") }
+    let(:offer_code_with_required_product) do
+      create(:offer_code,
+        user: seller,
+        products: [product],
+        amount_percentage: 100,
+        amount_cents: nil,
+        required_product: required_product,
+        required_product_ownership_months: 6,
+        fallback_discount_percentage: 50
+      )
+    end
+
+    context "when purchaser is not provided" do
+      it "returns missing_required_product error" do
+        result = OfferCodeDiscountComputingService.new(offer_code_with_required_product.code, products_data).process
+
+        expect(result[:error_code]).to eq(:missing_required_product)
+        expect(result[:products_data]).to eq({})
+      end
+    end
+
+    context "when purchaser has not purchased required product" do
+      it "returns missing_required_product error" do
+        result = OfferCodeDiscountComputingService.new(offer_code_with_required_product.code, products_data, purchaser: purchaser).process
+
+        expect(result[:error_code]).to eq(:missing_required_product)
+        expect(result[:products_data]).to eq({})
+      end
+    end
+
+    context "when purchaser owns required product" do
+      let!(:recent_purchase) { create(:free_purchase, link: required_product, seller: seller, purchaser: purchaser, created_at: 3.months.ago) }
+
+      context "when purchased within ownership threshold" do
+        it "applies primary discount" do
+          result = OfferCodeDiscountComputingService.new(offer_code_with_required_product.code, products_data, purchaser: purchaser).process
+
+          expect(result[:error_code]).to be_nil
+          expect(result[:products_data][product.unique_permalink][:discount]).to include(
+            type: "percent",
+            percents: 100
+          )
+        end
+      end
+
+      context "when purchased outside ownership threshold" do
+        let!(:old_purchase) { create(:free_purchase, link: required_product, seller: seller, purchaser: purchaser, created_at: 8.months.ago) }
+
+        before { recent_purchase.destroy }
+
+        it "applies fallback discount" do
+          result = OfferCodeDiscountComputingService.new(offer_code_with_required_product.code, products_data, purchaser: purchaser).process
+
+          expect(result[:error_code]).to be_nil
+          expect(result[:products_data][product.unique_permalink][:discount]).to include(
+            type: "percent",
+            percents: 50
+          )
+        end
+      end
+
+      context "when no ownership threshold is set" do
+        let(:simple_required_product_code) do
+          create(:offer_code,
+            user: seller,
+            products: [product],
+            amount_percentage: 75,
+            amount_cents: nil,
+            required_product: required_product
+          )
+        end
+
+        it "applies primary discount regardless of purchase date" do
+          result = OfferCodeDiscountComputingService.new(simple_required_product_code.code, products_data, purchaser: purchaser).process
+
+          expect(result[:error_code]).to be_nil
+          expect(result[:products_data][product.unique_permalink][:discount]).to include(
+            type: "percent",
+            percents: 75
+          )
+        end
+      end
+
+      context "when no fallback discount is configured" do
+        let(:no_fallback_code) do
+          create(:offer_code,
+            user: seller,
+            products: [product],
+            amount_percentage: 100,
+            amount_cents: nil,
+            required_product: required_product
+          )
+        end
+        let!(:old_purchase) { create(:free_purchase, link: required_product, seller: seller, purchaser: purchaser, created_at: 8.months.ago) }
+
+        before { recent_purchase.destroy }
+
+        it "applies primary discount even when outside threshold" do
+          result = OfferCodeDiscountComputingService.new(no_fallback_code.code, products_data, purchaser: purchaser).process
+
+          expect(result[:error_code]).to be_nil
+          expect(result[:products_data][product.unique_permalink][:discount]).to include(
+            type: "percent",
+            percents: 100
+          )
+        end
+      end
+    end
+
+    context "with cents-based discounts" do
+      let(:cents_offer_code) do
+        create(:offer_code,
+          user: seller,
+          products: [product],
+          amount_cents: 1000,
+          currency_type: "usd",
+          required_product: required_product,
+          required_product_ownership_months: 6,
+          fallback_discount_cents: 500
+        )
+      end
+      let!(:old_purchase) { create(:free_purchase, link: required_product, seller: seller, purchaser: purchaser, created_at: 8.months.ago) }
+
+      it "applies fallback cents discount correctly" do
+        result = OfferCodeDiscountComputingService.new(cents_offer_code.code, products_data, purchaser: purchaser).process
+
+        expect(result[:error_code]).to be_nil
+        expect(result[:products_data][product.unique_permalink][:discount]).to include(
+          type: "fixed",
+          cents: 500
+        )
+      end
+    end
+
+    context "with failed or test purchases" do
+      let!(:failed_purchase) { create(:failed_purchase, link: required_product, seller: seller, purchaser: purchaser, created_at: 3.months.ago) }
+      let!(:test_purchase) { create(:test_purchase, link: required_product, seller: seller, purchaser: purchaser, created_at: 3.months.ago) }
+
+      it "does not consider failed or test purchases as ownership" do
+        result = OfferCodeDiscountComputingService.new(offer_code_with_required_product.code, products_data, purchaser: purchaser).process
+
+        expect(result[:error_code]).to eq(:missing_required_product)
+        expect(result[:products_data]).to eq({})
+      end
+    end
+  end
 end

@@ -20,6 +20,7 @@ class OfferCode < ApplicationRecord
 
   has_and_belongs_to_many :products, class_name: "Link", join_table: "offer_codes_products", association_foreign_key: "product_id"
   belongs_to :user
+  belongs_to :required_product, class_name: "Link", optional: true
   has_many :purchases
   has_many :purchases_that_count_towards_offer_code_uses, -> { counts_towards_offer_code_uses }, class_name: "Purchase"
   has_one :upsell
@@ -33,6 +34,8 @@ class OfferCode < ApplicationRecord
   validate :price_validation
   validate :validate_cancellation_discount_uniqueness
   validate :validate_cancellation_discount_product_type
+  validate :validate_required_product_configuration
+  validate :validate_fallback_discount
 
   before_save :to_mongo
 
@@ -63,6 +66,16 @@ class OfferCode < ApplicationRecord
 
   def is_cents?
     amount_cents.present?
+  end
+
+  def has_fallback_discount?
+    fallback_discount_percentage.present? || fallback_discount_cents.present?
+  end
+
+  def fallback_discount_amount_off(price_cents)
+    return fallback_discount_cents if fallback_discount_cents.present?
+
+    (price_cents * (fallback_discount_percentage / 100.0)).round if fallback_discount_percentage.present?
   end
 
   def amount_off(price_cents)
@@ -282,6 +295,44 @@ class OfferCode < ApplicationRecord
       product = products.first
       unless product.is_tiered_membership?
         errors.add(:base, "Cancellation discounts can only be added to memberships")
+      end
+    end
+
+    def validate_required_product_configuration
+      return if required_product_id.blank?
+
+      # Required product must belong to the same user
+      if required_product && required_product.user_id != user_id
+        errors.add(:base, "Required product must belong to you")
+        return
+      end
+
+      # If ownership duration is specified, fallback discount is required
+      if required_product_ownership_months.present? && !has_fallback_discount?
+        errors.add(:base, "Fallback discount is required when setting ownership duration threshold")
+      end
+    end
+
+    def validate_fallback_discount
+      return unless has_fallback_discount?
+
+      # Fallback discount requires required product
+      if required_product_id.blank?
+        errors.add(:base, "Fallback discount can only be used with required product ownership")
+        return
+      end
+
+      # Fallback discount requires ownership duration threshold
+      if required_product_ownership_months.blank?
+        errors.add(:base, "Ownership duration threshold is required when setting fallback discount")
+        return
+      end
+
+      # Validate fallback discount amount
+      if fallback_discount_percentage.present?
+        errors.add(:base, "Fallback discount percentage must be between 0 and 100") if fallback_discount_percentage < 0 || fallback_discount_percentage > 100
+      elsif fallback_discount_cents.present?
+        errors.add(:base, "Fallback discount amount must be positive") if fallback_discount_cents < 0
       end
     end
 end
