@@ -60,7 +60,7 @@ describe "Admin Pages Scenario", type: :system, js: true do
       fill_in("expiry_date", with: "02/22")
       fill_in("price", with: "9.99")
       click_on("Search")
-      expect(page).to have_current_path(admin_cards_path, ignore_query: true)
+      expect(page).to have_current_path(admin_search_purchases_path, ignore_query: true)
       query_values = Addressable::URI.parse(page.current_url).query_values
       expect(query_values["card_type"]).to eq("visa")
       expect(query_values["transaction_date"]).to eq("02/22/2022")
