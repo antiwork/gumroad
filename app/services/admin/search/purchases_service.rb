@@ -1,7 +1,7 @@
 # frozen_string_literal: true
 
 class Admin::Search::PurchasesService
-  attr_reader :card_type, :creator_email, :expiry_date, :last_4, :limit, :license_key, :price, :product_title_query, :purchase_status, :query, :transaction_date
+  attr_reader :card_type, :creator_email, :expiry_date, :last_4, :license_key, :price, :product_title_query, :purchase_status, :query, :transaction_date
 
   def initialize(**search_params)
     @card_type = search_params[:card_type]
@@ -9,7 +9,6 @@ class Admin::Search::PurchasesService
     @expiry_date = search_params[:expiry_date]
     @last_4 = search_params[:last_4]
     @license_key = search_params[:license_key]
-    @limit = search_params[:limit]
     @price = search_params[:price]
     @product_title_query = search_params[:product_title_query]
     @purchase_status = search_params[:purchase_status]
@@ -96,6 +95,6 @@ class Admin::Search::PurchasesService
       end
     end
 
-    purchases.limit(limit)
+    purchases
   end
 end

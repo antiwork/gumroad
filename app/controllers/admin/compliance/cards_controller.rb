@@ -3,8 +3,6 @@
 class Admin::Compliance::CardsController < Admin::BaseController
   include Admin::ListPaginatedPurchases
 
-  MAX_RESULT_LIMIT = 100
-
   def index
     super do |pagination, purchases|
       if purchases.one? && params[:page].blank?
@@ -25,7 +23,6 @@ class Admin::Compliance::CardsController < Admin::BaseController
         if hash[:transaction_date].present?
           hash[:transaction_date] = Date.strptime(hash[:transaction_date], "%m/%d/%Y").to_s
         end
-        hash[:limit] = MAX_RESULT_LIMIT
       end
     end
 
