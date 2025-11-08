@@ -60,7 +60,7 @@ describe Admin::Compliance::CardsController, type: :controller, inertia: true do
         expect(inertia.props[:pagination]).to be_present
       end
 
-      it "when a single purchase is found redirects to the admin purchase page when one purchase is found" do
+      it "when a single purchase is found redirects to the admin purchase page" do
         get :index, params: { card_type: "visa" }
 
         expect(response).to redirect_to admin_purchase_path(@purchase_visa)

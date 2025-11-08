@@ -73,12 +73,12 @@ class Admin::Search::PurchasesService
       if transaction_date.present?
         begin
           formatted_date = Date.strptime(transaction_date.to_s.strip, "%Y-%m-%d").in_time_zone
-          start_date = (formatted_date - 1.day).beginning_of_day.to_fs(:db)
-          end_date = (formatted_date + 1.day).end_of_day.to_fs(:db)
-          purchases = purchases.where("created_at between ? and ?", start_date, end_date)
-        rescue ArgumentError
-          raise ArgumentError, "transaction_date must use YYYY-MM-DD format."
+        rescue Date::Error
+          raise Date::Error, "transaction_date must use YYYY-MM-DD format."
         end
+        start_date = (formatted_date - 1.day).beginning_of_day.to_fs(:db)
+        end_date = (formatted_date + 1.day).end_of_day.to_fs(:db)
+        purchases = purchases.where("created_at between ? and ?", start_date, end_date)
       end
       purchases = purchases.where(card_type:) if card_type.present?
       if last_4.present?

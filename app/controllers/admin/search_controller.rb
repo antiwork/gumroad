@@ -25,7 +25,6 @@ class Admin::SearchController < Admin::BaseController
       product_title_query: params[:product_title_query]&.strip,
       purchase_status: params[:purchase_status],
     ).perform
-
     @purchases = @purchases.page_with_kaminari(params[:page]).per(RECORDS_PER_PAGE) if @purchases.present?
 
     redirect_to admin_purchase_path(@purchases.first) if @purchases.one? && params[:page].blank?

@@ -12,13 +12,9 @@ module Admin::ListPaginatedPurchases
 
     begin
       records = Admin::Search::PurchasesService.new(**search_params).perform
-    rescue ArgumentError => e
-      if e.message.include?("transaction_date must use YYYY-MM-DD format") || transaction_date_error_message
-        flash[:alert] = transaction_date_error_message || e.message
-        records = Purchase.none
-      else
-        raise e
-      end
+    rescue Date::Error => e
+      flash[:alert] = transaction_date_error_message || e.message
+      records = Purchase.none
     end
 
     pagination, purchases = pagy_countless(

@@ -72,10 +72,10 @@ describe Admin::Search::PurchasesService do
       end
 
       context "when transaction_date value is not a date" do
-        it "raises ArgumentError with appropriate message" do
-          service = Admin::Search::PurchasesService.new(transaction_date: "2021-01", card_type: "other")
-
-          expect { service.perform }.to raise_error(ArgumentError, "transaction_date must use YYYY-MM-DD format.")
+        it "raises an error" do
+          expect do
+            Admin::Search::PurchasesService.new(transaction_date: "2021-01", card_type: "other").perform
+          end.to raise_error(Date::Error, "transaction_date must use YYYY-MM-DD format.")
         end
       end
 
@@ -100,8 +100,9 @@ describe Admin::Search::PurchasesService do
       end
 
       it "supports filtering by decimal price" do
+        purchase_decimal = create(:purchase, price_cents: 1999, stripe_fingerprint: "test_fingerprint")
         purchases = Admin::Search::PurchasesService.new(price: "19.99").perform
-        expect(purchases).to eq [create(:purchase, price_cents: 1999, stripe_fingerprint: "test_fingerprint")]
+        expect(purchases).to eq [purchase_decimal]
       end
 
       it "supports filtering by combination of params" do
@@ -116,11 +117,13 @@ describe Admin::Search::PurchasesService do
       let(:other_ip) { "198.51.100.10" }
 
       it "returns purchases matching ip_address" do
+        purchase_from_ip_v4 = create(:purchase, ip_address: ip_v4)
+        purchase_from_ip_v6 = create(:purchase, ip_address: ip_v6)
         purchases = Admin::Search::PurchasesService.new(query: ip_v4).perform
-        expect(purchases).to contain_exactly(create(:purchase, ip_address: ip_v4))
+        expect(purchases).to contain_exactly(purchase_from_ip_v4)
 
         purchases = Admin::Search::PurchasesService.new(query: ip_v6).perform
-        expect(purchases).to contain_exactly(create(:purchase, ip_address: ip_v6))
+        expect(purchases).to contain_exactly(purchase_from_ip_v6)
 
         purchases = Admin::Search::PurchasesService.new(query: other_ip).perform
         expect(purchases).to be_empty
