@@ -289,6 +289,7 @@ export const Checkout = ({
                         </>
                       }
                       price={discount > 0 ? -discount : null}
+                      displayZeroPrice={visibleDiscounts.length > 0}
                     />
                   ) : null}
                   {cart.items.some((item) => item.product.has_offer_codes) ? (

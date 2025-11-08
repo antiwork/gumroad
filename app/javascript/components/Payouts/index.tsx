@@ -843,7 +843,7 @@ const Payouts = ({
                     <PayoutLineItem title="Amount" price={instantPayoutAmountCents} />
                     <PayoutLineItem
                       title={`Instant payout fee (${INSTANT_PAYOUT_FEE_PERCENTAGE * 100}%)`}
-                      price={instantPayoutFee}
+                      price={-instantPayoutFee}
                     />
                   </div>
                   <footer className="grid gap-4 p-4">
@@ -965,14 +965,16 @@ export function PayoutLineItem({
   price?: number | null;
   className?: string;
 }) {
-  if (!price || price === 0) {
+  if (price === null || price === undefined) {
     return null;
   }
 
   return (
     <div className={classNames("grid grid-flow-col justify-between gap-4", className)}>
       <h4 className="inline-flex flex-wrap gap-2">{title}</h4>
-      <div>${formatPriceCentsWithoutCurrencySymbol("usd", price)}</div>
+      <div>
+        {price < 0 ? "-" : ""}${formatPriceCentsWithoutCurrencySymbol("usd", Math.abs(price))}
+      </div>
     </div>
   );
 }

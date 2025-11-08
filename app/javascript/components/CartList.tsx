@@ -9,13 +9,14 @@ type BaseProps = {
   extra?: React.ReactNode;
 } & React.HTMLAttributes<HTMLElement>;
 
-export const CartList = ({ children, className }: BaseProps) => (
+export const CartList = ({ children, className, ...props }: BaseProps) => (
   <div
     role="list"
     className={classNames(
       "rounded-sm border border-border bg-background *:not-first:border-t *:not-first:border-border",
       className,
     )}
+    {...props}
   >
     {children}
   </div>
