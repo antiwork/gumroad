@@ -292,7 +292,7 @@ describe Purchase::SyncStatusWithChargeProcessorService, :vcr do
   context "for a Stripe Connect purchase" do
     it "marks the purchase as successful and returns true if purchase's charge was successful" do
       merchant_account = create(:merchant_account_stripe_connect, user: @product.user,
-                                                                  charge_processor_merchant_id: "acct_1MeFbmKQKir5qdfM", currency: "usd")
+                                                                  charge_processor_merchant_id: "acct_1SOb0DEwFhlcVS6d", currency: "usd")
       purchase = create(:purchase, id: 88, link: @product, purchase_state: "in_progress", merchant_account:)
       purchase.process!
       purchase.stripe_transaction_id = nil
@@ -313,7 +313,7 @@ describe Purchase::SyncStatusWithChargeProcessorService, :vcr do
 
     it "marks the purchase as failed and returns false if purchase's charge has been refunded" do
       merchant_account = create(:merchant_account_stripe_connect, user: @product.user,
-                                                                  charge_processor_merchant_id: "acct_1MeFbmKQKir5qdfM", currency: "usd")
+                                                                  charge_processor_merchant_id: "acct_1SOb0DEwFhlcVS6d", currency: "usd")
       purchase = create(:purchase, id: 90, link: @product, purchase_state: "in_progress", merchant_account:)
       purchase.process!
       purchase.stripe_transaction_id = nil

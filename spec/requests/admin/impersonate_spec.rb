@@ -3,10 +3,12 @@
 require "spec_helper"
 
 describe "Impersonate", type: :system, js: true do
+  include StripeMerchantAccountHelper
+
   let(:admin) { create(:admin_user, name: "Gumlord") }
   let(:seller) do
     user = create(:named_seller)
-    create(:merchant_account_stripe, user:)
+    create(:merchant_account, user:, charge_processor_merchant_id: create_verified_stripe_account(country: "US").id)
     user
   end
 

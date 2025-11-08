@@ -10,12 +10,12 @@ class Admin::UsersController < Admin::BaseController
 
   helper Pagy::UrlHelpers
 
-  PRODUCTS_ORDER = "ISNULL(COALESCE(purchase_disabled_at, banned_at, links.deleted_at)) DESC, created_at DESC"
+  PRODUCTS_ORDER = Arel.sql("ISNULL(COALESCE(purchase_disabled_at, banned_at, links.deleted_at)) DESC, created_at DESC")
   PRODUCTS_PER_PAGE = 10
 
   def show
     @title = "#{@user.display_name} on Gumroad"
-    @pagy, @products = pagy(@user.links.order(Arel.sql(PRODUCTS_ORDER)), limit: PRODUCTS_PER_PAGE)
+    @pagy, @products = pagy(@user.links.order(PRODUCTS_ORDER), limit: PRODUCTS_PER_PAGE)
     respond_to do |format|
       format.html
       format.json { render json: @user }

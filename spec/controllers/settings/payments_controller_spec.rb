@@ -1051,16 +1051,8 @@ describe Settings::PaymentsController, :vcr do
         user.update!(user_risk_state: "compliant", payment_address: nil)
         create(:card_bank_account, user:)
 
-        @card_params = lambda do |number: "4000056655665556", exp_month: 12, exp_year: 2023|
-          card_token = Stripe::Token.create(
-            card: {
-              number:,
-              exp_month:,
-              exp_year:,
-              cvc: "123"
-            }
-          )
-
+        @card_params = lambda do
+          card_token = Stripe::Token.retrieve(CardParamsSpecHelper.success_debit_visa[:token])
           { card: { stripe_token: card_token.id } }
         end
       end
@@ -1079,8 +1071,8 @@ describe Settings::PaymentsController, :vcr do
 
         credit_card = active_bank_account.credit_card
         expect(credit_card.visual).to eq("**** **** **** 5556")
-        expect(credit_card.expiry_month).to eq(12)
-        expect(credit_card.expiry_year).to eq(2023)
+        expect(credit_card.expiry_month).to eq(11)
+        expect(credit_card.expiry_year).to eq(2026)
       end
     end
 

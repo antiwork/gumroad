@@ -202,9 +202,7 @@ describe FailAbandonedPurchaseWorker, :vcr do
           @subscription.credit_card = @indian_cc
           @subscription.save!
 
-          travel_to(@originally_subscribed_at + 4.months)
-
-          @subscription.update!(cancelled_at: 1.day.ago, cancelled_by_buyer: true)
+          @subscription.update!(cancelled_at: @originally_subscribed_at + 4.months, cancelled_by_buyer: true)
 
           params = {
             price_id: @quarterly_product_price.external_id,

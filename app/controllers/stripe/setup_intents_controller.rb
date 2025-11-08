@@ -17,35 +17,7 @@ class Stripe::SetupIntentsController < ApplicationController
     chargeable.prepare!
     reusable_token = chargeable.reusable_token_for!(StripeChargeProcessor.charge_processor_id, logged_in_user)
 
-    mandate_options = if chargeable.requires_mandate?
-      # In case of checkout, create mandate with max product price,
-      # as that is what we'd create an off-session charge for at max
-      max_product_price = params.permit(products: [:price]).to_h.values.first.max_by { _1["price"].to_i }["price"].to_i rescue 0
-
-      # In case of subscription update, create mandate with current subscription price,
-      # as price in params is 0 if there's no change in price
-      subscription_id = params.permit(products: [:subscription_id]).to_h.values.first[0]["subscription_id"] rescue nil
-      subscription_current_amount = subscription_id.present? ? Subscription.find_by_external_id(subscription_id).current_subscription_price_cents : 0
-
-      mandate_amount = max_product_price > 0 ? max_product_price : subscription_current_amount
-
-      mandate_amount > 0 ?
-      {
-        payment_method_options: {
-          card: {
-            mandate_options: {
-              reference: StripeChargeProcessor::MANDATE_PREFIX + SecureRandom.hex,
-              amount_type: "maximum",
-              amount: mandate_amount,
-              currency: "usd",
-              start_date: Time.current.to_i,
-              interval: "sporadic",
-              supported_types: ["india"]
-            }
-          }
-        }
-      } : nil
-    end
+    mandate_options = mandate_options_for_stripe(chargeable)
 
     setup_intent = ChargeProcessor.setup_future_charges!(merchant_account, chargeable, mandate_options:)
 
@@ -85,6 +57,38 @@ class Stripe::SetupIntentsController < ApplicationController
         link&.user&.merchant_account(processor_id) || MerchantAccount.gumroad(processor_id)
       else
         MerchantAccount.gumroad(processor_id)
+      end
+    end
+
+    def mandate_options_for_stripe(chargeable)
+      if chargeable.requires_mandate?
+        # In case of checkout, create mandate with max product price,
+        # as that is what we'd create an off-session charge for at max
+        max_product_price = params.permit(products: [:price]).to_h.values.first.max_by { _1["price"].to_i }["price"].to_i rescue 0
+
+        # In case of subscription update, create mandate with current subscription price,
+        # as price in params is 0 if there's no change in price
+        subscription_id = params.permit(products: [:subscription_id]).to_h.values.first[0]["subscription_id"] rescue nil
+        subscription_current_amount = subscription_id.present? ? Subscription.find_by_external_id(subscription_id).current_subscription_price_cents : 0
+
+        mandate_amount = max_product_price > 0 ? max_product_price : subscription_current_amount
+
+        mandate_amount > 0 ?
+          {
+            payment_method_options: {
+              card: {
+                mandate_options: {
+                  reference: StripeChargeProcessor::MANDATE_PREFIX + SecureRandom.hex,
+                  amount_type: "maximum",
+                  amount: mandate_amount,
+                  currency: "usd",
+                  start_date: Time.current.to_i,
+                  interval: "sporadic",
+                  supported_types: ["india"]
+                }
+              }
+            }
+          } : nil
       end
     end
 end
