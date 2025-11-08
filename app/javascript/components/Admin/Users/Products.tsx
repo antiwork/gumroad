@@ -20,7 +20,7 @@ const AdminUsersProductsContent = ({
   if (pagination.page === 1 && products.length === 0) {
     return (
       <div className="info" role="status">
-        No products created.
+        {isAffiliateUser ? "No affiliated products." : "No products created."}
       </div>
     );
   }
