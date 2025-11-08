@@ -12,6 +12,8 @@ class Admin::Search::PurchasesController < Admin::BaseController
   end
 
   private
+    def inertia_template = "Admin/Search/Purchases/Index"
+
     def page_title
       params[:query].present? ? "Purchase results for #{params[:query].strip}" : "Purchase results"
     end
@@ -22,13 +24,5 @@ class Admin::Search::PurchasesController < Admin::BaseController
         product_title_query: params[:product_title_query].to_s.strip.presence,
         purchase_status: params[:purchase_status]
       }
-    end
-
-    def inertia_template
-      "Admin/Search/Purchases/Index"
-    end
-
-    def show_validation_errors?
-      true
     end
 end

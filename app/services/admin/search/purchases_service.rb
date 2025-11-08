@@ -1,31 +1,23 @@
 # frozen_string_literal: true
 
 class Admin::Search::PurchasesService
-  include ActiveModel::Validations
-
-  attr_reader :search_attributes, :transaction_date, :formatted_transaction_date, :query, :product_title_query, :purchase_status, :creator_email, :license_key, :last_4, :card_type, :price, :expiry_date, :limit
-
-  validate :validate_transaction_date_format
+  attr_reader :card_type, :creator_email, :expiry_date, :last_4, :limit, :license_key, :price, :product_title_query, :purchase_status, :query, :transaction_date
 
   def initialize(**search_params)
-    @search_attributes = search_params
-    @transaction_date = search_params[:transaction_date]
-
-    @query = search_params[:query]
+    @card_type = search_params[:card_type]
+    @creator_email = search_params[:creator_email]
+    @expiry_date = search_params[:expiry_date]
+    @last_4 = search_params[:last_4]
+    @license_key = search_params[:license_key]
+    @limit = search_params[:limit]
+    @price = search_params[:price]
     @product_title_query = search_params[:product_title_query]
     @purchase_status = search_params[:purchase_status]
-    @creator_email = search_params[:creator_email]
-    @license_key = search_params[:license_key]
-    @last_4 = search_params[:last_4]
-    @card_type = search_params[:card_type]
-    @price = search_params[:price]
-    @expiry_date = search_params[:expiry_date]
-    @limit = search_params[:limit]
+    @query = search_params[:query]
+    @transaction_date = search_params[:transaction_date]
   end
 
   def perform
-    return Purchase.none unless valid?
-
     purchases = Purchase.order(created_at: :desc)
 
     if query.present?
@@ -80,9 +72,14 @@ class Admin::Search::PurchasesService
       purchases = purchases.where.not(stripe_fingerprint: nil)
 
       if transaction_date.present?
-        start_date = (formatted_transaction_date - 1.day).beginning_of_day.to_fs(:db)
-        end_date = (formatted_transaction_date + 1.day).end_of_day.to_fs(:db)
-        purchases = purchases.where("created_at between ? and ?", start_date, end_date)
+        begin
+          formatted_date = Date.strptime(transaction_date.to_s.strip, "%Y-%m-%d").in_time_zone
+          start_date = (formatted_date - 1.day).beginning_of_day.to_fs(:db)
+          end_date = (formatted_date + 1.day).end_of_day.to_fs(:db)
+          purchases = purchases.where("created_at between ? and ?", start_date, end_date)
+        rescue ArgumentError
+          raise ArgumentError, "transaction_date must use YYYY-MM-DD format."
+        end
       end
       purchases = purchases.where(card_type:) if card_type.present?
       if last_4.present?
@@ -101,12 +98,4 @@ class Admin::Search::PurchasesService
 
     purchases.limit(limit)
   end
-
-  private
-    def validate_transaction_date_format
-      return if transaction_date.blank?
-      @formatted_transaction_date = Date.strptime(transaction_date, "%Y-%m-%d").in_time_zone
-    rescue ArgumentError
-      errors.add(:transaction_date, "transaction_date must use YYYY-MM-DD format.")
-    end
 end

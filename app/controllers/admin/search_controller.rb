@@ -20,16 +20,11 @@ class Admin::SearchController < Admin::BaseController
   def purchases
     @title = "Purchase results"
 
-    search_service = Admin::Search::PurchasesService.new(
+    @purchases = Admin::Search::PurchasesService.new(
       query: @raw_query,
       product_title_query: params[:product_title_query]&.strip,
       purchase_status: params[:purchase_status],
-    )
-    @purchases = search_service.perform
-
-    unless search_service.valid?
-      flash[:alert] = search_service.errors.full_messages.first
-    end
+    ).perform
 
     @purchases = @purchases.page_with_kaminari(params[:page]).per(RECORDS_PER_PAGE) if @purchases.present?
 

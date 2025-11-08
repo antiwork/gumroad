@@ -10,11 +10,15 @@ module Admin::ListPaginatedPurchases
   def index
     @title = page_title
 
-    service = Admin::Search::PurchasesService.new(**search_params)
-    records = service.perform
-
-    if show_validation_errors? && !service.valid?
-      flash[:alert] = service.errors.full_messages.to_sentence
+    begin
+      records = Admin::Search::PurchasesService.new(**search_params).perform
+    rescue ArgumentError => e
+      if e.message.include?("transaction_date must use YYYY-MM-DD format") || transaction_date_error_message
+        flash[:alert] = transaction_date_error_message || e.message
+        records = Purchase.none
+      else
+        raise e
+      end
     end
 
     pagination, purchases = pagy_countless(
@@ -48,23 +52,13 @@ module Admin::ListPaginatedPurchases
   end
 
   private
-    def page_title
-      raise NotImplementedError, "must be overriden in subclass"
-    end
+    def inertia_template = raise NotImplementedError, "must be overriden in subclass"
 
-    def search_params
-      raise NotImplementedError, "must be overriden in subclass"
-    end
+    def page_title = raise NotImplementedError, "must be overriden in subclass"
 
-    def inertia_template
-      raise NotImplementedError, "must be overriden in subclass"
-    end
+    def presenter_method = :list_props
 
-    def presenter_method
-      :list_props
-    end
+    def search_params = raise NotImplementedError, "must be overriden in subclass"
 
-    def show_validation_errors?
-      false
-    end
+    def transaction_date_error_message = nil
 end

@@ -14,29 +14,20 @@ class Admin::Compliance::CardsController < Admin::BaseController
   end
 
   private
-    def page_title
-      "Transaction results"
-    end
+    def inertia_template = "Admin/Compliance/Cards/Index"
+
+    def page_title = "Transaction results"
+
+    def presenter_method = :props
 
     def search_params
-      search_params_hash = params.permit(:transaction_date, :last_4, :card_type, :price, :expiry_date).to_hash.symbolize_keys
-
-      if search_params_hash[:transaction_date].present?
-        begin
-          search_params_hash[:transaction_date] = Date.strptime(search_params_hash[:transaction_date], "%m/%d/%Y").to_s
-        rescue ArgumentError
-          flash[:alert] = "Please enter the date using the MM/DD/YYYY format."
+      params.permit(:transaction_date, :last_4, :card_type, :price, :expiry_date).to_h.symbolize_keys.tap do |hash|
+        if hash[:transaction_date].present?
+          hash[:transaction_date] = Date.strptime(hash[:transaction_date], "%m/%d/%Y").to_s
         end
+        hash[:limit] = MAX_RESULT_LIMIT
       end
-
-      search_params_hash.merge(limit: MAX_RESULT_LIMIT)
     end
 
-    def inertia_template
-      "Admin/Compliance/Cards/Index"
-    end
-
-    def presenter_method
-      :props
-    end
+    def transaction_date_error_message = "Please enter the date using the MM/DD/YYYY format."
 end
