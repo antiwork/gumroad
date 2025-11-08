@@ -159,7 +159,7 @@ namespace :admin do
   # Compliance
   resources :guids, only: [:show]
   scope module: "compliance" do
-    resources :cards, only: [:index] do
+    resources :cards, only: [] do
       collection do
         post :refund
       end

@@ -10,7 +10,7 @@ class Admin::Search::PurchasesController < Admin::BaseController
     @purchases = AdminSearchService.new.search_purchases(
       query: params[:query]&.strip,
       product_title_query: params[:product_title_query]&.strip,
-      purchase_status: params[:purchase_status],
+      **params.permit(:transaction_date, :last_4, :card_type, :price, :expiry_date, :purchase_status).to_hash.symbolize_keys,
     )
 
     pagination, purchases = pagy_countless(
