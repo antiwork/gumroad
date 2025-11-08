@@ -5,6 +5,8 @@ require "shared_examples/admin_base_controller_concern"
 require "inertia_rails/rspec"
 
 describe Admin::Search::PurchasesController, type: :controller, inertia: true do
+  render_views
+
   it_behaves_like "inherits from Admin::BaseController"
 
   before do
@@ -106,7 +108,6 @@ describe Admin::Search::PurchasesController, type: :controller, inertia: true do
         it "filters by purchase status" do
           # Create another purchase with same email and same status to avoid redirect
           create(:purchase, purchase_state: "successful", email: email)
-
           expect(Admin::Search::PurchasesService).to receive(:new).with(query: email, product_title_query: nil, purchase_status:).and_call_original
 
           get :index, params: { query: email, purchase_status: purchase_status }

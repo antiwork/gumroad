@@ -72,13 +72,10 @@ describe Admin::Search::PurchasesService do
       end
 
       context "when transaction_date value is not a date" do
-        it "returns empty relation and has validation errors" do
+        it "raises ArgumentError with appropriate message" do
           service = Admin::Search::PurchasesService.new(transaction_date: "2021-01", card_type: "other")
-          result = service.perform
 
-          expect(result).to eq(Purchase.none)
-          expect(result).to be_empty
-          expect(service.errors[:transaction_date]).to include("transaction_date must use YYYY-MM-DD format.")
+          expect { service.perform }.to raise_error(ArgumentError, "transaction_date must use YYYY-MM-DD format.")
         end
       end
 
