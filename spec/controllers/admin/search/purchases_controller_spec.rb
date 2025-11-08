@@ -38,6 +38,18 @@ describe Admin::Search::PurchasesController, type: :controller, inertia: true do
       expect(response.parsed_body["pagination"]).to be_present
     end
 
+    context "when transaction_date is invalid" do
+      let(:transaction_date) { "02/22" }
+
+      it "shows error flash message and no purchases" do
+        expect_any_instance_of(AdminSearchService).to_not receive(:search_purchases)
+        get :index, params: { transaction_date: "12/31" }
+
+        expect(flash[:alert]).to eq("Please enter the date using the MM/DD/YYYY format.")
+        expect(assigns(:purchases)).to eq([])
+      end
+    end
+
     it "redirects to the admin purchase page when one purchase is found" do
       purchase_by_email = create(:purchase, email:)
       purchase_by_ip = create(:purchase, ip_address: ip_v4)
