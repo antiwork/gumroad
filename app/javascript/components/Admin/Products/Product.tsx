@@ -25,7 +25,7 @@ export type ActiveIntegration = {
 
 export type ProductUser = {
   id: number;
-  name: string;
+  name: string | null;
   suspended: boolean;
   flagged_for_tos_violation: boolean;
 };
@@ -37,7 +37,7 @@ export type Product = {
   price_cents: number;
   currency_code: string;
   unique_permalink: string;
-  preview_url: string;
+  preview_url: string | null;
   cover_placeholder_url: string;
   price_formatted: string;
   created_at: string;
@@ -52,7 +52,7 @@ export type Product = {
   admins_can_unmark_as_staff_picked: boolean;
   is_tiered_membership: boolean;
   updated_at: string;
-  deleted_at: string;
+  deleted_at: string | null;
 };
 
 type AdminUsersProductsProductProps = {

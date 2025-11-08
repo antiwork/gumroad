@@ -29,19 +29,17 @@ http_interactions:
       Connection:
       - keep-alive
       Date:
-      - Thu, 11 Jul 2024 14:58:04 GMT
+      - Sat, 01 Nov 2025 15:33:18 GMT
       Access-Control-Expose-Headers:
       - Server-Timing
       Cache-Control:
       - max-age=0, no-cache, no-store, must-revalidate
       Paypal-Debug-Id:
-      - 5c094ffc127ac
+      - e7d61895bcaed
       Pragma:
       - no-cache
       Server-Timing:
-      - traceparent;desc="00-00000000000000000005c094ffc127ac-227e97080996a1ac-01"
-      Traceparent:
-      - 00-00000000000000000005c094ffc127ac-ee13bc040de0cb6c-01
+      - traceparent;desc="00-0000000000000000000e7d61895bcaed-30de3fbe7cb37c09-01"
       Vary:
       - Accept-Encoding
       X-Paypal-Token-Service:
@@ -65,8 +63,8 @@ http_interactions:
         https://uri.paypal.com/services/partners/merchant-accounts/readwrite https://uri.paypal.com/services/identity/grantdelegation
         https://uri.paypal.com/services/customer/onboarding/account https://uri.paypal.com/payments/payouts
         https://uri.paypal.com/services/customer/onboarding/sessions https://api.paypal.com/v1/vault/credit-card/.*
-        https://uri.paypal.com/services/subscriptions","access_token":"A21AAKyCPb8kO6395LKMNyLstOGuwojFVfFCzoJWB5UklZX1C49OE5PUxYEY3Fd7sC5qEYfW7VNVd9Z34MzNtD-cdVJhGeEGA","token_type":"Bearer","app_id":"APP-80W284485P519543T","expires_in":31197,"nonce":"2024-07-11T14:38:01ZCv5wJ91JmNzdwF3IIB6atv8WiicFhXEvF7bSn4Hqp9k"}'
-  recorded_at: Thu, 11 Jul 2024 14:58:04 GMT
+        https://uri.paypal.com/services/subscriptions","access_token":"A21AAKhOhlen-7Om_jW_YyeGRyridhpjDghUVAq-Znpi-RvFQIVY_c0_WofnaBUGQR9rxgCLfWKgwk4pdWry18EX_bQxAztDw","token_type":"Bearer","app_id":"APP-80W284485P519543T","expires_in":32400,"nonce":"2025-11-01T15:33:18ZCmVGtOoYruyIKMk4A4j2LRHapX5tzBk7GdZg5qviQAo"}'
+  recorded_at: Sat, 01 Nov 2025 15:33:18 GMT
 - request:
     method: get
     uri: https://api.sandbox.paypal.com/v1/customer/partners/<PAYPAL_PARTNER_MERCHANT_ID>/merchant-integrations/B66YJBBNCRW6L
@@ -77,7 +75,7 @@ http_interactions:
       Content-Type:
       - application/json
       Authorization:
-      - Bearer A21AAKyCPb8kO6395LKMNyLstOGuwojFVfFCzoJWB5UklZX1C49OE5PUxYEY3Fd7sC5qEYfW7VNVd9Z34MzNtD-cdVJhGeEGA
+      - Bearer A21AAKhOhlen-7Om_jW_YyeGRyridhpjDghUVAq-Znpi-RvFQIVY_c0_WofnaBUGQR9rxgCLfWKgwk4pdWry18EX_bQxAztDw
       Accept-Encoding:
       - gzip;q=1.0,deflate;q=0.6,identity;q=0.3
       Accept:
@@ -92,11 +90,11 @@ http_interactions:
       Content-Type:
       - application/json
       Content-Length:
-      - '1676'
+      - '99'
       Connection:
       - keep-alive
       Date:
-      - Thu, 11 Jul 2024 14:58:05 GMT
+      - Sat, 01 Nov 2025 15:33:20 GMT
       Access-Control-Expose-Headers:
       - Server-Timing
       Application-Id:
@@ -104,13 +102,11 @@ http_interactions:
       Cache-Control:
       - max-age=0, no-cache, no-store, must-revalidate
       Caller-Acct-Num:
-      - <PAYPAL_PARTNER_MERCHANT_ID>
+      - HU29XVVCZXNFN
       Paypal-Debug-Id:
-      - 72fb713f08759
+      - 77331acd53163
       Server-Timing:
-      - traceparent;desc="00-000000000000000000072fb713f08759-a9c020046a8ee60a-01"
-      Traceparent:
-      - 00-000000000000000000072fb713f08759-eb270eed4cb7d54d-01
+      - traceparent;desc="00-000000000000000000077331acd53163-153066c251213560-01"
       Vary:
       - Accept-Encoding
       Http-X-Pp-Az-Locator:
@@ -121,5 +117,5 @@ http_interactions:
       encoding: UTF-8
       string: '{"merchant_id":"B66YJBBNCRW6L","tracking_id":"1592901550","products":[{"name":"MOBILE_PAYMENT_ACCEPTANCE","status":"ACTIVE"},{"name":"PPCP_CUSTOM","vetting_status":"SUBSCRIBED","capabilities":["CARD_PROCESSING_VIRTUAL_TERMINAL","COMMERCIAL_ENTITY","DEBIT_CARD_SWITCH","FRAUD_TOOL_ACCESS","AMEX_OPTBLUE","CUSTOM_CARD_PROCESSING"]},{"name":"PPCP_STANDARD","vetting_status":"SUBSCRIBED","capabilities":["SPEND_FROM_BALANCE"]}],"capabilities":[{"name":"FRAUD_TOOL_ACCESS","status":"ACTIVE"},{"name":"CARD_PROCESSING_VIRTUAL_TERMINAL","status":"ACTIVE"},{"name":"COMMERCIAL_ENTITY","status":"ACTIVE"},{"name":"DEBIT_CARD_SWITCH","status":"ACTIVE"},{"name":"CUSTOM_CARD_PROCESSING","status":"ACTIVE"},{"name":"AMEX_OPTBLUE","status":"ACTIVE"},{"name":"SPEND_FROM_BALANCE","status":"ACTIVE"}],"payments_receivable":true,"legal_name":"John
         Doe''s Test Store","primary_email":"sb-byx2u2205460@business.example.com","primary_email_confirmed":true,"oauth_integrations":[{"integration_type":"OAUTH_THIRD_PARTY","integration_method":"PAYPAL","oauth_third_party":[{"partner_client_id":"<PAYPAL_PARTNER_CLIENT_ID>","merchant_client_id":"AaqC6zBkZjZFpVepKOa8jeJzpnsJw5aF61sa5r-6-WDYhP7hI2_z8tvoJ3i007IaGcJJxx03dPHKpAlO","scopes":["https://uri.paypal.com/services/payments/delay-funds-disbursement","https://uri.paypal.com/services/payments/realtimepayment","https://uri.paypal.com/services/payments/partnerfee","https://uri.paypal.com/services/payments/refund","https://uri.paypal.com/services/customer/merchant-integrations/read","https://uri.paypal.com/services/payments/payment/authcapture"]}]}],"primary_currency":"USD","country":"US"}'
-  recorded_at: Thu, 11 Jul 2024 14:58:06 GMT
+  recorded_at: Sat, 01 Nov 2025 15:33:20 GMT
 recorded_with: VCR 6.2.0
