@@ -1,4 +1,3 @@
-import cx from "classnames";
 import throttle from "lodash/throttle";
 import * as React from "react";
 import { cast } from "ts-safe-cast";
@@ -202,8 +201,8 @@ export const FileRow = ({
   const isEmbeddedVideo = isEmbed && !!streamUrl;
 
   return (
-    <div
-      className={cx({ embed: isEmbed }, className)}
+    <Row
+      className={classNames({ embed: isEmbed }, className)}
       role={isTreeItem || shouldShowSubtitlesForFile(file) ? "treeitem" : undefined}
       aria-expanded={shouldShowSubtitlesForFile(file) ? isExpanded : undefined}
     >
@@ -217,7 +216,7 @@ export const FileRow = ({
           autoPlay={initialCollapsed}
         />
       ) : null}
-      <div className="content" onClick={() => setIsExpanded(!isExpanded)}>
+      <RowContent onClick={() => setIsExpanded(!isExpanded)}>
         {isEmbeddedVideo && file.thumbnail_url && isCollapsed ? (
           <div className="thumbnail">
             <img src={file.thumbnail_url} />
@@ -248,9 +247,9 @@ export const FileRow = ({
             </>
           }
         />
-      </div>
+      </RowContent>
 
-      <div className="actions">
+      <RowActions>
         {file.latest_media_location && file.content_length ? (
           <div>
             <ProgressPie progress={file.latest_media_location.location / file.content_length} />
@@ -333,7 +332,7 @@ export const FileRow = ({
             ) : null}
           </>
         ) : null}
-      </div>
+      </RowActions>
 
       {FileUtils.isAudioExtension(file.extension) && isShowingAudioDrawer ? (
         <div className="drawer">
@@ -358,15 +357,15 @@ export const FileRow = ({
       ) : null}
 
       {shouldShowSubtitlesForFile(file) ? (
-        <div role="group">
+        <div role="group" className="grid basis-full gap-4">
           {file.subtitle_files?.map((subtitleFile) => (
             <SubtitleRow key={subtitleFile.url} subtitleFile={subtitleFile} />
           ))}
         </div>
       ) : null}
 
-      {file.description?.trim() ? <p style={{ whiteSpace: "pre-wrap" }}>{file.description}</p> : null}
-    </div>
+      {file.description?.trim() ? <p className="whitespace-pre-wrap">{file.description}</p> : null}
+    </Row>
   );
 };
 
@@ -462,7 +461,7 @@ const MobileAppAudioFileRow = ({ file }: { file: FileItem }) => {
           contentLength={file.duration || 0}
         >
           <button
-            className={cx("content", { "text-muted": isProcessing })}
+            className={classNames("content", { "text-muted": isProcessing })}
             style={{
               gridColumn: "3 span",
               userSelect: "none",
@@ -493,7 +492,7 @@ const MobileAppAudioFileRow = ({ file }: { file: FileItem }) => {
         </TrackClick>
       </WithTooltip>
       <div
-        className={cx("actions", { "text-muted": isProcessing })}
+        className={classNames("actions", { "text-muted": isProcessing })}
         style={{ gridColumn: "4", gap: "var(--spacer-4)", flexWrap: "nowrap" }}
       >
         {file.download_url ? (
@@ -734,7 +733,7 @@ const SendToKindleContainer = ({
   return (
     <div>
       <div className="input-with-button">
-        <fieldset className={cx({ danger: hasError })}>
+        <fieldset className={classNames({ danger: hasError })}>
           <input
             type="text"
             value={emailEntry}
@@ -771,7 +770,6 @@ const SubtitleRow = ({ subtitleFile }: { subtitleFile: SubtitleFile }) => (
         details={subtitleFile.file_size ? <li>{FileUtils.getFullFileSizeString(subtitleFile.file_size)}</li> : null}
       />
     </RowContent>
-
     <RowActions>
       <NavigationButton href={subtitleFile.download_url}>Download</NavigationButton>
     </RowActions>

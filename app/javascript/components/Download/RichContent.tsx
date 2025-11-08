@@ -174,7 +174,12 @@ const FileEmbedNodeView = ({ node, getPos, editor }: NodeViewProps) => {
   const { hasStreamable } = useFilesInGroup(groupNode?.node);
   const isConnectedRow = !!groupNode && !hasStreamable;
   const isLastInGroup = node === groupNode?.node.content.lastChild;
-  const fileRow = file ? (
+
+  if (!file) {
+    return null;
+  }
+
+  const fileRow = (
     <FileRow
       file={file}
       playingAudioForId={playingAudioForId}
@@ -184,18 +189,19 @@ const FileEmbedNodeView = ({ node, getPos, editor }: NodeViewProps) => {
       collapsed={!!node.attrs.collapsed}
       className={isConnectedRow ? connectedFileRowClassName(isLastInGroup) : undefined}
     />
-  ) : null;
-  return file ? (
+  );
+
+  return (
     <NodeViewWrapper>
       {shouldShowSubtitlesForFile(file) ? (
-        <div role="tree" style={{ border: 0 }}>
+        <Rows role="tree" className="border-0">
           {fileRow}
-        </div>
+        </Rows>
       ) : (
         fileRow
       )}
     </NodeViewWrapper>
-  ) : null;
+  );
 };
 
 const FileEmbed = TiptapNode.create({
