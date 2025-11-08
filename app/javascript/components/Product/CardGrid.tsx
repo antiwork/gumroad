@@ -318,7 +318,7 @@ export const CardGrid = ({
                   <label htmlFor={minPriceUid}>Minimum price</label>
                 </legend>
                 <div className="input">
-                  <Pill>{currencySymbol}</Pill>
+                  <Pill className="shrink-0 -ml-2">{currencySymbol}</Pill>
                   <NumberInput
                     onChange={(value) => {
                       setEnteredMinPrice(value);
@@ -335,7 +335,7 @@ export const CardGrid = ({
                   <label htmlFor={maxPriceUid}>Maximum price</label>
                 </legend>
                 <div className="input">
-                  <Pill>{currencySymbol}</Pill>
+                  <Pill className="shrink-0 -ml-2">{currencySymbol}</Pill>
                   <NumberInput
                     onChange={(value) => {
                       setEnteredMaxPrice(value);

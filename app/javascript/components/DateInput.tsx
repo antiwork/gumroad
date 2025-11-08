@@ -53,7 +53,7 @@ export const DateInput = ({
   return withTime && seller ? (
     <div className="input">
       {input}
-      <Pill>{formatInTimeZone(value ?? new Date(), seller.timeZone.name, "z")}</Pill>
+      <Pill className="shrink-0 -mr-2">{formatInTimeZone(value ?? new Date(), seller.timeZone.name, "z")}</Pill>
     </div>
   ) : (
     <div className="input">{input}</div>

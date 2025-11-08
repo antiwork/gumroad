@@ -361,23 +361,26 @@ const NewProductPage = ({
                 </legend>
 
                 <div className="input">
-                  <Pill as="label" select>
-                    <span>{selectedCurrency.longSymbol}</span>
-                    <TypeSafeOptionSelect
-                      onChange={(newCurrencyCode) => {
-                        setCurrencyCode(newCurrencyCode);
-                      }}
-                      value={currencyCode}
-                      aria-label="Currency"
-                      options={currencyCodeList.map((code) => {
-                        const { displayFormat } = findCurrencyByCode(code);
-                        return {
-                          id: code,
-                          label: displayFormat,
-                        };
-                      })}
-                      className="absolute top-0 left-0 h-full w-full opacity-0 cursor-pointer text-foreground bg-background"
-                    />
+                  <Pill asChild kind="selectable" className="shrink-0 -ml-2 ">
+                    <label>
+                      <span>{selectedCurrency.longSymbol}</span>
+                      <TypeSafeOptionSelect
+                        onChange={(newCurrencyCode) => {
+                          setCurrencyCode(newCurrencyCode);
+                        }}
+                        value={currencyCode}
+                        aria-label="Currency"
+                        options={currencyCodeList.map((code) => {
+                          const { displayFormat } = findCurrencyByCode(code);
+                          return {
+                            id: code,
+                            label: displayFormat,
+                          };
+                        })}
+                        className="absolute top-0 left-0 h-full w-full opacity-0 cursor-pointer text-foreground bg-background"
+                      />
+                      <Icon name="outline-cheveron-down" className="ml-2 float-right pointer-events-none" />
+                    </label>
                   </Pill>
 
                   <input
@@ -400,20 +403,23 @@ const NewProductPage = ({
                   />
 
                   {isRecurringBilling ? (
-                    <Pill select>
-                      <span>{recurrenceLabels[subscriptionDuration || defaultRecurrence]}</span>
-                      <TypeSafeOptionSelect
-                        onChange={(newSubscriptionDuration) => {
-                          setSubscriptionDuration(newSubscriptionDuration);
-                        }}
-                        value={subscriptionDuration || defaultRecurrence}
-                        aria-label="Default subscription duration"
-                        options={recurrenceIds.map((recurrence) => ({
-                          id: recurrence,
-                          label: recurrenceLabels[recurrence],
-                        }))}
-                        className="absolute top-0 left-0 h-full w-full opacity-0 cursor-pointer text-foreground bg-background"
-                      />
+                    <Pill asChild kind= "selectable" className="shrink-0 -mr-2">
+                      <label>
+                        <span>{recurrenceLabels[subscriptionDuration || defaultRecurrence]}</span>
+                        <TypeSafeOptionSelect
+                          onChange={(newSubscriptionDuration) => {
+                            setSubscriptionDuration(newSubscriptionDuration);
+                          }}
+                          value={subscriptionDuration || defaultRecurrence}
+                          aria-label="Default subscription duration"
+                          options={recurrenceIds.map((recurrence) => ({
+                            id: recurrence,
+                            label: recurrenceLabels[recurrence],
+                          }))}
+                          className="absolute top-0 left-0 h-full w-full opacity-0 cursor-pointer text-foreground bg-background"
+                        />
+                        <Icon name="outline-cheveron-down" className="ml-2 float-right pointer-events-none" />
+                      </label>
                     </Pill>
                   ) : null}
                 </div>

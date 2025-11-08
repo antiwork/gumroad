@@ -881,7 +881,7 @@ const Form = ({ title, headerLabel, submitLabel }: FormProps) => {
                             disabled={navigation.state === "submitting" || !affiliateState.apply_to_all_products}
                             {...inputProps}
                           />
-                          <Pill>%</Pill>
+                          <Pill className="shrink-0 -mr-2">%</Pill>
                         </div>
                       )}
                     </NumberInput>

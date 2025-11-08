@@ -248,7 +248,7 @@ export const ProductRow = ({ product, disabled, onChange }: ProductRowProps) => 
                   disabled={disabled || !product.enabled}
                   {...inputProps}
                 />
-                <Pill>%</Pill>
+                <Pill className="shrink-0 -mr-2">%</Pill>
               </div>
             )}
           </NumberInput>

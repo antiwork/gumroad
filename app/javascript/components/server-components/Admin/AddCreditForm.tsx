@@ -18,7 +18,11 @@ export const AdminAddCreditForm = ({ user_id }: { user_id: number }) => (
       <fieldset>
         <div className="input-with-button">
           <div className="input">
-            <Pill as="span">$</Pill>
+            <Pill asChild className="shrink-0 -ml-2">
+              <span>
+                $
+              </span>
+            </Pill>
             <input type="text" name="credit[credit_amount]" placeholder="10.25" inputMode="decimal" required />
           </div>
           <button type="submit" className="button" disabled={isLoading}>

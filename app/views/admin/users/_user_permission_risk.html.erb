@@ -13,9 +13,8 @@
   </div>
   <div>
     <%= with_tooltip(tip: "Risk State", position: "left") do %>
-      <div class="inline-block align-middle px-3 py-2 bg-background text-foreground border border-border rounded-[10rem] truncate pill-component rounded p-1 text-sm <%= user.compliant? ? "success" : "warning" %>"><%= user.user_risk_state.humanize %></div>
-      <%# TODO: When migrating to React/Inertia, use the Pill component instead of these Tailwind classes example:<Pill size="small"> %>
-      <% end %>
+      <%= react_component "Pill", props: {size: "small",color: user.compliant? ? "success" : "warning", children: user.user_risk_state.humanize}, prerender: true %>
+    <% end %>
   </div>
 </div>
 

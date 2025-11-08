@@ -539,7 +539,7 @@ const WorkflowForm = () => {
                 >
                   {(inputProps) => (
                     <div className={cx("input", { disabled: wasPublishedPreviously })}>
-                      <Pill>{context.currency_symbol}</Pill>
+                      <Pill className="shrink-0 -ml-2">{context.currency_symbol}</Pill>
                       <input
                         id="paid_more_than"
                         type="text"
@@ -563,7 +563,7 @@ const WorkflowForm = () => {
                 >
                   {(inputProps) => (
                     <div className={cx("input", { disabled: wasPublishedPreviously })}>
-                      <Pill>{context.currency_symbol}</Pill>
+                      <Pill className="shrink-0 -ml-2">{context.currency_symbol}</Pill>
                       <input
                         id="paid_less_than"
                         type="text"

@@ -17,8 +17,7 @@
     <div class="byline">
       <img class="user-avatar" src="<%= @seller_presenter[:avatar_url] %>" alt="<%= @seller_presenter[:name] %>">
       <span><%= @seller_presenter[:name] %></span>
-      <span class="inline-block align-middle px-3 py-2 bg-background text-foreground border border-border rounded-[10rem] truncate pill-component rounded p-1 text-sm">Creator</span>
-      <%# TODO: When migrating to React/Inertia, use the Pill component instead of these Tailwind classes example: <Pill as="span" size="small"> %>
+      <span class="pill small">Creator</span>
     </div>
   </div>
 </div>

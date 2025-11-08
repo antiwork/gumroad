@@ -39,10 +39,13 @@
   --color-active-bg: rgb(var(--color) / var(--gray-1));
   --color-muted: rgb(var(--color) / var(--gray-3));
   --color-success: rgb(var(--success));
+  --color-success-foreground: rgb(var(--contrast-success));
   --color-danger: rgb(var(--danger));
+  --color-danger-foreground: rgb(var(--contrast-danger));
   --color-primary: rgb(var(--primary));
   --color-primary-foreground: rgb(var(--contrast-primary));
   --color-warning: rgb(var(--warning));
+  --color-warning-foreground: rgb(var(--contrast-warning));
 
   --shadow: 0.25rem 0.25rem 0 currentColor;
   --shadow-lg: 0.5rem 0.5rem 0 currentColor;
@@ -51,8 +54,6 @@
   --grid-cols-sidebar: 1fr 3fr;
 
   --loading-spinner: url("~images/loading-rainbow.svg");
-  --icon-cheveron-down: url("~images/icons/outline-cheveron-down.svg");
-  --icon-x: url("~images/icons/x.svg");
   --animate-fade-in-down-out-up: fade-in-down-out-up 5s both;
 
   @keyframes fade-in-down-out-up {
@@ -60,14 +61,17 @@
       transform: translateY(-100%);
       opacity: 0;
     }
+
     5% {
       transform: translateY(0);
       opacity: 1;
     }
+
     95% {
       transform: translateY(0);
       opacity: 1;
     }
+
     100% {
       transform: translateY(-100%);
       opacity: 0;
@@ -108,9 +112,11 @@
   0% {
     transform: translateX(0);
   }
+
   50% {
     transform: translateX(-50%);
   }
+
   100% {
     transform: translateX(0);
   }

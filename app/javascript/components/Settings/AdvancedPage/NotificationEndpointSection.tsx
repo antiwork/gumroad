@@ -67,7 +67,7 @@ const NotificationEndpointSection = ({
             onChange={(e) => setPingEndpoint(e.target.value)}
           />
           <WithTooltip tip={isSendingPing ? null : "Send your most recent sale's JSON, with 'test' set to 'true'"}>
-            <Button className="inline-block align-middle !px-3 !py-2 bg-background text-foreground border border-border !rounded-[10rem] truncate pill-component" onClick={sendTestPing} disabled={isSendingPing}>
+            <Button className="inline-block align-middle !px-3 !py-2 bg-background text-foreground border border-border !rounded-[10rem] truncate" onClick={sendTestPing} disabled={isSendingPing}>
               {isSendingPing ? "Sending test ping..." : "Send test ping to URL"}
             </Button>
           </WithTooltip>

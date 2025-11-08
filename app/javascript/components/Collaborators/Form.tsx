@@ -285,7 +285,7 @@ const CollaboratorForm = () => {
                               aria-label="Percentage"
                               {...inputProps}
                             />
-                            <Pill>%</Pill>
+                            <Pill className="shrink-0 -mr-2">%</Pill>
                           </div>
                         )}
                       </NumberInput>
@@ -350,7 +350,7 @@ const CollaboratorForm = () => {
                                   aria-label="Percentage"
                                   {...inputProps}
                                 />
-                                <Pill>%</Pill>
+                                <Pill className="shrink-0 -mr-2">%</Pill>
                               </div>
                             )}
                           </NumberInput>

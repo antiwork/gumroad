@@ -37,6 +37,7 @@ import { computeTip, computeTipForPrice, getTotalPrice, isProcessing, useState }
 
 import placeholder from "$assets/images/placeholders/checkout.png";
 import { Pill } from "$app/components/ui/Pill";
+import { Icon } from "$app/components/Icons";
 
 function formatPrice(price: number) {
   return formatUSDCentsWithExpandedCurrencySymbol(Math.floor(price));
@@ -271,13 +272,11 @@ export const Checkout = ({
                             tip="This discount is applied based on the cost of living in your country."
                             position="top"
                           >
-                            <Pill as="button"
-                              size="small"
-                              kind="dismissable"
-                              onClick={() => updateCart({ rejectPppDiscount: true })}
-                              aria-label="Purchasing power parity discount"
-                            >
-                              Purchasing power parity discount
+                            <Pill asChild size="small" kind="dismissable">
+                              <button onClick={() => updateCart({ rejectPppDiscount: true })} aria-label="Purchasing power parity discount">
+                                Purchasing power parity discount
+                                <Icon name="x" className="ml-2 float-right pointer-events-none" />
+                              </button>
                             </Pill>
                           </WithTooltip>
                         ) : null}
@@ -291,6 +290,7 @@ export const Checkout = ({
                             aria-label="Discount code"
                           >
                             {code.code}
+                            <Icon name="x" className="ml-2 float-right pointer-events-none" />
                           </Pill>
                         ))}
                       </h4>

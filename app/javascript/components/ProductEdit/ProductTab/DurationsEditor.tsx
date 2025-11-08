@@ -160,7 +160,7 @@ const DurationEditor = ({
               >
                 {(props) => <input id={`${uid}-duration`} {...props} />}
               </NumberInput>
-              <Pill>minutes</Pill>
+              <Pill className="shrink-0 -mr-2">minutes</Pill>
             </div>
           </fieldset>
           <fieldset>

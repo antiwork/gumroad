@@ -299,7 +299,7 @@ export const UtmLinkForm = () => {
             </legend>
             <div style={{ display: "grid", gridTemplateColumns: "1fr auto", gap: "var(--spacer-2)" }}>
               <div className={cx("input", { disabled: isEditing })}>
-                <Pill>{shortUrlPrefix}</Pill>
+                <Pill className="shrink-0 -ml-2">{shortUrlPrefix}</Pill>
                 <input
                   type="text"
                   id={`${uid}-link-text`}

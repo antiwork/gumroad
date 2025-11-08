@@ -58,7 +58,13 @@ export const Review = ({
           aria-label={`${review.rating} ${review.rating === 1 ? "star" : "stars"}`}
         >
           <RatingStars rating={review.rating} />
-          {review.is_new ? <Pill as="span" size="small" color="primary">New</Pill> : null}
+          {review.is_new ?
+          <Pill asChild size="small" color="primary">
+            <span>
+              New
+            </span>
+          </Pill>
+           : null}
         </span>
         {review.message ? <p className="m-0">{review.message}</p> : null}
         {review.video ? <ReviewVideoPlayer videoId={review.video.id} thumbnail={review.video.thumbnail_url} /> : null}
@@ -71,7 +77,11 @@ export const Review = ({
           <p className="m-0">{review.response.message}</p>
           <section className="flex flex-wrap items-center gap-1">
             {seller ? <ReviewUserAttribution avatarUrl={seller.avatar_url} name={seller.name} /> : null}
-            <Pill as="span" size="small">Creator</Pill>
+            <Pill asChild size="small">
+              <span>
+                Creator
+              </span>
+            </Pill>
           </section>
         </section>
       ) : null}
