@@ -31,7 +31,7 @@ export const AdminManualPayoutForm = ({
   <Form
     url={Routes.admin_pay_user_path(user_id)}
     method="POST"
-    confirmMessage={ask_confirmation ? "DON'T USE UNLESS to transfer the balance to Stripe Connect account" : false}
+    confirmMessage={ask_confirmation ? "DON'T USE UNLESS to transfer the balance to Stripe Connect account" : undefined}
     onSuccess={() => showAlert("Successfully issued payout.", "success")}
   >
     {(isLoading) => (
