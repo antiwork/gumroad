@@ -30,8 +30,8 @@ describe Admin::Compliance::CardsController, type: :controller, inertia: true do
                               stripe_fingerprint: "test_fingerprint_visa")
     end
 
-    context "with HTML format" do
-      it "passes purchases in Inertia props" do
+    context "with Inertia" do
+      it "passes purchases in props" do
         get :index, params: { card_type:, transaction_date: }
 
         expect(response).to be_successful
@@ -52,28 +52,33 @@ describe Admin::Compliance::CardsController, type: :controller, inertia: true do
         end
       end
 
-      it "when there is no results passes empty arrays in Inertia props" do
-        get :index, params: { card_type: }
+      context "when there is no results" do
+        it "passes empty arrays in props" do
+          get :index, params: { card_type: }
 
-        assert_response :success
-        expect(inertia.props[:purchases]).to eq([])
-        expect(inertia.props[:pagination]).to be_present
+          assert_response :success
+          expect(inertia.props[:purchases]).to eq([])
+          expect(inertia.props[:pagination]).to be_present
+        end
       end
 
-      it "when a single purchase is found redirects to the admin purchase page" do
-        get :index, params: { card_type: "visa" }
+      context "when a single purchase is found" do
+        it "redirects to the admin purchase page" do
+          get :index, params: { card_type: "visa" }
 
-        expect(response).to redirect_to admin_purchase_path(@purchase_visa)
+          expect(response).to redirect_to admin_purchase_path(@purchase_visa)
+        end
       end
 
-      it "when a multiple purchases are found, passes purchases in Inertia props" do
-        purchase_2 = create(:purchase, card_type: "visa", stripe_fingerprint: "test_fingerprint")
+      context "when a multiple purchases are found" do
+        it "passes purchases in props" do
+          purchase_2 = create(:purchase, card_type: "visa", stripe_fingerprint: "test_fingerprint")
+          get :index, params: { card_type: "visa" }
 
-        get :index, params: { card_type: "visa" }
-
-        assert_response :success
-        expect(inertia.props[:purchases]).to contain_exactly(hash_including(id: @purchase_visa.id), hash_including(id: purchase_2.id))
-        expect(inertia.props[:pagination]).to be_present
+          expect(response).to be_successful
+          expect(inertia.props[:purchases]).to contain_exactly(hash_including(id: @purchase_visa.id), hash_including(id: purchase_2.id))
+          expect(inertia.props[:pagination]).to be_present
+        end
       end
 
       context "with pagination" do

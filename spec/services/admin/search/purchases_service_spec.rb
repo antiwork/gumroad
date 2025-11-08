@@ -5,9 +5,9 @@ require "spec_helper"
 describe Admin::Search::PurchasesService do
   describe "#perform" do
     it "returns no Purchases if query is invalid" do
-      purchase = Admin::Search::PurchasesService.new(query: "invalidquery").perform
+      purchases = Admin::Search::PurchasesService.new(query: "invalidquery").perform
 
-      expect(purchase.size).to eq(0)
+      expect(purchases.size).to eq(0)
     end
 
     it "returns purchases matching email, directly and through gifts" do
@@ -119,6 +119,7 @@ describe Admin::Search::PurchasesService do
       it "returns purchases matching ip_address" do
         purchase_from_ip_v4 = create(:purchase, ip_address: ip_v4)
         purchase_from_ip_v6 = create(:purchase, ip_address: ip_v6)
+
         purchases = Admin::Search::PurchasesService.new(query: ip_v4).perform
         expect(purchases).to contain_exactly(purchase_from_ip_v4)
 
