@@ -78,6 +78,8 @@ class Admin::UserPresenter::Card
       user.admin_manageable_user_memberships.map do |membership|
         {
           id: membership.id,
+          role: membership.role,
+          last_accessed_at: membership.last_accessed_at,
           created_at: membership.created_at,
           updated_at: membership.updated_at,
           seller: {

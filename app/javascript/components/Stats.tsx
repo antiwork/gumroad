@@ -1,21 +1,38 @@
-import cx from "classnames";
+import { cva } from "class-variance-authority";
 import * as React from "react";
 
 import { assertDefined } from "$app/utils/assert";
+import { classNames } from "$app/utils/classNames";
 
 import { Icon } from "$app/components/Icons";
 import { WithTooltip } from "$app/components/WithTooltip";
+
+const statsVariants = cva(
+  "text-4xl leading-tight p-8 border border-border rounded grid content-between gap-2 bg-background",
+  {
+    variants: {
+      variant: {
+        success: "text-green",
+        danger: "text-red",
+        warning: "text-orange",
+        info: "text-purple",
+      },
+    },
+  },
+);
 
 export const Stats = ({
   title,
   description,
   value,
+  variant,
   className,
 }: {
   title: React.ReactNode;
   description?: string;
   value?: string;
   className?: string;
+  variant?: "success" | "danger" | "warning" | "info";
 }) => {
   const [adjustedFontSize, setAdjustedFontSize] = React.useState<number | null>(null);
   const containerRef = React.useRef<HTMLDivElement | null>(null);
@@ -42,8 +59,8 @@ export const Stats = ({
   }, [value]);
 
   return (
-    <section className={cx("stats", className)}>
-      <h2>
+    <section className={classNames(statsVariants({ variant }), className)}>
+      <h2 className="flex gap-2 text-base">
         {title}
         {description ? (
           <WithTooltip tip={description} position="top">
@@ -51,7 +68,7 @@ export const Stats = ({
           </WithTooltip>
         ) : null}
       </h2>
-      <div ref={containerRef} className="overflow-hidden" style={{ overflowWrap: "initial" }}>
+      <div ref={containerRef} className="overflow-hidden break-words">
         <span style={adjustedFontSize ? { fontSize: adjustedFontSize } : undefined}>{value ?? "-"}</span>
       </div>
     </section>

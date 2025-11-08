@@ -5,8 +5,6 @@ require "shared_examples/admin_base_controller_concern"
 require "inertia_rails/rspec"
 
 describe Admin::Compliance::CardsController, type: :controller, inertia: true do
-  # render_views
-
   it_behaves_like "inherits from Admin::BaseController"
 
   before do

@@ -59,11 +59,10 @@ const urlsMigratedtoInertia = [
   Routes.admin_refund_queue_url(),
   Routes.admin_action_call_dashboard_url(),
   Routes.admin_search_users_url(),
-  Routes.admin_search_purchases_url(),
-  // Routes.admin_search_purchases_url(),
+  Routes.admin_search_purchases_url(), // Routes.admin_search_purchases_url(),
   /\/admin\/guids\/\w+/u, // Routes.admin_guid_url
-  Routes.admin_cards_url(),
-  // Routes.admin_user_url(),
+  Routes.admin_cards_url(), // Routes.admin_compliance_cards_url(),
+  /\/admin\/users\/\w+/u, // Routes.admin_user_url
   /\/admin\/products\/\w+/u, // Routes.admin_product_url
   /\/admin\/users\/\w+\/products/u, // Routes.admin_user_products_url
   /\/admin\/payouts\/\w+/u, // Routes.admin_payout_url

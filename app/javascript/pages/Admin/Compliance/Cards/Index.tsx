@@ -3,13 +3,13 @@ import React from "react";
 
 import EmptyState from "$app/components/Admin/EmptyState";
 import PaginatedLoader, { Pagination } from "$app/components/Admin/PaginatedLoader";
-import { AdminPurchase, type Purchase } from "$app/components/Admin/Purchase";
+import AdminPurchase, { type Purchase } from "$app/components/Admin/Purchases";
 
 const AdminComplianceCardsIndex = () => {
   const { purchases, pagination } = usePage<{ purchases: Purchase[]; pagination: Pagination }>().props;
 
   return (
-    <div className="paragraphs">
+    <div className="flex flex-col gap-4">
       {purchases.map((purchase) => (
         <AdminPurchase key={purchase.id} purchase={purchase} />
       ))}
