@@ -85,9 +85,12 @@ class Admin::PurchasePresenter
                        subscription: purchase.subscription ? {
                          id: purchase.subscription.id,
                          external_id: purchase.subscription.external_id,
-                         cancelled_at: purchase.subscription.cancelled_at,
-                         cancelled_by_buyer: purchase.subscription.cancelled_by_buyer,
+                         cancelled: purchase.subscription.cancelled_at ? {
+                           at: purchase.subscription.cancelled_at,
+                           by_buyer: purchase.subscription.cancelled_by_buyer
+                         } : nil,
                          ended_at: purchase.subscription.ended_at,
+                         failed_at: purchase.subscription.failed_at,
                        } : nil,
                        email_info: email_info_text,
                        is_bundle_purchase: purchase.is_bundle_purchase,

@@ -1,12 +1,18 @@
 import { usePage } from "@inertiajs/react";
 import React from "react";
+import { cast } from "ts-safe-cast";
 
 import EmptyState from "$app/components/Admin/EmptyState";
 import PaginatedLoader, { Pagination } from "$app/components/Admin/PaginatedLoader";
 import AdminPurchase, { type Purchase } from "$app/components/Admin/Purchases";
 
+type PageProps = {
+  purchases: Purchase[];
+  pagination: Pagination;
+};
+
 const AdminComplianceCardsIndex = () => {
-  const { purchases, pagination } = usePage<{ purchases: Purchase[]; pagination: Pagination }>().props;
+  const { purchases, pagination } = cast<PageProps>(usePage().props);
 
   return (
     <div className="flex flex-col gap-4">
