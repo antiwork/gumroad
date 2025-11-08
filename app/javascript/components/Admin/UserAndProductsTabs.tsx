@@ -12,11 +12,14 @@ type Props = {
 const AdminUserAndProductsTabs = ({ selectedTab, userId, isAffiliateUser = false }: Props) => (
   <Tabs variant="buttons">
     <Tab isSelected={selectedTab === "profile"} variant="buttons" asChild>
-      <Link href={isAffiliateUser ? Routes.admin_affiliate_path(userId) : Routes.admin_user_path(userId)}>Profile</Link>
+      <Link href={isAffiliateUser ? Routes.admin_affiliate_path(userId) : Routes.admin_user_path(userId)} prefetch>
+        Profile
+      </Link>
     </Tab>
     <Tab isSelected={selectedTab === "products"} variant="buttons" asChild>
       <Link
         href={isAffiliateUser ? Routes.admin_affiliate_products_path(userId) : Routes.admin_user_products_path(userId)}
+        prefetch
       >
         Products
       </Link>
