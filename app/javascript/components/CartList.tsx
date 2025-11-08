@@ -22,14 +22,27 @@ export const CartList = ({ children, className, ...props }: BaseProps) => (
   </div>
 );
 
-export const CartListItem = ({ className, children, extra, ...props }: BaseProps) => (
-  <div role="listitem" className={classNames("grid border-border not-first:border-t", className)} {...props}>
-    <section className="col-span-3 grid grid-cols-[3.625rem_1fr_auto] gap-x-4 rounded-sm p-4 not-first:rounded-none sm:grid-cols-[8.5rem_1fr_auto] sm:p-0 sm:pr-4">
-      {children}
-    </section>
-    {extra ? <section className="col-span-3 grid gap-4 border-border p-4 not-first:border-t">{extra}</section> : null}
-  </div>
-);
+export const CartListItem = ({
+  className,
+  children,
+  extra,
+  asChild = false,
+  ...props
+}: BaseProps & { asChild?: boolean }) => {
+  const Comp = asChild ? Slot : "div";
+  return (
+    <Comp role="listitem" className={classNames("grid border-border not-first:border-t", className)} {...props}>
+      <>
+        <section className="col-span-3 grid grid-cols-[3.625rem_1fr_auto] gap-x-4 rounded-sm p-4 not-first:rounded-none sm:grid-cols-[8.5rem_1fr_auto] sm:p-0 sm:pr-4">
+          {children}
+        </section>
+        {extra ? (
+          <section className="col-span-3 grid gap-4 border-border p-4 not-first:border-t">{extra}</section>
+        ) : null}
+      </>
+    </Comp>
+  );
+};
 
 export const CartItemMedia = ({ className, children }: BaseProps) => (
   <figure

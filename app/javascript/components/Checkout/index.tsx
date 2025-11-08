@@ -288,7 +288,7 @@ export const Checkout = ({
                           ))}
                         </>
                       }
-                      price={discount > 0 ? -discount : null}
+                      price={discount > 0 ? -discount : 0}
                       displayZeroPrice={visibleDiscounts.length > 0}
                     />
                   ) : null}
