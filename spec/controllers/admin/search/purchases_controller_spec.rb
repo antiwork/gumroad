@@ -25,13 +25,16 @@ describe Admin::Search::PurchasesController, type: :controller, inertia: true do
     end
 
     it "returns JSON response when requested" do
-      purchase_1, purchase_2, purchase_3 = create_list(:purchase, 3, email:)
+      purchase_1 = create(:purchase, email:, created_at: 3.seconds.ago)
+      purchase_2 = create(:purchase, email:, created_at: 2.seconds.ago)
+      purchase_3 = create(:purchase, email:, created_at: 1.second.ago)
+
       get :index, params: { query: email, per_page: 2 }, format: :json
 
       expect(response).to be_successful
       expect(response.content_type).to match(%r{application/json})
-      expect(response.parsed_body["purchases"]).to contain_exactly(hash_including("id" => purchase_1.id), hash_including("id" => purchase_2.id))
-      expect(response.parsed_body["purchases"]).not_to include(hash_including("id" => purchase_3.id))
+      expect(response.parsed_body["purchases"]).to contain_exactly(hash_including("id" => purchase_3.id), hash_including("id" => purchase_2.id))
+      expect(response.parsed_body["purchases"]).not_to include(hash_including("id" => purchase_1.id))
       expect(response.parsed_body["pagination"]).to be_present
     end
 
