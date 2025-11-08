@@ -8,13 +8,7 @@ module StripePaymentMethodHelper
 
   module ExtensionMethods
     def to_stripe_card_hash
-      expiry_month, expiry_year = CreditCardUtility.extract_month_and_year(self[:expiry_date]) if self[:expiry_date]
-      stripe_params = {}
-      stripe_params[:number] = self[:cc_number] if self[:cc_number]
-      stripe_params[:exp_month] = expiry_month if expiry_month
-      stripe_params[:exp_year] = expiry_year if expiry_year
-      stripe_params[:cvc] = self[:cvc] if self[:cvc]
-      stripe_params
+      { token: self[:token] }
     end
 
     def to_stripe_billing_details
@@ -42,7 +36,7 @@ module StripePaymentMethodHelper
     end
 
     def to_stripejs_payment_method_id
-      to_stripejs_payment_method.id
+      self[:payment_method_id] || to_stripejs_payment_method.id
     end
 
     def to_stripejs_customer(prepare_future_payments: false)
@@ -123,12 +117,8 @@ module StripePaymentMethodHelper
 
   module_function
 
-  def build(number: "4242 4242 4242 4242", expiry_month: EXPIRY_MM, expiry_year: EXPIRY_YYYY, cvc: "123")
-    card_params = {
-      cc_number: number,
-      expiry_date: "#{expiry_month} / #{expiry_year}",
-      cvc:
-    }
+  def build(token: "tok_visa", payment_method_id: nil)
+    card_params = payment_method_id.present? ? { payment_method_id: } : { token: }
     card_params.extend(StripePaymentMethodHelper::ExtensionMethods)
     card_params
   end
@@ -138,79 +128,79 @@ module StripePaymentMethodHelper
   end
 
   def success_with_sca
-    build(number: "4000 0025 0000 3155")
+    build(token: "tok_threeDSecure2Required")
   end
 
   def success_future_usage_set_up
-    build(number: "4000 0038 0000 0446")
+    build(payment_method_id: "pm_card_authenticationRequiredSetupForOffSession")
   end
 
   # SCA supported, but not required
   def success_sca_not_required
-    build(number: "4000000000003055")
+    build(token: "tok_threeDSecureOptional")
   end
 
   def success_discover
-    build(number: "6011 0009 9013 9424")
+    build(token: "tok_discover")
   end
 
   def success_debit_visa
-    build(number: "4000 0566 5566 5556")
+    build(token: "tok_visa_debit")
   end
 
   def success_zip_check_unsupported
-    build(number: "4000 0000 0000 0044")
+    build(token: "tok_avsUnchecked")
   end
 
   def success_zip_check_fails
-    build(number: "4000 0000 0000 0036")
+    build(token: "tok_avsZipFail")
   end
 
   def success_charge_decline
-    build(number: "4000 0000 0000 0341")
+    build(token: "tok_visa_chargeCustomerFail")
   end
 
   def decline
-    build(number: "4000 0000 0000 0002")
+    build(token: "tok_visa_chargeDeclined")
   end
 
   def decline_expired
-    build(number: "4000 0000 0000 0069")
+    build(token: "tok_chargeDeclinedExpiredCard")
   end
 
   def decline_invalid_luhn
-    build(number: "4242 4242 4242 4241")
+    build(token: "tok_visa_chargeDeclinedProcessingError")
   end
 
   def decline_cvc_check_fails
-    build(number: "4000 0000 0000 0101")
+    build(token: "tok_cvcCheckFail")
   end
 
   def decline_fraudulent
-    build(number: "4100 0000 0000 0019")
+    build(token: "tok_radarBlock")
   end
 
   def success_charge_disputed
-    build(number: "4000 0000 0000 0259")
+    build(token: "tok_createDispute")
   end
 
   def success_available_balance
-    build(number: "4000 0000 0000 0077")
+    build(token: "tok_bypassPending")
   end
 
   def success_indian_card_mandate
-    build(number: "4000 0035 6000 0123")
+    build(payment_method_id: "pm_card_indiaRecurringMandateSetupAndRenewalsSuccess")
   end
 
   def cancelled_indian_card_mandate
-    build(number: "4000 0035 6000 0263")
+    build(payment_method_id: "pm_card_indiaRecurringPaymentFailureCanceledMandate")
   end
 
   def decline_indian_card_mandate
-    build(number: "4000 0035 6000 0297")
+    build(payment_method_id: "pm_card_indiaRecurringPaymentFailureAfterPreDebitNotification")
   end
 
   def fail_indian_card_mandate
-    build(number: "4000 0035 6000 0248")
+    build(payment_method_id: "pm_card_indiaRecurringPaymentFailureUndeliveredDebitNotification")
   end
 end

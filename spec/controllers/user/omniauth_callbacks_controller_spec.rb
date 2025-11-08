@@ -19,7 +19,7 @@ describe User::OmniauthCallbacksController do
   end
 
   describe "#stripe_connect", :vcr do
-    let(:stripe_uid) { "acct_1MFA1rCOxuflorGu" }
+    let(:stripe_uid) { "acct_1SOb0DEwFhlcVS6d" }
     let(:stripe_auth) do
       OmniAuth::AuthHash.new(
         uid: stripe_uid,
@@ -80,20 +80,20 @@ describe User::OmniauthCallbacksController do
       end
 
       it "throws error if stripe account is from an unsupported country" do
-        request.env["omniauth.auth"]["uid"] = "acct_1MZxz1SDi33l2YQx"
+        request.env["omniauth.auth"]["uid"] = "acct_1SOk0BEsYunTuUHD"
         user = create(:user)
         allow(controller).to receive(:current_user).and_return(user)
 
         post :stripe_connect
 
         expect(user.reload.stripe_connect_account).to be(nil)
-        expect(flash[:alert]).to eq "Sorry, Stripe Connect is not supported in India yet."
+        expect(flash[:alert]).to eq "Sorry, Stripe Connect is not supported in Malaysia yet."
         expect(response).to redirect_to settings_payments_url
       end
 
       it "throws error if creator already has another stripe account connected" do
         user = create(:user)
-        stripe_connect_account = create(:merchant_account_stripe_connect, user:, charge_processor_merchant_id: "acct_1MZxz1SDi33l2YQx")
+        stripe_connect_account = create(:merchant_account_stripe_connect, user:, charge_processor_merchant_id: "acct_1SOb0DEwFhlcVS6d")
         allow(controller).to receive(:current_user).and_return(user)
 
         expect { post :stripe_connect }.not_to change { MerchantAccount.count }

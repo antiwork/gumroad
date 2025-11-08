@@ -14,6 +14,7 @@ import { DiscordButton } from "$app/components/DiscordButton";
 import { DownloadAllButton } from "$app/components/Download/DownloadAllButton";
 import { FileItem, FileList as DownloadFileList, FolderItem } from "$app/components/Download/FileList";
 import { OpenInAppButton } from "$app/components/Download/OpenInAppButton";
+import { PageList, PageListItem } from "$app/components/Download/PageListLayout";
 import { DownloadPagePostList, Post } from "$app/components/Download/PostList";
 import {
   FileDownloadInfo,
@@ -279,22 +280,22 @@ const WithContent = ({
       }
       pageList={
         showPageList && isDesktop ? (
-          <div role="tablist" className="pagelist" aria-label="Table of Contents">
+          <PageList aria-label="Table of Contents">
             {pages.map((page, index) => (
-              <div
+              <PageListItem
                 key={page.page_id}
-                role="tab"
-                aria-selected={index === activePageIndex}
+                isSelected={index === activePageIndex}
                 onClick={() => setActivePageIndex(index)}
+                role="tab"
               >
                 <Icon
                   name={pageIcons[index] ?? "file-text"}
                   aria-label={pageIcons[index] ? PAGE_ICON_LABEL[pageIcons[index]] : "file-text"}
                 />
-                <span className="content">{page.title ?? "Untitled"}</span>
-              </div>
+                <span className="flex-1">{page.title ?? "Untitled"}</span>
+              </PageListItem>
             ))}
-          </div>
+          </PageList>
         ) : null
       }
     >
@@ -334,7 +335,7 @@ const WithContent = ({
       </PurchaseInfoProvider>
 
       {showPageList ? (
-        <div role="navigation" style={{ marginTop: "auto" }}>
+        <div role="navigation" className="mt-auto flex gap-4 border-t border-border pt-4 lg:justify-end lg:pb-4">
           {isDesktop ? null : (
             <Popover
               aria-label="Table of Contents"
@@ -370,13 +371,21 @@ const WithContent = ({
             </Popover>
           )}
           <WithTooltip position="top" tip={hasPreviousPage ? null : "No more pages"}>
-            <Button disabled={!hasPreviousPage} onClick={() => setActivePageIndex(activePageIndex - 1)}>
+            <Button
+              disabled={!hasPreviousPage}
+              onClick={() => setActivePageIndex(activePageIndex - 1)}
+              className="flex-1 lg:flex-none"
+            >
               <Icon name="arrow-left" />
               Previous
             </Button>
           </WithTooltip>
           <WithTooltip position="top" tip={hasNextPage ? null : "No more pages"}>
-            <Button disabled={!hasNextPage} onClick={() => setActivePageIndex(activePageIndex + 1)}>
+            <Button
+              disabled={!hasNextPage}
+              onClick={() => setActivePageIndex(activePageIndex + 1)}
+              className="flex-1 lg:flex-none"
+            >
               Next
               <Icon name="arrow-right" />
             </Button>
