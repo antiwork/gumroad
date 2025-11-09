@@ -47,6 +47,7 @@ const AdminProductPurchases = ({ productId, isAffiliateUser = false, userId }: A
           isLoading={isLoading}
           hasMore={hasMore}
           onLoadMore={() => void fetchNextPage()}
+          productId={productId}
         />
       </details>
     </>

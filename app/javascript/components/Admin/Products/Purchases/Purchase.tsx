@@ -17,6 +17,13 @@ export type ProductPurchase = {
   gumroad_responsible_for_tax: boolean;
 };
 
+type AdminProductPurchaseProps = {
+  purchase: ProductPurchase;
+  isSelected?: boolean;
+  onSelectionChange?: (purchaseId: number, selected: boolean) => void;
+  showCheckbox?: boolean;
+};
+
 const AdminProductPurchase = ({
   purchase: {
     id,
@@ -33,40 +40,53 @@ const AdminProductPurchase = ({
     email,
     created,
   },
-}: {
-  purchase: ProductPurchase;
-}) => (
-  <div>
-    <div>
-      <h5>
-        <a href={Routes.admin_purchase_path(id)}>{displayed_price}</a>
-        {gumroad_responsible_for_tax ? ` + ${formatted_gumroad_tax_amount} VAT` : null}
-      </h5>
-      <small>
-        <ul className="inline">
-          <li>{purchase_state}</li>
-          {error_code ? <li>{error_code}</li> : null}
-          {is_preorder_authorization ? <li>(pre-order auth)</li> : null}
-          {stripe_refunded ? (
-            <li>
-              (refunded
-              {refunded_by.map((refunder) => (
-                <React.Fragment key={refunder.id}>
-                  {" "}
-                  by <a href={Routes.admin_user_path(refunder.id)}>{refunder.email}</a>
-                </React.Fragment>
-              ))}
-              )
-            </li>
-          ) : null}
-          {is_chargedback ? <li>(chargeback)</li> : null}
-          {is_chargeback_reversed ? <li>(chargeback_reversed)</li> : null}
-        </ul>
-      </small>
-    </div>
-    <div style={{ textAlign: "right" }}>
-      <a href={Routes.admin_search_purchases_path({ query: email })}>{email}</a>
-      <small>{created}</small>
+  isSelected = false,
+  onSelectionChange,
+  showCheckbox = false,
+}: AdminProductPurchaseProps) => (
+  <div style={{ display: "flex", gap: "1rem", alignItems: "flex-start" }}>
+    {showCheckbox ? (
+      <div style={{ paddingTop: "0.25rem" }}>
+        <input
+          type="checkbox"
+          checked={isSelected}
+          onChange={(e) => onSelectionChange?.(id, e.target.checked)}
+          aria-label={`Select purchase ${id}`}
+        />
+      </div>
+    ) : null}
+    <div style={{ flex: 1 }}>
+      <div>
+        <h5>
+          <a href={Routes.admin_purchase_path(id)}>{displayed_price}</a>
+          {gumroad_responsible_for_tax ? ` + ${formatted_gumroad_tax_amount} VAT` : null}
+        </h5>
+        <small>
+          <ul className="inline">
+            <li>{purchase_state}</li>
+            {error_code ? <li>{error_code}</li> : null}
+            {is_preorder_authorization ? <li>(pre-order auth)</li> : null}
+            {stripe_refunded ? (
+              <li>
+                (refunded
+                {refunded_by.map((refunder) => (
+                  <React.Fragment key={refunder.id}>
+                    {" "}
+                    by <a href={Routes.admin_user_path(refunder.id)}>{refunder.email}</a>
+                  </React.Fragment>
+                ))}
+                )
+              </li>
+            ) : null}
+            {is_chargedback ? <li>(chargeback)</li> : null}
+            {is_chargeback_reversed ? <li>(chargeback_reversed)</li> : null}
+          </ul>
+        </small>
+      </div>
+      <div style={{ textAlign: "right" }}>
+        <a href={Routes.admin_search_purchases_path({ query: email })}>{email}</a>
+        <small>{created}</small>
+      </div>
     </div>
   </div>
 );
