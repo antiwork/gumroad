@@ -45,12 +45,16 @@ describe SendAllMissedPostsJob do
       expect(CreatorContactingCustomersEmailInfo.where(id: email_info2.id)).to be_empty
     end
 
-    it "uses caching to prevent duplicate sends within 8 hours" do
+    it "clears cache before sending each post" do
       Rails.cache.write("post_email:#{post1.id}:#{purchase.id}", true, expires_in: 8.hours)
+      Rails.cache.write("post_email:#{post2.id}:#{purchase.id}", true, expires_in: 8.hours)
 
-      expect(PostEmailApi).to receive(:process).once # Only for post2
+      expect(PostEmailApi).to receive(:process).twice
 
       described_class.new.perform(seller.id, purchase.id, [post1.id, post2.id])
+
+      expect(Rails.cache.read("post_email:#{post1.id}:#{purchase.id}")).to be_nil
+      expect(Rails.cache.read("post_email:#{post2.id}:#{purchase.id}")).to be_nil
     end
 
     it "continues processing other posts if one fails" do
