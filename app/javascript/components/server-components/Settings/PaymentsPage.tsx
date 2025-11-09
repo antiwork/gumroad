@@ -599,7 +599,7 @@ const PaymentsPage = (props: Props) => {
     if (
       complianceInfo.country !== null &&
       complianceInfo.country.toLowerCase() in props.states &&
-      (!complianceInfo.state || complianceInfo.state === "State" || complianceInfo.state === "Province")
+      !complianceInfo.state
     ) {
       markFieldInvalid("state");
       setErrorMessage({ message: "Please select a valid state or province." });
@@ -673,9 +673,7 @@ const PaymentsPage = (props: Props) => {
       if (
         complianceInfo.business_country !== null &&
         complianceInfo.business_country.toLowerCase() in props.states &&
-        (!complianceInfo.business_state ||
-          complianceInfo.business_state === "State" ||
-          complianceInfo.business_state === "Province")
+        !complianceInfo.business_state
       ) {
         markFieldInvalid("business_state");
         setErrorMessage({ message: "Please select a valid state or province." });
