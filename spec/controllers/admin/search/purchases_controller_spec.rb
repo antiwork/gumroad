@@ -42,11 +42,10 @@ describe Admin::Search::PurchasesController, type: :controller, inertia: true do
       let(:transaction_date) { "02/22" }
 
       it "shows error flash message and no purchases" do
-        expect_any_instance_of(AdminSearchService).to_not receive(:search_purchases)
+        expect_any_instance_of(AdminSearchService).to receive(:search_purchases).with(query: nil, product_title_query: nil).and_call_original
         get :index, params: { transaction_date: "12/31" }
 
         expect(flash[:alert]).to eq("Please enter the date using the MM/DD/YYYY format.")
-        expect(assigns(:purchases)).to eq([])
       end
     end
 

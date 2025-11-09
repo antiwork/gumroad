@@ -14,9 +14,7 @@ class Admin::Search::PurchasesController < Admin::BaseController
         search_params[:transaction_date] = Date.strptime(search_params[:transaction_date], "%m/%d/%Y").to_s
       rescue ArgumentError
         flash[:alert] = "Please enter the date using the MM/DD/YYYY format."
-        @purchases = []
-        @service_charges = []
-        return
+        search_params.delete(:transaction_date)
       end
     end
 
