@@ -6,7 +6,7 @@ import * as React from "react";
 export const RemoveButton = ({ className, style, ...props }: React.HTMLAttributes<HTMLDivElement>) => (
   <div
     {...props}
-    className={cx("remove-button", className)}
+    className={cx(className)}
     style={{ ...style, width: "var(--big-icon-size)", display: "inline-block", cursor: "pointer" }}
   >
     <svg viewBox="0 0 1 1" style={{ width: "100%", height: "100%" }}>

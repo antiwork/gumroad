@@ -247,6 +247,7 @@ const CoverUploader = ({
 const CoversTabList = React.forwardRef<HTMLDivElement, React.HTMLProps<HTMLDivElement>>((props, ref) => (
   <Tabs
     variant="buttons"
+    aria-label="Product covers"
     {...props}
     className="-mt-3 !auto-cols-max grid-flow-col overflow-x-auto pt-3 pb-4 pl-1"
     ref={ref}
