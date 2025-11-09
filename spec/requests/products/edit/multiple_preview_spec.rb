@@ -18,8 +18,8 @@ describe("Product edit multiple-preview Scenario", type: :system, js: true) do
 
   it "uploads a preview image" do
     visit(edit_link_path(product))
+    upload_image
     within "[role=tablist][aria-label='Product covers']" do
-      upload_image
       img = first("img")
       expect(img.native.css_value("max-width")).to eq("100%")
       find(:tab_button).hover
@@ -29,11 +29,11 @@ describe("Product edit multiple-preview Scenario", type: :system, js: true) do
 
   it "uploads an image via URL" do
     visit(edit_link_path(product))
+    click_on "Upload images or videos"
+    select_tab "External link"
+    fill_in placeholder: "https://", with: "https://picsum.photos/200/300"
+    click_on "Upload"
     within "[role=tablist][aria-label='Product covers']" do
-      click_on "Upload images or videos"
-      select_tab "External link"
-      fill_in placeholder: "https://", with: "https://picsum.photos/200/300"
-      click_on "Upload"
       img = first("img")
       expect(img.native.css_value("max-width")).to eq("100%")
       find(:tab_button).hover
