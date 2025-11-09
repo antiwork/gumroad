@@ -37,7 +37,7 @@ export const CartItem = ({
 export const CartItemMedia = ({ className, children, ...props }: BaseProps) => (
   <figure
     className={classNames(
-      "h-fit w-14 rounded-sm border border-foreground sm:h-full sm:w-32 sm:rounded-none sm:border-y-0 sm:border-l-0",
+      "h-fit w-14 rounded-sm border border-foreground sm:h-full sm:w-36 sm:rounded-none sm:border-y-0 sm:border-l-0",
       className,
     )}
     {...props}
@@ -68,7 +68,7 @@ export const CartItemTitle = ({
 
 export const CartItemFooter = ({ className, children, ...props }: BaseProps) => (
   <footer className={classNames("mt-auto items-end", className)} {...props}>
-    <ul className="flex list-none flex-col gap-x-4 gap-y-1 pl-0 md:flex md:flex-wrap">{children}</ul>
+    <ul className="flex list-none flex-col gap-x-4 gap-y-1 pl-0 sm:flex-row sm:flex-wrap">{children}</ul>
   </footer>
 );
 

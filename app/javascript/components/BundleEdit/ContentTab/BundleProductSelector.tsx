@@ -22,7 +22,7 @@ export const BundleProductSelector = ({
   onToggle: () => void;
 }) => (
   <CartItem>
-    <CartItemMedia>
+    <CartItemMedia className="sm:w-24">
       <Thumbnail url={bundleProduct.thumbnail_url} nativeType={bundleProduct.native_type} className="size-full" />
     </CartItemMedia>
     <CartItemMain>

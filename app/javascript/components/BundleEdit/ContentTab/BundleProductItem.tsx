@@ -59,7 +59,7 @@ export const BundleProductItem = ({
         </CartItemFooter>
       </CartItemMain>
       <CartItemEnd className="mt-auto">
-        <ul className="flex list-none flex-col gap-x-4 gap-y-1 pl-0 md:flex md:flex-wrap">
+        <ul className="flex list-none flex-col flex-wrap gap-x-4 gap-y-1 pl-0 sm:flex-row">
           {bundleProduct.is_quantity_enabled || bundleProduct.variants ? (
             <li>
               <Popover
