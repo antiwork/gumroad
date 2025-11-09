@@ -1,5 +1,6 @@
 import * as React from "react";
 
+import { classNames } from "$app/utils/classNames";
 import FileUtils from "$app/utils/file";
 
 import { Button } from "$app/components/Button";
@@ -42,7 +43,10 @@ export const ImageUploader = ({
           <LoadingSpinner className="size-8" />
         </Placeholder>
       ) : imageUrl == null ? (
-        <Placeholder className="aspect-square items-center" style={{ background }}>
+        <Placeholder
+          className={classNames("aspect-square items-center", background && "bg-transparent")}
+          style={{ background }}
+        >
           <label className="button primary">
             <input
               type="file"
