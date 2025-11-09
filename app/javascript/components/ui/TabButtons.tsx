@@ -32,8 +32,8 @@ export const TabButton = ({
   return (
     <Component
       className={classNames(
-        "flex items-start gap-3 rounded-sm border px-4 py-3 no-underline transition-all hover:-translate-1 hover:shadow",
-        isSelected ? "-translate-1 bg-background shadow" : "",
+        "flex items-start gap-3 rounded-sm border border-border px-4 py-3 text-left no-underline transition-all hover:-translate-1 hover:shadow",
+        isSelected ? "-translate-1 shadow" : "",
         className,
       )}
       role="tab"

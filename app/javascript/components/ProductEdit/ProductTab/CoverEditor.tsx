@@ -201,7 +201,11 @@ const CoverUploader = ({
             External link
           </TabButton>
         </TabButtons>
-        <fieldset className="mt-4 rounded-sm border p-4" id={`${uid}-url`} hidden={uploader?.type !== "url"}>
+        <fieldset
+          className="mt-4 rounded-sm border border-border p-4"
+          id={`${uid}-url`}
+          hidden={uploader?.type !== "url"}
+        >
           {uploader?.type === "url" ? (
             <div className="input-with-button">
               <input
@@ -239,7 +243,7 @@ const CoverUploader = ({
 };
 
 const CoversTabList = React.forwardRef<HTMLDivElement, React.HTMLProps<HTMLDivElement>>((props, ref) => (
-  <TabButtons {...props} className="-mt-3 !auto-cols-max overflow-x-auto pt-3 pb-4 pl-1" ref={ref}>
+  <TabButtons {...props} className="-mt-3 !auto-cols-max grid-flow-col overflow-x-auto pt-3 pb-4 pl-1" ref={ref}>
     {props.children}
   </TabButtons>
 ));

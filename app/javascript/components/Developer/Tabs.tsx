@@ -21,7 +21,7 @@ export const Tabs = ({
       <div>
         {" "}
         <h4 className="font-bold">Modal Overlay</h4>
-        <small>Pop up product information with a familiar and trusted buying experience.</small>
+        <small className="text-sm">Pop up product information with a familiar and trusted buying experience.</small>
       </div>
     </TabButton>
     <TabButton onClick={() => setTab("embed")} isSelected={tab === "embed"} aria-controls={embedTabpanelUID}>
@@ -29,7 +29,7 @@ export const Tabs = ({
       <div>
         {" "}
         <h4 className="font-bold">Embed</h4>
-        <small>Embed on your website, blog posts & more.</small>
+        <small className="text-sm">Embed on your website, blog posts & more.</small>
       </div>
     </TabButton>
   </TabButtons>

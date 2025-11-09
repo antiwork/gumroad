@@ -134,7 +134,7 @@ const Widgets = ({ display_product_select, products, affiliated_products, defaul
   );
 
   return (
-    <div className="grid gap-4">
+    <div className="scoped-tailwind-preflight grid gap-4">
       <Tabs
         tab={selectedTab}
         setTab={setSelectedTab}
