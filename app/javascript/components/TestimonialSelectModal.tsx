@@ -93,6 +93,7 @@ export const TestimonialSelectModal = ({
   return (
     <Modal
       open={isOpen}
+      className="max-h-11/12"
       onClose={onClose}
       title="Insert reviews"
       footer={
@@ -110,45 +111,43 @@ export const TestimonialSelectModal = ({
         </>
       }
     >
-      <div>
-        {isLoading && state.reviews.length === 0 ? (
-          <div className="flex items-center justify-center">
-            <LoadingSpinner className="size-8" />
+      {isLoading && state.reviews.length === 0 ? (
+        <div className="flex items-center justify-center">
+          <LoadingSpinner className="size-8" />
+        </div>
+      ) : !isLoading && state.reviews.length === 0 ? (
+        <p>No reviews with text or video yet.</p>
+      ) : (
+        <div className="flex min-h-0 flex-col gap-2">
+          <div className="flex flex-row items-center gap-2">
+            <input
+              type="checkbox"
+              role="checkbox"
+              checked={selectedReviewIds.length === state.reviews.length && state.reviews.length > 0}
+              onChange={toggleSelectAll}
+              aria-label="Select all reviews"
+            />
+            <p>Select all</p>
           </div>
-        ) : !isLoading && state.reviews.length === 0 ? (
-          <p>No reviews with text or video yet.</p>
-        ) : (
-          <>
-            <div className="flex flex-row items-center gap-2">
-              <input
-                type="checkbox"
-                role="checkbox"
-                checked={selectedReviewIds.length === state.reviews.length && state.reviews.length > 0}
-                onChange={toggleSelectAll}
-                aria-label="Select all reviews"
+          <section className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto p-1">
+            {state.reviews.map((review) => (
+              <SelectableReviewCard
+                key={review.id}
+                review={review}
+                isSelected={selectedReviewIds.includes(review.id)}
+                onSelect={() => toggleReviewSelection(review.id)}
               />
-              <p>Select all</p>
-            </div>
-            <section className="paragraphs" style={{ marginTop: "var(--spacer-2)" }}>
-              {state.reviews.map((review) => (
-                <SelectableReviewCard
-                  key={review.id}
-                  review={review}
-                  isSelected={selectedReviewIds.includes(review.id)}
-                  onSelect={() => toggleReviewSelection(review.id)}
-                />
-              ))}
-              {hasMorePages ? (
-                <div className="mt-4">
-                  <Button onClick={handleLoadMore} disabled={isLoading}>
-                    {isLoading ? "Loading..." : "Load more"}
-                  </Button>
-                </div>
-              ) : null}
-            </section>
-          </>
-        )}
-      </div>
+            ))}
+            {hasMorePages ? (
+              <div className="mt-4">
+                <Button onClick={handleLoadMore} disabled={isLoading}>
+                  {isLoading ? "Loading..." : "Load more"}
+                </Button>
+              </div>
+            ) : null}
+          </section>
+        </div>
+      )}
     </Modal>
   );
 };
