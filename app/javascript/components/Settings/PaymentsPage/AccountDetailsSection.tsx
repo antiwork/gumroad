@@ -382,7 +382,7 @@ const AccountDetailsSection = ({
                   required={complianceInfo.is_business}
                   disabled={isFormDisabled}
                   aria-invalid={errorFieldNames.has("business_state")}
-                  value={complianceInfo.business_state || "State"}
+                  value={complianceInfo.business_state || ""}
                   onChange={(evt) => updateComplianceInfo({ business_state: evt.target.value })}
                 >
                   <option value="" disabled>
