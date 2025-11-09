@@ -1631,6 +1631,8 @@ describe("Payments Settings Scenario", type: :system, js: true) do
       end
 
       it "prevents submission when state is not selected" do
+        allow(StripeMerchantAccountManager).to receive(:handle_new_user_compliance_info)
+
         visit settings_payments_path
 
         fill_in("First name", with: "barnabas")
