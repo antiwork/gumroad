@@ -97,6 +97,58 @@ describe PostsController do
         expect(response).to have_http_status(:no_content)
       end
     end
+
+    describe "POST send_all_for_purchase" do
+      before do
+        link = create(:product, user: seller)
+        @post1 = create(:installment, link:)
+        @post2 = create(:installment, link:)
+        @purchase = build(:purchase, seller:, link:, created_at: Time.current)
+        @purchase.save!(validate: false)
+        allow(Installment).to receive(:missed_for_purchase).with(@purchase).and_return([@post1, @post2])
+      end
+
+      before do
+        create(:payment_completed, user: seller)
+        allow_any_instance_of(User).to receive(:sales_cents_total).and_return(Installment::MINIMUM_SALES_CENTS_VALUE)
+      end
+
+      it_behaves_like "authorize called for action", :post, :send_all_for_purchase do
+        let(:record) { Installment }
+        let(:request_params) { { purchase_id: @purchase.external_id } }
+      end
+
+      it "returns an error if seller is not eligible to send emails" do
+        allow_any_instance_of(User).to receive(:sales_cents_total).and_return(Installment::MINIMUM_SALES_CENTS_VALUE - 1)
+
+        expect(SendAllMissedPostsJob).to_not receive(:perform_async)
+        post :send_all_for_purchase, params: { purchase_id: @purchase.external_id }
+        expect(response).to have_http_status(:unauthorized)
+        expect(response.parsed_body).to eq("message" => "You are not eligible to resend this email.")
+      end
+
+      it "returns 404 if no purchase" do
+        expect(SendAllMissedPostsJob).to_not receive(:perform_async)
+        expect do
+          post :send_all_for_purchase, params: { purchase_id: "hello" }
+        end.to raise_error(ActiveRecord::RecordNotFound)
+      end
+
+      it "enqueues job to send all missed posts" do
+        expect(SendAllMissedPostsJob).to receive(:perform_async).with(seller.id, @purchase.id, [@post1.id, @post2.id])
+        post :send_all_for_purchase, params: { purchase_id: @purchase.external_id }
+        expect(response).to be_successful
+        expect(response.parsed_body).to eq("message" => "Sending all missed posts", "count" => 2)
+      end
+
+      it "handles case with no missed posts" do
+        allow(Installment).to receive(:missed_for_purchase).with(@purchase).and_return([])
+        expect(SendAllMissedPostsJob).to receive(:perform_async).with(seller.id, @purchase.id, [])
+        post :send_all_for_purchase, params: { purchase_id: @purchase.external_id }
+        expect(response).to be_successful
+        expect(response.parsed_body).to eq("message" => "Sending all missed posts", "count" => 0)
+      end
+    end
   end
 
   context "within consumer area" do

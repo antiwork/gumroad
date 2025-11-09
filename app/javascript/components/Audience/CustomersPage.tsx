@@ -25,6 +25,7 @@ import {
   resendPing,
   refund,
   resendPost,
+  resendAllPosts,
   resendReceipt,
   updateLicense,
   updatePurchase,
@@ -690,6 +691,7 @@ const CustomerDrawer = ({
   const userAgentInfo = useUserAgentInfo();
 
   const [loadingId, setLoadingId] = React.useState<string | null>(null);
+  const [isResendingAll, setIsResendingAll] = React.useState(false);
   const [missedPosts, setMissedPosts] = React.useState<MissedPost[] | null>(null);
   const [shownMissedPosts, setShownMissedPosts] = React.useState(PAGE_SIZE);
   const [emails, setEmails] = React.useState<CustomerEmail[] | null>(null);
@@ -717,6 +719,27 @@ const CustomerDrawer = ({
       showAlert(e.message, "error");
     }
     setLoadingId(null);
+  };
+
+  const onResendAll = async () => {
+    if (!missedPosts?.length) return;
+
+    setIsResendingAll(true);
+    try {
+      const result = await resendAllPosts(customer.id);
+      missedPosts.forEach(post => sentEmailIds.current.add(post.id));
+      showAlert(`Sending ${result.count} missed posts`, "success");
+
+      setTimeout(() => {
+        getCustomerEmails(customer.id).then(setEmails, (e: unknown) => {
+          assertResponseError(e);
+        });
+      }, 2000);
+    } catch (e) {
+      assertResponseError(e);
+      showAlert(e.message, "error");
+    }
+    setIsResendingAll(false);
   };
 
   const [productPurchases, setProductPurchases] = React.useState<Customer[]>([]);
@@ -1206,6 +1229,17 @@ const CustomerDrawer = ({
           </header>
           {missedPosts ? (
             <>
+              {missedPosts.length > 1 ? (
+                <section>
+                  <Button
+                    color="primary"
+                    disabled={!!loadingId || isResendingAll}
+                    onClick={() => void onResendAll()}
+                  >
+                    {isResendingAll ? "Sending all..." : "Resend all"}
+                  </Button>
+                </section>
+              ) : null}
               {missedPosts.slice(0, shownMissedPosts).map((post) => (
                 <section key={post.id}>
                   <div>
@@ -1218,7 +1252,7 @@ const CustomerDrawer = ({
                   </div>
                   <Button
                     color="primary"
-                    disabled={!!loadingId || sentEmailIds.current.has(post.id)}
+                    disabled={!!loadingId || isResendingAll || sentEmailIds.current.has(post.id)}
                     onClick={() => void onSend(post.id, "post")}
                   >
                     {sentEmailIds.current.has(post.id) ? "Sent" : loadingId === post.id ? "Sending...." : "Send"}

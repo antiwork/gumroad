@@ -66,6 +66,7 @@ class CustomersController < Sellers::BaseController
 
   def customer_emails
     original_purchase = current_seller.sales.find_by_external_id!(params[:purchase_id]) if params[:purchase_id].present?
+    return render json: [] unless original_purchase
 
     all_purchases = if original_purchase.subscription.present?
       original_purchase.subscription.purchases.all_success_states_except_preorder_auth_and_gift.preload(:receipt_email_info_from_purchase)
@@ -88,12 +89,18 @@ class CustomersController < Sellers::BaseController
 
     posts = original_purchase.installments.alive.where(seller_id: original_purchase.seller_id).map do |post|
       email_info = CreatorContactingCustomersEmailInfo.where(purchase: original_purchase, installment: post).last
+      fallback_date = post.published_at || post.created_at || Time.current
+      state_at = if email_info.present? && email_info.most_recent_state_at.present?
+        email_info.most_recent_state_at.in_time_zone(current_seller.timezone)
+      else
+        fallback_date.in_time_zone(current_seller.timezone)
+      end
       {
         type: "post",
         name: post.name,
         id: post.external_id,
-        state: email_info.state.humanize,
-        state_at: email_info.most_recent_state_at.in_time_zone(current_seller.timezone),
+        state: email_info&.state&.humanize || "Created",
+        state_at: state_at,
         date: post.published_at
       }
     end

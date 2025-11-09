@@ -3,10 +3,10 @@
 class PostsController < ApplicationController
   include CustomDomainConfig
 
-  before_action :authenticate_user!, only: %i[send_for_purchase]
-  after_action :verify_authorized, only: %i[send_for_purchase]
+  before_action :authenticate_user!, only: %i[send_for_purchase send_all_for_purchase]
+  after_action :verify_authorized, only: %i[send_for_purchase send_all_for_purchase]
   before_action :fetch_post, only: %i[send_for_purchase]
-  before_action :ensure_seller_is_eligible_to_send_emails, only: %i[send_for_purchase]
+  before_action :ensure_seller_is_eligible_to_send_emails, only: %i[send_for_purchase send_all_for_purchase]
   before_action :set_user_and_custom_domain_config, only: %i[show]
   before_action :check_if_needs_redirect, only: %i[show]
 
@@ -76,6 +76,14 @@ class PostsController < ApplicationController
     head :no_content
   end
 
+  def send_all_for_purchase
+    purchase = current_seller.sales.find_by_external_id!(params[:purchase_id])
+    missed_posts = Installment.missed_for_purchase(purchase)
+    authorize(missed_posts.first || Installment)
+    SendAllMissedPostsJob.perform_async(current_seller.id, purchase.id, missed_posts.pluck(:id))
+    render json: { message: "Sending all missed posts", count: missed_posts.count }
+  end
+
   def increment_post_views
     fetch_post(false)
 
@@ -121,7 +129,7 @@ class PostsController < ApplicationController
     end
 
     def ensure_seller_is_eligible_to_send_emails
-      seller = @post.seller || @post.link.seller
+      seller = @post ? (@post.seller || @post.link.seller) : current_seller
       unless seller&.eligible_to_send_emails?
         render json: { message: "You are not eligible to resend this email." }, status: :unauthorized
       end

@@ -63,4 +63,8 @@ class InstallmentPolicy < ApplicationPolicy
     create? ||
     user.role_support_for?(seller)
   end
+
+  def send_all_for_purchase?
+    send_for_purchase?
+  end
 end
