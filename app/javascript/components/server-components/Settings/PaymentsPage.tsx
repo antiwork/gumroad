@@ -596,7 +596,7 @@ const PaymentsPage = (props: Props) => {
     if (!complianceInfo.city) {
       markFieldInvalid("city");
     }
-    if ( complianceInfo.country !== null && complianceInfo.country.toLowerCase() in props.states && (!complianceInfo.state || complianceInfo.state === "State" || complianceInfo.state === "Province" || complianceInfo.state === "County") ) {
+    if (complianceInfo.country !== null && complianceInfo.country.toLowerCase() in props.states && !complianceInfo.state) {
       markFieldInvalid("state");
       setErrorMessage({ message: "Please select a valid state." });
     }
@@ -669,7 +669,7 @@ const PaymentsPage = (props: Props) => {
       if (
         complianceInfo.business_country !== null &&
         complianceInfo.business_country.toLowerCase() in props.states &&
-        (!complianceInfo.business_state || complianceInfo.business_state === "State" || complianceInfo.business_state === "Province" || complianceInfo.business_state === "County")
+        !complianceInfo.business_state
       ) {
         markFieldInvalid("business_state");
         setErrorMessage({ message: "Please select a valid state." });
@@ -1071,8 +1071,8 @@ const PaymentsPage = (props: Props) => {
                 </Button>
               ) : null}
               {props.user.country_code === "BR" ||
-              props.user.can_connect_stripe ||
-              props.stripe_connect.has_connected_stripe ? (
+                props.user.can_connect_stripe ||
+                props.stripe_connect.has_connected_stripe ? (
                 <Button
                   role="radio"
                   key="stripe"
