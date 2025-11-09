@@ -94,7 +94,7 @@ export const TestimonialSelectModal = ({
     <Modal
       open={isOpen}
       onClose={onClose}
-      title="Insert reviews"
+      title="Insert reviews" /* Modal title */
       footer={
         <>
           <Button onClick={onClose}>Cancel</Button>
@@ -105,13 +105,13 @@ export const TestimonialSelectModal = ({
               disabled={selectedReviewIds.length === 0}
             >
               Insert
-            </Button>
+            </Button> /*Action button 1 */
           ) : null}
         </>
       }
-      className="max-h-[100vh] overflow-y-auto"
+      className="max-h-[100vh]"
     >
-      <div>
+      <div className="flex flex-col sm:max-h-[75vh] max-h-[65vh]">
         {isLoading && state.reviews.length === 0 ? (
           <div className="flex items-center justify-center">
             <LoadingSpinner className="size-8" />
@@ -130,7 +130,7 @@ export const TestimonialSelectModal = ({
               />
               <p>Select all</p>
             </div>
-            <section className="paragraphs" style={{ marginTop: "var(--spacer-2)" }}>
+            <section className="paragraphs p-3 flex flex-col flex-1 overflow-y-auto" style={{ marginTop: "var(--spacer-2)" }}>
               {state.reviews.map((review) => (
                 <SelectableReviewCard
                   key={review.id}
