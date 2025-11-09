@@ -8,13 +8,16 @@ class CustomerPresenter
   end
 
   def missed_posts
-    posts = Installment.missed_for_purchase(purchase).order(published_at: :desc)
+    posts = Installment.missed_for_purchase(purchase).includes(:workflow, :link).order(published_at: :desc)
     posts.map do |post|
       {
         id: post.external_id,
         name: post.name,
         url: post.full_url,
         published_at: post.published_at,
+        workflow_name: post.workflow&.name,
+        product_name: post.link&.name,
+        category: determine_post_category(post),
       }
     end
   end
@@ -173,6 +176,12 @@ class CustomerPresenter
   end
 
   private
+    def determine_post_category(post)
+      return post.workflow.name if post.workflow.present?
+      return post.link.name if post.link.present?
+      "All missed emails"
+    end
+
     def file_details(file)
       {
         id: file.signed_id,

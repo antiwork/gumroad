@@ -373,9 +373,15 @@ describe CustomersController, :vcr, type: :controller, inertia: true do
       expect(response.parsed_body[0]["name"]).to eq(@post2.name)
       expect(response.parsed_body[0]["published_at"].to_date).to eq(@post2.published_at.to_date)
       expect(response.parsed_body[0]["url"]).to eq(custom_domain_view_post_url(host: seller.subdomain_with_protocol, slug: @post2.slug))
+      expect(response.parsed_body[0]["workflow_name"]).to be_nil
+      expect(response.parsed_body[0]["product_name"]).to eq(@product.name)
+      expect(response.parsed_body[0]["category"]).to eq(@product.name)
       expect(response.parsed_body[1]["name"]).to eq(@post3.name)
       expect(response.parsed_body[1]["published_at"].to_date).to eq(@post3.published_at.to_date)
       expect(response.parsed_body[1]["url"]).to eq(custom_domain_view_post_url(host: seller.subdomain_with_protocol, slug: @post3.slug))
+      expect(response.parsed_body[1]["workflow_name"]).to be_nil
+      expect(response.parsed_body[1]["product_name"]).to eq(@product.name)
+      expect(response.parsed_body[1]["category"]).to eq(@product.name)
       expect(response.parsed_body[2]).to eq(nil)
     end
 

@@ -194,6 +194,9 @@ export type MissedPost = {
   name: string;
   url: string;
   published_at: string;
+  workflow_name: string | null;
+  product_name: string | null;
+  category: string;
 };
 export const getMissedPosts = (purchaseId: string, purchaseEmail: string) =>
   request({

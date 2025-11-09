@@ -691,10 +691,12 @@ const CustomerDrawer = ({
 
   const [loadingId, setLoadingId] = React.useState<string | null>(null);
   const [missedPosts, setMissedPosts] = React.useState<MissedPost[] | null>(null);
+  const [selectedMissedPostsFilter, setSelectedMissedPostsFilter] = React.useState<string>("All missed emails");
   const [shownMissedPosts, setShownMissedPosts] = React.useState(PAGE_SIZE);
   const [emails, setEmails] = React.useState<CustomerEmail[] | null>(null);
   const [shownEmails, setShownEmails] = React.useState(PAGE_SIZE);
   const sentEmailIds = React.useRef<Set<string>>(new Set());
+  const [isResendingAll, setIsResendingAll] = React.useState(false);
   useRunOnce(() => {
     getMissedPosts(customer.id, customer.email).then(setMissedPosts, (e: unknown) => {
       assertResponseError(e);
@@ -717,6 +719,48 @@ const CustomerDrawer = ({
       showAlert(e.message, "error");
     }
     setLoadingId(null);
+  };
+
+  const missedPostsCategories = React.useMemo(() => {
+    if (!missedPosts) return [];
+    const categories = Array.from(new Set(missedPosts.map(post => post.category)));
+    return ["All missed emails", ...categories.filter(cat => cat !== "All missed emails")];
+  }, [missedPosts]);
+
+  const filteredMissedPosts = React.useMemo(() => {
+    if (!missedPosts) return null;
+    if (selectedMissedPostsFilter === "All missed emails") return missedPosts;
+    return missedPosts.filter(post => post.category === selectedMissedPostsFilter);
+  }, [missedPosts, selectedMissedPostsFilter]);
+
+
+  const onResendAll = async () => {
+    if (!filteredMissedPosts || filteredMissedPosts.length === 0) return;
+
+    setIsResendingAll(true);
+    let successCount = 0;
+    let errorCount = 0;
+
+    for (const post of filteredMissedPosts) {
+      if (sentEmailIds.current.has(post.id)) continue;
+
+      try {
+        await resendPost(customer.id, post.id);
+        sentEmailIds.current.add(post.id);
+        successCount++;
+      } catch (e) {
+        errorCount++;
+      }
+    }
+
+    setIsResendingAll(false);
+
+    if (successCount > 0) {
+      showAlert(`Successfully resent ${successCount} email${successCount > 1 ? 's' : ''}`, "success");
+    }
+    if (errorCount > 0) {
+      showAlert(`Failed to resend ${errorCount} email${errorCount > 1 ? 's' : ''}`, "error");
+    }
   };
 
   const [productPurchases, setProductPurchases] = React.useState<Customer[]>([]);
@@ -1206,7 +1250,22 @@ const CustomerDrawer = ({
           </header>
           {missedPosts ? (
             <>
-              {missedPosts.slice(0, shownMissedPosts).map((post) => (
+              <section>
+                <Select
+                  inputId="missed-posts-filter"
+                  instanceId="missed-posts-filter"
+                  isMulti={false}
+                  options={missedPostsCategories.map((category) => ({ id: category, label: category }))}
+                  value={{ id: selectedMissedPostsFilter, label: selectedMissedPostsFilter }}
+                  onChange={(option) => {
+                    if (option) {
+                      setSelectedMissedPostsFilter(option.id);
+                      setShownMissedPosts(PAGE_SIZE);
+                    }
+                  }}
+                />
+              </section>
+              {filteredMissedPosts && filteredMissedPosts.slice(0, shownMissedPosts).map((post) => (
                 <section key={post.id}>
                   <div>
                     <h5>
@@ -1218,19 +1277,31 @@ const CustomerDrawer = ({
                   </div>
                   <Button
                     color="primary"
-                    disabled={!!loadingId || sentEmailIds.current.has(post.id)}
+                    disabled={!!loadingId || sentEmailIds.current.has(post.id) || isResendingAll}
                     onClick={() => void onSend(post.id, "post")}
                   >
-                    {sentEmailIds.current.has(post.id) ? "Sent" : loadingId === post.id ? "Sending...." : "Send"}
+                    {sentEmailIds.current.has(post.id) ? "Sent" : loadingId === post.id ? "Sending...." : "Resend"}
                   </Button>
                 </section>
               ))}
-              {shownMissedPosts < missedPosts.length ? (
+              {filteredMissedPosts && shownMissedPosts < filteredMissedPosts.length ? (
                 <section>
                   <Button
                     onClick={() => setShownMissedPosts((prevShownMissedPosts) => prevShownMissedPosts + PAGE_SIZE)}
                   >
                     Show more
+                  </Button>
+                </section>
+              ) : null}
+              {filteredMissedPosts && filteredMissedPosts.length > 0 ? (
+                <section>
+                  <Button
+                    color="accent"
+                    disabled={isResendingAll || !!loadingId || filteredMissedPosts.every(post => sentEmailIds.current.has(post.id))}
+                    onClick={() => void onResendAll()}
+                    style={{ width: "100%" }}
+                  >
+                    {isResendingAll ? "Resending..." : "Resend all"}
                   </Button>
                 </section>
               ) : null}

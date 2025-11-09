@@ -531,6 +531,60 @@ describe "Sales page", type: :system, js: true do
         expect(page).to have_alert(text: "You are not eligible to resend this email.")
         expect(EmailInfo.last.installment).to be_nil
       end
+
+      it "filters missed posts by workflow category" do
+        workflow = create(:workflow, seller:, name: "Welcome Series", published_at: Time.current)
+        create(:installment, workflow:, seller:, published_at: Time.current, name: "Welcome Email")
+        create(:installment, link: product1, published_at: Time.current, name: "Product Update")
+
+        allow_any_instance_of(User).to receive(:sales_cents_total).and_return(Installment::MINIMUM_SALES_CENTS_VALUE)
+        stripe_connect_account = create(:merchant_account_stripe_connect, user: seller)
+        create(:purchase, seller:, link: product1, merchant_account: stripe_connect_account)
+
+        visit customers_path
+        find(:table_row, { "Name" => "Customer 1" }).click
+        within_section "Product 1", section_element: :aside do
+          within_section "Send missed posts", section_element: :section do
+            expect(page).to have_select("missed-posts-filter")
+            expect(page).to have_section("Welcome Email")
+            expect(page).to have_section("Product Update")
+
+            select "Welcome Series", from: "missed-posts-filter"
+            expect(page).to have_section("Welcome Email")
+            expect(page).to_not have_section("Product Update")
+          end
+        end
+      end
+
+      it "resends all filtered posts" do
+        workflow = create(:workflow, seller:, name: "Feedback", published_at: Time.current)
+        create(:installment, workflow:, seller:, published_at: Time.current, name: "Feedback Email 1")
+        create(:installment, workflow:, seller:, published_at: Time.current, name: "Feedback Email 2")
+
+        allow_any_instance_of(User).to receive(:sales_cents_total).and_return(Installment::MINIMUM_SALES_CENTS_VALUE)
+        stripe_connect_account = create(:merchant_account_stripe_connect, user: seller)
+        create(:purchase, seller:, link: product1, merchant_account: stripe_connect_account)
+
+        visit customers_path
+        find(:table_row, { "Name" => "Customer 1" }).click
+        within_section "Product 1", section_element: :aside do
+          within_section "Send missed posts", section_element: :section do
+            select "Feedback", from: "missed-posts-filter"
+            click_on "Resend all"
+            expect(page).to have_button("Resending...", disabled: true)
+          end
+        end
+
+        expect(page).to have_alert(text: "Successfully resent 2 emails")
+        within_section "Send missed posts", section_element: :section do
+          within_section "Feedback Email 1" do
+            expect(page).to have_button("Sent", disabled: true)
+          end
+          within_section "Feedback Email 2" do
+            expect(page).to have_button("Sent", disabled: true)
+          end
+        end
+      end
     end
 
     describe "receipts" do
