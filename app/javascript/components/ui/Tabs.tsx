@@ -23,7 +23,7 @@ const tabVariants = cva("", {
     variant: {
       pills: "shrink-0 rounded-full border-transparent px-3 py-2 hover:border-border",
       buttons:
-        "flex items-start gap-3 rounded-sm border-border px-4 py-3 text-left transition-all hover:-translate-1 hover:shadow",
+        "flex items-start gap-3 rounded-sm border-border px-4 py-3 text-left transition-all not-active:hover:-translate-1 not-active:hover:shadow",
     },
     active: {
       true: "bg-background",

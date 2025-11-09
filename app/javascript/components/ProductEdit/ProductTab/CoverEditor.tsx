@@ -191,12 +191,12 @@ const CoverUploader = ({
             </label>
           </Tab>
           <Tab
-            isSelected={uploader?.type === "url"}
-            aria-controls={`${uid}-url`}
             className="items-center"
             onClick={() =>
               setUploader((prevUploader) => (prevUploader?.type === "url" ? null : { type: "url", value: "" }))
             }
+            isSelected={uploader?.type === "url"}
+            aria-controls={`${uid}-url`}
           >
             <TabIcon name="link" />
             External link
