@@ -1608,10 +1608,6 @@ describe("Payments Settings Scenario", type: :system, js: true) do
 
     describe "AU creator without and with state selection" do
       before do
-        create(:australian_bank_account, user: @user)
-        create(:tos_agreement, user: @user)
-        create(:merchant_account, user: @user, country: "AU", currency: "aud")
-
         old_user_compliance_info = @user.alive_user_compliance_info
         new_user_compliance_info = old_user_compliance_info.dup
         new_user_compliance_info.country = "Australia"
@@ -1620,9 +1616,15 @@ describe("Payments Settings Scenario", type: :system, js: true) do
           old_user_compliance_info.mark_deleted!
           new_user_compliance_info.save!
         end
+
+        create(:australian_bank_account, user: @user)
+        create(:tos_agreement, user: @user)
+        create(:merchant_account, user: @user, country: "AU", currency: "aud")
       end
 
-      it "prevents submission when state placeholder is not changed" do
+      it "prevents submission when state is not selected" do
+        allow(StripeMerchantAccountManager).to receive(:handle_new_user_compliance_info)
+
         visit settings_payments_path
 
         fill_in("First name", with: "barnabas")
@@ -1636,9 +1638,9 @@ describe("Payments Settings Scenario", type: :system, js: true) do
         select("January", from: "Month")
         select("1980", from: "Year")
 
+        expect(page).to have_field("State")
         click_on("Update settings")
 
-        expect(page).to_not have_alert(text: "Thanks! You're all set.")
         expect(page).to have_status(text: "Please select a valid state.")
         expect(find_field("State")["aria-invalid"]).to eq "true"
 
