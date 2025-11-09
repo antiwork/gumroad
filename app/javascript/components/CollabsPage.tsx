@@ -69,7 +69,7 @@ const CollabsPage = ({
           </Placeholder>
         ) : (
           <div style={{ display: "grid", gap: "var(--spacer-7)" }}>
-            <div className="stats-grid" aria-label="Stats">
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4" aria-label="Stats">
               <StatsComponent
                 title="Total revenue"
                 description="Gross sales from all your product collabs."
