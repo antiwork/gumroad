@@ -6,7 +6,7 @@ import { createCast } from "ts-safe-cast";
 import { register } from "$app/utils/serverComponentUtil";
 
 import { formatPostDate } from "$app/components/server-components/Profile/PostPage";
-import { Tabs, Tab } from "$app/components/ui/Tabs";
+import { TabPills, TabPill } from "$app/components/ui/TabPills";
 
 import placeholderFeatureImage from "../../../../assets/images/blog/post-placeholder.jpg";
 
@@ -212,21 +212,21 @@ const TagSelector = ({
 
   return (
     <div className="mb-12">
-      <Tabs>
-        <Tab isSelected={isAllPostsActive} onClick={selectAll}>
+      <TabPills>
+        <TabPill isSelected={isAllPostsActive} onClick={selectAll}>
           All Posts {isAllPostsActive ? <span className="ml-1.5 text-base opacity-85">({allPostsCount})</span> : null}
-        </Tab>
+        </TabPill>
         {tags.map((tag) => {
           const isActive = activeTab === tag;
           const count = postsByTags[tag]?.length || 0;
 
           return (
-            <Tab key={tag} isSelected={isActive} onClick={() => selectTag(tag)}>
+            <TabPill key={tag} isSelected={isActive} onClick={() => selectTag(tag)}>
               {tag} {isActive ? <span className="ml-1.5 text-base opacity-85">({count})</span> : null}
-            </Tab>
+            </TabPill>
           );
         })}
-      </Tabs>
+      </TabPills>
     </div>
   );
 };

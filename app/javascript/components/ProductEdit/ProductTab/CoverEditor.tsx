@@ -17,6 +17,7 @@ import { Covers } from "$app/components/Product/Covers";
 import { RemoveButton } from "$app/components/RemoveButton";
 import { showAlert } from "$app/components/server-components/Alert";
 import Placeholder from "$app/components/ui/Placeholder";
+import { TabButton, TabButtonIcon, TabButtons } from "$app/components/ui/TabButtons";
 import { useIsAboveBreakpoint } from "$app/components/useIsAboveBreakpoint";
 import { WithTooltip } from "$app/components/WithTooltip";
 const MAX_PREVIEW_COUNT = 8;
@@ -154,51 +155,53 @@ const CoverUploader = ({
       <LoadingSpinner className="size-20" />
     ) : (
       <div style={{ width: "100%" }}>
-        <div className="tab-buttons small" role="tablist">
-          <label className="button" role="tab">
-            <input
-              type="file"
-              multiple
-              accept={ALLOWED_EXTENSIONS.map((ext) => `.${ext}`).join(",")}
-              disabled={isUploading}
-              onChange={asyncVoid(async (event) => {
-                if (!event.target.files?.length) return;
+        <TabButtons>
+          <TabButton isSelected={false} asChild className="items-center">
+            <label className="after:absolute after:inset-0">
+              <input
+                type="file"
+                multiple
+                accept={ALLOWED_EXTENSIONS.map((ext) => `.${ext}`).join(",")}
+                disabled={isUploading}
+                onChange={asyncVoid(async (event) => {
+                  if (!event.target.files?.length) return;
 
-                for (const file of event.target.files) {
-                  if (!FileUtils.isFileNameExtensionAllowed(file.name, ALLOWED_EXTENSIONS)) {
-                    showAlert("Invalid file type.", "error");
-                    continue;
-                  }
-                  // TODO change the relevant endpoint(s) to allow uploading multiple files at once
-                  await new Promise<void>((resolve) => {
-                    new DirectUpload(file, "/rails/active_storage/direct_uploads").create((error, blob) => {
-                      if (error) {
-                        showAlert(error.message, "error");
-                      } else {
-                        void saveCover({ type: "file", signedBlobId: blob.signed_id }).finally(resolve);
-                      }
+                  for (const file of event.target.files) {
+                    if (!FileUtils.isFileNameExtensionAllowed(file.name, ALLOWED_EXTENSIONS)) {
+                      showAlert("Invalid file type.", "error");
+                      continue;
+                    }
+                    // TODO change the relevant endpoint(s) to allow uploading multiple files at once
+                    await new Promise<void>((resolve) => {
+                      new DirectUpload(file, "/rails/active_storage/direct_uploads").create((error, blob) => {
+                        if (error) {
+                          showAlert(error.message, "error");
+                        } else {
+                          void saveCover({ type: "file", signedBlobId: blob.signed_id }).finally(resolve);
+                        }
+                      });
                     });
-                  });
-                }
-                setIsSelecting(false);
-              })}
-            />
-            <Icon name="upload-fill" />
-            Computer files
-          </label>
-          <Button
-            role="tab"
+                  }
+                  setIsSelecting(false);
+                })}
+              />
+              <TabButtonIcon name="upload-fill" />
+              Computer files
+            </label>
+          </TabButton>
+          <TabButton
+            isSelected={uploader?.type === "url"}
+            aria-controls={`${uid}-url`}
+            className="items-center"
             onClick={() =>
               setUploader((prevUploader) => (prevUploader?.type === "url" ? null : { type: "url", value: "" }))
             }
-            aria-selected={uploader?.type === "url"}
-            aria-controls={`${uid}-url`}
           >
-            <Icon name="link" />
+            <TabButtonIcon name="link" />
             External link
-          </Button>
-        </div>
-        <fieldset role="tabpanel" id={`${uid}-url`} hidden={uploader?.type !== "url"}>
+          </TabButton>
+        </TabButtons>
+        <fieldset className="mt-4 rounded-sm border p-4" id={`${uid}-url`} hidden={uploader?.type !== "url"}>
           {uploader?.type === "url" ? (
             <div className="input-with-button">
               <input
@@ -236,20 +239,9 @@ const CoverUploader = ({
 };
 
 const CoversTabList = React.forwardRef<HTMLDivElement, React.HTMLProps<HTMLDivElement>>((props, ref) => (
-  <div
-    ref={ref}
-    role="tablist"
-    className="tab-buttons scrollable"
-    style={
-      /*
-        `overflow-y: visible` would be interpreted as `overflow-y: auto` since `overflow-x` is `auto` on this element
-        See the formal definition of overflow here: https://developer.mozilla.org/en-US/docs/Web/CSS/overflow#formal_definition
-      */
-      { paddingTop: "calc(var(--big-icon-size) / 2)", marginTop: "calc(var(--big-icon-size) / -2)" }
-    }
-  >
+  <TabButtons {...props} className="-mt-3 !auto-cols-max overflow-x-auto pt-3 pb-4 pl-1" ref={ref}>
     {props.children}
-  </div>
+  </TabButtons>
 ));
 CoversTabList.displayName = "CoversTabList";
 
@@ -270,14 +262,13 @@ const CoverTab = ({
   const hasThumbnail = cover.type !== "video" && (cover.type !== "oembed" || cover.thumbnail != null);
 
   return (
-    <Button
+    <TabButton
+      isSelected={selected}
       onClick={onClick}
-      className="relative"
-      style={{ cursor: "move", padding: hasThumbnail ? "unset" : undefined }}
+      className="relative cursor-move"
+      style={{ padding: hasThumbnail ? "unset" : undefined }}
       onMouseEnter={() => setShowDelete(true)}
       onMouseLeave={() => setShowDelete(false)}
-      role="tab"
-      aria-selected={selected}
     >
       {hasThumbnail ? (
         <img
@@ -302,7 +293,7 @@ const CoverTab = ({
           aria-label="Remove cover"
         />
       ) : null}
-    </Button>
+    </TabButton>
   );
 };
 

@@ -1,7 +1,7 @@
 import { Link } from "@inertiajs/react";
 import React from "react";
 
-import { Tab, Tabs } from "$app/components/ui/Tabs";
+import { TabButton, TabButtons } from "$app/components/ui/TabButtons";
 
 type Props = {
   selectedTab: string;
@@ -10,21 +10,26 @@ type Props = {
 };
 
 const AdminUserAndProductsTabs = ({ selectedTab, userId, isAffiliateUser = false }: Props) => (
-  <Tabs variant="buttons">
-    <Tab isSelected={selectedTab === "profile"} variant="buttons" asChild>
-      <Link href={isAffiliateUser ? Routes.admin_affiliate_path(userId) : Routes.admin_user_path(userId)} prefetch>
+  <TabButtons>
+    <TabButton isSelected={selectedTab === "profile"} asChild>
+      <Link
+        href={isAffiliateUser ? Routes.admin_affiliate_path(userId) : Routes.admin_user_path(userId)}
+        prefetch
+        className="no-underline"
+      >
         Profile
       </Link>
-    </Tab>
-    <Tab isSelected={selectedTab === "products"} variant="buttons" asChild>
+    </TabButton>
+    <TabButton isSelected={selectedTab === "products"} asChild>
       <Link
         href={isAffiliateUser ? Routes.admin_affiliate_products_path(userId) : Routes.admin_user_products_path(userId)}
         prefetch
+        className="no-underline"
       >
         Products
       </Link>
-    </Tab>
-  </Tabs>
+    </TabButton>
+  </TabButtons>
 );
 
 export default AdminUserAndProductsTabs;

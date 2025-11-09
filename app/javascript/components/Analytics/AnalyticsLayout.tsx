@@ -4,7 +4,7 @@ import { assertDefined } from "$app/utils/assert";
 
 import { useLoggedInUser } from "$app/components/LoggedInUser";
 import { PageHeader } from "$app/components/ui/PageHeader";
-import { Tabs, Tab } from "$app/components/ui/Tabs";
+import { TabPills, TabPill } from "$app/components/ui/TabPills";
 
 export const AnalyticsLayout = ({
   selectedTab,
@@ -20,19 +20,19 @@ export const AnalyticsLayout = ({
   return (
     <div>
       <PageHeader title="Analytics" actions={actions}>
-        <Tabs>
-          <Tab href={Routes.audience_dashboard_path()} isSelected={selectedTab === "following"}>
+        <TabPills>
+          <TabPill href={Routes.audience_dashboard_path()} isSelected={selectedTab === "following"}>
             Following
-          </Tab>
-          <Tab href={Routes.sales_dashboard_path()} isSelected={selectedTab === "sales"}>
+          </TabPill>
+          <TabPill href={Routes.sales_dashboard_path()} isSelected={selectedTab === "sales"}>
             Sales
-          </Tab>
+          </TabPill>
           {user.policies.utm_link.index ? (
-            <Tab href={Routes.utm_links_dashboard_path()} isSelected={selectedTab === "utm_links"}>
+            <TabPill href={Routes.utm_links_dashboard_path()} isSelected={selectedTab === "utm_links"}>
               Links
-            </Tab>
+            </TabPill>
           ) : null}
-        </Tabs>
+        </TabPills>
       </PageHeader>
       {children}
     </div>

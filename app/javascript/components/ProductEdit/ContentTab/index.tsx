@@ -57,7 +57,7 @@ import { MoveNode } from "$app/components/TiptapExtensions/MoveNode";
 import { Posts, PostsProvider } from "$app/components/TiptapExtensions/Posts";
 import { ShortAnswer } from "$app/components/TiptapExtensions/ShortAnswer";
 import { UpsellCard } from "$app/components/TiptapExtensions/UpsellCard";
-import { Tabs, Tab } from "$app/components/ui/Tabs";
+import { TabPills, TabPill } from "$app/components/ui/TabPills";
 import { UpsellSelectModal, Product, ProductOption } from "$app/components/UpsellSelectModal";
 import { useConfigureEvaporate } from "$app/components/useConfigureEvaporate";
 import { useIsAboveBreakpoint } from "$app/components/useIsAboveBreakpoint";
@@ -592,12 +592,12 @@ const ContentTabContent = ({ selectedVariantId }: { selectedVariantId: string | 
 
                 <Modal open={showEmbedModal} onClose={() => setShowEmbedModal(false)} title="Embed media">
                   <p>Paste a video link or upload images or videos.</p>
-                  <Tabs>
-                    <Tab isSelected aria-controls={`${uid}-embed-tab`}>
+                  <TabPills>
+                    <TabPill isSelected aria-controls={`${uid}-embed-tab`}>
                       <Icon name="link" />
                       <h4>Embed link</h4>
-                    </Tab>
-                    <Tab isSelected={false}>
+                    </TabPill>
+                    <TabPill isSelected={false}>
                       <label className="button">
                         <input
                           type="file"
@@ -617,8 +617,8 @@ const ContentTabContent = ({ selectedVariantId }: { selectedVariantId: string | 
                         <Icon name="upload-fill" />
                         <h4>Upload</h4>
                       </label>
-                    </Tab>
-                  </Tabs>
+                    </TabPill>
+                  </TabPills>
                   <div id={`${uid}-embed-tab`}>
                     <EmbedMediaForm
                       type="embed"

@@ -19,7 +19,7 @@ import { showAlert } from "$app/components/server-components/Alert";
 import { newEmailPath } from "$app/components/server-components/EmailsPage";
 import { SubtitleFile } from "$app/components/SubtitleList/Row";
 import { PageHeader } from "$app/components/ui/PageHeader";
-import { Tabs, Tab } from "$app/components/ui/Tabs";
+import { TabPills, TabPill } from "$app/components/ui/TabPills";
 import { useRefToLatest } from "$app/components/useRefToLatest";
 import { WithTooltip } from "$app/components/WithTooltip";
 
@@ -266,20 +266,20 @@ export const Layout = ({
             headerActions && "mt-2",
           )}
         >
-          <Tabs style={{ gridColumn: 1 }}>
-            <Tab asChild isSelected={tab === "product"}>
+          <TabPills style={{ gridColumn: 1 }}>
+            <TabPill asChild isSelected={tab === "product"}>
               <Link to={rootPath} onClick={onTabClick}>
                 Product
               </Link>
-            </Tab>
+            </TabPill>
             {!isCoffee ? (
-              <Tab asChild isSelected={tab === "content"}>
+              <TabPill asChild isSelected={tab === "content"}>
                 <Link to={`${rootPath}/content`} onClick={onTabClick}>
                   Content
                 </Link>
-              </Tab>
+              </TabPill>
             ) : null}
-            <Tab asChild isSelected={tab === "share"}>
+            <TabPill asChild isSelected={tab === "share"}>
               <Link
                 to={`${rootPath}/share`}
                 onClick={(evt) => {
@@ -296,8 +296,8 @@ export const Layout = ({
               >
                 Share
               </Link>
-            </Tab>
-          </Tabs>
+            </TabPill>
+          </TabPills>
           {headerActions}
         </div>
       </PageHeader>

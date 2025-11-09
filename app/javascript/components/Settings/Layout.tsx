@@ -5,7 +5,7 @@ import { SettingPage as Page } from "$app/parsers/settings";
 
 import { Button } from "$app/components/Button";
 import { PageHeader } from "$app/components/ui/PageHeader";
-import { Tabs, Tab } from "$app/components/ui/Tabs";
+import { TabPills, TabPill } from "$app/components/ui/TabPills";
 
 const PAGE_TITLES = {
   main: "Settings",
@@ -40,13 +40,13 @@ export const Layout = ({ onSave, pages, currentPage, children, hasAside, canUpda
         ) : null
       }
     >
-      <Tabs>
+      <TabPills>
         {pages.map((page) => (
-          <Tab key={page} href={Routes[`settings_${page}_path`]()} isSelected={currentPage === page}>
+          <TabPill key={page} href={Routes[`settings_${page}_path`]()} isSelected={currentPage === page}>
             {PAGE_TITLES[page]}
-          </Tab>
+          </TabPill>
         ))}
-      </Tabs>
+      </TabPills>
     </PageHeader>
     <div className={cx({ squished: hasAside })}>{children}</div>
   </>

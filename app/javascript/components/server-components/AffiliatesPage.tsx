@@ -55,7 +55,7 @@ import { Popover } from "$app/components/Popover";
 import { showAlert } from "$app/components/server-components/Alert";
 import { PageHeader } from "$app/components/ui/PageHeader";
 import Placeholder from "$app/components/ui/Placeholder";
-import { Tabs, Tab } from "$app/components/ui/Tabs";
+import { TabPills, TabPill } from "$app/components/ui/TabPills";
 import { useDebouncedCallback } from "$app/components/useDebouncedCallback";
 import { useLocalPagination } from "$app/components/useLocalPagination";
 import { useUserAgentInfo } from "$app/components/UserAgent";
@@ -105,14 +105,14 @@ export const AffiliatesNavigation = () => {
   const { pathname } = useLocation();
 
   return (
-    <Tabs>
-      <Tab href="/affiliates" isSelected={pathname === "/affiliates"}>
+    <TabPills>
+      <TabPill href="/affiliates" isSelected={pathname === "/affiliates"}>
         Affiliates
-      </Tab>
-      <Tab href="/affiliates/onboarding" isSelected={pathname === "/affiliates/onboarding"}>
+      </TabPill>
+      <TabPill href="/affiliates/onboarding" isSelected={pathname === "/affiliates/onboarding"}>
         Affiliate Signup Form
-      </Tab>
-    </Tabs>
+      </TabPill>
+    </TabPills>
   );
 };
 

@@ -1,8 +1,6 @@
-import cx from "classnames";
 import * as React from "react";
 
-import { Button } from "../Button";
-import { Icon } from "../Icons";
+import { TabButton, TabButtonIcon, TabButtons } from "$app/components/ui/TabButtons";
 
 export type Tab = "overlay" | "embed";
 
@@ -16,40 +14,23 @@ export const Tabs = ({
   setTab: React.Dispatch<React.SetStateAction<Tab>>;
   overlayTabpanelUID?: string;
   embedTabpanelUID?: string;
-}) => {
-  const selectTab = (evt: React.MouseEvent<HTMLButtonElement>, tab: Tab) => {
-    evt.preventDefault();
-    setTab(tab);
-  };
-
-  return (
-    <div className="tab-buttons" role="tablist">
-      <Button
-        onClick={(evt) => selectTab(evt, "overlay")}
-        className={cx(tab === "overlay" ? "selected" : null)}
-        role="tab"
-        aria-selected={tab === "overlay"}
-        aria-controls={overlayTabpanelUID}
-      >
-        <Icon name="stickies" />
-        <div>
-          <h4 className="tab-title">Modal Overlay</h4>
-          <small>Pop up product information with a familiar and trusted buying experience.</small>
-        </div>
-      </Button>
-      <Button
-        onClick={(evt) => selectTab(evt, "embed")}
-        className={cx(tab === "embed" ? "selected" : null)}
-        role="tab"
-        aria-selected={tab === "embed"}
-        aria-controls={embedTabpanelUID}
-      >
-        <Icon name="code-square" />
-        <div>
-          <h4 className="tab-title">Embed</h4>
-          <small>Embed on your website, blog posts & more.</small>
-        </div>
-      </Button>
-    </div>
-  );
-};
+}) => (
+  <TabButtons>
+    <TabButton onClick={() => setTab("overlay")} isSelected={tab === "overlay"} aria-controls={overlayTabpanelUID}>
+      <TabButtonIcon name="stickies" />
+      <div>
+        {" "}
+        <h4 className="font-bold">Modal Overlay</h4>
+        <small>Pop up product information with a familiar and trusted buying experience.</small>
+      </div>
+    </TabButton>
+    <TabButton onClick={() => setTab("embed")} isSelected={tab === "embed"} aria-controls={embedTabpanelUID}>
+      <TabButtonIcon name="code-square" />
+      <div>
+        {" "}
+        <h4 className="font-bold">Embed</h4>
+        <small>Embed on your website, blog posts & more.</small>
+      </div>
+    </TabButton>
+  </TabButtons>
+);

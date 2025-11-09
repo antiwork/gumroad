@@ -18,7 +18,7 @@ import { ImageUploadSettingsContext } from "$app/components/RichTextEditor";
 import { showAlert } from "$app/components/server-components/Alert";
 import { ProfileProps, TabWithId, useTabs } from "$app/components/server-components/Profile";
 import PlainTextStarterKit from "$app/components/TiptapExtensions/PlainTextStarterKit";
-import { Tabs, Tab } from "$app/components/ui/Tabs";
+import { TabPills, TabPill } from "$app/components/ui/TabPills";
 import { useIsAboveBreakpoint } from "$app/components/useIsAboveBreakpoint";
 import { useRefToLatest } from "$app/components/useRefToLatest";
 import { WithTooltip } from "$app/components/WithTooltip";
@@ -231,9 +231,9 @@ export const EditProfile = (props: Props) => {
             <AutoLink text={props.bio} />
           </h1>
         ) : null}
-        <Tabs aria-label="Profile Tabs">
+        <TabPills aria-label="Profile Tabs">
           {tabs.map((tab) => (
-            <Tab
+            <TabPill
               key={tab.id}
               isSelected={tab === selectedTab}
               onClick={() => {
@@ -245,9 +245,9 @@ export const EditProfile = (props: Props) => {
               }}
             >
               {tab.name}
-            </Tab>
+            </TabPill>
           ))}
-        </Tabs>
+        </TabPills>
       </header>
       <div className="fixed! top-5 right-3 z-30 p-0! lg:top-3 lg:right-auto lg:left-3">
         <WithTooltip tip="Edit profile" position={isDesktop ? "right" : "left"}>

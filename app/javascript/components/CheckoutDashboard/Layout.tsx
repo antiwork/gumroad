@@ -3,7 +3,7 @@ import cx from "classnames";
 import * as React from "react";
 
 import { PageHeader } from "$app/components/ui/PageHeader";
-import { Tabs, Tab } from "$app/components/ui/Tabs";
+import { TabPills, TabPill } from "$app/components/ui/TabPills";
 
 const pageNames = {
   discounts: "Discounts",
@@ -49,14 +49,14 @@ const Header = ({
   sticky?: boolean;
 }) => (
   <PageHeader className={cx({ "sticky-top": sticky })} title="Checkout" actions={actions}>
-    <Tabs>
+    <TabPills>
       {pages.map((page) => (
-        <Tab key={page} isSelected={page === currentPage} asChild>
+        <TabPill key={page} isSelected={page === currentPage} asChild>
           <Link href={Routes[`checkout_${page}_path`]()} className="no-underline">
             {pageNames[page]}
           </Link>
-        </Tab>
+        </TabPill>
       ))}
-    </Tabs>
+    </TabPills>
   </PageHeader>
 );
