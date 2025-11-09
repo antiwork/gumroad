@@ -55,7 +55,7 @@ import { LoadingSpinner } from "$app/components/LoadingSpinner";
 import { useLoggedInUser } from "$app/components/LoggedInUser";
 import { PriceInput } from "$app/components/PriceInput";
 import { showAlert } from "$app/components/server-components/Alert";
-import { TabPill, TabPills } from "$app/components/ui/TabPills";
+import { Tab, Tabs } from "$app/components/ui/Tabs";
 import { useIsDarkTheme } from "$app/components/useIsDarkTheme";
 import { useOnChangeSync } from "$app/components/useOnChange";
 import { RecaptchaCancelledError, useRecaptcha } from "$app/components/useRecaptcha";
@@ -416,7 +416,7 @@ const PaymentMethodRadio = ({
   const [state, dispatch] = useState();
   const selected = state.paymentMethod === paymentMethod;
   return (
-    <TabPill
+    <Tab
       isSelected={selected}
       onClick={() => {
         if (paymentMethod !== state.paymentMethod) dispatch({ type: "set-value", paymentMethod });
@@ -424,7 +424,7 @@ const PaymentMethodRadio = ({
       disabled={!selected && isProcessing(state)}
     >
       {children}
-    </TabPill>
+    </Tab>
   );
 };
 
@@ -1218,11 +1218,11 @@ export const PaymentForm = ({
             <div className="paragraphs">
               <h4>Pay with</h4>
               {state.availablePaymentMethods.length > 1 ? (
-                <TabPills>
+                <Tabs>
                   {state.availablePaymentMethods.map((method) => (
                     <React.Fragment key={method.type}>{method.button}</React.Fragment>
                   ))}
-                </TabPills>
+                </Tabs>
               ) : null}
             </div>
           </div>

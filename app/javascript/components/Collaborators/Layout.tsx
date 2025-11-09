@@ -1,7 +1,7 @@
 import * as React from "react";
 
 import { PageHeader } from "$app/components/ui/PageHeader";
-import { TabPills, TabPill } from "$app/components/ui/TabPills";
+import { Tabs, Tab } from "$app/components/ui/Tabs";
 
 type LayoutProps = {
   title: string;
@@ -21,14 +21,14 @@ export const Layout = ({
   <div>
     <PageHeader title={title} actions={headerActions}>
       {showTabs ? (
-        <TabPills>
-          <TabPill href={Routes.collaborators_path()} isSelected={selectedTab === "collaborators"}>
+        <Tabs>
+          <Tab href={Routes.collaborators_path()} isSelected={selectedTab === "collaborators"}>
             Collaborators
-          </TabPill>
-          <TabPill href={Routes.collaborators_incomings_path()} isSelected={selectedTab === "collaborations"}>
+          </Tab>
+          <Tab href={Routes.collaborators_incomings_path()} isSelected={selectedTab === "collaborations"}>
             Collaborations
-          </TabPill>
-        </TabPills>
+          </Tab>
+        </Tabs>
       ) : null}
     </PageHeader>
     {children}

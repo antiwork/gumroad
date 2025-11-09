@@ -23,7 +23,7 @@ import WorkflowList from "$app/components/server-components/WorkflowsPage/Workfl
 import { Toggle } from "$app/components/Toggle";
 import { PageHeader } from "$app/components/ui/PageHeader";
 import Placeholder from "$app/components/ui/Placeholder";
-import { TabPills, TabPill } from "$app/components/ui/TabPills";
+import { Tabs, Tab } from "$app/components/ui/Tabs";
 
 type LayoutProps = {
   title: string;
@@ -117,20 +117,20 @@ export const EditPageNavigation = (props: { workflowExternalId: string }) => {
   const { pathname } = useLocation();
 
   return (
-    <TabPills>
-      <TabPill
+    <Tabs>
+      <Tab
         href={`/workflows/${props.workflowExternalId}/edit`}
         isSelected={pathname === `/workflows/${props.workflowExternalId}/edit`}
       >
         Details
-      </TabPill>
-      <TabPill
+      </Tab>
+      <Tab
         href={`/workflows/${props.workflowExternalId}/emails`}
         isSelected={pathname === `/workflows/${props.workflowExternalId}/emails`}
       >
         Emails
-      </TabPill>
-    </TabPills>
+      </Tab>
+    </Tabs>
   );
 };
 

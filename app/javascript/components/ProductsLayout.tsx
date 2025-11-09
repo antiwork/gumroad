@@ -2,7 +2,7 @@ import { Link } from "@inertiajs/react";
 import * as React from "react";
 
 import { PageHeader } from "$app/components/ui/PageHeader";
-import { TabPill, TabPills } from "$app/components/ui/TabPills";
+import { Tab, Tabs } from "$app/components/ui/Tabs";
 
 export type Tab = "products" | "discover" | "affiliated" | "collabs" | "archived";
 
@@ -21,33 +21,33 @@ export const ProductsLayout = ({
 }) => (
   <div>
     <PageHeader title={title || "Products"} actions={ctaButton}>
-      <TabPills>
-        <TabPill isSelected={selectedTab === "products"} asChild>
+      <Tabs>
+        <Tab isSelected={selectedTab === "products"} asChild>
           <Link href={Routes.products_path()} className="no-underline">
             All products
           </Link>
-        </TabPill>
+        </Tab>
 
-        <TabPill isSelected={selectedTab === "affiliated"} asChild>
+        <Tab isSelected={selectedTab === "affiliated"} asChild>
           <Link href={Routes.products_affiliated_index_path()} className="no-underline">
             Affiliated
           </Link>
-        </TabPill>
+        </Tab>
 
-        <TabPill isSelected={selectedTab === "collabs"} asChild>
+        <Tab isSelected={selectedTab === "collabs"} asChild>
           <Link href={Routes.products_collabs_path()} className="no-underline">
             Collabs
           </Link>
-        </TabPill>
+        </Tab>
 
         {archivedTabVisible ? (
-          <TabPill isSelected={selectedTab === "archived"} asChild>
+          <Tab isSelected={selectedTab === "archived"} asChild>
             <Link href={Routes.products_archived_index_path()} className="no-underline">
               Archived
             </Link>
-          </TabPill>
+          </Tab>
         ) : null}
-      </TabPills>
+      </Tabs>
     </PageHeader>
     {children}
   </div>

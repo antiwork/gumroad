@@ -28,7 +28,7 @@ import { PublishedTab } from "$app/components/server-components/EmailsPage/Publi
 import { ScheduledTab } from "$app/components/server-components/EmailsPage/ScheduledTab";
 import { PageHeader } from "$app/components/ui/PageHeader";
 import Placeholder from "$app/components/ui/Placeholder";
-import { TabPills, TabPill } from "$app/components/ui/TabPills";
+import { Tabs, Tab } from "$app/components/ui/Tabs";
 import { WithTooltip } from "$app/components/WithTooltip";
 const TABS = ["published", "scheduled", "drafts", "subscribers"] as const;
 
@@ -87,19 +87,19 @@ export const Layout = ({
           </>
         }
       >
-        <TabPills>
+        <Tabs>
           {TABS.map((tab) =>
             tab === "subscribers" ? (
-              <TabPill href={Routes.followers_path()} isSelected={false} key={tab}>
+              <Tab href={Routes.followers_path()} isSelected={false} key={tab}>
                 Subscribers
-              </TabPill>
+              </Tab>
             ) : (
-              <TabPill href={emailTabPath(tab)} isSelected={selectedTab === tab} key={tab}>
+              <Tab href={emailTabPath(tab)} isSelected={selectedTab === tab} key={tab}>
                 {tab === "published" ? "Published" : tab === "scheduled" ? "Scheduled" : "Drafts"}
-              </TabPill>
+              </Tab>
             ),
           )}
-        </TabPills>
+        </Tabs>
       </PageHeader>
       {children}
     </div>

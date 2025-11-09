@@ -15,7 +15,7 @@ import { Icon } from "$app/components/Icons";
 import { Preview } from "$app/components/Preview";
 import { showAlert } from "$app/components/server-components/Alert";
 import { PageHeader } from "$app/components/ui/PageHeader";
-import { TabPills, TabPill } from "$app/components/ui/TabPills";
+import { Tabs, Tab } from "$app/components/ui/Tabs";
 import { useIsAboveBreakpoint } from "$app/components/useIsAboveBreakpoint";
 import { WithTooltip } from "$app/components/WithTooltip";
 
@@ -158,18 +158,18 @@ export const Layout = ({
           )
         }
       >
-        <TabPills style={{ gridColumn: 1 }}>
-          <TabPill asChild isSelected={tab === "product"}>
+        <Tabs style={{ gridColumn: 1 }}>
+          <Tab asChild isSelected={tab === "product"}>
             <Link to={`/bundles/${id}`} onClick={onTabClick}>
               Product
             </Link>
-          </TabPill>
-          <TabPill asChild isSelected={tab === "content"}>
+          </Tab>
+          <Tab asChild isSelected={tab === "content"}>
             <Link to={`/bundles/${id}/content`} onClick={onTabClick}>
               Content
             </Link>
-          </TabPill>
-          <TabPill asChild isSelected={tab === "share"}>
+          </Tab>
+          <Tab asChild isSelected={tab === "share"}>
             <Link
               to={`/bundles/${id}/share`}
               onClick={(evt: React.MouseEvent<HTMLAnchorElement>) => {
@@ -186,8 +186,8 @@ export const Layout = ({
             >
               Share
             </Link>
-          </TabPill>
-        </TabPills>
+          </Tab>
+        </Tabs>
       </PageHeader>
       <div className={preview ? "squished fixed-aside flex-1 lg:grid lg:grid-cols-[1fr_30vw]" : "flex-1"}>
         {children}

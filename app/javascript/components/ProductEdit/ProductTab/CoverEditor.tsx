@@ -1,4 +1,5 @@
 import { DirectUpload } from "@rails/activestorage";
+import classNames from "classnames";
 import * as React from "react";
 import { ReactSortable as Sortable } from "react-sortablejs";
 
@@ -17,7 +18,7 @@ import { Covers } from "$app/components/Product/Covers";
 import { RemoveButton } from "$app/components/RemoveButton";
 import { showAlert } from "$app/components/server-components/Alert";
 import Placeholder from "$app/components/ui/Placeholder";
-import { TabButton, TabButtonIcon, TabButtons } from "$app/components/ui/TabButtons";
+import { Tab, TabIcon, Tabs } from "$app/components/ui/Tabs";
 import { useIsAboveBreakpoint } from "$app/components/useIsAboveBreakpoint";
 import { WithTooltip } from "$app/components/WithTooltip";
 const MAX_PREVIEW_COUNT = 8;
@@ -155,9 +156,9 @@ const CoverUploader = ({
       <LoadingSpinner className="size-20" />
     ) : (
       <div style={{ width: "100%" }}>
-        <TabButtons>
-          <TabButton isSelected={false} asChild className="items-center">
-            <label className="after:absolute after:inset-0">
+        <Tabs variant="buttons">
+          <Tab isSelected={false} asChild className="items-center">
+            <label>
               <input
                 type="file"
                 multiple
@@ -185,11 +186,11 @@ const CoverUploader = ({
                   setIsSelecting(false);
                 })}
               />
-              <TabButtonIcon name="upload-fill" />
+              <TabIcon name="upload-fill" />
               Computer files
             </label>
-          </TabButton>
-          <TabButton
+          </Tab>
+          <Tab
             isSelected={uploader?.type === "url"}
             aria-controls={`${uid}-url`}
             className="items-center"
@@ -197,11 +198,12 @@ const CoverUploader = ({
               setUploader((prevUploader) => (prevUploader?.type === "url" ? null : { type: "url", value: "" }))
             }
           >
-            <TabButtonIcon name="link" />
+            <TabIcon name="link" />
             External link
-          </TabButton>
-        </TabButtons>
+          </Tab>
+        </Tabs>
         <fieldset
+          role="tabpanel"
           className="mt-4 rounded-sm border border-border p-4"
           id={`${uid}-url`}
           hidden={uploader?.type !== "url"}
@@ -243,9 +245,14 @@ const CoverUploader = ({
 };
 
 const CoversTabList = React.forwardRef<HTMLDivElement, React.HTMLProps<HTMLDivElement>>((props, ref) => (
-  <TabButtons {...props} className="-mt-3 !auto-cols-max grid-flow-col overflow-x-auto pt-3 pb-4 pl-1" ref={ref}>
+  <Tabs
+    variant="buttons"
+    {...props}
+    className="-mt-3 !auto-cols-max grid-flow-col overflow-x-auto pt-3 pb-4 pl-1"
+    ref={ref}
+  >
     {props.children}
-  </TabButtons>
+  </Tabs>
 ));
 CoversTabList.displayName = "CoversTabList";
 
@@ -266,11 +273,10 @@ const CoverTab = ({
   const hasThumbnail = cover.type !== "video" && (cover.type !== "oembed" || cover.thumbnail != null);
 
   return (
-    <TabButton
+    <Tab
       isSelected={selected}
       onClick={onClick}
-      className="relative cursor-move"
-      style={{ padding: hasThumbnail ? "unset" : undefined }}
+      className={classNames("relative cursor-move", { "p-0": hasThumbnail })}
       onMouseEnter={() => setShowDelete(true)}
       onMouseLeave={() => setShowDelete(false)}
     >
@@ -297,7 +303,7 @@ const CoverTab = ({
           aria-label="Remove cover"
         />
       ) : null}
-    </TabButton>
+    </Tab>
   );
 };
 

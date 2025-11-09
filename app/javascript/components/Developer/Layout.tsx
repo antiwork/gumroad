@@ -1,7 +1,7 @@
 import * as React from "react";
 
 import { PageHeader } from "$app/components/ui/PageHeader";
-import { TabPills, TabPill } from "$app/components/ui/TabPills";
+import { Tabs, Tab } from "$app/components/ui/Tabs";
 
 const pageNames = {
   widgets: "Widgets",
@@ -18,13 +18,13 @@ export const Layout = ({
 }) => (
   <div>
     <PageHeader title={pageNames[currentPage]}>
-      <TabPills>
+      <Tabs>
         {Object.entries(pageNames).map(([page, name]) => (
-          <TabPill key={page} isSelected={page === currentPage} href={Routes[`${page}_path`]()}>
+          <Tab key={page} isSelected={page === currentPage} href={Routes[`${page}_path`]()}>
             {name}
-          </TabPill>
+          </Tab>
         ))}
-      </TabPills>
+      </Tabs>
     </PageHeader>
     {children}
   </div>

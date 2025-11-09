@@ -16,7 +16,7 @@ import { showAlert } from "$app/components/server-components/Alert";
 import { ExportSubscribersPopover } from "$app/components/server-components/FollowersPage/ExportSubscribersPopover";
 import { PageHeader } from "$app/components/ui/PageHeader";
 import Placeholder from "$app/components/ui/Placeholder";
-import { TabPills, TabPill } from "$app/components/ui/TabPills";
+import { Tabs, Tab } from "$app/components/ui/Tabs";
 import { useUserAgentInfo } from "$app/components/UserAgent";
 import { WithTooltip } from "$app/components/WithTooltip";
 
@@ -36,24 +36,24 @@ const Layout = ({
   return (
     <div>
       <PageHeader title={title} actions={actions}>
-        <TabPills>
-          <TabPill href={`${Routes.emails_path()}/published`} isSelected={false}>
+        <Tabs>
+          <Tab href={`${Routes.emails_path()}/published`} isSelected={false}>
             Published
-          </TabPill>
+          </Tab>
           {loggedInUser?.policies.installment.create ? (
             <>
-              <TabPill href={`${Routes.emails_path()}/scheduled`} isSelected={false}>
+              <Tab href={`${Routes.emails_path()}/scheduled`} isSelected={false}>
                 Scheduled
-              </TabPill>
-              <TabPill href={`${Routes.emails_path()}/drafts`} isSelected={false}>
+              </Tab>
+              <Tab href={`${Routes.emails_path()}/drafts`} isSelected={false}>
                 Drafts
-              </TabPill>
+              </Tab>
             </>
           ) : null}
-          <TabPill href={Routes.followers_path()} isSelected>
+          <Tab href={Routes.followers_path()} isSelected>
             Subscribers
-          </TabPill>
-        </TabPills>
+          </Tab>
+        </Tabs>
       </PageHeader>
       {children}
     </div>

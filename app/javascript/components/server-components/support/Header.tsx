@@ -9,7 +9,7 @@ import { Icon } from "$app/components/Icons";
 import { UnauthenticatedNewTicketModal } from "$app/components/support/UnauthenticatedNewTicketModal";
 import { UnreadTicketsBadge } from "$app/components/support/UnreadTicketsBadge";
 import { PageHeader } from "$app/components/ui/PageHeader";
-import { TabPills, TabPill } from "$app/components/ui/TabPills";
+import { Tabs, Tab } from "$app/components/ui/Tabs";
 import { useOriginalLocation } from "$app/components/useOriginalLocation";
 
 export function SupportHeader({
@@ -61,22 +61,19 @@ export function SupportHeader({
         }
       >
         {hasHelperSession ? (
-          <TabPills>
-            <TabPill
-              href={Routes.help_center_root_path()}
-              isSelected={pathname.startsWith(Routes.help_center_root_path())}
-            >
+          <Tabs>
+            <Tab href={Routes.help_center_root_path()} isSelected={pathname.startsWith(Routes.help_center_root_path())}>
               Articles
-            </TabPill>
-            <TabPill
+            </Tab>
+            <Tab
               href={Routes.support_index_path()}
               isSelected={pathname.startsWith(Routes.support_index_path())}
               className="flex items-center gap-2"
             >
               Support tickets
               <UnreadTicketsBadge />
-            </TabPill>
-          </TabPills>
+            </Tab>
+          </Tabs>
         ) : null}
       </PageHeader>
       {isAnonymousUserOnHelpCenter ? (

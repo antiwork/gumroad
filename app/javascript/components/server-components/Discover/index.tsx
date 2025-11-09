@@ -18,7 +18,7 @@ import { Icon } from "$app/components/Icons";
 import { HorizontalCard } from "$app/components/Product/Card";
 import { CardGrid, useSearchReducer } from "$app/components/Product/CardGrid";
 import { RatingStars } from "$app/components/RatingStars";
-import { TabPills, TabPill } from "$app/components/ui/TabPills";
+import { Tabs, Tab } from "$app/components/ui/Tabs";
 import { useOnChange } from "$app/components/useOnChange";
 import { useOriginalLocation } from "$app/components/useOriginalLocation";
 import { useScrollableCarousel } from "$app/components/useScrollableCarousel";
@@ -219,9 +219,9 @@ const Discover = (props: Props) => {
                 : sortTitles[is<keyof typeof sortTitles>(state.params.sort) ? state.params.sort : "trending"]}
             </h2>
             {state.params.query ? null : (
-              <TabPills>
+              <Tabs>
                 {props.curated_product_ids.length > 0 ? (
-                  <TabPill
+                  <Tab
                     isSelected={state.params.sort === "curated"}
                     onClick={() =>
                       updateParams({
@@ -231,29 +231,29 @@ const Discover = (props: Props) => {
                     }
                   >
                     Curated
-                  </TabPill>
+                  </Tab>
                 ) : null}
-                <TabPill
+                <Tab
                   isSelected={!state.params.sort || state.params.sort === "default"}
                   onClick={() => updateParams({ sort: undefined })}
                 >
                   Trending
-                </TabPill>
+                </Tab>
                 {props.curated_product_ids.length === 0 ? (
-                  <TabPill
+                  <Tab
                     isSelected={state.params.sort === "best_sellers"}
                     onClick={() => updateParams({ sort: "best_sellers" })}
                   >
                     Best Sellers
-                  </TabPill>
+                  </Tab>
                 ) : null}
-                <TabPill
+                <Tab
                   isSelected={state.params.sort === "hot_and_new"}
                   onClick={() => updateParams({ sort: "hot_and_new" })}
                 >
                   Hot &amp; New
-                </TabPill>
-              </TabPills>
+                </Tab>
+              </Tabs>
             )}
           </div>
           <CardGrid
