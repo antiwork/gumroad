@@ -1071,6 +1071,12 @@ describe("Payments Settings Scenario", type: :system, js: true) do
         select("1980", from: "Year")
         click_on("Update settings")
         expect(page).to_not have_alert(text: "Thanks! You're all set.")
+        expect(find_field("State")["aria-invalid"]).to eq "true"
+        expect(page).to have_status(text: "Please select a valid state.")
+
+        select("Rio de Janeiro", from: "State")
+        click_on("Update settings")
+        expect(page).to have_alert(text: "Thanks! You're all set.")
       end
 
       it "allows the (non-US based) creator to enter their kyc and paypal email address and it'll save it properly" do
@@ -1082,6 +1088,7 @@ describe("Payments Settings Scenario", type: :system, js: true) do
         fill_in("City", with: "barnabasville")
         fill_in("Phone number", with: "5022541982")
         fill_in("Postal code", with: "12345")
+        select("Rio de Janeiro", from: "State")
 
         select("1", from: "Day")
         select("January", from: "Month")
@@ -1114,6 +1121,7 @@ describe("Payments Settings Scenario", type: :system, js: true) do
         fill_in "City", with: "Tokyo"
         fill_in "Postal code", with: "12345"
         fill_in "Phone number", with: "5022541982"
+        select("São Paulo", from: "State")
         select("1", from: "Day")
         select("January", from: "Month")
         select("1990", from: "Year")
