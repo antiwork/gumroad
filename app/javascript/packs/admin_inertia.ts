@@ -64,6 +64,7 @@ const urlsMigratedtoInertia = [
   /\/admin\/guids\/\w+/u, // Routes.admin_guid_url
   // Routes.admin_compliance_cards_url(),
   /\/admin\/users\/\w+/u, // Routes.admin_user_url
+  /\/admin\/affiliates\/\w+/u, // Routes.admin_affiliate_url
   /\/admin\/products\/\w+/u, // Routes.admin_product_url
   /\/admin\/users\/\w+\/products/u, // Routes.admin_user_products_url
   /\/admin\/payouts\/\w+/u, // Routes.admin_payout_url
