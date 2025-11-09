@@ -9,7 +9,7 @@ import { BundleProductSelector } from "$app/components/BundleEdit/ContentTab/Bun
 import { Layout } from "$app/components/BundleEdit/Layout";
 import { BundleProduct, useBundleEditContext } from "$app/components/BundleEdit/state";
 import { Button } from "$app/components/Button";
-import { CartList } from "$app/components/CartList";
+import { CartItemList } from "$app/components/CartList";
 import { Icon } from "$app/components/Icons";
 import { LoadingSpinner } from "$app/components/LoadingSpinner";
 import { Card } from "$app/components/Product/Card";
@@ -115,7 +115,7 @@ export const ContentTab = () => {
                 </label>
               </header>
               {bundle.products.length > 0 ? (
-                <CartList aria-label="Bundle products">
+                <CartItemList aria-label="Bundle products">
                   {bundle.products.map((bundleProduct, idx) => (
                     <BundleProductItem
                       key={bundleProduct.id}
@@ -134,7 +134,7 @@ export const ContentTab = () => {
                       }
                     />
                   ))}
-                </CartList>
+                </CartItemList>
               ) : null}
               <div
                 className="grid gap-4 rounded-sm border border-border bg-background p-4"
@@ -154,7 +154,7 @@ export const ContentTab = () => {
                     <LoadingSpinner />
                   </div>
                 ) : results.length > 0 ? (
-                  <CartList>
+                  <CartItemList>
                     {results.map((bundleProduct) => {
                       const selected = bundle.products.some(({ id }) => id === bundleProduct.id);
                       return (
@@ -172,7 +172,7 @@ export const ContentTab = () => {
                         />
                       );
                     })}
-                  </CartList>
+                  </CartItemList>
                 ) : (
                   <div style={{ justifySelf: "center" }}>No products found</div>
                 )}

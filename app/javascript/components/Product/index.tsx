@@ -27,13 +27,14 @@ import { startTrackingForSeller, trackProductEvent } from "$app/utils/user_analy
 
 import { NavigationButton } from "$app/components/Button";
 import {
-  CartListItem,
+  CartItem,
   CartItemEnd,
   CartItemFooter,
   CartItemMain,
   CartItemMedia,
   CartItemTitle,
-  CartList,
+  CartItemList,
+  CartItemFooterItem,
 } from "$app/components/CartList";
 import { Icon } from "$app/components/Icons";
 import { useLoggedInUser } from "$app/components/LoggedInUser";
@@ -381,13 +382,13 @@ export const Product = ({
         {isBundle ? (
           <section>
             <h2>This bundle contains...</h2>
-            <CartList>
+            <CartItemList>
               {product.bundle_products.map((bundleProduct) => {
                 const price = formatPriceCentsWithCurrencySymbol(bundleProduct.currency_code, bundleProduct.price, {
                   symbolFormat: "long",
                 });
                 return (
-                  <CartListItem key={bundleProduct.id}>
+                  <CartItem key={bundleProduct.id}>
                     <CartItemMedia>
                       <Thumbnail url={bundleProduct.thumbnail_url} nativeType={bundleProduct.native_type} />
                     </CartItemMedia>
@@ -404,13 +405,13 @@ export const Product = ({
                         </div>
                       ) : null}
                       <CartItemFooter>
-                        <li>
+                        <CartItemFooterItem>
                           <strong>Qty:</strong> {bundleProduct.quantity}
-                        </li>
+                        </CartItemFooterItem>
                         {bundleProduct.variant ? (
-                          <li>
+                          <CartItemFooterItem>
                             <strong>{variantLabel(bundleProduct.native_type)}:</strong> {bundleProduct.variant}
-                          </li>
+                          </CartItemFooterItem>
                         ) : null}
                       </CartItemFooter>
                     </CartItemMain>
@@ -419,10 +420,10 @@ export const Product = ({
                         {discountedPriceCents < basePriceCents ? <s>{price}</s> : price}
                       </span>
                     </CartItemEnd>
-                  </CartListItem>
+                  </CartItem>
                 );
               })}
-            </CartList>
+            </CartItemList>
           </section>
         ) : null}
         <section>

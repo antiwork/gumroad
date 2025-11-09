@@ -25,7 +25,7 @@ import { asyncVoid } from "$app/utils/promise";
 import { assertResponseError, request } from "$app/utils/request";
 
 import { Button, NavigationButton } from "$app/components/Button";
-import { CartListItem, CartItemMain, CartItemMedia, CartItemTitle, CartList } from "$app/components/CartList";
+import { CartItem, CartItemMain, CartItemMedia, CartItemTitle, CartItemList } from "$app/components/CartList";
 import { useCurrentSeller } from "$app/components/CurrentSeller";
 import { useAppDomain, useDomains } from "$app/components/DomainSettings";
 import {
@@ -650,12 +650,9 @@ const AbandonedCartProductListNodeView = (props: NodeViewProps) => {
     <NodeViewWrapper className="paragraphs" style={isPreview ? {} : { userSelect: "none", cursor: "not-allowed" }}>
       <div className="has-tooltip top" aria-describedby={tooltipUid} style={{ display: "grid" }}>
         {abandonedCartProducts.length > 0 ? (
-          <CartList>
+          <CartItemList>
             {abandonedCartProducts.slice(0, shownProductCount).map((product) => (
-              <CartListItem
-                className={classNames({ "pointer-events-none": !isPreview })}
-                key={product.unique_permalink}
-              >
+              <CartItem className={classNames({ "pointer-events-none": !isPreview })} key={product.unique_permalink}>
                 <CartItemMedia>
                   {product.thumbnail_url ? (
                     <img src={product.thumbnail_url} className="rounded-none object-fill" />
@@ -674,9 +671,9 @@ const AbandonedCartProductListNodeView = (props: NodeViewProps) => {
                   </CartItemTitle>
                   <SellerByLine isPreview={isPreview} />
                 </CartItemMain>
-              </CartListItem>
+              </CartItem>
             ))}
-          </CartList>
+          </CartItemList>
         ) : (
           <Placeholder>
             {showAddProductCTA ? (

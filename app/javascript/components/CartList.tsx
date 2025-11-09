@@ -6,70 +6,80 @@ import { classNames } from "$app/utils/classNames";
 type BaseProps = {
   children: React.ReactNode;
   className?: string;
-  extra?: React.ReactNode;
 } & React.HTMLAttributes<HTMLElement>;
 
-export const CartList = ({ children, className, ...props }: BaseProps) => (
-  <div
-    role="list"
-    className={classNames(
-      "rounded-sm border border-border bg-background *:not-first:border-t *:not-first:border-border",
-      className,
-    )}
-    {...props}
-  >
+export const CartItemList = ({ children, className, ...props }: BaseProps) => (
+  <div role="list" className={classNames("rounded-sm border border-border bg-background", className)} {...props}>
     {children}
   </div>
 );
 
-export const CartListItem = ({
+export const CartItem = ({
   className,
   children,
   extra,
   asChild = false,
   ...props
-}: BaseProps & { asChild?: boolean }) => {
+}: BaseProps & { asChild?: boolean; extra?: React.ReactNode }) => {
   const Comp = asChild ? Slot : "div";
   return (
-    <Comp role="listitem" className={classNames("grid border-border not-first:border-t", className)} {...props}>
+    <Comp role="listitem" className={classNames("border-border not-first:border-t", className)} {...props}>
       <>
-        <section className="col-span-3 grid grid-cols-[3.625rem_1fr_auto] gap-x-4 rounded-sm p-4 not-first:rounded-none sm:grid-cols-[8.5rem_1fr_auto] sm:p-0 sm:pr-4">
+        <section className="col-span-3 flex flex-row gap-4 rounded-sm p-4 not-first:rounded-none sm:p-0 sm:pr-4">
           {children}
         </section>
-        {extra ? (
-          <section className="col-span-3 grid gap-4 border-border p-4 not-first:border-t">{extra}</section>
-        ) : null}
+        {extra ? <section className="flex flex-col gap-4 border-border p-4 not-first:border-t">{extra}</section> : null}
       </>
     </Comp>
   );
 };
 
-export const CartItemMedia = ({ className, children }: BaseProps) => (
+export const CartItemMedia = ({ className, children, ...props }: BaseProps) => (
   <figure
     className={classNames(
-      "h-fit rounded-sm border border-foreground sm:h-full sm:rounded-none sm:border-y-0 sm:border-l-0 sm:border-foreground",
+      "h-fit w-14 rounded-sm border border-foreground sm:h-full sm:w-32 sm:rounded-none sm:border-y-0 sm:border-l-0",
       className,
     )}
+    {...props}
   >
     {children}
   </figure>
 );
 
-export const CartItemMain = ({ className, children }: BaseProps) => (
-  <section className={classNames("flex flex-col gap-1 sm:py-4", className)}>{children}</section>
+export const CartItemMain = ({ className, children, ...props }: BaseProps) => (
+  <section className={classNames("flex flex-1 flex-col gap-1 sm:py-4", className)} {...props}>
+    {children}
+  </section>
 );
 
-export const CartItemTitle = ({ className, children, asChild = false }: BaseProps & { asChild?: boolean }) => {
+export const CartItemTitle = ({
+  className,
+  children,
+  asChild = false,
+  ...props
+}: BaseProps & { asChild?: boolean }) => {
   const Comp = asChild ? Slot : "h4";
-  return <Comp className={classNames("line-clamp-2 font-bold", className)}>{children}</Comp>;
+  return (
+    <Comp className={classNames("line-clamp-2 font-bold", className)} {...props}>
+      {children}
+    </Comp>
+  );
 };
 
-export const CartItemFooter = ({ className, children }: BaseProps) => (
-  <footer className={classNames("mt-auto items-end", className)}>
-    <ul className="grid list-none gap-x-4 gap-y-1 pl-0 md:flex md:flex-wrap">{children}</ul>
+export const CartItemFooter = ({ className, children, ...props }: BaseProps) => (
+  <footer className={classNames("mt-auto items-end", className)} {...props}>
+    <ul className="flex list-none flex-col gap-x-4 gap-y-1 pl-0 md:flex md:flex-wrap">{children}</ul>
   </footer>
 );
 
-export const CartItemEnd = ({ className, children }: BaseProps) => (
-  <section className={classNames("flex flex-col items-end gap-1 sm:py-4", className)}>{children}</section>
+export const CartItemFooterItem = ({ className, children, ...props }: BaseProps) => (
+  <li className={className} {...props}>
+    {children}
+  </li>
+);
+
+export const CartItemEnd = ({ className, children, ...props }: BaseProps) => (
+  <section className={classNames("ml-auto flex flex-col items-end gap-1 sm:py-4", className)} {...props}>
+    {children}
+  </section>
 );

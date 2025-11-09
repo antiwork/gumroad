@@ -10,7 +10,8 @@ import {
   CartItemMain,
   CartItemMedia,
   CartItemTitle,
-  CartListItem,
+  CartItem,
+  CartItemFooterItem,
 } from "$app/components/CartList";
 import { Popover } from "$app/components/Popover";
 import { ConfigurationSelector, PriceSelection } from "$app/components/Product/ConfigurationSelector";
@@ -40,25 +41,25 @@ export const BundleProductItem = ({
   });
 
   return (
-    <CartListItem key={bundleProduct.id}>
+    <CartItem key={bundleProduct.id}>
       <CartItemMedia>
         <Thumbnail url={bundleProduct.thumbnail_url} nativeType={bundleProduct.native_type} />
       </CartItemMedia>
       <CartItemMain>
         <CartItemTitle>{bundleProduct.name}</CartItemTitle>
         <CartItemFooter>
-          <li>
+          <CartItemFooterItem>
             <strong>Qty:</strong> {bundleProduct.quantity}
-          </li>
+          </CartItemFooterItem>
           {selectedVariant ? (
-            <li>
+            <CartItemFooterItem>
               <strong>{variantLabel(bundleProduct.native_type)}:</strong> {selectedVariant.name}
-            </li>
+            </CartItemFooterItem>
           ) : null}
         </CartItemFooter>
       </CartItemMain>
       <CartItemEnd className="mt-auto">
-        <ul className="grid list-none gap-x-4 gap-y-1 pl-0 md:flex md:flex-wrap">
+        <ul className="flex list-none flex-col gap-x-4 gap-y-1 pl-0 md:flex md:flex-wrap">
           {bundleProduct.is_quantity_enabled || bundleProduct.variants ? (
             <li>
               <Popover
@@ -126,6 +127,6 @@ export const BundleProductItem = ({
           </li>
         </ul>
       </CartItemEnd>
-    </CartListItem>
+    </CartItem>
   );
 };

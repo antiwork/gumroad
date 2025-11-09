@@ -1,10 +1,10 @@
-import classNames from "classnames";
 import * as React from "react";
 
 import { computeOfferDiscount } from "$app/data/offer_code";
 import { getRecommendedProducts } from "$app/data/recommended_products";
 import { CardProduct, COMMISSION_DEPOSIT_PROPORTION } from "$app/parsers/product";
 import { isOpenTuple } from "$app/utils/array";
+import { classNames } from "$app/utils/classNames";
 import { formatUSDCentsWithExpandedCurrencySymbol } from "$app/utils/currency";
 import { formatCallDate } from "$app/utils/date";
 import { variantLabel } from "$app/utils/labels";
@@ -15,13 +15,14 @@ import { assertResponseError } from "$app/utils/request";
 
 import { Button, NavigationButton } from "$app/components/Button";
 import {
-  CartListItem,
+  CartItem,
   CartItemFooter,
   CartItemMain,
   CartItemMedia,
   CartItemTitle,
-  CartList,
+  CartItemList,
   CartItemEnd,
+  CartItemFooterItem,
 } from "$app/components/CartList";
 import { PaymentForm } from "$app/components/Checkout/PaymentForm";
 import { Popover } from "$app/components/Popover";
@@ -42,7 +43,14 @@ import { useOriginalLocation } from "$app/components/useOriginalLocation";
 import { useRunOnce } from "$app/components/useRunOnce";
 import { WithTooltip } from "$app/components/WithTooltip";
 
-import { CartState, convertToUSD, hasFreeTrial, getDiscountedPrice, CartItem, findCartItem } from "./cartState";
+import {
+  CartState,
+  convertToUSD,
+  hasFreeTrial,
+  getDiscountedPrice,
+  CartItem as CartItemProps,
+  findCartItem,
+} from "./cartState";
 import { computeTip, computeTipForPrice, getTotalPrice, isProcessing, useState } from "./payment";
 
 import placeholder from "$assets/images/placeholders/checkout.png";
@@ -227,7 +235,7 @@ export const Checkout = ({
         <div className="grid gap-8 p-4 md:p-8">
           <div className="grid grid-cols-1 items-start gap-x-16 gap-y-8 lg:grid-cols-[2fr_minmax(26rem,1fr)]">
             <div className="grid gap-6">
-              <CartList>
+              <CartItemList>
                 {cart.items.map((item) => (
                   <CartItemComponent
                     key={`${item.product.permalink}${item.option_id ? `_${item.option_id}` : ""}`}
@@ -238,59 +246,65 @@ export const Checkout = ({
                   />
                 ))}
 
-                <div className="grid gap-4 p-4">
+                <div className="grid gap-4 border-t border-border p-4">
                   {state.surcharges.type === "loaded" ? (
                     <>
-                      <CartPriceItem title="Subtotal" price={subtotal} displayZeroPrice />
-                      <CartPriceItem title="Tip" price={tip} />
-                      <CartPriceItem
-                        title={`${nameOfSalesTaxForCountry(state.country)} (included)`}
-                        price={state.surcharges.result.tax_included_cents}
-                      />
-                      <CartPriceItem
-                        title={nameOfSalesTaxForCountry(state.country)}
-                        price={state.surcharges.result.tax_cents}
-                      />
-                      <CartPriceItem title="Shipping rate" price={state.surcharges.result.shipping_rate_cents} />
+                      <CartPriceItem title="Subtotal" price={formatPrice(subtotal)} />
+                      {tip ? <CartPriceItem title="Tip" price={formatPrice(tip)} /> : null}
+                      {state.surcharges.result.tax_included_cents ? (
+                        <CartPriceItem
+                          title={`${nameOfSalesTaxForCountry(state.country)} (included)`}
+                          price={formatPrice(state.surcharges.result.tax_included_cents)}
+                        />
+                      ) : null}
+                      {state.surcharges.result.tax_cents ? (
+                        <CartPriceItem
+                          title={nameOfSalesTaxForCountry(state.country)}
+                          price={formatPrice(state.surcharges.result.tax_cents)}
+                        />
+                      ) : null}
+                      {state.surcharges.result.shipping_rate_cents ? (
+                        <CartPriceItem
+                          title="Shipping rate"
+                          price={formatPrice(state.surcharges.result.shipping_rate_cents)}
+                        />
+                      ) : null}
                     </>
                   ) : null}
                   {visibleDiscounts.length || discount > 0 ? (
-                    <CartPriceItem
-                      title={
-                        <>
-                          Discounts
-                          {cart.items.some((item) => !!item.product.ppp_details && item.price !== 0) &&
-                          !cart.rejectPppDiscount ? (
-                            <WithTooltip
-                              tip="This discount is applied based on the cost of living in your country."
-                              position="top"
-                            >
-                              <button
-                                className="pill small dismissable"
-                                onClick={() => updateCart({ rejectPppDiscount: true })}
-                                aria-label="Purchasing power parity discount"
-                              >
-                                Purchasing power parity discount
-                              </button>
-                            </WithTooltip>
-                          ) : null}
-                          {visibleDiscounts.map((code) => (
-                            <div
+                    <div className="grid grid-flow-col justify-between gap-4">
+                      <h4 className="inline-flex flex-wrap gap-2">
+                        Discounts
+                        {cart.items.some((item) => !!item.product.ppp_details && item.price !== 0) &&
+                        !cart.rejectPppDiscount ? (
+                          <WithTooltip
+                            tip="This discount is applied based on the cost of living in your country."
+                            position="top"
+                          >
+                            <button
                               className="pill small dismissable"
-                              onClick={() =>
-                                updateCart({ discountCodes: cart.discountCodes.filter((item) => item !== code) })
-                              }
-                              key={code.code}
-                              aria-label="Discount code"
+                              onClick={() => updateCart({ rejectPppDiscount: true })}
+                              aria-label="Purchasing power parity discount"
                             >
-                              {code.code}
-                            </div>
-                          ))}
-                        </>
-                      }
-                      price={discount > 0 ? -discount : 0}
-                      displayZeroPrice={visibleDiscounts.length > 0}
-                    />
+                              Purchasing power parity discount
+                            </button>
+                          </WithTooltip>
+                        ) : null}
+                        {visibleDiscounts.map((code) => (
+                          <div
+                            className="pill small dismissable"
+                            onClick={() =>
+                              updateCart({ discountCodes: cart.discountCodes.filter((item) => item !== code) })
+                            }
+                            key={code.code}
+                            aria-label="Discount code"
+                          >
+                            {code.code}
+                          </div>
+                        ))}
+                      </h4>
+                      {discount > 0 ? <div>{formatPrice(-discount)}</div> : null}
+                    </div>
                   ) : null}
                   {cart.items.some((item) => item.product.has_offer_codes) ? (
                     <form
@@ -314,22 +328,32 @@ export const Checkout = ({
                 </div>
                 {total != null ? (
                   <>
-                    <footer className="grid gap-4 p-4">
-                      <CartPriceItem title="Total" price={total} className="*:text-lg" displayZeroPrice />
+                    <footer className="grid gap-4 border-t border-border p-4">
+                      <CartPriceItem title="Total" price={formatPrice(total)} className="*:text-lg" />
                     </footer>
                     {commissionCompletionTotal > 0 || futureInstallmentsWithoutTipsTotal > 0 ? (
-                      <div className="grid gap-4 p-4">
+                      <div className="grid gap-4 border-t border-border p-4">
                         <CartPriceItem
                           title="Payment today"
-                          price={total - commissionCompletionTotal - futureInstallmentsWithoutTipsTotal}
+                          price={formatPrice(total - commissionCompletionTotal - futureInstallmentsWithoutTipsTotal)}
                         />
-                        <CartPriceItem title="Payment after completion" price={commissionCompletionTotal} />
-                        <CartPriceItem title="Future installments" price={futureInstallmentsWithoutTipsTotal} />
+                        {commissionCompletionTotal > 0 ? (
+                          <CartPriceItem
+                            title="Payment after completion"
+                            price={formatPrice(commissionCompletionTotal)}
+                          />
+                        ) : null}
+                        {futureInstallmentsWithoutTipsTotal > 0 ? (
+                          <CartPriceItem
+                            title="Future installments"
+                            price={formatPrice(futureInstallmentsWithoutTipsTotal)}
+                          />
+                        ) : null}
                       </div>
                     ) : null}
                   </>
                 ) : null}
-              </CartList>
+              </CartItemList>
               {recommendedProducts && recommendedProducts.length > 0 ? (
                 <section className="paragraphs">
                   <h2>Customers who bought {cart.items.length === 1 ? "this item" : "these items"} also bought</h2>
@@ -368,23 +392,16 @@ const CartPriceItem = ({
   title,
   price,
   className,
-  displayZeroPrice = false,
 }: {
   title: React.ReactNode;
-  price: number | null;
+  price: string | number | null;
   className?: string;
-  displayZeroPrice?: boolean;
-}) => {
-  if (price == null || (price === 0 && !displayZeroPrice)) {
-    return null;
-  }
-  return (
-    <div className={classNames("grid grid-flow-col justify-between gap-4", className)}>
-      <h4 className="inline-flex flex-wrap gap-2">{title}</h4>
-      <div>{formatUSDCentsWithExpandedCurrencySymbol(Math.floor(price))}</div>
-    </div>
-  );
-};
+}) => (
+  <div className={classNames("grid grid-flow-col justify-between gap-4", className)}>
+    <h4 className="inline-flex flex-wrap gap-2">{title}</h4>
+    <div>{price}</div>
+  </div>
+);
 
 const CartItemComponent = ({
   item,
@@ -392,7 +409,7 @@ const CartItemComponent = ({
   updateCart,
   isGift,
 }: {
-  item: CartItem;
+  item: CartItemProps;
   cart: CartState;
   updateCart: (update: Partial<CartState>) => void;
   isGift: boolean;
@@ -442,33 +459,33 @@ const CartItemComponent = ({
   const price = hasFreeTrial(item, isGift) ? 0 : item.price * item.quantity;
 
   return (
-    <CartListItem
+    <CartItem
       extra={
         item.product.bundle_products.length > 0 ? (
           <>
             <h4>This bundle contains...</h4>
-            <CartList>
+            <CartItemList>
               {item.product.bundle_products.map((bundleProduct) => (
-                <CartListItem key={bundleProduct.product_id}>
+                <CartItem key={bundleProduct.product_id}>
                   <CartItemMedia>
                     <Thumbnail url={bundleProduct.thumbnail_url} nativeType={bundleProduct.native_type} />
                   </CartItemMedia>
                   <CartItemMain>
                     <CartItemTitle>{bundleProduct.name}</CartItemTitle>
                     <CartItemFooter>
-                      <li>
+                      <CartItemFooterItem>
                         <strong>Qty:</strong> {bundleProduct.quantity}
-                      </li>
+                      </CartItemFooterItem>
                       {bundleProduct.variant ? (
-                        <li>
+                        <CartItemFooterItem>
                           <strong>{variantLabel(bundleProduct.native_type)}:</strong> {bundleProduct.variant.name}
-                        </li>
+                        </CartItemFooterItem>
                       ) : null}
                     </CartItemFooter>
                   </CartItemMain>
-                </CartListItem>
+                </CartItem>
               ))}
-            </CartList>
+            </CartItemList>
           </>
         ) : null
       }
@@ -597,6 +614,6 @@ const CartItemComponent = ({
           </ul>
         </footer>
       </CartItemEnd>
-    </CartListItem>
+    </CartItem>
   );
 };
