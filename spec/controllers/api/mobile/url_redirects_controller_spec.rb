@@ -136,6 +136,14 @@ describe Api::Mobile::UrlRedirectsController do
     let(:subtitle_en_url) { "#{subtitle_url_bucket_url}#{subtitle_en_file_path}" }
     let(:subtitle_fr_url) { "#{subtitle_url_bucket_url}#{subtitle_fr_file_path}" }
 
+    before do
+      next unless USING_MINIO
+
+      allow_any_instance_of(SignedUrlHelper).to receive(:minio_presigned_url) do |_helper, s3_key, *_args|
+        "#{AWS_S3_ENDPOINT}/#{S3_BUCKET}/#{s3_key}"
+      end
+    end
+
     it "returns an unauthorized response if the user does not provide the correct mobile token" do
       get :stream, params: { token: url_redirect.token, product_file_id: file_1.external_id, format: :json }
       expect(response.code).to eq "401"
@@ -198,15 +206,6 @@ describe Api::Mobile::UrlRedirectsController do
       subtitle_file_fr = create(:subtitle_file, language: "Français", url: subtitle_fr_url, product_file: file_1)
       allow(s3_object).to receive(:content_length).and_return(100, 105)
       allow(s3_object).to receive(:public_url).and_return(subtitle_en_file_path, subtitle_fr_file_path)
-      if USING_MINIO
-        allow(s3_object).to receive(:presigned_url) do |_, options|
-          if options[:response_content_disposition]&.include?("english.srt")
-            "https://example.com/minio/english.srt"
-          else
-            "https://example.com/minio/french.srt"
-          end
-        end
-      end
       travel_to Time.current # Freeze time so we can generate the expected URL(that is based on time)
       subtitle_en_path =
         file_1.signed_download_url_for_s3_key_and_filename(subtitle_file_en.s3_key, subtitle_file_en.s3_filename,
