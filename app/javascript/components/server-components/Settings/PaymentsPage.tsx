@@ -1071,8 +1071,8 @@ const PaymentsPage = (props: Props) => {
                 </Button>
               ) : null}
               {props.user.country_code === "BR" ||
-                props.user.can_connect_stripe ||
-                props.stripe_connect.has_connected_stripe ? (
+              props.user.can_connect_stripe ||
+              props.stripe_connect.has_connected_stripe ? (
                 <Button
                   role="radio"
                   key="stripe"
