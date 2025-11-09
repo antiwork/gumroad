@@ -16,6 +16,14 @@ describe("File embeds in product content editor", type: :system, js: true) do
                                                               multiple_items_rate_cents: 0)
   end
 
+  before do
+    next unless USING_MINIO
+
+    allow_any_instance_of(SignedUrlHelper).to receive(:minio_presigned_url) do |_helper, s3_key, *_args|
+      "#{AWS_S3_ENDPOINT}/#{S3_BUCKET}/#{s3_key}"
+    end
+  end
+
   include_context "with switching account to user as admin for seller"
 
   it "allows to mark PDF files as stampable" do
@@ -122,7 +130,11 @@ describe("File embeds in product content editor", type: :system, js: true) do
   end
 
   it "allows users to upload subtitles with special characters in filenames" do
-    allow(Aws::S3::Resource).to receive(:new).and_return(double(bucket: double(object: double(content_length: 1024, public_url: Addressable::URI.encode("#{AWS_S3_ENDPOINT}/#{S3_BUCKET}/attachment/0000063137454006b85553304efaffb7/original/[]&+.mp4")))))
+    s3_object_double = double(
+      content_length: 1024,
+      public_url: Addressable::URI.encode("#{AWS_S3_ENDPOINT}/#{S3_BUCKET}/attachment/0000063137454006b85553304efaffb7/original/[]&+.mp4")
+    )
+    allow(Aws::S3::Resource).to receive(:new).and_return(double(bucket: double(object: s3_object_double)))
 
     product_file = create(:product_file, url: "#{AWS_S3_ENDPOINT}/#{S3_BUCKET}/attachment/0000063137454006b85553304efaffb7/original/[]&+.mp4")
     @product.product_files << product_file
@@ -147,7 +159,11 @@ describe("File embeds in product content editor", type: :system, js: true) do
 
   describe "with video" do
     before do
-      allow(Aws::S3::Resource).to receive(:new).and_return(double(bucket: double(object: double(content_length: 1024, public_url: Addressable::URI.encode("#{AWS_S3_ENDPOINT}/#{S3_BUCKET}/attachment/1111163137454006b85553304efaffb7/original/[]&+.mp4")))))
+      s3_object_double = double(
+        content_length: 1024,
+        public_url: Addressable::URI.encode("#{AWS_S3_ENDPOINT}/#{S3_BUCKET}/attachment/1111163137454006b85553304efaffb7/original/[]&+.mp4")
+      )
+      allow(Aws::S3::Resource).to receive(:new).and_return(double(bucket: double(object: s3_object_double)))
 
       product_file = create(:product_file, url: "#{AWS_S3_ENDPOINT}/#{S3_BUCKET}/attachment/0000063137454006b85553304efaffb7/original/[]&+.mp4")
       @product.product_files << product_file
@@ -212,7 +228,6 @@ describe("File embeds in product content editor", type: :system, js: true) do
         allow(bucket_double).to receive(:object).times.and_return(@s3_object_double)
         allow(@s3_object_double).to receive(:content_length).times.and_return(1)
         allow(@s3_object_double).to receive(:public_url).times.and_return(video_uri)
-
         visit edit_link_path(@product.unique_permalink) + "/content"
         within find_embed(name: "chapter2") do
           click_on "Edit"
@@ -322,7 +337,11 @@ describe("File embeds in product content editor", type: :system, js: true) do
   end
 
   it "allows to rename files even if filenames have special characters [, ], &, +" do
-    allow(Aws::S3::Resource).to receive(:new).and_return(double(bucket: double(object: double(content_length: 1024, public_url: Addressable::URI.encode("#{AWS_S3_ENDPOINT}/#{S3_BUCKET}/attachment/0000063137454006b85553304efaffb7/original/[]&+.mp4")))))
+    s3_object_double = double(
+      content_length: 1024,
+      public_url: Addressable::URI.encode("#{AWS_S3_ENDPOINT}/#{S3_BUCKET}/attachment/0000063137454006b85553304efaffb7/original/[]&+.mp4")
+    )
+    allow(Aws::S3::Resource).to receive(:new).and_return(double(bucket: double(object: s3_object_double)))
 
     product_file = create(:product_file, link: @product, url: "#{AWS_S3_ENDPOINT}/#{S3_BUCKET}/attachment/0000063137454006b85553304efaffb7/original/[]&+.mp4")
     create(:rich_content, entity: @product, description: [{ "type" => "fileEmbed", "attrs" => { "id" => product_file.external_id, "uid" => SecureRandom.uuid } }])
