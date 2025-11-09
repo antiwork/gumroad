@@ -46,7 +46,7 @@ describe "Admin::AffiliatesController Scenario", type: :system, js: true do
       expect(page).not_to have_text("Product a")
       expect(page).not_to have_text("Product b")
       expect(page).to have_text("Product c")
-      within("[aria-label='Pagination']") { expect(page).to have_link("1") }
+      within("[aria-label='Pagination']") { expect(page).to have_command("1") }
     end
   end
 end

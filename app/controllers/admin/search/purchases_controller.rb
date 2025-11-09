@@ -7,10 +7,21 @@ class Admin::Search::PurchasesController < Admin::BaseController
   def index
     @title = "Purchase results"
 
+    search_params = params.permit(:transaction_date, :last_4, :card_type, :price, :expiry_date, :purchase_status).to_hash.symbolize_keys
+
+    if search_params[:transaction_date].present?
+      begin
+        search_params[:transaction_date] = Date.strptime(search_params[:transaction_date], "%m/%d/%Y").to_s
+      rescue ArgumentError
+        flash[:alert] = "Please enter the date using the MM/DD/YYYY format."
+        search_params.delete(:transaction_date)
+      end
+    end
+
     @purchases = AdminSearchService.new.search_purchases(
       query: params[:query]&.strip,
       product_title_query: params[:product_title_query]&.strip,
-      purchase_status: params[:purchase_status],
+      **search_params,
     )
 
     pagination, purchases = pagy_countless(
