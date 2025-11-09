@@ -21,6 +21,8 @@ describe SignedUrlHelper do
     allow(s3_res_double).to receive(:bucket).times.and_return(bucket_double)
     allow(bucket_double).to receive(:object).times.and_return(@s3_object_double)
     allow(@s3_object_double).to receive(:public_url).times.and_return(pdf_uri)
+
+    allow(@s3_object_double).to receive(:presigned_url).and_return("#{AWS_S3_ENDPOINT}/#{S3_BUCKET}/#{pdf_path}?X-Amz-Signature=test")
   end
 
   it "returns the correct validation duration" do
@@ -32,29 +34,41 @@ describe SignedUrlHelper do
   it "returns a CloudFront read url with the proper cache_group paramter if file size >= 8GB" do
     allow(@s3_object_double).to receive(:content_length).and_return(8_000_000_000)
 
-    expect(signed_download_url_for_s3_key_and_filename(@file.s3_key, @file.s3_filename, cache_group: "read"))
-      .to match(/cloudfront\.net.*cache_group=read/)
+    url = signed_download_url_for_s3_key_and_filename(@file.s3_key, @file.s3_filename, cache_group: "read")
+
+    if USING_MINIO
+      expect(url).to match(/X-Amz-Signature=/)
+    else
+      expect(url).to match(/cloudfront\.net.*cache_group=read/)
+    end
   end
 
   it "returns a Cloudflare read url with the proper cache_group paramter if file size < 8GB" do
     allow(@s3_object_double).to receive(:content_length).and_return(1_000_000_000)
 
-    expect(signed_download_url_for_s3_key_and_filename(@file.s3_key, @file.s3_filename, cache_group: "read"))
-      .to match(/staging-files\.gumroad\.com.*cache_group=read.*verify=/)
+    url = signed_download_url_for_s3_key_and_filename(@file.s3_key, @file.s3_filename, cache_group: "read")
+
+    if USING_MINIO
+      expect(url).to match(/X-Amz-Signature=/)
+    else
+      expect(url).to match(/staging-files\.gumroad\.com.*cache_group=read.*verify=/)
+    end
   end
 
   it "contains the cache_key parameter in the query string for files with specific extensions" do
     allow(@s3_object_double).to receive(:content_length).and_return(1_000_000_000)
 
-    expect(signed_download_url_for_s3_key_and_filename(@file.s3_key, @file.s3_filename))
-      .to_not include("cache_key=caIWHGT4Qhqo6KoxDMNXwQ")
+    url = signed_download_url_for_s3_key_and_filename(@file.s3_key, @file.s3_filename)
+    expect(url).to_not include("cache_key=caIWHGT4Qhqo6KoxDMNXwQ")
 
-    %w(jpg jpeg png epub brushset scrivtemplate zip).each do |extension|
-      file_path = "#{AWS_S3_ENDPOINT}/#{S3_BUCKET}/attachments/23b2d41ac63a40b5afa1a99bf38a0982/original/nyt.#{extension}"
-      file = create(:product_file, url: URI.parse(file_path).to_s)
+    unless USING_MINIO
+      %w(jpg jpeg png epub brushset scrivtemplate zip).each do |extension|
+        file_path = "#{AWS_S3_ENDPOINT}/#{S3_BUCKET}/attachments/23b2d41ac63a40b5afa1a99bf38a0982/original/nyt.#{extension}"
+        file = create(:product_file, url: URI.parse(file_path).to_s)
 
-      expect(signed_download_url_for_s3_key_and_filename(file.s3_key, file.s3_filename))
-          .to match(/staging-files\.gumroad\.com.*cache_key=caIWHGT4Qhqo6KoxDMNXwQ.*/)
+        expect(signed_download_url_for_s3_key_and_filename(file.s3_key, file.s3_filename))
+            .to match(/staging-files\.gumroad\.com.*cache_key=caIWHGT4Qhqo6KoxDMNXwQ.*/)
+      end
     end
   end
 
@@ -62,9 +76,15 @@ describe SignedUrlHelper do
     RSpec::Mocks.space.proxy_for(Aws::S3::Client).reset
     RSpec::Mocks.space.proxy_for(Aws::S3::Resource).reset
 
-    expect do
-      signed_download_url_for_s3_key_and_filename("attachments/missing.txt", "filename")
-    end.to raise_error(Aws::S3::Errors::NotFound, /Key = attachments\/missing.txt/)
+    if USING_MINIO
+      expect do
+        signed_download_url_for_s3_key_and_filename("attachments/missing.txt", "filename")
+      end.to raise_error(Aws::S3::Errors::NotFound)
+    else
+      expect do
+        signed_download_url_for_s3_key_and_filename("attachments/missing.txt", "filename")
+      end.to raise_error(Aws::S3::Errors::NotFound, /Key = attachments\/missing.txt/)
+    end
   end
 
   describe "#file_needs_cache_key?" do
