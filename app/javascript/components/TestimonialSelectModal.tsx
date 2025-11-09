@@ -94,7 +94,7 @@ export const TestimonialSelectModal = ({
     <Modal
       open={isOpen}
       onClose={onClose}
-      title="Insert reviews" /* Modal title */
+      title="Insert reviews"
       footer={
         <>
           <Button onClick={onClose}>Cancel</Button>
@@ -105,7 +105,7 @@ export const TestimonialSelectModal = ({
               disabled={selectedReviewIds.length === 0}
             >
               Insert
-            </Button> /*Action button 1 */
+            </Button>
           ) : null}
         </>
       }
