@@ -75,4 +75,23 @@ describe "Admin::LinksController Scenario", type: :system, js: true do
       expect(product.reload.staff_picked?).to eq(true)
     end
   end
+
+  describe "Product files display" do
+    context "when product has files with and without s3_filename" do
+      let!(:regular_file) { create(:product_file, link: product, position: 1) }
+      let!(:external_link_file) { create(:product_file, link: product, position: 2, filetype: "link", url: "https://example.com/external-resource") }
+
+      it "renders product card with all files" do
+        visit admin_link_path(product.unique_permalink)
+
+        within_section(product.name, section_element: :article) do
+          # Should show the regular file with s3_filename
+          expect(page).to have_link(regular_file.s3_filename, href: admin_access_product_file_admin_product_path(product.unique_permalink, regular_file.external_id))
+
+          # Should show the external link file with external_id as fallback
+          expect(page).to have_link(external_link_file.external_id, href: admin_access_product_file_admin_product_path(product.unique_permalink, external_link_file.external_id))
+        end
+      end
+    end
+  end
 end
