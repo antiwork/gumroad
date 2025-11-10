@@ -88,6 +88,7 @@ class Admin::PurchasePresenter
                          cancelled_at: purchase.subscription.cancelled_at,
                          cancelled_by_buyer: purchase.subscription.cancelled_by_buyer,
                          ended_at: purchase.subscription.ended_at,
+                         failed_at: purchase.subscription.failed_at,
                        } : nil,
                        email_info: email_info_text,
                        is_bundle_purchase: purchase.is_bundle_purchase,
