@@ -1,14 +1,13 @@
 import { usePage } from "@inertiajs/react";
 import React from "react";
+import { cast } from "ts-safe-cast";
 
 import { WorkflowFormContext } from "$app/types/workflow";
 
 import WorkflowForm from "$app/components/WorkflowsPage/WorkflowForm";
 
-function WorkflowsNew() {
-  const { context } = usePage<{ context: WorkflowFormContext }>().props;
+export default function WorkflowsNew() {
+  const { context } = cast<{ context: WorkflowFormContext }>(usePage().props);
 
   return <WorkflowForm context={context} />;
 }
-
-export default WorkflowsNew;
