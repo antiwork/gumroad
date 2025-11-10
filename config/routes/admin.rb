@@ -30,7 +30,7 @@ namespace :admin do
       resource :payout_info, only: :show
       resources :latest_posts, only: :index
       resources :stats, only: :index
-      resources :products, only: [] do
+      resources :products, only: :index do
         scope module: :products do
           resources :tos_violation_flags, only: [:index, :create]
           resources :purchases, only: :index
@@ -66,7 +66,7 @@ namespace :admin do
   end
 
   resources :affiliates, only: [] do
-    resources :products, only: [], module: :affiliates do
+    resources :products, only: [:index], module: :affiliates do
       resources :purchases, only: :index, module: :products
     end
   end
@@ -112,6 +112,9 @@ namespace :admin do
   resources :comments, only: :create
 
   resources :purchases, only: [:show] do
+    scope module: :purchases do
+      concerns :commentable
+    end
     member do
       post :refund
       post :refund_for_fraud
@@ -156,7 +159,7 @@ namespace :admin do
   # Compliance
   resources :guids, only: [:show]
   scope module: "compliance" do
-    resources :cards, only: [:index] do
+    resources :cards, only: [] do
       collection do
         post :refund
       end

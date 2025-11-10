@@ -455,11 +455,11 @@ describe ProductFile do
         hls_playlist = @file_1.hls_playlist
         url = "#EXTM3U\n#EXT-X-STREAM-INF:PROGRAM-ID=1,RESOLUTION=854x480,CODECS=\"avc1.4d001f,mp4a.40.2\",BANDWIDTH=1191000\n"
         url += "https://d1jmbc8d0c0hid.cloudfront.net/attachments/2_1/original/chapter+2/hls/hls_480p_.m3u8?Expires=1426248000&"
-        url += "Signature=vanawCHC4r2A+uhez+lPVIjGTN+wYkgEoEwQ4QROsfcW7L4CPGCraydEonwriLbfyCKwstKYgZU4EXIefbFtboqq/34TcJsrbuabd890HeHJ7whSg/I7RoWoHJJ9J48N9wFZ4LyqY9PlWM8vhI3WBr7TV1THyuB1F/fieQ+Sr5o=&"
+        url += "Signature=lqqrPpAOP6KeFxLiOt/ynEpMvkAgIzwuQM9LZSA6cB143fSP0WVkGuq10VJzsICzQ/3wdSWhRYTgJsNQMATDtg==&"
         url += "Key-Pair-Id=APKAISH5PKOS7WQUJ6SA\n"
         url += "#EXT-X-STREAM-INF:PROGRAM-ID=1,RESOLUTION=1280x720,CODECS=\"avc1.4d001f,mp4a.40.2\",BANDWIDTH=2805000\n"
         url += "https://d1jmbc8d0c0hid.cloudfront.net/attachments/2_1/original/chapter+2/hls/hls_720p_.m3u8?Expires=1426248000&"
-        url += "Signature=n4AQRij+ip3QPK9PLbc3pElA3/YytwV83I33fppz/va+8ecgU04keHvLkL7olIWu3mNQjX/xYGmnvJJucPKBuqKNpATMdUBo2yr70gsEo3FW7tmrHjZQWBFObvMkNR0FFb3syow5X71JQRCkmkaer3y6x7EMyKUxwcH8lCxx2+4=&"
+        url += "Signature=P3ocRbRxhWiP1pSWehzxz7PMx+GUlhoZGL5u+KMIj4+hrbcoT3Gm9rNiZL1PDUzBHP6DJ8Cgw3TNPYb2xcoNsQ==&"
         url += "Key-Pair-Id=APKAISH5PKOS7WQUJ6SA\n"
         expect(hls_playlist).to eq url
       end
@@ -471,11 +471,11 @@ describe ProductFile do
         hls_playlist = @file_1.hls_playlist
         url = "#EXTM3U\n#EXT-X-STREAM-INF:PROGRAM-ID=1,RESOLUTION=854x480,CODECS=\"avc1.4d001f,mp4a.40.2\",BANDWIDTH=1191000\n"
         url += "https://d1jmbc8d0c0hid.cloudfront.net/attachments/2_1/original/chapter+2/hls/hls_480p_.m3u8?Expires=1426248000&" # Notice the + in chapter+2
-        url += "Signature=vanawCHC4r2A+uhez+lPVIjGTN+wYkgEoEwQ4QROsfcW7L4CPGCraydEonwriLbfyCKwstKYgZU4EXIefbFtboqq/34TcJsrbuabd890HeHJ7whSg/I7RoWoHJJ9J48N9wFZ4LyqY9PlWM8vhI3WBr7TV1THyuB1F/fieQ+Sr5o=&"
+        url += "Signature=lqqrPpAOP6KeFxLiOt/ynEpMvkAgIzwuQM9LZSA6cB143fSP0WVkGuq10VJzsICzQ/3wdSWhRYTgJsNQMATDtg==&"
         url += "Key-Pair-Id=APKAISH5PKOS7WQUJ6SA\n"
         url += "#EXT-X-STREAM-INF:PROGRAM-ID=1,RESOLUTION=1280x720,CODECS=\"avc1.4d001f,mp4a.40.2\",BANDWIDTH=2805000\n"
         url += "https://d1jmbc8d0c0hid.cloudfront.net/attachments/2_1/original/chapter+2/hls/hls_720p_.m3u8?Expires=1426248000&" # Notice the + in chapter+2
-        url += "Signature=n4AQRij+ip3QPK9PLbc3pElA3/YytwV83I33fppz/va+8ecgU04keHvLkL7olIWu3mNQjX/xYGmnvJJucPKBuqKNpATMdUBo2yr70gsEo3FW7tmrHjZQWBFObvMkNR0FFb3syow5X71JQRCkmkaer3y6x7EMyKUxwcH8lCxx2+4=&"
+        url += "Signature=P3ocRbRxhWiP1pSWehzxz7PMx+GUlhoZGL5u+KMIj4+hrbcoT3Gm9rNiZL1PDUzBHP6DJ8Cgw3TNPYb2xcoNsQ==&"
         url += "Key-Pair-Id=APKAISH5PKOS7WQUJ6SA\n"
         expect(hls_playlist).to eq url
       end

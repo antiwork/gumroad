@@ -134,7 +134,7 @@ const Widgets = ({ display_product_select, products, affiliated_products, defaul
   );
 
   return (
-    <>
+    <div className="scoped-tailwind-preflight grid gap-4">
       <Tabs
         tab={selectedTab}
         setTab={setSelectedTab}
@@ -144,10 +144,8 @@ const Widgets = ({ display_product_select, products, affiliated_products, defaul
       <div
         role="tabpanel"
         id={overlayTabpanelUID}
-        style={{
-          display: selectedTab === "overlay" ? "grid" : "none",
-          gap: "var(--spacer-6)",
-        }}
+        className="grid gap-6 rounded-sm border bg-background p-4"
+        hidden={selectedTab !== "overlay"}
       >
         {display_product_select ? productSelect : null}
         <OverlayPanel selectedProduct={selectedProduct} />
@@ -155,15 +153,13 @@ const Widgets = ({ display_product_select, products, affiliated_products, defaul
       <div
         role="tabpanel"
         id={embedTabpanelUID}
-        style={{
-          display: selectedTab === "embed" ? "grid" : "none",
-          gap: "var(--spacer-6)",
-        }}
+        className="grid gap-6 rounded-sm border bg-background p-4"
+        hidden={selectedTab !== "embed"}
       >
         {display_product_select ? productSelect : null}
         <EmbedPanel selectedProduct={selectedProduct} />
       </div>
-    </>
+    </div>
   );
 };
 

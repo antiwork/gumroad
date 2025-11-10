@@ -4,53 +4,16 @@ require "spec_helper"
 
 describe Admin::UserPresenter::Card do
   describe "#props" do
+    let(:admin_user) { create(:user) }
     let(:user) { create(:named_user, *user_traits) }
     let(:user_traits) { [] }
-    let(:impersonatable) { false }
-    let(:presenter) { described_class.new(user:, impersonatable:) }
+    let(:pundit_user) { SellerContext.new(user: admin_user, seller: admin_user) }
+    let(:presenter) { described_class.new(user:, pundit_user:) }
 
     subject(:props) { presenter.props }
 
     before do
       create_list(:comment, 2, commentable: user, comment_type: Comment::COMMENT_TYPE_NOTE)
-    end
-
-    describe "basic structure" do
-      it "returns a hash with all expected keys" do
-        expect(props).to include(
-          :id,
-          :name,
-          :bio,
-          :avatar_url,
-          :username,
-          :email,
-          :form_email,
-          :form_email_domain,
-          :support_email,
-          :profile_url,
-          :subdomain_with_protocol,
-          :custom_fee_per_thousand,
-          :unpaid_balance_cents,
-          :disable_paypal_sales,
-          :verified,
-          :suspended,
-          :flagged_for_fraud,
-          :flagged_for_tos_violation,
-          :on_probation,
-          :all_adult_products,
-          :impersonatable,
-          :user_risk_state,
-          :comments_count,
-          :compliant,
-          :created_at,
-          :updated_at,
-          :deleted_at,
-          :blocked_by_form_email_object,
-          :blocked_by_form_email_domain_object,
-          :admin_manageable_user_memberships,
-          :alive_user_compliance_info
-        )
-      end
     end
 
     describe "fields" do
@@ -165,6 +128,8 @@ describe Admin::UserPresenter::Card do
 
           expect(membership_data).to include(
             id: membership.id,
+            role: membership.role,
+            last_accessed_at: membership.last_accessed_at,
             created_at: membership.created_at,
             updated_at: membership.updated_at
           )
