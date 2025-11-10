@@ -13,6 +13,7 @@ import { Thumbnail } from "$app/components/Product/Thumbnail";
 import { RatingStars } from "$app/components/RatingStars";
 import { ReviewForm } from "$app/components/ReviewForm";
 import Placeholder from "$app/components/ui/Placeholder";
+import { Table, TableBody, TableCaption, TableCell, TableHead, TableHeader, TableRow } from "$app/components/ui/Table";
 import { useOnChange } from "$app/components/useOnChange";
 
 import placeholderImage from "$assets/images/placeholders/reviews.png";
@@ -145,9 +146,17 @@ const ReviewsPage = ({
             </a>
           </Placeholder>
         ) : reviews.length > 0 ? (
-          <table>
-            <caption>Your reviews</caption>
-            <tbody>
+          <Table>
+            <TableCaption>Your reviews</TableCaption>
+            <TableHeader>
+              <TableRow>
+                <TableHead colSpan={2}>Product</TableHead>
+                <TableHead>Rating</TableHead>
+                <TableHead>Review</TableHead>
+                <TableHead>Actions</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
               {reviews.map((review) => (
                 <Row
                   key={review.id}
@@ -159,8 +168,8 @@ const ReviewsPage = ({
                   }
                 />
               ))}
-            </tbody>
-          </table>
+            </TableBody>
+          </Table>
         ) : null}
       </section>
     </Layout>
@@ -171,8 +180,8 @@ const Row = ({ review, onChange }: { review: Review; onChange: (review: Review) 
   const [isEditing, setIsEditing] = React.useState(false);
 
   return (
-    <tr>
-      <td className="icon-cell">
+    <TableRow>
+      <TableCell isIcon>
         <a href={review.product.url}>
           {review.product.thumbnail_url ? (
             <img alt={review.product.name} src={review.product.thumbnail_url} />
@@ -180,8 +189,8 @@ const Row = ({ review, onChange }: { review: Review; onChange: (review: Review) 
             <img src={cast(nativeTypeThumbnails(`./${review.product.native_type}.svg`))} />
           )}
         </a>
-      </td>
-      <td style={{ wordWrap: "break-word" }}>
+      </TableCell>
+      <TableCell label="Product" className="break-words">
         <div>
           <a href={review.product.url} target="_blank" rel="noreferrer">
             <h4>{review.product.name}</h4>
@@ -191,12 +200,18 @@ const Row = ({ review, onChange }: { review: Review; onChange: (review: Review) 
             {review.product.seller.name}
           </a>
         </div>
-      </td>
-      <td style={{ whiteSpace: "nowrap" }} aria-label={`${review.rating} ${review.rating === 1 ? "star" : "stars"}`}>
+      </TableCell>
+      <TableCell
+        label="Rating"
+        className="text-nowrap"
+        aria-label={`${review.rating} ${review.rating === 1 ? "star" : "stars"}`}
+      >
         <RatingStars rating={review.rating} />
-      </td>
-      <td style={{ wordWrap: "break-word" }}>{review.message ? `"${review.message}"` : null}</td>
-      <td>
+      </TableCell>
+      <TableCell label="Review" className="break-words">
+        {review.message ? `"${review.message}"` : null}
+      </TableCell>
+      <TableCell label="Actions">
         <div className="actions">
           <Popover
             open={isEditing}
@@ -218,8 +233,8 @@ const Row = ({ review, onChange }: { review: Review; onChange: (review: Review) 
             </div>
           </Popover>
         </div>
-      </td>
-    </tr>
+      </TableCell>
+    </TableRow>
   );
 };
 

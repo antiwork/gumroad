@@ -29,6 +29,7 @@ import {
   useSearchContext,
   ViewEmailButton,
 } from "$app/components/server-components/EmailsPage";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "$app/components/ui/Table";
 import { useDebouncedCallback } from "$app/components/useDebouncedCallback";
 import { useOnChange } from "$app/components/useOnChange";
 import { useUserAgentInfo } from "$app/components/UserAgent";
@@ -115,38 +116,38 @@ export const DraftsTab = () => {
       <div className="space-y-4 p-4 md:p-8">
         {installments.length > 0 ? (
           <>
-            <table aria-label="Drafts" className="mb-4" aria-live="polite" aria-busy={isLoading}>
-              <thead>
-                <tr>
-                  <th>Subject</th>
-                  <th>Sent to</th>
-                  <th>Audience</th>
-                  <th>Last edited</th>
-                </tr>
-              </thead>
-              <tbody>
+            <Table aria-label="Drafts" aria-live="polite" aria-busy={isLoading}>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Subject</TableHead>
+                  <TableHead>Sent to</TableHead>
+                  <TableHead>Audience</TableHead>
+                  <TableHead>Last edited</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
                 {installments.map((installment) => (
-                  <tr
+                  <TableRow
                     key={installment.external_id}
                     aria-selected={installment.external_id === selectedInstallmentId}
                     onClick={() => setSelectedInstallmentId(installment.external_id)}
                   >
-                    <td data-label="Subject">{installment.name}</td>
-                    <td data-label="Sent to">{installment.recipient_description}</td>
-                    <td
-                      data-label="Audience"
+                    <TableCell label="Subject">{installment.name}</TableCell>
+                    <TableCell label="Sent to">{installment.recipient_description}</TableCell>
+                    <TableCell
+                      label="Audience"
                       aria-busy={audienceCountValue(audienceCounts, installment.external_id) === null}
-                      className="whitespace-nowrap"
+                      className="text-nowrap"
                     >
                       {audienceCountValue(audienceCounts, installment.external_id)}
-                    </td>
-                    <td data-label="Last edited" className="whitespace-nowrap">
+                    </TableCell>
+                    <TableCell label="Last edited" className="text-nowrap">
                       {formatDistanceToNow(installment.updated_at)} ago
-                    </td>
-                  </tr>
+                    </TableCell>
+                  </TableRow>
                 ))}
-              </tbody>
-            </table>
+              </TableBody>
+            </Table>
             {pagination.next ? (
               <Button color="primary" disabled={isLoading} onClick={() => void fetchInstallments()}>
                 Load more

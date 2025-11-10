@@ -8,6 +8,16 @@ import { AbortError, assertResponseError } from "$app/utils/request";
 import { Icon } from "$app/components/Icons";
 import { Pagination, PaginationProps } from "$app/components/Pagination";
 import { showAlert } from "$app/components/server-components/Alert";
+import {
+  Table,
+  TableBody,
+  TableCaption,
+  TableCell,
+  TableFooter,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "$app/components/ui/Table";
 import { useUserAgentInfo } from "$app/components/UserAgent";
 import { useClientSortingTableDriver } from "$app/components/useSortingTableDriver";
 
@@ -61,33 +71,24 @@ export const CollabsProductsTable = (props: { entries: Product[]; pagination: Pa
 
   return (
     <div className="paragraphs">
-      <table aria-live="polite" aria-busy={isLoading} ref={tableRef}>
-        <caption>Products</caption>
-        <thead>
-          <tr>
-            <th />
-            <th {...thProps("name")} title="Sort by Name">
+      <Table aria-live="polite" aria-busy={isLoading} ref={tableRef}>
+        <TableCaption>Products</TableCaption>
+        <TableHeader>
+          <TableRow>
+            <TableHead colSpan={2} {...thProps("name")}>
               Name
-            </th>
-            <th {...thProps("display_price_cents")} title="Sort by Price">
-              Price
-            </th>
-            <th {...thProps("cut")} title="Sort by Cut">
-              Cut
-            </th>
-            <th {...thProps("successful_sales_count")} title="Sort by Sales">
-              Sales
-            </th>
-            <th {...thProps("revenue")} title="Sort by Revenue">
-              Revenue
-            </th>
-          </tr>
-        </thead>
+            </TableHead>
+            <TableHead {...thProps("display_price_cents")}>Price</TableHead>
+            <TableHead {...thProps("cut")}>Cut</TableHead>
+            <TableHead {...thProps("successful_sales_count")}>Sales</TableHead>
+            <TableHead {...thProps("revenue")}>Revenue</TableHead>
+          </TableRow>
+        </TableHeader>
 
-        <tbody>
+        <TableBody>
           {items.map((product) => (
-            <tr key={product.id}>
-              <td className="icon-cell">
+            <TableRow key={product.id}>
+              <TableCell isIcon>
                 {product.thumbnail ? (
                   <a href={product.can_edit ? product.edit_url : product.url}>
                     <img alt={product.name} src={product.thumbnail.url} />
@@ -95,9 +96,9 @@ export const CollabsProductsTable = (props: { entries: Product[]; pagination: Pa
                 ) : (
                   <Icon name="card-image-fill" />
                 )}
-              </td>
+              </TableCell>
 
-              <td>
+              <TableCell label="Name">
                 <div>
                   {/* Safari currently doesn't support position: relative on <tr>, so we can't use stretched-link here */}
                   <a href={product.can_edit ? product.edit_url : product.url} style={{ textDecoration: "none" }}>
@@ -108,15 +109,15 @@ export const CollabsProductsTable = (props: { entries: Product[]; pagination: Pa
                     <small>{product.url_without_protocol}</small>
                   </a>
                 </div>
-              </td>
+              </TableCell>
 
-              <td data-label="Price" style={{ whiteSpace: "nowrap" }}>
+              <TableCell label="Price" className="text-nowrap">
                 {product.price_formatted}
-              </td>
+              </TableCell>
 
-              <td data-label="Cut">{product.cut}%</td>
+              <TableCell label="Cut">{product.cut}%</TableCell>
 
-              <td data-label="Sales" style={{ whiteSpace: "nowrap" }}>
+              <TableCell label="Sales" className="text-nowrap">
                 <a href={Routes.customers_link_id_path(product.permalink)}>
                   {product.successful_sales_count.toLocaleString(userAgentInfo.locale)}
                 </a>
@@ -124,34 +125,34 @@ export const CollabsProductsTable = (props: { entries: Product[]; pagination: Pa
                 {product.remaining_for_sale_count ? (
                   <small>{product.remaining_for_sale_count.toLocaleString(userAgentInfo.locale)} remaining</small>
                 ) : null}
-              </td>
+              </TableCell>
 
-              <td data-label="Revenue" style={{ whiteSpace: "nowrap" }}>
+              <TableCell label="Revenue" className="text-nowrap">
                 {formatPriceCentsWithCurrencySymbol("usd", product.revenue, { symbolFormat: "short" })}
-              </td>
-            </tr>
+              </TableCell>
+            </TableRow>
           ))}
-        </tbody>
+        </TableBody>
 
-        <tfoot>
-          <tr>
-            <td colSpan={4}>Totals</td>
-            <td>
+        <TableFooter>
+          <TableRow>
+            <TableCell colSpan={4}>Totals</TableCell>
+            <TableCell>
               {products
                 .reduce((sum, product) => sum + product.successful_sales_count, 0)
                 .toLocaleString(userAgentInfo.locale)}
-            </td>
+            </TableCell>
 
-            <td>
+            <TableCell>
               {formatPriceCentsWithCurrencySymbol(
                 "usd",
                 products.reduce((sum, product) => sum + product.revenue, 0),
                 { symbolFormat: "short" },
               )}
-            </td>
-          </tr>
-        </tfoot>
-      </table>
+            </TableCell>
+          </TableRow>
+        </TableFooter>
+      </Table>
 
       {pagination.pages > 1 ? (
         <Pagination onChangePage={(page) => loadProducts({ page, query: state.query })} pagination={pagination} />

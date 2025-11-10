@@ -6,16 +6,15 @@ import { classNames } from "$app/utils/classNames";
 const TableContext = React.createContext<{ busy?: boolean | undefined }>({});
 const useTable = () => assertDefined(React.useContext(TableContext), "useTable must be used within a Table");
 
-export const Table = ({
-  className,
-  busy,
-  children,
-  ...props
-}: React.HTMLAttributes<HTMLTableElement> & { busy?: boolean }) => {
+export const Table = React.forwardRef<
+  HTMLTableElement,
+  Omit<React.HTMLAttributes<HTMLTableElement>, "aria-busy"> & { busy?: boolean }
+>(({ className, busy, children, ...props }, ref) => {
   const contextValue = React.useMemo(() => ({ busy }), [busy]);
   return (
     <TableContext.Provider value={contextValue}>
       <table
+        ref={ref}
         aria-busy={busy}
         className={classNames(
           "custom-table grid w-full border-spacing-0 gap-4 lg:table lg:rounded-sm lg:border lg:border-border",
@@ -27,7 +26,8 @@ export const Table = ({
       </table>
     </TableContext.Provider>
   );
-};
+});
+Table.displayName = "Table";
 
 export const TableCaption = ({ className, children, ...props }: React.HTMLAttributes<HTMLTableCaptionElement>) => (
   <caption className={classNames("block text-left text-base text-xl lg:mb-4 lg:table-caption", className)} {...props}>
@@ -78,7 +78,7 @@ export const TableRow = ({
   selected,
   children,
   ...props
-}: React.HTMLAttributes<HTMLTableRowElement> & { selected?: boolean; footer?: boolean }) => (
+}: Omit<React.HTMLAttributes<HTMLTableRowElement>, "aria-selected"> & { selected?: boolean; footer?: boolean }) => (
   <tr
     aria-selected={selected}
     className={classNames(
@@ -94,29 +94,27 @@ export const TableRow = ({
 
 export const TableHead = ({
   className,
-  sortable,
   sortDirection,
   onSort,
   children,
   ...props
-}: React.ThHTMLAttributes<HTMLTableCellElement> & {
-  sortable?: boolean;
+}: Omit<React.ThHTMLAttributes<HTMLTableCellElement>, "aria-sort"> & {
   sortDirection?: "ascending" | "descending" | "none";
   onSort?: () => void;
 }) => (
   <th
-    aria-sort={sortable ? sortDirection : undefined}
-    onClick={sortable ? onSort : undefined}
+    aria-sort={sortDirection}
+    onClick={onSort}
     className={classNames(
       "px-4 py-3 text-left align-middle lg:table-cell lg:whitespace-nowrap",
-      sortable && "cursor-pointer",
+      sortDirection && "cursor-pointer",
       className,
     )}
     {...props}
   >
     <span className="inline-flex items-center gap-1">
       {children}
-      {sortable && sortDirection && sortDirection !== "none" ? (
+      {sortDirection && sortDirection !== "none" ? (
         <span className="inline-block">{sortDirection === "ascending" ? "↑" : "↓"}</span>
       ) : null}
     </span>
@@ -131,7 +129,7 @@ export const TableCell = ({
   isIcon,
   children,
   ...props
-}: React.TdHTMLAttributes<HTMLTableCellElement> & {
+}: Omit<React.TdHTMLAttributes<HTMLTableCellElement>, "aria-busy"> & {
   busy?: boolean;
   actions?: boolean;
   label?: string;

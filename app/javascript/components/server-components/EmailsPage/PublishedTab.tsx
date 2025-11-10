@@ -20,6 +20,7 @@ import {
   useSearchContext,
   ViewEmailButton,
 } from "$app/components/server-components/EmailsPage";
+import { Table, TableBody, TableCaption, TableCell, TableHead, TableHeader, TableRow } from "$app/components/ui/Table";
 import { useDebouncedCallback } from "$app/components/useDebouncedCallback";
 import { useOnChange } from "$app/components/useOnChange";
 import { useUserAgentInfo } from "$app/components/UserAgent";
@@ -97,15 +98,16 @@ export const PublishedTab = () => {
       <div className="space-y-4 p-4 md:p-8">
         {installments.length > 0 ? (
           <>
-            <table aria-label="Published" aria-live="polite" aria-busy={isLoading} className="mb-4">
-              <thead>
-                <tr>
-                  <th>Subject</th>
-                  <th>Date</th>
-                  <th>Emailed</th>
-                  <th>Opened</th>
-                  <th>Clicks</th>
-                  <th>
+            <Table busy={isLoading} aria-label="Published" aria-live="polite">
+              <TableCaption>Published</TableCaption>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Subject</TableHead>
+                  <TableHead>Date</TableHead>
+                  <TableHead>Emailed</TableHead>
+                  <TableHead>Opened</TableHead>
+                  <TableHead>Clicks</TableHead>
+                  <TableHead>
                     Views{" "}
                     <div className="has-tooltip top whitespace-normal" aria-describedby={`views-tooltip-${uid}`}>
                       <Icon name="info-circle" />
@@ -113,66 +115,66 @@ export const PublishedTab = () => {
                         Views only apply to emails published on your profile.
                       </div>
                     </div>
-                  </th>
-                </tr>
-              </thead>
-              <tbody>
+                  </TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
                 {installments.map((installment) => (
-                  <tr
+                  <TableRow
                     key={installment.external_id}
-                    aria-selected={installment.external_id === selectedInstallmentId}
+                    selected={installment.external_id === selectedInstallmentId}
                     onClick={() => setSelectedInstallmentId(installment.external_id)}
                   >
-                    <td data-label="Subject">{installment.name}</td>
-                    <td data-label="Date" className="whitespace-nowrap">
+                    <TableCell label="Subject">{installment.name}</TableCell>
+                    <TableCell label="Date" className="whitespace-nowrap">
                       {new Date(installment.published_at).toLocaleDateString(userAgentInfo.locale, {
                         day: "numeric",
                         month: "short",
                         year: "numeric",
                         timeZone: currentSeller.timeZone.name,
                       })}
-                    </td>
-                    <td data-label="Emailed" className="whitespace-nowrap">
+                    </TableCell>
+                    <TableCell label="Emailed" className="whitespace-nowrap">
                       {installment.send_emails ? formatStatNumber({ value: installment.sent_count }) : "n/a"}
-                    </td>
-                    <td data-label="Opened" className="whitespace-nowrap">
+                    </TableCell>
+                    <TableCell label="Opened" className="whitespace-nowrap">
                       {installment.send_emails
                         ? formatStatNumber({ value: installment.open_rate, suffix: "%" })
                         : "n/a"}
-                    </td>
-                    <td data-label="Clicks" className="whitespace-nowrap">
+                    </TableCell>
+                    <TableCell label="Clicks" className="whitespace-nowrap">
                       {installment.clicked_urls.length > 0 ? (
                         <span className="has-tooltip" aria-describedby={`url-clicks-${installment.external_id}`}>
                           {formatStatNumber({ value: installment.click_count })}
                           <div role="tooltip" id={`url-clicks-${installment.external_id}`} className="w-[20rem] p-0">
-                            <table>
-                              <tbody>
+                            <Table>
+                              <TableBody>
                                 {installment.clicked_urls.map(({ url, count }) => (
-                                  <tr key={`${installment.external_id}-${url}`}>
-                                    <th scope="row" className="max-w-56 whitespace-break-spaces">
+                                  <TableRow key={`${installment.external_id}-${url}`}>
+                                    <TableHead scope="row" className="max-w-56 whitespace-break-spaces">
                                       {url}
-                                    </th>
-                                    <td>{formatStatNumber({ value: count })}</td>
-                                  </tr>
+                                    </TableHead>
+                                    <TableCell>{formatStatNumber({ value: count })}</TableCell>
+                                  </TableRow>
                                 ))}
-                              </tbody>
-                            </table>
+                              </TableBody>
+                            </Table>
                           </div>
                         </span>
                       ) : (
                         formatStatNumber({ value: installment.click_count })
                       )}
-                    </td>
-                    <td data-label="Views" className="whitespace-nowrap">
+                    </TableCell>
+                    <TableCell label="Views" className="whitespace-nowrap">
                       {formatStatNumber({
                         value: installment.view_count,
                         placeholder: "n/a",
                       })}
-                    </td>
-                  </tr>
+                    </TableCell>
+                  </TableRow>
                 ))}
-              </tbody>
-            </table>
+              </TableBody>
+            </Table>
             {pagination.next ? (
               <Button color="primary" disabled={isLoading} onClick={() => void fetchInstallments({ reset: false })}>
                 Load more

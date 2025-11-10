@@ -1,4 +1,4 @@
-table:not(.custom-table) {
+table:not(.custom-table, .scoped-tailwind-preflight *) {
   border-spacing: 0;
   width: 100%;
   display: grid;

@@ -9,6 +9,16 @@ import { Pagination, PaginationProps } from "$app/components/Pagination";
 import { Tab } from "$app/components/ProductsLayout";
 import ActionsPopover from "$app/components/ProductsPage/ActionsPopover";
 import { showAlert } from "$app/components/server-components/Alert";
+import {
+  Table,
+  TableBody,
+  TableCaption,
+  TableCell,
+  TableFooter,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "$app/components/ui/Table";
 import { useDebouncedCallback } from "$app/components/useDebouncedCallback";
 import { useUserAgentInfo } from "$app/components/UserAgent";
 import { Sort, useSortingTableDriver } from "$app/components/useSortingTableDriver";
@@ -80,34 +90,26 @@ export const ProductsPageMembershipsTable = (props: {
   if (!memberships.length) return null;
 
   return (
-    <section className="paragraphs">
-      <table aria-busy={isLoading}>
-        <caption>Memberships</caption>
-        <thead>
-          <tr>
-            <th />
-            <th {...thProps("name")} title="Sort by Name" className="lg:relative lg:-left-20">
+    <div className="grid gap-4">
+      <Table busy={isLoading}>
+        <TableCaption>Memberships</TableCaption>
+        <TableHeader>
+          <TableRow>
+            <TableHead colSpan={2} {...thProps("name")}>
               Name
-            </th>
-            <th {...thProps("successful_sales_count")} title="Sort by Members" className="lg:px-8">
-              Members
-            </th>
-            <th {...thProps("revenue")} title="Sort by Revenue" className="lg:px-8">
-              Revenue
-            </th>
-            <th {...thProps("display_price_cents")} title="Sort by Price" className="lg:px-8">
-              Price
-            </th>
-            <th {...thProps("status")} title="Sort by Status" className="lg:px-8">
-              Status
-            </th>
-          </tr>
-        </thead>
+            </TableHead>
+            <TableHead {...thProps("successful_sales_count")}>Members</TableHead>
+            <TableHead {...thProps("revenue")}>Revenue</TableHead>
+            <TableHead {...thProps("display_price_cents")}>Price</TableHead>
+            <TableHead {...thProps("status")}>Status</TableHead>
+            <TableHead />
+          </TableRow>
+        </TableHeader>
 
-        <tbody>
+        <TableBody>
           {memberships.map((membership) => (
-            <tr key={membership.id}>
-              <td className="icon-cell">
+            <TableRow key={membership.id}>
+              <TableCell isIcon>
                 {membership.thumbnail ? (
                   <a href={membership.can_edit ? membership.edit_url : membership.url}>
                     <img alt={membership.name} src={membership.thumbnail.url} />
@@ -115,8 +117,8 @@ export const ProductsPageMembershipsTable = (props: {
                 ) : (
                   <Icon name="card-image-fill" />
                 )}
-              </td>
-              <td className="w-full">
+              </TableCell>
+              <TableCell label="Name">
                 {/* Safari currently doesn't support position: relative on <tr>, so we can't use stretched-link here */}
                 <a href={membership.can_edit ? membership.edit_url : membership.url} style={{ textDecoration: "none" }}>
                   <h4>{membership.name}</h4>
@@ -124,39 +126,46 @@ export const ProductsPageMembershipsTable = (props: {
                 <a href={membership.url} title={membership.url} target="_blank" rel="noreferrer">
                   <small>{membership.url_without_protocol}</small>
                 </a>
-              </td>
+              </TableCell>
 
-              <td data-label="Members" className="whitespace-nowrap lg:px-8">
-                {membership.successful_sales_count.toLocaleString(userAgentInfo.locale)}
+              <TableCell label="Members" className="text-nowrap">
+                <div>
+                  {membership.successful_sales_count.toLocaleString(userAgentInfo.locale)}
+                  {membership.remaining_for_sale_count ? (
+                    <>
+                      {" "}
+                      <small>
+                        {membership.remaining_for_sale_count.toLocaleString(userAgentInfo.locale)} remaining
+                      </small>
+                    </>
+                  ) : null}
+                </div>
+              </TableCell>
 
-                {membership.remaining_for_sale_count ? (
-                  <small>{membership.remaining_for_sale_count.toLocaleString(userAgentInfo.locale)} remaining</small>
-                ) : null}
-              </td>
-
-              <td data-label="Revenue" className="whitespace-nowrap lg:px-8">
-                {formatPriceCentsWithCurrencySymbol("usd", membership.revenue, { symbolFormat: "short" })}
-
-                <small>
-                  {membership.has_duration
-                    ? `Including pending payments: ${formatPriceCentsWithCurrencySymbol(
-                        "usd",
-                        membership.revenue_pending,
-                        {
+              <TableCell label="Revenue" className="text-nowrap">
+                <div>
+                  {formatPriceCentsWithCurrencySymbol("usd", membership.revenue, { symbolFormat: "short" })}{" "}
+                  <small>
+                    {membership.has_duration
+                      ? `Including pending payments: ${formatPriceCentsWithCurrencySymbol(
+                          "usd",
+                          membership.revenue_pending,
+                          {
+                            symbolFormat: "short",
+                          },
+                        )}`
+                      : `${formatPriceCentsWithCurrencySymbol("usd", membership.monthly_recurring_revenue, {
                           symbolFormat: "short",
-                        },
-                      )}`
-                    : `${formatPriceCentsWithCurrencySymbol("usd", membership.monthly_recurring_revenue, {
-                        symbolFormat: "short",
-                      })} /mo`}
-                </small>
-              </td>
+                        })} /mo`}
+                  </small>
+                </div>
+              </TableCell>
 
-              <td data-label="Price" className="whitespace-nowrap lg:px-8">
+              <TableCell label="Price" className="text-nowrap">
                 {membership.price_formatted}
-              </td>
+              </TableCell>
 
-              <td data-label="Status" className="whitespace-nowrap lg:px-8">
+              <TableCell label="Status" className="text-nowrap">
                 {(() => {
                   switch (membership.status) {
                     case "unpublished":
@@ -167,9 +176,9 @@ export const ProductsPageMembershipsTable = (props: {
                       return <>Published</>;
                   }
                 })()}
-              </td>
+              </TableCell>
               {membership.can_duplicate || membership.can_destroy ? (
-                <td className="lg:px-8">
+                <TableCell>
                   <ActionsPopover
                     product={membership}
                     onDuplicate={() => void loadMemberships(1)}
@@ -184,36 +193,36 @@ export const ProductsPageMembershipsTable = (props: {
                       else void reloadMemberships();
                     }}
                   />
-                </td>
+                </TableCell>
               ) : null}
-            </tr>
+            </TableRow>
           ))}
-        </tbody>
+        </TableBody>
 
-        <tfoot>
-          <tr>
-            <td colSpan={2}>Totals</td>
+        <TableFooter>
+          <TableRow>
+            <TableCell colSpan={2}>Totals</TableCell>
 
-            <td className="whitespace-nowrap lg:px-8">
+            <TableCell className="text-nowrap">
               {memberships
                 .reduce((sum, membership) => sum + membership.successful_sales_count, 0)
                 .toLocaleString(userAgentInfo.locale)}
-            </td>
+            </TableCell>
 
-            <td colSpan={4} className="whitespace-nowrap lg:px-8">
+            <TableCell colSpan={4} className="text-nowrap">
               {formatPriceCentsWithCurrencySymbol(
                 "usd",
                 memberships.reduce((sum, membership) => sum + membership.revenue, 0),
                 { symbolFormat: "short" },
               )}
-            </td>
-          </tr>
-        </tfoot>
-      </table>
+            </TableCell>
+          </TableRow>
+        </TableFooter>
+      </Table>
 
       {pagination.pages > 1 ? (
         <Pagination onChangePage={(page) => void loadMemberships(page)} pagination={pagination} />
       ) : null}
-    </section>
+    </div>
   );
 };

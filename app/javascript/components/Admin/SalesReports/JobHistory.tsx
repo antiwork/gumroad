@@ -1,5 +1,7 @@
 import * as React from "react";
 
+import { Table, TableBody, TableCaption, TableCell, TableHead, TableHeader, TableRow } from "$app/components/ui/Table";
+
 export type JobHistoryItem = {
   job_id: string;
   country_code: string;
@@ -36,26 +38,27 @@ const AdminSalesReportsJobHistory = ({ countries, jobHistory }: Props) => {
 
   return (
     <section>
-      <table>
-        <thead>
-          <tr>
-            <th>Country</th>
-            <th>Date range</th>
-            <th>Enqueued at</th>
-            <th>Status</th>
-            <th>Download</th>
-          </tr>
-        </thead>
-        <tbody>
+      <Table>
+        <TableCaption>Job History</TableCaption>
+        <TableHeader>
+          <TableRow>
+            <TableHead>Country</TableHead>
+            <TableHead>Date range</TableHead>
+            <TableHead>Enqueued at</TableHead>
+            <TableHead>Status</TableHead>
+            <TableHead>Download</TableHead>
+          </TableRow>
+        </TableHeader>
+        <TableBody>
           {jobHistory.map((job, index) => (
-            <tr key={index}>
-              <td>{countryCodeToName[job.country_code] || job.country_code}</td>
-              <td>
+            <TableRow key={index}>
+              <TableCell label="Country">{countryCodeToName[job.country_code] || job.country_code}</TableCell>
+              <TableCell label="Date range">
                 {job.start_date} to {job.end_date}
-              </td>
-              <td>{new Date(job.enqueued_at).toLocaleString()}</td>
-              <td>{job.status}</td>
-              <td>
+              </TableCell>
+              <TableCell label="Enqueued at">{new Date(job.enqueued_at).toLocaleString()}</TableCell>
+              <TableCell label="Status">{job.status}</TableCell>
+              <TableCell label="Download">
                 {job.status === "completed" && job.download_url ? (
                   <a href={job.download_url} className="button small" target="_blank" rel="noopener noreferrer">
                     Download CSV
@@ -63,11 +66,11 @@ const AdminSalesReportsJobHistory = ({ countries, jobHistory }: Props) => {
                 ) : (
                   <span>-</span>
                 )}
-              </td>
-            </tr>
+              </TableCell>
+            </TableRow>
           ))}
-        </tbody>
-      </table>
+        </TableBody>
+      </Table>
     </section>
   );
 };

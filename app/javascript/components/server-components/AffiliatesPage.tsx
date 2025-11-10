@@ -55,6 +55,7 @@ import { Popover } from "$app/components/Popover";
 import { showAlert } from "$app/components/server-components/Alert";
 import { PageHeader } from "$app/components/ui/PageHeader";
 import Placeholder from "$app/components/ui/Placeholder";
+import { Table, TableBody, TableCaption, TableCell, TableHead, TableHeader, TableRow } from "$app/components/ui/Table";
 import { Tabs, Tab } from "$app/components/ui/Tabs";
 import { useDebouncedCallback } from "$app/components/useDebouncedCallback";
 import { useLocalPagination } from "$app/components/useLocalPagination";
@@ -247,78 +248,76 @@ const AffiliateRequestsTable = ({
   return (
     <>
       {visibleItems.length > 0 ? (
-        <table>
-          <caption>
+        <Table>
+          <TableCaption>
             <div style={{ display: "flex", justifyContent: "space-between" }}>
               Requests
               {allowApproveAll ? <ApproveAllButton isLoading={isLoading} setIsLoading={setIsLoading} /> : null}
             </div>
-          </caption>
-          <thead>
-            <tr>
-              <th {...thProps("name")}>Name</th>
-              <th {...thProps("promotion")}>Promotion</th>
-              <th {...thProps("date")}>Date</th>
-              <th />
-            </tr>
-          </thead>
+          </TableCaption>
+          <TableHeader>
+            <TableRow>
+              <TableHead {...thProps("name")}>Name</TableHead>
+              <TableHead {...thProps("promotion")}>Promotion</TableHead>
+              <TableHead {...thProps("date")}>Date</TableHead>
+              <TableHead />
+            </TableRow>
+          </TableHeader>
 
-          <tbody>
+          <TableBody>
             {visibleItems.map((affiliateRequest) => (
-              <tr key={affiliateRequest.id}>
-                <td>
+              <TableRow key={affiliateRequest.id}>
+                <TableCell>
                   {affiliateRequest.name}
                   <small>{affiliateRequest.email}</small>
-                </td>
+                </TableCell>
 
-                <td data-label="Promotion">{affiliateRequest.promotion}</td>
+                <TableCell label="Promotion">{affiliateRequest.promotion}</TableCell>
 
-                <td data-label="Date">{parseISO(affiliateRequest.date).toLocaleDateString(userAgentInfo.locale)}</td>
+                <TableCell label="Date">
+                  {parseISO(affiliateRequest.date).toLocaleDateString(userAgentInfo.locale)}
+                </TableCell>
 
-                <td>
-                  <div className="actions">
+                <TableCell actions>
+                  <Button
+                    disabled={
+                      !loggedInUser?.policies.direct_affiliate.update || isLoading || !!affiliateRequest.processingState
+                    }
+                    onClick={() => update(affiliateRequest, "ignore")}
+                  >
+                    {affiliateRequest.processingState === "ignore" ? "Ignoring" : "Ignore"}
+                  </Button>
+
+                  <WithTooltip
+                    tip={
+                      affiliateRequest.state === "approved"
+                        ? "You have approved this request but the affiliate hasn't created a Gumroad account yet"
+                        : null
+                    }
+                    position="bottom"
+                  >
                     <Button
+                      color="primary"
+                      onClick={() => update(affiliateRequest, "approve")}
                       disabled={
                         !loggedInUser?.policies.direct_affiliate.update ||
                         isLoading ||
+                        affiliateRequest.state === "approved" ||
                         !!affiliateRequest.processingState
                       }
-                      onClick={() => update(affiliateRequest, "ignore")}
                     >
-                      {affiliateRequest.processingState === "ignore" ? "Ignoring" : "Ignore"}
+                      {affiliateRequest.state === "approved"
+                        ? "Approved"
+                        : affiliateRequest.processingState === "approve"
+                          ? "Approving"
+                          : "Approve"}
                     </Button>
-
-                    <WithTooltip
-                      tip={
-                        affiliateRequest.state === "approved"
-                          ? "You have approved this request but the affiliate hasn't created a Gumroad account yet"
-                          : null
-                      }
-                      position="bottom"
-                    >
-                      <Button
-                        color="primary"
-                        onClick={() => update(affiliateRequest, "approve")}
-                        disabled={
-                          !loggedInUser?.policies.direct_affiliate.update ||
-                          isLoading ||
-                          affiliateRequest.state === "approved" ||
-                          !!affiliateRequest.processingState
-                        }
-                      >
-                        {affiliateRequest.state === "approved"
-                          ? "Approved"
-                          : affiliateRequest.processingState === "approve"
-                            ? "Approving"
-                            : "Approve"}
-                      </Button>
-                    </WithTooltip>
-                  </div>
-                </td>
-              </tr>
+                  </WithTooltip>
+                </TableCell>
+              </TableRow>
             ))}
-          </tbody>
-        </table>
+          </TableBody>
+        </Table>
       ) : (
         <Placeholder>No requests yet</Placeholder>
       )}
@@ -475,8 +474,8 @@ const AffiliatesTab = () => {
             {affiliates.length > 0 ? (
               <>
                 <section className="paragraphs">
-                  <table aria-busy={navigation.state !== "idle"}>
-                    <caption>
+                  <Table busy={navigation.state !== "idle"}>
+                    <TableCaption>
                       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
                         Affiliates
                         <div className="text-base">
@@ -487,30 +486,30 @@ const AffiliatesTab = () => {
                           </WithTooltip>
                         </div>
                       </div>
-                    </caption>
-                    <thead>
-                      <tr>
-                        <th {...thProps("affiliate_user_name")}>Name</th>
-                        <th {...thProps("products")}>Products</th>
-                        <th {...thProps("fee_percent")}>Commission</th>
-                        <th {...thProps("volume_cents")}>Sales</th>
-                        <th />
-                      </tr>
-                    </thead>
+                    </TableCaption>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead {...thProps("affiliate_user_name")}>Name</TableHead>
+                        <TableHead {...thProps("products")}>Products</TableHead>
+                        <TableHead {...thProps("fee_percent")}>Commission</TableHead>
+                        <TableHead {...thProps("volume_cents")}>Sales</TableHead>
+                        <TableHead />
+                      </TableRow>
+                    </TableHeader>
 
-                    <tbody>
+                    <TableBody>
                       {affiliates.map((affiliate) => {
                         const enabledProducts = affiliate.products;
                         const statistics = affiliateStatistics[affiliate.id];
 
                         return (
-                          <tr
+                          <TableRow
                             key={affiliate.id}
-                            aria-selected={affiliate.id === selectedAffiliate?.id}
+                            selected={affiliate.id === selectedAffiliate?.id}
                             onClick={() => setSelectedAffiliate(affiliate)}
                           >
-                            <td data-label="Name">{affiliate.affiliate_user_name}</td>
-                            <td data-label="Products">
+                            <TableCell label="Name">{affiliate.affiliate_user_name}</TableCell>
+                            <TableCell label="Products">
                               <WithTooltip
                                 tip={enabledProducts.length <= 1 ? null : productTooltipLabel(enabledProducts)}
                               >
@@ -518,50 +517,50 @@ const AffiliatesTab = () => {
                                   {productName(enabledProducts)}
                                 </a>
                               </WithTooltip>
-                            </td>
-                            <td data-label="Commission">{formattedFeePercentLabel(affiliate)}</td>
+                            </TableCell>
+                            <TableCell label="Commission">{formattedFeePercentLabel(affiliate)}</TableCell>
                             {statistics ? (
-                              <td data-label="Sales">{formattedSalesVolumeAmount(statistics.total_volume_cents)}</td>
+                              <TableCell label="Sales">
+                                {formattedSalesVolumeAmount(statistics.total_volume_cents)}
+                              </TableCell>
                             ) : (
-                              <td aria-busy data-label="Sales" />
+                              <TableCell busy label="Sales" />
                             )}
-                            <td>
-                              <div className="actions" onClick={(e) => e.stopPropagation()}>
-                                <CopyToClipboard
-                                  tooltipPosition="bottom"
-                                  copyTooltip="Copy link"
-                                  text={affiliate.product_referral_url}
-                                >
-                                  <Button>Copy link</Button>
-                                </CopyToClipboard>
+                            <TableCell actions onClick={(e) => e.stopPropagation()}>
+                              <CopyToClipboard
+                                tooltipPosition="bottom"
+                                copyTooltip="Copy link"
+                                text={affiliate.product_referral_url}
+                              >
+                                <Button>Copy link</Button>
+                              </CopyToClipboard>
 
-                                <Link
-                                  to={`/affiliates/${affiliate.id}/edit`}
-                                  className="button"
-                                  aria-label="Edit"
-                                  inert={!loggedInUser?.policies.direct_affiliate.update || navigation.state !== "idle"}
-                                >
-                                  <Icon name="pencil" />
-                                </Link>
+                              <Link
+                                to={`/affiliates/${affiliate.id}/edit`}
+                                className="button"
+                                aria-label="Edit"
+                                inert={!loggedInUser?.policies.direct_affiliate.update || navigation.state !== "idle"}
+                              >
+                                <Icon name="pencil" />
+                              </Link>
 
-                                <Button
-                                  type="submit"
-                                  color="danger"
-                                  onClick={() => remove(affiliate.id)}
-                                  aria-label="Delete"
-                                  disabled={
-                                    !loggedInUser?.policies.direct_affiliate.update || navigation.state !== "idle"
-                                  }
-                                >
-                                  <Icon name="trash2" />
-                                </Button>
-                              </div>
-                            </td>
-                          </tr>
+                              <Button
+                                type="submit"
+                                color="danger"
+                                onClick={() => remove(affiliate.id)}
+                                aria-label="Delete"
+                                disabled={
+                                  !loggedInUser?.policies.direct_affiliate.update || navigation.state !== "idle"
+                                }
+                              >
+                                <Icon name="trash2" />
+                              </Button>
+                            </TableCell>
+                          </TableRow>
                         );
                       })}
-                    </tbody>
-                  </table>
+                    </TableBody>
+                  </Table>
                   {pagination.pages > 1 ? <Pagination onChangePage={onChangePage} pagination={pagination} /> : null}
                 </section>
                 {selectedAffiliate ? (
@@ -824,22 +823,22 @@ const Form = ({ title, headerLabel, submitLabel }: FormProps) => {
               autoFocus={!affiliateId}
             />
           </fieldset>
-          <table>
-            <thead>
-              <tr>
-                <th>Enable</th>
-                <th>Product</th>
-                <th>Commission</th>
-                <th>
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Enable</TableHead>
+                <TableHead>Product</TableHead>
+                <TableHead>Commission</TableHead>
+                <TableHead>
                   <a href="/help/article/333-affiliates-on-gumroad" target="_blank" rel="noreferrer">
                     Destination URL (optional)
                   </a>
-                </th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr>
-                <td data-label="Enable">
+                </TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              <TableRow>
+                <TableCell label="Enable">
                   <input
                     id={`${uid}enableAllProducts`}
                     type="checkbox"
@@ -848,11 +847,11 @@ const Form = ({ title, headerLabel, submitLabel }: FormProps) => {
                     onChange={(evt) => toggleAllProducts(evt.target.checked)}
                     aria-label="Enable all products"
                   />
-                </td>
-                <td data-label="Product">
+                </TableCell>
+                <TableCell label="Product">
                   <label htmlFor={`${uid}enableAllProducts`}>All products</label>
-                </td>
-                <td data-label="Commission">
+                </TableCell>
+                <TableCell label="Commission">
                   <fieldset className={cx({ danger: errors.has("feePercent") })}>
                     <NumberInput
                       onChange={(value) =>
@@ -885,8 +884,8 @@ const Form = ({ title, headerLabel, submitLabel }: FormProps) => {
                       )}
                     </NumberInput>
                   </fieldset>
-                </td>
-                <td>
+                </TableCell>
+                <TableCell>
                   <fieldset className={cx({ danger: errors.has("destinationUrl") })}>
                     <input
                       type="url"
@@ -896,8 +895,8 @@ const Form = ({ title, headerLabel, submitLabel }: FormProps) => {
                       disabled={navigation.state !== "idle" || !affiliateState.apply_to_all_products}
                     />
                   </fieldset>
-                </td>
-              </tr>
+                </TableCell>
+              </TableRow>
               {affiliateState.products.map((product) => (
                 <ProductRow
                   key={product.id}
@@ -913,8 +912,8 @@ const Form = ({ title, headerLabel, submitLabel }: FormProps) => {
                   }
                 />
               ))}
-            </tbody>
-          </table>
+            </TableBody>
+          </Table>
         </section>
       </form>
     </Layout>

@@ -9,6 +9,16 @@ import { Pagination, PaginationProps } from "$app/components/Pagination";
 import { Tab } from "$app/components/ProductsLayout";
 import ActionsPopover from "$app/components/ProductsPage/ActionsPopover";
 import { showAlert } from "$app/components/server-components/Alert";
+import {
+  Table,
+  TableBody,
+  TableCaption,
+  TableCell,
+  TableFooter,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "$app/components/ui/Table";
 import { useDebouncedCallback } from "$app/components/useDebouncedCallback";
 import { useUserAgentInfo } from "$app/components/UserAgent";
 import { Sort, useSortingTableDriver } from "$app/components/useSortingTableDriver";
@@ -82,33 +92,33 @@ export const ProductsPageProductsTable = (props: {
 
   return (
     <div className="paragraphs">
-      <table aria-live="polite" aria-busy={isLoading} ref={tableRef}>
-        <caption>Products</caption>
-        <thead>
-          <tr>
-            <th />
-            <th {...thProps("name")} title="Sort by Name" className="lg:relative lg:-left-20">
+      <Table aria-live="polite" ref={tableRef} busy={isLoading}>
+        <TableCaption>Products</TableCaption>
+        <TableHeader>
+          <TableRow>
+            <TableHead />
+            <TableHead {...thProps("name")} title="Sort by Name" className="lg:relative lg:-left-20">
               Name
-            </th>
-            <th {...thProps("successful_sales_count")} title="Sort by Sales" className="lg:px-8">
+            </TableHead>
+            <TableHead {...thProps("successful_sales_count")} title="Sort by Sales" className="lg:px-8">
               Sales
-            </th>
-            <th {...thProps("revenue")} title="Sort by Revenue" className="lg:px-8">
+            </TableHead>
+            <TableHead {...thProps("revenue")} title="Sort by Revenue" className="lg:px-8">
               Revenue
-            </th>
-            <th {...thProps("display_price_cents")} title="Sort by Price" className="lg:px-8">
+            </TableHead>
+            <TableHead {...thProps("display_price_cents")} title="Sort by Price" className="lg:px-8">
               Price
-            </th>
-            <th {...thProps("status")} title="Sort by Status" className="lg:px-8">
+            </TableHead>
+            <TableHead {...thProps("status")} title="Sort by Status" className="lg:px-8">
               Status
-            </th>
-          </tr>
-        </thead>
+            </TableHead>
+          </TableRow>
+        </TableHeader>
 
-        <tbody>
+        <TableBody>
           {products.map((product) => (
-            <tr key={product.id}>
-              <td className="icon-cell">
+            <TableRow key={product.id}>
+              <TableCell isIcon>
                 {product.thumbnail ? (
                   <a href={product.can_edit ? product.edit_url : product.url}>
                     <img alt={product.name} src={product.thumbnail.url} />
@@ -116,8 +126,8 @@ export const ProductsPageProductsTable = (props: {
                 ) : (
                   <Icon name="card-image-fill" />
                 )}
-              </td>
-              <td className="w-full">
+              </TableCell>
+              <TableCell label="Name" className="w-full">
                 <div>
                   {/* Safari currently doesn't support position: relative on <tr>, so we can't use stretched-link here */}
                   <a href={product.can_edit ? product.edit_url : product.url} style={{ textDecoration: "none" }}>
@@ -128,9 +138,9 @@ export const ProductsPageProductsTable = (props: {
                     <small>{product.url_without_protocol}</small>
                   </a>
                 </div>
-              </td>
+              </TableCell>
 
-              <td data-label="Sales" className="whitespace-nowrap lg:px-8">
+              <TableCell label="Sales" className="whitespace-nowrap lg:px-8">
                 <a href={Routes.customers_link_id_path(product.permalink)}>
                   {product.successful_sales_count.toLocaleString(locale)}
                 </a>
@@ -138,17 +148,17 @@ export const ProductsPageProductsTable = (props: {
                 {product.remaining_for_sale_count ? (
                   <small>{product.remaining_for_sale_count.toLocaleString(locale)} remaining</small>
                 ) : null}
-              </td>
+              </TableCell>
 
-              <td data-label="Revenue" className="whitespace-nowrap lg:px-8">
+              <TableCell label="Revenue" className="whitespace-nowrap lg:px-8">
                 {formatPriceCentsWithCurrencySymbol("usd", product.revenue, { symbolFormat: "short" })}
-              </td>
+              </TableCell>
 
-              <td data-label="Price" className="whitespace-nowrap lg:px-8">
+              <TableCell label="Price" className="whitespace-nowrap lg:px-8">
                 {product.price_formatted}
-              </td>
+              </TableCell>
 
-              <td data-label="Status" className="whitespace-nowrap lg:px-8">
+              <TableCell label="Status" className="whitespace-nowrap lg:px-8">
                 {(() => {
                   switch (product.status) {
                     case "unpublished":
@@ -159,9 +169,9 @@ export const ProductsPageProductsTable = (props: {
                       return <>Published</>;
                   }
                 })()}
-              </td>
+              </TableCell>
               {product.can_duplicate || product.can_destroy ? (
-                <td className="lg:px-8">
+                <TableCell actions className="lg:px-8">
                   <ActionsPopover
                     product={product}
                     onDuplicate={() => void loadProducts(1)}
@@ -176,29 +186,29 @@ export const ProductsPageProductsTable = (props: {
                       else void reloadProducts();
                     }}
                   />
-                </td>
+                </TableCell>
               ) : null}
-            </tr>
+            </TableRow>
           ))}
-        </tbody>
+        </TableBody>
 
-        <tfoot>
-          <tr>
-            <td colSpan={2}>Totals</td>
-            <td className="whitespace-nowrap lg:px-8">
+        <TableFooter>
+          <TableRow>
+            <TableCell colSpan={2}>Totals</TableCell>
+            <TableCell label="Sales" className="whitespace-nowrap lg:px-8">
               {products.reduce((sum, product) => sum + product.successful_sales_count, 0).toLocaleString(locale)}
-            </td>
+            </TableCell>
 
-            <td colSpan={5} className="whitespace-nowrap lg:px-8">
+            <TableCell colSpan={5} label="Revenue" className="whitespace-nowrap lg:px-8">
               {formatPriceCentsWithCurrencySymbol(
                 "usd",
                 products.reduce((sum, product) => sum + product.revenue, 0),
                 { symbolFormat: "short" },
               )}
-            </td>
-          </tr>
-        </tfoot>
-      </table>
+            </TableCell>
+          </TableRow>
+        </TableFooter>
+      </Table>
 
       {pagination.pages > 1 ? (
         <Pagination onChangePage={(page) => void loadProducts(page)} pagination={pagination} />

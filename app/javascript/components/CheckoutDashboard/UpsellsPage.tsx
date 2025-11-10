@@ -37,6 +37,7 @@ import { Select } from "$app/components/Select";
 import { CrossSellModal, UpsellModal } from "$app/components/server-components/CheckoutPage";
 import { PageHeader } from "$app/components/ui/PageHeader";
 import Placeholder from "$app/components/ui/Placeholder";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "$app/components/ui/Table";
 import { useDebouncedCallback } from "$app/components/useDebouncedCallback";
 import { Sort, useSortingTableDriver } from "$app/components/useSortingTableDriver";
 
@@ -263,35 +264,35 @@ const UpsellsPage = (props: UpsellsPageProps) => {
       <section className="p-4 md:p-8">
         {upsells.length > 0 ? (
           <section className="paragraphs">
-            <table aria-busy={isLoading} aria-label="Upsells">
-              <thead>
-                <tr>
-                  <th {...thProps("name")}>Upsell</th>
-                  <th {...thProps("revenue")}>Revenue</th>
-                  <th {...thProps("uses")}>Uses</th>
-                  <th {...thProps("status")}>Status</th>
-                </tr>
-              </thead>
-              <tbody>
+            <Table busy={isLoading}>
+              <TableHeader>
+                <TableRow>
+                  <TableHead {...thProps("name")}>Upsell</TableHead>
+                  <TableHead {...thProps("revenue")}>Revenue</TableHead>
+                  <TableHead {...thProps("uses")}>Uses</TableHead>
+                  <TableHead {...thProps("status")}>Status</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
                 {upsells.map((upsell) => {
                   const statistics = upsellStatistics[upsell.id];
                   return (
-                    <tr
+                    <TableRow
                       key={upsell.id}
                       onClick={() => setSelectedUpsellId(upsell.id)}
-                      aria-selected={selectedUpsellId === upsell.id}
+                      selected={selectedUpsellId === upsell.id}
                     >
-                      <td>
+                      <TableCell label="Upsell">
                         <div>
                           <div>
                             <b>{upsell.name}</b>
                           </div>
                           <small>{formatOfferedProductName(upsell.product.name, upsell.product.variant?.name)}</small>
                         </div>
-                      </td>
+                      </TableCell>
                       {statistics ? (
                         <>
-                          <td>
+                          <TableCell label="Revenue">
                             {formatPriceCentsWithCurrencySymbol(
                               upsell.product.currency_type,
                               statistics.revenue_cents,
@@ -299,21 +300,21 @@ const UpsellsPage = (props: UpsellsPageProps) => {
                                 symbolFormat: "short",
                               },
                             )}
-                          </td>
-                          <td>{statistics.uses.total}</td>
+                          </TableCell>
+                          <TableCell label="Uses">{statistics.uses.total}</TableCell>
                         </>
                       ) : (
                         <>
-                          <td aria-busy></td>
-                          <td aria-busy> </td>
+                          <TableCell label="Revenue" busy />
+                          <TableCell label="Uses" busy />
                         </>
                       )}
-                      <td>{upsell.paused ? "Paused" : "Live"}</td>
-                    </tr>
+                      <TableCell label="Status">{upsell.paused ? "Paused" : "Live"}</TableCell>
+                    </TableRow>
                   );
                 })}
-              </tbody>
-            </table>
+              </TableBody>
+            </Table>
             {pagination.pages > 1 ? (
               <Pagination
                 onChangePage={(newPage) => loadUpsells({ page: newPage, query: searchQuery, sort })}

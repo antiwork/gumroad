@@ -13,6 +13,7 @@ import { Modal } from "$app/components/Modal";
 import { showAlert } from "$app/components/server-components/Alert";
 import { Layout } from "$app/components/Settings/Layout";
 import Placeholder from "$app/components/ui/Placeholder";
+import { Table, TableBody, TableCaption, TableCell, TableHead, TableHeader, TableRow } from "$app/components/ui/Table";
 import { useUserAgentInfo } from "$app/components/UserAgent";
 
 import placeholderAppIcon from "$assets/images/gumroad_app.png";
@@ -95,59 +96,63 @@ const AuthorizedApplicationsPage = (props: Props) => {
   return (
     <Layout currentPage="authorized_applications" pages={props.settings_pages}>
       {applications.length > 0 ? (
-        <section className="p-4! md:p-8!">
-          <table>
-            <caption>You've authorized the following applications to use your Gumroad account.</caption>
-            <tbody>
+        <section className="p-4 md:p-8">
+          <Table>
+            <TableCaption>You've authorized the following applications to use your Gumroad account.</TableCaption>
+            <TableHeader>
+              <TableRow>
+                <TableHead colSpan={2}>Application</TableHead>
+                <TableHead>Permissions</TableHead>
+                <TableHead>Actions</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
               {applications.map((application) => (
-                <tr key={application.id}>
-                  <td>
-                    <div className="flex gap-3">
-                      <div>
-                        <img
-                          src={application.icon_url || placeholderAppIcon}
-                          className="application-icon"
-                          width={72}
-                          height={72}
-                          alt={application.name}
-                        />
-                      </div>
-                      <div>
-                        <h3 style={{ marginBottom: "var(--spacer-1)" }}>
-                          {application.name}
-                          {application.is_own_app ? <span> (Your application)</span> : null}
-                        </h3>
-
-                        <p>
-                          <small>
-                            First authorized on:{" "}
-                            {parseISO(application.first_authorized_at).toLocaleDateString(userAgentInfo.locale, {
-                              month: "long",
-                              day: "numeric",
-                              year: "numeric",
-                            })}
-                          </small>
-                        </p>
-                      </div>
+                <TableRow key={application.id}>
+                  <TableCell isIcon>
+                    <img
+                      src={application.icon_url || placeholderAppIcon}
+                      className="application-icon"
+                      width={72}
+                      height={72}
+                      alt={application.name}
+                    />
+                  </TableCell>
+                  <TableCell label="Application">
+                    <div>
+                      <h3 style={{ marginBottom: "var(--spacer-1)" }}>
+                        {application.name}
+                        {application.is_own_app ? <span> (Your application)</span> : null}
+                      </h3>
+                      <p>
+                        <small>
+                          First authorized on:{" "}
+                          {parseISO(application.first_authorized_at).toLocaleDateString(userAgentInfo.locale, {
+                            month: "long",
+                            day: "numeric",
+                            year: "numeric",
+                          })}
+                        </small>
+                      </p>
                     </div>
-                  </td>
-                  <td>
+                  </TableCell>
+                  <TableCell label="Permissions">
                     <ul>
                       {application.scopes.map((scope) => (
                         <li key={scope}>{SCOPE_DESCRIPTIONS[scope]}</li>
                       ))}
                     </ul>
-                  </td>
-                  <td>
+                  </TableCell>
+                  <TableCell label="Actions">
                     <Button color="danger" outline onClick={() => setRevokingAccessForApp({ id: application.id })}>
                       <Icon name="x-square"></Icon>
                       Revoke access
                     </Button>
-                  </td>
-                </tr>
+                  </TableCell>
+                </TableRow>
               ))}
-            </tbody>
-          </table>
+            </TableBody>
+          </Table>
           {revokingAccessForApp ? (
             <Modal
               open

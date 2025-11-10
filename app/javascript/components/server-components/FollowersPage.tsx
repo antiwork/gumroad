@@ -16,6 +16,7 @@ import { showAlert } from "$app/components/server-components/Alert";
 import { ExportSubscribersPopover } from "$app/components/server-components/FollowersPage/ExportSubscribersPopover";
 import { PageHeader } from "$app/components/ui/PageHeader";
 import Placeholder from "$app/components/ui/Placeholder";
+import { Table, TableBody, TableCaption, TableCell, TableHead, TableHeader, TableRow } from "$app/components/ui/Table";
 import { Tabs, Tab } from "$app/components/ui/Tabs";
 import { useUserAgentInfo } from "$app/components/UserAgent";
 import { WithTooltip } from "$app/components/WithTooltip";
@@ -178,27 +179,27 @@ export const FollowersPage = ({ followers: initialFollowers, per_page, total }: 
           </div>
         ) : followers.length > 0 ? (
           <div>
-            <table>
-              <caption>All subscribers ({totalCount.toLocaleString(userAgentInfo.locale)})</caption>
-              <thead>
-                <tr>
-                  <th>Email</th>
-                  <th>Date Added</th>
-                </tr>
-              </thead>
-              <tbody>
+            <Table>
+              <TableCaption>All subscribers ({totalCount.toLocaleString(userAgentInfo.locale)})</TableCaption>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Email</TableHead>
+                  <TableHead>Date Added</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
                 {followers.map((follower) => (
-                  <tr
+                  <TableRow
                     key={follower.id}
                     onClick={() => setSelectedFollowerId(follower.id === selectedFollowerId ? null : follower.id)}
-                    aria-selected={selectedFollowerId === follower.id}
+                    selected={selectedFollowerId === follower.id}
                   >
-                    <td data-label="Email">{follower.email}</td>
-                    <td data-label="Date Added">{follower.formatted_confirmed_on}</td>
-                  </tr>
+                    <TableCell label="Email">{follower.email}</TableCell>
+                    <TableCell label="Date Added">{follower.formatted_confirmed_on}</TableCell>
+                  </TableRow>
                 ))}
-              </tbody>
-            </table>
+              </TableBody>
+            </Table>
             {page * per_page < totalFilteredCount ? (
               <Button color="primary" onClick={() => void loadFollowers(searchQuery, page + 1)} className="mt-6">
                 Load more

@@ -77,6 +77,7 @@ import { showAlert } from "$app/components/server-components/Alert";
 import { Toggle } from "$app/components/Toggle";
 import { PageHeader } from "$app/components/ui/PageHeader";
 import Placeholder from "$app/components/ui/Placeholder";
+import { Table, TableBody, TableCaption, TableCell, TableHead, TableHeader, TableRow } from "$app/components/ui/Table";
 import { useDebouncedCallback } from "$app/components/useDebouncedCallback";
 import { useOnChange } from "$app/components/useOnChange";
 import { useUserAgentInfo } from "$app/components/UserAgent";
@@ -440,18 +441,18 @@ const CustomersPage = ({
       <section className="p-4 md:p-8">
         {customers.length > 0 ? (
           <section className="paragraphs">
-            <table aria-live="polite" aria-busy={isLoading}>
-              <caption>{`All sales (${count})`}</caption>
-              <thead>
-                <tr>
-                  <th>Email</th>
-                  <th>Name</th>
-                  <th>Product</th>
-                  <th {...thProps("created_at")}>Purchase Date</th>
-                  <th {...thProps("price_cents")}>Price</th>
-                </tr>
-              </thead>
-              <tbody>
+            <Table aria-live="polite" busy={isLoading}>
+              <TableCaption>{`All sales (${count})`}</TableCaption>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Email</TableHead>
+                  <TableHead>Name</TableHead>
+                  <TableHead>Product</TableHead>
+                  <TableHead {...thProps("created_at")}>Purchase Date</TableHead>
+                  <TableHead {...thProps("price_cents")}>Price</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
                 {customers.map((customer) => {
                   const price = formatPrice(
                     customer.price.cents,
@@ -460,21 +461,21 @@ const CustomersPage = ({
                   );
                   const createdAt = new Date(customer.created_at);
                   return (
-                    <tr
+                    <TableRow
                       key={customer.id}
-                      aria-selected={selectedCustomerId === customer.id}
+                      selected={selectedCustomerId === customer.id}
                       onClick={() => setSelectedCustomerId(customer.id)}
                     >
-                      <td>
+                      <TableCell label="Email">
                         {customer.shipping && !customer.shipping.tracking.shipped ? (
                           <WithTooltip tip="Not Shipped">
                             <Icon name="truck" style={{ marginRight: "var(--spacer-2)" }} aria-label="Not Shipped" />
                           </WithTooltip>
                         ) : null}
                         {customer.email.length <= 30 ? customer.email : `${customer.email.slice(0, 27)}...`}
-                      </td>
-                      <td>{customer.name}</td>
-                      <td>
+                      </TableCell>
+                      <TableCell label="Name">{customer.name}</TableCell>
+                      <TableCell label="Product">
                         {customer.product.name}
                         {customer.subscription?.is_installment_plan ? (
                           <span className="pill small" style={{ marginLeft: "var(--spacer-2)" }}>
@@ -526,8 +527,8 @@ const CustomersPage = ({
                             </div>
                           </div>
                         ) : null}
-                      </td>
-                      <td>
+                      </TableCell>
+                      <TableCell label="Purchase Date">
                         {createdAt.toLocaleDateString(userAgentInfo.locale, {
                           day: "numeric",
                           month: "short",
@@ -536,19 +537,19 @@ const CustomersPage = ({
                           minute: "numeric",
                           hour12: true,
                         })}
-                      </td>
-                      <td>
+                      </TableCell>
+                      <TableCell label="Price">
                         {customer.transaction_url_for_seller ? (
                           <a href={customer.transaction_url_for_seller}>{price}</a>
                         ) : (
                           price
                         )}
-                      </td>
-                    </tr>
+                      </TableCell>
+                    </TableRow>
                   );
                 })}
-              </tbody>
-            </table>
+              </TableBody>
+            </Table>
             {pagination && pagination.pages > 1 ? (
               <Pagination onChangePage={asyncVoid(loadCustomers)} pagination={pagination} />
             ) : null}

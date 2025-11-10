@@ -25,6 +25,7 @@ import { Popover } from "$app/components/Popover";
 import { showAlert } from "$app/components/server-components/Alert";
 import { extractSortParam } from "$app/components/server-components/UtmLinksPage";
 import Placeholder from "$app/components/ui/Placeholder";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "$app/components/ui/Table";
 import { useDebouncedCallback } from "$app/components/useDebouncedCallback";
 import { useUserAgentInfo } from "$app/components/UserAgent";
 import { Sort, useSortingTableDriver } from "$app/components/useSortingTableDriver";
@@ -155,29 +156,29 @@ const UtmLinkList = () => {
         </div>
       ) : utmLinks.length > 0 ? (
         <section className="p-4 md:p-8">
-          <table>
-            <thead>
-              <tr>
-                <th {...thProps("link")} style={{ width: "30%" }}>
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead {...thProps("link")} style={{ width: "30%" }}>
                   Link
-                </th>
-                <th {...thProps("source")}>Source</th>
-                <th {...thProps("medium")}>Medium</th>
-                <th {...thProps("campaign")}>Campaign</th>
-                <th {...thProps("clicks")}>Clicks</th>
-                <th {...thProps("revenue_cents")}>Revenue</th>
-                <th {...thProps("conversion_rate")}>Conversion</th>
-                <th />
-              </tr>
-            </thead>
-            <tbody>
+                </TableHead>
+                <TableHead {...thProps("source")}>Source</TableHead>
+                <TableHead {...thProps("medium")}>Medium</TableHead>
+                <TableHead {...thProps("campaign")}>Campaign</TableHead>
+                <TableHead {...thProps("clicks")}>Clicks</TableHead>
+                <TableHead {...thProps("revenue_cents")}>Revenue</TableHead>
+                <TableHead {...thProps("conversion_rate")}>Conversion</TableHead>
+                <TableHead />
+              </TableRow>
+            </TableHeader>
+            <TableBody>
               {utmLinksWithStats.map((link) => (
-                <tr
+                <TableRow
                   key={link.id}
-                  aria-selected={link.id === selectedUtmLink?.id}
+                  selected={link.id === selectedUtmLink?.id}
                   onClick={() => setSelectedUtmLink(link)}
                 >
-                  <td data-label="Link">
+                  <TableCell label="Link">
                     <div>
                       <h4>
                         <TruncatedTextWithTooltip text={link.title} maxLength={35} />
@@ -188,36 +189,26 @@ const UtmLinkList = () => {
                         </a>
                       </small>
                     </div>
-                  </td>
-                  <td data-label="Source">
+                  </TableCell>
+                  <TableCell label="Source">
                     <TruncatedTextWithTooltip text={link.source} maxLength={16} />
-                  </td>
-                  <td data-label="Medium">
+                  </TableCell>
+                  <TableCell label="Medium">
                     <TruncatedTextWithTooltip text={link.medium} maxLength={16} />
-                  </td>
-                  <td data-label="Campaign">
+                  </TableCell>
+                  <TableCell label="Campaign">
                     <TruncatedTextWithTooltip text={link.campaign} maxLength={16} />
-                  </td>
-                  <td data-label="Clicks" style={{ whiteSpace: "nowrap" }}>
+                  </TableCell>
+                  <TableCell label="Clicks" className="text-nowrap">
                     {link.clicks}
-                  </td>
-                  <td
-                    data-label="Revenue"
-                    aria-busy={link.revenue_cents === null}
-                    aria-live="polite"
-                    style={{ whiteSpace: "nowrap" }}
-                  >
+                  </TableCell>
+                  <TableCell label="Revenue" busy={link.revenue_cents === null} className="text-nowrap">
                     {link.revenue_cents !== null ? `$${fixedDecimalPointNumber(link.revenue_cents / 100)}` : null}
-                  </td>
-                  <td
-                    data-label="Conversion"
-                    aria-busy={link.conversion_rate === null}
-                    aria-live="polite"
-                    style={{ whiteSpace: "nowrap" }}
-                  >
+                  </TableCell>
+                  <TableCell label="Conversion" busy={link.conversion_rate === null} className="text-nowrap">
                     {link.conversion_rate !== null ? `${fixedDecimalPointNumber(link.conversion_rate * 100)}%` : null}
-                  </td>
-                  <td>
+                  </TableCell>
+                  <TableCell actions>
                     <UtmLinkActions link={link}>
                       <div role="menu">
                         <div role="menuitem" onClick={() => navigate(editLinkPath(link))}>
@@ -240,11 +231,11 @@ const UtmLinkList = () => {
                         </div>
                       </div>
                     </UtmLinkActions>
-                  </td>
-                </tr>
+                  </TableCell>
+                </TableRow>
               ))}
-            </tbody>
-          </table>
+            </TableBody>
+          </Table>
           {pagination.pages > 1 ? <Pagination onChangePage={onChangePage} pagination={pagination} /> : null}
           {selectedUtmLink ? (
             <UtmLinkDetails
