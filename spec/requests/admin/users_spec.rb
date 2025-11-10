@@ -216,4 +216,89 @@ describe "Admin::UsersController Scenario", type: :system, js: true do
       end
     end
   end
+
+  describe "blocked user indicator" do
+    context "when user is not blocked" do
+      it "does not show blocked user indicator" do
+        visit admin_user_path(user.id)
+
+        expect(page).not_to have_css(".icon-solid-shield-exclamation")
+      end
+    end
+
+    context "when user is blocked by form email" do
+      before do
+        BlockedObject.block!(BLOCKED_OBJECT_TYPES[:email], user.form_email, admin.id)
+      end
+
+      after do
+        BlockedObject.delete_all
+      end
+
+      it "shows blocked user indicator with tooltip" do
+        visit admin_user_path(user.id)
+
+        expect(page).to have_css(".icon-solid-shield-exclamation")
+      end
+
+      it "displays blocked and created dates in tooltip" do
+        visit admin_user_path(user.id)
+
+        icon = find(".icon-solid-shield-exclamation")
+        icon.hover
+
+        expect(page).to have_text("Email blocked")
+        expect(page).to have_text("block created")
+      end
+    end
+
+    context "when user is blocked by form email domain" do
+      before do
+        BlockedObject.block!(BLOCKED_OBJECT_TYPES[:email_domain], user.form_email_domain, admin.id)
+      end
+
+      after do
+        BlockedObject.delete_all
+      end
+
+      it "shows blocked user indicator with tooltip" do
+        visit admin_user_path(user.id)
+
+        expect(page).to have_css(".icon-solid-shield-exclamation")
+      end
+
+      it "displays domain name, blocked and created dates in tooltip" do
+        visit admin_user_path(user.id)
+
+        icon = find(".icon-solid-shield-exclamation")
+        icon.hover
+
+        expect(page).to have_text("#{user.form_email_domain} blocked")
+        expect(page).to have_text("block created")
+      end
+    end
+
+    context "when user is blocked by both form email and domain" do
+      before do
+        BlockedObject.block!(BLOCKED_OBJECT_TYPES[:email], user.form_email, admin.id)
+        BlockedObject.block!(BLOCKED_OBJECT_TYPES[:email_domain], user.form_email_domain, admin.id)
+      end
+
+      after do
+        BlockedObject.delete_all
+      end
+
+      it "shows blocked user indicator with tooltip containing both blocks" do
+        visit admin_user_path(user.id)
+
+        expect(page).to have_css(".icon-solid-shield-exclamation")
+
+        icon = find(".icon-solid-shield-exclamation")
+        icon.hover
+
+        expect(page).to have_text("Email blocked")
+        expect(page).to have_text("#{user.form_email_domain} blocked")
+      end
+    end
+  end
 end
