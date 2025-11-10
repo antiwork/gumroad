@@ -6,7 +6,13 @@ describe UrlRedirectPresenter do
   include Rails.application.routes.url_helpers
   describe "#download_attributes" do
     it "returns all necessary attributes for the download page" do
-      allow(Aws::S3::Resource).to receive(:new).and_return(double(bucket: double(object: double(content_length: 1, public_url: "#{AWS_S3_ENDPOINT}/#{S3_BUCKET}/attachments/4768692737035/bb69798a4a694e19a0976390a7e40e6b/original/chapter1.srt"))))
+      public_url = "#{AWS_S3_ENDPOINT}/#{S3_BUCKET}/attachments/4768692737035/bb69798a4a694e19a0976390a7e40e6b/original/chapter1.srt"
+      s3_object = double(
+        content_length: 1,
+        public_url: public_url
+      )
+      allow(s3_object).to receive(:presigned_url).and_return(public_url) if USING_MINIO
+      allow(Aws::S3::Resource).to receive(:new).and_return(double(bucket: double(object: s3_object)))
 
       product = create(:product)
       folder = create(:product_folder, link: product, name: "Folder")
