@@ -74,7 +74,7 @@ export type Purchase = PurchaseStatesInfo & {
     type: string;
     visual: string;
     country: string;
-    fingerprint_search_url: string;
+    fingerprint_search_url: string | null;
   } | null;
   ip_address: string | null;
   ip_country: string | null;
@@ -82,7 +82,8 @@ export type Purchase = PurchaseStatesInfo & {
   subscription: {
     id: number;
     external_id: string;
-    cancelled: { at: string; by_buyer: boolean } | null;
+    cancelled_at: string | null;
+    cancelled_by_buyer: boolean | null;
     ended_at: string | null;
     failed_at: string | null;
   } | null;
@@ -395,9 +396,9 @@ const Info = ({ purchase }: { purchase: Purchase }) => (
         <>
           <dt>Cancelled</dt>
           <dd>
-            <BooleanIcon value={!!purchase.subscription.cancelled} />
-            {purchase.subscription.cancelled
-              ? ` (on ${purchase.subscription.cancelled.at} by ${purchase.subscription.cancelled.by_buyer ? "buyer" : "seller"})`
+            <BooleanIcon value={!!purchase.subscription.cancelled_at} />
+            {purchase.subscription.cancelled_at
+              ? ` (on ${purchase.subscription.cancelled_at} by ${purchase.subscription.cancelled_by_buyer ? "buyer" : "seller"})`
               : null}
           </dd>
 
@@ -575,7 +576,7 @@ const ActionButtons = ({ purchase }: { purchase: Purchase }) => (
       </>
     ) : null}
     {purchase.subscription &&
-    !purchase.subscription.cancelled &&
+    !purchase.subscription.cancelled_at &&
     !purchase.subscription.ended_at &&
     !purchase.subscription.failed_at ? (
       <>
