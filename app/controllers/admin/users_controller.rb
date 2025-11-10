@@ -1,23 +1,23 @@
 # frozen_string_literal: true
 
 class Admin::UsersController < Admin::BaseController
-  include Pagy::Backend
+  include Admin::FetchUser
   include MassTransferPurchases
 
   skip_before_action :require_admin!, if: :request_from_iffy?, only: %i[suspend_for_fraud_from_iffy mark_compliant_from_iffy flag_for_explicit_nsfw_tos_violation_from_iffy]
 
-  before_action :fetch_user, except: %i[refund_queue block_ip_address]
-
-  helper Pagy::UrlHelpers
-
-  PRODUCTS_ORDER = Arel.sql("ISNULL(COALESCE(purchase_disabled_at, banned_at, links.deleted_at)) DESC, created_at DESC")
-  PRODUCTS_PER_PAGE = 10
+  before_action :fetch_user, except: %i[block_ip_address]
 
   def show
     @title = "#{@user.display_name} on Gumroad"
-    @pagy, @products = pagy(@user.links.order(PRODUCTS_ORDER), limit: PRODUCTS_PER_PAGE)
+
     respond_to do |format|
-      format.html
+      format.html do
+        render inertia: "Admin/Users/Show",
+               props: {
+                 user: Admin::UserPresenter::Card.new(user: @user, pundit_user:).props,
+               }
+      end
       format.json { render json: @user }
     end
   end
@@ -193,10 +193,9 @@ class Admin::UsersController < Admin::BaseController
   def set_custom_fee
     custom_fee_per_thousand = params[:custom_fee_percent].present? ? (params[:custom_fee_percent].to_f * 10).round : nil
     @user.update!(custom_fee_per_thousand:)
-
     render json: { success: true }
-  rescue => e
-    render json: { success: false, message: e.message }
+  rescue ActiveRecord::RecordInvalid => e
+    render json: { success: false, message: e.message }, status: :unprocessable_content
   end
 
   def toggle_adult_products
@@ -208,17 +207,6 @@ class Admin::UsersController < Admin::BaseController
   end
 
   private
-    def fetch_user
-      if params[:id].include?("@")
-        @user = User.find_by(email: params[:id])
-      else
-        @user = User.find_by(username: params[:id]) ||
-                User.find_by(id: params[:id])
-      end
-
-      e404 unless @user
-    end
-
     def mass_transfer_purchases_params
       params.require(:mass_transfer_purchases).permit(:new_email)
     end

@@ -4,19 +4,20 @@ import React from "react";
 import DateTimeWithRelativeTooltip from "$app/components/Admin/DateTimeWithRelativeTooltip";
 import EmptyState from "$app/components/Admin/EmptyState";
 import PaginatedLoader, { Pagination } from "$app/components/Admin/PaginatedLoader";
+import { type RefundPolicy, RefundPolicyTitle } from "$app/components/Admin/Purchases/RefundPolicy";
+import { PurchaseStates } from "$app/components/Admin/Purchases/States";
 import { CopyToClipboard } from "$app/components/CopyToClipboard";
 import { Icon } from "$app/components/Icons";
 import { useOriginalLocation } from "$app/components/useOriginalLocation";
-import { WithTooltip } from "$app/components/WithTooltip";
 
 type Purchase = {
   id: string;
   formatted_display_price: string;
-  formatted_gumroad_tax_amount: string;
+  formatted_gumroad_tax_amount: string | null;
   gumroad_responsible_for_tax: boolean;
   product: { id: string; name: string; long_url: string };
   variants_list: string;
-  purchase_refund_policy: string | null;
+  refund_policy: RefundPolicy | null;
   product_refund_policy: string | null;
   seller: { email: string; support_email: string };
   email: string;
@@ -97,35 +98,12 @@ export default function Purchases() {
                     <Link href={purchase.product.long_url} target="_blank" rel="noopener noreferrer nofollow">
                       <Icon name="arrow-up-right-square" />
                     </Link>{" "}
-                    <ul className="inline">
-                      <li>{purchase.purchase_state}</li>
-                      {purchase.stripe_refunded ? <li>(refunded)</li> : null}
-                      {purchase.stripe_partially_refunded ? <li>(partially refunded)</li> : null}
-                      {purchase.chargedback ? (
-                        <li>(chargeback{purchase.chargeback_reversed ? " reversed" : ""})</li>
-                      ) : null}
-                      {purchase.error_code ? (
-                        <li>
-                          {purchase.last_chargebacked_purchase ? (
-                            <Link href={Routes.admin_purchase_path(purchase.last_chargebacked_purchase)}>
-                              {purchase.error_code}
-                            </Link>
-                          ) : (
-                            purchase.error_code
-                          )}
-                        </li>
-                      ) : null}
-                    </ul>
+                    <PurchaseStates purchase={purchase} />
                     <div className="text-sm">
                       <ul className="inline">
-                        {purchase.purchase_refund_policy ? (
+                        {purchase.refund_policy ? (
                           <li>
-                            Refund policy: {purchase.purchase_refund_policy}{" "}
-                            {purchase.product_refund_policy ? (
-                              <WithTooltip tip={`Current refund policy: ${purchase.product_refund_policy}`}>
-                                <Icon name="solid-shield-exclamation" className="text-warning" />
-                              </WithTooltip>
-                            ) : null}
+                            <RefundPolicyTitle refundPolicy={purchase.refund_policy} />
                           </li>
                         ) : null}
                         <li>

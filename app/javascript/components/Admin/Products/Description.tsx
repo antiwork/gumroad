@@ -21,7 +21,7 @@ const AdminUsersProductsDescription = ({ product }: Props) => {
         <summary>
           <h3>Description</h3>
         </summary>
-        {strippedHtmlSafeDescription ? (
+        {product.html_safe_description && strippedHtmlSafeDescription ? (
           <div dangerouslySetInnerHTML={{ __html: product.html_safe_description }} />
         ) : (
           <div className="info" role="status">

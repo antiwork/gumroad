@@ -15,7 +15,7 @@ export const Form = ({
 }: {
   url: string;
   method: "POST" | "DELETE";
-  confirmMessage: string | false;
+  confirmMessage?: string | undefined;
   onSuccess: () => void;
   children: (isLoading: boolean) => React.ReactNode;
   className?: string;
@@ -27,7 +27,7 @@ export const Form = ({
     event.preventDefault();
 
     // eslint-disable-next-line no-alert
-    if (confirmMessage !== false && !confirm(confirmMessage)) {
+    if (confirmMessage && !confirm(confirmMessage)) {
       return;
     }
 
