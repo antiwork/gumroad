@@ -527,7 +527,6 @@ const GiftInfo = ({ purchaseId, gift }: { purchaseId: number; gift: Gift }) =>
     </details>
   );
 
-
 const ActionButtons = ({ purchase }: { purchase: Purchase }) => (
   <div className="button-group">
     {purchase.can_force_update || purchase.failed ? (
