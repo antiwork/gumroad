@@ -108,4 +108,46 @@ describe User::LowBalanceFraudCheck do
       end
     end
   end
+
+  describe "#mark_compliant_if_balance_recovered!" do
+    it "does nothing when user is not on probation" do
+      allow(@creator).to receive(:unpaid_balance_cents).and_return(50_00)
+      expect { @creator.mark_compliant_if_balance_recovered! }.not_to change { @creator.reload.user_risk_state }
+    end
+
+    context "when user is on probation for low balance" do
+      before do
+        @creator.send(:disable_refunds_and_put_on_probation!)
+      end
+
+      it "does nothing when balance is below $100" do
+        allow(@creator).to receive(:unpaid_balance_cents).and_return(99_99)
+        expect { @creator.mark_compliant_if_balance_recovered! }.not_to change { @creator.reload.user_risk_state }
+      end
+
+      it "marks user compliant, creates compliant comment, and enables refunds when balance is at or above $100" do
+        allow(@creator).to receive(:unpaid_balance_cents).and_return(100_00)
+        expect { @creator.mark_compliant_if_balance_recovered! }
+          .to change { @creator.reload.user_risk_state }.from("on_probation").to("compliant")
+
+        compliant_comment = @creator.comments.where(comment_type: Comment::COMMENT_TYPE_COMPLIANT).order(created_at: :desc).first
+        expect(compliant_comment.author_name).to eq("LowBalanceFraudCheck")
+        expect(compliant_comment.content).to include("Marked compliant automatically", "balance has recovered to $100")
+        expect(@creator.reload.refunds_disabled?).to eq(false)
+      end
+    end
+
+    context "when user is on probation but not for low balance" do
+      before do
+        @creator.comments.create!(comment_type: Comment::COMMENT_TYPE_ON_PROBATION, author_name: "LowBalanceFraudCheck", content: "Probated (payouts suspended) automatically on #{Time.current.to_fs(:formatted_date_full_month)} because of suspicious refund activity", created_at: 1.month.ago)
+        @creator.comments.create!(comment_type: Comment::COMMENT_TYPE_COMPLIANT, author_name: "LowBalanceFraudCheck", content: "Marked compliant automatically on #{Time.current.to_fs(:formatted_date_full_month)} as balance has recovered to $100", created_at: 1.day.ago)
+        @creator.put_on_probation!(author_name: "pause_payouts_for_seller_based_on_chargeback_rate", content: "Payouts automatically paused due to chargeback rate (50%) exceeding 3% volume.")
+      end
+
+      it "does not mark user as compliant if balance is above $100" do
+        allow(@creator).to receive(:unpaid_balance_cents).and_return(100_00)
+        expect { @creator.mark_compliant_if_balance_recovered! }.not_to change { @creator.reload.user_risk_state }
+      end
+    end
+  end
 end

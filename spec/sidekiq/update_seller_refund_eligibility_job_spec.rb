@@ -52,4 +52,12 @@ describe UpdateSellerRefundEligibilityJob do
       expect { perform }.to change { user.reload.refunds_disabled? }.from(false).to(true)
     end
   end
+
+  it "calls mark_compliant_if_balance_recovered!" do
+    user.send(:disable_refunds_and_put_on_probation!)
+    create(:balance, user: user, amount_cents: 100_00)
+    expect { perform }
+      .to change { user.reload.user_risk_state }.from("on_probation").to("compliant")
+      .and change { user.reload.refunds_disabled? }.from(true).to(false)
+  end
 end
