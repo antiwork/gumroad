@@ -3,10 +3,10 @@ import React from "react";
 import { DomainSettings } from "$app/types/domain_settings";
 import { LoggedInUser, Seller, CurrentUser } from "$app/types/user";
 
-import { type AlertPayload } from "$app/components/server-components/Alert";
 import { DesignContextProvider, DesignSettings } from "$app/components/DesignSettings";
 import { DomainSettingsProvider } from "$app/components/DomainSettings";
 import { LoggedInUserProvider, parseLoggedInUser } from "$app/components/LoggedInUser";
+import { type AlertPayload } from "$app/components/server-components/Alert";
 import { SSRLocationProvider } from "$app/components/useOriginalLocation";
 import { UserAgentProvider } from "$app/components/UserAgent";
 

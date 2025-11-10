@@ -69,18 +69,18 @@ export default function AppWrapper({ children, global }: { children: React.React
           apiDomain: global.domain_settings.api_domain,
         }}
       >
-      <UserAgentProvider
-        value={{
-          isMobile: global.user_agent_info.is_mobile,
-          locale: global.locale,
-        }}
-      >
-        <LoggedInUserProvider value={parseLoggedInUser(global.logged_in_user)}>
-          <CurrentSellerProvider value={parseCurrentSeller(global.current_seller)}>
-            <SSRLocationProvider value={global.href}>{children}</SSRLocationProvider>
-          </CurrentSellerProvider>
-        </LoggedInUserProvider>
-      </UserAgentProvider>
+        <UserAgentProvider
+          value={{
+            isMobile: global.user_agent_info.is_mobile,
+            locale: global.locale,
+          }}
+        >
+          <LoggedInUserProvider value={parseLoggedInUser(global.logged_in_user)}>
+            <CurrentSellerProvider value={parseCurrentSeller(global.current_seller)}>
+              <SSRLocationProvider value={global.href}>{children}</SSRLocationProvider>
+            </CurrentSellerProvider>
+          </LoggedInUserProvider>
+        </UserAgentProvider>
       </DomainSettingsProvider>
     </DesignContextProvider>
   );

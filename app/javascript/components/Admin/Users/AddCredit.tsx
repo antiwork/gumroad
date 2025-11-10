@@ -8,41 +8,38 @@ type AdminUserAddCreditProps = {
   user: User;
 };
 
-const AdminUserAddCredit = ({ user }: AdminUserAddCreditProps) => {
-
-  return (
-    <>
-      <hr />
-      <details>
-        <summary>
-          <h3>Add credits</h3>
-        </summary>
-        <Form
-          url={Routes.add_credit_admin_user_path(user.id)}
-          method="POST"
-          confirmMessage="Are you sure you want to add credits?"
-          onSuccess={() => showAlert("Successfully added credits.", "success")}
-        >
-          {(isLoading) => (
-            <fieldset>
-              <div className="input-with-button">
-                <div className="input">
-                  <span className="pill">$</span>
-                  <input type="text" name="credit[credit_amount]" placeholder="10.25" inputMode="decimal" required />
-                </div>
-
-                <button type="submit" className="button" disabled={isLoading}>
-                  {isLoading ? "Saving..." : "Add credits"}
-                </button>
+const AdminUserAddCredit = ({ user }: AdminUserAddCreditProps) => (
+  <>
+    <hr />
+    <details>
+      <summary>
+        <h3>Add credits</h3>
+      </summary>
+      <Form
+        url={Routes.add_credit_admin_user_path(user.id)}
+        method="POST"
+        confirmMessage="Are you sure you want to add credits?"
+        onSuccess={() => showAlert("Successfully added credits.", "success")}
+      >
+        {(isLoading) => (
+          <fieldset>
+            <div className="input-with-button">
+              <div className="input">
+                <span className="pill">$</span>
+                <input type="text" name="credit[credit_amount]" placeholder="10.25" inputMode="decimal" required />
               </div>
 
-              <small>Subtract credits by providing a negative value</small>
-            </fieldset>
-          )}
-        </Form>
-      </details>
-    </>
-  );
-};
+              <button type="submit" className="button" disabled={isLoading}>
+                {isLoading ? "Saving..." : "Add credits"}
+              </button>
+            </div>
+
+            <small>Subtract credits by providing a negative value</small>
+          </fieldset>
+        )}
+      </Form>
+    </details>
+  </>
+);
 
 export default AdminUserAddCredit;

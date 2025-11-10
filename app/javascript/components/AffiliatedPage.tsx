@@ -6,13 +6,13 @@ import { asyncVoid } from "$app/utils/promise";
 import { AbortError, assertResponseError } from "$app/utils/request";
 
 import { Button } from "$app/components/Button";
-import { showAlert } from "$app/components/server-components/Alert";
 import { CopyToClipboard } from "$app/components/CopyToClipboard";
 import { GlobalAffiliates } from "$app/components/GlobalAffiliates";
 import { Icon } from "$app/components/Icons";
 import { Pagination, PaginationProps } from "$app/components/Pagination";
 import { Popover } from "$app/components/Popover";
 import { ProductsLayout } from "$app/components/ProductsLayout";
+import { showAlert } from "$app/components/server-components/Alert";
 import { Stats as StatsComponent } from "$app/components/Stats";
 import Placeholder from "$app/components/ui/Placeholder";
 import { useDebouncedCallback } from "$app/components/useDebouncedCallback";

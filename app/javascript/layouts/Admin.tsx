@@ -5,8 +5,8 @@ import { classNames } from "$app/utils/classNames";
 
 import AdminNav from "$app/components/Admin/Nav";
 import AdminSearchPopover from "$app/components/Admin/SearchPopover";
-import Alert, { showAlert, type AlertPayload } from "$app/components/server-components/Alert";
 import LoadingSkeleton from "$app/components/LoadingSkeleton";
+import Alert, { showAlert, type AlertPayload } from "$app/components/server-components/Alert";
 import useRouteLoading from "$app/components/useRouteLoading";
 
 type PageProps = {

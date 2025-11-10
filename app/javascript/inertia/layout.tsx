@@ -4,8 +4,8 @@ import React from "react";
 import { classNames } from "$app/utils/classNames";
 
 import { Nav } from "$app/components/client-components/Nav";
-import Alert from "$app/components/server-components/Alert";
 import LoadingSkeleton from "$app/components/LoadingSkeleton";
+import Alert from "$app/components/server-components/Alert";
 import useRouteLoading from "$app/components/useRouteLoading";
 
 export default function Layout({ children }: { children: React.ReactNode }) {
