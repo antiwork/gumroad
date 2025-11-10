@@ -73,9 +73,9 @@ export const SearchPopover = ({ card_types }: Props) => {
           </Button>
         </form>
         <Separator>or search by card</Separator>
-        <form action={Routes.admin_cards_path()} method="get" style={{ display: "contents" }}>
+        <form action={Routes.admin_search_purchases_path()} method="get" style={{ display: "contents" }}>
           <select name="card_type" defaultValue={searchParams.get("card_type") || ""}>
-            <option>Choose card type</option>
+            <option value="">Choose card type</option>
             {card_types.map((cardType) => (
               <option key={cardType.id} value={cardType.id}>
                 {cardType.name}

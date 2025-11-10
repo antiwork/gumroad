@@ -4,11 +4,13 @@ import * as React from "react";
 
 import { classNames } from "$app/utils/classNames";
 
+import { Icon } from "$app/components/Icons";
+
 const tabsVariants = cva("", {
   variants: {
     variant: {
       pills: "flex gap-3 overflow-x-auto",
-      buttons: "tab-buttons",
+      buttons: "grid gap-3 md:auto-cols-fr md:grid-flow-col",
     },
   },
   defaultVariants: {
@@ -19,11 +21,12 @@ const tabsVariants = cva("", {
 const tabVariants = cva("", {
   variants: {
     variant: {
-      pills: "shrink-0 rounded-full border border-transparent px-3 py-2 no-underline hover:border-border",
-      buttons: "", // SCSS handles styling via [role="tab"]
+      pills: "shrink-0 rounded-full border-transparent px-3 py-2 hover:border-border",
+      buttons:
+        "flex items-start gap-3 rounded-sm border-border px-4 py-3 text-left transition-all not-active:hover:-translate-1 not-active:hover:shadow",
     },
     active: {
-      true: "",
+      true: "bg-background",
       false: "",
     },
   },
@@ -31,7 +34,12 @@ const tabVariants = cva("", {
     {
       variant: "pills",
       active: true,
-      className: "border-border bg-background text-foreground",
+      className: "border-border text-foreground",
+    },
+    {
+      variant: "buttons",
+      active: true,
+      className: "shadow -translate-1",
     },
   ],
   defaultVariants: {
@@ -40,28 +48,38 @@ const tabVariants = cva("", {
   },
 });
 
+const TabVariantContext = React.createContext<"pills" | "buttons">("pills");
+
 interface TabsProps extends React.HTMLProps<HTMLDivElement>, VariantProps<typeof tabsVariants> {
   children: React.ReactNode;
 }
 
-export const Tabs = ({ children, className, variant, ...props }: TabsProps) => (
-  <div role="tablist" className={classNames(tabsVariants({ variant }), className)} {...props}>
-    {children}
+export const Tabs = React.forwardRef<HTMLDivElement, TabsProps>(({ children, className, variant, ...props }, ref) => (
+  <div role="tablist" className={classNames(tabsVariants({ variant }), className)} {...props} ref={ref}>
+    <TabVariantContext.Provider value={variant ?? "pills"}> {children} </TabVariantContext.Provider>
+  </div>
+));
+Tabs.displayName = "Tabs";
+
+export const TabIcon = ({ name }: { name: IconName }) => (
+  <div className="flex-shrink-0 text-xl">
+    <Icon name={name} />
   </div>
 );
 
-interface TabProps extends Omit<React.HTMLProps<HTMLAnchorElement>, "selected">, VariantProps<typeof tabVariants> {
+interface TabProps extends Omit<React.HTMLProps<HTMLAnchorElement>, "selected"> {
   children: React.ReactNode;
   asChild?: boolean;
   isSelected: boolean;
 }
 
-export const Tab = ({ children, isSelected, className, asChild, variant, ...props }: TabProps) => {
+export const Tab = ({ children, isSelected, className, asChild, ...props }: TabProps) => {
+  const variant = React.useContext(TabVariantContext);
   const Component = asChild ? Slot : "a";
 
   return (
     <Component
-      className={classNames(tabVariants({ variant, active: isSelected }), className)}
+      className={classNames("border no-underline", tabVariants({ variant, active: isSelected }), className)}
       role="tab"
       aria-selected={isSelected}
       {...props}
