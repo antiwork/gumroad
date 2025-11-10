@@ -6,15 +6,21 @@ import { Tab, Tabs } from "$app/components/ui/Tabs";
 type Props = {
   selectedTab: string;
   userId: number;
+  isAffiliateUser?: boolean;
 };
 
-const AdminUserAndProductsTabs = ({ selectedTab, userId }: Props) => (
+const AdminUserAndProductsTabs = ({ selectedTab, userId, isAffiliateUser = false }: Props) => (
   <Tabs variant="buttons">
-    <Tab isSelected={selectedTab === "users"} variant="buttons" asChild>
-      <Link href={Routes.admin_user_path(userId)}>Profile</Link>
+    <Tab isSelected={selectedTab === "profile"} asChild>
+      <Link href={isAffiliateUser ? Routes.admin_affiliate_path(userId) : Routes.admin_user_path(userId)} prefetch>
+        Profile
+      </Link>
     </Tab>
-    <Tab isSelected={selectedTab === "products"} variant="buttons" asChild>
-      <Link href={Routes.admin_user_products_path(userId)} prefetch>
+    <Tab isSelected={selectedTab === "products"} asChild>
+      <Link
+        href={isAffiliateUser ? Routes.admin_affiliate_products_path(userId) : Routes.admin_user_products_path(userId)}
+        prefetch
+      >
         Products
       </Link>
     </Tab>

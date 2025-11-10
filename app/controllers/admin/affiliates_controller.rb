@@ -20,11 +20,14 @@ class Admin::AffiliatesController < Admin::BaseController
 
   def show
     @title = "#{@affiliate_user.display_name} affiliate on Gumroad"
-    products_scope = @affiliate_user.directly_affiliated_products.unscope(where: :purchase_disabled_at).order(Arel.sql(Admin::UsersController::PRODUCTS_ORDER))
-    @pagy, @products = pagy(products_scope, limit: Admin::UsersController::PRODUCTS_PER_PAGE)
     respond_to do |format|
-      format.html
-      format.json { render json: @affiliate }
+      format.html do
+        render inertia: "Admin/Affiliates/Show",
+               props: {
+                 user: Admin::UserPresenter::Card.new(user: @affiliate_user, pundit_user:).props,
+               }
+      end
+      format.json { render json: @affiliate_user }
     end
   end
 

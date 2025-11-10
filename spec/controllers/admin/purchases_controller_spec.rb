@@ -2,8 +2,9 @@
 
 require "spec_helper"
 require "shared_examples/admin_base_controller_concern"
+require "inertia_rails/rspec"
 
-describe Admin::PurchasesController, :vcr do
+describe Admin::PurchasesController, :vcr, inertia: true do
   it_behaves_like "inherits from Admin::BaseController"
 
   before do
@@ -14,6 +15,14 @@ describe Admin::PurchasesController, :vcr do
   describe "#show" do
     before do
       @purchase = create(:purchase)
+    end
+
+    it "returns successful response with Inertia page data" do
+      expect(Admin::PurchasePresenter).to receive(:new).with(@purchase).and_call_original
+      get :show, params: { id: @purchase.id }
+
+      expect(response).to be_successful
+      expect(inertia.component).to eq("Admin/Purchases/Show")
     end
 
     it "raises ActionController::RoutingError when purchase is not found" do

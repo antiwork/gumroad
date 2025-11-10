@@ -159,9 +159,12 @@ const SearchPopover = () => {
 
         <div role="separator">or search by card</div>
 
-        <form onSubmit={(e) => submitForm(e, Routes.admin_cards_path(), null)} style={{ display: "contents" }}>
+        <form
+          onSubmit={(e) => submitForm(e, Routes.admin_search_purchases_path(), null)}
+          style={{ display: "contents" }}
+        >
           <select name="card_type" value={data.card_type} onChange={(e) => setData("card_type", e.target.value)}>
-            <option>Choose card type</option>
+            <option value="">Choose card type</option>
             {card_types.map((cardType) => (
               <option key={cardType.id} value={cardType.id}>
                 {cardType.name}
