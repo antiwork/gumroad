@@ -15,6 +15,7 @@ import { Popover } from "$app/components/Popover";
 import { ProductsLayout } from "$app/components/ProductsLayout";
 import { Stats as StatsComponent } from "$app/components/Stats";
 import Placeholder from "$app/components/ui/Placeholder";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "$app/components/ui/Table";
 import { useDebouncedCallback } from "$app/components/useDebouncedCallback";
 import { useGlobalEventListener } from "$app/components/useGlobalEventListener";
 import { useOriginalLocation } from "$app/components/useOriginalLocation";
@@ -109,52 +110,52 @@ const AffiliatedProductsTable = ({
 
   return (
     <section className="paragraphs">
-      <table aria-live="polite" aria-busy={isLoading}>
-        <thead>
-          <tr>
-            <th {...thProps("product_name")} title="Sort by Product">
+      <Table aria-live="polite" busy={isLoading}>
+        <TableHeader>
+          <TableRow>
+            <TableHead {...thProps("product_name")} title="Sort by Product">
               Product
-            </th>
-            <th {...thProps("sales_count")} title="Sort by Sales">
+            </TableHead>
+            <TableHead {...thProps("sales_count")} title="Sort by Sales">
               Sales
-            </th>
-            <th title="Sort by Type">Type</th>
-            <th {...thProps("commission")} title="Sort by Commission">
+            </TableHead>
+            <TableHead title="Sort by Type">Type</TableHead>
+            <TableHead {...thProps("commission")} title="Sort by Commission">
               Commission
-            </th>
-            <th {...thProps("revenue")} title="Sort by Revenue">
+            </TableHead>
+            <TableHead {...thProps("revenue")} title="Sort by Revenue">
               Revenue
-            </th>
-            <th />
-          </tr>
-        </thead>
+            </TableHead>
+            <TableHead />
+          </TableRow>
+        </TableHeader>
 
-        <tbody>
+        <TableBody>
           {affiliatedProducts.map((affiliatedProduct) => (
-            <tr key={affiliatedProduct.url}>
-              <td>
+            <TableRow key={affiliatedProduct.url}>
+              <TableCell label="Product">
                 <a href={affiliatedProduct.url} title={affiliatedProduct.url} target="_blank" rel="noreferrer">
                   {affiliatedProduct.product_name}
                 </a>
-              </td>
+              </TableCell>
 
-              <td data-label="Sales" style={{ whiteSpace: "nowrap" }}>
+              <TableCell label="Sales" className="text-nowrap">
                 {affiliatedProduct.sales_count.toLocaleString(userAgentInfo.locale)}
-              </td>
+              </TableCell>
 
-              <td data-label="Type" style={{ whiteSpace: "nowrap" }}>
+              <TableCell label="Type" className="text-nowrap">
                 {affiliatedProduct.affiliate_type === "direct_affiliate" ? "Direct" : "Gumroad"}
-              </td>
+              </TableCell>
 
-              <td data-label="Commission">
+              <TableCell label="Commission">
                 {(affiliatedProduct.fee_percentage / 100).toLocaleString([], { style: "percent" })}
-              </td>
+              </TableCell>
 
-              <td data-label="Revenue" style={{ whiteSpace: "nowrap" }}>
+              <TableCell label="Revenue" className="text-nowrap">
                 {affiliatedProduct.humanized_revenue}
-              </td>
+              </TableCell>
 
-              <td>
+              <TableCell>
                 <div className="actions">
                   <CopyToClipboard tooltipPosition="bottom" copyTooltip="Copy link" text={affiliatedProduct.url}>
                     <Button>
@@ -163,11 +164,11 @@ const AffiliatedProductsTable = ({
                     </Button>
                   </CopyToClipboard>
                 </div>
-              </td>
-            </tr>
+              </TableCell>
+            </TableRow>
           ))}
-        </tbody>
-      </table>
+        </TableBody>
+      </Table>
       {pagination.pages > 1 ? (
         <Pagination onChangePage={(page) => loadAffiliatedProducts(page, sort)} pagination={pagination} />
       ) : null}
