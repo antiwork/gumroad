@@ -526,7 +526,7 @@ const GiftInfo = ({ purchaseId, gift }: { purchaseId: number; gift: Gift }) =>
       </dl>
     </details>
   );
-};
+
 
 const ActionButtons = ({ purchase }: { purchase: Purchase }) => (
   <div className="button-group">
