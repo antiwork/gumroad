@@ -25,7 +25,7 @@ import { ProductToAdd, CartItem } from "$app/components/Checkout/cartState";
 import { CheckoutPreview } from "$app/components/CheckoutDashboard/CheckoutPreview";
 import { DiscountInput, InputtedDiscount } from "$app/components/CheckoutDashboard/DiscountInput";
 import { Layout, Page } from "$app/components/CheckoutDashboard/Layout";
-import { useClientAlert } from "$app/components/ClientAlertProvider";
+import { showAlert } from "$app/components/server-components/Alert";
 import { Details } from "$app/components/Details";
 import { Icon } from "$app/components/Icons";
 import { useLoggedInUser } from "$app/components/LoggedInUser";
@@ -89,7 +89,6 @@ export type UpsellsPageProps = {
 };
 
 const UpsellsPage = (props: UpsellsPageProps) => {
-  const { showAlert } = useClientAlert();
   const loggedInUser = useLoggedInUser();
   const isReadOnly = !loggedInUser?.policies.upsell.create;
 
@@ -524,7 +523,6 @@ const Form = ({
   isLoading: boolean;
 }) => {
   const uid = React.useId();
-  const { showAlert } = useClientAlert();
   const [name, setName] = React.useState<{ value: string; error?: boolean }>({ value: upsell?.name ?? "" });
   const [offerText, setOfferText] = React.useState<{ value: string; error?: boolean }>({ value: upsell?.text ?? "" });
   const [offerDescription, setOfferDescription] = React.useState(upsell?.description ?? "");

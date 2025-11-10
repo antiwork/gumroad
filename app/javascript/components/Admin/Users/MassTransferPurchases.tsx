@@ -2,14 +2,13 @@ import * as React from "react";
 
 import { Form } from "$app/components/Admin/Form";
 import type { User } from "$app/components/Admin/Users/User";
-import { useClientAlert } from "$app/components/ClientAlertProvider";
+import { showAlert } from "$app/components/server-components/Alert";
 
 type AdminUserMassTransferPurchasesProps = {
   user: User;
 };
 
 const AdminUserMassTransferPurchases = ({ user }: AdminUserMassTransferPurchasesProps) => {
-  const { showAlert } = useClientAlert();
 
   return (
     <>

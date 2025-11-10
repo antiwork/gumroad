@@ -1,7 +1,7 @@
 import * as React from "react";
 
 import { Form } from "$app/components/Admin/Form";
-import { useClientAlert } from "$app/components/ClientAlertProvider";
+import { showAlert } from "$app/components/server-components/Alert";
 
 type AdminResendReceiptFormProps = {
   purchase_id: number;
@@ -9,8 +9,6 @@ type AdminResendReceiptFormProps = {
 };
 
 export const AdminResendReceiptForm = ({ purchase_id, email }: AdminResendReceiptFormProps) => {
-  const { showAlert } = useClientAlert();
-
   return (
     <Form
       url={Routes.resend_receipt_admin_purchase_path(purchase_id)}

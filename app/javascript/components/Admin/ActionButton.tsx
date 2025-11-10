@@ -9,7 +9,7 @@ import { cast } from "ts-safe-cast";
 import { assertResponseError, request, ResponseError } from "$app/utils/request";
 
 import { Button } from "$app/components/Button";
-import { useClientAlert } from "$app/components/ClientAlertProvider";
+import { showAlert } from "$app/components/server-components/Alert";
 import { ButtonColor } from "$app/components/design";
 
 type AdminActionButtonProps = {
@@ -39,7 +39,6 @@ export const AdminActionButton = ({
   color,
   class: className,
 }: AdminActionButtonProps) => {
-  const { showAlert } = useClientAlert();
   const [state, setState] = React.useState<"initial" | "loading" | "done">("initial");
 
   const handleSubmit = async () => {

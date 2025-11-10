@@ -17,7 +17,7 @@ import {
 import { assertResponseError, request } from "$app/utils/request";
 
 import { Button, NavigationButton } from "$app/components/Button";
-import { useClientAlert } from "$app/components/ClientAlertProvider";
+import { showAlert } from "$app/components/server-components/Alert";
 import { Icon } from "$app/components/Icons";
 import { Popover } from "$app/components/Popover";
 import { TypeSafeOptionSelect } from "$app/components/TypeSafeOptionSelect";
@@ -52,7 +52,6 @@ const NewProductPage = ({
   ai_promo_dismissed,
 }: NewProductPageProps) => {
   const formUID = React.useId();
-  const { showAlert } = useClientAlert();
   const nameInputRef = React.useRef<HTMLInputElement>(null);
   const priceInputRef = React.useRef<HTMLInputElement>(null);
 
