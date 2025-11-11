@@ -124,6 +124,7 @@ export const FileRow = ({
   isEmbed = false,
   isTreeItem = true,
   collapsed: initialCollapsed = false,
+  className,
 }: {
   file: FileItem;
   playingAudioForId: null | string;
@@ -131,6 +132,7 @@ export const FileRow = ({
   isEmbed?: boolean;
   isTreeItem?: boolean;
   collapsed?: boolean;
+  className?: string | undefined;
 }) => {
   const isMobileAppWebView = useIsMobileAppView();
   const purchaseInfo = usePurchaseInfo();
@@ -191,7 +193,7 @@ export const FileRow = ({
 
   return (
     <div
-      className={cx({ embed: isEmbed })}
+      className={cx({ embed: isEmbed }, className)}
       role={isTreeItem || shouldShowSubtitlesForFile(file) ? "treeitem" : undefined}
       aria-expanded={shouldShowSubtitlesForFile(file) ? isExpanded : undefined}
     >
@@ -677,7 +679,7 @@ const VideoEmbedPreview = ({
           onClick={() => void startPlaying()}
           aria-label="Watch"
         >
-          {isFetchingMediaUrls ? <LoadingSpinner width="4em" /> : <PlayVideoIcon />}
+          {isFetchingMediaUrls ? <LoadingSpinner className="size-16" /> : <PlayVideoIcon />}
         </button>
       </TrackClick>
     </figure>

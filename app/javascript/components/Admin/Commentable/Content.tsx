@@ -1,7 +1,7 @@
 import React from "react";
 
 import Comment, { type CommentProps } from "$app/components/Admin/Commentable/Comment";
-import Loading from "$app/components/Admin/Loading";
+import { LoadingSpinner } from "$app/components/LoadingSpinner";
 import { useIsIntersecting } from "$app/components/useIsIntersecting";
 
 type AdminCommentableContentProps = {
@@ -40,7 +40,7 @@ const AdminCommentableContent = ({
 
   return (
     <div>
-      {isLoading && !hasLoaded ? <Loading /> : null}
+      {isLoading && !hasLoaded ? <LoadingSpinner /> : null}
 
       <div className="rows" role="list">
         {comments.map((comment) => (
@@ -48,7 +48,7 @@ const AdminCommentableContent = ({
         ))}
       </div>
 
-      {hasMore ? <div ref={elementRef}>{isLoading ? <Loading /> : null}</div> : null}
+      {hasMore ? <div ref={elementRef}>{isLoading ? <LoadingSpinner /> : null}</div> : null}
     </div>
   );
 };

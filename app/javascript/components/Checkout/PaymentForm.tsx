@@ -51,11 +51,11 @@ import {
   getTotalPriceFromProducts,
 } from "$app/components/Checkout/payment";
 import { Icon } from "$app/components/Icons";
+import { LoadingSpinner } from "$app/components/LoadingSpinner";
 import { useLoggedInUser } from "$app/components/LoggedInUser";
 import { PriceInput } from "$app/components/PriceInput";
-import { Progress } from "$app/components/Progress";
 import { showAlert } from "$app/components/server-components/Alert";
-import { Tabs } from "$app/components/ui/Tabs";
+import { Tab, Tabs } from "$app/components/ui/Tabs";
 import { useIsDarkTheme } from "$app/components/useIsDarkTheme";
 import { useOnChangeSync } from "$app/components/useOnChange";
 import { RecaptchaCancelledError, useRecaptcha } from "$app/components/useRecaptcha";
@@ -416,16 +416,15 @@ const PaymentMethodRadio = ({
   const [state, dispatch] = useState();
   const selected = state.paymentMethod === paymentMethod;
   return (
-    <Button
-      role="tab"
-      aria-selected={selected}
+    <Tab
+      isSelected={selected}
       onClick={() => {
         if (paymentMethod !== state.paymentMethod) dispatch({ type: "set-value", paymentMethod });
       }}
       disabled={!selected && isProcessing(state)}
     >
       {children}
-    </Button>
+    </Tab>
   );
 };
 
@@ -959,7 +958,7 @@ const NativePayPal = ({ implementation }: { implementation: PayPalNamespace }) =
         hidden={isProcessing(state)}
         style={isDarkTheme ? { filter: "invert(1) grayscale(1)" } : undefined}
       />
-      {isProcessing(state) ? <Progress width="1em" /> : null}
+      {isProcessing(state) ? <LoadingSpinner /> : null}
     </>
   );
 };
@@ -1219,7 +1218,7 @@ export const PaymentForm = ({
             <div className="paragraphs">
               <h4>Pay with</h4>
               {state.availablePaymentMethods.length > 1 ? (
-                <Tabs>
+                <Tabs variant="buttons" className="auto-cols-max grid-flow-col">
                   {state.availablePaymentMethods.map((method) => (
                     <React.Fragment key={method.type}>{method.button}</React.Fragment>
                   ))}

@@ -8,6 +8,6 @@ class Admin::Products::StaffPicked::LinkPolicy < ApplicationPolicy
   end
 
   def destroy?
-    record.staff_picked_product&.not_deleted?
+    record.staff_picked_product&.not_deleted? || false
   end
 end

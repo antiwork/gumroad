@@ -86,7 +86,7 @@ describe "Tiered Membership Free Trial Spec", type: :system, js: true do
 
           expect(page).to have_text "Pay with"
           expect(page).not_to have_text "You'll be charged" # no charge today
-          fill_in_credit_card(number: StripePaymentMethodHelper.success[:cc_number])
+          fill_in_credit_card(number: CardParamsSpecHelper.card_number(:success))
           expect do
             click_on "Update membership"
             wait_for_ajax
@@ -127,7 +127,7 @@ describe "Tiered Membership Free Trial Spec", type: :system, js: true do
         visit "/subscriptions/#{@subscription.external_id}/manage?token=#{@subscription.token}"
 
         click_on "Use a different card?"
-        fill_in_credit_card(number: StripePaymentMethodHelper.success[:cc_number])
+        fill_in_credit_card(number: CardParamsSpecHelper.card_number(:success))
         click_on "Update membership"
         wait_for_ajax
 
@@ -145,7 +145,7 @@ describe "Tiered Membership Free Trial Spec", type: :system, js: true do
         visit "/subscriptions/#{@subscription.external_id}/manage?token=#{@subscription.token}"
 
         click_on "Use a different card?"
-        fill_in_credit_card(number: StripePaymentMethodHelper.success_with_sca[:cc_number])
+        fill_in_credit_card(number: CardParamsSpecHelper.card_number(:success_with_sca))
         click_on "Update membership"
         wait_for_ajax
         sleep 1
@@ -214,7 +214,7 @@ describe "Tiered Membership Free Trial Spec", type: :system, js: true do
           expect do
             visit "/subscriptions/#{@subscription.external_id}/manage?token=#{@subscription.token}"
             click_on "Use a different card?"
-            fill_in_credit_card(number: StripePaymentMethodHelper.success[:cc_number])
+            fill_in_credit_card(number: CardParamsSpecHelper.card_number(:success))
             click_on "Update membership"
             wait_for_ajax
 

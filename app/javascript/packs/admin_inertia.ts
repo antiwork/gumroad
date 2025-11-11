@@ -57,12 +57,21 @@ const urlsMigratedtoInertia = [
   Routes.admin_unblock_email_domains_url(),
   Routes.admin_sales_reports_url(),
   Routes.admin_refund_queue_url(),
-  // Routes.admin_search_users_url(),
+  Routes.admin_action_call_dashboard_url(),
+  Routes.admin_search_users_url(),
+  Routes.admin_search_purchases_url(),
   // Routes.admin_search_purchases_url(),
-  // Routes.admin_compliance_guids_url(),
+  /\/admin\/guids\/\w+/u, // Routes.admin_guid_url
   // Routes.admin_compliance_cards_url(),
-  // Routes.admin_user_url(),
-  // Routes.admin_product_url(),
+  /\/admin\/users\/\w+/u, // Routes.admin_user_url
+  /\/admin\/affiliates\/\w+/u, // Routes.admin_affiliate_url
+  /\/admin\/products\/\w+/u, // Routes.admin_product_url
+  /\/admin\/users\/\w+\/products/u, // Routes.admin_user_products_url
+  /\/admin\/payouts\/\w+/u, // Routes.admin_payout_url
+  /\/admin\/users\/\w+\/payouts/u, // Routes.admin_user_payouts_url
+  /\/admin\/purchases\/\w+/u, // Routes.admin_purchase_url
+  Routes.admin_affiliates_url(),
+  /\/admin\/merchant_accounts\/\w+/u, // Routes.admin_merchant_account_url
   // Add other urls here when they are migrated to inertia
 ];
 
@@ -75,7 +84,12 @@ interface InertiaBeforeEvent extends Event {
 
 router.on("before", (event: InertiaBeforeEvent) => {
   const url = event.detail.visit.url.toString();
-  const hasMigratedToInertia = url && urlsMigratedtoInertia.includes(url);
+  const urlToCompare = url.split("?")[0];
+  const hasMigratedToInertia =
+    urlToCompare &&
+    urlsMigratedtoInertia.some((pattern) =>
+      pattern instanceof RegExp ? pattern.test(urlToCompare) : pattern === urlToCompare,
+    );
 
   if (!hasMigratedToInertia) {
     event.preventDefault();

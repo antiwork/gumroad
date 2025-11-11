@@ -257,7 +257,7 @@ describe("Subscription Purchases from the product page", type: :system, js: true
         expect(page).to have_text("one week free")
         expect(page).to have_text("$3 monthly after")
 
-        check_out(@membership_product, credit_card: { number: StripePaymentMethodHelper.success_with_sca[:cc_number] }, sca: true)
+        check_out(@membership_product, credit_card: { number: CardParamsSpecHelper.card_number(:success_with_sca) }, sca: true)
 
         expect(page).not_to have_content "We charged your card"
         expect(page).to have_content "We sent a receipt to test@gumroad.com"

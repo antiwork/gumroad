@@ -2,25 +2,24 @@
 http_interactions:
 - request:
     method: get
-    uri: https://api.stripe.com/v1/accounts/acct_1MZxz1SDi33l2YQx
+    uri: https://api.stripe.com/v1/accounts/acct_1SOk0BEsYunTuUHD
     body:
       encoding: US-ASCII
       string: ''
     headers:
       User-Agent:
-      - Stripe/v1 RubyBindings/10.0.0
+      - Stripe/v1 RubyBindings/12.5.0
       Authorization:
       - Bearer <STRIPE_API_KEY>
       Content-Type:
       - application/x-www-form-urlencoded
-      X-Stripe-Client-Telemetry:
-      - '{"last_request_metrics":{"request_id":"req_KTWvmYUrRK58PL","request_duration_ms":443}}'
       Stripe-Version:
       - '2023-10-16'
       X-Stripe-Client-User-Agent:
-      - '{"bindings_version":"10.0.0","lang":"ruby","lang_version":"3.2.2 p53 (2023-03-30)","platform":"arm64-darwin20","engine":"ruby","publisher":"stripe","uname":"Darwin
-        Harbakshs-MacBook-Air.local 20.5.0 Darwin Kernel Version 20.5.0: Sat May  8
-        05:10:31 PDT 2021; root:xnu-7195.121.3~9/RELEASE_ARM64_T8101 arm64","hostname":"Harbakshs-MacBook-Air.local"}'
+      - '{"bindings_version":"12.5.0","lang":"ruby","lang_version":"3.4.3 p32 (2025-04-14)","platform":"x86_64-linux","engine":"ruby","publisher":"stripe","uname":"Linux
+        version 6.14.0-33-generic (buildd@lcy02-amd64-026) (x86_64-linux-gnu-gcc-13
+        (Ubuntu 13.3.0-6ubuntu2~24.04) 13.3.0, GNU ld (GNU Binutils for Ubuntu) 2.42)
+        #33~24.04.1-Ubuntu SMP PREEMPT_DYNAMIC Fri Sep 19 17:02:30 UTC 2","hostname":"hsc-desk"}'
       Accept-Encoding:
       - gzip;q=1.0,deflate;q=0.6,identity;q=0.3
       Accept:
@@ -33,17 +32,17 @@ http_interactions:
       Server:
       - nginx
       Date:
-      - Tue, 31 Oct 2023 19:58:49 GMT
+      - Sat, 01 Nov 2025 19:00:40 GMT
       Content-Type:
       - application/json
       Content-Length:
-      - '2650'
+      - '5654'
       Connection:
       - keep-alive
       Access-Control-Allow-Credentials:
       - 'true'
       Access-Control-Allow-Methods:
-      - GET,HEAD,PUT,PATCH,POST,DELETE
+      - GET, HEAD, PUT, PATCH, POST, DELETE
       Access-Control-Allow-Origin:
       - "*"
       Access-Control-Expose-Headers:
@@ -53,46 +52,99 @@ http_interactions:
       - '300'
       Cache-Control:
       - no-cache, no-store
-      Content-Security-Policy-Report-Only:
-      - report-uri https://q.stripe.com/csp-report?p=v1%2Faccounts%2F%3Aaccount; block-all-mixed-content;
-        default-src 'none'; base-uri 'none'; form-action 'none'; frame-ancestors 'none';
-        img-src 'self'; script-src 'self' 'report-sample'; style-src 'self'
+      Content-Security-Policy:
+      - base-uri 'none'; default-src 'none'; form-action 'none'; frame-ancestors 'none';
+        img-src 'self'; script-src 'self' 'report-<RPUSH_CONSUMER_FCM_FIREBASE_PROJECT_ID>';
+        style-src 'self'; worker-src 'none'; upgrade-insecure-requests; report-uri
+        https://q.stripe.com/csp-violation?q=78_6SUP6OJ0Mzku7TFA5bLe4O-fQyYLaM_QRGQXhG_j-97PGbmmSgb2KmCG_foBlYCzyy9-bx1jahFrn
       Request-Id:
-      - req_9kafLfLU9QF92K
+      - req_BtqFlQwVzGrX1s
       Stripe-Account:
-      - acct_1MZxz1SDi33l2YQx
+      - acct_1SOk0BEsYunTuUHD
       Stripe-Version:
       - '2023-10-16'
       Vary:
       - Origin
+      X-Stripe-Priority-Routing-Enabled:
+      - 'true'
       X-Stripe-Routing-Context-Priority-Tier:
       - api-testmode
+      X-Wc:
+      - ABGHIJ
       Strict-Transport-Security:
       - max-age=63072000; includeSubDomains; preload
     body:
       encoding: UTF-8
       string: |-
         {
-          "id": "acct_1MZxz1SDi33l2YQx",
+          "id": "acct_1SOk0BEsYunTuUHD",
           "object": "account",
           "business_profile": {
-            "mcc": "5192",
-            "name": "Gumroad",
+            "annual_revenue": null,
+            "estimated_worker_count": null,
+            "mcc": null,
+            "minority_owned_business_designation": null,
+            "name": null,
+            "product_description": null,
             "support_address": null,
             "support_email": null,
             "support_phone": null,
             "support_url": null,
             "url": null
           },
-          "capabilities": {},
+          "business_type": "individual",
+          "capabilities": {
+            "card_payments": "inactive",
+            "transfers": "inactive"
+          },
           "charges_enabled": false,
+          "company": {
+            "address": {
+              "city": null,
+              "country": "MY",
+              "line1": null,
+              "line2": null,
+              "postal_code": null,
+              "state": null
+            },
+            "directors_provided": true,
+            "directorship_declaration": null,
+            "executives_provided": true,
+            "name": null,
+            "name_kana": null,
+            "name_kanji": null,
+            "owners_provided": true,
+            "ownership_declaration": null,
+            "phone": null,
+            "representative_declaration": null,
+            "tax_id_provided": false,
+            "vat_id_provided": false,
+            "verification": {
+              "document": {
+                "back": null,
+                "details": null,
+                "details_code": null,
+                "front": null
+              }
+            }
+          },
           "controller": {
+            "fees": {
+              "payer": "account"
+            },
             "is_controller": true,
+            "losses": {
+              "payments": "stripe"
+            },
+            "requirement_collection": "stripe",
+            "stripe_dashboard": {
+              "type": "full"
+            },
             "type": "application"
           },
-          "country": "IN",
-          "created": 1676040842,
-          "default_currency": "inr",
+          "country": "MY",
+          "created": 1762023496,
+          "default_currency": "myr",
           "details_submitted": false,
           "email": null,
           "external_accounts": {
@@ -100,7 +152,7 @@ http_interactions:
             "data": [],
             "has_more": false,
             "total_count": 0,
-            "url": "/v1/accounts/acct_1MZxz1SDi33l2YQx/external_accounts"
+            "url": "/v1/accounts/acct_1SOk0BEsYunTuUHD/external_accounts"
           },
           "future_requirements": {
             "alternatives": [],
@@ -118,28 +170,86 @@ http_interactions:
             "alternatives": [],
             "current_deadline": null,
             "currently_due": [
+              "business_profile.mcc",
               "business_profile.product_description",
               "business_profile.support_phone",
               "business_profile.url",
+              "company.registration_number",
+              "company.tax_id",
+              "company.vat_id",
+              "company.vat_registration_status",
               "external_account",
+              "individual.address.city",
+              "individual.address.line1",
+              "individual.address.postal_code",
+              "individual.dob.day",
+              "individual.dob.month",
+              "individual.dob.year",
+              "individual.email",
+              "individual.first_name",
+              "individual.id_number",
+              "individual.last_name",
+              "individual.phone",
               "tos_acceptance.date",
               "tos_acceptance.ip"
             ],
             "disabled_reason": "requirements.past_due",
             "errors": [],
             "eventually_due": [
+              "business_profile.mcc",
               "business_profile.product_description",
               "business_profile.support_phone",
               "business_profile.url",
+              "company.registration_number",
+              "company.tax_id",
+              "company.vat_id",
+              "company.vat_registration_status",
               "external_account",
+              "individual.address.city",
+              "individual.address.line1",
+              "individual.address.postal_code",
+              "individual.dob.day",
+              "individual.dob.month",
+              "individual.dob.year",
+              "individual.email",
+              "individual.first_name",
+              "individual.id_number",
+              "individual.last_name",
+              "individual.phone",
               "tos_acceptance.date",
               "tos_acceptance.ip"
             ],
-            "past_due": [],
+            "past_due": [
+              "business_profile.mcc",
+              "business_profile.product_description",
+              "business_profile.support_phone",
+              "business_profile.url",
+              "company.registration_number",
+              "company.tax_id",
+              "company.vat_id",
+              "company.vat_registration_status",
+              "external_account",
+              "individual.address.city",
+              "individual.address.line1",
+              "individual.address.postal_code",
+              "individual.dob.day",
+              "individual.dob.month",
+              "individual.dob.year",
+              "individual.email",
+              "individual.first_name",
+              "individual.id_number",
+              "individual.last_name",
+              "individual.phone",
+              "tos_acceptance.date",
+              "tos_acceptance.ip"
+            ],
             "pending_verification": []
           },
           "settings": {
-            "bacs_debit_payments": {},
+            "bacs_debit_payments": {
+              "display_name": null,
+              "service_user_number": null
+            },
             "branding": {
               "icon": null,
               "logo": null,
@@ -165,6 +275,10 @@ http_interactions:
               "display_name": null,
               "timezone": "Etc/UTC"
             },
+            "invoices": {
+              "default_account_tax_ids": null,
+              "hosted_payment_method_save": "offer"
+            },
             "payments": {
               "statement_descriptor": null,
               "statement_descriptor_kana": null,
@@ -181,9 +295,11 @@ http_interactions:
             "sepa_debit_payments": {}
           },
           "tos_acceptance": {
-            "date": null
+            "date": null,
+            "ip": null,
+            "user_agent": null
           },
           "type": "standard"
         }
-  recorded_at: Tue, 31 Oct 2023 19:58:49 GMT
+  recorded_at: Sat, 01 Nov 2025 19:00:40 GMT
 recorded_with: VCR 6.2.0

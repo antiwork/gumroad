@@ -16,20 +16,25 @@ import { summarizeUploadProgress } from "$app/utils/summarizeUploadProgress";
 
 import { AudioPlayer } from "$app/components/AudioPlayer";
 import { Button, NavigationButton } from "$app/components/Button";
+import { connectedFileRowClassName } from "$app/components/Download/RichContent";
 import { useEvaporateUploader } from "$app/components/EvaporateUploader";
 import { FileRowContent } from "$app/components/FileRowContent";
 import { Icon } from "$app/components/Icons";
+import { LoadingSpinner } from "$app/components/LoadingSpinner";
 import { PlayVideoIcon } from "$app/components/PlayVideoIcon";
 import { Popover } from "$app/components/Popover";
+import {
+  FileEmbedGroup,
+  titleWithFallback,
+  useFilesInGroup,
+} from "$app/components/ProductEdit/ContentTab/FileEmbedGroup";
 import { FileEntry, useProductEditContext } from "$app/components/ProductEdit/state";
-import { Progress } from "$app/components/Progress";
 import { useS3UploadConfig } from "$app/components/S3UploadConfig";
 import { Separator } from "$app/components/Separator";
 import { showAlert } from "$app/components/server-components/Alert";
 import { SubtitleList } from "$app/components/SubtitleList";
 import { SubtitleFile } from "$app/components/SubtitleList/Row";
 import { SubtitleUploadBox } from "$app/components/SubtitleUploadBox";
-import { FileEmbedGroup, titleWithFallback } from "$app/components/TiptapExtensions/FileEmbedGroup";
 import { NodeActionsMenu } from "$app/components/TiptapExtensions/NodeActionsMenu";
 import Placeholder from "$app/components/ui/Placeholder";
 import { WithTooltip } from "$app/components/WithTooltip";
@@ -156,6 +161,11 @@ const FileEmbedNodeView = ({ node, editor, getPos, updateAttributes }: NodeViewP
     [selected],
   );
 
+  const isInGroup = parentNode?.type.name === FileEmbedGroup.name;
+  const { hasStreamable } = useFilesInGroup(parentNode, product.files);
+  const isConnectedRow = isInGroup && !hasStreamable;
+  const isLastInGroup = node === parentNode?.content.lastChild;
+
   if (!fileExists) return;
   const updateFile = (data: Partial<FileEntry>) =>
     updateProduct((product) => {
@@ -178,11 +188,10 @@ const FileEmbedNodeView = ({ node, editor, getPos, updateAttributes }: NodeViewP
 
   const setDragOver = (value: boolean) => {
     // Prevent dropcursor showing up around file embed rather than inside
-    document.querySelector(".product-content .drop-cursor")?.classList.toggle("hidden", value);
+    editor.view.dom.querySelector(".drop-cursor")?.classList.toggle("hidden", value);
     setIsDropZone(value);
   };
 
-  const isInGroup = parentNode?.type.name === FileEmbedGroup.name;
   const shouldIgnoreFileGroupingAt = (clientY: number) => {
     if (!ref.current) return false;
 
@@ -341,15 +350,18 @@ const FileEmbedNodeView = ({ node, editor, getPos, updateAttributes }: NodeViewP
           })
           .run();
       }}
-      className={cx({ "file-dropzone": isDropZone })}
+      className={cx({ "relative rounded-sm border border-dashed border-accent": isDropZone })}
       contentEditable={false}
     >
-      <div className={cx("embed", { selected })} role={isInGroup ? "treeitem" : undefined}>
+      <div
+        className={cx("embed", { selected, [connectedFileRowClassName(isLastInGroup)]: isConnectedRow })}
+        role={isInGroup ? "treeitem" : undefined}
+      >
         {file.is_streamable && !node.attrs.collapsed ? (
           loadingVideo ? (
             <figure className="preview">
               <div style={{ position: "absolute", top: "50%", left: "50%", transform: "translate(-50%, -50%)" }}>
-                <Progress width="4em" />
+                <LoadingSpinner className="size-16" />
               </div>
             </figure>
           ) : file.thumbnail ? (
@@ -420,7 +432,7 @@ const FileEmbedNodeView = ({ node, editor, getPos, updateAttributes }: NodeViewP
             <label className="thumbnail" aria-label="Upload a thumbnail">
               {loadingVideo ? (
                 <div style={{ placeSelf: "center" }}>
-                  <Progress width="3em" />
+                  <LoadingSpinner className="size-12" />
                 </div>
               ) : (
                 <>
@@ -653,8 +665,8 @@ const FileEmbedNodeView = ({ node, editor, getPos, updateAttributes }: NodeViewP
         ) : null}
       </div>
       {isDropZone ? (
-        <div className="backdrop">
-          <div className="button primary">Create folder with 2 items</div>
+        <div className="absolute inset-0 bg-backdrop">
+          <div className="button primary absolute top-1/2 left-1/2 -translate-1/2">Create folder with 2 items</div>
         </div>
       ) : null}
     </NodeViewWrapper>

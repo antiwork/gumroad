@@ -71,7 +71,7 @@ export const DiscordButton = ({
 
   return loading ? (
     <div className="flex items-center">
-      <LoadingSpinner width="2em" />
+      <LoadingSpinner className="size-8" />
     </div>
   ) : (
     <Button className="button-discord" onClick={discordConnected ? leaveDiscord : openJoinDiscordPopup}>

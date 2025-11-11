@@ -160,10 +160,10 @@ describe("Bundle edit page", type: :system, js: true) do
 
     within_section "Cover", section_element: :section do
       first("[role='tab']").hover
-      find(".remove-button[aria-label='Remove cover']").click
+      find("[aria-label='Remove cover']").click
       wait_for_ajax
       first("[role='tab']").hover
-      find(".remove-button[aria-label='Remove cover']").click
+      find("[aria-label='Remove cover']").click
       wait_for_ajax
       expect(bundle.reload.display_asset_previews).to be_empty
 

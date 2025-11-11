@@ -5,8 +5,8 @@ import { DISCORD_CLIENT_ID, DISCORD_OAUTH_URL } from "$app/utils/integrations";
 import { startOauthRedirectChecker } from "$app/utils/oauth";
 
 import { Button } from "$app/components/Button";
+import { LoadingSpinner } from "$app/components/LoadingSpinner";
 import { useProductEditContext } from "$app/components/ProductEdit/state";
-import { Progress } from "$app/components/Progress";
 import { showAlert } from "$app/components/server-components/Alert";
 import { ToggleSettingRow } from "$app/components/SettingRow";
 import { Toggle } from "$app/components/Toggle";
@@ -62,7 +62,7 @@ export const DiscordIntegrationEditor = ({
         <div className="paragraphs">
           People who purchase your product will be automatically invited to your Discord server.
           {isLoading ? (
-            <Progress width="1.5rem" />
+            <LoadingSpinner className="size-6" />
           ) : !integration ? (
             <div>
               <Button

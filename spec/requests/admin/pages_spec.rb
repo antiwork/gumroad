@@ -50,7 +50,7 @@ describe "Admin Pages Scenario", type: :system, js: true do
 
     it "searches users by query field" do
       fill_in "Search users (email, name, ID)", with: "joe@example.com\n"
-      expect(page).to have_current_path(admin_search_users_path(query: "joe@example.com"))
+      expect(page).to have_selector("h1", text: "Search for joe@example.com")
     end
 
     it "searches cards by all fields" do
@@ -60,7 +60,7 @@ describe "Admin Pages Scenario", type: :system, js: true do
       fill_in("expiry_date", with: "02/22")
       fill_in("price", with: "9.99")
       click_on("Search")
-      expect(page).to have_current_path(admin_cards_path, ignore_query: true)
+      expect(page).to have_current_path(admin_search_purchases_path, ignore_query: true)
       query_values = Addressable::URI.parse(page.current_url).query_values
       expect(query_values["card_type"]).to eq("visa")
       expect(query_values["transaction_date"]).to eq("02/22/2022")
@@ -86,7 +86,7 @@ describe "Admin Pages Scenario", type: :system, js: true do
 
       fill_in "Search purchases (email, IP, card, external ID)", with: "#{email}\n"
 
-      expect(page).to have_selector("h2.purchase-title", text: "€6 + €1.32 VAT for #{product.name}")
+      expect(page).to have_selector("h2", text: "€6 + €1.32 VAT for #{product.name}")
     end
 
     it "allows admins to search purchases by credit card fingerprint" do
@@ -110,11 +110,10 @@ describe "Admin Pages Scenario", type: :system, js: true do
       expect(page).to have_no_content "MY_FINGERPRINT"
     end
 
-    it "allows admins to page through purchase search results" do
-      stub_const("#{Admin::SearchController}::RECORDS_PER_PAGE", 2)
+    it "allows admins to infinitely scroll through purchase search results" do
       email = "searchme@gumroad.com"
 
-      3.times do |i|
+      30.times do |i|
         link = create(:product, name: "product ##{i}")
         create(:purchase, link:, email:, created_at: Time.current + i.hours)
       end
@@ -124,10 +123,11 @@ describe "Admin Pages Scenario", type: :system, js: true do
 
       fill_in "Search purchases (email, IP, card, external ID)", with: "#{email}\n"
 
-      expect(page).to have_text("product #2")
-      expect(page).to have_text("product #1")
+      expect(page).to have_text("product #29")
+      expect(page).to have_text("product #28")
+      expect(page).not_to have_text("product #0")
+      first("main").scroll_to :bottom
 
-      click_on("Next")
       expect(page).to have_text("product #0")
     end
   end

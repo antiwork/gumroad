@@ -21,12 +21,14 @@ import { generatePageIcon } from "$app/utils/rich_content_page";
 import { Button } from "$app/components/Button";
 import { InputtedDiscount } from "$app/components/CheckoutDashboard/DiscountInput";
 import { ComboBox } from "$app/components/ComboBox";
+import { PageList, PageListLayout, PageListItem } from "$app/components/Download/PageListLayout";
 import { EvaporateUploaderProvider, useEvaporateUploader } from "$app/components/EvaporateUploader";
 import { FileKindIcon } from "$app/components/FileRowContent";
 import { Icon } from "$app/components/Icons";
 import { LoadingSpinner } from "$app/components/LoadingSpinner";
 import { Modal } from "$app/components/Modal";
 import { Popover } from "$app/components/Popover";
+import { FileEmbedGroup } from "$app/components/ProductEdit/ContentTab/FileEmbedGroup";
 import { Layout } from "$app/components/ProductEdit/Layout";
 import { ExistingFileEntry, FileEntry, useProductEditContext, Variant } from "$app/components/ProductEdit/state";
 import { ReviewForm } from "$app/components/ReviewForm";
@@ -44,7 +46,6 @@ import { Separator } from "$app/components/Separator";
 import { showAlert } from "$app/components/server-components/Alert";
 import { EntityInfo } from "$app/components/server-components/DownloadPage/Layout";
 import { TestimonialSelectModal } from "$app/components/TestimonialSelectModal";
-import { FileEmbedGroup } from "$app/components/TiptapExtensions/FileEmbedGroup";
 import { FileUpload } from "$app/components/TiptapExtensions/FileUpload";
 import { uploadImages } from "$app/components/TiptapExtensions/Image";
 import { LicenseKey, LicenseProvider } from "$app/components/TiptapExtensions/LicenseKey";
@@ -65,13 +66,6 @@ import { WithTooltip } from "$app/components/WithTooltip";
 
 import { FileEmbed, FileEmbedConfig, getDownloadUrl } from "./FileEmbed";
 import { Page, PageTab, titleWithFallback } from "./PageTab";
-
-const PageTabList = React.forwardRef<HTMLDivElement, React.HTMLProps<HTMLDivElement>>(({ children }, ref) => (
-  <div ref={ref} role="tablist" className="pagelist">
-    {children}
-  </div>
-));
-PageTabList.displayName = "PageTabList";
 
 declare global {
   interface Window {
@@ -485,9 +479,10 @@ const ContentTabContent = ({ selectedVariantId }: { selectedVariantId: string | 
 
   return (
     <>
-      <div className="product-content h-screen sm:h-full md:flex md:flex-col">
+      <div className="h-screen sm:h-full md:flex md:flex-col">
         {editor ? (
           <RichTextEditorToolbar
+            color="ghost"
             className="border-b border-border px-8"
             editor={editor}
             productId={id}
@@ -562,7 +557,7 @@ const ContentTabContent = ({ selectedVariantId }: { selectedVariantId: string | 
                       >
                         {selectingExistingFiles.isLoading ? (
                           <div className="flex min-h-40 justify-center">
-                            <LoadingSpinner width="2rem" />
+                            <LoadingSpinner className="size-8" />
                           </div>
                         ) : (
                           filteredExistingFiles.map((file) => (
@@ -743,122 +738,130 @@ const ContentTabContent = ({ selectedVariantId }: { selectedVariantId: string | 
             }
           />
         ) : null}
-        <div className="has-sidebar p-4 md:h-auto! md:flex-1 md:p-8">
-          {!isDesktop && !showPageList ? null : (
-            <div className="paragraphs">
-              {showPageList ? (
-                <ReactSortable
-                  draggable="[role=tab]"
-                  handle="[aria-grabbed]"
-                  tag={PageTabList}
-                  list={pages.map((page) => ({ ...page, id: page.id }))}
-                  setList={updatePages}
-                >
-                  <>
-                    {isDesktop ? null : (
-                      <button onClick={() => setPagesExpanded(!pagesExpanded)}>
-                        <span className="content">
-                          <strong>Table of contents:</strong> {titleWithFallback(selectedPage?.title)}
-                        </span>
+        <PageListLayout
+          className="md:h-auto! md:flex-1"
+          pageList={
+            !isDesktop && !showPageList ? null : (
+              <div className="paragraphs">
+                {showPageList ? (
+                  <ReactSortable
+                    draggable="[role=tab]"
+                    handle="[aria-grabbed]"
+                    tag={PageList}
+                    list={pages.map((page) => ({ ...page, id: page.id }))}
+                    setList={updatePages}
+                  >
+                    <>
+                      {isDesktop ? null : (
+                        <PageListItem asChild className="tailwind-override text-left">
+                          <button onClick={() => setPagesExpanded(!pagesExpanded)}>
+                            <span className="flex-1">
+                              <strong>Table of contents:</strong> {titleWithFallback(selectedPage?.title)}
+                            </span>
 
-                        <Icon name={pagesExpanded ? "outline-cheveron-down" : "outline-cheveron-right"} />
-                      </button>
-                    )}
-                    {isDesktop || pagesExpanded ? (
-                      <>
-                        {pages.map((page) => (
-                          <PageTab
-                            key={page.id}
-                            page={page}
-                            selected={page === selectedPage}
-                            icon={pageIcons.get(page.id) ?? "file-text"}
-                            dragging={!!page.chosen}
-                            renaming={page.id === renamingPageId}
-                            setRenaming={(renaming) => setRenamingPageId(renaming ? page.id : null)}
-                            onClick={() => {
-                              setSelectedPageId(page.id);
-                              if (!isDesktop) setPagesExpanded(false);
-                            }}
-                            onUpdate={(title) =>
-                              updatePages(
-                                pagesRef.current.map((existing) =>
-                                  existing.id === page.id ? { ...existing, title } : existing,
-                                ),
-                              )
-                            }
-                            onDelete={() => setConfirmingDeletePage(page)}
-                          />
-                        ))}
-                        {product.native_type === "commission" ? (
-                          <WithTooltip
-                            tip="Commission files will appear on this page upon completion"
-                            position="bottom"
-                          >
+                            <Icon name={pagesExpanded ? "outline-cheveron-down" : "outline-cheveron-right"} />
+                          </button>
+                        </PageListItem>
+                      )}
+                      {isDesktop || pagesExpanded ? (
+                        <>
+                          {pages.map((page) => (
                             <PageTab
-                              page={{
-                                id: "",
-                                title: "Downloads",
-                                description: {
-                                  type: "doc",
-                                  content: [],
-                                },
-                                updated_at: pages[0]?.updated_at ?? new Date().toString(),
+                              key={page.id}
+                              page={page}
+                              selected={page === selectedPage}
+                              icon={pageIcons.get(page.id) ?? "file-text"}
+                              dragging={!!page.chosen}
+                              renaming={page.id === renamingPageId}
+                              setRenaming={(renaming) => setRenamingPageId(renaming ? page.id : null)}
+                              onClick={() => {
+                                setSelectedPageId(page.id);
+                                if (!isDesktop) setPagesExpanded(false);
                               }}
-                              selected={false}
-                              icon="file-arrow-down"
-                              dragging={false}
-                              renaming={false}
-                              onClick={() => {}}
-                              onUpdate={() => {}}
-                              onDelete={() => {}}
-                              setRenaming={() => {}}
-                              disabled
+                              onUpdate={(title) =>
+                                updatePages(
+                                  pagesRef.current.map((existing) =>
+                                    existing.id === page.id ? { ...existing, title } : existing,
+                                  ),
+                                )
+                              }
+                              onDelete={() => setConfirmingDeletePage(page)}
                             />
-                          </WithTooltip>
-                        ) : null}
-                        <button
-                          className="add-page"
-                          onClick={(e) => {
-                            e.preventDefault();
-                            handleCreatePageClick();
-                          }}
-                        >
-                          <Icon name="plus" />
-                          <span className="content">Add another page</span>
-                        </button>
-                      </>
-                    ) : null}
-                  </>
-                </ReactSortable>
-              ) : null}
-              {isDesktop ? (
-                <>
-                  <div className="stack">
-                    <ReviewForm permalink="" purchaseId="" review={null} preview />
-                  </div>
-                  <div className="stack">
-                    {product.native_type === "membership" ? (
+                          ))}
+                          {product.native_type === "commission" ? (
+                            <WithTooltip
+                              tip="Commission files will appear on this page upon completion"
+                              position="bottom"
+                            >
+                              <PageTab
+                                page={{
+                                  id: "",
+                                  title: "Downloads",
+                                  description: {
+                                    type: "doc",
+                                    content: [],
+                                  },
+                                  updated_at: pages[0]?.updated_at ?? new Date().toString(),
+                                }}
+                                selected={false}
+                                icon="file-arrow-down"
+                                dragging={false}
+                                renaming={false}
+                                onClick={() => {}}
+                                onUpdate={() => {}}
+                                onDelete={() => {}}
+                                setRenaming={() => {}}
+                                disabled
+                              />
+                            </WithTooltip>
+                          ) : null}
+                          <PageListItem asChild className="tailwind-override text-left">
+                            <button
+                              className="add-page"
+                              onClick={(e) => {
+                                e.preventDefault();
+                                handleCreatePageClick();
+                              }}
+                            >
+                              <Icon name="plus" />
+                              <span className="flex-1">Add another page</span>
+                            </button>
+                          </PageListItem>
+                        </>
+                      ) : null}
+                    </>
+                  </ReactSortable>
+                ) : null}
+                {isDesktop ? (
+                  <>
+                    <div className="stack">
+                      <ReviewForm permalink="" purchaseId="" review={null} preview />
+                    </div>
+                    <div className="stack">
+                      {product.native_type === "membership" ? (
+                        <details>
+                          <summary inert>Membership</summary>
+                        </details>
+                      ) : null}
                       <details>
-                        <summary inert>Membership</summary>
+                        <summary inert>Receipt</summary>
                       </details>
-                    ) : null}
-                    <details>
-                      <summary inert>Receipt</summary>
-                    </details>
-                    <details>
-                      <summary inert>Library</summary>
-                    </details>
-                  </div>
-                  <EntityInfo
-                    entityName={selectedVariant ? `${product.name} - ${selectedVariant.name}` : product.name}
-                    creator={seller}
-                  />
-                </>
-              ) : null}
-            </div>
-          )}
-          <EditorContent className="rich-text" editor={editor} data-gumroad-ignore />
-        </div>
+                      <details>
+                        <summary inert>Library</summary>
+                      </details>
+                    </div>
+                    <EntityInfo
+                      entityName={selectedVariant ? `${product.name} - ${selectedVariant.name}` : product.name}
+                      creator={seller}
+                    />
+                  </>
+                ) : null}
+              </div>
+            )
+          }
+        >
+          <EditorContent className="rich-text grid h-full flex-1" editor={editor} data-gumroad-ignore />
+        </PageListLayout>
       </div>
       {confirmingDeletePage !== null ? (
         <Modal
@@ -1035,11 +1038,11 @@ export const ContentTab = () => {
               headerActions={
                 product.variants.length > 0 ? (
                   <ComboBox<Variant>
-                    className="version-dropdown"
+                    className="hidden lg:block"
                     // TODO: Currently needed to get the icon on the selected option even though this is not multiple select. We should fix this in the design system
                     multiple
                     input={(props) => (
-                      <div {...props} className="input" aria-label="Select a version">
+                      <div {...props} className="input h-full min-h-auto" aria-label="Select a version">
                         <span className="fake-input text-singleline">
                           {selectedVariant && !product.has_same_rich_content_for_all_variants
                             ? `Editing: ${selectedVariant.name || "Untitled"}`

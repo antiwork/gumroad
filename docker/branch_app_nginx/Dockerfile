@@ -1,4 +1,4 @@
-FROM openresty/openresty:jessie
+FROM openresty/openresty:alpine-fat
 
 # Expire Docker images after 1 week in Quay
 LABEL quay.expires-after=1w
