@@ -9,7 +9,11 @@ type BaseProps = {
 } & React.HTMLAttributes<HTMLElement>;
 
 export const CartItemList = ({ children, className, ...props }: BaseProps) => (
-  <div role="list" className={classNames("rounded-sm border border-border bg-background", className)} {...props}>
+  <div
+    role="list"
+    className={classNames("overflow-hidden rounded-sm border border-border bg-background", className)}
+    {...props}
+  >
     {children}
   </div>
 );
