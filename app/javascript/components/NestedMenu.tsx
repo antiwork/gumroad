@@ -238,7 +238,7 @@ const MenubarItem = ({
     >
       <a
         href={menuItem.href ?? "#"}
-        className={classNames("button","!inline-block  align-middle !px-3 !py-2 !rounded-[10rem] aria-[current]:bg-background aria-[current]:text-foreground hover:!shadow",showExpandableIcon?"relative cursor-pointer":"")}
+        className={classNames("button","!inline-block  align-middle !px-3 !py-2 !rounded-[10rem] aria-[current]:bg-background aria-[current]:text-foreground aria-[expanded=true]:!shadow",showExpandableIcon?"relative cursor-pointer":"")}
         role="menuitem"
         aria-current={isHighlighted}
         aria-haspopup="menu"
