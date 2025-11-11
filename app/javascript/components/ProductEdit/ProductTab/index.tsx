@@ -80,8 +80,6 @@ export const ProductTab = () => {
 
   if (!currentSeller) return null;
 
-  console.log("refund policies", product.refund_policy);
-
   return (
     <Layout preview={<ProductPreview showRefundPolicyModal={showRefundPolicyPreview} />} isLoading={isUploading}>
       <div className="squished">
