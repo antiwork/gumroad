@@ -3075,7 +3075,6 @@ class Purchase < ApplicationRecord
 
     # Private: validator that guarantees that the right transaction information is present for paid purchases.
     def financial_transaction_validation
-      return
       return if self.price_cents > 0 &&
                 stripe_transaction_id.present? &&
                 merchant_account.present? &&
