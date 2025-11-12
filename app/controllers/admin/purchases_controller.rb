@@ -45,6 +45,10 @@ class Admin::PurchasesController < Admin::BaseController
         @purchase.email = params[:resend_receipt][:email_address]
         @purchase.save!
 
+        if @purchase.subscription.present? && !@purchase.is_original_subscription_purchase?
+          @purchase.original_purchase.update!(email: params[:resend_receipt][:email_address])
+        end
+
         user = User.alive.find_by(email: @purchase.email)
         @purchase.attach_to_user_and_card(user, nil, nil) if user
       end
