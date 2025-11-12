@@ -1,6 +1,5 @@
 # frozen_string_literal: true
 
-# app/business/payments/merchant_registration/guardian_compliance_info_fields.rb
 module GuardianComplianceInfoFields
   module Guardian
     FIRST_NAME = "guardian_first_name"
