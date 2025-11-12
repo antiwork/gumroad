@@ -207,49 +207,45 @@ module StripeMerchantAccountManager
 
     # Add guardian person update logic
     if user.under_18?
-      update_guardian_person(user, stripe_account, last_user_compliance_info&.external_id, passphrase)
+      update_person(user, stripe_account, last_user_compliance_info&.external_id, passphrase, person_type: :guardian)
     end
   end
 
-  def self.update_person(user, stripe_account, last_user_compliance_info_id, passphrase)
-    stripe_person = Stripe::Account.list_persons(stripe_account.id)["data"].last
-    last_user_compliance_info = UserComplianceInfo.find_by_external_id(last_user_compliance_info_id)
-    user_compliance_info = user.alive_user_compliance_info
-
-    current_attributes = person_hash(user_compliance_info, passphrase)
-    current_attributes.deep_merge!(relationship: { representative: true, owner: true, title: user_compliance_info.job_title.presence || DEFAULT_RELATIONSHIP_TITLE, percent_ownership: 100 })
-    diff_attributes = current_attributes
-    last_attributes = person_hash(last_user_compliance_info, passphrase)
-
-    if last_attributes
-      last_attributes[:email] = nil
-      last_attributes[:phone] = nil
-      diff_attributes = get_diff_attributes(current_attributes, last_attributes)
-    end
-
-    if diff_attributes[:dob].present?
-      # Re-add the full DOB field if any part of it is being kept. Stripe handles this field inconsistently and the full DOB
-      # must be submitted if any part of it is changing.
-      diff_attributes[:dob] = current_attributes[:dob]
-    end
-
-    Stripe::Account.update_person(stripe_account.id, stripe_person.id, diff_attributes)
-  end
-
-  def self.update_guardian_person(user, stripe_account, last_user_compliance_info_id, passphrase)
+  def self.update_person(user, stripe_account, last_user_compliance_info_id, passphrase, person_type: :representative)
+    # Find the right person based on type
     stripe_persons = Stripe::Account.list_persons(stripe_account.id)["data"]
-    guardian_person = stripe_persons.find { |person| person["relationship"]&.[]("legal_guardian") }
+    stripe_person = if person_type == :guardian
+      stripe_persons.find { |person| person["relationship"]&.[]("legal_guardian") }
+    else
+      stripe_persons.last
+    end
 
     last_user_compliance_info = UserComplianceInfo.find_by_external_id(last_user_compliance_info_id)
     user_compliance_info = user.alive_user_compliance_info
 
-    current_attributes = guardian_person_hash(user_compliance_info, passphrase)
-    return unless current_attributes
+    # Get current attributes based on person type
+    current_attributes = if person_type == :guardian
+      guardian_person_hash(user_compliance_info, passphrase)
+    else
+      person_hash(user_compliance_info, passphrase)
+    end
 
-    if guardian_person
-      # Update existing guardian person
+    # For guardian, return early if no attributes (guardian info not complete)
+    return unless current_attributes if person_type == :guardian
+
+    # If person exists, update it
+    if stripe_person
+      # Add relationship for representative
+      if person_type == :representative
+        current_attributes.deep_merge!(relationship: { representative: true, owner: true, title: user_compliance_info.job_title.presence || DEFAULT_RELATIONSHIP_TITLE, percent_ownership: 100 })
+      end
+
       diff_attributes = current_attributes
-      last_attributes = guardian_person_hash(last_user_compliance_info, passphrase)
+      last_attributes = if person_type == :guardian
+        guardian_person_hash(last_user_compliance_info, passphrase)
+      else
+        person_hash(last_user_compliance_info, passphrase)
+      end
 
       if last_attributes
         last_attributes[:email] = nil
@@ -257,9 +253,7 @@ module StripeMerchantAccountManager
         diff_attributes = get_diff_attributes(current_attributes, last_attributes)
       end
 
-      # If we have a full SSN, don't send the last 4 digits at the same time. If the last 4 digits are from a previous
-      # compliance info and don't match the new full SSN, this will result in an invalid request.
-      # Also, if we're sending id_number, we should not send ssn_last_4 regardless of what the diff shows
+      # Better SSN handling logic
       if diff_attributes[:id_number].present?
         diff_attributes.delete(:ssn_last_4)
       elsif diff_attributes[:ssn_last_4].present? && current_attributes[:id_number].present?
@@ -269,12 +263,13 @@ module StripeMerchantAccountManager
       end
 
       if diff_attributes[:dob].present?
-        # Re-add the full DOB field if any part of it is being kept
+        # Re-add the full DOB field if any part of it is being kept. Stripe handles this field inconsistently and the full DOB
+        # must be submitted if any part of it is changing.
         diff_attributes[:dob] = current_attributes[:dob]
       end
 
-      Stripe::Account.update_person(stripe_account.id, guardian_person.id, diff_attributes)
-    else
+      Stripe::Account.update_person(stripe_account.id, stripe_person.id, diff_attributes)
+    elsif person_type == :guardian
       # Create new guardian person if it doesn't exist
       Stripe::Account.create_person(stripe_account.id, current_attributes)
     end
