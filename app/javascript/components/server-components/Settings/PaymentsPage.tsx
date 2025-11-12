@@ -1179,7 +1179,7 @@ const PaymentsPage = (props: Props) => {
                 states={props.states}
                 errorFieldNames={errorFieldNames}
                 isLegalGuardianInformationRequired={
-                  props.user_under_18 ? props.guardian_verification_state !== "not_required" : null
+                  props.user_under_18 && props.guardian_verification_state !== "not_required"
                 }
               />
             ) : (
