@@ -19,7 +19,7 @@ export const WithTooltip = ({ tip, children, position = "bottom", className, too
   const id = React.useId();
 
   return (
-    <span {...props} className={classNames("group relative inline-grid", className, position)}>
+    <span {...props} className={classNames("group/tooltip relative inline-grid", className, position)}>
       <span aria-describedby={id} style={{ display: "contents" }}>
         {children}
       </span>
@@ -29,7 +29,7 @@ export const WithTooltip = ({ tip, children, position = "bottom", className, too
           id={id}
           {...tooltipProps}
           className={classNames(
-            "absolute z-30 hidden w-40 max-w-max rounded-md bg-primary p-3 text-primary-foreground group-focus-within:block group-hover:block",
+            "absolute z-30 hidden w-40 max-w-max rounded-md bg-primary p-3 text-primary-foreground group-focus-within/tooltip:block group-legacy-hover/tooltip:block",
             centerClasses(position),
             {
               "bottom-full -translate-y-2": position === "top",
