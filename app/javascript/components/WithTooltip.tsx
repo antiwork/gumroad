@@ -29,7 +29,7 @@ export const WithTooltip = ({ tip, children, position = "bottom", className, too
           id={id}
           {...tooltipProps}
           className={classNames(
-            "absolute z-30 hidden w-40 max-w-max rounded-md bg-primary p-3 text-primary-foreground group-hover:block",
+            "absolute z-30 hidden w-40 max-w-max rounded-md bg-primary p-3 text-primary-foreground group-focus-within:block group-hover:block",
             centerClasses(position),
             {
               "bottom-full -translate-y-2": position === "top",
