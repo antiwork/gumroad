@@ -1068,21 +1068,21 @@ module StripeMerchantAccountManager
 
     # Map common Stripe fields to internal fields
     field_mapping = {
-      "guardian_first_name" => GuardianComplianceInfoFields::Guardian::FIRST_NAME,
-      "guardian_last_name" => GuardianComplianceInfoFields::Guardian::LAST_NAME,
-      "guardian_email" => GuardianComplianceInfoFields::Guardian::EMAIL,
-      "guardian_phone" => GuardianComplianceInfoFields::Guardian::PHONE,
-      "guardian_dob.day" => GuardianComplianceInfoFields::Guardian::DATE_OF_BIRTH,
-      "guardian_dob.month" => GuardianComplianceInfoFields::Guardian::DATE_OF_BIRTH,
-      "guardian_dob.year" => GuardianComplianceInfoFields::Guardian::DATE_OF_BIRTH,
-      "guardian_id_number" => GuardianComplianceInfoFields::Guardian::TAX_ID,
-      "guardian_address.line1" => GuardianComplianceInfoFields::Guardian::Address::STREET,
-      "guardian_address.city" => GuardianComplianceInfoFields::Guardian::Address::CITY,
-      "guardian_address.state" => GuardianComplianceInfoFields::Guardian::Address::STATE,
-      "guardian_address.postal_code" => GuardianComplianceInfoFields::Guardian::Address::ZIP_CODE,
-      "guardian_address.country" => GuardianComplianceInfoFields::Guardian::Address::COUNTRY,
-      "guardian_verification.document" => GuardianComplianceInfoFields::Guardian::STRIPE_IDENTITY_DOCUMENT_ID,
-      "guardian_verification.additional_document" => GuardianComplianceInfoFields::Guardian::STRIPE_ADDITIONAL_DOCUMENT_ID
+      "guardian_first_name" => UserComplianceInfoFields::Guardian::FIRST_NAME,
+      "guardian_last_name" => UserComplianceInfoFields::Guardian::LAST_NAME,
+      "guardian_email" => UserComplianceInfoFields::Guardian::EMAIL,
+      "guardian_phone" => UserComplianceInfoFields::Guardian::PHONE,
+      "guardian_dob.day" => UserComplianceInfoFields::Guardian::DATE_OF_BIRTH,
+      "guardian_dob.month" => UserComplianceInfoFields::Guardian::DATE_OF_BIRTH,
+      "guardian_dob.year" => UserComplianceInfoFields::Guardian::DATE_OF_BIRTH,
+      "guardian_id_number" => UserComplianceInfoFields::Guardian::TAX_ID,
+      "guardian_address.line1" => UserComplianceInfoFields::Guardian::Address::STREET,
+      "guardian_address.city" => UserComplianceInfoFields::Guardian::Address::CITY,
+      "guardian_address.state" => UserComplianceInfoFields::Guardian::Address::STATE,
+      "guardian_address.postal_code" => UserComplianceInfoFields::Guardian::Address::ZIP_CODE,
+      "guardian_address.country" => UserComplianceInfoFields::Guardian::Address::COUNTRY,
+      "guardian_verification.document" => UserComplianceInfoFields::Guardian::STRIPE_IDENTITY_DOCUMENT_ID,
+      "guardian_verification.additional_document" => UserComplianceInfoFields::Guardian::STRIPE_ADDITIONAL_DOCUMENT_ID
     }
 
     field_mapping[internal_field]

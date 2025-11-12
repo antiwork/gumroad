@@ -48,7 +48,7 @@ class GuardianComplianceInfoRequest < ApplicationRecord
   end
 
   def self.handle_new_guardian_compliance_info(user_compliance_info)
-    GuardianComplianceInfoFields.all_fields.each do |field|
+    UserComplianceInfoFields::Guardian::ALL_FIELDS.each do |field|
       field_value = user_compliance_info.send(field)
       field_value = field_value.decrypt(GlobalConfig.get("STRONGBOX_GENERAL_PASSWORD")) if field_value.is_a?(Strongbox::Lock)
       next if field_value.blank?

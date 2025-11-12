@@ -60,6 +60,49 @@ module UserComplianceInfoFields
     end
   end
 
+  module Guardian
+    FIRST_NAME = "guardian_first_name"
+    LAST_NAME = "guardian_last_name"
+    EMAIL = "guardian_email"
+    PHONE = "guardian_phone"
+    DATE_OF_BIRTH = "guardian_birthday"
+    TAX_ID = "guardian_individual_tax_id"
+    STRIPE_IDENTITY_DOCUMENT_ID = "guardian_stripe_identity_document_id"
+    STRIPE_ADDITIONAL_DOCUMENT_ID = "guardian_stripe_additional_document_id"
+    DOB_DAY = "guardian_dob_day"
+    DOB_MONTH = "guardian_dob_month"
+    DOB_YEAR = "guardian_dob_year"
+    STRIPE_TOS_ACCEPTED = "guardian_stripe_tos_accepted"
+
+    module Address
+      STREET = "guardian_street_address"
+      CITY = "guardian_city"
+      STATE = "guardian_state"
+      ZIP_CODE = "guardian_zip_code"
+      COUNTRY = "guardian_country"
+    end
+
+    ALL_FIELDS = [
+      FIRST_NAME,
+      LAST_NAME,
+      EMAIL,
+      PHONE,
+      DATE_OF_BIRTH,
+      TAX_ID,
+      STRIPE_IDENTITY_DOCUMENT_ID,
+      STRIPE_ADDITIONAL_DOCUMENT_ID,
+      DOB_DAY,
+      DOB_MONTH,
+      DOB_YEAR,
+      STRIPE_TOS_ACCEPTED,
+      Address::STREET,
+      Address::CITY,
+      Address::STATE,
+      Address::ZIP_CODE,
+      Address::COUNTRY
+    ].freeze
+  end
+
   # The following fields are not found on UserComplianceInfo, and are stored in other
   # objects, but conceptually make up compliance information requested for by
   # the external parties facilitating our merchant registration.
@@ -91,7 +134,24 @@ module UserComplianceInfoFields
     LegalEntity::Address::CITY,
     LegalEntity::Address::STATE,
     LegalEntity::Address::ZIP_CODE,
-    LegalEntity::Address::COUNTRY
+    LegalEntity::Address::COUNTRY,
+    Guardian::FIRST_NAME,
+    Guardian::LAST_NAME,
+    Guardian::EMAIL,
+    Guardian::PHONE,
+    Guardian::DATE_OF_BIRTH,
+    Guardian::TAX_ID,
+    Guardian::STRIPE_IDENTITY_DOCUMENT_ID,
+    Guardian::STRIPE_ADDITIONAL_DOCUMENT_ID,
+    Guardian::DOB_DAY,
+    Guardian::DOB_MONTH,
+    Guardian::DOB_YEAR,
+    Guardian::STRIPE_TOS_ACCEPTED,
+    Guardian::Address::STREET,
+    Guardian::Address::CITY,
+    Guardian::Address::STATE,
+    Guardian::Address::ZIP_CODE,
+    Guardian::Address::COUNTRY
   ].freeze
 
   ALL_ADDITIONAL_FIELDS = [
