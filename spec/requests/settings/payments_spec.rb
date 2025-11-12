@@ -706,6 +706,63 @@ describe("Payments Settings Scenario", type: :system, js: true) do
       end
     end
 
+    it "prevents submission when business province placeholder is not changed" do
+      @user.active_bank_account&.mark_deleted!
+
+      old_user_compliance_info = @user.alive_user_compliance_info
+      new_user_compliance_info = old_user_compliance_info.dup
+      new_user_compliance_info.country = "Canada"
+      ActiveRecord::Base.transaction do
+        old_user_compliance_info.mark_deleted!
+        new_user_compliance_info.save!
+      end
+
+      visit settings_payments_path
+
+      choose "Business"
+      fill_in("Legal business name", with: "Placeholder Corp")
+      select("Private Corporation", from: "Type")
+      find_field("Address", match: :first).set("123 Maple Ave")
+      find_field("City", match: :first).set("Toronto")
+      find_field("Province", match: :first).select("Province")
+      find_field("Postal code", match: :first).set("M4C 1T2")
+      fill_in("Business phone number", with: "5052426789")
+      fill_in("Business Number (BN)", with: "111111111")
+
+      fill_in("First name", with: "CA")
+      fill_in("Last name", with: "Creator")
+      fill_in("Job title", with: "General Manager")
+      all('select[id$="creator-country"]').last.select("Canada")
+      all('input[id$="creator-street-address"]').last.set("address_full_match")
+      all('input[id$="creator-city"]').last.set("Toronto")
+      all('select[id$="creator-province"]').last.select("Ontario")
+      all('input[id$="creator-zip-code"]').last.set("M4C 1T2")
+      fill_in("Phone number", with: "5052429876")
+      fill_in("Social Insurance Number", with: "111111111")
+
+      select("1", from: "Day")
+      select("January", from: "Month")
+      select("1980", from: "Year")
+      fill_in("Pay to the order of", with: "Placeholder Corp")
+      fill_in("Transit #", with: "11000")
+      fill_in("Institution #", with: "000")
+      fill_in("Account #", with: "000123456789")
+      fill_in("Confirm account #", with: "000123456789")
+
+      expect do
+        click_on("Update settings")
+        expect(page).to have_status(text: "Please select a valid state or province.")
+      end.not_to change { @user.alive_user_compliance_info.reload.business_state }
+
+      find_field("Province", match: :first).select("Ontario")
+      expect do
+        click_on("Update settings")
+        wait_for_ajax
+        expect(page).to have_alert(text: "Thanks! You're all set.")
+      end.to change { @user.alive_user_compliance_info.reload.business_state }.to("ON")
+    end
+
+
     describe "CA corporation requiring company registration verification document" do
       before do
         old_user_compliance_info = @user.alive_user_compliance_info
