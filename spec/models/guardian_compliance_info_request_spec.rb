@@ -23,9 +23,9 @@ RSpec.describe GuardianComplianceInfoRequest, type: :model do
     describe "mark_provided event" do
       it "transitions from requested to provided" do
         expect(request.state).to eq("requested")
-        
+
         request.mark_provided!
-        
+
         expect(request.state).to eq("provided")
         expect(request.provided_at).to be_present
         expect(request.provided_at).to be_within(1.second).of(Time.current)
@@ -33,7 +33,7 @@ RSpec.describe GuardianComplianceInfoRequest, type: :model do
 
       it "sets provided_at timestamp on transition" do
         freeze_time = Time.parse("2024-01-15 10:30:00 UTC")
-        
+
         travel_to freeze_time do
           request.mark_provided!
           expect(request.provided_at).to eq(freeze_time)
@@ -68,7 +68,7 @@ RSpec.describe GuardianComplianceInfoRequest, type: :model do
       it "stores and retrieves stripe event ID" do
         request.stripe_event_id = "evt_1234567890"
         request.save!
-        
+
         request.reload
         expect(request.stripe_event_id).to eq("evt_1234567890")
       end
@@ -78,7 +78,7 @@ RSpec.describe GuardianComplianceInfoRequest, type: :model do
       it "stores and retrieves guardian person ID" do
         request.guardian_person_id = "person_1234567890"
         request.save!
-        
+
         request.reload
         expect(request.guardian_person_id).to eq("person_1234567890")
       end
@@ -89,7 +89,7 @@ RSpec.describe GuardianComplianceInfoRequest, type: :model do
         error_message = "Document verification failed"
         request.verification_error = error_message
         request.save!
-        
+
         request.reload
         expect(request.verification_error).to eq(error_message)
       end
@@ -108,7 +108,7 @@ RSpec.describe GuardianComplianceInfoRequest, type: :model do
       timestamp = "2024-01-15T10:30:00Z"
       request.emails_sent_at = [timestamp]
       request.save!
-      
+
       request.reload
       expect(request.emails_sent_at.first).to be_a(Time)
       expect(request.emails_sent_at.first).to eq(Time.parse(timestamp))
@@ -118,7 +118,7 @@ RSpec.describe GuardianComplianceInfoRequest, type: :model do
       timestamp = Time.current
       request.emails_sent_at = [timestamp]
       request.save!
-      
+
       request.reload
       expect(request.emails_sent_at.first).to be_a(Time)
       expect(request.emails_sent_at.first).to be_within(1.second).of(timestamp)
@@ -129,7 +129,7 @@ RSpec.describe GuardianComplianceInfoRequest, type: :model do
       time_object = Time.current
       request.emails_sent_at = [string_time, time_object]
       request.save!
-      
+
       request.reload
       expect(request.emails_sent_at).to all(be_a(Time))
       expect(request.emails_sent_at.first).to eq(Time.parse(string_time))
@@ -143,37 +143,37 @@ RSpec.describe GuardianComplianceInfoRequest, type: :model do
 
     it "records current time by default" do
       current_time = Time.current
-      
+
       travel_to current_time do
         request.record_email_sent!
-        
+
         expect(request.emails_sent_at.last).to be_within(1.second).of(current_time)
       end
     end
 
     it "records specific timestamp when provided" do
       specific_time = Time.parse("2024-01-15T10:30:00Z")
-      
+
       request.record_email_sent!(specific_time)
-      
+
       expect(request.emails_sent_at).to include(specific_time)
     end
 
     it "appends to existing timestamps" do
       first_time = Time.parse("2024-01-15T10:30:00Z")
       second_time = Time.parse("2024-01-16T10:30:00Z")
-      
+
       request.record_email_sent!(first_time)
       request.record_email_sent!(second_time)
-      
+
       expect(request.emails_sent_at).to contain_exactly(first_time, second_time)
     end
 
     it "persists the change to database" do
       timestamp = Time.current.change(usec: 0)
-      
+
       request.record_email_sent!(timestamp)
-      
+
       request.reload
       expect(request.emails_sent_at).to include(timestamp)
     end
@@ -191,7 +191,7 @@ RSpec.describe GuardianComplianceInfoRequest, type: :model do
       it "can be set to true" do
         request.only_needs_field_to_be_partially_provided = true
         request.save!
-        
+
         request.reload
         expect(request.only_needs_field_to_be_partially_provided?).to eq(true)
       end
@@ -205,7 +205,7 @@ RSpec.describe GuardianComplianceInfoRequest, type: :model do
     before do
       # Mock the global config for encryption
       allow(GlobalConfig).to receive(:get).with("STRONGBOX_GENERAL_PASSWORD").and_return("test_password")
-      
+
       # Mock Strongbox::Lock behavior to avoid encryption issues in tests
       allow_any_instance_of(Strongbox::Lock).to receive(:decrypt).and_return("decrypted_value")
     end
@@ -213,30 +213,30 @@ RSpec.describe GuardianComplianceInfoRequest, type: :model do
     context "when guardian compliance info requests exist" do
       let!(:first_name_request) do
         create(:guardian_compliance_info_request,
-          user: user,
-          field_needed: "guardian_first_name",
-          state: "requested"
+               user: user,
+               field_needed: "guardian_first_name",
+               state: "requested"
         )
       end
 
       let!(:last_name_request) do
         create(:guardian_compliance_info_request,
-          user: user,
-          field_needed: "guardian_last_name",
-          state: "requested"
+               user: user,
+               field_needed: "guardian_last_name",
+               state: "requested"
         )
       end
 
       let!(:email_request) do
         create(:guardian_compliance_info_request,
-          user: user,
-          field_needed: "guardian_email",
-          state: "requested"
+               user: user,
+               field_needed: "guardian_email",
+               state: "requested"
         )
       end
 
       it "marks matching requests as provided when fields are filled" do
-        saved, new_compliance_info = user_compliance_info.dup_and_save do |new_info|
+        _, new_compliance_info = user_compliance_info.dup_and_save do |new_info|
           new_info.guardian_first_name = "John"
           new_info.guardian_last_name = "Guardian"
         end
@@ -255,13 +255,13 @@ RSpec.describe GuardianComplianceInfoRequest, type: :model do
       it "handles encrypted fields properly" do
         # Create a request for encrypted tax ID field
         tax_id_request = create(:guardian_compliance_info_request,
-          user: user,
-          field_needed: "guardian_individual_tax_id",
-          state: "requested"
+                                user: user,
+                                field_needed: "guardian_individual_tax_id",
+                                state: "requested"
         )
 
         # Update with encrypted tax ID
-        saved, new_compliance_info = user_compliance_info.dup_and_save do |new_info|
+        _, new_compliance_info = user_compliance_info.dup_and_save do |new_info|
           new_info.guardian_individual_tax_id = "123456789"
         end
 
@@ -272,7 +272,7 @@ RSpec.describe GuardianComplianceInfoRequest, type: :model do
       end
 
       it "ignores blank fields" do
-        saved, new_compliance_info = user_compliance_info.dup_and_save do |new_info|
+        _, new_compliance_info = user_compliance_info.dup_and_save do |new_info|
           new_info.guardian_first_name = ""
           new_info.guardian_last_name = nil
         end
@@ -288,16 +288,16 @@ RSpec.describe GuardianComplianceInfoRequest, type: :model do
 
       it "handles all defined guardian compliance fields" do
         # Create requests for all guardian fields
-        GuardianComplianceInfoFields.all_fields.each do |field|
+        UserComplianceInfoFields::Guardian::ALL_FIELDS.each do |field|
           create(:guardian_compliance_info_request,
-            user: user,
-            field_needed: field,
-            state: "requested"
+                 user: user,
+                 field_needed: field,
+                 state: "requested"
           )
         end
 
         # Update compliance info with sample values for text fields
-        saved, new_compliance_info = user_compliance_info.dup_and_save do |new_info|
+        _, new_compliance_info = user_compliance_info.dup_and_save do |new_info|
           new_info.guardian_first_name = "John"
           new_info.guardian_last_name = "Guardian"
           new_info.guardian_email = "guardian@example.com"
@@ -318,7 +318,7 @@ RSpec.describe GuardianComplianceInfoRequest, type: :model do
         # All text field requests should be marked as provided
         text_fields = [
           "guardian_first_name",
-          "guardian_last_name", 
+          "guardian_last_name",
           "guardian_email",
           "guardian_phone",
           "guardian_street_address",
@@ -341,22 +341,22 @@ RSpec.describe GuardianComplianceInfoRequest, type: :model do
 
     context "when no compliance info requests exist" do
       it "handles gracefully without errors" do
-        saved, new_compliance_info = user_compliance_info.dup_and_save do |new_info|
+        _, new_compliance_info = user_compliance_info.dup_and_save do |new_info|
           new_info.guardian_first_name = "John"
         end
 
-        expect {
+        expect do
           described_class.handle_new_guardian_compliance_info(new_compliance_info)
-        }.not_to raise_error
+        end.not_to raise_error
       end
     end
 
     context "when user compliance info has no guardian fields" do
       it "does not mark any requests as provided" do
         request = create(:guardian_compliance_info_request,
-          user: user,
-          field_needed: "guardian_first_name",
-          state: "requested"
+                         user: user,
+                         field_needed: "guardian_first_name",
+                         state: "requested"
         )
 
         described_class.handle_new_guardian_compliance_info(user_compliance_info)
@@ -377,7 +377,7 @@ RSpec.describe GuardianComplianceInfoRequest, type: :model do
 
     it "generates external ID on creation" do
       request = create(:guardian_compliance_info_request, user: user)
-      
+
       expect(request.external_id).to be_present
       expect(request.external_id.length).to be >= 10
     end
@@ -385,7 +385,7 @@ RSpec.describe GuardianComplianceInfoRequest, type: :model do
     it "generates unique external IDs" do
       request1 = create(:guardian_compliance_info_request, user: user)
       request2 = create(:guardian_compliance_info_request, user: user)
-      
+
       expect(request1.external_id).not_to eq(request2.external_id)
     end
   end
