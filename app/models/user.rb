@@ -1084,15 +1084,16 @@ class User < ApplicationRecord
     end
   end
 
-  def is_legal_guardian_information_required?
-    user_compliance_info = alive_user_compliance_info
-    return false unless user_compliance_info&.birthday
+  def under_18?
+    return false unless alive_user_compliance_info&.birthday
 
-    is_under_18 = user_compliance_info.birthday > 18.years.ago.to_date
-    return false unless is_under_18
+    alive_user_compliance_info.birthday > 18.years.ago.to_date
+  end
+
+  def is_legal_guardian_information_required?
+    return false unless under_18?
 
     guardian_status = guardian_verification_status
-
     guardian_status != "verified"
   end
 

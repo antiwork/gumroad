@@ -73,7 +73,7 @@ class UpdateUserComplianceInfo
 
       begin
         StripeMerchantAccountManager.handle_new_user_compliance_info(new_compliance_info)
-        
+
         # Handle guardian compliance info requests
         GuardianComplianceInfoRequest.handle_new_guardian_compliance_info(new_compliance_info)
       rescue Stripe::InvalidRequestError => e
@@ -94,11 +94,5 @@ class UpdateUserComplianceInfo
       end
 
       filtered
-    end
-
-    def user_under_18?(user_compliance_info)
-      return false unless user_compliance_info&.birthday
-
-      user_compliance_info.birthday > 18.years.ago.to_date
     end
 end
