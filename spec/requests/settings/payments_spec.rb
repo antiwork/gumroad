@@ -315,6 +315,84 @@ describe("Payments Settings Scenario", type: :system, js: true) do
       expect(find_button("Disconnect Stripe account", disabled: true)[:disabled]).to eq "true"
     end
 
+    it "does not allow saving placeholder state values" do
+      visit settings_payments_path
+
+      fill_in("First name", with: "barnabas")
+      fill_in("Last name", with: "barnabastein")
+      fill_in("Address", with: "address_full_match")
+      fill_in("City", with: "barnabasville")
+      select("State", from: "State")
+      fill_in("ZIP code", with: "12345")
+      fill_in("Phone number", with: "(502) 254-1982")
+
+      fill_in("Pay to the order of", with: "barnabas ngagy")
+      fill_in("Routing number", with: "110000000")
+      fill_in("Account number", with: "000123456789")
+      fill_in("Confirm account number", with: "000123456789")
+
+      select("1", from: "Day")
+      select("January", from: "Month")
+      select("1980", from: "Year")
+      fill_in("Last 4 digits of SSN", with: "1235")
+
+      expect do
+        click_on("Update settings")
+        expect(page).to have_status(text: "Please select a valid state.")
+      end.to_not change { @user.alive_user_compliance_info.reload.state }
+
+      select("California", from: "State")
+      expect do
+        click_on("Update settings")
+        wait_for_ajax
+        expect(page).to have_alert(text: "Thanks! You're all set.")
+      end.to change { @user.alive_user_compliance_info.reload.state }.to("CA")
+    end
+
+    it "does not allow saving placeholder state values for business" do
+      visit settings_payments_path
+
+      choose("Business")
+      fill_in("Legal business name", with: "Acme")
+      select("LLC", from: "Type")
+      find_field("Address", match: :first).set("123 North street")
+      find_field("City", match: :first).set("Barnesville")
+      find_field("State", match: :first).select("State")
+      find_field("ZIP code", match: :first).set("12345")
+      fill_in("Business phone number", with: "15052229876")
+      fill_in("Business Tax ID (EIN, or SSN for sole proprietors)", with: "123456789")
+
+      fill_in("First name", with: "barnabas")
+      fill_in("Last name", with: "barnabastein")
+      all('input[id$="creator-street-address"]').last.set("address_full_match")
+      all('input[id$="creator-city"]').last.set("barnabasville")
+      all('select[id$="creator-state"]').last.select("California")
+      all('input[id$="creator-zip-code"]').last.set("12345")
+      fill_in("Phone number", with: "(502) 254-1982")
+
+      fill_in("Pay to the order of", with: "barnabas ngagy")
+      fill_in("Routing number", with: "110000000")
+      fill_in("Account number", with: "000123456789")
+      fill_in("Confirm account number", with: "000123456789")
+
+      select("1", from: "Day")
+      select("January", from: "Month")
+      select("1980", from: "Year")
+      fill_in("Last 4 digits of SSN", with: "1235")
+
+      expect do
+        click_on("Update settings")
+        expect(page).to have_status(text: "Please select a valid state.")
+      end.to_not change { @user.alive_user_compliance_info.reload.business_state }
+
+      find_field("State", match: :first).select("California")
+      expect do
+        click_on("Update settings")
+        wait_for_ajax
+        expect(page).to have_alert(text: "Thanks! You're all set.")
+      end.to change { @user.alive_user_compliance_info.reload.business_state }.to("CA")
+    end
+
     describe "US-based creator with information set" do
       before do
         create(:ach_account_stripe_succeed, user: @user)
@@ -1611,53 +1689,6 @@ describe("Payments Settings Scenario", type: :system, js: true) do
         expect(compliance_info.phone).to eq("+8223123456")
         expect(compliance_info.birthday).to eq(Date.new(1980, 1, 1))
         expect(@user.reload.active_bank_account.send(:account_number_decrypted)).to eq("000123456789")
-      end
-    end
-
-    describe "AU creator without and with state selection" do
-      before do
-        old_user_compliance_info = @user.alive_user_compliance_info
-        new_user_compliance_info = old_user_compliance_info.dup
-        new_user_compliance_info.country = "Australia"
-
-        ActiveRecord::Base.transaction do
-          old_user_compliance_info.mark_deleted!
-          new_user_compliance_info.save!
-        end
-
-        create(:australian_bank_account, user: @user)
-        create(:tos_agreement, user: @user)
-        create(:merchant_account, user: @user, country: "AU", currency: "aud")
-      end
-
-      it "prevents submission when state is not selected" do
-        allow(StripeMerchantAccountManager).to receive(:handle_new_user_compliance_info)
-
-        visit settings_payments_path
-
-        fill_in("First name", with: "barnabas")
-        fill_in("Last name", with: "barnabastein")
-        fill_in("Address", with: "address_full_match")
-        fill_in("City", with: "barnabasville")
-        fill_in("Postal code", with: "2000")
-        fill_in("Phone number", with: "212345678")
-
-        select("1", from: "Day")
-        select("January", from: "Month")
-        select("1980", from: "Year")
-
-        expect(page).to have_field("State")
-        click_on("Update settings")
-
-        expect(page).to have_status(text: "Please select a valid state.")
-        expect(find_field("State")["aria-invalid"]).to eq "true"
-
-        select("New South Wales", from: "State")
-        click_on("Update settings")
-
-        expect(page).to have_alert(text: "Thanks! You're all set.")
-        compliance_info = @user.alive_user_compliance_info
-        expect(compliance_info.state).to eq("NSW")
       end
     end
 
