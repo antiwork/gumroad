@@ -230,7 +230,7 @@ class SettingsPresenter
       minimum_payout_threshold_cents: seller.minimum_payout_threshold_cents,
       payout_frequency: seller.payout_frequency,
       payout_frequency_daily_supported: seller.instant_payouts_supported?,
-      user_under_18: user_under_18?(user_compliance_info),
+      user_under_18: seller.under_18?,
       guardian_verification_state: guardian_verification_state,
     }
   end
@@ -255,12 +255,10 @@ class SettingsPresenter
 
     user_compliance_info = seller.alive_user_compliance_info
 
-    # Return not_required if user is 18 or older
-    return "not_required" unless user_under_18?(user_compliance_info)
+    return "not_required" unless seller.under_18?
 
     guardian_requests = seller.guardian_compliance_info_requests
 
-    # Check if user has submitted all required guardian information
     has_submitted_guardian_info = user_compliance_info.present? && (
       user_compliance_info.guardian_first_name.present? &&
       user_compliance_info.guardian_last_name.present? &&
@@ -282,7 +280,6 @@ class SettingsPresenter
     elsif guardian_requests.verified.present? && guardian_requests.requested.blank?
       "verified"
     elsif guardian_requests.provided.present?
-      # Info submitted to Stripe but not yet verified
       "pending"
     else
       "requires_input"
@@ -485,12 +482,6 @@ class SettingsPresenter
           paypal_fee_info_text: "All sales will incur fees based on how customers find your product:\n\n• Direct sales: #{direct_fee_percent}% + #{fixed_fee_cents}¢ Gumroad fee + #{processor_fee_percent}% + #{processor_fee_fixed_cents}¢ PayPal fee.\n• Discover sales: #{discover_fee_percent}% flat\n",
         }
       end
-    end
-
-    def user_under_18?(user_compliance_info)
-      return false unless user_compliance_info&.birthday
-
-      user_compliance_info.birthday > 18.years.ago.to_date
     end
 
     def guardian_date_complete?(user_compliance_info)

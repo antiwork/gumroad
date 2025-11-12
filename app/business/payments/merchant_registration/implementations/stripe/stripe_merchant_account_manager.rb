@@ -79,7 +79,7 @@ module StripeMerchantAccountManager
     end
 
     # Create guardian person if user is under 18
-    if user_under_18?(user_compliance_info)
+    if user.under_18?
       guardian_params = guardian_person_hash(user_compliance_info, passphrase)
       if guardian_params
         Stripe::Account.create_person(stripe_account.id, guardian_params)
@@ -206,7 +206,7 @@ module StripeMerchantAccountManager
     end
 
     # Add guardian person update logic
-    if user_under_18?(user_compliance_info)
+    if user.under_18?
       update_guardian_person(user, stripe_account, last_user_compliance_info&.external_id, passphrase)
     end
   end
@@ -974,12 +974,6 @@ module StripeMerchantAccountManager
     end
 
     hash.deep_values_strip!
-  end
-
-  def self.user_under_18?(user_compliance_info)
-    return false unless user_compliance_info&.birthday
-
-    user_compliance_info.birthday > 18.years.ago.to_date
   end
 
   def self.handle_guardian_stripe_info_requirements(stripe_event_id, stripe_account, user)
