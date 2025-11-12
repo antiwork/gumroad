@@ -1007,7 +1007,8 @@ module StripeMerchantAccountManager
 
     # Send email if new guardian requests were created
     if user.guardian_compliance_info_requests.requested.present?
-      ContactingCreatorMailer.guardian_kyc_needed(user.id).deliver_later(queue: "critical")
+      guardian_fields = user.guardian_compliance_info_requests.requested.pluck(:field_needed)
+      ContactingCreatorMailer.more_kyc_needed(user.id, guardian_fields).deliver_later(queue: "critical")
     end
   end
 
@@ -1047,7 +1048,8 @@ module StripeMerchantAccountManager
 
     # Send email if new guardian requests were created
     if new_guardian_requests.any?
-      ContactingCreatorMailer.guardian_kyc_needed(user.id).deliver_later(queue: "critical")
+      guardian_fields = new_guardian_requests.map(&:field_needed)
+      ContactingCreatorMailer.more_kyc_needed(user.id, guardian_fields).deliver_later(queue: "critical")
     end
   end
 
