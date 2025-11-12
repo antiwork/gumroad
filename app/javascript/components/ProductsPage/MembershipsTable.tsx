@@ -181,7 +181,7 @@ export const ProductsPageMembershipsTable = (props: {
                     }}
                     onUnarchive={(hasRemainingArchivedProducts) => {
                       props.setEnableArchiveTab?.(hasRemainingArchivedProducts);
-                      if (!hasRemainingArchivedProducts) router.visit(Routes.products_path());
+                      if (!hasRemainingArchivedProducts) router.get(Routes.products_path());
                       else void reloadMemberships();
                     }}
                   />
