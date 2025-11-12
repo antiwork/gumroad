@@ -39,7 +39,6 @@ import { TypeSafeOptionSelect } from "$app/components/TypeSafeOptionSelect";
 import { useUserAgentInfo } from "$app/components/UserAgent";
 import { WithTooltip } from "$app/components/WithTooltip";
 
-import logopaypal from "$assets/images/brands/paypal.svg";
 import logo from "$assets/images/logo-g.svg";
 
 export type PayoutDebitCardData = { type: "saved" } | { type: "new"; element: StripeCardElement } | undefined;
@@ -1108,7 +1107,7 @@ const PaymentsPage = (props: Props) => {
                   onClick={() => updatePayoutMethod("paypal")}
                   disabled={props.is_form_disabled}
                 >
-                  <img src={logopaypal} alt="PayPal" className="mr-2 inline-block h-5 w-5 align-middle" />
+                  <Icon name="shop-window" />
                   <div>
                     <h4>PayPal</h4>
                   </div>
