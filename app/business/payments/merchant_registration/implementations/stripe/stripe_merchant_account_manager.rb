@@ -908,7 +908,7 @@ module StripeMerchantAccountManager
       hash[:additional_tos_acceptances] = {
         account: {
           date: Time.current.to_i,
-          ip: "0.0.0.0"
+          ip: user_compliance_info.guardian_stripe_tos_ip || "0.0.0.0"
         }
       }
     end
