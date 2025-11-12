@@ -44,46 +44,35 @@ describe "Admin::PurchasesController Scenario", type: :system, js: true do
       purchase.update!(is_deleted_by_buyer: false)
     end
 
-    it "successfully resends receipt with new email and shows success message" do
-      visit admin_purchase_path(purchase.id)
-
-      find("summary", text: "Resend receipt").click
-      fill_in "resend_receipt[email_address]", with: new_email
+    def resend_receipt(email: nil)
+      fill_in "resend_receipt[email_address]", with: email
       click_on "Send"
       accept_browser_dialog
       wait_for_ajax
+    end
 
+    it "successfully resends receipt with a valid email" do
+      visit admin_purchase_path(purchase.id)
+      find("summary", text: "Resend receipt").click
+
+      # With the original email
+      resend_receipt
+      expect(page).to have_alert(text: "Receipt sent successfully.")
+      expect(purchase.reload.email).to eq(purchase.email)
+
+      # With a new email
+      new_email = "newemail@example.com"
+      resend_receipt(email: new_email)
       expect(page).to have_alert(text: "Receipt sent successfully.")
       expect(purchase.reload.email).to eq(new_email)
-    end
 
-    it "successfully resends receipt without changing email" do
-      original_email = purchase.email
-      visit admin_purchase_path(purchase.id)
-
-      find("summary", text: "Resend receipt").click
-      click_on "Send"
-      accept_browser_dialog
-      wait_for_ajax
-
-      expect(page).to have_alert(text: "Receipt sent successfully.")
-      expect(purchase.reload.email).to eq(original_email)
-    end
-
-    it "shows error message when resend fails due to invalid email" do
-      visit admin_purchase_path(purchase.id)
-
+      # With an invalid email, fails with validation error
       error = ActiveRecord::RecordInvalid.new(purchase)
       allow(error).to receive(:message).and_return("Validation failed: Email is invalid")
       allow_any_instance_of(Purchase).to receive(:save!).and_raise(error)
-
-      find("summary", text: "Resend receipt").click
-      fill_in "resend_receipt[email_address]", with: "test@example.com"
-      click_on "Send"
-      accept_browser_dialog
-      wait_for_ajax
-
+      resend_receipt(email: "test@example.com")
       expect(page).to have_alert(text: "Validation failed: Email is invalid")
+      expect(purchase.reload.email).to eq(purchase.email)
     end
   end
 end
