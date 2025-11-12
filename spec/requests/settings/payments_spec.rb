@@ -1781,7 +1781,6 @@ describe("Payments Settings Scenario", type: :system, js: true) do
 
         login_as user
         visit settings_payments_path
-        # find_field("Province", match: :first).select("Dubai")
         expect(page).to have_selector("iframe[src*='connect-js.stripe.com']")
       end
 
