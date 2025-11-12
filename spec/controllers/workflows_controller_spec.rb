@@ -78,7 +78,7 @@ describe WorkflowsController, type: :controller, inertia: true do
 
     context "with invalid params" do
       it "redirects back to new workflow page with errors when service fails" do
-        allow_any_instance_of(Workflow::ManageService).to receive(:process).and_return([false, double(full_messages: ["Name can't be blank"])])
+        allow_any_instance_of(Workflow::ManageService).to receive(:process).and_return([false, "Name can't be blank"])
 
         post :create, params: { workflow: { name: "", workflow_type: "audience" } }
 
@@ -89,10 +89,9 @@ describe WorkflowsController, type: :controller, inertia: true do
       it "handles validation errors from the service" do
         workflow_params = { name: "Test", workflow_type: "audience" }
         service = instance_double(Workflow::ManageService)
-        errors = double("errors", full_messages: ["Validation failed"])
 
         allow(Workflow::ManageService).to receive(:new).and_return(service)
-        allow(service).to receive(:process).and_return([false, errors])
+        allow(service).to receive(:process).and_return([false, "Validation failed"])
 
         post :create, params: { workflow: workflow_params }
 
@@ -150,7 +149,7 @@ describe WorkflowsController, type: :controller, inertia: true do
 
     context "with invalid params" do
       it "redirects back to edit workflow page with errors when service fails" do
-        allow_any_instance_of(Workflow::ManageService).to receive(:process).and_return([false, double(full_messages: ["Name can't be blank"])])
+        allow_any_instance_of(Workflow::ManageService).to receive(:process).and_return([false, "Name can't be blank"])
 
         patch :update, params: { id: workflow.external_id, workflow: { name: "" } }
 
@@ -160,10 +159,9 @@ describe WorkflowsController, type: :controller, inertia: true do
 
       it "handles validation errors from the service" do
         service = instance_double(Workflow::ManageService)
-        errors = double("errors", full_messages: ["Validation failed", "Another error"])
 
         allow(Workflow::ManageService).to receive(:new).and_return(service)
-        allow(service).to receive(:process).and_return([false, errors])
+        allow(service).to receive(:process).and_return([false, "Validation failed"])
 
         patch :update, params: { id: workflow.external_id, workflow: { name: "Test" } }
 

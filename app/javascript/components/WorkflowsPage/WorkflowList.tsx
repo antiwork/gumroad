@@ -76,7 +76,7 @@ const WorkflowList = ({ workflows }: WorkflowListProps) => {
                             setDeletingWorkflow((previous) =>
                               previous ? { ...previous, state: "delete-confirmation" } : previous,
                             );
-                            showAlert("Something went wrong.", "error");
+                            showAlert("Sorry, something went wrong. Please try again.", "error");
                           },
                         });
                       }}
