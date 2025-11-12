@@ -105,4 +105,3 @@ describe Admin::PurchasePresenter do
     end
   end
 end
-
