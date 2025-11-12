@@ -28,8 +28,8 @@ RSpec.describe Onetime::CreateProductRefundPoliciesForUser do
   end
 
   describe "#process" do
-    let!(:product_without_policy_1) { create(:product, user: user) }
-    let!(:product_without_policy_2) { create(:product, user: user) }
+    let!(:product_without_policy_1) { create(:product, user: user, product_refund_policy_enabled: false) }
+    let!(:product_without_policy_2) { create(:product, user: user, product_refund_policy_enabled: false) }
     let!(:product_with_policy) { create(:product, user: user) }
     let!(:existing_policy) { create(:product_refund_policy, product: product_with_policy, seller: user) }
 
@@ -50,17 +50,17 @@ RSpec.describe Onetime::CreateProductRefundPoliciesForUser do
       expect(product_with_policy.reload.product_refund_policy).to eq(existing_policy)
     end
 
-    it "sets the correct max_refund_period_in_days" do
+    it "sets the correct values" do
       service.process
 
-      expect(product_without_policy_1.reload.product_refund_policy.max_refund_period_in_days).to eq(0)
-      expect(product_without_policy_2.reload.product_refund_policy.max_refund_period_in_days).to eq(0)
-    end
-
-    it "sets the seller correctly" do
-      service.process
-
+      product_without_policy_1.reload
+      expect(product_without_policy_1.product_refund_policy_enabled).to be true
+      expect(product_without_policy_1.product_refund_policy.max_refund_period_in_days).to eq(0)
       expect(product_without_policy_1.reload.product_refund_policy.seller).to eq(user)
+
+      product_without_policy_2.reload
+      expect(product_without_policy_2.product_refund_policy_enabled).to be true
+      expect(product_without_policy_2.product_refund_policy.max_refund_period_in_days).to eq(0)
       expect(product_without_policy_2.reload.product_refund_policy.seller).to eq(user)
     end
 
@@ -106,8 +106,11 @@ RSpec.describe Onetime::CreateProductRefundPoliciesForUser do
       it "creates policies with the specified refund period" do
         service.process
 
-        expect(product_without_policy_1.reload.product_refund_policy.max_refund_period_in_days).to eq(30)
-        expect(product_without_policy_2.reload.product_refund_policy.max_refund_period_in_days).to eq(30)
+        product_without_policy_1.reload
+        expect(product_without_policy_1.product_refund_policy.max_refund_period_in_days).to eq(30)
+
+        product_without_policy_2.reload
+        expect(product_without_policy_2.product_refund_policy.max_refund_period_in_days).to eq(30)
       end
     end
 

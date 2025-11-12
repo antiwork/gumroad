@@ -4,8 +4,8 @@ import React from "react";
 import { classNames } from "$app/utils/classNames";
 
 import { Nav } from "$app/components/client-components/Nav";
-import { useClientAlert, ClientAlert, type AlertPayload } from "$app/components/ClientAlertProvider";
 import LoadingSkeleton from "$app/components/LoadingSkeleton";
+import Alert, { showAlert, type AlertPayload } from "$app/components/server-components/Alert";
 import useRouteLoading from "$app/components/useRouteLoading";
 
 type PageProps = {
@@ -16,18 +16,17 @@ type PageProps = {
 export default function Layout({ children }: { children: React.ReactNode }) {
   const { title, flash } = usePage<PageProps>().props;
   const isRouteLoading = useRouteLoading();
-  const { alert, showAlert } = useClientAlert();
 
   React.useEffect(() => {
     if (flash?.message) {
-      showAlert(flash.message, flash.status);
+      showAlert(flash.message, flash.status === "danger" ? "error" : flash.status);
     }
-  }, [flash, showAlert]);
+  }, [flash]);
 
   return (
     <>
       <Head title={title} />
-      <ClientAlert alert={alert} />
+      <Alert initial={null} />
       <div id="inertia-shell" className="flex h-screen flex-col lg:flex-row">
         <Nav title="Dashboard" />
         {isRouteLoading ? <LoadingSkeleton /> : null}

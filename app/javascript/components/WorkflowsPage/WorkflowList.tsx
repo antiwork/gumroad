@@ -5,10 +5,10 @@ import { Workflow } from "$app/types/workflow";
 import { formatStatNumber } from "$app/utils/formatStatNumber";
 
 import { Button } from "$app/components/Button";
-import { useClientAlert } from "$app/components/ClientAlertProvider";
 import { Icon } from "$app/components/Icons";
 import { useLoggedInUser } from "$app/components/LoggedInUser";
 import { Modal } from "$app/components/Modal";
+import { showAlert } from "$app/components/server-components/Alert";
 import Placeholder from "$app/components/ui/Placeholder";
 import { Layout } from "$app/components/WorkflowsPage";
 
@@ -19,7 +19,6 @@ type WorkflowListProps = {
 };
 
 const WorkflowList = ({ workflows }: WorkflowListProps) => {
-  const { showAlert } = useClientAlert();
   const loggedInUser = useLoggedInUser();
   const canManageWorkflow = !!loggedInUser?.policies.workflow.create;
   const newWorkflowButton = (
