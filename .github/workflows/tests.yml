@@ -148,6 +148,85 @@ jobs:
           build_and_push $WEB_BASE_TEST_REPO $WEB_BASE_TEST_SHA build_base_test
           build_and_push $WEB_REPO test-$REVISION build_test
 
+  test_fast:
+    name: Test Fast ${{ matrix.ci_node_index }}
+    env:
+      COMPOSE_PROJECT_NAME: web_${{ github.run_id }}_${{ github.run_attempt }}_fast_${{ matrix.ci_node_index }}
+    runs-on: hetzner
+    needs: build_test
+    strategy:
+      fail-fast: false
+      matrix:
+        ci_node_total: [15]
+        ci_node_index: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/login-action@v3
+        with:
+          registry: quay.io
+          username: ${{ secrets.QUAY_USERNAME }}
+          password: ${{ secrets.QUAY_PASSWORD }}
+          logout: false
+      - name: Start services
+        env:
+          COMPOSE_HTTP_TIMEOUT: 300
+        run: docker compose -f docker/docker-compose-test-and-ci.yml up -d
+      - name: Wait for services
+        env:
+          WEB_REPO: quay.io/gumroad/web
+        run: |
+          docker run --rm --network ${{ env.COMPOSE_PROJECT_NAME }}_default \
+            $WEB_REPO:test-${{ github.sha }} \
+            docker/ci/wait_on_connection.sh db_test 3306
+
+          docker run --rm --network ${{ env.COMPOSE_PROJECT_NAME }}_default \
+            $WEB_REPO:test-${{ github.sha }} \
+            docker/ci/wait_on_connection.sh minio 9000
+        timeout-minutes: 5
+
+      - name: Setup test database
+        env:
+          WEB_REPO: quay.io/gumroad/web
+        run: |
+          docker run --rm --network ${{ env.COMPOSE_PROJECT_NAME }}_default \
+            -e RAILS_ENV=test \
+            -e RAILS_MASTER_KEY=${{ secrets.RAILS_MASTER_KEY }} \
+            $WEB_REPO:test-${{ github.sha }} \
+            bundle exec rake db:setup
+
+      - name: Run tests
+        env:
+          WEB_REPO: quay.io/gumroad/web
+        run: |
+          docker run --rm --network ${{ env.COMPOSE_PROJECT_NAME }}_default \
+            -e RAILS_MASTER_KEY=${{ secrets.RAILS_MASTER_KEY }} \
+            -e RUBY_YJIT_ENABLE=1 \
+            -e KNAPSACK_PRO_TEST_SUITE_TOKEN_RSPEC=${{ secrets.KNAPSACK_PRO_TEST_SUITE_TOKEN_RSPEC_FAST }} \
+            -e KNAPSACK_PRO_CI_NODE_TOTAL=${{ matrix.ci_node_total }} \
+            -e KNAPSACK_PRO_CI_NODE_INDEX=${{ matrix.ci_node_index }} \
+            -e KNAPSACK_PRO_LOG_LEVEL=info \
+            -e KNAPSACK_PRO_RSPEC_SPLIT_BY_TEST_EXAMPLES=true \
+            -e KNAPSACK_PRO_TEST_FILE_PATTERN="spec/**/*_spec.rb" \
+            -e KNAPSACK_PRO_TEST_FILE_EXCLUDE_PATTERN="spec/requests/**/*_spec.rb" \
+            -e KNAPSACK_PRO_COMMIT_HASH=${{ github.sha }} \
+            -e KNAPSACK_PRO_BRANCH=${{ github.ref_name }} \
+            -e KNAPSACK_PRO_CI_NODE_BUILD_ID=${{ github.run_id }} \
+            -e KNAPSACK_PRO_CI_NODE_RETRY_COUNT=${{ github.run_attempt }} \
+            -e KNAPSACK_PRO_PROJECT_DIR=/app \
+            -e KNAPSACK_PRO_FIXED_QUEUE_SPLIT=true \
+            -e CI=true \
+            -e IN_DOCKER=true \
+            $WEB_REPO:test-${{ github.sha }} \
+            /usr/local/bin/gosu app bundle exec rake "knapsack_pro:queue:rspec[--format RSpec::Github::Formatter --tag ~skip --format progress]"
+        timeout-minutes: 15
+      - name: Clean up
+        if: always()
+        run: |
+          docker compose -f docker/docker-compose-test-and-ci.yml down -v 2>/dev/null || true
+          docker rm -f $(docker ps -aq -f name=${{ env.COMPOSE_PROJECT_NAME }}) 2>/dev/null || true
+          docker volume rm $(docker volume ls -q -f name=${{ env.COMPOSE_PROJECT_NAME }}) 2>/dev/null || true
+          docker network rm ${{ env.COMPOSE_PROJECT_NAME }}_default 2>/dev/null || true
+
   test_slow:
     name: Test Slow ${{ matrix.ci_node_index }}
     env:
@@ -158,11 +237,55 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        ci_node_total: [6]
+        ci_node_total: [45]
         ci_node_index:
           [
-          0,1,2,3,4,5
-        ]
+            0,
+            1,
+            2,
+            3,
+            4,
+            5,
+            6,
+            7,
+            8,
+            9,
+            10,
+            11,
+            12,
+            13,
+            14,
+            15,
+            16,
+            17,
+            18,
+            19,
+            20,
+            21,
+            22,
+            23,
+            24,
+            25,
+            26,
+            27,
+            28,
+            29,
+            30,
+            31,
+            32,
+            33,
+            34,
+            35,
+            36,
+            37,
+            38,
+            39,
+            40,
+            41,
+            42,
+            43,
+            44,
+          ]
     steps:
       - uses: actions/checkout@v4
       - uses: docker/login-action@v3
@@ -206,7 +329,7 @@ jobs:
           KNAPSACK_PRO_CI_NODE_INDEX: ${{ matrix.ci_node_index }}
           KNAPSACK_PRO_LOG_LEVEL: info
           KNAPSACK_PRO_RSPEC_SPLIT_BY_TEST_EXAMPLES: true
-          KNAPSACK_PRO_TEST_FILE_PATTERN: "spec/requests/**/*membership_spec.rb"
+          KNAPSACK_PRO_TEST_FILE_PATTERN: "spec/requests/**/*_spec.rb"
           KNAPSACK_PRO_COMMIT_HASH: ${{ github.sha }}
           KNAPSACK_PRO_BRANCH: ${{ github.ref_name }}
           KNAPSACK_PRO_CI_NODE_BUILD_ID: ${{ github.run_id }}
@@ -273,7 +396,7 @@ jobs:
   unblock_deployment_from_buildkite:
     name: Unblock deployment from Buildkite
     runs-on: ubicloud-standard-4
-    needs: [test_slow]
+    needs: [test_fast, test_slow]
     if: success() && github.ref == 'refs/heads/main'
     steps:
       - name: Unblock corresponding Buildkite build
