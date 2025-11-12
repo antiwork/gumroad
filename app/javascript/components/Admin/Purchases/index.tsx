@@ -8,9 +8,9 @@ import Comments from "$app/components/Admin/Commentable";
 import DateTimeWithRelativeTooltip from "$app/components/Admin/DateTimeWithRelativeTooltip";
 import { Form } from "$app/components/Admin/Form";
 import { NoIcon, BooleanIcon } from "$app/components/Admin/Icons";
+import AdminResendReceiptForm from "$app/components/Admin/Purchases/ResendReceiptForm";
 import { CopyToClipboard } from "$app/components/CopyToClipboard";
 import { Icon } from "$app/components/Icons";
-import { AdminResendReceiptForm } from "$app/components/server-components/Admin/ResendReceiptForm";
 import { showAlert } from "$app/components/server-components/Alert";
 
 import { type RefundPolicy, RefundPolicyTitle } from "./RefundPolicy";

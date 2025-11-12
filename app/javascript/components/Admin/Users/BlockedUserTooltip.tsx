@@ -14,7 +14,10 @@ export type Props = {
 const BlockedUserTooltip = ({ user, position = "bottom" }: Props) => {
   const { blocked_by_form_email_object, blocked_by_form_email_domain_object } = user;
 
-  if (!blocked_by_form_email_object && !blocked_by_form_email_domain_object) {
+  const isBlockedByFormEmail = blocked_by_form_email_object?.blocked_at;
+  const isBlockedByFormEmailDomain = blocked_by_form_email_domain_object?.blocked_at;
+
+  if (!isBlockedByFormEmail && !isBlockedByFormEmailDomain) {
     return null;
   }
 

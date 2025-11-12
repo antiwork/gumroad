@@ -75,7 +75,7 @@ const AdminUsersProductsHeader = ({ product, isCurrentUrl }: Props) => (
           target="_blank"
           rel="noreferrer noopener"
         >
-          {file.s3_filename}
+          {file.s3_filename || file.external_id}
         </a>
       ))}
     </div>

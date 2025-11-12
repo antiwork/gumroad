@@ -216,4 +216,38 @@ describe "Admin::UsersController Scenario", type: :system, js: true do
       end
     end
   end
+
+  describe "blocked user indicator" do
+    before { BlockedObject.delete_all }
+    after { BlockedObject.delete_all }
+
+    it "shows blocked user indicator with appropriate tooltips for email and domain blocks" do
+      # Initially no block should exist
+      visit admin_user_path(user.id)
+      expect(page).not_to have_css(".icon-solid-shield-exclamation")
+
+      # Block by email
+      BlockedObject.block!(BLOCKED_OBJECT_TYPES[:email], user.form_email, admin.id)
+      page.refresh
+
+      # Verify icon appears and tooltip shows email block
+      expect(page).to have_css(".icon-solid-shield-exclamation")
+      icon = find(".icon-solid-shield-exclamation")
+      icon.hover
+      expect(page).to have_text("Email blocked")
+      expect(page).to have_text("block created")
+
+      # Add domain block
+      BlockedObject.block!(BLOCKED_OBJECT_TYPES[:email_domain], user.form_email_domain, admin.id)
+      page.refresh
+
+      # Verify icon still appears and tooltip shows both blocks
+      expect(page).to have_css(".icon-solid-shield-exclamation")
+      icon = find(".icon-solid-shield-exclamation")
+      icon.hover
+      expect(page).to have_text("Email blocked")
+      expect(page).to have_text("#{user.form_email_domain} blocked")
+      expect(page).to have_text("block created")
+    end
+  end
 end

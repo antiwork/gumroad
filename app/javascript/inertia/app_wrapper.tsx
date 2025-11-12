@@ -1,6 +1,5 @@
 import React from "react";
 
-import { ClientAlertProvider } from "$app/components/ClientAlertProvider";
 import { CurrentSellerProvider, parseCurrentSeller } from "$app/components/CurrentSeller";
 import { DesignContextProvider, DesignSettings } from "$app/components/DesignSettings";
 import { DomainSettingsProvider } from "$app/components/DomainSettings";
@@ -78,9 +77,7 @@ export default function AppWrapper({ children, global }: { children: React.React
         >
           <LoggedInUserProvider value={parseLoggedInUser(global.logged_in_user)}>
             <CurrentSellerProvider value={parseCurrentSeller(global.current_seller)}>
-              <SSRLocationProvider value={global.href}>
-                <ClientAlertProvider>{children}</ClientAlertProvider>
-              </SSRLocationProvider>
+              <SSRLocationProvider value={global.href}>{children}</SSRLocationProvider>
             </CurrentSellerProvider>
           </LoggedInUserProvider>
         </UserAgentProvider>
