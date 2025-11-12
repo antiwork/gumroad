@@ -49,26 +49,6 @@
   --grid-cols-sidebar: 1fr 3fr;
 
   --loading-spinner: url("~images/loading-rainbow.svg");
-  --animate-fade-in-down-out-up: fade-in-down-out-up 5s both;
-
-  @keyframes fade-in-down-out-up {
-    0% {
-      transform: translateY(-100%);
-      opacity: 0;
-    }
-    5% {
-      transform: translateY(0);
-      opacity: 1;
-    }
-    95% {
-      transform: translateY(0);
-      opacity: 1;
-    }
-    100% {
-      transform: translateY(-100%);
-      opacity: 0;
-    }
-  }
 }
 
 @layer base {
