@@ -19,7 +19,7 @@ export const LegalGuardianInformationRequiredBanner = ({ status }: Props) => {
             <div>
               <a
                 href="#legal-guardian-section"
-                className="hover:bg-gray-800 rounded bg-black px-4 py-2 text-sm font-medium text-white no-underline"
+                className="rounded bg-black px-4 py-2 text-sm font-medium text-white no-underline hover:bg-gray-800"
               >
                 Add guardian details
               </a>
@@ -32,9 +32,8 @@ export const LegalGuardianInformationRequiredBanner = ({ status }: Props) => {
       return (
         <div role="status" className="info">
           <p>
-            <strong>Stripe is verifying your information.</strong>
-            You'll get an email once the verification is complete. If additional information is needed, we'll contact
-            your legal guardian directly.
+            <strong>Stripe is verifying your information.</strong> You'll get an email once the verification is
+            complete. If additional information is needed, we'll contact your legal guardian directly.
           </p>
         </div>
       );
