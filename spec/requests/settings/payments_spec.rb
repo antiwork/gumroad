@@ -1159,6 +1159,7 @@ describe("Payments Settings Scenario", type: :system, js: true) do
         fill_in("Last name", with: "barnabastein")
         fill_in("Address", with: "address_full_match")
         fill_in("City", with: "barnabasville")
+        select("Rio de Janeiro", from: "State")
         fill_in("Phone number", with: "5022541982")
         fill_in("Postal code", with: "12345")
 
@@ -1191,6 +1192,7 @@ describe("Payments Settings Scenario", type: :system, js: true) do
         fill_in "Last name", with: "Doe"
         fill_in "Address", with: "P.O. Box 123, Tokyo central hall"
         fill_in "City", with: "Tokyo"
+        select("Rio de Janeiro", from: "State")
         fill_in "Postal code", with: "12345"
         fill_in "Phone number", with: "5022541982"
         select("1", from: "Day")
