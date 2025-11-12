@@ -7,7 +7,7 @@ type ImpersonateActionProps = {
   user: User;
 };
 
-const ImpersonateAction = ({ user: { impersonatable, id: user_identifier } }: ImpersonateActionProps) =>
+const ImpersonateAction = ({ user: { impersonatable, username: user_identifier } }: ImpersonateActionProps) =>
   impersonatable ? (
     <a href={Routes.admin_impersonate_url({ user_identifier })} className="button small">
       Become
