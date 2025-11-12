@@ -55,6 +55,44 @@ describe Api::Internal::Helper::PurchasesController, :vcr do
         expect(subscription.user).to eq(target_user)
       end
 
+      it "updates original_purchase email for subscription purchases" do
+        subscription = create(:subscription, user: buyer)
+        original_purchase = create(:purchase, email: "old_original_purchase@example.com", purchaser: buyer, is_original_subscription_purchase: true, subscription: subscription)
+        recurring_purchase = create(:purchase, email: from_email, purchaser: buyer, subscription: subscription)
+
+        post :reassign_purchases, params: { from: from_email, to: to_email }
+
+        expect(response).to have_http_status(:success)
+        expect(response.parsed_body["success"]).to eq(true)
+
+        original_purchase.reload
+        expect(original_purchase.email).to eq(to_email)
+
+        recurring_purchase.reload
+        expect(recurring_purchase.email).to eq(to_email)
+
+        subscription.reload
+        expect(subscription.original_purchase.email).to eq(to_email)
+      end
+
+      it "updates the original purchase once only when there are multiple recurring purchases sharing the same original purchase" do
+        from_email = "recurring_purchase@example.com"
+
+        subscription = create(:subscription, user: buyer)
+        create(:purchase, email: "old_original_purchase@example.com", purchaser: buyer, is_original_subscription_purchase: true, subscription: subscription)
+
+        create(:purchase, email: from_email, purchaser: buyer, subscription: subscription)
+        create(:purchase, email: from_email, purchaser: buyer, subscription: subscription)
+        create(:purchase, email: from_email, purchaser: buyer, subscription: subscription)
+
+        post :reassign_purchases, params: { from: from_email, to: to_email }
+
+        expect(response).to have_http_status(:success)
+        expect(response.parsed_body["success"]).to eq(true)
+
+        expect(response.parsed_body["count"]).to eq(4)
+      end
+
       it "reassigns purchases and sets purchaser_id to nil when target user doesn't exist" do
         subscription = create(:subscription, user: buyer)
         subscription_purchase = create(:purchase, email: from_email, purchaser: buyer, is_original_subscription_purchase: true, subscription: subscription)
