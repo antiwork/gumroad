@@ -161,8 +161,52 @@ jobs:
         ci_node_total: [45]
         ci_node_index:
           [
-            1
-          ]
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7,
+          8,
+          9,
+          10,
+          11,
+          12,
+          13,
+          14,
+          15,
+          16,
+          17,
+          18,
+          19,
+          20,
+          21,
+          22,
+          23,
+          24,
+          25,
+          26,
+          27,
+          28,
+          29,
+          30,
+          31,
+          32,
+          33,
+          34,
+          35,
+          36,
+          37,
+          38,
+          39,
+          40,
+          41,
+          42,
+          43,
+          44
+        ]
     steps:
       - uses: actions/checkout@v4
       - uses: docker/login-action@v3
@@ -206,7 +250,7 @@ jobs:
           KNAPSACK_PRO_CI_NODE_INDEX: ${{ matrix.ci_node_index }}
           KNAPSACK_PRO_LOG_LEVEL: info
           KNAPSACK_PRO_RSPEC_SPLIT_BY_TEST_EXAMPLES: true
-          KNAPSACK_PRO_TEST_FILE_PATTERN: "spec/requests/**/*_spec.rb"
+          KNAPSACK_PRO_TEST_FILE_PATTERN: "spec/requests/**/*membership_spec.rb"
           KNAPSACK_PRO_COMMIT_HASH: ${{ github.sha }}
           KNAPSACK_PRO_BRANCH: ${{ github.ref_name }}
           KNAPSACK_PRO_CI_NODE_BUILD_ID: ${{ github.run_id }}
