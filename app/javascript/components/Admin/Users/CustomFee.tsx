@@ -2,14 +2,13 @@ import * as React from "react";
 
 import { Form } from "$app/components/Admin/Form";
 import type { User } from "$app/components/Admin/Users/User";
-import { useClientAlert } from "$app/components/ClientAlertProvider";
+import { showAlert } from "$app/components/server-components/Alert";
 
 type AdminUserCustomFeeProps = {
   user: User;
 };
 
 const AdminUserCustomFee = ({ user }: AdminUserCustomFeeProps) => {
-  const { showAlert } = useClientAlert();
   const initialCustomFee = user.custom_fee_per_thousand ? user.custom_fee_per_thousand / 10 : "";
   const [customFee, setCustomFee] = React.useState(initialCustomFee);
 

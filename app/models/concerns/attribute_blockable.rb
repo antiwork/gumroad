@@ -179,7 +179,7 @@ module AttributeBlockable
           attribute_type = blockable_config ? blockable_config[:object_type] : method_name.to_sym
 
           scope = BLOCKED_OBJECT_TYPES.fetch(attribute_type, :all)
-          blocked_objects_by_value = BlockedObject.send(scope).find_objects(values).index_by(&:object_value)
+          blocked_objects_by_value = BlockedObject.send(scope).find_active_objects(values).index_by(&:object_value)
 
           @records.each do |record|
             value = record.send(method_name)
@@ -306,7 +306,7 @@ module AttributeBlockable
   #   user.blocked_objects_for_values(:email, ['email1@example.com', 'email2@example.com'])
   def blocked_objects_for_values(method_name, values)
     scope = BLOCKED_OBJECT_TYPES.fetch(method_name.to_sym, :all)
-    BlockedObject.send(scope).find_objects(values)
+    BlockedObject.send(scope).find_active_objects(values)
   end
 
   private
@@ -317,6 +317,6 @@ module AttributeBlockable
     # @return [BlockedObject, nil] The BlockedObject or nil if not found
     def blocked_object_for_value(method_name, value)
       scope = BLOCKED_OBJECT_TYPES.fetch(method_name.to_sym, :all)
-      BlockedObject.send(scope).find_object(value)
+      BlockedObject.send(scope).find_active_object(value)
     end
 end
