@@ -237,7 +237,6 @@ module StripeMerchantAccountManager
   end
 
   def self.update_guardian_person(user, stripe_account, last_user_compliance_info_id, passphrase)
-    # Find guardian person (legal_guardian: true)
     stripe_persons = Stripe::Account.list_persons(stripe_account.id)["data"]
     guardian_person = stripe_persons.find { |person| person["relationship"]&.[]("legal_guardian") }
 
