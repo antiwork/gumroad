@@ -1186,7 +1186,9 @@ const PaymentsPage = (props: Props) => {
                 canadaBusinessTypes={props.canada_business_types}
                 states={props.states}
                 errorFieldNames={errorFieldNames}
-                isLegalGuardianInformationRequired={props.guardian_verification_state !== "not_required"}
+                isLegalGuardianInformationRequired={
+                  props.user_under_18 ? props.guardian_verification_state !== "not_required" : null
+                }
               />
             ) : (
               <StripeConnectSection
