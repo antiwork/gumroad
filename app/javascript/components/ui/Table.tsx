@@ -139,14 +139,13 @@ export const TableCell = ({
     aria-busy={busy}
     className={classNames(
       "block p-4 text-left align-middle lg:table-cell lg:border-t lg:border-border lg:before:content-none [&:not(:first-child)]:border-t [&:not(:first-child)]:border-border",
-      actions && "grid auto-cols-max grid-flow-col gap-3 lg:justify-end",
       isIcon && "text-center text-xl lg:w-20 lg:min-w-20 lg:border-r lg:border-border",
       className,
     )}
     {...props}
   >
     {label ? <div className="mb-2 font-bold lg:hidden">{label}</div> : null}
-    {children}
+    {actions ? <div className="flex flex-wrap gap-3 lg:justify-end">{children}</div> : children}
     {busy ? <div className="h-[1lh] w-full animate-pulse rounded-full bg-border content-['']" /> : null}
   </td>
 );
