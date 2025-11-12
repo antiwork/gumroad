@@ -19,7 +19,6 @@ const AccountDetailsSection = ({
   canadaBusinessTypes,
   states,
   errorFieldNames,
-  payoutMethod,
 }: {
   user: User;
   complianceInfo: ComplianceInfo;
@@ -40,7 +39,6 @@ const AccountDetailsSection = ({
     br: { code: string; name: string }[];
   };
   errorFieldNames: Set<FormFieldName>;
-  payoutMethod: PayoutMethod;
   isLegalGuardianInformationRequired: boolean;
 }) => {
   const uid = React.useId();
