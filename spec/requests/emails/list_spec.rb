@@ -53,7 +53,7 @@ describe("Email List", :js, :sidekiq_inline, :elasticsearch_wait_for_refresh, ty
         end
 
         # Opens a sidebar drawer with additional information of the selected email
-        find(:table_row, { name: "Email 1 (sent)" }).click
+        find(:table_row, { "Subject" => "Email 1 (sent)" }).click
         within_section "Email 1 (sent)", section_element: :aside do
           expect(page).to have_text("Sent #{installment1.published_at.in_time_zone(seller.timezone).strftime("%-m/%-d/%Y, %-I:%M:%S %p")}", normalize_ws: true)
           expect(page).to have_text("Emailed 1", normalize_ws: true)
@@ -77,7 +77,7 @@ describe("Email List", :js, :sidekiq_inline, :elasticsearch_wait_for_refresh, ty
         end
         expect(page).to_not have_section("Email 1 (sent)", section_element: :aside)
 
-        find(:table_row, { name: "Email 3 (sent)" }).click
+        find(:table_row, { "Subject" => "Email 3 (sent)" }).click
         within_section "Email 3 (sent)", section_element: :aside do
           expect(page).to have_text("Sent #{installment3.published_at.in_time_zone(seller.timezone).strftime("%-m/%-d/%Y, %-I:%M:%S %p")}", normalize_ws: true)
           expect(page).to have_text("Emailed --", normalize_ws: true)
@@ -139,7 +139,7 @@ describe("Email List", :js, :sidekiq_inline, :elasticsearch_wait_for_refresh, ty
       it "deletes an email" do
         visit "#{emails_path}/published"
 
-        find(:table_row, { name: "Email 1 (sent)" }).click
+        find(:table_row, { "Subject" => "Email 1 (sent)" }).click
         within_section "Email 1 (sent)", section_element: :aside do
           click_on "Delete"
         end
@@ -182,7 +182,7 @@ describe("Email List", :js, :sidekiq_inline, :elasticsearch_wait_for_refresh, ty
         visit "#{emails_path}/scheduled"
         wait_for_ajax
 
-        find(:table_row, { name: "Email 5 (scheduled)" }).click
+        find(:table_row, { "Subject" => "Email 5 (scheduled)" }).click
         within_section "Email 5 (scheduled)", section_element: :aside do
           click_on "Delete"
         end
@@ -245,7 +245,7 @@ describe("Email List", :js, :sidekiq_inline, :elasticsearch_wait_for_refresh, ty
         visit "#{emails_path}/drafts"
         wait_for_ajax
 
-        find(:table_row, { name: "Email 2 (draft)" }).click
+        find(:table_row, { "Subject" => "Email 2 (draft)" }).click
         within_section "Email 2 (draft)", section_element: :aside do
           click_on "Delete"
         end
