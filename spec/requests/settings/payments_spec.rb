@@ -1212,7 +1212,7 @@ describe("Payments Settings Scenario", type: :system, js: true) do
         fill_in "First name", with: "John"
         fill_in "Last name", with: "Doe"
         fill_in "Address", with: "P.O. Box 123, Tokyo central hall"
-        fill_in "City", with: "Rio de Janeiro"
+        fill_in "City", with: "Tokyo"
         select("Rio de Janeiro", from: "State")
         fill_in "Postal code", with: "12345"
         fill_in "Phone number", with: "5022541982"
