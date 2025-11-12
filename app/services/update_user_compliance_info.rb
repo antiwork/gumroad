@@ -1,11 +1,12 @@
 # frozen_string_literal: true
 
 class UpdateUserComplianceInfo
-  attr_reader :compliance_params, :user
+  attr_reader :compliance_params, :user, :remote_ip
 
-  def initialize(compliance_params:, user:)
+  def initialize(compliance_params:, user:, remote_ip: nil)
     @compliance_params = compliance_params
     @user = user
+    @remote_ip = remote_ip
   end
 
   def process
@@ -59,6 +60,7 @@ class UpdateUserComplianceInfo
         new_compliance_info.guardian_individual_tax_id =  compliance_params[:guardian_ssn_last_four]         if compliance_params[:guardian_ssn_last_four].present?
         new_compliance_info.guardian_individual_tax_id =  compliance_params[:guardian_individual_tax_id]  if compliance_params[:guardian_individual_tax_id].present?
         new_compliance_info.guardian_stripe_tos_accepted = ActiveModel::Type::Boolean.new.cast(compliance_params[:guardian_stripe_tos_accepted]) if compliance_params[:guardian_stripe_tos_accepted].present?
+        new_compliance_info.guardian_stripe_tos_ip = remote_ip if compliance_params[:guardian_stripe_tos_accepted].present? && remote_ip.present?
         new_compliance_info.guardian_stripe_processing_tos_accepted = ActiveModel::Type::Boolean.new.cast(compliance_params[:guardian_stripe_processing_tos_accepted]) if compliance_params[:guardian_stripe_processing_tos_accepted].present?
         new_compliance_info.birthday = Date.new(compliance_params[:dob_year].to_i, compliance_params[:dob_month].to_i, compliance_params[:dob_day].to_i) if compliance_params[:dob_year].present? && compliance_params[:dob_year].to_i > 0
         new_compliance_info.skip_stripe_job_on_create = true
