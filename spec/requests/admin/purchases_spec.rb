@@ -75,4 +75,14 @@ describe "Admin::PurchasesController Scenario", type: :system, js: true do
       expect(purchase.reload.email).to eq(purchase.email)
     end
   end
+
+  describe "tip display" do
+    it "shows tip amount correctly when purchase has a tip" do
+      create(:tip, purchase: purchase, value_usd_cents: 500)
+
+      visit admin_purchase_path(purchase.id)
+
+      expect(page).to have_content("Tip $5", normalize_ws: true)
+    end
+  end
 end
