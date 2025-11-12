@@ -28,7 +28,7 @@ export const Chart = ({
   tooltipPosition: { left: number; top: number } | null;
   tooltip: React.ReactNode;
 } & React.ComponentPropsWithoutRef<typeof ComposedChart>) => (
-  <section className="rounded border border-border bg-background p-6 text-foreground" data-testid="chart">
+  <section className="rounded border border-border bg-background p-6 text-foreground">
     <WithTooltip
       tip={tooltip}
       className="block"
@@ -38,7 +38,7 @@ export const Chart = ({
         className: "-translate-y-full",
       }}
     >
-      <ResponsiveContainer aspect={aspect ?? 1092 / 450} maxHeight={650} ref={containerRef}>
+      <ResponsiveContainer aspect={aspect ?? 1092 / 450} maxHeight={650} data-testid="chart" ref={containerRef}>
         <ComposedChart margin={{ top: 32, right: 0, bottom: 16, left: 0 }} {...props} />
       </ResponsiveContainer>
     </WithTooltip>
