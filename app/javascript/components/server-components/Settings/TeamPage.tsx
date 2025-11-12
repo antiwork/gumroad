@@ -331,13 +331,7 @@ const TeamMembersSection = ({
                 </div>
               </td>
               <td data-label="Role">
-                {memberInfo.leave_team_option ? (
-                  <div className="flex justify-end">
-                    <Button color="danger" disabled={loading} onClick={() => setConfirming(memberInfo)}>
-                      {memberInfo.leave_team_option.label}
-                    </Button>
-                  </div>
-                ) : (
+                <div className="flex items-center justify-between gap-2">
                   <Select
                     instanceId={memberInfo.id}
                     options={memberInfo.options}
@@ -350,8 +344,14 @@ const TeamMembersSection = ({
                     isClearable={false}
                     isDisabled={loading || memberInfo.options.length === 1}
                     value={memberInfo.options.find((o) => o.id === memberInfo.role) ?? null}
+                    className="flex-1"
                   />
-                )}
+                  {memberInfo.leave_team_option ? (
+                    <Button color="danger" disabled={loading} onClick={() => setConfirming(memberInfo)}>
+                      {memberInfo.leave_team_option.label}
+                    </Button>
+                  ) : null}
+                </div>
               </td>
             </tr>
           ))}
