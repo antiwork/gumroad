@@ -596,7 +596,11 @@ const PaymentsPage = (props: Props) => {
     if (!complianceInfo.city) {
       markFieldInvalid("city");
     }
-    if (complianceInfo.country !== null && complianceInfo.country.toLowerCase() in props.states && !complianceInfo.state) {
+    if (
+      complianceInfo.country !== null &&
+      complianceInfo.country.toLowerCase() in props.states &&
+      !complianceInfo.state
+    ) {
       markFieldInvalid("state");
       setErrorMessage({ message: "Please select a valid state." });
     }
