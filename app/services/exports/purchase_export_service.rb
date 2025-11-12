@@ -11,7 +11,7 @@ class Exports::PurchaseExportService
     "Pre-order authorization time (UTC timezone)", "Custom Fields", "Item Price ($)",
     "Variants Price ($)", "Giftee Email", "SKU ID", "Quantity", "Recurrence",
     "Affiliate", "Affiliate commission ($)", "Discover?", "Subscription End Date", "Rating", "Review",
-    "License Key", "License Key Activation Count", "Payment Type", "PayPal Transaction ID", "PayPal Fee Amount", "PayPal Fee Currency",
+    "License Key Enabled?", "License Key", "License Key Activation Count", "Payment Type", "PayPal Transaction ID", "PayPal Fee Amount", "PayPal Fee Currency",
     "Stripe Transaction ID", "Stripe Fee Amount", "Stripe Fee Currency",
     "Purchasing Power Parity Discounted?", "Upsold?", "Sent Abandoned Cart Email?",
     "UTM Source", "UTM Medium", "UTM Campaign", "UTM Term", "UTM Content"
@@ -177,6 +177,7 @@ class Exports::PurchaseExportService
         "Subscription End Date" => purchase.subscription&.termination_date&.to_s,
         "Rating" => main_or_giftee_purchase&.original_product_review&.rating,
         "Review" => main_or_giftee_purchase&.original_product_review&.message,
+        "License Key Enabled?" => purchase.link.is_licensed? ? 1 : 0,
         "License Key" => main_or_giftee_purchase&.license_key,
         "License Key Activation Count" => main_or_giftee_purchase&.license&.uses,
         "Payment Type" => ((purchase.card_type == "paypal" ? "PayPal" : "Card") if purchase.card_type.present?),
