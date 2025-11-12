@@ -26,7 +26,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
   return (
     <>
       <Head title={title} />
-      <Alert initial={null} />
+      <Alert initial={flash ?? null} />
       <div id="inertia-shell" className="flex h-screen flex-col lg:flex-row">
         <Nav title="Dashboard" />
         {isRouteLoading ? <LoadingSkeleton /> : null}
