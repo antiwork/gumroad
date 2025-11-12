@@ -3,10 +3,10 @@ import React from "react";
 import { DomainSettings } from "$app/types/domain_settings";
 import { LoggedInUser, Seller, CurrentUser } from "$app/types/user";
 
-import { ClientAlertProvider, type AlertPayload } from "$app/components/ClientAlertProvider";
 import { DesignContextProvider, DesignSettings } from "$app/components/DesignSettings";
 import { DomainSettingsProvider } from "$app/components/DomainSettings";
 import { LoggedInUserProvider, parseLoggedInUser } from "$app/components/LoggedInUser";
+import { type AlertPayload } from "$app/components/server-components/Alert";
 import { SSRLocationProvider } from "$app/components/useOriginalLocation";
 import { UserAgentProvider } from "$app/components/UserAgent";
 
@@ -51,9 +51,7 @@ const AdminAppWrapper = ({ children, global }: { children: React.ReactNode; glob
         }}
       >
         <LoggedInUserProvider value={parseLoggedInUser(global.logged_in_user)}>
-          <SSRLocationProvider value={global.href}>
-            <ClientAlertProvider>{children}</ClientAlertProvider>
-          </SSRLocationProvider>
+          <SSRLocationProvider value={global.href}>{children}</SSRLocationProvider>
         </LoggedInUserProvider>
       </UserAgentProvider>
     </DomainSettingsProvider>
