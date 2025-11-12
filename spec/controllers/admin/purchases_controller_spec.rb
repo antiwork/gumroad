@@ -178,4 +178,31 @@ describe Admin::PurchasesController, :vcr, inertia: true do
       expect { post :undelete, params: { id: "invalid-id" } }.to raise_error(ActionController::RoutingError)
     end
   end
+
+  describe "POST resend_receipt" do
+    let(:buyer) { create(:user) }
+    let(:new_email) { "new@example.com" }
+
+    context "when updating email for subscription purchases" do
+      it "updates original_purchase email for subscription purchases" do
+        subscription = create(:subscription, user: buyer)
+        create(:purchase, email: "old@example.com", purchaser: buyer, is_original_subscription_purchase: true, subscription: subscription)
+        recurring_purchase = create(:purchase, email: "old@example.com", purchaser: buyer, subscription: subscription)
+
+        post :resend_receipt, params: {
+          id: recurring_purchase.id,
+          resend_receipt: { email_address: new_email }
+        }
+
+        expect(response).to be_successful
+        expect(response.parsed_body["success"]).to be(true)
+
+        recurring_purchase.reload
+        expect(recurring_purchase.email).to eq(new_email)
+
+        subscription.reload
+        expect(subscription.original_purchase.email).to eq(new_email)
+      end
+    end
+  end
 end
