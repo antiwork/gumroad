@@ -1,0 +1,38 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta content='text/html; charset=UTF-8' http-equiv='Content-Type' />
+  <style>
+    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; line-height: 1.6; color: #333; }
+    .container { max-width: 600px; margin: 0 auto; padding: 20px; }
+    .header { background-color: #f4f4f4; padding: 15px; border-radius: 5px; margin-bottom: 20px; }
+    .sender { font-weight: bold; color: #555; }
+    .room { color: #888; font-size: 0.9em; }
+    .message { background-color: #fff; padding: 15px; border-left: 4px solid #0066cc; white-space: pre-wrap; }
+    .attachment { background-color: #f9f9f9; padding: 10px; margin-top: 10px; border-radius: 3px; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="header">
+      <div class="sender"><%= @sender %></div>
+      <div class="room">Channel: <%= @room_name %></div>
+    </div>
+    
+    <div class="message">
+      <%= simple_format(@message_text) %>
+    </div>
+    
+    <% if @attachments.any? %>
+      <% @attachments.each do |attachment| %>
+        <div class="attachment">
+          <% if attachment["title"] %>
+            <strong><%= attachment["title"] %></strong><br/>
+          <% end %>
+          <%= simple_format(attachment["text"] || attachment["fallback"]) %>
+        </div>
+      <% end %>
+    <% end %>
+  </div>
+</body>
+</html>
