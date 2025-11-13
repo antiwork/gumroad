@@ -31,12 +31,12 @@ class Workflows::EmailsController < Sellers::BaseController
 
     if success
       redirect_to workflow_emails_path(@workflow.external_id),
-        status: :see_other,
-        notice: flash_message_for(installments_params)
+                  status: :see_other,
+                  notice: flash_message_for(installments_params)
     else
       redirect_to workflow_emails_path(@workflow.external_id),
-        inertia: { errors: errors },
-        alert: errors.full_messages.first
+                  inertia: { errors: errors },
+                  alert: errors.full_messages.first
     end
   end
 
