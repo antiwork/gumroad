@@ -27,6 +27,10 @@ class SlackMessageWorker
     chat_room = CHAT_ROOMS[room_name.to_sym][:slack]
     return if chat_room.nil?
 
+    send_email_notification(room_name, sender, message_text, options)
+
+    return if Feature.active?(:skip_slack_notifications)
+
     hex_color = Color::CSS[color].html
 
     Timeout.timeout(SLACK_MESSAGE_SEND_TIMEOUT) do
@@ -46,6 +50,14 @@ class SlackMessageWorker
     unless e.message.include? "rate_limited"
       raise SlackError, e.message
     end
+  end
+
+  private
+
+  def send_email_notification(room_name, sender, message_text, options)
+    NotificationMailer.slack_notification(room_name, sender, message_text, options).deliver_later
+  rescue StandardError => e
+    Rails.logger.error("Failed to send notification email: #{e.message}")
   end
 end
 
