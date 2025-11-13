@@ -27,6 +27,22 @@ class SlackMessageWorker
     chat_room = CHAT_ROOMS[room_name.to_sym][:slack]
     return if chat_room.nil?
 
+    attachments = Array(options["attachments"] || options[:attachments])
+    notifications_email = GlobalConfig.get("NOTIFICATIONS_EMAIL_ADDRESS")
+
+    if notifications_email.present?
+      SlackNotificationMailer.with(
+        room_name:,
+        sender:,
+        message_text:,
+        attachments:,
+        slack_channel: chat_room[:channel],
+        notifications_email:
+      ).notification.deliver_now
+    end
+
+    return if Feature.active?(:skip_slack_notifications)
+
     hex_color = Color::CSS[color].html
 
     Timeout.timeout(SLACK_MESSAGE_SEND_TIMEOUT) do
@@ -35,12 +51,11 @@ class SlackMessageWorker
                  username: sender
       end
 
-      extra_attachments = (options["attachments"].nil? ? [] : options["attachments"])
       client.ping("", attachments: [{
         fallback: message_text,
         color: hex_color,
         text: message_text
-      }] + extra_attachments)
+      }] + attachments)
     end
   rescue StandardError, Timeout::Error => e
     unless e.message.include? "rate_limited"

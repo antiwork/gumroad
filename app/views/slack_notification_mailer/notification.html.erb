@@ -1,0 +1,18 @@
+<p>
+  Slack notification from <strong><%= @room_name.titleize %></strong> (<code>#<%= @slack_channel %></code>) sent by <strong><%= @sender %></strong>.
+</p>
+
+<p><strong>Message:</strong></p>
+<pre><%= @message_text %></pre>
+
+<% if @attachments.present? %>
+  <p><strong>Attachments:</strong></p>
+  <ul>
+    <% @attachments.each do |attachment| %>
+      <li>
+        <pre><%= attachment %></pre>
+      </li>
+    <% end %>
+  </ul>
+<% end %>
+
