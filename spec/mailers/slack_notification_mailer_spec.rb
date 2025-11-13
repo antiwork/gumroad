@@ -110,14 +110,17 @@ RSpec.describe SlackNotificationMailer, type: :mailer do
           expect(mail.body.encoded).to include(sender)
         end
 
+        let(:html_body) { mail.html_part.body.to_s }
+
         it "renders the message text in the body" do
-          expect(mail.body.encoded).to include(message_text)
+          expect(html_body).to include("<p>#{message_text}</p>")
         end
 
         context "when attachments are present" do
           it "lists attachments in the body" do
-            expect(mail.body.encoded).to include("Attachments:")
-            expect(mail.body.encoded).to include(attachments.first.to_s)
+            expect(html_body).to include("Attachments:")
+            expect(html_body).to match(/<strong>\s*Report URL\s*<\/strong>/)
+            expect(html_body).to match(/<p>\s*https:\/\/example\.com\s*<\/p>/)
           end
 
           context "with multiple attachments" do
@@ -130,7 +133,8 @@ RSpec.describe SlackNotificationMailer, type: :mailer do
 
             it "renders all attachments" do
               attachments.each do |attachment|
-                expect(mail.body.encoded).to include(attachment.to_s)
+                expect(html_body).to match(/<strong>\s*#{attachment[:title]}\s*<\/strong>/)
+                expect(html_body).to match(/<p>\s*#{attachment[:text]}\s*<\/p>/)
               end
             end
           end
