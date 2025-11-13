@@ -7,6 +7,7 @@ class Workflows::EmailsController < Sellers::BaseController
   layout "inertia"
 
   FLASH_CHANGES_SAVED = "Changes saved!"
+  FLASH_PREVIEW_EMAIL_SENT = "A preview has been sent to your email."
   FLASH_WORKFLOW_PUBLISHED = "Workflow published!"
   FLASH_WORKFLOW_UNPUBLISHED = "Unpublished!"
 
@@ -29,19 +30,13 @@ class Workflows::EmailsController < Sellers::BaseController
     success, errors = service.process
 
     if success
-      flash_message = case installments_params[:save_action_name]
-                      when "save_and_publish"
-                        FLASH_WORKFLOW_PUBLISHED
-                      when "save_and_unpublish"
-                        FLASH_WORKFLOW_UNPUBLISHED
-                      else
-                        FLASH_CHANGES_SAVED
-      end
-
-      redirect_to workflow_emails_path(@workflow.external_id), status: :see_other, notice: flash_message
+      redirect_to workflow_emails_path(@workflow.external_id),
+        status: :see_other,
+        notice: flash_message_for(installments_params)
     else
-      error_message = errors.full_messages.first
-      redirect_to workflow_emails_path(@workflow.external_id), inertia: { errors: errors }, alert: error_message
+      redirect_to workflow_emails_path(@workflow.external_id),
+        inertia: { errors: errors },
+        alert: errors.full_messages.first
     end
   end
 
@@ -68,5 +63,18 @@ class Workflows::EmailsController < Sellers::BaseController
           files: [:external_id, :url, :position, :stream_only, subtitle_files: [:url, :language]],
         ],
       )
+    end
+
+    def flash_message_for(permitted_params)
+      case permitted_params[:save_action_name]
+      when "save_and_publish"   then FLASH_WORKFLOW_PUBLISHED
+      when "save_and_unpublish" then FLASH_WORKFLOW_UNPUBLISHED
+      else preview_email_requested?(permitted_params) ? FLASH_PREVIEW_EMAIL_SENT : FLASH_CHANGES_SAVED
+      end
+    end
+
+    def preview_email_requested?(permitted_params)
+      boolean = ActiveModel::Type::Boolean.new
+      Array(permitted_params[:installments]).any? { |inst| boolean.cast(inst[:send_preview_email]) }
     end
 end
