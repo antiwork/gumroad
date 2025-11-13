@@ -2,18 +2,42 @@
   Slack notification from <strong><%= @room_name.titleize %></strong> (<code>#<%= @slack_channel %></code>) sent by <strong><%= @sender %></strong>.
 </p>
 
-<p><strong>Message:</strong></p>
-<pre><%= @message_text %></pre>
+<% message_lines = Array(@message_text).flatten.compact.map(&:to_s).map(&:strip).reject(&:blank?) %>
+<% if message_lines.present? %>
+  <p><strong>Message:</strong></p>
+  <div>
+    <%= simple_format(message_lines.join("\n")) %>
+  </div>
+<% end %>
 
-<% if @attachments.present? %>
+<% attachments = Array(@attachments).flatten.compact %>
+<% if attachments.present? %>
   <p><strong>Attachments:</strong></p>
   <ul>
-    <% @attachments.each do |attachment| %>
+    <% attachments.each do |raw_attachment| %>
+      <% attachment = raw_attachment.respond_to?(:with_indifferent_access) ? raw_attachment.with_indifferent_access : raw_attachment %>
+      <% attachment_hash = attachment.respond_to?(:[]) ? attachment : {} %>
+      <% title = attachment_hash[:title].presence || attachment_hash["title"].presence %>
+      <% text = attachment_hash[:text].presence || attachment_hash["text"].presence %>
+      <% url = attachment_hash[:url].presence || attachment_hash["url"].presence || attachment_hash[:title_link].presence || attachment_hash["title_link"].presence %>
       <li>
-        <pre><%= attachment %></pre>
+        <% if title.present? %>
+          <strong>
+            <% if url.present? %>
+              <%= link_to title, url, target: "_blank", rel: "noopener noreferrer" %>
+            <% else %>
+              <%= title %>
+            <% end %>
+          </strong>
+        <% elsif url.present? %>
+          <strong><%= link_to url, url, target: "_blank", rel: "noopener noreferrer" %></strong>
+        <% end %>
+        <% if text.present? %>
+          <div>
+            <%= simple_format(text) %>
+          </div>
+        <% end %>
       </li>
     <% end %>
   </ul>
 <% end %>
-
-
