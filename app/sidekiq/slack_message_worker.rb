@@ -17,7 +17,7 @@ class SlackMessageWorker
   #
   # Examples
   #
-  # SlackMessageWorker.perform_async("announcements", "Example Service", "This is an example message")
+  # NotificationService.send_notification("announcements", "Example Service", "This is an example message")
   #
   # Options supports the key 'attachments':
   # Provide an array of hashes for attachments. See for more information about how

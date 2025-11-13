@@ -17,12 +17,12 @@ describe NotificationMailer do
 
     it "sends email with correct subject format" do
       mail = NotificationMailer.slack_notification(room_name, sender, message_text)
-      expect(mail.subject).to eq("[Gumroad Notifications][Accounting] Multi-state summary report for 2025-10 is ready")
+      expect(mail.subject).to eq("[test] [Gumroad Notifications][Accounting] Multi-state summary report for 2025-10 is ready")
     end
 
-    it "sends email to configured recipient" do
+    it "sends email to configured recipient from NOTIFICATIONS_EMAIL constant" do
       mail = NotificationMailer.slack_notification(room_name, sender, message_text)
-      expect(mail.to).to eq([recipient_email])
+      expect(mail.to).to eq([NotificationMailer::NOTIFICATIONS_EMAIL])
     end
 
     it "sends email from noreply address" do
@@ -45,7 +45,7 @@ describe NotificationMailer do
     it "handles multi-line messages by using first line in subject" do
       multi_line_message = "PayPal balance needs attention\nDetails: $200,000.00 required\nAction needed"
       mail = NotificationMailer.slack_notification(room_name, sender, multi_line_message)
-      expect(mail.subject).to eq("[Gumroad Notifications][Accounting] PayPal balance needs attention")
+      expect(mail.subject).to eq("[test] [Gumroad Notifications][Accounting] PayPal balance needs attention")
     end
 
     it "includes attachments in email body" do

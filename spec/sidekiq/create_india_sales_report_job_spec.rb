@@ -121,10 +121,11 @@ describe CreateIndiaSalesReportJob do
 
     it "generates CSV report for India sales" do
       expect(s3_bucket_double).to receive(:object).and_return(@s3_object)
+      allow(NotificationService).to receive(:send_notification)
 
       described_class.new.perform(6, 2023)
 
-      expect(SlackMessageWorker).to have_enqueued_sidekiq_job("payments", "India Sales Reporting", anything, "green")
+      expect(NotificationService).to have_received(:send_notification).with("payments", "India Sales Reporting", anything, "green")
 
       temp_file = Tempfile.new("actual-file", encoding: "ascii-8bit")
       @s3_object.get(response_target: temp_file)

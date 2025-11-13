@@ -33,7 +33,7 @@ class SendPaypalTopupNotificationJob
       "No more top-up required."
     end
 
-    SlackMessageWorker.perform_async("payments",
+    NotificationService.send_notification("payments",
                                      "PayPal Top-up",
                                      notification_msg,
                                      topup_amount_cents > 0 ? "red" : "green")

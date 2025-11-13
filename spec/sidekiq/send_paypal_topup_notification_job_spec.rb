@@ -10,6 +10,7 @@ describe SendPaypalTopupNotificationJob do
 
       allow(Rails.env).to receive(:production?).and_return(true)
       allow(PaypalPayoutProcessor).to receive(:current_paypal_balance_cents).and_return(125_000_00)
+      allow(NotificationService).to receive(:send_notification)
     end
 
     it "sends a notification to slack with the required topup amount" do
@@ -21,7 +22,7 @@ describe SendPaypalTopupNotificationJob do
 
       described_class.new.perform
 
-      expect(SlackMessageWorker).to have_enqueued_sidekiq_job("payments", "PayPal Top-up", notification_msg, "red")
+      expect(NotificationService).to have_received(:send_notification).with("payments", "PayPal Top-up", notification_msg, "red")
     end
 
     it "includes details of payout amount in transit in the slack notification" do
@@ -34,7 +35,7 @@ describe SendPaypalTopupNotificationJob do
 
       described_class.new.perform
 
-      expect(SlackMessageWorker).to have_enqueued_sidekiq_job("payments", "PayPal Top-up", notification_msg, "red")
+      expect(NotificationService).to have_received(:send_notification).with("payments", "PayPal Top-up", notification_msg, "red")
     end
 
     it "sends no more topup required green notification if there's sufficient amount in PayPal" do
@@ -47,7 +48,7 @@ describe SendPaypalTopupNotificationJob do
 
       described_class.new.perform
 
-      expect(SlackMessageWorker).to have_enqueued_sidekiq_job("payments", "PayPal Top-up", notification_msg, "green")
+      expect(NotificationService).to have_received(:send_notification).with("payments", "PayPal Top-up", notification_msg, "green")
     end
   end
 end

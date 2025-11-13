@@ -44,10 +44,11 @@ describe GenerateSalesReportJob do
         expect(args[:expiry]).to eq(1.week)
         @mock_service
       end
+      allow(NotificationService).to receive(:send_notification)
 
       described_class.new.perform(country_code, start_date, end_date)
 
-      expect(SlackMessageWorker).to have_enqueued_sidekiq_job("payments", "VAT Reporting", anything, "green")
+      expect(NotificationService).to have_received(:send_notification).with("payments", "VAT Reporting", anything, "green")
     end
 
     it "creates a CSV file for sales into Australia" do
@@ -58,10 +59,11 @@ describe GenerateSalesReportJob do
         expect(args[:expiry]).to eq(1.week)
         @mock_service
       end
+      allow(NotificationService).to receive(:send_notification)
 
       described_class.new.perform("AU", start_date, end_date)
 
-      expect(SlackMessageWorker).to have_enqueued_sidekiq_job("payments", "GST Reporting", anything, "green")
+      expect(NotificationService).to have_received(:send_notification).with("payments", "GST Reporting", anything, "green")
     end
 
     it "creates a CSV file for sales into Singapore" do
@@ -72,10 +74,11 @@ describe GenerateSalesReportJob do
         expect(args[:expiry]).to eq(1.week)
         @mock_service
       end
+      allow(NotificationService).to receive(:send_notification)
 
       described_class.new.perform("SG", start_date, end_date)
 
-      expect(SlackMessageWorker).to have_enqueued_sidekiq_job("payments", "GST Reporting", anything, "green")
+      expect(NotificationService).to have_received(:send_notification).with("payments", "GST Reporting", anything, "green")
     end
 
     it "creates a CSV file for sales into the United Kingdom and does not send slack notification when send_notification is false",
@@ -90,19 +93,21 @@ describe GenerateSalesReportJob do
     it "creates a CSV file for sales into the United Kingdom and sends slack notification when send_notification is true",
        vcr: { cassette_name: "GenerateSalesReportJob/happy_case/creates_a_CSV_file_for_sales_into_the_United_Kingdom" } do
       expect(ExpiringS3FileService).to receive(:new).and_return(@mock_service)
+      allow(NotificationService).to receive(:send_notification)
 
       described_class.new.perform(country_code, start_date, end_date, true)
 
-      expect(SlackMessageWorker).to have_enqueued_sidekiq_job("payments", "VAT Reporting", anything, "green")
+      expect(NotificationService).to have_received(:send_notification).with("payments", "VAT Reporting", anything, "green")
     end
 
     it "creates a CSV file for sales into the United Kingdom and sends slack notification when send_notification is not provided (default behavior)",
        vcr: { cassette_name: "GenerateSalesReportJob/happy_case/creates_a_CSV_file_for_sales_into_the_United_Kingdom" } do
       expect(ExpiringS3FileService).to receive(:new).and_return(@mock_service)
+      allow(NotificationService).to receive(:send_notification)
 
       described_class.new.perform(country_code, start_date, end_date)
 
-      expect(SlackMessageWorker).to have_enqueued_sidekiq_job("payments", "VAT Reporting", anything, "green")
+      expect(NotificationService).to have_received(:send_notification).with("payments", "VAT Reporting", anything, "green")
     end
   end
 

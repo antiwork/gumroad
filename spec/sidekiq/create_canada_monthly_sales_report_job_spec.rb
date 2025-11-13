@@ -55,10 +55,11 @@ describe CreateCanadaMonthlySalesReportJob do
 
     it "creates a CSV file for all sales into Canada" do
       expect(s3_bucket_double).to receive(:object).ordered.and_return(@s3_object)
+      allow(NotificationService).to receive(:send_notification)
 
       described_class.new.perform(month, year)
 
-      expect(SlackMessageWorker).to have_enqueued_sidekiq_job("payments", "Canada Sales Reporting", anything, "green")
+      expect(NotificationService).to have_received(:send_notification).with("payments", "Canada Sales Reporting", anything, "green")
 
       temp_file = Tempfile.new("actual-file", encoding: "ascii-8bit")
       @s3_object.get(response_target: temp_file)

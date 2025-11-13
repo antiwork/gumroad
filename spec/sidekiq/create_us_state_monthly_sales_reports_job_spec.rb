@@ -58,10 +58,11 @@ describe CreateUsStateMonthlySalesReportsJob do
     it "creates CSV files for sales into the state of Washington" do
       expect(s3_bucket_double).to receive(:object).ordered.and_return(@s3_object)
       expect_any_instance_of(TaxjarApi).to receive(:create_order_transaction).exactly(6).times.and_call_original
+      allow(NotificationService).to receive(:send_notification)
 
       described_class.new.perform(subdivision_code, month, year)
 
-      expect(SlackMessageWorker).to have_enqueued_sidekiq_job("payments", "US Sales Tax Reporting", anything, "green")
+      expect(NotificationService).to have_received(:send_notification).with("payments", "US Sales Tax Reporting", anything, "green")
 
       temp_file = Tempfile.new("actual-file", encoding: "ascii-8bit")
       @s3_object.get(response_target: temp_file)

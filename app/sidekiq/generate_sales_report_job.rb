@@ -55,7 +55,7 @@ class GenerateSalesReportJob
 
       if send_notification
         message = "#{country.common_name} sales report (#{start_time_of_quarter.to_date} to #{end_time_of_quarter.to_date}) is ready - #{s3_signed_url}"
-        SlackMessageWorker.perform_async("payments", slack_sender(country_code), message, "green")
+        NotificationService.send_notification("payments", slack_sender(country_code), message, "green")
         update_job_status_to_completed(country_code, start_time_of_quarter, end_time_of_quarter, s3_signed_url)
       end
     ensure

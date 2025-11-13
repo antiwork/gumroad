@@ -149,10 +149,11 @@ describe GenerateFeesByCreatorLocationReportJob do
 
     it "creates a CSV file for creator fees by location" do
       expect(s3_bucket_double).to receive(:object).ordered.and_return(@s3_object)
+      allow(NotificationService).to receive(:send_notification)
 
       described_class.new.perform(month, year)
 
-      expect(SlackMessageWorker).to have_enqueued_sidekiq_job("payments", "Fee Reporting", anything, "green")
+      expect(NotificationService).to have_received(:send_notification).with("payments", "Fee Reporting", anything, "green")
 
       temp_file = Tempfile.new("actual-file", encoding: "ascii-8bit")
       @s3_object.get(response_target: temp_file)

@@ -129,10 +129,11 @@ describe CreateVatReportJob do
       expect(s3_bucket_double).to receive(:object).and_return(@s3_object)
       expect(AccountingMailer).to receive(:vat_report).with(1, 2015, anything).and_call_original
       allow_any_instance_of(described_class).to receive(:gbp_to_usd_rate_for_date).and_return(1.5)
+      allow(NotificationService).to receive(:send_notification)
 
       described_class.new.perform(1, 2015)
 
-      expect(SlackMessageWorker).to have_enqueued_sidekiq_job("payments", "VAT Reporting", anything, "green")
+      expect(NotificationService).to have_received(:send_notification).with("payments", "VAT Reporting", anything, "green")
 
       report_verification_helper
     end

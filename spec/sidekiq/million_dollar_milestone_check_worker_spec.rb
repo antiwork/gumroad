@@ -7,6 +7,10 @@ describe MillionDollarMilestoneCheckWorker do
     let(:seller) { create(:named_seller) }
     let(:product) { create(:product, user: seller) }
 
+    before do
+      allow(NotificationService).to receive(:send_notification)
+    end
+
     it "sends Slack notification if million dollar milestone is reached with no compliance info" do
       allow_any_instance_of(User).to receive(:gross_sales_cents_total_as_seller).and_return(1_000_000_00)
       allow_any_instance_of(User).to receive(:alive_user_compliance_info).and_return(nil)
@@ -18,7 +22,7 @@ describe MillionDollarMilestoneCheckWorker do
                 "• Name: #{seller.name}\n" \
                 "• Username: #{seller.username}\n" \
                 "• Email: #{seller.email}\n"
-      expect(SlackMessageWorker).to have_enqueued_sidekiq_job("awards", "Gumroad Awards", message, "hotpink")
+      expect(NotificationService).to have_received(:send_notification).with("awards", "Gumroad Awards", message, "hotpink")
     end
 
     it "sends Slack notification if million dollar milestone is reached with compliance info" do
@@ -49,7 +53,7 @@ describe MillionDollarMilestoneCheckWorker do
                 "• State: CA\n" \
                 "• ZIP code: 94105\n" \
                 "• Country: USA"
-      expect(SlackMessageWorker).to have_enqueued_sidekiq_job("awards", "Gumroad Awards", message, "hotpink")
+      expect(NotificationService).to have_received(:send_notification).with("awards", "Gumroad Awards", message, "hotpink")
     end
 
     it "does not send Slack notification if million dollar milestone is not reached" do
@@ -58,7 +62,7 @@ describe MillionDollarMilestoneCheckWorker do
 
       described_class.new.perform
 
-      expect(SlackMessageWorker).not_to have_enqueued_sidekiq_job("awards", "Gumroad Awards", anything, "hotpink")
+      expect(NotificationService).not_to have_received(:send_notification)
     end
 
     it "does not send Slack notification if million dollar milestone is reached but announcement has already been " \
@@ -69,7 +73,7 @@ describe MillionDollarMilestoneCheckWorker do
 
       described_class.new.perform
 
-      expect(SlackMessageWorker).not_to have_enqueued_sidekiq_job("awards", "Gumroad Awards", anything, "hotpink")
+      expect(NotificationService).not_to have_received(:send_notification)
     end
 
     it "does not include users who have not made a sale in the last 3 weeks" do
@@ -78,7 +82,7 @@ describe MillionDollarMilestoneCheckWorker do
 
       described_class.new.perform
 
-      expect(SlackMessageWorker).not_to have_enqueued_sidekiq_job("awards", "Gumroad Awards", anything, "hotpink")
+      expect(NotificationService).not_to have_received(:send_notification)
     end
 
     it "does not include users whose purchases are within the last 2 weeks" do
@@ -87,7 +91,7 @@ describe MillionDollarMilestoneCheckWorker do
 
       described_class.new.perform
 
-      expect(SlackMessageWorker).not_to have_enqueued_sidekiq_job("awards", "Gumroad Awards", anything, "hotpink")
+      expect(NotificationService).not_to have_received(:send_notification)
     end
 
     it "marks seller as announcement sent" do
