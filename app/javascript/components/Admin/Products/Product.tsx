@@ -16,7 +16,7 @@ import AdminProductPurchases from "$app/components/Admin/Products/Purchases";
 type ProductFile = {
   id: number;
   external_id: string;
-  s3_filename: string;
+  s3_filename: string | null;
 };
 
 export type ActiveIntegration = {
