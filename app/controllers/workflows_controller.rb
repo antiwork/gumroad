@@ -3,7 +3,7 @@
 class WorkflowsController < Sellers::BaseController
   before_action :set_workflow, only: %i[edit update destroy]
   before_action :authorize_workflow, only: %i[edit update destroy]
-  before_action :fetch_product_and_enforce_ownership, only: %i[create update], if: -> { product_or_variant_workflow? }
+  before_action :fetch_product_and_enforce_ownership, only: %i[create update], if: :product_or_variant_workflow?
 
   layout "inertia"
 
