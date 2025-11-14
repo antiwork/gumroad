@@ -10,6 +10,7 @@ class Refund < ApplicationRecord
   belongs_to :product, class_name: "Link", foreign_key: :link_id
   belongs_to :seller, class_name: "User"
   has_many :balance_transactions
+  has_many :balance_loads
   has_one :credit
 
   before_validation :assign_product, on: :create

@@ -64,6 +64,8 @@ class User < ApplicationRecord
   has_many :payments
   has_many :balances
   has_many :balance_transactions
+  has_many :balance_load_credit_cards
+  has_many :balance_loads
   has_many :credits
   has_many :credits_given, class_name: "Credit", foreign_key: :crediting_user_id
   has_many :bank_accounts

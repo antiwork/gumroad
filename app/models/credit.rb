@@ -14,6 +14,7 @@ class Credit < ApplicationRecord
   belongs_to :financing_paydown_purchase, class_name: "Purchase", optional: true
   belongs_to :fee_retention_refund, class_name: "Refund", optional: true
   belongs_to :backtax_agreement, optional: true
+  belongs_to :balance_load, optional: true
 
   has_one :balance_transaction
 
