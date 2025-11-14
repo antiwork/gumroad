@@ -67,10 +67,7 @@ const AdminUsersProductsProduct = ({ product, isAffiliateUser = false }: AdminUs
   const isCurrentUrl = url === Routes.admin_product_path(product.id);
 
   return (
-    <article
-      className="grid gap-4 rounded border border-border bg-background p-4"
-      data-product-id={product.id}
-    >
+    <article className="grid gap-4 rounded border border-border bg-background p-4" data-product-id={product.id}>
       <AdminProductHeader product={product} isCurrentUrl={isCurrentUrl} />
       <AdminProductDescription product={product} />
       <AdminProductDetails product={product} />
