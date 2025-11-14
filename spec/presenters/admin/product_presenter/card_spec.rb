@@ -35,6 +35,7 @@ describe Admin::ProductPresenter::Card do
         expect(props[:alive]).to eq(product.alive?)
         expect(props[:is_adult]).to eq(product.is_adult?)
         expect(props[:is_tiered_membership]).to eq(product.is_tiered_membership?)
+        expect(props[:comments_count]).to eq(product.comments.size)
         expect(props[:updated_at]).to eq(product.updated_at)
         expect(props[:deleted_at]).to eq(product.deleted_at)
       end
