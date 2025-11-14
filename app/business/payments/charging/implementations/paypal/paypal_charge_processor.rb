@@ -730,6 +730,184 @@ class PaypalChargeProcessor
       end
     end
 
+    # Fights a PayPal dispute by submitting evidence via the PayPal Disputes API
+    #
+    # This method implements automatic dispute evidence submission for PayPal transactions,
+    # providing parity with Stripe's dispute handling functionality. It builds comprehensive
+    # evidence from the DisputeEvidence model and submits it to PayPal.
+    #
+    # @param paypal_transaction_id [String] The PayPal transaction/capture ID
+    # @param dispute_evidence [DisputeEvidence] The evidence model containing all dispute data
+    # @param merchant_account [MerchantAccount] The merchant account for the transaction
+    # @raise [ChargeProcessorInvalidRequestError] If dispute ID not found or submission fails
+    #
+    # Evidence types supported:
+    # - PROOF_OF_FULFILLMENT: Shipping tracking information
+    # - ACCESS_ACTIVITY_LOG: Customer access logs for digital products
+    # - RETURN_POLICY: Refund policy disclosure
+    # - BILLING_AGREEMENT: Subscription/cancellation policy
+    #
+    # All evidence is also compiled into comprehensive notes with customer info,
+    # purchase details, shipping data, and rebuttal text.
+    def fight_chargeback(paypal_transaction_id, dispute_evidence, merchant_account:)
+      # Fetch the dispute to get the PayPal dispute ID
+      dispute = find_dispute_for_transaction(paypal_transaction_id)
+
+      unless dispute&.charge_processor_dispute_id.present?
+        Rails.logger.error("PayPal fight_chargeback: No dispute_id found for transaction #{paypal_transaction_id}")
+        raise ChargeProcessorInvalidRequestError.new(message: "PayPal dispute ID not found for transaction")
+      end
+
+      dispute_id = dispute.charge_processor_dispute_id
+
+      # Build evidence payload
+      evidence_data = build_paypal_evidence(dispute_evidence)
+
+      # Submit evidence to PayPal
+      paypal_rest_api = PaypalRestApi.new
+      api_response = paypal_rest_api.provide_dispute_evidence(
+        dispute_id:,
+        evidence_data:,
+        merchant_account:
+      )
+
+      self.class.log_paypal_api_response("Provide Dispute Evidence", dispute_id, api_response)
+
+      if paypal_rest_api.successful_response?(api_response)
+        Rails.logger.info("PayPal dispute #{dispute_id} evidence submitted successfully")
+      else
+        error_message = self.class.build_error_message(
+          "Failed to submit evidence for dispute #{dispute_id}",
+          api_response.result
+        )
+        Rails.logger.error("PayPal fight_chargeback failed: #{error_message}")
+        raise ChargeProcessorInvalidRequestError.new(message: error_message)
+      end
+    rescue => e
+      Rails.logger.error("PayPal fight_chargeback exception for #{paypal_transaction_id}: #{e.message}")
+      raise ChargeProcessorInvalidRequestError.new(message: e.message, original_error: e)
+    end
+
+    private
+
+    def find_dispute_for_transaction(paypal_transaction_id)
+      # Try to find dispute by purchase
+      purchase = Purchase.find_by(stripe_transaction_id: paypal_transaction_id)
+      return purchase.dispute if purchase&.dispute.present?
+
+      # Try to find by charge
+      charge = Charge.find_by(processor_transaction_id: paypal_transaction_id)
+      return charge.dispute if charge&.dispute.present?
+
+      nil
+    end
+
+    # Builds PayPal evidence payload from DisputeEvidence model
+    #
+    # Transforms Gumroad's DisputeEvidence data into PayPal's evidence format.
+    # Creates structured evidence items for specific evidence types and compiles
+    # all information into comprehensive notes.
+    #
+    # @param dispute_evidence [DisputeEvidence] The evidence data to transform
+    # @return [Hash] PayPal evidence payload with :evidences array and :notes string
+    #
+    # PayPal Evidence Structure:
+    # {
+    #   evidences: [
+    #     { evidence_type: "PROOF_OF_FULFILLMENT", evidence_info: {...} },
+    #     { evidence_type: "ACCESS_ACTIVITY_LOG", notes: "..." },
+    #     ...
+    #   ],
+    #   notes: "Comprehensive case summary with all details..."
+    # }
+    def build_paypal_evidence(dispute_evidence)
+      evidences = []
+      notes_parts = []
+
+      # Proof of fulfillment (tracking info)
+      if dispute_evidence.shipping_tracking_number.present?
+        evidences << {
+          evidence_type: "PROOF_OF_FULFILLMENT",
+          evidence_info: {
+            tracking_info: [{
+              carrier_name: (dispute_evidence.shipping_carrier&.upcase || "OTHER"),
+              tracking_number: dispute_evidence.shipping_tracking_number
+            }]
+          }
+        }
+        notes_parts << "Tracking: #{dispute_evidence.shipping_carrier} #{dispute_evidence.shipping_tracking_number}"
+      end
+
+      # Access activity log
+      if dispute_evidence.access_activity_log.present?
+        evidences << {
+          evidence_type: "ACCESS_ACTIVITY_LOG",
+          notes: dispute_evidence.access_activity_log.truncate(2000)
+        }
+      end
+
+      # Return/refund policy
+      if dispute_evidence.refund_policy_disclosure.present?
+        evidences << {
+          evidence_type: "RETURN_POLICY",
+          notes: dispute_evidence.refund_policy_disclosure.truncate(2000)
+        }
+      end
+
+      # Cancellation policy (for subscriptions)
+      if dispute_evidence.cancellation_policy_disclosure.present?
+        evidences << {
+          evidence_type: "BILLING_AGREEMENT",
+          notes: dispute_evidence.cancellation_policy_disclosure.truncate(2000)
+        }
+      end
+
+      # Build comprehensive notes
+      notes_parts << "Customer: #{dispute_evidence.customer_name} (#{dispute_evidence.customer_email})" if dispute_evidence.customer_name.present? || dispute_evidence.customer_email.present?
+      notes_parts << "Purchase IP: #{dispute_evidence.customer_purchase_ip}" if dispute_evidence.customer_purchase_ip.present?
+      notes_parts << "Product: #{dispute_evidence.product_description}" if dispute_evidence.product_description.present?
+      notes_parts << "Purchased: #{dispute_evidence.purchased_at&.strftime('%Y-%m-%d')}" if dispute_evidence.purchased_at.present?
+
+      if dispute_evidence.billing_address.present?
+        notes_parts << "Billing Address: #{dispute_evidence.billing_address}"
+      end
+
+      if dispute_evidence.shipping_address.present?
+        notes_parts << "Shipping Address: #{dispute_evidence.shipping_address}"
+        notes_parts << "Shipped: #{dispute_evidence.shipped_at&.strftime('%Y-%m-%d')}" if dispute_evidence.shipped_at.present?
+      end
+
+      # Reason for winning
+      if dispute_evidence.reason_for_winning.present?
+        notes_parts << "\n---\nThe merchant should win this dispute because:\n#{dispute_evidence.reason_for_winning}"
+      end
+
+      # Cancellation rebuttal
+      if dispute_evidence.cancellation_rebuttal.present?
+        notes_parts << "\nCancellation Rebuttal:\n#{dispute_evidence.cancellation_rebuttal}"
+      end
+
+      # Refund refusal explanation
+      if dispute_evidence.refund_refusal_explanation.present?
+        notes_parts << "\nRefund Refusal Explanation:\n#{dispute_evidence.refund_refusal_explanation}"
+      end
+
+      # Custom uncategorized text
+      if dispute_evidence.uncategorized_text.present?
+        notes_parts << "\nAdditional Information:\n#{dispute_evidence.uncategorized_text}"
+      end
+
+      # PayPal has a limit on notes field (typically 2000-4000 characters)
+      combined_notes = notes_parts.join("\n\n").truncate(4000)
+
+      {
+        evidences:,
+        notes: combined_notes
+      }
+    end
+
+    public
+
     def self.sanitize_for_paypal(string, max_length)
       string.gsub(PAYPAL_VALID_CHARACTERS_REGEX, "").to_s.strip[0...max_length]
     end

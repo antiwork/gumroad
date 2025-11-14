@@ -225,14 +225,22 @@ module Charge::Disputable
   end
 
   def eligible_for_dispute_evidence?
-    return false unless charge_processor == StripeChargeProcessor.charge_processor_id
-    return false if merchant_account&.is_a_stripe_connect_account?
-    true
+    case charge_processor
+    when StripeChargeProcessor.charge_processor_id
+      return false if merchant_account&.is_a_stripe_connect_account?
+      true
+    when PaypalChargeProcessor.charge_processor_id
+      # PayPal disputes are eligible for evidence submission
+      # We use the merchant_account to provide evidence via the PayPal API
+      true
+    else
+      false
+    end
   end
 
   def fight_chargeback
     dispute_evidence = dispute.dispute_evidence
 
-    ChargeProcessor.fight_chargeback(charge_processor, charge_processor_transaction_id, dispute_evidence)
+    ChargeProcessor.fight_chargeback(charge_processor, charge_processor_transaction_id, dispute_evidence, merchant_account: merchant_account)
   end
 end

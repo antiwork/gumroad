@@ -123,6 +123,36 @@ class PaypalRestApi
     execute_request
   end
 
+  # Fetches dispute details from PayPal Disputes API v1
+  #
+  # @param dispute_id [String] The PayPal dispute ID
+  # @param merchant_account [MerchantAccount] The merchant account for the dispute
+  # @return [OpenStruct] PayPal API response with dispute details
+  def fetch_dispute(dispute_id:, merchant_account:)
+    paypal_account_id = merchant_account.charge_processor_merchant_id
+    @request = new_request(path: "/v1/customer/disputes/#{dispute_id}", verb: "GET")
+    @request.headers["Paypal-Auth-Assertion"] = paypal_auth_assertion_header(paypal_account_id)
+    execute_request
+  end
+
+  # Submits evidence to PayPal for a dispute
+  #
+  # Uses PayPal Disputes API v1 to provide evidence for fighting a dispute.
+  # Evidence must be provided within the timeframe specified by PayPal.
+  #
+  # @param dispute_id [String] The PayPal dispute ID
+  # @param evidence_data [Hash] Evidence payload with :evidences and :notes
+  # @param merchant_account [MerchantAccount] The merchant account for the dispute
+  # @return [OpenStruct] PayPal API response
+  def provide_dispute_evidence(dispute_id:, evidence_data:, merchant_account:)
+    paypal_account_id = merchant_account.charge_processor_merchant_id
+    @request = new_request(path: "/v1/customer/disputes/#{dispute_id}/provide-evidence", verb: "POST")
+    @request.headers["Paypal-Auth-Assertion"] = paypal_auth_assertion_header(paypal_account_id)
+    @request.headers["PayPal-Request-Id"] = "provide-evidence-#{dispute_id}-#{timestamp}"
+    @request.body = evidence_data
+    execute_request
+  end
+
   def successful_response?(api_response)
     (200...300).include?(api_response.status_code)
   end
