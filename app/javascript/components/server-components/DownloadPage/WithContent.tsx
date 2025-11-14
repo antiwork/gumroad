@@ -210,6 +210,35 @@ const WithContent = ({
   const pages = content.rich_content_pages ?? [];
   const [activePageIndex, setActivePageIndex] = React.useState(0);
   const activePage = pages[activePageIndex];
+
+  // Track page views for analytics
+  React.useEffect(() => {
+    if (!activePage || !props.redirect_id) return;
+
+    const trackPageView = async () => {
+      try {
+        await request({
+          url: Routes.consumption_analytics_path(),
+          method: "POST",
+          accept: "json",
+          body: {
+            event_type: "view",
+            platform: "other",
+            url_redirect_id: props.redirect_id,
+            rich_content_id: activePage.page_id,
+            content_page_index: activePageIndex,
+            consumed_at: new Date().toISOString(),
+          },
+        });
+      } catch (e) {
+        // Silently fail - analytics shouldn't break user experience
+        // eslint-disable-next-line no-console
+        console.error("Failed to track page view:", e);
+      }
+    };
+
+    void trackPageView();
+  }, [activePageIndex, activePage?.page_id, props.redirect_id]);
   const showPageList = pages.length > 1 || (pages.length === 1 && (pages[0]?.title ?? "").trim() !== "");
   const hasPreviousPage = activePageIndex > 0;
   const hasNextPage = activePageIndex < pages.length - 1;

@@ -10,6 +10,8 @@ module CreateConsumptionEvent
       purchase_id = params[:purchase_id].present? ? ObfuscateIds.decrypt(params[:purchase_id]) : UrlRedirect.find(url_redirect_id)&.purchase_id
       product_id = Purchase.find_by(id: purchase_id)&.link_id
       consumed_at = params[:consumed_at].present? ? Time.zone.parse(params[:consumed_at]) : Time.current
+      rich_content_id = ObfuscateIds.decrypt(params[:rich_content_id]) if params[:rich_content_id].present?
+      content_page_index = params[:content_page_index].to_i if params[:content_page_index].present?
 
       ConsumptionEvent.create_event!(
         event_type: params[:event_type],
@@ -20,6 +22,8 @@ module CreateConsumptionEvent
         product_id:,
         consumed_at:,
         ip_address: request.remote_ip,
+        rich_content_id:,
+        content_page_index:
       )
       true
     end

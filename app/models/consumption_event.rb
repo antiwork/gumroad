@@ -12,7 +12,9 @@ class ConsumptionEvent < ApplicationRecord
         link_id: kwargs.fetch(:product_id, nil),
         folder_id: kwargs.fetch(:folder_id, nil),
         consumed_at: kwargs.fetch(:consumed_at, Time.current),
-        ip_address: kwargs.fetch(:ip_address)
+        ip_address: kwargs.fetch(:ip_address),
+        rich_content_id: kwargs.fetch(:rich_content_id, nil),
+        content_page_index: kwargs.fetch(:content_page_index, nil)
       )
     end
 
@@ -35,6 +37,7 @@ class ConsumptionEvent < ApplicationRecord
   end
 
   belongs_to :purchase, optional: true
+  belongs_to :rich_content, optional: true
 
   attr_json_data_accessor :folder_id
   attr_json_data_accessor :ip_address

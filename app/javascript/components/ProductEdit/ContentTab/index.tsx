@@ -66,6 +66,7 @@ import { WithTooltip } from "$app/components/WithTooltip";
 
 import { FileEmbed, FileEmbedConfig, getDownloadUrl } from "./FileEmbed";
 import { Page, PageTab, titleWithFallback } from "./PageTab";
+import { PageAnalytics } from "./PageAnalytics";
 
 declare global {
   interface Window {
@@ -127,6 +128,7 @@ const ContentTabContent = ({ selectedVariantId }: { selectedVariantId: string | 
   const [renamingPageId, setRenamingPageId] = React.useState<string | null>(null);
   const [confirmingDeletePage, setConfirmingDeletePage] = React.useState<Page | null>(null);
   const [pagesExpanded, setPagesExpanded] = React.useState(false);
+  const [analyticsExpanded, setAnalyticsExpanded] = React.useState(false);
   const showPageList =
     pages.length > 1 || selectedPage?.title || renamingPageId != null || product.native_type === "commission";
   const [insertMenuState, setInsertMenuState] = React.useState<"open" | "inputs" | null>(null);
@@ -827,6 +829,32 @@ const ContentTabContent = ({ selectedVariantId }: { selectedVariantId: string | 
                               <span className="flex-1">Add another page</span>
                             </button>
                           </PageListItem>
+                          {pages.length > 0 ? (
+                            <div className="border-t border-border">
+                              <PageListItem asChild className="tailwind-override text-left">
+                                <button onClick={() => setAnalyticsExpanded(!analyticsExpanded)}>
+                                  <Icon name="chart-line" />
+                                  <span className="flex-1 font-bold">Page Analytics</span>
+                                  <Icon name={analyticsExpanded ? "outline-cheveron-down" : "outline-cheveron-right"} />
+                                </button>
+                              </PageListItem>
+                              {analyticsExpanded ? (
+                                <div className="p-4">
+                                  <PageAnalytics
+                                    productId={id}
+                                    onPageClick={(pageIndex) => {
+                                      const targetPage = pages[pageIndex];
+                                      if (targetPage) {
+                                        setSelectedPageId(targetPage.id);
+                                        setAnalyticsExpanded(false);
+                                        if (!isDesktop) setPagesExpanded(false);
+                                      }
+                                    }}
+                                  />
+                                </div>
+                              ) : null}
+                            </div>
+                          ) : null}
                         </>
                       ) : null}
                     </>
