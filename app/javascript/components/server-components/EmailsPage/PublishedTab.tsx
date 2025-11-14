@@ -20,7 +20,7 @@ import {
   useSearchContext,
   ViewEmailButton,
 } from "$app/components/server-components/EmailsPage";
-import { Sheet } from "$app/components/ui/Sheet";
+import { Sheet, SheetHeader } from "$app/components/ui/Sheet";
 import { useDebouncedCallback } from "$app/components/useDebouncedCallback";
 import { useOnChange } from "$app/components/useOnChange";
 import { useUserAgentInfo } from "$app/components/UserAgent";
@@ -180,7 +180,8 @@ export const PublishedTab = () => {
               </Button>
             ) : null}
             {selectedInstallment ? (
-              <Sheet open onOpenChange={() => setSelectedInstallmentId(null)} title={selectedInstallment.name}>
+              <Sheet open onOpenChange={() => setSelectedInstallmentId(null)}>
+                <SheetHeader>{selectedInstallment.name}</SheetHeader>
                 <div className="stack">
                   <div>
                     <h5>Sent</h5>

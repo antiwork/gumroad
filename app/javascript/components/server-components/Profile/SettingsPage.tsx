@@ -76,7 +76,7 @@ const SettingsPage = ({ creator_profile, profile_settings, settings_pages, ...pr
     `${parseInt(hex.slice(1, 3), 16)} ${parseInt(hex.slice(3, 5), 16)} ${parseInt(hex.slice(5), 16)}`;
 
   return (
-    <SettingsLayout currentPage="profile" pages={settings_pages} onSave={handleSave} canUpdate={canUpdate} hasAside>
+    <SettingsLayout currentPage="profile" pages={settings_pages} onSave={handleSave} canUpdate={canUpdate}>
       <WithPreviewSidebar>
         <form>
           <section className="p-4! md:p-8!">

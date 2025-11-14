@@ -34,7 +34,7 @@ import { showAlert } from "$app/components/server-components/Alert";
 import { TypeSafeOptionSelect } from "$app/components/TypeSafeOptionSelect";
 import { PageHeader } from "$app/components/ui/PageHeader";
 import Placeholder from "$app/components/ui/Placeholder";
-import { Sheet } from "$app/components/ui/Sheet";
+import { Sheet, SheetHeader } from "$app/components/ui/Sheet";
 import { useDebouncedCallback } from "$app/components/useDebouncedCallback";
 import { useGlobalEventListener } from "$app/components/useGlobalEventListener";
 import { useOriginalLocation } from "$app/components/useOriginalLocation";
@@ -474,11 +474,8 @@ const DiscountsPage = ({ offer_codes, pages, products, pagination: initialPagina
           </Placeholder>
         )}
         {selectedOfferCode ? (
-          <Sheet
-            open
-            onOpenChange={() => setSelectedOfferCodeId(null)}
-            title={selectedOfferCode.name || selectedOfferCode.code.toUpperCase()}
-          >
+          <Sheet open onOpenChange={() => setSelectedOfferCodeId(null)}>
+            <SheetHeader>{selectedOfferCode.name || selectedOfferCode.code.toUpperCase()}</SheetHeader>
             <section className="stack">
               <h3>Details</h3>
               <div>

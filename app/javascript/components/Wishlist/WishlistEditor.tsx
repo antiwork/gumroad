@@ -5,7 +5,7 @@ import { assertResponseError } from "$app/utils/request";
 
 import { Icon } from "$app/components/Icons";
 import { showAlert } from "$app/components/server-components/Alert";
-import { Sheet } from "$app/components/ui/Sheet";
+import { Sheet, SheetHeader } from "$app/components/ui/Sheet";
 
 export const WishlistEditor = ({
   id,
@@ -44,7 +44,8 @@ export const WishlistEditor = ({
   };
 
   return (
-    <Sheet open onOpenChange={close} title={newName || "Untitled"}>
+    <Sheet open onOpenChange={close}>
+      <SheetHeader>{newName || "Untitled"}</SheetHeader>
       {isDiscoverable ? (
         <small className="mt-1 text-muted">
           <Icon name="solid-check-circle" /> Discoverable

@@ -54,7 +54,7 @@ import { Popover } from "$app/components/Popover";
 import { showAlert } from "$app/components/server-components/Alert";
 import { PageHeader } from "$app/components/ui/PageHeader";
 import Placeholder from "$app/components/ui/Placeholder";
-import { Sheet } from "$app/components/ui/Sheet";
+import { Sheet, SheetHeader } from "$app/components/ui/Sheet";
 import { Tabs, Tab } from "$app/components/ui/Tabs";
 import { useDebouncedCallback } from "$app/components/useDebouncedCallback";
 import { useLocalPagination } from "$app/components/useLocalPagination";
@@ -603,7 +603,8 @@ const AffiliateDetails = ({
   const navigation = useNavigation();
 
   return (
-    <Sheet open onOpenChange={onClose} title={selectedAffiliate.affiliate_user_name}>
+    <Sheet open onOpenChange={onClose}>
+      <SheetHeader>{selectedAffiliate.affiliate_user_name}</SheetHeader>
       {selectedAffiliate.products.map((product) => {
         const productStatistics = statistics?.products[product.id];
 

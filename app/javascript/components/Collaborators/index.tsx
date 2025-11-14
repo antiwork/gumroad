@@ -32,7 +32,7 @@ import { Icon } from "$app/components/Icons";
 import { useLoggedInUser } from "$app/components/LoggedInUser";
 import { showAlert } from "$app/components/server-components/Alert";
 import Placeholder from "$app/components/ui/Placeholder";
-import { Sheet } from "$app/components/ui/Sheet";
+import { Sheet, SheetHeader } from "$app/components/ui/Sheet";
 import { WithTooltip } from "$app/components/WithTooltip";
 
 import placeholder from "$assets/images/placeholders/collaborators.png";
@@ -84,7 +84,8 @@ const CollaboratorDetails = ({
   const navigation = useNavigation();
 
   return (
-    <Sheet open onOpenChange={onClose} title={selectedCollaborator.name}>
+    <Sheet open onOpenChange={onClose}>
+      <SheetHeader>{selectedCollaborator.name}</SheetHeader>
       {selectedCollaborator.setup_incomplete ? (
         <div role="alert" className="warning">
           Collaborators won't receive their cut until they set up a payout account in their Gumroad settings.

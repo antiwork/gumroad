@@ -17,7 +17,7 @@ import { LoadingSpinner } from "$app/components/LoadingSpinner";
 import { useLoggedInUser } from "$app/components/LoggedInUser";
 import { showAlert } from "$app/components/server-components/Alert";
 import Placeholder from "$app/components/ui/Placeholder";
-import { Sheet } from "$app/components/ui/Sheet";
+import { Sheet, SheetHeader } from "$app/components/ui/Sheet";
 import { WithTooltip } from "$app/components/WithTooltip";
 
 import placeholder from "$assets/images/placeholders/collaborators.png";
@@ -70,7 +70,8 @@ const IncomingCollaboratorDetails = ({
   onRemove: () => void;
   disabled: boolean;
 }) => (
-  <Sheet open onOpenChange={onClose} title={selected.seller_name}>
+  <Sheet open onOpenChange={onClose}>
+    <SheetHeader>{selected.seller_name}</SheetHeader>
     <section className="stack">
       <h3>Email</h3>
       <div>

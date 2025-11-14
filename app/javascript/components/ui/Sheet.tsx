@@ -8,10 +8,9 @@ import { Icon } from "$app/components/Icons";
 export const Sheet = ({
   children,
   className,
-  title,
   ...props
-}: { className?: string; title?: React.ReactNode } & React.ComponentProps<typeof Dialog.Root>) => (
-  <Dialog.Root {...props}>
+}: { className?: string } & React.ComponentProps<typeof Dialog.Root>) => (
+  <Dialog.Root {...props} modal={false}>
     <Dialog.Portal>
       <Dialog.Content
         className={classNames(
@@ -20,15 +19,17 @@ export const Sheet = ({
         )}
         aria-modal
       >
-        <div className="flex items-start gap-4">
-          {title ? <Dialog.Title>{title}</Dialog.Title> : null}
-          <Dialog.Close className="ml-auto" aria-label="Close">
-            <Icon name="x" />
-          </Dialog.Close>
-        </div>
         {children}
       </Dialog.Content>
-      <Dialog.Overlay className="fixed inset-0 z-30 bg-backdrop" />
     </Dialog.Portal>
   </Dialog.Root>
+);
+
+export const SheetHeader = ({ children }: { children: React.ReactNode }) => (
+  <div className="flex items-start gap-4">
+    <Dialog.Title>{children}</Dialog.Title>
+    <Dialog.Close className="ml-auto" aria-label="Close">
+      <Icon name="x" />
+    </Dialog.Close>
+  </div>
 );

@@ -24,7 +24,7 @@ import { Popover } from "$app/components/Popover";
 import { showAlert } from "$app/components/server-components/Alert";
 import { extractSortParam } from "$app/components/server-components/UtmLinksPage";
 import Placeholder from "$app/components/ui/Placeholder";
-import { Sheet } from "$app/components/ui/Sheet";
+import { Sheet, SheetHeader } from "$app/components/ui/Sheet";
 import { useDebouncedCallback } from "$app/components/useDebouncedCallback";
 import { useUserAgentInfo } from "$app/components/UserAgent";
 import { Sort, useSortingTableDriver } from "$app/components/useSortingTableDriver";
@@ -414,7 +414,8 @@ const UtmLinkDetails = ({
   const userAgentInfo = useUserAgentInfo();
 
   return (
-    <Sheet open onOpenChange={onClose} title={utmLink.title}>
+    <Sheet open onOpenChange={onClose}>
+      <SheetHeader>{utmLink.title}</SheetHeader>
       <section className="stack">
         <div>
           <h3>Details</h3>

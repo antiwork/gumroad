@@ -38,7 +38,7 @@ import { showAlert } from "$app/components/server-components/Alert";
 import { CrossSellModal, UpsellModal } from "$app/components/server-components/CheckoutPage";
 import { PageHeader } from "$app/components/ui/PageHeader";
 import Placeholder from "$app/components/ui/Placeholder";
-import { Sheet } from "$app/components/ui/Sheet";
+import { Sheet, SheetHeader } from "$app/components/ui/Sheet";
 import { useDebouncedCallback } from "$app/components/useDebouncedCallback";
 import { Sort, useSortingTableDriver } from "$app/components/useSortingTableDriver";
 
@@ -395,7 +395,8 @@ const UpsellDrawer = ({
   const loggedInUser = useLoggedInUser();
   const isReadOnly = !loggedInUser?.policies.upsell.create;
   return (
-    <Sheet open onOpenChange={onClose} title={selectedUpsell.name}>
+    <Sheet open onOpenChange={onClose}>
+      <SheetHeader>{selectedUpsell.name}</SheetHeader>
       <section className="stack">
         <h3>Details</h3>
         <div>

@@ -16,7 +16,7 @@ import { showAlert } from "$app/components/server-components/Alert";
 import { ExportSubscribersPopover } from "$app/components/server-components/FollowersPage/ExportSubscribersPopover";
 import { PageHeader } from "$app/components/ui/PageHeader";
 import Placeholder from "$app/components/ui/Placeholder";
-import { Sheet } from "$app/components/ui/Sheet";
+import { Sheet, SheetHeader } from "$app/components/ui/Sheet";
 import { Tabs, Tab } from "$app/components/ui/Tabs";
 import { useUserAgentInfo } from "$app/components/UserAgent";
 import { WithTooltip } from "$app/components/WithTooltip";
@@ -209,9 +209,9 @@ export const FollowersPage = ({ followers: initialFollowers, per_page, total }: 
               <Sheet
                 open
                 onOpenChange={() => setSelectedFollowerId(null)}
-                title="Details"
                 className={selectedFollower.can_update ? "" : "js-team-member-read-only"}
               >
+                <SheetHeader>Details</SheetHeader>
                 <div className="stack">
                   <div>
                     <div>
