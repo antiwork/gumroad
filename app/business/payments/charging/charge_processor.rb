@@ -196,8 +196,8 @@ module ChargeProcessor
   end
 
   # Public: Fights a chargeback by supplying evidence.
-  def self.fight_chargeback(charge_processor_id, charge_id, dispute_evidence)
-    get_charge_processor(charge_processor_id).fight_chargeback(charge_id, dispute_evidence)
+  def self.fight_chargeback(charge_processor_id, charge_id, dispute_evidence, merchant_account: nil)
+    get_charge_processor(charge_processor_id).fight_chargeback(charge_id, dispute_evidence, merchant_account: merchant_account)
   end
 
   # Public: Returns where the funds are held for this merchant account.
