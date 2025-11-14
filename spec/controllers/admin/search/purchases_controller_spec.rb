@@ -38,6 +38,17 @@ describe Admin::Search::PurchasesController, type: :controller, inertia: true do
       expect(response.parsed_body["pagination"]).to be_present
     end
 
+    context "when transaction_date is invalid" do
+      let(:transaction_date) { "02/22" }
+
+      it "shows error flash message and no purchases" do
+        expect_any_instance_of(AdminSearchService).to receive(:search_purchases).with(query: nil, product_title_query: nil).and_call_original
+        get :index, params: { transaction_date: "12/31" }
+
+        expect(flash[:alert]).to eq("Please enter the date using the MM/DD/YYYY format.")
+      end
+    end
+
     it "redirects to the admin purchase page when one purchase is found" do
       purchase_by_email = create(:purchase, email:)
       purchase_by_ip = create(:purchase, ip_address: ip_v4)
@@ -54,7 +65,7 @@ describe Admin::Search::PurchasesController, type: :controller, inertia: true do
       purchase_2 = create(:gift, gifter_email: email, gifter_purchase: create(:purchase)).gifter_purchase
       purchase_3 = create(:gift, giftee_email: email, giftee_purchase: create(:purchase)).giftee_purchase
 
-      expect_any_instance_of(AdminSearchService).to receive(:search_purchases).with(query: email, product_title_query: nil, purchase_status: nil).and_call_original
+      expect_any_instance_of(AdminSearchService).to receive(:search_purchases).with(query: email, product_title_query: nil).and_call_original
       get :index, params: { query: email }
 
       assert_response :success
@@ -75,7 +86,7 @@ describe Admin::Search::PurchasesController, type: :controller, inertia: true do
           # Create another purchase with same email and same product to avoid redirect
           create(:purchase, email: email, link: product)
 
-          expect_any_instance_of(AdminSearchService).to receive(:search_purchases).with(query: email, product_title_query:, purchase_status: nil).and_call_original
+          expect_any_instance_of(AdminSearchService).to receive(:search_purchases).with(query: email, product_title_query:).and_call_original
 
           get :index, params: { query: email, product_title_query: product_title_query }
 
@@ -86,7 +97,7 @@ describe Admin::Search::PurchasesController, type: :controller, inertia: true do
 
       context "when query is not set" do
         it "ignores product_title_query" do
-          expect_any_instance_of(AdminSearchService).to receive(:search_purchases).with(query: "", product_title_query:, purchase_status: nil).and_call_original
+          expect_any_instance_of(AdminSearchService).to receive(:search_purchases).with(query: "", product_title_query:).and_call_original
 
           get :index, params: { query: "", product_title_query: product_title_query }
 

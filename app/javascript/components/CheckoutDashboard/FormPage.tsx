@@ -13,11 +13,11 @@ import { Button } from "$app/components/Button";
 import { CartItem } from "$app/components/Checkout/cartState";
 import { CheckoutPreview } from "$app/components/CheckoutDashboard/CheckoutPreview";
 import { Layout, Page } from "$app/components/CheckoutDashboard/Layout";
-import { useClientAlert } from "$app/components/ClientAlertProvider";
 import { Icon } from "$app/components/Icons";
 import { useLoggedInUser } from "$app/components/LoggedInUser";
 import { WithPreviewSidebar } from "$app/components/PreviewSidebar";
 import { Select } from "$app/components/Select";
+import { showAlert } from "$app/components/server-components/Alert";
 import { Toggle } from "$app/components/Toggle";
 import { TypeSafeOptionSelect } from "$app/components/TypeSafeOptionSelect";
 
@@ -43,7 +43,6 @@ const FormPage = ({
   products,
 }: FormPageProps) => {
   const loggedInUser = useLoggedInUser();
-  const { showAlert } = useClientAlert();
 
   const cartItem = cart_item ?? PLACEHOLDER_CART_ITEM;
   const cardProduct = card_product ?? PLACEHOLDER_CARD_PRODUCT;

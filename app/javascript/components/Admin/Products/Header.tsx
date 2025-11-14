@@ -70,12 +70,12 @@ const AdminUsersProductsHeader = ({ product, isCurrentUrl }: Props) => (
       {product.alive_product_files.map((file) => (
         <a
           key={file.external_id}
-          href={Routes.admin_access_product_file_admin_product_path(product.id, file.external_id)}
+          href={Routes.admin_access_product_file_admin_product_path(product.unique_permalink, file.external_id)}
           className="button small"
           target="_blank"
           rel="noreferrer noopener"
         >
-          {file.s3_filename}
+          {file.s3_filename || file.external_id}
         </a>
       ))}
     </div>

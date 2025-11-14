@@ -66,7 +66,7 @@ namespace :admin do
   end
 
   resources :affiliates, only: [] do
-    resources :products, only: [], module: :affiliates do
+    resources :products, only: [:index], module: :affiliates do
       resources :purchases, only: :index, module: :products
     end
   end
@@ -159,7 +159,7 @@ namespace :admin do
   # Compliance
   resources :guids, only: [:show]
   scope module: "compliance" do
-    resources :cards, only: [:index] do
+    resources :cards, only: [] do
       collection do
         post :refund
       end

@@ -8,7 +8,7 @@ import { ReactSortable } from "react-sortablejs";
 import { cast } from "ts-safe-cast";
 
 import { fetchDropboxFiles, ResponseDropboxFile, uploadDropboxFile } from "$app/data/dropbox_upload";
-import { Post } from "$app/data/workflows";
+import { type Post } from "$app/types/workflow";
 import { escapeRegExp } from "$app/utils";
 import { assertDefined } from "$app/utils/assert";
 import { formatDate } from "$app/utils/date";

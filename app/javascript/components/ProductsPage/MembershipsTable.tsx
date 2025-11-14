@@ -1,3 +1,4 @@
+import { router } from "@inertiajs/react";
 import * as React from "react";
 
 import { getPagedMemberships, Membership, SortKey } from "$app/data/products";
@@ -180,7 +181,7 @@ export const ProductsPageMembershipsTable = (props: {
                     }}
                     onUnarchive={(hasRemainingArchivedProducts) => {
                       props.setEnableArchiveTab?.(hasRemainingArchivedProducts);
-                      if (!hasRemainingArchivedProducts) window.location.href = Routes.products_path();
+                      if (!hasRemainingArchivedProducts) router.get(Routes.products_path());
                       else void reloadMemberships();
                     }}
                   />
