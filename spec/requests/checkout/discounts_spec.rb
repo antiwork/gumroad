@@ -79,7 +79,6 @@ describe("Checkout discounts page", type: :system, js: true) do
         expect(page).to have_button("Duplicate")
         expect(page).to have_button("Edit")
         expect(page).to have_button("Delete")
-        click_on "Close"
       end
 
       find(:table_row, { "Discount" => "Discount 2" }).click
@@ -104,7 +103,6 @@ describe("Checkout discounts page", type: :system, js: true) do
         expect(page).to have_button("Duplicate")
         expect(page).to have_button("Edit")
         expect(page).to have_button("Delete")
-        click_on "Close"
       end
 
       find(:table_row, { "Discount" => "Discount 3" }).click
@@ -468,7 +466,6 @@ describe("Checkout discounts page", type: :system, js: true) do
       end
       expect(page).to have_section("Edit discount")
       click_on "Cancel"
-      click_on "Close"
 
       table_row.click
       within_modal "Discount 2" do
@@ -702,7 +699,6 @@ describe("Checkout discounts page", type: :system, js: true) do
 
     expect(page).to have_section("Create discount")
     click_on "Cancel"
-    click_on "Close"
 
     table_row.click
     within_modal "Discount 1" do

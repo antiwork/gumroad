@@ -212,7 +212,6 @@ describe "Affiliates", type: :system, js: true do
 
       expect(page).to have_link("Edit")
       expect(page).to have_button("Delete")
-      click_on "Close"
     end
 
     find(:table_row, { "Name" => affiliate_user2.name, "Product" => product.name }).click
@@ -226,7 +225,6 @@ describe "Affiliates", type: :system, js: true do
 
       expect(page).to have_link("Edit")
       expect(page).to have_button("Delete")
-      click_on "Close"
     end
 
     find(:table_row, { "Name" => affiliate_user3.name, "Product" => product.name }).click

@@ -810,7 +810,7 @@ describe "Sales page", type: :system, js: true do
 
         click_on "Close"
 
-        expect(page).to_not have_selector("aside")
+        expect(page).to_not have_modal
 
         find(:table_row, { "Product" => "BundleBundle" }).click
         expect(page).to have_modal "Bundle"
@@ -1065,7 +1065,6 @@ describe "Sales page", type: :system, js: true do
           visit customers_path
           find(:table_row, { "Name" => "Customer 1" }).click
           expect(page).to_not have_button("Resend ping")
-          click_on "Close"
 
           find(:table_row, { "Name" => "Customer 2" }).click
           expect(page).to_not have_button("Resend ping")
@@ -1513,7 +1512,6 @@ describe "Sales page", type: :system, js: true do
         row.click
         within_modal "Product 1" do
           expect(page).to_not have_section("Refund")
-          click_on "Close"
         end
         find(:table_row, { "Name" => "Customer 2" }).click
         within_modal "Membership" do

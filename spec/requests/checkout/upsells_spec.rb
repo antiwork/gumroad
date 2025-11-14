@@ -64,7 +64,6 @@ describe("Checkout upsells page", type: :system, js: true) do
         expect(page).to have_button("Edit")
         expect(page).to have_button("Duplicate")
         expect(page).to have_button("Delete")
-        click_on "Close"
       end
 
       upsell2_row = find(:table_row, { "Upsell" => "Upsell 2", "Revenue" => "$25", "Uses" => "5" })
@@ -95,7 +94,6 @@ describe("Checkout upsells page", type: :system, js: true) do
         expect(page).to have_button("Edit")
         expect(page).to have_button("Duplicate")
         expect(page).to have_button("Delete")
-        click_on "Close"
       end
 
       universal_upsell_row = find(:table_row, { "Upsell" => "Universal Upsell" })
@@ -615,7 +613,6 @@ describe("Checkout upsells page", type: :system, js: true) do
         expect(page).to have_text("Status Live", normalize_ws: true)
       end
       click_on "Pause upsell"
-      click_on "Close"
     end
 
     expect(page).to have_alert(text: "Upsell paused and will not appear at checkout.")
@@ -641,7 +638,6 @@ describe("Checkout upsells page", type: :system, js: true) do
         expect(page).to have_text("Status Paused", normalize_ws: true)
       end
       click_on "Resume upsell"
-      click_on "Close"
     end
 
     expect(page).to have_alert(text: "Upsell resumed and will appear at checkout.")
