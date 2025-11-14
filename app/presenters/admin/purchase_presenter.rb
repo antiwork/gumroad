@@ -53,7 +53,7 @@ class Admin::PurchasePresenter
                          holder_of_funds: purchase.merchant_account.holder_of_funds.capitalize,
                        } : nil,
                        fee_cents: purchase.fee_cents,
-                       tip: purchase.tip,
+                       tip: purchase.tip&.value_usd_cents,
                        formatted_seller_tax_amount: purchase.tax_cents > 0 ? purchase.formatted_seller_tax_amount : nil,
                        gumroad_tax_cents: purchase.gumroad_tax_cents,
                        formatted_shipping_amount: purchase.shipping_cents > 0 ? purchase.formatted_shipping_amount : nil,

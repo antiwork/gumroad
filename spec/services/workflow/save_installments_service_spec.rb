@@ -112,7 +112,7 @@ describe Workflow::SaveInstallmentsService do
           success, error = service.process
 
           expect(success).to be(false)
-          expect(error).to eq("An abandoned cart workflow can only have one email.")
+          expect(error.full_messages.first).to eq("An abandoned cart workflow can only have one email.")
         end.to_not change { workflow.installments.alive.count }
       end
 
@@ -124,7 +124,7 @@ describe Workflow::SaveInstallmentsService do
           success, error = service.process
 
           expect(success).to be(false)
-          expect(error).to eq("An abandoned cart workflow can only have one email.")
+          expect(error.full_messages.first).to eq("An abandoned cart workflow can only have one email.")
         end.to_not change { workflow.installments.alive.count }
       end
 
@@ -335,9 +335,11 @@ describe Workflow::SaveInstallmentsService do
       params[:installments] = [default_installment_params.merge(id: SecureRandom.uuid, message: "")]
       service = described_class.new(seller:, params:, workflow:, preview_email_recipient:)
       expect do
-        expect(service.process).to eq([false, "Please include a message as part of the update."])
+        success, errors = service.process
+        expect(success).to be(false)
+        expect(errors.full_messages.first).to eq("Please include a message as part of the update.")
       end.to_not change { workflow.installments.alive.count }
-      expect(service.error).to eq("Please include a message as part of the update.")
+      expect(service.errors.full_messages.first).to eq("Please include a message as part of the update.")
     end
 
     it "does not save installments while publishing if the seller's email is not confirmed" do
@@ -351,7 +353,9 @@ describe Workflow::SaveInstallmentsService do
 
       service = described_class.new(seller:, params:, workflow:, preview_email_recipient:)
       expect do
-        expect(service.process).to eq([false, "You have to confirm your email address before you can do that."])
+        success, errors = service.process
+        expect(success).to be(false)
+        expect(errors.full_messages.first).to eq("You have to confirm your email address before you can do that.")
       end.not_to change { workflow.reload.published_at }
       expect(workflow.installments.alive.sole.id).to eq(installment.id)
       expect(installment.reload.name).to eq("Installment 1")
@@ -394,7 +398,7 @@ describe Workflow::SaveInstallmentsService do
         service = described_class.new(seller:, params:, workflow:, preview_email_recipient:)
 
         expect { service.process }.to_not change { installment.reload.name }
-        expect(service.error).to eq("You have to confirm your email address before you can do that.")
+        expect(service.errors.full_messages.first).to eq("You have to confirm your email address before you can do that.")
       end
 
       it "does not send preview email if send_preview_email is false" do

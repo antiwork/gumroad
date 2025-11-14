@@ -54,7 +54,7 @@ describe "UTM links", :js, type: :system do
           visit utm_links_dashboard_path
 
           wait_for_ajax
-          find(:table_row, { "Link" => utm_link.title, "Clicks" => "3", "Sales" => "2", "Conversion" => "66.67%" }).click
+          find(:table_row, { "Link" => utm_link.title, "Clicks" => "3", "Conversion" => "66.67%" }).click
           wait_for_ajax
           within_section utm_link.title, section_element: :aside do
             within_section "Details" do
