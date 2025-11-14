@@ -38,8 +38,8 @@ export const Chart = ({
         className: "-translate-y-full",
       }}
     >
-      <ResponsiveContainer aspect={aspect ?? 1092 / 450} maxHeight={650} data-testid="chart" ref={containerRef}>
-        <ComposedChart margin={{ top: 32, right: 0, bottom: 16, left: 0 }} {...props} />
+      <ResponsiveContainer aspect={aspect ?? 1092 / 450} maxHeight={650} ref={containerRef}>
+        <ComposedChart margin={{ top: 32, right: 0, bottom: 16, left: 0 }} data-testid="chart" {...props} />
       </ResponsiveContainer>
     </WithTooltip>
   </section>
