@@ -453,6 +453,8 @@ Rails.application.routes.draw do
           post :disconnect
         end
       end
+      resources :balance_load_cards, only: %i[index create update destroy]
+      end
       resource :team, only: %i[show], controller: "team"
       namespace :team do
         scope format: true, constraints: { format: :json } do

@@ -45,8 +45,37 @@ class Purchase
 
         amount_cents_to_refund = amount_cents.presence || amount_refundable_cents
         if amount_cents_to_refund > seller.unpaid_balance_cents && charged_using_gumroad_merchant_account?
-          errors.add :base, "Your balance is insufficient to process this refund."
-          return false
+          # Attempt to load balance via credit card if available
+          shortfall_cents = amount_cents_to_refund - seller.unpaid_balance_cents
+
+          if seller.balance_load_credit_cards.active.default_card.exists?
+            begin
+              logger.info("Purchase #{id}: Attempting to load $#{shortfall_cents / 100.0} to cover refund")
+              balance_load = BalanceLoading::ChargeService.new(
+                user: seller,
+                amount_cents: shortfall_cents,
+                refund: nil # Will be set after refund is created
+              ).charge!
+
+              # Wait for charge to complete (with timeout)
+              wait_for_balance_load(balance_load, timeout: 30.seconds)
+
+              unless balance_load.succeeded?
+                error_msg = balance_load.error_message || "Balance load failed"
+                errors.add :base, "Could not load balance to cover refund: #{error_msg}. Please check your refund payment method."
+                return false
+              end
+
+              logger.info("Purchase #{id}: Successfully loaded $#{shortfall_cents / 100.0} via BalanceLoad #{balance_load.id}")
+            rescue => e
+              logger.error("Purchase #{id}: Balance load failed: #{e.message}")
+              errors.add :base, "Could not load balance: #{e.message}"
+              return false
+            end
+          else
+            errors.add :base, "Your balance is insufficient to process this refund ($#{seller.unpaid_balance_cents / 100.0} available, $#{amount_cents_to_refund / 100.0} needed). Please add a refund payment method in Settings."
+            return false
+          end
         end
       end
 
@@ -389,5 +418,17 @@ class Purchase
       Credit.create_for_partial_refund_transfer_reversal!(amount_cents_usd: -reversal_amount_cents_usd,
                                                           amount_cents_holding_currency: -destination_balance_transaction.net.abs,
                                                           merchant_account: refund.purchase.merchant_account)
+    end
+
+    def wait_for_balance_load(balance_load, timeout: 30.seconds)
+      start_time = Time.current
+      while balance_load.pending? && (Time.current - start_time) < timeout
+        sleep 0.5
+        balance_load.reload
+      end
+
+      if balance_load.pending?
+        logger.warn("BalanceLoad #{balance_load.id} timed out after #{timeout} seconds")
+      end
     end
 end
