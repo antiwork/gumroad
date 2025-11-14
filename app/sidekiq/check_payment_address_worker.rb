@@ -8,10 +8,7 @@ class CheckPaymentAddressWorker
     user = User.find_by(id: user_id)
     return if !user.can_flag_for_fraud? || user.payment_address.blank?
 
-    banned_accounts_with_same_payment_address = User.where(
-      payment_address: user.payment_address,
-      user_risk_state: ["suspended_for_tos_violation", "suspended_for_fraud"]
-    )
+    banned_accounts_with_same_payment_address = User.suspended.where(payment_address: user.payment_address)
 
     blocked_email = BlockedObject.find_active_object(user.payment_address)
 

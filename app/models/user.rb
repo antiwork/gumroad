@@ -136,6 +136,7 @@ class User < ApplicationRecord
   scope :compliant, -> { where(user_risk_state: "compliant") }
   scope :payment_reminder_risk_state, -> { where("user_risk_state in (?)", PAYMENT_REMINDER_RISK_STATES) }
   scope :not_suspended, -> { without_user_risk_state(:suspended_for_fraud, :suspended_for_tos_violation) }
+  scope :suspended, -> { with_user_risk_state(:suspended_for_fraud, :suspended_for_tos_violation) }
   scope :created_between, ->(range) { where(created_at: range) if range }
   scope :holding_balance_more_than, lambda { |cents|
     joins(:balances).merge(Balance.unpaid).group("balances.user_id").having("SUM(balances.amount_cents) > ?", cents)

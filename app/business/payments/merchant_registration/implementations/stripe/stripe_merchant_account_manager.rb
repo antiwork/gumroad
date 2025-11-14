@@ -253,6 +253,7 @@ module StripeMerchantAccountManager
     Stripe::Account.update(stripe_account.id, attributes)
 
     save_stripe_bank_account_info(bank_account, stripe_account.refresh)
+    FlagForFraudStripeFingerprintWorker.perform_async(user.id)
   rescue Stripe::InvalidRequestError => e
     return ContactingCreatorMailer.invalid_bank_account(user.id).deliver_later(queue: "critical") if e.message["Invalid account number"] ||
                                                                             e.message["couldn't find that transit"] || e.message["previous attempts to deliver payouts"]

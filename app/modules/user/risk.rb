@@ -15,6 +15,7 @@ module User::Risk
   PROBATION_REVIEW_DAYS = 2
   MAX_REFUND_QUEUE_SIZE = 100000
   MAX_CHARGEBACK_RATE_ALLOWED_FOR_PAYOUTS = 3.0
+  ENABLE_SELLER_ACCOUNTS_AUTHOR_NAME = "enable_sellers_other_accounts"
 
   def self.contact_iffy_risk_analysis(iffy_request_parameters)
     return nil unless Rails.env.production?
@@ -123,7 +124,12 @@ module User::Risk
   def suspend_sellers_other_accounts(transition)
     return if transition.args.first&.dig(:skip_transition) == __method__
 
-    SuspendAccountsWithPaymentAddressWorker.perform_in(5.seconds, id)
+    case current_payout_processor
+    when PayoutProcessorType::PAYPAL
+      SuspendAccountsWithPaymentAddressWorker.perform_in(5.seconds, id)
+    when PayoutProcessorType::STRIPE
+      SuspendAccountsWithStripeFingerprintWorker.perform_in(5.seconds, id)
+    end
   end
 
   def block_seller_ip!
@@ -133,10 +139,13 @@ module User::Risk
   def enable_sellers_other_accounts(transition)
     return if transition.args.first&.dig(:skip_transition) == __method__
 
-    return if payment_address.blank?
-
-    User.where(payment_address:).where.not(id:).each do |user|
-      user.mark_compliant!(author_name: "enable_sellers_other_accounts", content: "Marked compliant automatically on #{Time.current.to_fs(:formatted_date_full_month)} as payment address #{payment_address} is now unblocked (from User##{id})", skip_transition: :enable_sellers_other_accounts)
+    case current_payout_processor
+    when PayoutProcessorType::PAYPAL
+      User.where(payment_address:).where.not(id:).each do |user|
+        user.mark_compliant!(author_name: ENABLE_SELLER_ACCOUNTS_AUTHOR_NAME, content: "Marked compliant automatically on #{Time.current.to_fs(:formatted_date_full_month)} as payment address #{payment_address} is now unblocked (from User##{id})", skip_transition: :enable_sellers_other_accounts)
+      end
+    when PayoutProcessorType::STRIPE
+      MarkAccountsCompliantWithStripeFingerprintWorker.perform_async(id)
     end
   end
 
