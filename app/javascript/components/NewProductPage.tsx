@@ -1,4 +1,3 @@
-import { Link } from "@inertiajs/react";
 import cx from "classnames";
 import hands from "images/illustrations/hands.png";
 import * as React from "react";
@@ -222,12 +221,10 @@ const NewProductPage = ({
         title={show_orientation_text ? "Publish your first product" : "What are you creating?"}
         actions={
           <>
-            <Link href={Routes.products_path()} className="no-underline">
-              <NavigationButton>
-                <Icon name="x-square" />
-                <span>Cancel</span>
-              </NavigationButton>
-            </Link>
+            <NavigationButton href={Routes.products_path()}>
+              <Icon name="x-square" />
+              <span>Cancel</span>
+            </NavigationButton>
             {ai_generation_enabled ? (
               <Popover
                 open={aiPopoverOpen}
