@@ -83,21 +83,26 @@ namespace :admin do
       get :access_product_file
       post :flag_seller_for_tos_violation
       get :generate_url_redirect
-      post :is_adult
-      post :publish
-      post :unpublish
       get :join_discord
       get :join_discord_redirect
     end
   end
 
-  resources :products, controller: "links", only: [:show, :destroy] do
+  resources :products, only: [:show, :destroy] do
+    member do
+      post :restore
+      post :publish
+      delete :unpublish
+      post :is_adult
+    end
+  end
+
+  resources :products, controller: "links", only: [] do
     member do
       get "/file/:product_file_id/access", to: "links#access_product_file", as: :admin_access_product_file
       get :legacy_purchases
       get :views_count
       get :sales_stats
-      post :restore
     end
     scope module: :products do
       concerns :commentable

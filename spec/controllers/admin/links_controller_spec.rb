@@ -75,52 +75,62 @@ describe Admin::LinksController, type: :controller, inertia: true do
   end
 
   describe "GET show" do
-    it "shows a Product page" do
-      product = create(:product)
-      installment = create(:product_installment, link: product)
-      create(:product_file, installment_id: installment.id)
-
-      get :show, params: { id: product.unique_permalink }
-
-      expect(response).to be_successful
-      expect(inertia.component).to eq("Admin/Products/Show")
-    end
-
-    it "redirects to a unique permalink URL if looked up via ID" do
+    it "redirects to a product page if looked up via ID" do
       product = create(:product)
 
       get :show, params: { id: product.id }
 
-      expect(response).to redirect_to(admin_product_path(product.unique_permalink))
+      expect(response).to redirect_to(admin_product_path(product.id))
     end
 
-    it "redirects to a unique permalink URL if looked up via custom permalink" do
+    it "redirects to a product page if looked up via unique permalink" do
+      product = create(:product)
+
+      get :show, params: { id: product.unique_permalink }
+
+      expect(response).to redirect_to(admin_product_path(product.id))
+    end
+
+    it "redirects to a product page if looked up via custom permalink" do
       product = create(:product, unique_permalink: "a", custom_permalink: "custom")
 
-      get :show, params: { id: "custom" }
+      get :show, params: { id: product.custom_permalink }
 
-      expect(response).to redirect_to(admin_product_path(product.unique_permalink))
+      expect(response).to redirect_to(admin_product_path(product.id))
     end
 
-    it "does not redirect for unique_permalink == custom_permalink" do
-      product = create(:product, unique_permalink: "Cat", custom_permalink: "Cat")
+    describe "multiple matches by permalink" do
+      context "when multiple products matched by permalink" do
+        it "lists all matches" do
+          product_1 = create(:product, unique_permalink: "a", custom_permalink: "match")
+          product_2 = create(:product, unique_permalink: "b", custom_permalink: "match")
+          create(:product, unique_permalink: "c", custom_permalink: "should-not-match")
 
-      get :show, params: { id: "Cat" }
+          get :show, params: { id: "match" }
 
-      expect(assigns(:product)).to eq(product)
-      expect(response).to be_successful
-    end
+          expect(response).to be_successful
+          expect(inertia.component).to eq("Admin/Products/MultipleMatches")
+          expect(inertia.props[:product_matches]).to contain_exactly(hash_including(id: product_1.id), hash_including(id: product_2.id))
+        end
+      end
 
-    it "lists all matches if multiple products matched by permalink" do
-      product_1 = create(:product, unique_permalink: "a", custom_permalink: "match")
-      product_2 = create(:product, unique_permalink: "b", custom_permalink: "match")
-      create(:product, unique_permalink: "c", custom_permalink: "should-not-match")
+      context "when only one product matched by permalink" do
+        it "redirects to the product page" do
+          product = create(:product, unique_permalink: "a", custom_permalink: "match")
 
-      get :show, params: { id: "match" }
+          get :show, params: { id: "match" }
 
-      expect(response).to be_successful
-      expect(inertia.component).to eq("Admin/Products/MultipleMatches")
-      expect(inertia.props[:product_matches].map { _1[:id] }).to match_array([product_1.id, product_2.id])
+          expect(response).to redirect_to(admin_product_path(product.id))
+        end
+      end
+
+      context "when no products matched by permalink" do
+        it "raises a 404" do
+          expect do
+            get :show, params: { id: "match" }
+          end.to raise_error(ActionController::RoutingError, "Not Found")
+        end
+      end
     end
   end
 end

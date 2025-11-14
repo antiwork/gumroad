@@ -4,7 +4,7 @@ import React from "react";
 import { formatPriceCentsWithCurrencySymbol } from "$app/utils/currency";
 
 import AdminActionButton from "$app/components/Admin/ActionButton";
-import Comments from "$app/components/Admin/Commentable";
+import AdminCommentableComments from "$app/components/Admin/Commentable";
 import DateTimeWithRelativeTooltip from "$app/components/Admin/DateTimeWithRelativeTooltip";
 import { Form } from "$app/components/Admin/Form";
 import { NoIcon, BooleanIcon } from "$app/components/Admin/Icons";
@@ -678,7 +678,7 @@ const AdminPurchase = ({ purchase }: { purchase: Purchase }) => (
     ) : null}
     <hr />
     <ActionButtons purchase={purchase} />
-    <Comments
+    <AdminCommentableComments
       count={purchase.comments_count}
       endpoint={Routes.admin_purchase_comments_path(purchase.id)}
       commentableType="purchase"

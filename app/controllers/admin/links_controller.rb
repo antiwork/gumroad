@@ -35,42 +35,6 @@ class Admin::LinksController < Admin::BaseController
     redirect_to url_redirect.signed_location_for_file(product_file), allow_other_host: true
   end
 
-  def is_adult
-    @product.is_adult = params[:is_adult]
-    @product.save!
-
-    render json: { success: true }
-  end
-
-  def publish
-    begin
-      @product.publish!
-    rescue Link::LinkInvalid, WithProductFilesInvalid
-      return render json: { success: false, error_message: @product.errors.full_messages.join(", ") }
-    rescue => e
-      Bugsnag.notify(e)
-      return render json: { success: false, error_message: I18n.t(:error_500) }
-    end
-
-    render json: { success: true }
-  end
-
-  def unpublish
-    @product.unpublish!
-
-    render json: { success: true }
-  end
-
-  def destroy
-    @product.delete!
-
-    render json: { success: true }
-  end
-
-  def restore
-    render json: { success: @product.update_attribute(:deleted_at, nil) }
-  end
-
   def legacy_purchases
     product_id = params[:id].to_i
     product = Link.find_by(id: product_id)
@@ -174,22 +138,20 @@ class Admin::LinksController < Admin::BaseController
   private
     def fetch_product_by_general_permalink
       @product = Link.find_by(id: params[:id])
-      return redirect_to admin_product_path(@product.unique_permalink) if @product
+      return redirect_to admin_product_path(@product.id) if @product
 
       @product_matches = Link.by_general_permalink(params["id"])
 
-      if @product_matches.size > 1
+      if @product_matches.many?
         @title = "Multiple products matched"
         render inertia: "Admin/Products/MultipleMatches", legacy_template: "admin/links/multiple_matches", props: {
           product_matches: @product_matches.map { |product| Admin::ProductPresenter::MultipleMatches.new(product:).props }
         }
-        return
+        nil
+      elsif @product_matches.one?
+        redirect_to admin_product_path(@product_matches.first.id)
       else
-        @product = @product_matches.first || e404
-      end
-
-      if @product && @product.unique_permalink != params["id"]
-        redirect_to admin_product_path(@product.unique_permalink)
+        e404
       end
     end
 
