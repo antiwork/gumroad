@@ -8,7 +8,6 @@ import { asyncVoid } from "$app/utils/promise";
 import { assertResponseError, request } from "$app/utils/request";
 
 import { Button, NavigationButton } from "$app/components/Button";
-import { PageListLayout } from "$app/components/Download/PageListLayout";
 import { Icon } from "$app/components/Icons";
 import { useLoggedInUser } from "$app/components/LoggedInUser";
 import { Modal } from "$app/components/Modal";
@@ -249,7 +248,7 @@ export const Layout = ({
               {children}
               {!isDesktop ? settings : null}
             </div>
-          </PageListLayout>
+          </div>
         ) : (
           <div className="flex flex-col gap-4 flex-1 p-4 md:p-8">{children}</div>
         )}
