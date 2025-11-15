@@ -147,7 +147,7 @@ const Header = ({ purchase }: { purchase: Purchase }) => (
 );
 
 const Info = ({ purchase }: { purchase: Purchase }) => (
-  <div className="paragraphs">
+  <div className="flex flex-col gap-4">
     <h3>Info</h3>
     <dl>
       {purchase.seller.support_email ? (
@@ -497,7 +497,7 @@ const GiftInfo = ({ purchaseId, gift }: { purchaseId: number; gift: Gift }) =>
           onSuccess={() => showAlert("Successfully updated the giftee email.", "success")}
         >
           {(isLoading) => (
-            <div className="input-with-button">
+            <div className="grid grid-flow-col gap-3 grid-cols-[1fr] auto-cols-max items-center">
               <input type="text" name="giftee_email" placeholder="Enter new giftee email" required />
               <button type="submit" className="button" disabled={isLoading}>
                 {isLoading ? "Updating..." : "Update"}
@@ -528,7 +528,7 @@ const GiftInfo = ({ purchaseId, gift }: { purchaseId: number; gift: Gift }) =>
   );
 
 const ActionButtons = ({ purchase }: { purchase: Purchase }) => (
-  <div className="button-group">
+  <div className="flex flex-wrap gap-2">
     {purchase.can_force_update || purchase.failed ? (
       <AdminActionButton
         label="Sync with Stripe/PayPal"

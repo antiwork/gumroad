@@ -27,7 +27,7 @@ const AdminUserCustomFee = ({ user }: AdminUserCustomFeeProps) => {
         >
           {(isLoading) => (
             <fieldset>
-              <div className="input-with-button" style={{ alignItems: "start" }}>
+              <div className="grid grid-flow-col gap-3 grid-cols-[1fr] auto-cols-max items-start">
                 <input
                   name="custom_fee_percent"
                   type="number"

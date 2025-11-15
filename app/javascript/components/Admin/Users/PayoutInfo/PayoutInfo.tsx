@@ -57,7 +57,7 @@ const PayoutInfo = ({ user_id, payoutInfo, isLoading }: PayoutInfoComponentProps
   } = payoutInfo;
 
   return (
-    <div className="paragraphs">
+    <div className="flex flex-col gap-4">
       <Header active_bank_account={active_bank_account} payment_address={payment_address} />
       <hr />
       <AdminTogglePayoutsForm

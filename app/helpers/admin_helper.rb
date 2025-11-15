@@ -72,7 +72,7 @@ module AdminHelper
 
     return if email_blocked_content.blank? && email_domain_blocked_content.blank?
 
-    content = tag.div(class: "paragraphs") do
+    content = tag.div(class: "flex flex-col gap-4") do
       concat tag.span(email_blocked_content) if email_blocked_content
       concat tag.span(email_domain_blocked_content) if email_domain_blocked_content
     end.html_safe

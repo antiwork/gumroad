@@ -49,7 +49,7 @@ const AdminUsersProducts = ({ isAffiliateUser = false }: Props) => {
   const onChangePage = (page: number) => router.reload({ data: { page }, only: ["products", "pagination"] });
 
   return (
-    <div className="paragraphs">
+    <div className="flex flex-col gap-4">
       <AdminUserAndProductsTabs selectedTab="products" userId={user.id} isAffiliateUser={isAffiliateUser} />
       <AdminUsersProductsContent products={products} isAffiliateUser={isAffiliateUser} pagination={pagination} />
       {pagination.pages > 1 && <Pagination pagination={pagination} onChangePage={onChangePage} />}

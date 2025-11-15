@@ -64,7 +64,7 @@ const AdminCommentableForm = ({ endpoint, onCommentAdded, commentableType }: Adm
     <form onSubmit={(e) => void onSubmit(e)}>
       <input type="hidden" name="authenticity_token" value={authenticity_token} />
       <fieldset>
-        <div className="input-with-button">
+        <div className="grid grid-flow-col gap-3 grid-cols-[1fr] auto-cols-max items-center">
           <textarea
             name="comment[content]"
             rows={1}

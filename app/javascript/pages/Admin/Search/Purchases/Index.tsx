@@ -42,7 +42,7 @@ export default function Purchases() {
   });
 
   return (
-    <div className="paragraphs">
+    <div className="flex flex-col gap-4">
       {purchases.length > 0 ? (
         <>
           <form
@@ -50,7 +50,7 @@ export default function Purchases() {
               e.preventDefault();
               get(Routes.admin_search_purchases_path());
             }}
-            className="input-with-button"
+            className="grid grid-flow-col gap-3 grid-cols-[1fr] auto-cols-max items-center"
           >
             <input
               name="product_title_query"

@@ -17,7 +17,7 @@ export const AdminResendReceiptForm = ({ purchase_id, email }: AdminResendReceip
   >
     {(isLoading) => (
       <fieldset>
-        <div className="input-with-button">
+        <div className="grid grid-flow-col gap-3 grid-cols-[1fr] auto-cols-max items-center">
           <input type="email" name="resend_receipt[email_address]" placeholder={email} />
           <button type="submit" className="button" disabled={isLoading}>
             {isLoading ? "Sending..." : "Send"}

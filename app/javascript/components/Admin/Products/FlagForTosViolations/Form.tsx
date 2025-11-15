@@ -33,7 +33,7 @@ export const AdminSuspendForTosForm = ({
       method="POST"
       confirmMessage={confirm_message}
       onSuccess={onFormSuccess}
-      className="input-with-button"
+      className="grid grid-flow-col gap-3 grid-cols-[1fr] auto-cols-max items-center"
     >
       {(isLoading) => (
         <>

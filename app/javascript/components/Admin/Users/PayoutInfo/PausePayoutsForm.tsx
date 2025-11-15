@@ -21,7 +21,7 @@ const AdminPausePayoutsForm = ({ user_id, onSuccess }: { user_id: number; onSucc
     >
       {(isLoading) => (
         <fieldset>
-          <div className="input-with-button !items-end">
+          <div className="grid grid-flow-col gap-3 grid-cols-[1fr] auto-cols-max items-end">
             <div className="grid gap-2">
               <textarea
                 name="pause_payouts[reason]"
