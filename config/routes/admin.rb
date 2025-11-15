@@ -98,6 +98,7 @@ namespace :admin do
       get :views_count
       get :sales_stats
       post :restore
+      post :mass_refund_for_fraud
     end
     scope module: :products do
       concerns :commentable

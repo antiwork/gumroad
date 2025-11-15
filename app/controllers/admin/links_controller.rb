@@ -71,6 +71,50 @@ class Admin::LinksController < Admin::BaseController
     render json: { success: @product.update_attribute(:deleted_at, nil) }
   end
 
+  def mass_refund_for_fraud
+    purchase_ids = params[:purchase_ids] || []
+    return render json: { success: false, message: "No purchases selected" } if purchase_ids.empty?
+
+    purchases = Purchase.where(id: purchase_ids, link_id: @product.id)
+    return render json: { success: false, message: "No valid purchases found" } if purchases.empty?
+
+    refunded_count = 0
+    blocked_count = 0
+    errors = []
+
+    purchases.each do |purchase|
+      begin
+        if purchase.purchase_state == "failed"
+          purchase.block_buyer!(blocking_user_id: current_user.id)
+          blocked_count += 1
+        else
+          purchase.refund_for_fraud_and_block_buyer!(current_user.id)
+          refunded_count += 1
+        end
+      rescue => e
+        errors << "Purchase #{purchase.id}: #{e.message}"
+      end
+    end
+
+    processed_count = refunded_count + blocked_count
+    if processed_count > 0
+      message_parts = []
+      message_parts << "Refunded #{refunded_count} purchase(s)" if refunded_count > 0
+      message_parts << "Blocked buyer for #{blocked_count} failed purchase(s)" if blocked_count > 0
+      message = message_parts.join(" and ")
+      message += " with some errors: #{errors.join('; ')}" if errors.any?
+
+      render json: {
+        success: true,
+        refunded_count:,
+        blocked_count:,
+        message:,
+      }
+    else
+      render json: { success: false, message: "Failed to process purchases: #{errors.join('; ')}" }
+    end
+  end
+
   def legacy_purchases
     product_id = params[:id].to_i
     product = Link.find_by(id: product_id)
