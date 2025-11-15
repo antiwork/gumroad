@@ -36,6 +36,13 @@ describe User::Compliance do
       expect(venezuela_user.native_payouts_supported?).to be false
     end
 
+    it "returns false for Kazakhstan (PayPal-only country)" do
+      kazakhstan_user = create(:user)
+      create(:user_compliance_info_empty, user: kazakhstan_user, country: "Kazakhstan")
+
+      expect(kazakhstan_user.native_payouts_supported?).to be false
+    end
+
     it "accepts country_code as optional argument" do
       jordan_user = create(:user)
       create(:user_compliance_info_empty, user: jordan_user, country: "Jordan")
@@ -492,15 +499,6 @@ describe User::Compliance do
       create(:user_compliance_info_empty, user: mz_creator, country: "Mozambique")
       expect(mz_creator.signed_up_from_mozambique?).to be true
       expect(mz_creator.compliance_country_has_states?).to be false
-    end
-  end
-
-  describe "signed_up_from_kazakhstan?" do
-    it "returns true if from Kazakhstan" do
-      kz_creator = create(:user)
-      create(:user_compliance_info_empty, user: kz_creator, country: "Kazakhstan")
-      expect(kz_creator.signed_up_from_kazakhstan?).to be true
-      expect(kz_creator.compliance_country_has_states?).to be false
     end
   end
 
