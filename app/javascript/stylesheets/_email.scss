@@ -35,10 +35,14 @@ $accent-color: map-get($colors, "pink"); // [1]
       }
 
       td {
-        padding: spacer(3);
+        padding: spacer(4);
 
         &:not(:last-child) {
           border-bottom: $border;
+        }
+
+        h4 {
+          font-weight: bold;
         }
       }
 

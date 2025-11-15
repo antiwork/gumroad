@@ -103,7 +103,7 @@ export const CollabsMembershipsTable = (props: { entries: Membership[]; paginati
               <TableCell label="Name">
                 {/* Safari currently doesn't support position: relative on <tr>, so we can't use stretched-link here */}
                 <a href={membership.can_edit ? membership.edit_url : membership.url} style={{ textDecoration: "none" }}>
-                  <h4>{membership.name}</h4>
+                  <h4 className="font-bold">{membership.name}</h4>
                 </a>
                 <a href={membership.url} title={membership.url} target="_blank" rel="noreferrer">
                   <small>{membership.url_without_protocol}</small>
