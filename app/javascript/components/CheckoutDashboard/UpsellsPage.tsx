@@ -31,12 +31,14 @@ import { useLoggedInUser } from "$app/components/LoggedInUser";
 import { Modal } from "$app/components/Modal";
 import { Pagination, PaginationProps } from "$app/components/Pagination";
 import { Popover } from "$app/components/Popover";
+import { WithPreviewSidebar } from "$app/components/PreviewSidebar";
 import { applySelection } from "$app/components/Product/ConfigurationSelector";
 import { Select } from "$app/components/Select";
 import { showAlert } from "$app/components/server-components/Alert";
 import { CrossSellModal, UpsellModal } from "$app/components/server-components/CheckoutPage";
 import { PageHeader } from "$app/components/ui/PageHeader";
 import Placeholder from "$app/components/ui/Placeholder";
+import { Sheet, SheetHeader } from "$app/components/ui/Sheet";
 import { useDebouncedCallback } from "$app/components/useDebouncedCallback";
 import { Sort, useSortingTableDriver } from "$app/components/useSortingTableDriver";
 
@@ -393,11 +395,8 @@ const UpsellDrawer = ({
   const loggedInUser = useLoggedInUser();
   const isReadOnly = !loggedInUser?.policies.upsell.create;
   return (
-    <aside>
-      <header>
-        <h2>{selectedUpsell.name}</h2>
-        <button className="close" aria-label="Close" onClick={onClose} />
-      </header>
+    <Sheet open onOpenChange={onClose}>
+      <SheetHeader>{selectedUpsell.name}</SheetHeader>
       <section className="stack">
         <h3>Details</h3>
         <div>
@@ -503,7 +502,7 @@ const UpsellDrawer = ({
           {isLoading ? "Deleting..." : "Delete"}
         </Button>
       </section>
-    </aside>
+    </Sheet>
   );
 };
 
@@ -694,7 +693,7 @@ const Form = ({
           </>
         }
       />
-      <div className="squished fixed-aside flex-1 lg:grid lg:grid-cols-[1fr_30vw]">
+      <WithPreviewSidebar className="flex-1">
         <form>
           <section className="p-8!">
             <p>
@@ -1003,7 +1002,7 @@ const Form = ({
             )}
           </Modal>
         </CheckoutPreview>
-      </div>
+      </WithPreviewSidebar>
     </>
   );
 };

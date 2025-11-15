@@ -77,6 +77,7 @@ import { showAlert } from "$app/components/server-components/Alert";
 import { Toggle } from "$app/components/Toggle";
 import { PageHeader } from "$app/components/ui/PageHeader";
 import Placeholder from "$app/components/ui/Placeholder";
+import { Sheet, SheetHeader } from "$app/components/ui/Sheet";
 import { useDebouncedCallback } from "$app/components/useDebouncedCallback";
 import { useOnChange } from "$app/components/useOnChange";
 import { useUserAgentInfo } from "$app/components/UserAgent";
@@ -780,16 +781,17 @@ const CustomerDrawer = ({
     });
 
   return (
-    <aside>
-      <header>
-        {onBack ? (
-          <button onClick={onBack} aria-label="Return to bundle">
-            <Icon name="arrow-left" style={{ fontSize: "var(--big-icon-size)" }} />
-          </button>
-        ) : null}
-        <h2>{customer.product.name}</h2>
-        <button className="close" aria-label="Close" onClick={onClose} />
-      </header>
+    <Sheet open onOpenChange={onClose}>
+      <SheetHeader>
+        <div className="flex gap-4">
+          {onBack ? (
+            <button onClick={onBack} aria-label="Return to bundle">
+              <Icon name="arrow-left" style={{ fontSize: "var(--big-icon-size)" }} />
+            </button>
+          ) : null}
+          <h2>{customer.product.name}</h2>
+        </div>
+      </SheetHeader>
       {commission ? <CommissionStatusPill commission={commission} /> : null}
       {customer.is_additional_contribution ? (
         <div role="status" className="info">
@@ -1309,7 +1311,7 @@ const CustomerDrawer = ({
           )}
         </section>
       ) : null}
-    </aside>
+    </Sheet>
   );
 };
 
