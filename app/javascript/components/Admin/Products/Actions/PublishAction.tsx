@@ -10,15 +10,16 @@ type PublishActionProps = {
 const PublishAction = ({ product }: PublishActionProps) =>
   product.alive ? (
     <AdminActionButton
-      url={Routes.unpublish_admin_link_path(product.unique_permalink)}
+      url={Routes.unpublish_admin_product_path(product.id)}
       label="Unpublish"
       loading="Unpublishing..."
       done="Unpublished!"
       success_message="Unpublished!"
+      method="DELETE"
     />
   ) : (
     <AdminActionButton
-      url={Routes.publish_admin_link_path(product.unique_permalink)}
+      url={Routes.publish_admin_product_path(product.id)}
       label="Publish"
       loading="Publishing..."
       done="Published!"

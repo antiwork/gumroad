@@ -14,7 +14,7 @@ type Props = {
 };
 
 const AdminUsersProductsHeader = ({ product, isCurrentUrl }: Props) => (
-  <div className="paragraphs">
+  <div className="flex flex-col gap-4">
     <div className="flex items-center gap-4">
       {product.preview_url ? (
         <a href={product.preview_url} target="_blank" rel="noreferrer noopener">
@@ -48,7 +48,7 @@ const AdminUsersProductsHeader = ({ product, isCurrentUrl }: Props) => (
       </div>
     </div>
 
-    <div className="button-group">
+    <div className="flex flex-wrap gap-2">
       <a
         href={Routes.edit_link_path(product.unique_permalink)}
         className="button small"
@@ -59,7 +59,7 @@ const AdminUsersProductsHeader = ({ product, isCurrentUrl }: Props) => (
       </a>
       {product.admins_can_generate_url_redirects ? (
         <a
-          href={Routes.generate_url_redirect_admin_link_path(product.id)}
+          href={Routes.generate_url_redirect_admin_product_path(product.id)}
           className="button small"
           target="_blank"
           rel="noreferrer noopener"

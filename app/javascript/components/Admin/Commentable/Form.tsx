@@ -64,9 +64,10 @@ const AdminCommentableForm = ({ endpoint, onCommentAdded, commentableType }: Adm
     <form onSubmit={(e) => void onSubmit(e)}>
       <input type="hidden" name="authenticity_token" value={authenticity_token} />
       <fieldset>
-        <div className="input-with-button">
+        <div className="flex items-center gap-2">
           <textarea
             name="comment[content]"
+            className="flex-1"
             rows={1}
             placeholder={`Comment on this ${commentableType}`}
             required

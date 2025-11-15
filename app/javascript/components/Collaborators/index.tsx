@@ -1,5 +1,4 @@
 import * as React from "react";
-import * as ReactDOM from "react-dom";
 import {
   RouterProvider,
   createBrowserRouter,
@@ -33,6 +32,8 @@ import { Icon } from "$app/components/Icons";
 import { useLoggedInUser } from "$app/components/LoggedInUser";
 import { showAlert } from "$app/components/server-components/Alert";
 import Placeholder from "$app/components/ui/Placeholder";
+import { Sheet, SheetHeader } from "$app/components/ui/Sheet";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "$app/components/ui/Table";
 import { WithTooltip } from "$app/components/WithTooltip";
 
 import placeholder from "$assets/images/placeholders/collaborators.png";
@@ -83,13 +84,9 @@ const CollaboratorDetails = ({
   const loggedInUser = useLoggedInUser();
   const navigation = useNavigation();
 
-  return ReactDOM.createPortal(
-    <aside className="flex! flex-col!">
-      <header>
-        <h2>{selectedCollaborator.name}</h2>
-        <button className="close" aria-label="Close" onClick={onClose} />
-      </header>
-
+  return (
+    <Sheet open onOpenChange={onClose}>
+      <SheetHeader>{selectedCollaborator.name}</SheetHeader>
       {selectedCollaborator.setup_incomplete ? (
         <div role="alert" className="warning">
           Collaborators won't receive their cut until they set up a payout account in their Gumroad settings.
@@ -132,8 +129,7 @@ const CollaboratorDetails = ({
           {navigation.state === "submitting" ? "Removing..." : "Remove"}
         </Button>
       </section>
-    </aside>,
-    document.body,
+    </Sheet>
   );
 };
 
@@ -182,25 +178,25 @@ const Collaborators = () => {
       {collaborators.length > 0 ? (
         <>
           <section className="p-4 md:p-8">
-            <table>
-              <thead>
-                <tr>
-                  <th>Name</th>
-                  <th>Products</th>
-                  <th>Cut</th>
-                  <th>Status</th>
-                  <th />
-                </tr>
-              </thead>
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Name</TableHead>
+                  <TableHead>Products</TableHead>
+                  <TableHead>Cut</TableHead>
+                  <TableHead>Status</TableHead>
+                  <TableHead />
+                </TableRow>
+              </TableHeader>
 
-              <tbody>
+              <TableBody>
                 {collaborators.map((collaborator) => (
-                  <tr
+                  <TableRow
                     key={collaborator.id}
-                    aria-selected={collaborator.id === selectedCollaborator?.id}
+                    selected={collaborator.id === selectedCollaborator?.id}
                     onClick={() => setSelectedCollaborator(collaborator)}
                   >
-                    <td data-label="Name">
+                    <TableCell>
                       <div className="flex items-center gap-4">
                         <img
                           className="user-avatar"
@@ -222,18 +218,16 @@ const Collaborators = () => {
                           </WithTooltip>
                         ) : null}
                       </div>
-                    </td>
-                    <td data-label="Products">
+                    </TableCell>
+                    <TableCell>
                       <span className="line-clamp-2">{formatProductNames(collaborator)}</span>
-                    </td>
-                    <td data-label="Cut" className="whitespace-nowrap">
-                      {formatCommission(collaborator)}
-                    </td>
-                    <td data-label="Status" className="whitespace-nowrap">
+                    </TableCell>
+                    <TableCell className="whitespace-nowrap">{formatCommission(collaborator)}</TableCell>
+                    <TableCell className="whitespace-nowrap">
                       {collaborator.invitation_accepted ? <>Accepted</> : <>Pending</>}
-                    </td>
-                    <td>
-                      <div className="actions" onClick={(e) => e.stopPropagation()}>
+                    </TableCell>
+                    <TableCell onClick={(e) => e.stopPropagation()}>
+                      <div className="flex flex-wrap gap-3 lg:justify-end">
                         <Link
                           to={`/collaborators/${collaborator.id}/edit`}
                           className="button"
@@ -253,11 +247,11 @@ const Collaborators = () => {
                           <Icon name="trash2" />
                         </Button>
                       </div>
-                    </td>
-                  </tr>
+                    </TableCell>
+                  </TableRow>
                 ))}
-              </tbody>
-            </table>
+              </TableBody>
+            </Table>
           </section>
           {selectedCollaborator ? (
             <CollaboratorDetails

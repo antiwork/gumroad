@@ -1,5 +1,6 @@
 import * as React from "react";
 
+import { classNames } from "$app/utils/classNames";
 import { getRootTaxonomy, getRootTaxonomyCss, Taxonomy } from "$app/utils/discover";
 
 import { NavigationButton } from "$app/components/Button";
@@ -219,13 +220,23 @@ const TaxonomyCategoryBreadcrumbs = ({
   taxonomies: Taxonomy[];
   onClickTaxonomy: (taxonomySlugPath?: string) => void;
 }) => (
-  <div role="navigation" className="breadcrumbs mt-4" aria-label="Breadcrumbs">
-    <ol itemScope itemType="https://schema.org/BreadcrumbList">
+  <div role="navigation" className="mt-4" aria-label="Breadcrumbs">
+    <ol
+      itemScope
+      itemType="https://schema.org/BreadcrumbList"
+      className="flex list-none flex-wrap p-0 text-xl leading-[1.3]"
+    >
       {taxonomyPath.split("/").map((slug, index, breadcrumbs) => {
         const taxonomySlugPath = breadcrumbs.slice(0, index + 1).join("/");
         const label = taxonomies.find((t) => t.slug === slug)?.label ?? slug;
+        const isPage = index === breadcrumbs.length - 1;
         return (
           <li key={taxonomySlugPath} itemProp="itemListElement" itemScope itemType="https://schema.org/ListItem">
+            {index > 0 ? (
+              <span aria-hidden="true" className="mx-2 select-none">
+                /
+              </span>
+            ) : null}
             <a
               href={`/${taxonomySlugPath}`}
               onClick={(e) => {
@@ -233,8 +244,9 @@ const TaxonomyCategoryBreadcrumbs = ({
                 e.preventDefault();
                 onClickTaxonomy(taxonomySlugPath);
               }}
-              aria-current={index === breadcrumbs.length - 1 ? "page" : undefined}
+              aria-current={isPage ? "page" : undefined}
               itemProp="item"
+              className={classNames({ "no-underline": isPage })}
             >
               <span itemProp="name">{label}</span>
             </a>

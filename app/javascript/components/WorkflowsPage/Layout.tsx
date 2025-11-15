@@ -1,5 +1,6 @@
 import * as React from "react";
 
+import { PreviewSidebar, WithPreviewSidebar } from "$app/components/PreviewSidebar";
 import { PageHeader } from "$app/components/ui/PageHeader";
 
 type LayoutProps = {
@@ -16,12 +17,10 @@ export const Layout = ({ title, actions, navigation, children, preview }: Layout
       {navigation ?? null}
     </PageHeader>
     {preview ? (
-      <div className="fixed-aside flex-1 lg:grid lg:grid-cols-[1fr_30vw]">
+      <WithPreviewSidebar className="flex-1">
         <div>{children}</div>
-        <aside className="hidden max-h-screen lg:sticky!" aria-label="Preview">
-          {preview}
-        </aside>
-      </div>
+        <PreviewSidebar>{preview}</PreviewSidebar>
+      </WithPreviewSidebar>
     ) : (
       <div>{children}</div>
     )}

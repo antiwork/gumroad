@@ -17,10 +17,12 @@ import { GettingStartedIconProps } from "$app/components/icons/getting-started/G
 import { MakeAccountIcon } from "$app/components/icons/getting-started/MakeAccountIcon";
 import { SmallBetsIcon } from "$app/components/icons/getting-started/SmallBetsIcon";
 import { useLoggedInUser } from "$app/components/LoggedInUser";
+import { ProductIconCell } from "$app/components/ProductsPage/ProductIconCell";
 import { DownloadTaxFormsPopover } from "$app/components/server-components/DashboardPage/DownloadTaxFormsPopover";
 import { Stats } from "$app/components/Stats";
 import { PageHeader } from "$app/components/ui/PageHeader";
 import Placeholder from "$app/components/ui/Placeholder";
+import { Table, TableBody, TableCaption, TableCell, TableHead, TableHeader, TableRow } from "$app/components/ui/Table";
 import { useUserAgentInfo } from "$app/components/UserAgent";
 import { useRunOnce } from "$app/components/useRunOnce";
 import { useClientSortingTableDriver } from "$app/components/useSortingTableDriver";
@@ -231,60 +233,50 @@ const ProductsTable = ({ sales }: TableProps) => {
   }
 
   return (
-    <table>
-      <caption>Best selling</caption>
-      <thead>
-        <tr>
-          <th colSpan={2} {...thProps("name")}>
+    <Table>
+      <TableCaption>Best selling</TableCaption>
+      <TableHeader>
+        <TableRow>
+          <TableHead colSpan={2} {...thProps("name")}>
             Products
-          </th>
-          <th {...thProps("sales")}>Sales</th>
-          <th {...thProps("revenue")}>Revenue</th>
-          <th {...thProps("visits")}>Visits</th>
-          <th {...thProps("today")}>Today</th>
-          <th className="text-singleline" {...thProps("last_7")}>
+          </TableHead>
+          <TableHead {...thProps("sales")}>Sales</TableHead>
+          <TableHead {...thProps("revenue")}>Revenue</TableHead>
+          <TableHead {...thProps("visits")}>Visits</TableHead>
+          <TableHead {...thProps("today")}>Today</TableHead>
+          <TableHead className="text-singleline" {...thProps("last_7")}>
             Last 7 days
-          </th>
-          <th className="text-singleline" {...thProps("last_30")}>
+          </TableHead>
+          <TableHead className="text-singleline" {...thProps("last_30")}>
             Last 30 days
-          </th>
-        </tr>
-      </thead>
-      <tbody>
+          </TableHead>
+        </TableRow>
+      </TableHeader>
+      <TableBody>
         {items.map(({ id, name, thumbnail, today, last_7, last_30, sales, visits, revenue }) => (
-          <tr key={id}>
-            <td className="icon-cell">
-              <a href={Routes.edit_link_url({ id }, { host: appDomain })}>
-                {thumbnail ? <img alt={name} src={thumbnail} /> : <Icon name="card-image-fill" />}
-              </a>
-            </td>
-            <td data-label="Products">
+          <TableRow key={id}>
+            <ProductIconCell href={Routes.edit_link_url({ id }, { host: appDomain })} thumbnail={thumbnail} />
+            <TableCell>
               <a href={Routes.edit_link_url({ id }, { host: appDomain })} className="line-clamp-2" title={name}>
                 {name}
               </a>
-            </td>
-            <td data-label="Sales" title={sales.toLocaleString(locale)} className="text-nowrap">
+            </TableCell>
+            <TableCell title={sales.toLocaleString(locale)} className="whitespace-nowrap">
               {sales.toLocaleString(locale, { notation: "compact" })}
-            </td>
-            <td data-label="Revenue" title={formatPrice(revenue)} className="text-nowrap">
+            </TableCell>
+            <TableCell title={formatPrice(revenue)} className="whitespace-nowrap">
               {formatPrice(revenue)}
-            </td>
-            <td data-label="Visits" title={visits.toLocaleString(locale)} className="text-nowrap">
+            </TableCell>
+            <TableCell title={visits.toLocaleString(locale)} className="whitespace-nowrap">
               {visits.toLocaleString(locale, { notation: "compact" })}
-            </td>
-            <td data-label="Today" className="text-nowrap">
-              {formatPrice(today)}
-            </td>
-            <td data-label="Last 7 days" className="text-nowrap">
-              {formatPrice(last_7)}
-            </td>
-            <td data-label="Last 30 days" className="text-nowrap">
-              {formatPrice(last_30)}
-            </td>
-          </tr>
+            </TableCell>
+            <TableCell className="whitespace-nowrap">{formatPrice(today)}</TableCell>
+            <TableCell className="whitespace-nowrap">{formatPrice(last_7)}</TableCell>
+            <TableCell className="whitespace-nowrap">{formatPrice(last_30)}</TableCell>
+          </TableRow>
         ))}
-      </tbody>
-    </table>
+      </TableBody>
+    </Table>
   );
 };
 

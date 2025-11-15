@@ -31,12 +31,16 @@ import { useLoggedInUser } from "$app/components/LoggedInUser";
 import { Modal } from "$app/components/Modal";
 import { Pagination, PaginationProps } from "$app/components/Pagination";
 import { Popover } from "$app/components/Popover";
+import { WithPreviewSidebar } from "$app/components/PreviewSidebar";
 import { applySelection } from "$app/components/Product/ConfigurationSelector";
 import { Select } from "$app/components/Select";
 import { showAlert } from "$app/components/server-components/Alert";
 import { CrossSellModal, UpsellModal } from "$app/components/server-components/CheckoutPage";
+import { Skeleton } from "$app/components/Skeleton";
 import { PageHeader } from "$app/components/ui/PageHeader";
 import Placeholder from "$app/components/ui/Placeholder";
+import { Sheet, SheetHeader } from "$app/components/ui/Sheet";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "$app/components/ui/Table";
 import { useDebouncedCallback } from "$app/components/useDebouncedCallback";
 import { Sort, useSortingTableDriver } from "$app/components/useSortingTableDriver";
 
@@ -261,58 +265,55 @@ const UpsellsPage = (props: UpsellsPageProps) => {
     >
       <section className="p-4 md:p-8">
         {upsells.length > 0 ? (
-          <section className="paragraphs">
-            <table aria-busy={isLoading} aria-label="Upsells">
-              <thead>
-                <tr>
-                  <th {...thProps("name")}>Upsell</th>
-                  <th {...thProps("revenue")}>Revenue</th>
-                  <th {...thProps("uses")}>Uses</th>
-                  <th {...thProps("status")}>Status</th>
-                </tr>
-              </thead>
-              <tbody>
+          <section className="flex flex-col gap-4">
+            <Table
+              aria-live="polite"
+              className={cx(isLoading && "pointer-events-none opacity-50")}
+              aria-label="Upsells"
+            >
+              <TableHeader>
+                <TableRow>
+                  <TableHead {...thProps("name")}>Upsell</TableHead>
+                  <TableHead {...thProps("revenue")}>Revenue</TableHead>
+                  <TableHead {...thProps("uses")}>Uses</TableHead>
+                  <TableHead {...thProps("status")}>Status</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
                 {upsells.map((upsell) => {
                   const statistics = upsellStatistics[upsell.id];
                   return (
-                    <tr
+                    <TableRow
                       key={upsell.id}
                       onClick={() => setSelectedUpsellId(upsell.id)}
-                      aria-selected={selectedUpsellId === upsell.id}
+                      selected={selectedUpsellId === upsell.id}
                     >
-                      <td>
+                      <TableCell>
                         <div>
                           <div>
                             <b>{upsell.name}</b>
                           </div>
                           <small>{formatOfferedProductName(upsell.product.name, upsell.product.variant?.name)}</small>
                         </div>
-                      </td>
-                      {statistics ? (
-                        <>
-                          <td>
-                            {formatPriceCentsWithCurrencySymbol(
-                              upsell.product.currency_type,
-                              statistics.revenue_cents,
-                              {
-                                symbolFormat: "short",
-                              },
-                            )}
-                          </td>
-                          <td>{statistics.uses.total}</td>
-                        </>
-                      ) : (
-                        <>
-                          <td aria-busy></td>
-                          <td aria-busy> </td>
-                        </>
-                      )}
-                      <td>{upsell.paused ? "Paused" : "Live"}</td>
-                    </tr>
+                      </TableCell>
+                      <TableCell aria-busy={!statistics}>
+                        {statistics ? (
+                          formatPriceCentsWithCurrencySymbol(upsell.product.currency_type, statistics.revenue_cents, {
+                            symbolFormat: "short",
+                          })
+                        ) : (
+                          <Skeleton className="w-16" />
+                        )}
+                      </TableCell>
+                      <TableCell aria-busy={!statistics}>
+                        {statistics ? statistics.uses.total : <Skeleton className="w-16" />}
+                      </TableCell>
+                      <TableCell>{upsell.paused ? "Paused" : "Live"}</TableCell>
+                    </TableRow>
                   );
                 })}
-              </tbody>
-            </table>
+              </TableBody>
+            </Table>
             {pagination.pages > 1 ? (
               <Pagination
                 onChangePage={(newPage) => loadUpsells({ page: newPage, query: searchQuery, sort })}
@@ -393,11 +394,8 @@ const UpsellDrawer = ({
   const loggedInUser = useLoggedInUser();
   const isReadOnly = !loggedInUser?.policies.upsell.create;
   return (
-    <aside>
-      <header>
-        <h2>{selectedUpsell.name}</h2>
-        <button className="close" aria-label="Close" onClick={onClose} />
-      </header>
+    <Sheet open onOpenChange={onClose}>
+      <SheetHeader>{selectedUpsell.name}</SheetHeader>
       <section className="stack">
         <h3>Details</h3>
         <div>
@@ -503,7 +501,7 @@ const UpsellDrawer = ({
           {isLoading ? "Deleting..." : "Delete"}
         </Button>
       </section>
-    </aside>
+    </Sheet>
   );
 };
 
@@ -694,7 +692,7 @@ const Form = ({
           </>
         }
       />
-      <div className="squished fixed-aside flex-1 lg:grid lg:grid-cols-[1fr_30vw]">
+      <WithPreviewSidebar className="flex-1">
         <form>
           <section className="p-8!">
             <p>
@@ -1003,7 +1001,7 @@ const Form = ({
             )}
           </Modal>
         </CheckoutPreview>
-      </div>
+      </WithPreviewSidebar>
     </>
   );
 };

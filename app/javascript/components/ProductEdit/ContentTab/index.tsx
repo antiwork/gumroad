@@ -541,7 +541,7 @@ const ContentTabContent = ({ selectedVariantId }: { selectedVariantId: string | 
                       </>
                     }
                   >
-                    <div className="paragraphs">
+                    <div className="flex flex-col gap-4">
                       <input
                         type="text"
                         placeholder="Find your files"
@@ -592,14 +592,17 @@ const ContentTabContent = ({ selectedVariantId }: { selectedVariantId: string | 
 
                 <Modal open={showEmbedModal} onClose={() => setShowEmbedModal(false)} title="Embed media">
                   <p>Paste a video link or upload images or videos.</p>
-                  <Tabs>
-                    <Tab isSelected aria-controls={`${uid}-embed-tab`}>
-                      <Icon name="link" />
-                      <h4>Embed link</h4>
+                  <Tabs variant="buttons">
+                    <Tab isSelected aria-controls={`${uid}-embed-tab`} asChild>
+                      <button type="button">
+                        <Icon name="link" />
+                        <h4>Embed link</h4>
+                      </button>
                     </Tab>
-                    <Tab isSelected={false}>
-                      <label className="button">
+                    <Tab isSelected={false} asChild>
+                      <label>
                         <input
+                          className="sr-only"
                           type="file"
                           accept="image/*,video/*"
                           multiple
@@ -742,7 +745,7 @@ const ContentTabContent = ({ selectedVariantId }: { selectedVariantId: string | 
           className="md:h-auto! md:flex-1"
           pageList={
             !isDesktop && !showPageList ? null : (
-              <div className="paragraphs">
+              <div className="flex flex-col gap-4">
                 {showPageList ? (
                   <ReactSortable
                     draggable="[role=tab]"

@@ -1,5 +1,4 @@
 import * as React from "react";
-import ReactDOM from "react-dom";
 import { Link, useLoaderData, useNavigation } from "react-router-dom";
 import { cast } from "ts-safe-cast";
 
@@ -9,6 +8,7 @@ import {
   removeCollaborator,
 } from "$app/data/collaborators";
 import { IncomingCollaborator, IncomingCollaboratorsData } from "$app/data/incoming_collaborators";
+import { classNames } from "$app/utils/classNames";
 import { assertResponseError } from "$app/utils/request";
 
 import { Button } from "$app/components/Button";
@@ -18,6 +18,8 @@ import { LoadingSpinner } from "$app/components/LoadingSpinner";
 import { useLoggedInUser } from "$app/components/LoggedInUser";
 import { showAlert } from "$app/components/server-components/Alert";
 import Placeholder from "$app/components/ui/Placeholder";
+import { Sheet, SheetHeader } from "$app/components/ui/Sheet";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "$app/components/ui/Table";
 import { WithTooltip } from "$app/components/WithTooltip";
 
 import placeholder from "$assets/images/placeholders/collaborators.png";
@@ -69,52 +71,46 @@ const IncomingCollaboratorDetails = ({
   onReject: () => void;
   onRemove: () => void;
   disabled: boolean;
-}) =>
-  ReactDOM.createPortal(
-    <aside className="flex! flex-col!">
-      <header>
-        <h2>{selected.seller_name}</h2>
-        <button className="close" aria-label="Close" onClick={onClose} />
-      </header>
+}) => (
+  <Sheet open onOpenChange={onClose}>
+    <SheetHeader>{selected.seller_name}</SheetHeader>
+    <section className="stack">
+      <h3>Email</h3>
+      <div>
+        <span>{selected.seller_email}</span>
+      </div>
+    </section>
 
-      <section className="stack">
-        <h3>Email</h3>
-        <div>
-          <span>{selected.seller_email}</span>
-        </div>
-      </section>
+    <section className="stack">
+      <h3>Products</h3>
+      {selected.products.map((product) => (
+        <section key={product.id}>
+          <a href={product.url} target="_blank" rel="noreferrer">
+            {product.name}
+          </a>
+          <div>{formatAsPercent(product.affiliate_percentage)}</div>
+        </section>
+      ))}
+    </section>
 
-      <section className="stack">
-        <h3>Products</h3>
-        {selected.products.map((product) => (
-          <section key={product.id}>
-            <a href={product.url} target="_blank" rel="noreferrer">
-              {product.name}
-            </a>
-            <div>{formatAsPercent(product.affiliate_percentage)}</div>
-          </section>
-        ))}
-      </section>
-
-      <section className="mt-auto flex gap-4">
-        {selected.invitation_accepted ? (
-          <Button className="flex-1" aria-label="Remove" color="danger" disabled={disabled} onClick={onRemove}>
-            Remove
+    <section className="mt-auto flex gap-4">
+      {selected.invitation_accepted ? (
+        <Button className="flex-1" aria-label="Remove" color="danger" disabled={disabled} onClick={onRemove}>
+          Remove
+        </Button>
+      ) : (
+        <>
+          <Button className="flex-1" aria-label="Accept" onClick={onAccept} disabled={disabled}>
+            Accept
           </Button>
-        ) : (
-          <>
-            <Button className="flex-1" aria-label="Accept" onClick={onAccept} disabled={disabled}>
-              Accept
-            </Button>
-            <Button className="flex-1" color="danger" aria-label="Decline" onClick={onReject} disabled={disabled}>
-              Decline
-            </Button>
-          </>
-        )}
-      </section>
-    </aside>,
-    document.body,
-  );
+          <Button className="flex-1" color="danger" aria-label="Decline" onClick={onReject} disabled={disabled}>
+            Decline
+          </Button>
+        </>
+      )}
+    </section>
+  </Sheet>
+);
 
 const IncomingCollaboratorsTableRow = ({
   incomingCollaborator,
@@ -131,8 +127,8 @@ const IncomingCollaboratorsTableRow = ({
   onReject: () => void;
   disabled: boolean;
 }) => (
-  <tr key={incomingCollaborator.id} aria-selected={isSelected} onClick={onSelect}>
-    <td data-label="Name">
+  <TableRow key={incomingCollaborator.id} selected={isSelected} onClick={onSelect}>
+    <TableCell>
       <div className="flex items-center gap-4">
         <img
           className="user-avatar w-8!"
@@ -144,19 +140,17 @@ const IncomingCollaboratorsTableRow = ({
           <small className="line-clamp-1">{incomingCollaborator.seller_email}</small>
         </div>
       </div>
-    </td>
-    <td data-label="Products">
+    </TableCell>
+    <TableCell>
       <span className="line-clamp-2">{formatProductNames(incomingCollaborator)}</span>
-    </td>
-    <td data-label="Cut" className="whitespace-nowrap">
-      {formatCommission(incomingCollaborator)}
-    </td>
-    <td data-label="Status" className="whitespace-nowrap">
+    </TableCell>
+    <TableCell className="whitespace-nowrap">{formatCommission(incomingCollaborator)}</TableCell>
+    <TableCell className="whitespace-nowrap">
       {incomingCollaborator.invitation_accepted ? <>Accepted</> : <>Pending</>}
-    </td>
-    <td>
+    </TableCell>
+    <TableCell>
       {incomingCollaborator.invitation_accepted ? null : (
-        <div className="actions" onClick={(e) => e.stopPropagation()}>
+        <div className="flex flex-wrap gap-3 lg:justify-end" onClick={(e) => e.stopPropagation()}>
           <Button type="submit" aria-label="Accept" onClick={onAccept} disabled={disabled}>
             <Icon name="outline-check" />
           </Button>
@@ -165,18 +159,18 @@ const IncomingCollaboratorsTableRow = ({
           </Button>
         </div>
       )}
-    </td>
-  </tr>
+    </TableCell>
+  </TableRow>
 );
 
 const TableRowLoadingSpinner = () => (
-  <tr>
-    <td colSpan={4}>
+  <TableRow>
+    <TableCell colSpan={5}>
       <div className="flex items-center justify-center py-4">
         <LoadingSpinner className="size-8" />
       </div>
-    </td>
-  </tr>
+    </TableCell>
+  </TableRow>
 );
 
 const EmptyState = () => (
@@ -216,18 +210,18 @@ const IncomingCollaboratorsTable = ({
   onRemove: (collaborator: IncomingCollaborator) => void;
 }) => (
   <section className="p-4 md:p-8">
-    <table aria-busy={loading || disabled}>
-      <thead>
-        <tr>
-          <th>From</th>
-          <th>Products</th>
-          <th>Your cut</th>
-          <th>Status</th>
-          <th />
-        </tr>
-      </thead>
+    <Table aria-live="polite" className={classNames((loading || disabled) && "pointer-events-none opacity-50")}>
+      <TableHeader>
+        <TableRow>
+          <TableHead>From</TableHead>
+          <TableHead>Products</TableHead>
+          <TableHead>Your cut</TableHead>
+          <TableHead>Status</TableHead>
+          <TableHead />
+        </TableRow>
+      </TableHeader>
 
-      <tbody>
+      <TableBody>
         {loading ? (
           <TableRowLoadingSpinner />
         ) : (
@@ -243,8 +237,8 @@ const IncomingCollaboratorsTable = ({
             />
           ))
         )}
-      </tbody>
-    </table>
+      </TableBody>
+    </Table>
     {selected ? (
       <IncomingCollaboratorDetails
         selected={selected}

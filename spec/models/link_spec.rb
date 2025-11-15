@@ -2453,6 +2453,10 @@ describe Link, :vcr do
       expect(@product.long_url(recommended_by: "abc")).to eq "#{@product.user.subdomain_with_protocol}/l/#{@product.general_permalink}?recommended_by=abc"
     end
 
+    it "appends the 'code' query parameter if one is present" do
+      expect(@product.long_url(code: "BLACKFRIDAY2025")).to eq "#{@product.user.subdomain_with_protocol}/l/#{@product.general_permalink}?code=BLACKFRIDAY2025"
+    end
+
     it "does not append the 'recommended_by' query parameter if the value is blank" do
       expect(@product.long_url(recommended_by: "")).to eq "#{@product.user.subdomain_with_protocol}/l/#{@product.general_permalink}"
       expect(@product.long_url(recommended_by: " ")).to eq "#{@product.user.subdomain_with_protocol}/l/#{@product.general_permalink}"
