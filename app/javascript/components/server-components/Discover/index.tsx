@@ -209,7 +209,7 @@ const Discover = (props: Props) => {
             title={isCuratedProducts ? "Recommended" : "Featured products"}
           />
         ) : null}
-        <section className="paragraphs">
+        <section className="flex flex-col gap-4">
           <div style={{ display: "flex", justifyContent: "space-between", gap: "var(--spacer-2)", flexWrap: "wrap" }}>
             <h2>
               {state.params.query

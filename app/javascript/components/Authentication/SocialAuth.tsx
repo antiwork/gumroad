@@ -6,7 +6,7 @@ import { useOriginalLocation } from "$app/components/useOriginalLocation";
 export const SocialAuth = () => {
   const next = new URL(useOriginalLocation()).searchParams.get("next");
   return (
-    <section className="paragraphs">
+    <section className="flex flex-col gap-4">
       <SocialAuthButton provider="facebook" href={Routes.user_facebook_omniauth_authorize_path({ referer: next })}>
         Facebook
       </SocialAuthButton>

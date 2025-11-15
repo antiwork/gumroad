@@ -64,7 +64,7 @@ const ComplianceInfo = ({ complianceInfo }: ComplianceInfoComponentProps) => {
 
   return (
     <div className="grid gap-4 md:grid-cols-2">
-      <div className="paragraphs">
+      <div className="flex flex-col gap-4">
         <h3>Personal Info</h3>
         <dl>
           <dt>Is Business</dt>
@@ -110,7 +110,7 @@ const ComplianceInfo = ({ complianceInfo }: ComplianceInfoComponentProps) => {
       </div>
 
       {is_business ? (
-        <div className="paragraphs">
+        <div className="flex flex-col gap-4">
           <h4 className="font-bold">Business Info</h4>
           <dl>
             <dt>Name</dt>

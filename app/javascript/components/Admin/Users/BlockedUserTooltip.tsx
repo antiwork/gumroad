@@ -22,7 +22,7 @@ const BlockedUserTooltip = ({ user, position = "bottom" }: Props) => {
   }
 
   const content = () => (
-    <div className="paragraphs">
+    <div className="flex flex-col gap-4">
       {blocked_by_form_email_object?.blocked_at ? (
         <span>{`Email blocked ${formatDate(new Date(blocked_by_form_email_object.blocked_at))} (block created ${formatDate(new Date(blocked_by_form_email_object.created_at))})`}</span>
       ) : null}

@@ -27,10 +27,11 @@ const SuspendForFraud = ({ user }: SuspendForFraudProps) => {
           >
             {(isLoading) => (
               <fieldset>
-                <div className="input-with-button" style={{ alignItems: "start" }}>
+                <div className="flex items-start gap-2">
                   <textarea
                     name="suspend_for_fraud[suspension_note]"
                     rows={3}
+                    className="flex-1"
                     placeholder="Add suspension note (optional)"
                   />
                   <button type="submit" className="button" disabled={isLoading}>

@@ -91,7 +91,7 @@ const NotifyAboutProductUpdatesAlert = () => {
       onMouseLeave={handleMouseLeave}
     >
       <div role="alert" className="info">
-        <div className="paragraphs">
+        <div className="flex flex-col gap-4">
           Changes saved! Would you like to notify your customers about those changes?
           <div className="flex gap-2">
             <Button color="primary" outline onClick={() => close()}>
