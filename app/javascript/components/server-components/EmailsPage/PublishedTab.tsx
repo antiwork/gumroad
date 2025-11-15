@@ -107,7 +107,11 @@ export const PublishedTab = () => {
                   <th>Clicks</th>
                   <th>
                     Views{" "}
-                    <WithTooltip position="top" tip="Views only apply to emails published on your profile.">
+                    <WithTooltip
+                      position="top"
+                      tip="Views only apply to emails published on your profile."
+                      className="whitespace-normal"
+                    >
                       <Icon name="info-circle" />
                     </WithTooltip>
                   </th>

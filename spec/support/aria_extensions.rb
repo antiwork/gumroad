@@ -260,6 +260,15 @@ module Capybara
       end
       alias_method :click_on, :click_command
     end
+
+    class Element
+      alias_method :base_hover, :hover
+
+      def hover
+        puts "NOTE: Please consider using an interaction method other than .hover to ensure proper accessibility"
+        base_hover
+      end
+    end
   end
 
   module RSpecMatchers
