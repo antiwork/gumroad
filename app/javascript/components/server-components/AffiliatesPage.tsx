@@ -1,7 +1,6 @@
 import cx from "classnames";
 import { parseISO } from "date-fns";
 import * as React from "react";
-import * as ReactDOM from "react-dom";
 import {
   RouterProvider,
   useNavigate,
@@ -55,6 +54,7 @@ import { Popover } from "$app/components/Popover";
 import { showAlert } from "$app/components/server-components/Alert";
 import { PageHeader } from "$app/components/ui/PageHeader";
 import Placeholder from "$app/components/ui/Placeholder";
+import { Sheet, SheetHeader } from "$app/components/ui/Sheet";
 import { Table, TableBody, TableCaption, TableCell, TableHead, TableHeader, TableRow } from "$app/components/ui/Table";
 import { Tabs, Tab } from "$app/components/ui/Tabs";
 import { useDebouncedCallback } from "$app/components/useDebouncedCallback";
@@ -601,12 +601,9 @@ const AffiliateDetails = ({
   const loggedInUser = useLoggedInUser();
   const navigation = useNavigation();
 
-  return ReactDOM.createPortal(
-    <aside>
-      <header>
-        <h2>{selectedAffiliate.affiliate_user_name}</h2>
-        <button className="close" aria-label="Close" onClick={onClose} />
-      </header>
+  return (
+    <Sheet open onOpenChange={onClose}>
+      <SheetHeader>{selectedAffiliate.affiliate_user_name}</SheetHeader>
       {selectedAffiliate.products.map((product) => {
         const productStatistics = statistics?.products[product.id];
 
@@ -655,8 +652,7 @@ const AffiliateDetails = ({
           {navigation.state === "submitting" ? "Deleting..." : "Delete"}
         </Button>
       </section>
-    </aside>,
-    document.body,
+    </Sheet>
   );
 };
 

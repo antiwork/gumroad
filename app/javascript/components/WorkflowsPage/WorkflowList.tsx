@@ -1,30 +1,29 @@
+import { Link, router } from "@inertiajs/react";
 import * as React from "react";
-import { Link, useLoaderData } from "react-router-dom";
-import { cast } from "ts-safe-cast";
 
-import { Workflow, deleteWorkflow } from "$app/data/workflows";
+import { Workflow } from "$app/types/workflow";
 import { formatStatNumber } from "$app/utils/formatStatNumber";
-import { asyncVoid } from "$app/utils/promise";
-import { assertResponseError } from "$app/utils/request";
 
 import { Button } from "$app/components/Button";
 import { Icon } from "$app/components/Icons";
 import { useLoggedInUser } from "$app/components/LoggedInUser";
 import { Modal } from "$app/components/Modal";
 import { showAlert } from "$app/components/server-components/Alert";
-import { Layout } from "$app/components/server-components/WorkflowsPage";
 import Placeholder from "$app/components/ui/Placeholder";
 import { Table, TableBody, TableCaption, TableCell, TableHead, TableHeader, TableRow } from "$app/components/ui/Table";
+import { Layout } from "$app/components/WorkflowsPage";
 
 import placeholder from "$assets/images/placeholders/workflows.png";
 
-const WorkflowList = () => {
+type WorkflowListProps = {
+  workflows: Workflow[];
+};
+
+const WorkflowList = ({ workflows }: WorkflowListProps) => {
   const loggedInUser = useLoggedInUser();
-  const { workflows: initialWorkflows } = cast<{ workflows: Workflow[] }>(useLoaderData());
-  const [workflows, setWorkflows] = React.useState(initialWorkflows);
   const canManageWorkflow = !!loggedInUser?.policies.workflow.create;
   const newWorkflowButton = (
-    <Link to="/workflows/new" className="button accent" inert={!canManageWorkflow}>
+    <Link href={Routes.new_workflow_path()} className="button accent" inert={!canManageWorkflow || undefined}>
       New workflow
     </Link>
   );
@@ -66,18 +65,21 @@ const WorkflowList = () => {
                   ) : (
                     <Button
                       color="danger"
-                      onClick={asyncVoid(async () => {
-                        try {
-                          setDeletingWorkflow({ ...deletingWorkflow, state: "deleting" });
-                          await deleteWorkflow(deletingWorkflow.id);
-                          setWorkflows(workflows.filter((workflow) => workflow.external_id !== deletingWorkflow.id));
-                          setDeletingWorkflow(null);
-                          showAlert("Workflow deleted!", "success");
-                        } catch (e) {
-                          assertResponseError(e);
-                          showAlert("Sorry, something went wrong. Please try again.", "error");
-                        }
-                      })}
+                      onClick={() => {
+                        setDeletingWorkflow({ ...deletingWorkflow, state: "deleting" });
+                        router.delete(Routes.workflow_path(deletingWorkflow.id), {
+                          only: ["workflows", "flash"],
+                          onSuccess: () => {
+                            setDeletingWorkflow(null);
+                          },
+                          onError: () => {
+                            setDeletingWorkflow((previous) =>
+                              previous ? { ...previous, state: "delete-confirmation" } : previous,
+                            );
+                            showAlert("Sorry, something went wrong. Please try again.", "error");
+                          },
+                        });
+                      }}
                     >
                       Delete
                     </Button>
@@ -127,9 +129,9 @@ const WorkflowRow = ({
         <div className="button-group">
           <Link
             className="button"
-            to={`/workflows/${workflow.external_id}/edit`}
+            href={Routes.edit_workflow_path(workflow.external_id)}
             aria-label="Edit workflow"
-            inert={!canManageWorkflow}
+            inert={!canManageWorkflow || undefined}
           >
             <Icon name="pencil" />
           </Link>
@@ -186,12 +188,10 @@ const WorkflowRow = ({
       {header}
       <Placeholder>
         <h4>
-          <>
-            No emails yet,{" "}
-            <Link to={`/workflows/${workflow.external_id}/emails`} inert={!canManageWorkflow}>
-              add one
-            </Link>
-          </>
+          No emails yet,{" "}
+          <Link href={Routes.workflow_emails_path(workflow.external_id)} inert={!canManageWorkflow || undefined}>
+            add one
+          </Link>
         </h4>
       </Placeholder>
     </section>

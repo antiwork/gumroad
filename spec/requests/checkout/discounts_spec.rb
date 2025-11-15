@@ -55,7 +55,7 @@ describe("Checkout discounts page", type: :system, js: true) do
     it "displays offer code drawers" do
       visit checkout_discounts_path
       find(:table_row, { "Discount" => "Discount 1" }).click
-      within_section "Discount 1", section_element: :aside do
+      within_modal "Discount 1" do
         within_section "Details" do
           expect(page).to have_text("Code CODE1", normalize_ws: true)
           expect(page).to have_text("Discount 50%", normalize_ws: true)
@@ -82,7 +82,7 @@ describe("Checkout discounts page", type: :system, js: true) do
       end
 
       find(:table_row, { "Discount" => "Discount 2" }).click
-      within_section "Discount 2", section_element: :aside do
+      within_modal "Discount 2" do
         within_section "Details" do
           expect(page).to have_text("Code CODE2", normalize_ws: true)
           expect(page).to have_text("Discount $2", normalize_ws: true)
@@ -106,7 +106,7 @@ describe("Checkout discounts page", type: :system, js: true) do
       end
 
       find(:table_row, { "Discount" => "Discount 3" }).click
-      within_section "Discount 3", section_element: :aside do
+      within_modal "Discount 3" do
         within_section "Details" do
           expect(page).to have_text("Code CODE3", normalize_ws: true)
           expect(page).to have_text("Discount 50%", normalize_ws: true)
@@ -293,7 +293,7 @@ describe("Checkout discounts page", type: :system, js: true) do
             expect(page).to have_selector("[aria-label='Offer code']", text: code.upcase)
           end
 
-          expect(page).to have_section("Black Friday", section_element: :aside)
+          expect(page).to have_modal "Black Friday"
 
           visit checkout_discounts_path
           within find(:table_row, { "Discount" => "Black Friday", "Revenue" => "$0", "Uses" => "0/∞" }) do
@@ -353,7 +353,7 @@ describe("Checkout discounts page", type: :system, js: true) do
 
           expect(page).to have_alert(text: "Successfully created discount!")
 
-          within_section "Discount", section_element: :aside do
+          within_modal "Discount" do
             click_on "Edit"
           end
           expect(page).to have_select("Currency", selected: "£", visible: false)
@@ -468,7 +468,7 @@ describe("Checkout discounts page", type: :system, js: true) do
       click_on "Cancel"
 
       table_row.click
-      within_section "Discount 2", section_element: :aside do
+      within_modal "Discount 2" do
         click_on "Edit"
       end
 
@@ -536,7 +536,7 @@ describe("Checkout discounts page", type: :system, js: true) do
         visit checkout_discounts_path
 
         find(:table_row, { "Discount" => "Discount 1" }).click
-        within_section "Discount 1", section_element: :aside do
+        within_modal "Discount 1" do
           click_on "Edit"
         end
 
@@ -565,7 +565,7 @@ describe("Checkout discounts page", type: :system, js: true) do
           expect(page).to have_selector("[aria-label='Offer code']", text: "CODE1")
         end
 
-        expect(page).to have_section("Black Friday", section_element: :aside)
+        expect(page).to have_modal "Black Friday"
 
         visit checkout_discounts_path
         within find(:table_row, { "Discount" => "Black Friday", "Revenue" => "$123.30", "Uses" => "10/∞" }) do
@@ -595,7 +595,7 @@ describe("Checkout discounts page", type: :system, js: true) do
         visit checkout_discounts_path
 
         find(:table_row, { "Discount" => "Discount 1" }).click
-        within_section "Discount 1", section_element: :aside do
+        within_modal "Discount 1" do
           click_on "Edit"
         end
 
@@ -624,7 +624,7 @@ describe("Checkout discounts page", type: :system, js: true) do
         visit checkout_discounts_path
 
         find(:table_row, { "Discount" => "Discount 1" }).click
-        within_section "Discount 1", section_element: :aside do
+        within_modal "Discount 1" do
           click_on "Edit"
         end
 
@@ -647,7 +647,7 @@ describe("Checkout discounts page", type: :system, js: true) do
         visit checkout_discounts_path
 
         find(:table_row, { "Discount" => "Discount 1" }).click
-        within_section "Discount 1", section_element: :aside do
+        within_modal "Discount 1" do
           click_on "Edit"
         end
 
@@ -673,7 +673,7 @@ describe("Checkout discounts page", type: :system, js: true) do
     expect(page).to_not have_selector(:table_row, { "Discount" => "Discount 1" })
 
     find(:table_row, { "Discount" => "Discount 2" }).click
-    within_section "Discount 2", section_element: :aside do
+    within_modal "Discount 2" do
       click_on "Delete"
     end
     expect(page).to have_alert(text: "Successfully deleted discount!")
@@ -701,7 +701,7 @@ describe("Checkout discounts page", type: :system, js: true) do
     click_on "Cancel"
 
     table_row.click
-    within_section "Discount 1", section_element: :aside do
+    within_modal "Discount 1" do
       click_on "Duplicate"
     end
 
