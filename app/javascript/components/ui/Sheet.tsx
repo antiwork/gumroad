@@ -18,6 +18,7 @@ export const Sheet = ({
           className,
         )}
         aria-modal
+        onPointerDownOutside={(e) => e.preventDefault()}
       >
         {children}
       </Dialog.Content>
