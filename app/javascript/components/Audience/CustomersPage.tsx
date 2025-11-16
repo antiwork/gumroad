@@ -513,19 +513,14 @@ const CustomersPage = ({
                           </>
                         )}
                         {customer.utm_link ? (
-                          <div className="has-tooltip" aria-describedby={`utm-link-${customer.id}`}>
+                          <WithTooltip
+                            tooltipProps={{ className: "w-80 p-0" }}
+                            tip={<UtmLinkStack link={customer.utm_link} showHeader={false} />}
+                          >
                             <span className="pill small" style={{ marginLeft: "var(--spacer-2)" }}>
                               UTM
                             </span>
-                            <div
-                              role="tooltip"
-                              id={`utm-link-${customer.id}`}
-                              style={{ padding: 0, width: "20rem" }}
-                              onClick={(e) => e.stopPropagation()}
-                            >
-                              <UtmLinkStack link={customer.utm_link} showHeader={false} />
-                            </div>
-                          </div>
+                          </WithTooltip>
                         ) : null}
                       </td>
                       <td>
