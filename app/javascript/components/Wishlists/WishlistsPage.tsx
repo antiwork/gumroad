@@ -1,9 +1,7 @@
 import * as React from "react";
-import { createCast } from "ts-safe-cast";
 
 import { deleteWishlist, updateWishlist } from "$app/data/wishlists";
 import { assertResponseError } from "$app/utils/request";
-import { register } from "$app/utils/serverComponentUtil";
 
 import { Button } from "$app/components/Button";
 import { Icon } from "$app/components/Icons";
@@ -17,7 +15,7 @@ import { WithTooltip } from "$app/components/WithTooltip";
 
 import placeholder from "$assets/images/placeholders/wishlists.png";
 
-type Wishlist = {
+export type Wishlist = {
   id: string;
   name: string;
   url: string;
@@ -25,15 +23,13 @@ type Wishlist = {
   discover_opted_out: boolean;
 };
 
-const WishlistsPage = ({
-  wishlists: preloadedWishlists,
-  reviews_page_enabled,
-  following_wishlists_enabled,
-}: {
+type Props = {
   wishlists: Wishlist[];
   reviews_page_enabled: boolean;
   following_wishlists_enabled: boolean;
-}) => {
+};
+
+const WishlistsPage = ({ wishlists: preloadedWishlists, reviews_page_enabled, following_wishlists_enabled }: Props) => {
   const [wishlists, setWishlists] = React.useState<Wishlist[]>(preloadedWishlists);
   const [deletingWishlist, setConfirmingDeleteWishlist] = React.useState<Wishlist | null>(null);
   const [isDeleting, setIsDeleting] = React.useState(false);
@@ -168,4 +164,4 @@ const WishlistsPage = ({
   );
 };
 
-export default register({ component: WishlistsPage, propParser: createCast() });
+export default WishlistsPage;
