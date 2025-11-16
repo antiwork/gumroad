@@ -27,7 +27,7 @@ const AdminUserCustomFee = ({ user }: AdminUserCustomFeeProps) => {
         >
           {(isLoading) => (
             <fieldset>
-              <div className="flex gap-2" style={{ alignItems: "start" }}>
+              <div className="flex items-start gap-2">
                 <input
                   name="custom_fee_percent"
                   type="number"
