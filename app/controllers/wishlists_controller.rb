@@ -7,13 +7,21 @@ class WishlistsController < ApplicationController
   after_action :verify_authorized, except: :show
   before_action :hide_layouts, only: :show
 
+  layout "inertia", only: :index
+
   def index
     authorize Wishlist
 
     respond_to do |format|
       format.html do
         @title = Feature.active?(:follow_wishlists, current_seller) ? "Saved" : "Wishlists"
-        @wishlists_props = WishlistPresenter.library_props(wishlists: current_seller.wishlists.alive)
+        wishlists_props = WishlistPresenter.library_props(wishlists: current_seller.wishlists.alive)
+
+        render inertia: "Wishlists/Index", props: {
+          wishlists: wishlists_props,
+          reviews_page_enabled: Feature.active?(:reviews_page, current_seller),
+          following_wishlists_enabled: Feature.active?(:follow_wishlists, current_seller),
+        }
       end
       format.json do
         wishlists = current_seller.wishlists.alive.includes(:products).by_external_ids(params[:ids])

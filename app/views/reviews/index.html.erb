@@ -1,3 +1,0 @@
-<%= load_pack("reviews") %>
-
-<%= react_component "ReviewsPage", props: @presenter.reviews_props.merge(following_wishlists_enabled: Feature.active?(:follow_wishlists, current_seller)), prerender: true %>

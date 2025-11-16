@@ -1,8 +1,7 @@
 import * as React from "react";
-import { cast, createCast } from "ts-safe-cast";
+import { cast } from "ts-safe-cast";
 
 import { ProductNativeType } from "$app/parsers/product";
-import { register } from "$app/utils/serverComponentUtil";
 
 import { Button, NavigationButton } from "$app/components/Button";
 import { useDiscoverUrl } from "$app/components/DomainSettings";
@@ -31,7 +30,7 @@ type Product = {
   };
 };
 
-type Review = {
+export type Review = {
   id: string;
   rating: number;
   message: string | null;
@@ -46,15 +45,13 @@ type Review = {
 
 let newReviewId = 0;
 
-const ReviewsPage = ({
-  reviews: initialReviews,
-  purchases: initialPurchases,
-  following_wishlists_enabled,
-}: {
+type Props = {
   reviews: Review[];
   purchases: { id: string; email_digest: string; product: Product }[];
   following_wishlists_enabled: boolean;
-}) => {
+};
+
+const ReviewsPage = ({ reviews: initialReviews, purchases: initialPurchases, following_wishlists_enabled }: Props) => {
   const discoverUrl = useDiscoverUrl();
 
   const [reviews, setReviews] = React.useState(initialReviews);
@@ -152,9 +149,9 @@ const ReviewsPage = ({
                 <Row
                   key={review.id}
                   review={review}
-                  onChange={(review) =>
+                  onChange={(updatedReview) =>
                     setReviews((prevReviews) =>
-                      prevReviews.map((prevReview) => (review.id === prevReview.id ? review : prevReview)),
+                      prevReviews.map((prevReview) => (updatedReview.id === prevReview.id ? updatedReview : prevReview)),
                     )
                   }
                 />
@@ -223,4 +220,6 @@ const Row = ({ review, onChange }: { review: Review; onChange: (review: Review) 
   );
 };
 
-export default register({ component: ReviewsPage, propParser: createCast() });
+export default ReviewsPage;
+
+

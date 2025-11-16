@@ -1,6 +1,6 @@
 import { produce } from "immer";
 import * as React from "react";
-import { createCast, is } from "ts-safe-cast";
+import { is } from "ts-safe-cast";
 
 import { deletePurchasedProduct, setPurchaseArchived } from "$app/data/library";
 import { ProductNativeType } from "$app/parsers/product";
@@ -8,7 +8,6 @@ import { assertDefined } from "$app/utils/assert";
 import { classNames } from "$app/utils/classNames";
 import { asyncVoid } from "$app/utils/promise";
 import { assertResponseError } from "$app/utils/request";
-import { register } from "$app/utils/serverComponentUtil";
 import { writeQueryParams } from "$app/utils/url";
 
 import { Button } from "$app/components/Button";
@@ -562,4 +561,4 @@ const LibraryPage = ({ results, creators, bundles, reviews_page_enabled, followi
   );
 };
 
-export default register({ component: LibraryPage, propParser: createCast() });
+export default LibraryPage;
