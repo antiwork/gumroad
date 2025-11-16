@@ -1,10 +1,11 @@
 # frozen_string_literal: true
 
 class LibraryController < Sellers::BaseController
+  layout "inertia"
+
   skip_before_action :check_suspended
 
   before_action :check_user_confirmed, only: [:index]
-  before_action :set_body_id_as_app
   before_action :set_purchase, only: [:archive, :unarchive, :delete]
 
   RESEND_CONFIRMATION_EMAIL_TIME_LIMIT = 24.hours
@@ -13,10 +14,16 @@ class LibraryController < Sellers::BaseController
   def index
     authorize Purchase
 
-    @on_library_page = true
     @title = "Library"
-    @body_class = "library-container"
-    @purchase_results, @creator_counts, @bundles = LibraryPresenter.new(logged_in_user).library_cards
+    purchase_results, creator_counts, bundles = LibraryPresenter.new(logged_in_user).library_cards
+
+    render inertia: "Library/Index", props: {
+      results: purchase_results,
+      creators: creator_counts,
+      bundles:,
+      reviews_page_enabled: Feature.active?(:reviews_page, current_seller),
+      following_wishlists_enabled: Feature.active?(:follow_wishlists, current_seller),
+    }
   end
 
   def archive
