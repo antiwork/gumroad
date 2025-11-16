@@ -603,12 +603,11 @@ const AbandonedCartProductListNodeView = (props: NodeViewProps) => {
   const appDomain = useAppDomain();
   const { abandonedCartProducts, shownProductCount, setShownProductCount, showAddProductCTA } =
     useAbandonedCartProducts();
-  const tooltipUid = React.useId();
   const isPreview = !props.editor.isEditable;
 
   return (
     <NodeViewWrapper className="paragraphs" style={isPreview ? {} : { userSelect: "none", cursor: "not-allowed" }}>
-      <div className="has-tooltip top" aria-describedby={tooltipUid} style={{ display: "grid" }}>
+      <WithTooltip position="top" tip={isPreview ? null : "This cannot be deleted"}>
         {abandonedCartProducts.length > 0 ? (
           <div className="cart" role="list">
             {abandonedCartProducts.slice(0, shownProductCount).map((product) => (
@@ -652,12 +651,7 @@ const AbandonedCartProductListNodeView = (props: NodeViewProps) => {
             )}
           </Placeholder>
         )}
-        {isPreview ? null : (
-          <div role="tooltip" id={tooltipUid}>
-            This cannot be deleted
-          </div>
-        )}
-      </div>
+      </WithTooltip>
       {abandonedCartProducts.length > shownProductCount ? (
         <button
           className="link"

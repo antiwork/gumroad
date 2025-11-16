@@ -34,7 +34,7 @@ export const CopyToClipboard = ({
         event.clearSelection();
       });
 
-      el.addEventListener("mouseout", () => setStatus("initial"));
+      el.addEventListener("mouseleave", () => setStatus("initial"));
       return () => clip.destroy();
     }
   });

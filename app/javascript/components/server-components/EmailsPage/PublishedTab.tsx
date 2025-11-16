@@ -25,6 +25,7 @@ import { Table, TableBody, TableCaption, TableCell, TableHead, TableHeader, Tabl
 import { useDebouncedCallback } from "$app/components/useDebouncedCallback";
 import { useOnChange } from "$app/components/useOnChange";
 import { useUserAgentInfo } from "$app/components/UserAgent";
+import { WithTooltip } from "$app/components/WithTooltip";
 
 import publishedPlaceholder from "$assets/images/placeholders/published_posts.png";
 
@@ -33,7 +34,6 @@ export const PublishedTab = () => {
   const [installments, setInstallments] = React.useState(data?.installments ?? []);
   const [pagination, setPagination] = React.useState(data?.pagination ?? { count: 0, next: null });
   const currentSeller = assertDefined(useCurrentSeller(), "currentSeller is required");
-  const uid = React.useId();
   const [selectedInstallmentId, setSelectedInstallmentId] = React.useState<string | null>(null);
   const [deletingInstallment, setDeletingInstallment] = React.useState<{
     id: string;
@@ -110,12 +110,13 @@ export const PublishedTab = () => {
                   <TableHead>Clicks</TableHead>
                   <TableHead>
                     Views{" "}
-                    <div className="has-tooltip top whitespace-normal" aria-describedby={`views-tooltip-${uid}`}>
+                    <WithTooltip
+                      position="top"
+                      tip="Views only apply to emails published on your profile."
+                      className="whitespace-normal"
+                    >
                       <Icon name="info-circle" />
-                      <div role="tooltip" id={`views-tooltip-${uid}`}>
-                        Views only apply to emails published on your profile.
-                      </div>
-                    </div>
+                    </WithTooltip>
                   </TableHead>
                 </TableRow>
               </TableHeader>
@@ -145,9 +146,9 @@ export const PublishedTab = () => {
                     </TableCell>
                     <TableCell label="Clicks" className="whitespace-nowrap">
                       {installment.clicked_urls.length > 0 ? (
-                        <span className="has-tooltip" aria-describedby={`url-clicks-${installment.external_id}`}>
-                          {formatStatNumber({ value: installment.click_count })}
-                          <div role="tooltip" id={`url-clicks-${installment.external_id}`} className="w-[20rem] p-0">
+                        <WithTooltip
+                          tooltipProps={{ className: "w-[20rem] p-0" }}
+                          tip={
                             <Table>
                               <TableBody>
                                 {installment.clicked_urls.map(({ url, count }) => (
@@ -160,8 +161,10 @@ export const PublishedTab = () => {
                                 ))}
                               </TableBody>
                             </Table>
-                          </div>
-                        </span>
+                          }
+                        >
+                          {formatStatNumber({ value: installment.click_count })}
+                        </WithTooltip>
                       ) : (
                         formatStatNumber({ value: installment.click_count })
                       )}
