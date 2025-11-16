@@ -513,7 +513,7 @@ const CartItemComponent = ({
                     open={editPopoverOpen}
                     onToggle={setEditPopoverOpen}
                   >
-                    <div className="flex flex-col gap-4" style={{ width: "24rem" }}>
+                    <div className="flex w-96 flex-col gap-4">
                       <ConfigurationSelector
                         selection={selection}
                         setSelection={(selection) => {
