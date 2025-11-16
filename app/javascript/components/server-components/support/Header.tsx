@@ -4,7 +4,7 @@ import { createCast } from "ts-safe-cast";
 
 import { register } from "$app/utils/serverComponentUtil";
 
-import { Button } from "$app/components/Button";
+import { Button, NavigationButton } from "$app/components/Button";
 import { Icon } from "$app/components/Icons";
 import { UnauthenticatedNewTicketModal } from "$app/components/support/UnauthenticatedNewTicketModal";
 import { UnreadTicketsBadge } from "$app/components/support/UnreadTicketsBadge";
@@ -54,9 +54,18 @@ export function SupportHeader({
               Contact support
             </Button>
           ) : hasHelperSession ? (
-            <Button color="accent" onClick={onOpenNewTicket}>
-              New ticket
-            </Button>
+            <>
+              <Button color="accent" onClick={onOpenNewTicket}>
+                New ticket
+              </Button>
+              <NavigationButton
+                href="https://github.com/antiwork/gumroad/issues/new"
+                target="_blank"
+                rel="noopener noreferrer"
+              >
+                File a bug
+              </NavigationButton>
+            </>
           ) : null
         }
       >
