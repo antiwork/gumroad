@@ -265,7 +265,7 @@ const UpsellsPage = (props: UpsellsPageProps) => {
       <section className="p-4 md:p-8">
         {upsells.length > 0 ? (
           <section className="paragraphs">
-            <Table busy={isLoading}>
+            <Table busy={isLoading} aria-label="Upsells">
               <TableHeader>
                 <TableRow>
                   <TableHead {...thProps("name")}>Upsell</TableHead>

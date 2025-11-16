@@ -96,13 +96,22 @@ export const ProductsPageMembershipsTable = (props: {
         <TableCaption>Memberships</TableCaption>
         <TableHeader>
           <TableRow>
-            <TableHead colSpan={2} {...thProps("name")}>
+            <TableHead />
+            <TableHead {...thProps("name")} title="Sort by Name" className="lg:relative lg:-left-20">
               Name
             </TableHead>
-            <TableHead {...thProps("successful_sales_count")}>Members</TableHead>
-            <TableHead {...thProps("revenue")}>Revenue</TableHead>
-            <TableHead {...thProps("display_price_cents")}>Price</TableHead>
-            <TableHead {...thProps("status")}>Status</TableHead>
+            <TableHead {...thProps("successful_sales_count")} title="Sort by Members">
+              Members
+            </TableHead>
+            <TableHead {...thProps("revenue")} title="Sort by Revenue">
+              Revenue
+            </TableHead>
+            <TableHead {...thProps("display_price_cents")} title="Sort by Price">
+              Price
+            </TableHead>
+            <TableHead {...thProps("status")} title="Sort by Status">
+              Status
+            </TableHead>
             <TableHead />
           </TableRow>
         </TableHeader>
