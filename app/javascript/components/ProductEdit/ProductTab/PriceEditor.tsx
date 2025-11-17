@@ -45,7 +45,13 @@ export const PriceEditor = ({
         id={`${uid}-price-cents`}
         currencyCode={currencyType}
         cents={priceCents}
-        onChange={(newAmount) => setPriceCents(newAmount ?? 0)}
+        onChange={(newAmount) => { 
+          const amount = newAmount ?? 0;
+          setPriceCents(amount);
+          if (amount === 0) {
+            setIsPWYW(true);
+          }
+        }}
         currencyCodeSelector={currencyCodeSelector}
       />
       <Details
