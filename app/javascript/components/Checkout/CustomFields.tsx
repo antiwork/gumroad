@@ -135,7 +135,7 @@ const SellerCustomFields = ({ seller }: { seller: Creator }) => {
 
   return sharedCustomFields.length > 0 ? (
     <div>
-      <section className="paragraphs">
+      <section className="flex flex-col gap-4">
         <h4>
           <img className="user-avatar" src={seller.avatar_url} />
           &ensp;
@@ -151,7 +151,7 @@ const SellerCustomFields = ({ seller }: { seller: Creator }) => {
             </legend>
             <div className="stack">
               <div>
-                <section className="paragraphs">
+                <section className="flex flex-col gap-4">
                   {customFields.map((field) => (
                     <CustomField key={field.id} field={field} fieldKey={getCustomFieldKey(field, product)} />
                   ))}
@@ -165,7 +165,7 @@ const SellerCustomFields = ({ seller }: { seller: Creator }) => {
   ) : (
     customFieldGroups.map(({ product, customFields }) => (
       <div key={`${product.permalink}-${product.bundleProductId}`}>
-        <section className="paragraphs">
+        <section className="flex flex-col gap-4">
           <h4>{product.name}</h4>
           {customFields.map((field) => (
             <CustomField key={field.id} field={field} fieldKey={getCustomFieldKey(field, product)} />

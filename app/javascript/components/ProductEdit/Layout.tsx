@@ -14,6 +14,7 @@ import { useCurrentSeller } from "$app/components/CurrentSeller";
 import { useDomains } from "$app/components/DomainSettings";
 import { Icon } from "$app/components/Icons";
 import { Preview } from "$app/components/Preview";
+import { PreviewSidebar, WithPreviewSidebar } from "$app/components/PreviewSidebar";
 import { useImageUploadSettings } from "$app/components/RichTextEditor";
 import { showAlert } from "$app/components/server-components/Alert";
 import { newEmailPath } from "$app/components/server-components/EmailsPage";
@@ -90,7 +91,7 @@ const NotifyAboutProductUpdatesAlert = () => {
       onMouseLeave={handleMouseLeave}
     >
       <div role="alert" className="info">
-        <div className="paragraphs">
+        <div className="flex flex-col gap-4">
           Changes saved! Would you like to notify your customers about those changes?
           <div className="flex gap-2">
             <Button color="primary" outline onClick={() => close()}>
@@ -301,26 +302,22 @@ export const Layout = ({
           {headerActions}
         </div>
       </PageHeader>
-      <div className={preview ? "squished fixed-aside flex-1 lg:grid lg:grid-cols-[1fr_30vw]" : "flex-1"}>
-        {children}
-        {preview ? (
-          <aside aria-label="Preview" className="sticky! top-0 min-h-screen self-start overflow-y-auto">
-            <header>
-              <h2>Preview</h2>
-              <WithTooltip tip="Preview">
-                <NavigationButton
-                  aria-label="Preview"
-                  disabled={isBusy}
-                  href={url}
-                  onClick={(evt) => {
-                    evt.preventDefault();
-                    void save().then(() => window.open(url, "_blank"));
-                  }}
-                >
-                  <Icon name="arrow-diagonal-up-right" />
-                </NavigationButton>
-              </WithTooltip>
-            </header>
+      {preview ? (
+        <WithPreviewSidebar className="flex-1">
+          {children}
+          <PreviewSidebar
+            previewLink={(props) => (
+              <NavigationButton
+                {...props}
+                disabled={isBusy}
+                href={url}
+                onClick={(evt) => {
+                  evt.preventDefault();
+                  void save().then(() => window.open(url, "_blank"));
+                }}
+              />
+            )}
+          >
             <Preview
               scaleFactor={0.4}
               style={{
@@ -331,9 +328,11 @@ export const Layout = ({
             >
               {preview}
             </Preview>
-          </aside>
-        ) : null}
-      </div>
+          </PreviewSidebar>
+        </WithPreviewSidebar>
+      ) : (
+        <div className="flex-1">{children}</div>
+      )}
     </>
   );
 };

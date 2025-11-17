@@ -56,8 +56,10 @@ class Admin::PurchasesController < Admin::BaseController
       @purchase.resend_receipt
       render json: { success: true }
     else
-      render json: { success: false }
+      e404_json
     end
+  rescue ActiveRecord::RecordInvalid => e
+    render json: { message: e.message }, status: :unprocessable_content
   end
 
   def show

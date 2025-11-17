@@ -177,7 +177,7 @@ export const Layout = ({
               {receiptPurchaseId ? (
                 <details>
                   <summary>Receipt</summary>
-                  <div className="paragraphs">
+                  <div className="flex flex-col gap-4">
                     <NavigationButton
                       href={
                         purchase.email
@@ -196,7 +196,7 @@ export const Layout = ({
               {loggedInUser !== null ? (
                 <details>
                   <summary>Library</summary>
-                  <div className="paragraphs">
+                  <div className="flex flex-col gap-4">
                     <PurchaseArchiveButton purchase_id={purchase.id} initial_is_archived={purchase.is_archived} />
                     <PurchaseDeleteButton purchase_id={purchase.id} product_name={purchase.product_name} />
                   </div>
@@ -249,13 +249,13 @@ export const Layout = ({
               </>
             }
           >
-            <div className="paragraphs">
+            <div className="flex flex-col gap-4">
               {children}
               {!isDesktop ? settings : null}
             </div>
           </PageListLayout>
         ) : (
-          <div className="paragraphs flex-1 p-4 md:p-8">{children}</div>
+          <div className="flex flex-1 flex-col gap-4 p-4 md:p-8">{children}</div>
         )}
       </div>
     </>

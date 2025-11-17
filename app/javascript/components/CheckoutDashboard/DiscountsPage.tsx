@@ -19,7 +19,6 @@ import { writeQueryParams } from "$app/utils/url";
 import { Button } from "$app/components/Button";
 import { DiscountInput, InputtedDiscount } from "$app/components/CheckoutDashboard/DiscountInput";
 import { Layout, Page } from "$app/components/CheckoutDashboard/Layout";
-import { useClientAlert } from "$app/components/ClientAlertProvider";
 import { CopyToClipboard } from "$app/components/CopyToClipboard";
 import { useCurrentSeller } from "$app/components/CurrentSeller";
 import { DateInput } from "$app/components/DateInput";
@@ -31,9 +30,11 @@ import { Pagination, PaginationProps } from "$app/components/Pagination";
 import { Popover } from "$app/components/Popover";
 import { PriceInput } from "$app/components/PriceInput";
 import { Select, Option } from "$app/components/Select";
+import { showAlert } from "$app/components/server-components/Alert";
 import { TypeSafeOptionSelect } from "$app/components/TypeSafeOptionSelect";
 import { PageHeader } from "$app/components/ui/PageHeader";
 import Placeholder from "$app/components/ui/Placeholder";
+import { Sheet, SheetHeader } from "$app/components/ui/Sheet";
 import { useDebouncedCallback } from "$app/components/useDebouncedCallback";
 import { useGlobalEventListener } from "$app/components/useGlobalEventListener";
 import { useOriginalLocation } from "$app/components/useOriginalLocation";
@@ -131,7 +132,6 @@ export type DiscountsPageProps = {
 };
 
 const DiscountsPage = ({ offer_codes, pages, products, pagination: initialPagination }: DiscountsPageProps) => {
-  const { showAlert } = useClientAlert();
   const loggedInUser = useLoggedInUser();
   const [{ offerCodes, pagination }, setState] = React.useState<{
     offerCodes: OfferCode[];
@@ -324,7 +324,7 @@ const DiscountsPage = ({ offer_codes, pages, products, pagination: initialPagina
     >
       <section className="p-4 md:p-8">
         {offerCodes.length > 0 ? (
-          <section className="paragraphs">
+          <section className="flex flex-col gap-4">
             <table aria-live="polite" aria-busy={isLoading}>
               <thead>
                 <tr>
@@ -474,11 +474,8 @@ const DiscountsPage = ({ offer_codes, pages, products, pagination: initialPagina
           </Placeholder>
         )}
         {selectedOfferCode ? (
-          <aside>
-            <header>
-              <h2>{selectedOfferCode.name || selectedOfferCode.code.toUpperCase()}</h2>
-              <button className="close" aria-label="Close" onClick={() => setSelectedOfferCodeId(null)} />
-            </header>
+          <Sheet open onOpenChange={() => setSelectedOfferCodeId(null)}>
+            <SheetHeader>{selectedOfferCode.name || selectedOfferCode.code.toUpperCase()}</SheetHeader>
             <section className="stack">
               <h3>Details</h3>
               <div>
@@ -592,7 +589,7 @@ const DiscountsPage = ({ offer_codes, pages, products, pagination: initialPagina
                 {isLoading ? "Deleting..." : "Delete"}
               </Button>
             </section>
-          </aside>
+          </Sheet>
         ) : null}
       </section>
     </Layout>
@@ -697,7 +694,6 @@ const Form = ({
   isLoading: boolean;
 }) => {
   const [name, setName] = React.useState<{ value: string; error?: boolean }>({ value: offerCode?.name ?? "" });
-  const { showAlert } = useClientAlert();
   const [code, setCode] = React.useState<{ value: string; error?: boolean }>({
     value: offerCode?.code || generateCode(),
   });
@@ -831,7 +827,7 @@ const Form = ({
       <form>
         <section className="p-8!">
           <header>
-            <div className="paragraphs">
+            <div className="flex flex-col gap-4">
               <div>Create a discount code so your audience can buy your products at a reduced price.</div>
               <div>
                 Once the code is created, you can share it or copy a unique link per product that automatically applies

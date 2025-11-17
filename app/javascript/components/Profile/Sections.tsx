@@ -167,7 +167,7 @@ export const WishlistsView = ({ wishlists }: { wishlists: CardWishlist[] }) =>
       ))}
     </WishlistCardGrid>
   ) : (
-    <div className="paragraphs" style={{ textAlign: "center", height: "100%", alignContent: "center" }}>
+    <div className="flex h-full flex-col content-center gap-4 text-center">
       <h1>
         <Icon name="archive-fill" />
       </h1>

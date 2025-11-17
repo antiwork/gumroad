@@ -315,6 +315,84 @@ describe("Payments Settings Scenario", type: :system, js: true) do
       expect(find_button("Disconnect Stripe account", disabled: true)[:disabled]).to eq "true"
     end
 
+    it "does not allow saving placeholder state values" do
+      visit settings_payments_path
+
+      fill_in("First name", with: "barnabas")
+      fill_in("Last name", with: "barnabastein")
+      fill_in("Address", with: "address_full_match")
+      fill_in("City", with: "barnabasville")
+      select("State", from: "State")
+      fill_in("ZIP code", with: "12345")
+      fill_in("Phone number", with: "(502) 254-1982")
+
+      fill_in("Pay to the order of", with: "barnabas ngagy")
+      fill_in("Routing number", with: "110000000")
+      fill_in("Account number", with: "000123456789")
+      fill_in("Confirm account number", with: "000123456789")
+
+      select("1", from: "Day")
+      select("January", from: "Month")
+      select("1980", from: "Year")
+      fill_in("Last 4 digits of SSN", with: "1235")
+
+      expect do
+        click_on("Update settings")
+        expect(page).to have_status(text: "Please select a valid state or province.")
+      end.to_not change { @user.alive_user_compliance_info.reload.state }
+
+      select("California", from: "State")
+      expect do
+        click_on("Update settings")
+        wait_for_ajax
+        expect(page).to have_alert(text: "Thanks! You're all set.")
+      end.to change { @user.alive_user_compliance_info.reload.state }.to("CA")
+    end
+
+    it "does not allow saving placeholder state values for business" do
+      visit settings_payments_path
+
+      choose("Business")
+      fill_in("Legal business name", with: "Acme")
+      select("LLC", from: "Type")
+      find_field("Address", match: :first).set("123 North street")
+      find_field("City", match: :first).set("Barnesville")
+      find_field("State", match: :first).select("State")
+      find_field("ZIP code", match: :first).set("12345")
+      fill_in("Business phone number", with: "15052229876")
+      fill_in("Business Tax ID (EIN, or SSN for sole proprietors)", with: "123456789")
+
+      fill_in("First name", with: "barnabas")
+      fill_in("Last name", with: "barnabastein")
+      all('input[id$="creator-street-address"]').last.set("address_full_match")
+      all('input[id$="creator-city"]').last.set("barnabasville")
+      all('select[id$="creator-state"]').last.select("California")
+      all('input[id$="creator-zip-code"]').last.set("12345")
+      fill_in("Phone number", with: "(502) 254-1982")
+
+      fill_in("Pay to the order of", with: "barnabas ngagy")
+      fill_in("Routing number", with: "110000000")
+      fill_in("Account number", with: "000123456789")
+      fill_in("Confirm account number", with: "000123456789")
+
+      select("1", from: "Day")
+      select("January", from: "Month")
+      select("1980", from: "Year")
+      fill_in("Last 4 digits of SSN", with: "1235")
+
+      expect do
+        click_on("Update settings")
+        expect(page).to have_status(text: "Please select a valid state or province.")
+      end.to_not change { @user.alive_user_compliance_info.reload.business_state }
+
+      find_field("State", match: :first).select("California")
+      expect do
+        click_on("Update settings")
+        wait_for_ajax
+        expect(page).to have_alert(text: "Thanks! You're all set.")
+      end.to change { @user.alive_user_compliance_info.reload.business_state }.to("CA")
+    end
+
     describe "US-based creator with information set" do
       before do
         create(:ach_account_stripe_succeed, user: @user)
@@ -1071,6 +1149,12 @@ describe("Payments Settings Scenario", type: :system, js: true) do
         select("1980", from: "Year")
         click_on("Update settings")
         expect(page).to_not have_alert(text: "Thanks! You're all set.")
+        expect(find_field("State")["aria-invalid"]).to eq "true"
+        expect(page).to have_status(text: "Please select a valid state or province.")
+
+        select("Rio de Janeiro", from: "State")
+        click_on("Update settings")
+        expect(page).to have_alert(text: "Thanks! You're all set.")
       end
 
       it "allows the (non-US based) creator to enter their kyc and paypal email address and it'll save it properly" do
@@ -1082,6 +1166,7 @@ describe("Payments Settings Scenario", type: :system, js: true) do
         fill_in("City", with: "barnabasville")
         fill_in("Phone number", with: "5022541982")
         fill_in("Postal code", with: "12345")
+        select("Rio de Janeiro", from: "State")
 
         select("1", from: "Day")
         select("January", from: "Month")
@@ -1114,6 +1199,7 @@ describe("Payments Settings Scenario", type: :system, js: true) do
         fill_in "City", with: "Tokyo"
         fill_in "Postal code", with: "12345"
         fill_in "Phone number", with: "5022541982"
+        select("São Paulo", from: "State")
         select("1", from: "Day")
         select("January", from: "Month")
         select("1990", from: "Year")
