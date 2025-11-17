@@ -10,7 +10,7 @@
     </h2>
   </header>
   <% if @pre_auth.scopes.present? %>
-    <div class="paragraphs">
+    <div class="flex flex-col gap-4">
       <h4>This application will be able to:</h4>
       <ul>
         <% @pre_auth.scopes.each do |scope| %>

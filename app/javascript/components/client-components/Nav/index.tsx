@@ -130,7 +130,7 @@ export const Nav = (props: Props) => {
           href={Routes.emails_url(routeParams)}
           additionalPatterns={[Routes.followers_url(routeParams)]}
         />
-        <NavLink text="Workflows" icon="diagram-2-fill" href={Routes.workflows_url(routeParams)} />
+        <ClientNavLink text="Workflows" icon="diagram-2-fill" href={Routes.workflows_url(routeParams)} />
         <ClientNavLink text="Sales" icon="solid-currency-dollar" href={Routes.customers_url(routeParams)} />
         <ClientNavLink
           text="Analytics"

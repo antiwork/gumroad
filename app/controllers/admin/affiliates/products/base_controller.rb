@@ -1,14 +1,9 @@
 # frozen_string_literal: true
 
-class Admin::Affiliates::Products::BaseController < Admin::Users::BaseController
-  before_action :set_affiliate_user
+class Admin::Affiliates::Products::BaseController < Admin::Affiliates::BaseController
   before_action :set_product
 
   private
-    def set_affiliate_user
-      @affiliate_user = User.find(params[:affiliate_id])
-    end
-
     def set_product
       @product = Link.find(params[:product_id])
     end

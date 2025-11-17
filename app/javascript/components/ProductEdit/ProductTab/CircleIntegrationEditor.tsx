@@ -109,7 +109,7 @@ export const CircleIntegrationEditor = ({
       }}
       label="Invite your customers to a Circle community"
       dropdown={
-        <div className="paragraphs">
+        <div className="flex flex-col gap-4">
           People who purchase your product will be automatically invited to your Circle community. To get your API
           token, visit your-community.circle.so/settings/API.
           <fieldset>

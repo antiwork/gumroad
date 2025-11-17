@@ -33,11 +33,11 @@ export const AdminSuspendForTosForm = ({
       method="POST"
       confirmMessage={confirm_message}
       onSuccess={onFormSuccess}
-      className="input-with-button"
+      className="flex gap-2"
     >
       {(isLoading) => (
         <>
-          <select name="suspend_tos[reason]" defaultValue={default_reason}>
+          <select name="suspend_tos[reason]" defaultValue={default_reason} className="flex-1">
             {Object.entries(reasons).map(([name, value]) => (
               <option key={value} value={value}>
                 {name}
