@@ -1,34 +1,28 @@
+import { Link, useForm } from "@inertiajs/react";
 import cx from "classnames";
 import * as React from "react";
-import { Link, useLoaderData, useNavigate, useRevalidator } from "react-router-dom";
-import { cast } from "ts-safe-cast";
 
 import {
   WorkflowFormContext,
   Workflow,
   WorkflowType,
-  createWorkflow,
   LegacyWorkflowTrigger,
-  updateWorkflow,
   SaveActionName,
   ProductOption,
   VariantOption,
-} from "$app/data/workflows";
-import { asyncVoid } from "$app/utils/promise";
-import { assertResponseError } from "$app/utils/request";
+} from "$app/types/workflow";
 
 import { Button } from "$app/components/Button";
 import { Icon } from "$app/components/Icons";
 import { NumberInput } from "$app/components/NumberInput";
-import { showAlert } from "$app/components/server-components/Alert";
+import { TagInput } from "$app/components/TagInput";
+import { WithTooltip } from "$app/components/WithTooltip";
 import {
   Layout,
   EditPageNavigation,
   sendToPastCustomersCheckboxLabel,
   PublishButton,
-} from "$app/components/server-components/WorkflowsPage";
-import { TagInput } from "$app/components/TagInput";
-import { WithTooltip } from "$app/components/WithTooltip";
+} from "$app/components/WorkflowsPage";
 
 import abandonedCartTriggerImage from "$assets/images/workflows/triggers/abandoned_cart.svg";
 import audienceTriggerImage from "$assets/images/workflows/triggers/audience.svg";
@@ -85,10 +79,13 @@ type WorkflowFormState = {
   beforeDate: string;
   fromCountry: string;
 };
-const WorkflowForm = () => {
-  const navigate = useNavigate();
-  const { context, workflow } = cast<{ context: WorkflowFormContext; workflow?: Workflow }>(useLoaderData());
-  const loaderDataRevalidator = useRevalidator();
+
+type WorkflowFormProps = {
+  context: WorkflowFormContext;
+  workflow?: Workflow;
+};
+
+const WorkflowForm = ({ context, workflow }: WorkflowFormProps) => {
   const wasPublishedPreviously = !!workflow?.first_published_at;
   const [formState, setFormState] = React.useState<WorkflowFormState>(() => {
     if (!workflow)
@@ -126,7 +123,7 @@ const WorkflowForm = () => {
       fromCountry: workflow.bought_from ?? "",
     };
   });
-  const [isSaving, setIsSaving] = React.useState(false);
+  const form = useForm({});
   const [invalidFields, setInvalidFields] = React.useState<Set<keyof WorkflowFormState>>(() => new Set());
   const nameInputRef = React.useRef<HTMLInputElement>(null);
   const paidMoreThanInputRef = React.useRef<HTMLInputElement>(null);
@@ -202,7 +199,7 @@ const WorkflowForm = () => {
     return invalidFieldNames.size === 0;
   };
 
-  const handleSave = asyncVoid(async (saveActionName: SaveActionName = "save") => {
+  const handleSave = (saveActionName: SaveActionName = "save") => {
     if (!validate()) return;
 
     const boughtItems = formState.bought.flatMap(
@@ -233,47 +230,37 @@ const WorkflowForm = () => {
           { productIds: [], variantIds: [] },
         )
       : { productIds: [], variantIds: [] };
-    const payload = {
-      name: formState.name,
-      workflow_type: workflowType,
-      workflow_trigger: workflowTrigger,
-      bought_products: bought.productIds,
-      bought_variants: bought.variantIds,
-      variant_external_id: variantId,
-      permalink: productPermalink,
-      not_bought_products: notBought.productIds,
-      not_bought_variants: notBought.variantIds,
-      paid_more_than: triggerSupportsPaidFilters ? formState.paidMoreThan : null,
-      paid_less_than: triggerSupportsPaidFilters ? formState.paidLessThan : null,
-      created_after: triggerSupportsDateFilters ? formState.afterDate : "",
-      created_before: triggerSupportsDateFilters ? formState.beforeDate : "",
-      bought_from: triggerSupportsFromCountryFilter ? formState.fromCountry : null,
-      affiliate_products: formState.trigger === "new_affiliate" ? formState.affiliatedProducts : [],
-      send_to_past_customers: formState.sendToPastCustomers,
-      save_action_name: saveActionName,
-    };
 
-    try {
-      setIsSaving(true);
-      const response = await (workflow ? updateWorkflow(workflow.external_id, payload) : createWorkflow(payload));
-      if (response.success) {
-        if (saveActionName === "save") {
-          showAlert("Changes saved!", "success");
-          navigate(`/workflows/${response.workflow_id}/emails`);
-        } else {
-          showAlert(saveActionName === "save_and_publish" ? "Workflow published!" : "Unpublished!", "success");
-          loaderDataRevalidator.revalidate();
-        }
-      } else {
-        showAlert(response.message, "error");
-      }
-    } catch (e) {
-      assertResponseError(e);
-      showAlert("Sorry, something went wrong. Please try again.", "error");
-    } finally {
-      setIsSaving(false);
+    form.transform(() => ({
+      workflow: {
+        name: formState.name,
+        workflow_type: workflowType,
+        workflow_trigger: workflowTrigger,
+        bought_products: bought.productIds,
+        bought_variants: bought.variantIds,
+        variant_external_id: variantId,
+        permalink: productPermalink,
+        not_bought_products: notBought.productIds,
+        not_bought_variants: notBought.variantIds,
+        paid_more_than: triggerSupportsPaidFilters ? formState.paidMoreThan : null,
+        paid_less_than: triggerSupportsPaidFilters ? formState.paidLessThan : null,
+        created_after: triggerSupportsDateFilters ? formState.afterDate : "",
+        created_before: triggerSupportsDateFilters ? formState.beforeDate : "",
+        bought_from: triggerSupportsFromCountryFilter ? formState.fromCountry : null,
+        affiliate_products: formState.trigger === "new_affiliate" ? formState.affiliatedProducts : [],
+        send_to_past_customers: formState.sendToPastCustomers,
+        save_action_name: saveActionName,
+      },
+    }));
+
+    if (workflow) {
+      form.patch(Routes.workflow_path(workflow.external_id), {
+        only: ["workflow", "flash"],
+      });
+    } else {
+      form.post(Routes.workflows_path());
     }
-  });
+  };
 
   const abandonedCartButton = (
     <Button
@@ -296,18 +283,18 @@ const WorkflowForm = () => {
       navigation={workflow ? <EditPageNavigation workflowExternalId={workflow.external_id} /> : null}
       actions={
         <>
-          <Link to="/workflows" className="button" inert={isSaving}>
+          <Link href={Routes.workflows_path()} className="button" inert={form.processing || undefined}>
             <Icon name="x-square" />
             Cancel
           </Link>
-          <Button color="primary" onClick={() => handleSave()} disabled={isSaving}>
+          <Button color="primary" onClick={() => handleSave()} disabled={form.processing}>
             {workflow ? "Save changes" : "Save and continue"}
           </Button>
           {workflow ? (
             <PublishButton
               isPublished={workflow.published}
               wasPublishedPreviously={wasPublishedPreviously}
-              isDisabled={isSaving}
+              isDisabled={form.processing}
               sendToPastCustomers={
                 formState.trigger === "abandoned_cart"
                   ? null

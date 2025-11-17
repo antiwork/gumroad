@@ -54,9 +54,9 @@ describe "UTM links", :js, type: :system do
           visit utm_links_dashboard_path
 
           wait_for_ajax
-          find(:table_row, { "Link" => utm_link.title, "Clicks" => "3", "Sales" => "2", "Conversion" => "66.67%" }).click
+          find(:table_row, { "Link" => utm_link.title, "Clicks" => "3", "Conversion" => "66.67%" }).click
           wait_for_ajax
-          within_section utm_link.title, section_element: :aside do
+          within_modal utm_link.title do
             within_section "Details" do
               expect(page).to have_text("Destination Profile page", normalize_ws: true)
               expect(page).to have_link("Profile page", href: seller.profile_url)
@@ -95,7 +95,7 @@ describe "UTM links", :js, type: :system do
           visit utm_links_dashboard_path
 
           find(:table_row, { "Link" => utm_link.title }).click
-          within_section utm_link.title, section_element: :aside do
+          within_modal utm_link.title do
             click_on "Delete"
           end
           within_modal "Delete link?" do
@@ -103,7 +103,7 @@ describe "UTM links", :js, type: :system do
           end
           wait_for_ajax
           expect(page).to have_alert(text: "Link deleted!")
-          expect(page).to_not have_section(utm_link.title, section_element: :aside)
+          expect(page).to_not have_modal
           expect(page).to_not have_table_row({ "Link" => utm_link.title })
           expect(utm_link.reload).to be_deleted
         end
@@ -718,7 +718,7 @@ describe "UTM links", :js, type: :system do
         expect(page).to have_alert(text: "Link updated!")
         expect(page).to have_current_path(utm_links_dashboard_path)
         find(:table_row, { "Link" => "Updated UTM Link", "Source" => "instagram", "Medium" => "social", "Campaign" => "summer-sale-1" }).click
-        within_section "Updated UTM Link", section_element: :aside do
+        within_modal "Updated UTM Link" do
           within_section "Details" do
             expect(page).to have_text("Source instagram", normalize_ws: true)
             expect(page).to have_text("Content hello-world-", normalize_ws: true)

@@ -3,7 +3,7 @@ import { cast } from "ts-safe-cast";
 
 import { ResponseError, assertResponseError, request } from "$app/utils/request";
 
-import { useClientAlert } from "$app/components/ClientAlertProvider";
+import { showAlert } from "$app/components/server-components/Alert";
 
 export const Form = ({
   url,
@@ -21,7 +21,6 @@ export const Form = ({
   className?: string;
 }) => {
   const [isLoading, setIsLoading] = React.useState(false);
-  const { showAlert } = useClientAlert();
 
   const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();

@@ -33,7 +33,7 @@ export const ReferrersTable = ({ data }: { data: AnalyticsReferrerTotals }) => {
   }, [data]);
 
   return (
-    <section className="paragraphs">
+    <section className="flex flex-col gap-4">
       <table>
         <caption>
           <a href="/help/article/74-the-analytics-dashboard" target="_blank" rel="noreferrer">

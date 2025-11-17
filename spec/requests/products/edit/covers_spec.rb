@@ -37,8 +37,8 @@ describe "Product Edit Covers", type: :system, js: true do
     end
     wait_for_ajax
 
-    within_section "Cover", section_element: :section do
-      expect(page).to have_selector("button[role='tab']", count: 2)
+    within "[role=tablist][aria-label='Product covers']" do
+      expect(page).to have_tab_button(count: 2)
     end
   end
 
@@ -68,8 +68,8 @@ describe "Product Edit Covers", type: :system, js: true do
     expect(page).to have_alert(text: "Could not process your preview, please try again.")
     upload_image(["test-small.jpg"])
     wait_for_ajax
-    within_section "Cover", section_element: :section do
-      expect(page).to have_selector("button[role='tab']", count: 1)
+    within "[role=tablist][aria-label='Product covers']" do
+      expect(page).to have_tab_button(count: 1)
     end
   end
 
@@ -77,8 +77,8 @@ describe "Product Edit Covers", type: :system, js: true do
     visit edit_link_path(product.unique_permalink)
     upload_image(["ScreenRecording.mov"])
     wait_for_ajax
-    within_section "Cover", section_element: :section do
-      expect(page).to have_selector("button[role='tab']", count: 1)
+    within "[role=tablist][aria-label='Product covers']" do
+      expect(page).to have_tab_button(count: 1)
     end
   end
 
@@ -86,8 +86,8 @@ describe "Product Edit Covers", type: :system, js: true do
     visit edit_link_path(product.unique_permalink)
     upload_image(["test-small.jpg", "test.png"])
     wait_for_ajax
-    within_section "Cover", section_element: :section do
-      expect(page).to have_selector("button[role='tab']", count: 2)
+    within "[role=tablist][aria-label='Product covers']" do
+      expect(page).to have_tab_button(count: 2)
     end
   end
 
@@ -107,8 +107,8 @@ describe "Product Edit Covers", type: :system, js: true do
                  ])
     wait_for_ajax
     expect(page).to have_alert(text: "Sorry, we have a limit of 8 previews. Please delete an existing one before adding another.")
-    within_section "Cover", section_element: :section do
-      expect(page).to have_selector("button[role='tab']", count: 8)
+    within "[role=tablist][aria-label='Product covers']" do
+      expect(page).to have_tab_button(count: 8)
     end
   end
 
@@ -127,8 +127,8 @@ describe "Product Edit Covers", type: :system, js: true do
             end
 
             expect(page).to_not have_alert(text: "A URL from an unsupported platform was provided. Please try again.")
-            within_section "Cover", section_element: :section do
-              expect(page).to have_selector("button[role='tab'] img[src='https://i.ytimg.com/vi/YE7VzlLtp-4/hqdefault.jpg']")
+            within "[role=tablist][aria-label='Product covers']" do
+              expect(page).to have_selector("img[src='https://i.ytimg.com/vi/YE7VzlLtp-4/hqdefault.jpg']")
             end
           end.to change { AssetPreview.count }.by(1)
         end
@@ -162,10 +162,10 @@ describe "Product Edit Covers", type: :system, js: true do
 
     visit edit_link_path(product.unique_permalink)
 
-    within_section "Cover", section_element: :section do
-      preview_mini_node1 = all("button[role='tab']")[0]
-      preview_mini_node2 = all("button[role='tab']")[1]
-      preview_mini_node3 = all("button[role='tab']")[2]
+    within "[role=tablist][aria-label='Product covers']" do
+      preview_mini_node1 = all(:tab_button)[0]
+      preview_mini_node2 = all(:tab_button)[1]
+      preview_mini_node3 = all(:tab_button)[2]
 
       expect(preview_mini_node1).not_to be nil
       expect(preview_mini_node2).not_to be nil

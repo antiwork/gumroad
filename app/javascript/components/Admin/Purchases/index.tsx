@@ -8,9 +8,9 @@ import Comments from "$app/components/Admin/Commentable";
 import DateTimeWithRelativeTooltip from "$app/components/Admin/DateTimeWithRelativeTooltip";
 import { Form } from "$app/components/Admin/Form";
 import { NoIcon, BooleanIcon } from "$app/components/Admin/Icons";
+import AdminResendReceiptForm from "$app/components/Admin/Purchases/ResendReceiptForm";
 import { CopyToClipboard } from "$app/components/CopyToClipboard";
 import { Icon } from "$app/components/Icons";
-import { AdminResendReceiptForm } from "$app/components/server-components/Admin/ResendReceiptForm";
 import { showAlert } from "$app/components/server-components/Alert";
 
 import { type RefundPolicy, RefundPolicyTitle } from "./RefundPolicy";
@@ -74,7 +74,7 @@ export type Purchase = PurchaseStatesInfo & {
     type: string;
     visual: string;
     country: string;
-    fingerprint_search_url: string;
+    fingerprint_search_url: string | null;
   } | null;
   ip_address: string | null;
   ip_country: string | null;
@@ -82,7 +82,8 @@ export type Purchase = PurchaseStatesInfo & {
   subscription: {
     id: number;
     external_id: string;
-    cancelled: { at: string; by_buyer: boolean } | null;
+    cancelled_at: string | null;
+    cancelled_by_buyer: boolean | null;
     ended_at: string | null;
     failed_at: string | null;
   } | null;
@@ -146,7 +147,7 @@ const Header = ({ purchase }: { purchase: Purchase }) => (
 );
 
 const Info = ({ purchase }: { purchase: Purchase }) => (
-  <div className="paragraphs">
+  <div className="flex flex-col gap-4">
     <h3>Info</h3>
     <dl>
       {purchase.seller.support_email ? (
@@ -395,9 +396,9 @@ const Info = ({ purchase }: { purchase: Purchase }) => (
         <>
           <dt>Cancelled</dt>
           <dd>
-            <BooleanIcon value={!!purchase.subscription.cancelled} />
-            {purchase.subscription.cancelled
-              ? ` (on ${purchase.subscription.cancelled.at} by ${purchase.subscription.cancelled.by_buyer ? "buyer" : "seller"})`
+            <BooleanIcon value={!!purchase.subscription.cancelled_at} />
+            {purchase.subscription.cancelled_at
+              ? ` (on ${purchase.subscription.cancelled_at} by ${purchase.subscription.cancelled_by_buyer ? "buyer" : "seller"})`
               : null}
           </dd>
 
@@ -496,8 +497,8 @@ const GiftInfo = ({ purchaseId, gift }: { purchaseId: number; gift: Gift }) =>
           onSuccess={() => showAlert("Successfully updated the giftee email.", "success")}
         >
           {(isLoading) => (
-            <div className="input-with-button">
-              <input type="text" name="giftee_email" placeholder="Enter new giftee email" required />
+            <div className="flex gap-2">
+              <input type="text" className="flex-1" name="giftee_email" placeholder="Enter new giftee email" required />
               <button type="submit" className="button" disabled={isLoading}>
                 {isLoading ? "Updating..." : "Update"}
               </button>
@@ -527,7 +528,7 @@ const GiftInfo = ({ purchaseId, gift }: { purchaseId: number; gift: Gift }) =>
   );
 
 const ActionButtons = ({ purchase }: { purchase: Purchase }) => (
-  <div className="button-group">
+  <div className="flex flex-wrap gap-2">
     {purchase.can_force_update || purchase.failed ? (
       <AdminActionButton
         label="Sync with Stripe/PayPal"
@@ -575,7 +576,7 @@ const ActionButtons = ({ purchase }: { purchase: Purchase }) => (
       </>
     ) : null}
     {purchase.subscription &&
-    !purchase.subscription.cancelled &&
+    !purchase.subscription.cancelled_at &&
     !purchase.subscription.ended_at &&
     !purchase.subscription.failed_at ? (
       <>

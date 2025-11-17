@@ -12,7 +12,7 @@ const AdminPayoutsShow = () => {
   const { payout } = cast<Props>(usePage().props);
 
   return (
-    <div className="paragraphs">
+    <div className="flex flex-col gap-4">
       <AdminPayout payout={payout} />
     </div>
   );

@@ -54,7 +54,7 @@ describe("Workflows", js: true, type: :system) do
       within_section unpublished_workflow.name, section_element: :section do
         expect(page).to have_text("Unpublished")
         expect(page).to have_text("No emails yet, add one")
-        expect(page).to have_link("add one", href: "/workflows/#{unpublished_workflow.external_id}/emails")
+        expect(page).to have_link("add one", href: workflow_emails_path(unpublished_workflow.external_id))
       end
 
       # When there is an alive workflow that is published and doesn't have any installments
@@ -137,7 +137,7 @@ describe("Workflows", js: true, type: :system) do
       workflow = Workflow.last
       expect(workflow.name).to eq("A workflow")
 
-      edit_workflow_path = "/workflows/#{workflow.external_id}/edit"
+      edit_workflow_path = edit_workflow_path(workflow.external_id)
       visit edit_workflow_path
       expect(page).to have_input_labelled "Name", with: "A workflow"
       fill_in "Paid more than", with: "10"
@@ -613,7 +613,7 @@ describe("Workflows", js: true, type: :system) do
       expect(installment.installment_rule.time_period).to eq("hour")
       expect(installment.installment_rule.delayed_delivery_time).to eq(24.hour)
 
-      expect(page).to have_current_path("/workflows/#{workflow.external_id}/emails")
+      expect(page).to have_current_path(workflow_emails_path(workflow.external_id))
       within find_email_row("You left something in your cart") do
         expect(page).to have_field("Subject", with: "You left something in your cart")
         expect(page).to_not have_field("Duration")
@@ -636,7 +636,7 @@ describe("Workflows", js: true, type: :system) do
           expect(page).to have_link("Complete checkout", href: checkout_index_url(host: UrlService.domain_with_protocol))
         end
       end
-      within find("[aria-label=Preview]") do
+      within_section "Preview", section_element: :aside do
         within_section "You left something in your cart" do
           expect(page).to have_text("24 hours after cart abandonment")
           expect(page).to have_text("When you're ready to buy, complete checking out", normalize_ws: true)
@@ -663,7 +663,7 @@ describe("Workflows", js: true, type: :system) do
           expect(page).to_not have_text("more product")
         end
       end
-      within find("[aria-label=Preview]") do
+      within_section "Preview", section_element: :aside do
         expect(page).to have_abandoned_cart_item(product5.name)
         expect(page).to_not have_text("more product")
       end
@@ -680,7 +680,7 @@ describe("Workflows", js: true, type: :system) do
           expect(page).to have_abandoned_cart_item(product5.name)
         end
       end
-      within find("[aria-label=Preview]") do
+      within_section "Preview", section_element: :aside do
         expect(page).to have_text("New description line")
         expect(page).to_not have_text("When you're ready to buy, complete checking out.")
         expect(page).to have_abandoned_cart_item(@product.name)
@@ -715,7 +715,7 @@ describe("Workflows", js: true, type: :system) do
       select_combo_box_option @product.name, from: "Has products in abandoned cart"
       click_on "Save and continue"
       expect(page).to have_alert(text: "Changes saved!")
-      expect(page).to have_current_path("/workflows/#{Workflow.last.external_id}/emails")
+      expect(page).to have_current_path(workflow_emails_path(Workflow.last.external_id))
       within find_email_row("You left something in your cart") do
         within find("[aria-label='Email message']") do
           expect(page).to have_abandoned_cart_item(@product.name)
@@ -789,7 +789,7 @@ describe("Workflows", js: true, type: :system) do
           click_on "Edit workflow"
         end
 
-        expect(page).to have_current_path("/workflows/#{workflow.external_id}/edit")
+        expect(page).to have_current_path(edit_workflow_path(workflow.external_id))
         expect(page).to have_tab_button("Details", open: true)
         expect(page).to have_tab_button("Emails", open: false)
         expect(page).to have_input_labelled "Name", with: "Legacy audience workflow"
@@ -817,7 +817,7 @@ describe("Workflows", js: true, type: :system) do
         fill_in "Purchased before", with: "01/01/2025"
         click_on "Save changes"
         expect(page).to have_alert(text: "Changes saved!")
-        expect(page).to have_current_path("/workflows/#{workflow.external_id}/emails")
+        expect(page).to have_current_path(workflow_emails_path(workflow.external_id))
         expect(page).to have_tab_button("Details", open: false)
         expect(page).to have_tab_button("Emails", open: true)
 
@@ -1233,6 +1233,7 @@ describe("Workflows", js: true, type: :system) do
         end
         expect(page).to have_alert(text: "Workflow published!")
 
+        click_on "Details"
         expect(page).to_not have_disclosure("Publish")
         expect(page).to have_button("Unpublish")
         expect(page).to have_input_labelled "Name", with: "My workflow (edited)"
@@ -1276,6 +1277,7 @@ describe("Workflows", js: true, type: :system) do
         fill_in "Name", with: "My workflow (edited again)"
         click_on "Unpublish"
         expect(page).to have_alert(text: "Unpublished!")
+        click_on "Details"
         expect(page).to_not have_button("Unpublish")
         expect(page).to_not have_disclosure("Publish")
         expect(page).to have_input_labelled "Name", with: "My workflow (edited again)"
@@ -1418,7 +1420,7 @@ describe("Workflows", js: true, type: :system) do
         click_on "add one"
       end
 
-      expect(page).to have_current_path("/workflows/#{@workflow.external_id}/emails")
+      expect(page).to have_current_path(workflow_emails_path(@workflow.external_id))
       expect(page).to have_tab_button("Emails", open: true)
       within_section "Create emails for your workflow" do
         click_on "Create email"
@@ -1471,7 +1473,7 @@ describe("Workflows", js: true, type: :system) do
         message_editor = find("[aria-label='Email message']")
         set_rich_text_editor_input(message_editor, to_text: "You're lucky!")
       end
-      within find("[aria-label=Preview]") do
+      within_section "Preview", section_element: :aside do
         within_section "Thank you!" do
           expect(page).to have_text("1 day after purchase")
           expect(page).to have_text("An important message")
@@ -1533,7 +1535,7 @@ describe("Workflows", js: true, type: :system) do
         click_on "Edit"
         check "Disable file downloads (stream only)"
       end
-      within find("[aria-label=Preview]") do
+      within_section "Preview", section_element: :aside do
         within_section "Thank you!" do
           expect(page).to have_text("1 day after purchase")
           expect(page).to have_text("An important message")
