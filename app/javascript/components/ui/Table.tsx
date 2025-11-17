@@ -15,6 +15,7 @@ export const Table = React.forwardRef<
     <TableContext.Provider value={contextValue}>
       <table
         ref={ref}
+        aria-live={busy == null ? undefined : "polite"}
         aria-busy={busy}
         className={classNames(
           "custom-table grid w-full border-spacing-0 gap-4 lg:table lg:rounded-sm lg:border lg:border-border",

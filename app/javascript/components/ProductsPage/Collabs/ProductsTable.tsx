@@ -71,7 +71,7 @@ export const CollabsProductsTable = (props: { entries: Product[]; pagination: Pa
 
   return (
     <div className="paragraphs">
-      <Table aria-live="polite" aria-busy={isLoading} ref={tableRef}>
+      <Table busy={isLoading} ref={tableRef}>
         <TableCaption>Products</TableCaption>
         <TableHeader>
           <TableRow>

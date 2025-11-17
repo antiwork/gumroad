@@ -211,7 +211,7 @@ const IncomingCollaboratorsTable = ({
   onRemove: (collaborator: IncomingCollaborator) => void;
 }) => (
   <section className="p-4 md:p-8">
-    <Table aria-busy={loading || disabled}>
+    <Table busy={loading || disabled}>
       <TableHeader>
         <TableRow>
           <TableHead>From</TableHead>

@@ -93,7 +93,7 @@ export const ProductsPageProductsTable = (props: {
 
   return (
     <div className="paragraphs">
-      <Table aria-live="polite" ref={tableRef} busy={isLoading}>
+      <Table ref={tableRef} busy={isLoading}>
         <TableCaption>Products</TableCaption>
         <TableHeader>
           <TableRow>

@@ -442,7 +442,7 @@ const CustomersPage = ({
       <section className="p-4 md:p-8">
         {customers.length > 0 ? (
           <section className="paragraphs">
-            <Table aria-live="polite" busy={isLoading}>
+            <Table busy={isLoading}>
               <TableCaption>{`All sales (${count})`}</TableCaption>
               <TableHeader>
                 <TableRow>

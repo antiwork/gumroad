@@ -110,7 +110,7 @@ const AffiliatedProductsTable = ({
 
   return (
     <section className="paragraphs">
-      <Table aria-live="polite" busy={isLoading}>
+      <Table busy={isLoading}>
         <TableHeader>
           <TableRow>
             <TableHead {...thProps("product_name")} title="Sort by Product">

@@ -1,6 +1,6 @@
 import * as React from "react";
 
-import { Table, TableBody, TableCaption, TableCell, TableHead, TableHeader, TableRow } from "$app/components/ui/Table";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "$app/components/ui/Table";
 
 export type JobHistoryItem = {
   job_id: string;
@@ -39,7 +39,6 @@ const AdminSalesReportsJobHistory = ({ countries, jobHistory }: Props) => {
   return (
     <section>
       <Table>
-        <TableCaption>Job History</TableCaption>
         <TableHeader>
           <TableRow>
             <TableHead>Country</TableHead>

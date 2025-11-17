@@ -117,7 +117,7 @@ export const DraftsTab = () => {
       <div className="space-y-4 p-4 md:p-8">
         {installments.length > 0 ? (
           <>
-            <Table aria-label="Drafts" aria-live="polite" aria-busy={isLoading}>
+            <Table aria-label="Drafts" busy={isLoading}>
               <TableHeader>
                 <TableRow>
                   <TableHead>Subject</TableHead>

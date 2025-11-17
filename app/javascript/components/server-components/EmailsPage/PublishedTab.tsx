@@ -99,7 +99,7 @@ export const PublishedTab = () => {
       <div className="space-y-4 p-4 md:p-8">
         {installments.length > 0 ? (
           <>
-            <Table busy={isLoading} aria-label="Published" aria-live="polite">
+            <Table busy={isLoading} aria-label="Published">
               <TableCaption>Published</TableCaption>
               <TableHeader>
                 <TableRow>

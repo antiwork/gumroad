@@ -131,7 +131,7 @@ export const ScheduledTab = () => {
         {installments.length > 0 ? (
           <>
             {Object.keys(installmentsByDate).map((date) => (
-              <Table key={date} className="mb-16" aria-live="polite" aria-busy={isLoading}>
+              <Table key={date} className="mb-16" busy={isLoading}>
                 <TableCaption>Scheduled for {date}</TableCaption>
                 <TableHeader>
                   <TableRow>
