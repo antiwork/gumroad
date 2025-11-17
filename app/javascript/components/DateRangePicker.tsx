@@ -53,7 +53,7 @@ export const DateRangePicker = ({
       }
     >
       {isCustom ? (
-        <div className="paragraphs">
+        <div className="flex flex-col gap-4">
           <fieldset>
             <legend>
               <label htmlFor={`${uid}-from`}>From (including)</label>

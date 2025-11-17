@@ -14,7 +14,7 @@ type Props = {
 };
 
 const AdminUsersProductsHeader = ({ product, isCurrentUrl }: Props) => (
-  <div className="paragraphs">
+  <div className="flex flex-col gap-4">
     <div className="flex items-center gap-4">
       {product.preview_url ? (
         <a href={product.preview_url} target="_blank" rel="noreferrer noopener">
@@ -48,7 +48,7 @@ const AdminUsersProductsHeader = ({ product, isCurrentUrl }: Props) => (
       </div>
     </div>
 
-    <div className="button-group">
+    <div className="flex flex-wrap gap-2">
       <a
         href={Routes.edit_link_path(product.unique_permalink)}
         className="button small"
@@ -70,12 +70,12 @@ const AdminUsersProductsHeader = ({ product, isCurrentUrl }: Props) => (
       {product.alive_product_files.map((file) => (
         <a
           key={file.external_id}
-          href={Routes.admin_access_product_file_admin_product_path(product.id, file.external_id)}
+          href={Routes.admin_access_product_file_admin_product_path(product.unique_permalink, file.external_id)}
           className="button small"
           target="_blank"
           rel="noreferrer noopener"
         >
-          {file.s3_filename}
+          {file.s3_filename || file.external_id}
         </a>
       ))}
     </div>

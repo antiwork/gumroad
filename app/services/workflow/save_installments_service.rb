@@ -3,21 +3,28 @@
 class Workflow::SaveInstallmentsService
   include InstallmentRuleHelper
 
-  attr_reader :error, :old_and_new_installment_id_mapping
+  attr_reader :errors, :old_and_new_installment_id_mapping
 
   def initialize(seller:, params:, workflow:, preview_email_recipient:)
     @seller = seller
     @params = params
     @workflow = workflow
     @preview_email_recipient = preview_email_recipient
-    @error = nil
+    @errors = nil
     @old_and_new_installment_id_mapping = {}
   end
 
   def process
+    if params[:installments].nil?
+      workflow.errors.add(:base, "Installments data is required")
+      @errors = workflow.errors
+      return [false, errors]
+    end
+
     if workflow.abandoned_cart_type? && params[:installments].size != 1
-      @error = "An abandoned cart workflow can only have one email."
-      return [false, error]
+      workflow.errors.add(:base, "An abandoned cart workflow can only have one email.")
+      @errors = workflow.errors
+      return [false, errors]
     end
 
     begin
@@ -53,12 +60,13 @@ class Workflow::SaveInstallmentsService
         workflow.unpublish! if params[:save_action_name] == Workflow::SAVE_AND_UNPUBLISH_ACTION
       end
     rescue ActiveRecord::RecordInvalid => e
-      @error = e.record.errors.full_messages.first
+      @errors = e.record.errors
     rescue Installment::InstallmentInvalid, Installment::PreviewEmailError => e
-      @error = e.message
+      workflow.errors.add(:base, e.message)
+      @errors = workflow.errors
     end
 
-    [error.nil?, error]
+    [errors.nil?, errors]
   end
 
   private

@@ -723,8 +723,8 @@ const SendToKindleContainer = ({
 
   return (
     <div>
-      <div className="input-with-button">
-        <fieldset className={cx({ danger: hasError })}>
+      <div className="flex gap-2">
+        <fieldset className={cx("flex-1", { danger: hasError })}>
           <input
             type="text"
             value={emailEntry}

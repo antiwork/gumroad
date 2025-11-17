@@ -1,5 +1,4 @@
 import * as React from "react";
-import ReactDOM from "react-dom";
 import { Link, useLoaderData, useNavigation } from "react-router-dom";
 import { cast } from "ts-safe-cast";
 
@@ -18,6 +17,7 @@ import { LoadingSpinner } from "$app/components/LoadingSpinner";
 import { useLoggedInUser } from "$app/components/LoggedInUser";
 import { showAlert } from "$app/components/server-components/Alert";
 import Placeholder from "$app/components/ui/Placeholder";
+import { Sheet, SheetHeader } from "$app/components/ui/Sheet";
 import { WithTooltip } from "$app/components/WithTooltip";
 
 import placeholder from "$assets/images/placeholders/collaborators.png";
@@ -69,52 +69,46 @@ const IncomingCollaboratorDetails = ({
   onReject: () => void;
   onRemove: () => void;
   disabled: boolean;
-}) =>
-  ReactDOM.createPortal(
-    <aside className="flex! flex-col!">
-      <header>
-        <h2>{selected.seller_name}</h2>
-        <button className="close" aria-label="Close" onClick={onClose} />
-      </header>
+}) => (
+  <Sheet open onOpenChange={onClose}>
+    <SheetHeader>{selected.seller_name}</SheetHeader>
+    <section className="stack">
+      <h3>Email</h3>
+      <div>
+        <span>{selected.seller_email}</span>
+      </div>
+    </section>
 
-      <section className="stack">
-        <h3>Email</h3>
-        <div>
-          <span>{selected.seller_email}</span>
-        </div>
-      </section>
+    <section className="stack">
+      <h3>Products</h3>
+      {selected.products.map((product) => (
+        <section key={product.id}>
+          <a href={product.url} target="_blank" rel="noreferrer">
+            {product.name}
+          </a>
+          <div>{formatAsPercent(product.affiliate_percentage)}</div>
+        </section>
+      ))}
+    </section>
 
-      <section className="stack">
-        <h3>Products</h3>
-        {selected.products.map((product) => (
-          <section key={product.id}>
-            <a href={product.url} target="_blank" rel="noreferrer">
-              {product.name}
-            </a>
-            <div>{formatAsPercent(product.affiliate_percentage)}</div>
-          </section>
-        ))}
-      </section>
-
-      <section className="mt-auto flex gap-4">
-        {selected.invitation_accepted ? (
-          <Button className="flex-1" aria-label="Remove" color="danger" disabled={disabled} onClick={onRemove}>
-            Remove
+    <section className="mt-auto flex gap-4">
+      {selected.invitation_accepted ? (
+        <Button className="flex-1" aria-label="Remove" color="danger" disabled={disabled} onClick={onRemove}>
+          Remove
+        </Button>
+      ) : (
+        <>
+          <Button className="flex-1" aria-label="Accept" onClick={onAccept} disabled={disabled}>
+            Accept
           </Button>
-        ) : (
-          <>
-            <Button className="flex-1" aria-label="Accept" onClick={onAccept} disabled={disabled}>
-              Accept
-            </Button>
-            <Button className="flex-1" color="danger" aria-label="Decline" onClick={onReject} disabled={disabled}>
-              Decline
-            </Button>
-          </>
-        )}
-      </section>
-    </aside>,
-    document.body,
-  );
+          <Button className="flex-1" color="danger" aria-label="Decline" onClick={onReject} disabled={disabled}>
+            Decline
+          </Button>
+        </>
+      )}
+    </section>
+  </Sheet>
+);
 
 const IncomingCollaboratorsTableRow = ({
   incomingCollaborator,
