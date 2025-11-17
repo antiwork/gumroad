@@ -1,15 +1,15 @@
 # frozen_string_literal: true
 
 require "spec_helper"
+require "inertia_rails/rspec"
 require "shared_examples/sellers_base_controller_concern"
 require "shared_examples/authorize_called"
 
-describe Settings::AdvancedController, :vcr do
-  render_views
-
+describe Settings::AdvancedController, :vcr, inertia: true do
   it_behaves_like "inherits from Sellers::BaseController"
 
   let(:seller) { create(:named_seller) }
+  let(:pundit_user) { SellerContext.new(user: user_with_role_for_seller, seller:) }
 
   include_context "with user signed in as admin for seller"
 
@@ -22,8 +22,8 @@ describe Settings::AdvancedController, :vcr do
       get :show
 
       expect(response).to have_http_status(:ok)
-      pundit_user = SellerContext.new(user: user_with_role_for_seller, seller:)
-      expect(assigns[:react_component_props]).to eq(SettingsPresenter.new(pundit_user:).advanced_props)
+      expect(inertia).to render_component("Settings/Advanced/Index")
+      expect(inertia.props).to include(SettingsPresenter.new(pundit_user:).advanced_props)
     end
   end
 

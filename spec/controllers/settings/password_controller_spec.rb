@@ -1,13 +1,15 @@
 # frozen_string_literal: true
 
 require "spec_helper"
+require "inertia_rails/rspec"
 require "shared_examples/sellers_base_controller_concern"
 require "shared_examples/authorize_called"
 
-describe Settings::PasswordController, :vcr do
+describe Settings::PasswordController, :vcr, inertia: true do
   it_behaves_like "inherits from Sellers::BaseController"
 
   let (:user) { create(:user) }
+  let(:pundit_user) { SellerContext.new(user:, seller: user) }
 
   before do
     sign_in user
@@ -22,9 +24,8 @@ describe Settings::PasswordController, :vcr do
       get :show
 
       expect(response).to be_successful
-      expect(assigns(:react_component_props)).to eq(
-        require_old_password: true, settings_pages: %w(main profile team payments password third_party_analytics advanced)
-      )
+      expect(inertia).to render_component("Settings/Password/Index")
+      expect(inertia.props).to include(SettingsPresenter.new(pundit_user:).password_props)
     end
   end
 

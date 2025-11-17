@@ -1,10 +1,11 @@
 # frozen_string_literal: true
 
 require "spec_helper"
+require "inertia_rails/rspec"
 require "shared_examples/sellers_base_controller_concern"
 require "shared_examples/authorize_called"
 
-describe Settings::PaymentsController, :vcr do
+describe Settings::PaymentsController, :vcr, inertia: true do
   it_behaves_like "inherits from Sellers::BaseController"
 
   let(:seller) { create(:named_seller) }
@@ -34,18 +35,19 @@ describe Settings::PaymentsController, :vcr do
       seller.save!
     end
 
-    it "returns http success and assigns correct instance variables" do
+    it "returns http success and includes expected props" do
       get :show
 
       expect(response).to be_successful
-      react_component_props = assigns[:react_component_props]
-      expect(react_component_props[:user][:country_code]).to eq("US")
+      expect(inertia).to render_component("Settings/Payments/Index")
+      expect(inertia.props[:user][:country_code]).to eq("US")
     end
 
-    it "assigns oauth_authorizations" do
+    it "exposes oauth authorization metadata" do
       get :show
-      expect(assigns(:stripe_authorization))
-      expect(assigns(:paypal_authorization))
+
+      expect(inertia.props[:stripe_connect]).to be_present
+      expect(inertia.props[:paypal_connect]).to be_present
     end
   end
 

@@ -1,10 +1,11 @@
 # frozen_string_literal: true
 
 require "spec_helper"
+require "inertia_rails/rspec"
 require "shared_examples/sellers_base_controller_concern"
 require "shared_examples/authorize_called"
 
-describe Settings::AuthorizedApplicationsController do
+describe Settings::AuthorizedApplicationsController, inertia: true do
   it_behaves_like "inherits from Sellers::BaseController"
 
   let(:seller) { create(:named_seller) }
@@ -24,7 +25,8 @@ describe Settings::AuthorizedApplicationsController do
       get :index
 
       expect(response).to be_successful
-      expect(assigns[:react_component_props]).to eq(SettingsPresenter.new(pundit_user:).authorized_applications_props)
+      expect(inertia).to render_component("Settings/AuthorizedApplications/Index")
+      expect(inertia.props).to include(SettingsPresenter.new(pundit_user:).authorized_applications_props)
     end
   end
 end

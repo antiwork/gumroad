@@ -1,11 +1,13 @@
 # frozen_string_literal: true
 
 require "spec_helper"
+require "inertia_rails/rspec"
 require "shared_examples/sellers_base_controller_concern"
 require "shared_examples/authorize_called"
 
-describe Settings::ThirdPartyAnalyticsController do
+describe Settings::ThirdPartyAnalyticsController, inertia: true do
   let(:seller) { create(:named_seller) }
+  let(:pundit_user) { SellerContext.new(user: user_with_role_for_seller, seller:) }
 
   include_context "with user signed in as admin for seller"
 
@@ -17,10 +19,11 @@ describe Settings::ThirdPartyAnalyticsController do
     it "returns http success and assigns correct instance variables" do
       get :show
       expect(response).to be_successful
-      expect(assigns[:title]).to eq("Settings")
+      expect(inertia).to render_component("Settings/ThirdPartyAnalytics/Index")
 
-      settings_presenter = assigns[:settings_presenter]
-      expect(settings_presenter.pundit_user).to eq(controller.pundit_user)
+      settings_presenter = SettingsPresenter.new(pundit_user:)
+      expect(inertia.props[:settings_pages]).to eq(settings_presenter.pages)
+      expect(inertia.props[:third_party_analytics]).to eq(settings_presenter.third_party_analytics_props)
     end
   end
 
