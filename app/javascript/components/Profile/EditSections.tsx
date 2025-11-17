@@ -168,7 +168,7 @@ export const EditorMenu = ({
       }}
     >
       {isSubmenu(activeSubmenu) ? (
-        <div className="paragraphs" style={{ width: "300px" }}>
+        <div className="flex w-75 flex-col gap-4">
           <h4 style={{ display: "grid", gridTemplateColumns: "1em 1fr 1em" }}>
             <button onClick={() => setMenuState("menu")} aria-label="Go back">
               <Icon name="outline-cheveron-left" />
@@ -338,7 +338,7 @@ const ProductsSettings = ({ section }: { section: ProductsSection }) => {
   );
 
   return (
-    <div className="paragraphs overflow-auto" style={{ maxHeight: "min(100vh, 500px)" }}>
+    <div className="flex flex-col gap-4 overflow-auto" style={{ maxHeight: "min(100vh, 500px)" }}>
       <fieldset>
         <legend>
           <label htmlFor={`${uid}-defaultProductSort`}>Default sort order</label>

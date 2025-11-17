@@ -98,7 +98,7 @@ export const CoffeeProduct = ({
             {configurationSelector}
           </fieldset>
         ) : (
-          <section className="paragraphs">{configurationSelector}</section>
+          <section className="flex flex-col gap-4">{configurationSelector}</section>
         )}
       </section>
     </section>

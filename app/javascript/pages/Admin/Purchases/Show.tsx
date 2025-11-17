@@ -16,7 +16,7 @@ const AdminPurchasesShow = () => {
   const { user, product, purchase } = cast<AdminPurchaseProps>(usePage().props);
 
   return (
-    <div className="paragraphs">
+    <div className="flex flex-col gap-4">
       <AdminPurchase purchase={purchase} />
       <AdminProduct product={product} />
       <AdminUser user={user} />

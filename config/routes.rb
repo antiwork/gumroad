@@ -397,7 +397,6 @@ Rails.application.routes.draw do
     get "/collaborators/*other", to: "collaborators#index"
 
     get "/affiliates/*other", to: "affiliates#index" # route handled by react-router
-    get "/workflows/*other", to: "workflows#index" # route handled by react-router
     get "/emails/*other", to: "emails#index" # route handled by react-router
     get "/dashboard/utm_links/*other", to: "utm_links#index" # route handled by react-router
     get "/communities/*other", to: "communities#index" # route handled by react-router
@@ -806,7 +805,13 @@ Rails.application.routes.draw do
     get "/posts", to: redirect("/emails")
 
     # workflows
-    get "/workflows", to: "workflows#index", as: :workflows
+    resources :workflows, only: [:index, :new, :create, :edit, :update, :destroy] do
+      scope module: "workflows" do
+        resources :emails, only: [:index] do
+          patch :update, on: :collection
+        end
+      end
+    end
 
     # utm links
     get "/utm_links" => redirect("/dashboard/utm_links")
@@ -909,9 +914,6 @@ Rails.application.routes.draw do
           resources :incomings, only: [:index]
         end
 
-        resources :workflows, only: [:index, :new, :create, :edit, :update, :destroy] do
-          put :save_installments, on: :member
-        end
         resources :installments, only: [:index, :new, :edit, :create, :update, :destroy] do
           member do
             resource :audience_count, only: [:show], controller: "installments/audience_counts", as: :installment_audience_count

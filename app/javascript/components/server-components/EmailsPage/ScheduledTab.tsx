@@ -28,6 +28,7 @@ import {
   useSearchContext,
   ViewEmailButton,
 } from "$app/components/server-components/EmailsPage";
+import { Sheet, SheetHeader } from "$app/components/ui/Sheet";
 import { useDebouncedCallback } from "$app/components/useDebouncedCallback";
 import { useOnChange } from "$app/components/useOnChange";
 import { useUserAgentInfo } from "$app/components/UserAgent";
@@ -173,11 +174,8 @@ export const ScheduledTab = () => {
               </Button>
             ) : null}
             {selectedInstallment ? (
-              <aside className="mt-0!">
-                <header>
-                  <h2>{selectedInstallment.name}</h2>
-                  <button className="close" aria-label="Close" onClick={() => setSelectedInstallmentId(null)} />
-                </header>
+              <Sheet open onOpenChange={() => setSelectedInstallmentId(null)}>
+                <SheetHeader>{selectedInstallment.name}</SheetHeader>
                 <div className="stack">
                   <div>
                     <h5>Sent to</h5>
@@ -224,7 +222,7 @@ export const ScheduledTab = () => {
                     Delete
                   </Button>
                 </div>
-              </aside>
+              </Sheet>
             ) : null}
             {deletingInstallment ? (
               <Modal
