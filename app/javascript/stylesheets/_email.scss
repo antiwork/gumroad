@@ -21,7 +21,8 @@ $accent-color: map-get($colors, "pink"); // [1]
       &,
       tbody,
       tr,
-      td {
+      td,
+      th {
         display: block;
       }
 
@@ -34,7 +35,8 @@ $accent-color: map-get($colors, "pink"); // [1]
         }
       }
 
-      td {
+      td,
+      th {
         padding: spacer(4);
 
         &:not(:last-child) {

@@ -100,8 +100,7 @@ export const CollabsMembershipsTable = (props: { entries: Membership[]; paginati
                 )}
               </TableCell>
 
-              <TableCell label="Name">
-                {/* Safari currently doesn't support position: relative on <tr>, so we can't use stretched-link here */}
+              <TableCell>
                 <a href={membership.can_edit ? membership.edit_url : membership.url} style={{ textDecoration: "none" }}>
                   <h4 className="font-bold">{membership.name}</h4>
                 </a>

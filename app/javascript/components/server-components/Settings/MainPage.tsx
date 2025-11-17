@@ -203,7 +203,7 @@ const MainPage = (props: Props) => {
               </TableHeader>
               <TableBody>
                 <TableRow>
-                  <TableCell label="Notifications">Purchases</TableCell>
+                  <TableCell>Purchases</TableCell>
                   <TableCell label="Email">
                     <Toggle
                       value={userSettings.enable_payment_email}
@@ -220,7 +220,7 @@ const MainPage = (props: Props) => {
                   </TableCell>
                 </TableRow>
                 <TableRow>
-                  <TableCell label="Notifications">Recurring payments</TableCell>
+                  <TableCell>Recurring payments</TableCell>
                   <TableCell label="Email">
                     <Toggle
                       value={userSettings.enable_recurring_subscription_charge_email}
@@ -241,7 +241,7 @@ const MainPage = (props: Props) => {
                   </TableCell>
                 </TableRow>
                 <TableRow>
-                  <TableCell label="Notifications">Free downloads</TableCell>
+                  <TableCell>Free downloads</TableCell>
                   <TableCell label="Email">
                     <Toggle
                       value={userSettings.enable_free_downloads_email}
@@ -258,7 +258,7 @@ const MainPage = (props: Props) => {
                   </TableCell>
                 </TableRow>
                 <TableRow>
-                  <TableCell label="Notifications">Personalized product announcements</TableCell>
+                  <TableCell>Personalized product announcements</TableCell>
                   <TableCell label="Email">
                     <Toggle
                       value={userSettings.announcement_notification_enabled}
@@ -269,7 +269,7 @@ const MainPage = (props: Props) => {
                   <TableCell label="Mobile"></TableCell>
                 </TableRow>
                 <TableRow>
-                  <TableCell label="Notifications">Comments</TableCell>
+                  <TableCell>Comments</TableCell>
                   <TableCell label="Email">
                     <Toggle
                       value={!userSettings.disable_comments_email}
@@ -280,7 +280,7 @@ const MainPage = (props: Props) => {
                   <TableCell label="Mobile"></TableCell>
                 </TableRow>
                 <TableRow>
-                  <TableCell label="Notifications">Reviews</TableCell>
+                  <TableCell>Reviews</TableCell>
                   <TableCell label="Email">
                     <Toggle
                       value={!userSettings.disable_reviews_email}

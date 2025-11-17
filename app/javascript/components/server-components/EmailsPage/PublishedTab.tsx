@@ -21,7 +21,7 @@ import {
   ViewEmailButton,
 } from "$app/components/server-components/EmailsPage";
 import { Sheet, SheetHeader } from "$app/components/ui/Sheet";
-import { Table, TableBody, TableCaption, TableCell, TableHead, TableHeader, TableRow } from "$app/components/ui/Table";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "$app/components/ui/Table";
 import { useDebouncedCallback } from "$app/components/useDebouncedCallback";
 import { useOnChange } from "$app/components/useOnChange";
 import { useUserAgentInfo } from "$app/components/UserAgent";
@@ -100,7 +100,6 @@ export const PublishedTab = () => {
         {installments.length > 0 ? (
           <>
             <Table busy={isLoading} aria-label="Published">
-              <TableCaption>Published</TableCaption>
               <TableHeader>
                 <TableRow>
                   <TableHead>Subject</TableHead>

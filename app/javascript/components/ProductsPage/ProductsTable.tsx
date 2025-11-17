@@ -128,7 +128,7 @@ export const ProductsPageProductsTable = (props: {
                   <Icon name="card-image-fill" />
                 )}
               </TableCell>
-              <TableCell label="Name" className="w-full">
+              <TableCell className="w-full">
                 <div>
                   {/* Safari currently doesn't support position: relative on <tr>, so we can't use stretched-link here */}
                   <a href={product.can_edit ? product.edit_url : product.url} style={{ textDecoration: "none" }}>

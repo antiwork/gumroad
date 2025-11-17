@@ -13,7 +13,7 @@ import { Thumbnail } from "$app/components/Product/Thumbnail";
 import { RatingStars } from "$app/components/RatingStars";
 import { ReviewForm } from "$app/components/ReviewForm";
 import Placeholder from "$app/components/ui/Placeholder";
-import { Table, TableBody, TableCaption, TableCell, TableHead, TableHeader, TableRow } from "$app/components/ui/Table";
+import { Table, TableBody, TableCaption, TableCell, TableRow } from "$app/components/ui/Table";
 import { useOnChange } from "$app/components/useOnChange";
 
 import placeholderImage from "$assets/images/placeholders/reviews.png";
@@ -148,14 +148,6 @@ const ReviewsPage = ({
         ) : reviews.length > 0 ? (
           <Table>
             <TableCaption>Your reviews</TableCaption>
-            <TableHeader>
-              <TableRow>
-                <TableHead colSpan={2}>Product</TableHead>
-                <TableHead>Rating</TableHead>
-                <TableHead>Review</TableHead>
-                <TableHead>Actions</TableHead>
-              </TableRow>
-            </TableHeader>
             <TableBody>
               {reviews.map((review) => (
                 <Row
@@ -190,7 +182,7 @@ const Row = ({ review, onChange }: { review: Review; onChange: (review: Review) 
           )}
         </a>
       </TableCell>
-      <TableCell label="Product" className="break-words">
+      <TableCell className="break-words">
         <div>
           <a href={review.product.url} target="_blank" rel="noreferrer">
             <h4>{review.product.name}</h4>
@@ -201,17 +193,11 @@ const Row = ({ review, onChange }: { review: Review; onChange: (review: Review) 
           </a>
         </div>
       </TableCell>
-      <TableCell
-        label="Rating"
-        className="text-nowrap"
-        aria-label={`${review.rating} ${review.rating === 1 ? "star" : "stars"}`}
-      >
+      <TableCell className="text-nowrap" aria-label={`${review.rating} ${review.rating === 1 ? "star" : "stars"}`}>
         <RatingStars rating={review.rating} />
       </TableCell>
-      <TableCell label="Review" className="break-words">
-        {review.message ? `"${review.message}"` : null}
-      </TableCell>
-      <TableCell label="Actions">
+      <TableCell className="break-words">{review.message ? `"${review.message}"` : null}</TableCell>
+      <TableCell>
         <div className="actions">
           <Popover
             open={isEditing}

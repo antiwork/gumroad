@@ -96,12 +96,12 @@ const AuthorizedApplicationsPage = (props: Props) => {
   return (
     <Layout currentPage="authorized_applications" pages={props.settings_pages}>
       {applications.length > 0 ? (
-        <section className="p-4 md:p-8">
+        <section className="p-4! md:p-8!">
           <Table>
             <TableCaption>You've authorized the following applications to use your Gumroad account.</TableCaption>
             <TableHeader>
               <TableRow>
-                <TableHead colSpan={2}>Application</TableHead>
+                <TableHead>Application</TableHead>
                 <TableHead>Permissions</TableHead>
                 <TableHead>Actions</TableHead>
               </TableRow>
@@ -109,31 +109,33 @@ const AuthorizedApplicationsPage = (props: Props) => {
             <TableBody>
               {applications.map((application) => (
                 <TableRow key={application.id}>
-                  <TableCell isIcon>
-                    <img
-                      src={application.icon_url || placeholderAppIcon}
-                      className="application-icon"
-                      width={72}
-                      height={72}
-                      alt={application.name}
-                    />
-                  </TableCell>
-                  <TableCell label="Application">
-                    <div>
-                      <h3 style={{ marginBottom: "var(--spacer-1)" }}>
-                        {application.name}
-                        {application.is_own_app ? <span> (Your application)</span> : null}
-                      </h3>
-                      <p>
-                        <small>
-                          First authorized on:{" "}
-                          {parseISO(application.first_authorized_at).toLocaleDateString(userAgentInfo.locale, {
-                            month: "long",
-                            day: "numeric",
-                            year: "numeric",
-                          })}
-                        </small>
-                      </p>
+                  <TableCell>
+                    <div className="flex gap-3">
+                      <div>
+                        <img
+                          src={application.icon_url || placeholderAppIcon}
+                          className="application-icon"
+                          width={72}
+                          height={72}
+                          alt={application.name}
+                        />
+                      </div>
+                      <div>
+                        <h3 style={{ marginBottom: "var(--spacer-1)" }}>
+                          {application.name}
+                          {application.is_own_app ? <span> (Your application)</span> : null}
+                        </h3>
+                        <p>
+                          <small>
+                            First authorized on:{" "}
+                            {parseISO(application.first_authorized_at).toLocaleDateString(userAgentInfo.locale, {
+                              month: "long",
+                              day: "numeric",
+                              year: "numeric",
+                            })}
+                          </small>
+                        </p>
+                      </div>
                     </div>
                   </TableCell>
                   <TableCell label="Permissions">

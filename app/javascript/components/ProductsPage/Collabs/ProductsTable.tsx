@@ -75,7 +75,8 @@ export const CollabsProductsTable = (props: { entries: Product[]; pagination: Pa
         <TableCaption>Products</TableCaption>
         <TableHeader>
           <TableRow>
-            <TableHead colSpan={2} {...thProps("name")}>
+            <TableHead />
+            <TableHead {...thProps("name")} className="lg:relative lg:-left-20">
               Name
             </TableHead>
             <TableHead {...thProps("display_price_cents")}>Price</TableHead>
@@ -98,7 +99,7 @@ export const CollabsProductsTable = (props: { entries: Product[]; pagination: Pa
                 )}
               </TableCell>
 
-              <TableCell label="Name">
+              <TableCell>
                 <div>
                   {/* Safari currently doesn't support position: relative on <tr>, so we can't use stretched-link here */}
                   <a href={product.can_edit ? product.edit_url : product.url} style={{ textDecoration: "none" }}>

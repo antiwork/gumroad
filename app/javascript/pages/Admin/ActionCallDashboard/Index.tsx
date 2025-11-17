@@ -1,7 +1,7 @@
 import { usePage } from "@inertiajs/react";
 import React from "react";
 
-import { Table, TableBody, TableCaption, TableCell, TableHead, TableHeader, TableRow } from "$app/components/ui/Table";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "$app/components/ui/Table";
 
 type ActionCallInfo = {
   id: number;
@@ -20,7 +20,6 @@ const AdminActionCallDashboard = () => {
   return (
     <section>
       <Table>
-        <TableCaption>Action Call Dashboard</TableCaption>
         <TableHeader>
           <TableRow>
             <TableHead>#</TableHead>

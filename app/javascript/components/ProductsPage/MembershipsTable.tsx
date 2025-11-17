@@ -128,8 +128,7 @@ export const ProductsPageMembershipsTable = (props: {
                   <Icon name="card-image-fill" />
                 )}
               </TableCell>
-              <TableCell label="Name">
-                {/* Safari currently doesn't support position: relative on <tr>, so we can't use stretched-link here */}
+              <TableCell>
                 <a href={membership.can_edit ? membership.edit_url : membership.url} style={{ textDecoration: "none" }}>
                   <h4 className="font-bold">{membership.name}</h4>
                 </a>
@@ -139,36 +138,29 @@ export const ProductsPageMembershipsTable = (props: {
               </TableCell>
 
               <TableCell label="Members" className="text-nowrap">
-                <div>
-                  {membership.successful_sales_count.toLocaleString(userAgentInfo.locale)}
-                  {membership.remaining_for_sale_count ? (
-                    <>
-                      {" "}
-                      <small>
-                        {membership.remaining_for_sale_count.toLocaleString(userAgentInfo.locale)} remaining
-                      </small>
-                    </>
-                  ) : null}
-                </div>
+                {membership.successful_sales_count.toLocaleString(userAgentInfo.locale)}
+
+                {membership.remaining_for_sale_count ? (
+                  <small>{membership.remaining_for_sale_count.toLocaleString(userAgentInfo.locale)} remaining</small>
+                ) : null}
               </TableCell>
 
               <TableCell label="Revenue" className="text-nowrap">
-                <div>
-                  {formatPriceCentsWithCurrencySymbol("usd", membership.revenue, { symbolFormat: "short" })}{" "}
-                  <small>
-                    {membership.has_duration
-                      ? `Including pending payments: ${formatPriceCentsWithCurrencySymbol(
-                          "usd",
-                          membership.revenue_pending,
-                          {
-                            symbolFormat: "short",
-                          },
-                        )}`
-                      : `${formatPriceCentsWithCurrencySymbol("usd", membership.monthly_recurring_revenue, {
+                {formatPriceCentsWithCurrencySymbol("usd", membership.revenue, { symbolFormat: "short" })}
+
+                <small>
+                  {membership.has_duration
+                    ? `Including pending payments: ${formatPriceCentsWithCurrencySymbol(
+                        "usd",
+                        membership.revenue_pending,
+                        {
                           symbolFormat: "short",
-                        })} /mo`}
-                  </small>
-                </div>
+                        },
+                      )}`
+                    : `${formatPriceCentsWithCurrencySymbol("usd", membership.monthly_recurring_revenue, {
+                        symbolFormat: "short",
+                      })} /mo`}
+                </small>
               </TableCell>
 
               <TableCell label="Price" className="text-nowrap">
