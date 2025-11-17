@@ -6,7 +6,6 @@ class Oauth::ApplicationsController < Doorkeeper::ApplicationsController
 
   include CsrfTokenInjector
   include Impersonate
-  layout "inertia", only: :edit
 
   before_action :authenticate_user!
   before_action :set_display_vars
