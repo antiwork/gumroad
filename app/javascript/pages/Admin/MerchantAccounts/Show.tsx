@@ -101,7 +101,7 @@ const AdminMerchantAccountsShow = () => {
       </div>
 
       <hr />
-      <div className="paragraphs">
+      <div className="flex flex-col gap-4">
         <h3>Charge Processor live attributes</h3>
         {merchant_account.live_attributes.length > 0 ? (
           <dl>

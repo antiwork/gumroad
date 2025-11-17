@@ -409,7 +409,7 @@ const CustomersPage = ({
                 </WithTooltip>
               }
             >
-              <div className="paragraphs">
+              <div className="flex flex-col gap-4">
                 <h3>Download sales as CSV</h3>
                 <div>
                   {exportNames
@@ -441,7 +441,7 @@ const CustomersPage = ({
       />
       <section className="p-4 md:p-8">
         {customers.length > 0 ? (
-          <section className="paragraphs">
+          <section className="flex flex-col gap-4">
             <Table busy={isLoading}>
               <TableCaption>{`All sales (${count})`}</TableCaption>
               <TableHeader>
@@ -1360,7 +1360,7 @@ const AddressSection = ({
       </header>
       {isEditing ? (
         <div>
-          <div className="paragraphs">
+          <div className="flex flex-col gap-4">
             <fieldset>
               <legend>
                 <label htmlFor={`${uid}-full-name`}>Full name</label>

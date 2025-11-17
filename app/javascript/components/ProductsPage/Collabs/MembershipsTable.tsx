@@ -62,7 +62,7 @@ export const CollabsMembershipsTable = (props: { entries: Membership[]; paginati
   });
 
   return (
-    <section className="paragraphs">
+    <section className="flex flex-col gap-4">
       <Table busy={isLoading}>
         <TableCaption>Memberships</TableCaption>
         <TableHeader>

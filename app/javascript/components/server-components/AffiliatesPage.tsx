@@ -474,7 +474,7 @@ const AffiliatesTab = () => {
             ) : null}
             {affiliates.length > 0 ? (
               <>
-                <section className="paragraphs">
+                <section className="flex flex-col gap-4">
                   <Table busy={navigation.state !== "idle"}>
                     <TableCaption>
                       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>

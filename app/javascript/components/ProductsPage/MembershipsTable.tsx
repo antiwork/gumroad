@@ -91,7 +91,7 @@ export const ProductsPageMembershipsTable = (props: {
   if (!memberships.length) return null;
 
   return (
-    <div className="grid gap-4">
+    <section className="flex flex-col gap-4">
       <Table busy={isLoading}>
         <TableCaption>Memberships</TableCaption>
         <TableHeader>
@@ -220,6 +220,6 @@ export const ProductsPageMembershipsTable = (props: {
       {pagination.pages > 1 ? (
         <Pagination onChangePage={(page) => void loadMemberships(page)} pagination={pagination} />
       ) : null}
-    </div>
+    </section>
   );
 };

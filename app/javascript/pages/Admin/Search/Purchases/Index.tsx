@@ -43,7 +43,7 @@ export default function Purchases() {
   });
 
   return (
-    <div className="paragraphs">
+    <div className="flex flex-col gap-4">
       {purchases.length > 0 ? (
         <>
           <form
@@ -51,7 +51,7 @@ export default function Purchases() {
               e.preventDefault();
               get(Routes.admin_search_purchases_path());
             }}
-            className="input-with-button"
+            className="flex gap-2"
           >
             <input
               name="product_title_query"
@@ -63,6 +63,7 @@ export default function Purchases() {
             <select
               name="purchase_status"
               value={data.purchase_status}
+              className="w-auto"
               onChange={(e) => setData("purchase_status", e.target.value)}
             >
               <option value="">Any status</option>

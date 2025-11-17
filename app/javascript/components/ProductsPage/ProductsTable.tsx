@@ -92,7 +92,7 @@ export const ProductsPageProductsTable = (props: {
   if (!products.length) return null;
 
   return (
-    <div className="paragraphs">
+    <div className="flex flex-col gap-4">
       <Table ref={tableRef} busy={isLoading}>
         <TableCaption>Products</TableCaption>
         <TableHeader>

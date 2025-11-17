@@ -75,7 +75,7 @@ const AdminUserMerchantAccounts = ({ user }: AdminUserMerchantAccountsProps) => 
       )}
 
       {!data?.has_stripe_account && (
-        <div className="button-group mt-2">
+        <div className="mt-2 flex flex-wrap gap-2">
           <AdminActionButton
             label="Create Managed Account"
             url={Routes.create_stripe_managed_account_admin_user_path(user.id)}

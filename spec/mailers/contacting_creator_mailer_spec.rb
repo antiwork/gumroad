@@ -1556,7 +1556,7 @@ describe ContactingCreatorMailer do
       expect(mail.to).to eq([@recipient.email])
       expect(mail.subject).to include("Here is your affiliates data")
       expect(mail.attachments.size).to eq(1)
-      expect(mail.attachments.first.body.raw_source).to eq("csv content\r\n")
+      expect(mail.attachments.first.body.raw_source).to eq("csv content\n")
     end
 
     context "when attachment size is above threshold" do
@@ -1593,7 +1593,7 @@ describe ContactingCreatorMailer do
       expect(mail.to).to eq([recipient.email])
       expect(mail.subject).to include("Here is your subscribers data")
       expect(mail.attachments.size).to eq(1)
-      expect(mail.attachments.first.body.raw_source).to eq("csv content\r\n")
+      expect(mail.attachments.first.body.raw_source).to eq("csv content\n")
     end
 
     context "when attachment size is above threshold" do

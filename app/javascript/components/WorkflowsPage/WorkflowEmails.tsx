@@ -476,7 +476,7 @@ const EmailRow = ({
         )}
       </div>
       {expanded ? (
-        <form className="paragraphs">
+        <form className="flex flex-col gap-4">
           {isAbandonedCartWorkflow ? null : (
             <div
               style={{
@@ -575,7 +575,7 @@ const EmailPreview = ({
   });
 
   return (
-    <section className="paragraphs" ref={selfRef}>
+    <section className="flex flex-col gap-4" ref={selfRef}>
       <Separator>
         <div className="flex gap-2">
           <Icon name="outline-clock" />
@@ -588,7 +588,7 @@ const EmailPreview = ({
         <EditorContent className="rich-text" editor={editor} />
         {emailFiles.length > 0 ? <Button color="primary">View content</Button> : null}
         <hr />
-        <div className="paragraphs" style={{ justifyItems: "center" }}>
+        <div className="flex flex-col items-center gap-4">
           <p>{gumroadAddress}</p>
           <p>
             Powered by <span style={{ marginLeft: "var(--spacer-1)" }} className="logo-full" />
@@ -606,7 +606,10 @@ const AbandonedCartProductListNodeView = (props: NodeViewProps) => {
   const isPreview = !props.editor.isEditable;
 
   return (
-    <NodeViewWrapper className="paragraphs" style={isPreview ? {} : { userSelect: "none", cursor: "not-allowed" }}>
+    <NodeViewWrapper
+      className="flex flex-col gap-4"
+      style={isPreview ? {} : { userSelect: "none", cursor: "not-allowed" }}
+    >
       <WithTooltip position="top" tip={isPreview ? null : "This cannot be deleted"}>
         {abandonedCartProducts.length > 0 ? (
           <div className="cart" role="list">
