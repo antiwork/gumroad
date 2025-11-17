@@ -1,4 +1,3 @@
-import cx from "classnames";
 import * as React from "react";
 
 import { SettingPage as Page } from "$app/parsers/settings";
@@ -23,11 +22,10 @@ type Props = {
   pages: Page[];
   currentPage: Page;
   children: React.ReactNode;
-  hasAside?: boolean;
   canUpdate?: boolean;
 };
 
-export const Layout = ({ onSave, pages, currentPage, children, hasAside, canUpdate }: Props) => (
+export const Layout = ({ onSave, pages, currentPage, children, canUpdate }: Props) => (
   <>
     <PageHeader
       className="sticky-top"
@@ -48,6 +46,6 @@ export const Layout = ({ onSave, pages, currentPage, children, hasAside, canUpda
         ))}
       </Tabs>
     </PageHeader>
-    <div className={cx({ squished: hasAside })}>{children}</div>
+    <div>{children}</div>
   </>
 );

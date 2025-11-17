@@ -44,7 +44,7 @@ export const CreditCardForm = ({ card, can_remove, read_only }: Props) => {
           Learn more.
         </a>
       </header>
-      <div className="paragraphs">
+      <div className="flex flex-col gap-4">
         <div className="input read-only" aria-label="Saved credit card">
           <Icon name="outline-credit-card" />
           <span>{card.number}</span>

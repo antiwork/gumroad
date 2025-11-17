@@ -1,6 +1,8 @@
 import * as React from "react";
 import { ResponsiveContainer, ComposedChart, XAxisProps, YAxisProps, LineProps } from "recharts";
 
+import { WithTooltip } from "$app/components/WithTooltip";
+
 type TickProps = {
   x: number;
   y: number;
@@ -25,37 +27,23 @@ export const Chart = ({
   containerRef: React.RefObject<HTMLDivElement>;
   tooltipPosition: { left: number; top: number } | null;
   tooltip: React.ReactNode;
-} & React.ComponentPropsWithoutRef<typeof ComposedChart>) => {
-  const uid = React.useId();
-  return (
-    <section
-      className="rounded border border-border bg-background p-6 text-foreground"
-      data-testid="chart"
-      aria-describedby={tooltip ? uid : undefined}
+} & React.ComponentPropsWithoutRef<typeof ComposedChart>) => (
+  <section className="rounded border border-border bg-background p-6 text-foreground">
+    <WithTooltip
+      tip={tooltip}
+      className="block"
+      position="top"
+      tooltipProps={{
+        style: { left: tooltipPosition?.left, top: tooltipPosition?.top, bottom: "unset" },
+        className: "-translate-y-full",
+      }}
     >
-      <div className="relative">
-        <ResponsiveContainer aspect={aspect ?? 1092 / 450} maxHeight={650} ref={containerRef}>
-          <ComposedChart margin={{ top: 32, right: 0, bottom: 16, left: 0 }} {...props} />
-        </ResponsiveContainer>
-        {tooltipPosition && tooltip ? (
-          <div className="has-tooltip top" style={{ position: "absolute", ...tooltipPosition }}>
-            <div
-              id={uid}
-              role="tooltip"
-              style={{
-                display: "block",
-                width: "max-content",
-                pointerEvents: "none",
-              }}
-            >
-              {tooltip}
-            </div>
-          </div>
-        ) : null}
-      </div>
-    </section>
-  );
-};
+      <ResponsiveContainer aspect={aspect ?? 1092 / 450} maxHeight={650} ref={containerRef}>
+        <ComposedChart margin={{ top: 32, right: 0, bottom: 16, left: 0 }} data-testid="chart" {...props} />
+      </ResponsiveContainer>
+    </WithTooltip>
+  </section>
+);
 
 export const xAxisProps: XAxisProps = {
   tick: ({ x, y, payload }: TickProps) => (

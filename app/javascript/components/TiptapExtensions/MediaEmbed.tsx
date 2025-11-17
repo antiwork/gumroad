@@ -134,7 +134,7 @@ export const EmbedMediaForm = React.forwardRef<{ focus: () => void }, EmbedMedia
           }
         />
         <div
-          className="button-group"
+          className="flex flex-wrap gap-2"
           style={{ alignSelf: "flex-end", gap: "var(--spacer-4)", marginTop: "var(--spacer-2)" }}
         >
           <Button onClick={onClose}>Cancel</Button>
@@ -178,7 +178,7 @@ export const EmbedMediaForm = React.forwardRef<{ focus: () => void }, EmbedMedia
         <legend>
           <label htmlFor={inputUid}>{type === "embed" ? "Video URL" : "Tweet URL"}</label>
         </legend>
-        {horizontalLayout ? <div className="input-with-button">{fields}</div> : fields}
+        {horizontalLayout ? <div className="flex gap-2">{fields}</div> : fields}
       </fieldset>
     );
   },
