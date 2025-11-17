@@ -17,6 +17,7 @@ import { GettingStartedIconProps } from "$app/components/icons/getting-started/G
 import { MakeAccountIcon } from "$app/components/icons/getting-started/MakeAccountIcon";
 import { SmallBetsIcon } from "$app/components/icons/getting-started/SmallBetsIcon";
 import { useLoggedInUser } from "$app/components/LoggedInUser";
+import { ProductIconCell } from "$app/components/ProductsPage/ProductIconCell";
 import { DownloadTaxFormsPopover } from "$app/components/server-components/DashboardPage/DownloadTaxFormsPopover";
 import { Stats } from "$app/components/Stats";
 import { PageHeader } from "$app/components/ui/PageHeader";
@@ -254,11 +255,7 @@ const ProductsTable = ({ sales }: TableProps) => {
       <TableBody>
         {items.map(({ id, name, thumbnail, today, last_7, last_30, sales, visits, revenue }) => (
           <TableRow key={id}>
-            <TableCell isIcon>
-              <a href={Routes.edit_link_url({ id }, { host: appDomain })}>
-                {thumbnail ? <img alt={name} src={thumbnail} /> : <Icon name="card-image-fill" />}
-              </a>
-            </TableCell>
+            <ProductIconCell href={Routes.edit_link_url({ id }, { host: appDomain })} thumbnail={thumbnail} />
             <TableCell label="Products">
               <a href={Routes.edit_link_url({ id }, { host: appDomain })} className="line-clamp-2" title={name}>
                 {name}

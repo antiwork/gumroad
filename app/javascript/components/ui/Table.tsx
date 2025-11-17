@@ -3,8 +3,6 @@ import * as React from "react";
 import { assertDefined } from "$app/utils/assert";
 import { classNames } from "$app/utils/classNames";
 
-import { Skeleton } from "$app/components/Skeleton";
-
 const TableContext = React.createContext<{ busy?: boolean | undefined }>({});
 const useTable = () => assertDefined(React.useContext(TableContext), "useTable must be used within a Table");
 
@@ -49,7 +47,7 @@ export const TableBody = ({ className, children, ...props }: React.HTMLAttribute
   return (
     <tbody
       className={classNames(
-        "contents lg:table-row-group lg:rounded-sm lg:bg-background",
+        "contents lg:table-row-group lg:rounded-sm",
         busy && "pointer-events-none opacity-50",
         className,
       )}
@@ -126,34 +124,23 @@ export const TableHead = ({
 
 export const TableCell = ({
   className,
-  busy,
   actions,
   label,
-  isIcon,
   children,
   ...props
 }: Omit<React.TdHTMLAttributes<HTMLTableCellElement>, "aria-busy"> & {
-  busy?: boolean;
   actions?: boolean;
   label?: string;
-  isIcon?: boolean;
 }) => (
   <td
-    aria-busy={busy}
     className={classNames(
-      "block p-4 text-left align-middle lg:table-cell lg:border-t lg:border-border [&:not(:first-child)]:border-t [&:not(:first-child)]:border-border",
-      isIcon && "text-center text-xl lg:w-20 lg:min-w-20 lg:border-r lg:border-border",
+      "block p-4 text-left align-middle not-first:border-t not-first:border-border lg:table-cell lg:border-t lg:border-border",
+      "lg:[table_>_:last-child_>_tr:last-child_>_&:first-child]:rounded-bl-sm lg:[table_>_:last-child_>_tr:last-child_>_&:last-child]:rounded-br-sm lg:[tbody_>_tr_>_&]:bg-background",
       className,
     )}
     {...props}
   >
     {label ? <div className="mb-2 font-bold lg:hidden">{label}</div> : null}
-    {busy ? (
-      <Skeleton className="h-[1lh] w-full" />
-    ) : actions ? (
-      <div className="flex flex-wrap gap-3 lg:justify-end">{children}</div>
-    ) : (
-      children
-    )}
+    {actions ? <div className="flex flex-wrap gap-3 lg:justify-end">{children}</div> : children}
   </td>
 );

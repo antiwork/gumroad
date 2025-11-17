@@ -155,7 +155,9 @@ export const PublishedTab = () => {
                                     <TableHead scope="row" className="max-w-56 whitespace-break-spaces">
                                       {url}
                                     </TableHead>
-                                    <TableCell>{formatStatNumber({ value: count })}</TableCell>
+                                    <TableCell className="bg-transparent!">
+                                      {formatStatNumber({ value: count })}
+                                    </TableCell>
                                   </TableRow>
                                 ))}
                               </TableBody>

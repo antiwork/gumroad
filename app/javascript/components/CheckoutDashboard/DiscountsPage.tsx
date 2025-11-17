@@ -31,6 +31,7 @@ import { Popover } from "$app/components/Popover";
 import { PriceInput } from "$app/components/PriceInput";
 import { Select, Option } from "$app/components/Select";
 import { showAlert } from "$app/components/server-components/Alert";
+import { Skeleton } from "$app/components/Skeleton";
 import { TypeSafeOptionSelect } from "$app/components/TypeSafeOptionSelect";
 import { PageHeader } from "$app/components/ui/PageHeader";
 import Placeholder from "$app/components/ui/Placeholder";
@@ -363,11 +364,15 @@ const DiscountsPage = ({ offer_codes, pages, products, pagination: initialPagina
                           </small>
                         </div>
                       </TableCell>
-                      <TableCell label="Revenue" className="whitespace-nowrap" busy={statistics == null}>
-                        {statistics != null ? formatRevenue(statistics.revenue_cents) : null}
+                      <TableCell label="Revenue" className="whitespace-nowrap" aria-busy={!statistics}>
+                        {statistics ? formatRevenue(statistics.revenue_cents) : <Skeleton className="h-4 w-16" />}
                       </TableCell>
-                      <TableCell label="Uses" className="whitespace-nowrap" busy={statistics == null}>
-                        {statistics != null ? formatUses(statistics.uses.total, offerCode.limit) : null}
+                      <TableCell label="Uses" className="whitespace-nowrap" aria-busy={!statistics}>
+                        {statistics ? (
+                          formatUses(statistics.uses.total, offerCode.limit)
+                        ) : (
+                          <Skeleton className="h-4 w-16" />
+                        )}
                       </TableCell>
                       <TableCell label="Term">{`${validAt ? `${formatDate(validAt)} - ` : ""}${
                         expiresAt ? formatDate(expiresAt) : "No end date"

@@ -10,6 +10,7 @@ import { Icon } from "$app/components/Icons";
 import { Layout } from "$app/components/Library/Layout";
 import { Popover } from "$app/components/Popover";
 import { Thumbnail } from "$app/components/Product/Thumbnail";
+import { ProductIconCell } from "$app/components/ProductsPage/ProductIconCell";
 import { RatingStars } from "$app/components/RatingStars";
 import { ReviewForm } from "$app/components/ReviewForm";
 import Placeholder from "$app/components/ui/Placeholder";
@@ -173,15 +174,11 @@ const Row = ({ review, onChange }: { review: Review; onChange: (review: Review) 
 
   return (
     <TableRow>
-      <TableCell isIcon>
-        <a href={review.product.url}>
-          {review.product.thumbnail_url ? (
-            <img alt={review.product.name} src={review.product.thumbnail_url} />
-          ) : (
-            <img src={cast(nativeTypeThumbnails(`./${review.product.native_type}.svg`))} />
-          )}
-        </a>
-      </TableCell>
+      <ProductIconCell
+        href={review.product.url}
+        thumbnail={review.product.thumbnail_url ?? null}
+        placeholder={<img src={cast(nativeTypeThumbnails(`./${review.product.native_type}.svg`))} />}
+      />
       <TableCell className="break-words">
         <div>
           <a href={review.product.url} target="_blank" rel="noreferrer">

@@ -52,6 +52,7 @@ import { NumberInput } from "$app/components/NumberInput";
 import { Pagination } from "$app/components/Pagination";
 import { Popover } from "$app/components/Popover";
 import { showAlert } from "$app/components/server-components/Alert";
+import { Skeleton } from "$app/components/Skeleton";
 import { PageHeader } from "$app/components/ui/PageHeader";
 import Placeholder from "$app/components/ui/Placeholder";
 import { Sheet, SheetHeader } from "$app/components/ui/Sheet";
@@ -519,13 +520,13 @@ const AffiliatesTab = () => {
                               </WithTooltip>
                             </TableCell>
                             <TableCell label="Commission">{formattedFeePercentLabel(affiliate)}</TableCell>
-                            {statistics ? (
-                              <TableCell label="Sales">
-                                {formattedSalesVolumeAmount(statistics.total_volume_cents)}
-                              </TableCell>
-                            ) : (
-                              <TableCell busy label="Sales" />
-                            )}
+                            <TableCell label="Sales" aria-busy={!statistics}>
+                              {statistics ? (
+                                formattedSalesVolumeAmount(statistics.total_volume_cents)
+                              ) : (
+                                <Skeleton className="h-4 w-16" />
+                              )}
+                            </TableCell>
                             <TableCell actions onClick={(e) => e.stopPropagation()}>
                               <CopyToClipboard
                                 tooltipPosition="bottom"

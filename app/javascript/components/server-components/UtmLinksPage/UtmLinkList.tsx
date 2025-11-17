@@ -23,6 +23,7 @@ import { Pagination, PaginationProps } from "$app/components/Pagination";
 import { Popover } from "$app/components/Popover";
 import { showAlert } from "$app/components/server-components/Alert";
 import { extractSortParam } from "$app/components/server-components/UtmLinksPage";
+import { Skeleton } from "$app/components/Skeleton";
 import Placeholder from "$app/components/ui/Placeholder";
 import { Sheet, SheetHeader } from "$app/components/ui/Sheet";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "$app/components/ui/Table";
@@ -202,11 +203,19 @@ const UtmLinkList = () => {
                   <TableCell label="Clicks" className="text-nowrap">
                     {link.clicks}
                   </TableCell>
-                  <TableCell label="Revenue" busy={link.revenue_cents === null} className="text-nowrap">
-                    {link.revenue_cents !== null ? `$${fixedDecimalPointNumber(link.revenue_cents / 100)}` : null}
+                  <TableCell label="Revenue" aria-busy={link.revenue_cents === null} className="text-nowrap">
+                    {link.revenue_cents !== null ? (
+                      `$${fixedDecimalPointNumber(link.revenue_cents / 100)}`
+                    ) : (
+                      <Skeleton className="h-4 w-16" />
+                    )}
                   </TableCell>
-                  <TableCell label="Conversion" busy={link.conversion_rate === null} className="text-nowrap">
-                    {link.conversion_rate !== null ? `${fixedDecimalPointNumber(link.conversion_rate * 100)}%` : null}
+                  <TableCell label="Conversion" aria-busy={link.conversion_rate === null} className="text-nowrap">
+                    {link.conversion_rate !== null ? (
+                      `${fixedDecimalPointNumber(link.conversion_rate * 100)}%`
+                    ) : (
+                      <Skeleton className="h-4 w-16" />
+                    )}
                   </TableCell>
                   <TableCell actions>
                     <UtmLinkActions link={link}>

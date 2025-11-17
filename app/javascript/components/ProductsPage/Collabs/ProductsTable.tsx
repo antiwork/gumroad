@@ -5,8 +5,8 @@ import { formatPriceCentsWithCurrencySymbol } from "$app/utils/currency";
 import { asyncVoid } from "$app/utils/promise";
 import { AbortError, assertResponseError } from "$app/utils/request";
 
-import { Icon } from "$app/components/Icons";
 import { Pagination, PaginationProps } from "$app/components/Pagination";
+import { ProductIconCell } from "$app/components/ProductsPage/ProductIconCell";
 import { showAlert } from "$app/components/server-components/Alert";
 import {
   Table,
@@ -89,15 +89,10 @@ export const CollabsProductsTable = (props: { entries: Product[]; pagination: Pa
         <TableBody>
           {items.map((product) => (
             <TableRow key={product.id}>
-              <TableCell isIcon>
-                {product.thumbnail ? (
-                  <a href={product.can_edit ? product.edit_url : product.url}>
-                    <img alt={product.name} src={product.thumbnail.url} />
-                  </a>
-                ) : (
-                  <Icon name="card-image-fill" />
-                )}
-              </TableCell>
+              <ProductIconCell
+                href={product.can_edit ? product.edit_url : product.url}
+                thumbnail={product.thumbnail?.url ?? null}
+              />
 
               <TableCell>
                 <div>

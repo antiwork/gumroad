@@ -36,6 +36,7 @@ import { applySelection } from "$app/components/Product/ConfigurationSelector";
 import { Select } from "$app/components/Select";
 import { showAlert } from "$app/components/server-components/Alert";
 import { CrossSellModal, UpsellModal } from "$app/components/server-components/CheckoutPage";
+import { Skeleton } from "$app/components/Skeleton";
 import { PageHeader } from "$app/components/ui/PageHeader";
 import Placeholder from "$app/components/ui/Placeholder";
 import { Sheet, SheetHeader } from "$app/components/ui/Sheet";
@@ -291,25 +292,18 @@ const UpsellsPage = (props: UpsellsPageProps) => {
                           <small>{formatOfferedProductName(upsell.product.name, upsell.product.variant?.name)}</small>
                         </div>
                       </TableCell>
-                      {statistics ? (
-                        <>
-                          <TableCell label="Revenue">
-                            {formatPriceCentsWithCurrencySymbol(
-                              upsell.product.currency_type,
-                              statistics.revenue_cents,
-                              {
-                                symbolFormat: "short",
-                              },
-                            )}
-                          </TableCell>
-                          <TableCell label="Uses">{statistics.uses.total}</TableCell>
-                        </>
-                      ) : (
-                        <>
-                          <TableCell label="Revenue" busy />
-                          <TableCell label="Uses" busy />
-                        </>
-                      )}
+                      <TableCell label="Revenue" aria-busy={!statistics}>
+                        {statistics ? (
+                          formatPriceCentsWithCurrencySymbol(upsell.product.currency_type, statistics.revenue_cents, {
+                            symbolFormat: "short",
+                          })
+                        ) : (
+                          <Skeleton className="h-4 w-16" />
+                        )}
+                      </TableCell>
+                      <TableCell label="Uses" aria-busy={!statistics}>
+                        {statistics ? statistics.uses.total : <Skeleton className="h-4 w-16" />}
+                      </TableCell>
                       <TableCell label="Status">{upsell.paused ? "Paused" : "Live"}</TableCell>
                     </TableRow>
                   );

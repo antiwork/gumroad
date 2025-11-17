@@ -5,10 +5,10 @@ import { getPagedMemberships, Membership, SortKey } from "$app/data/products";
 import { formatPriceCentsWithCurrencySymbol } from "$app/utils/currency";
 import { AbortError, assertResponseError } from "$app/utils/request";
 
-import { Icon } from "$app/components/Icons";
 import { Pagination, PaginationProps } from "$app/components/Pagination";
 import { Tab } from "$app/components/ProductsLayout";
 import ActionsPopover from "$app/components/ProductsPage/ActionsPopover";
+import { ProductIconCell } from "$app/components/ProductsPage/ProductIconCell";
 import { showAlert } from "$app/components/server-components/Alert";
 import {
   Table,
@@ -119,15 +119,10 @@ export const ProductsPageMembershipsTable = (props: {
         <TableBody>
           {memberships.map((membership) => (
             <TableRow key={membership.id}>
-              <TableCell isIcon>
-                {membership.thumbnail ? (
-                  <a href={membership.can_edit ? membership.edit_url : membership.url}>
-                    <img alt={membership.name} src={membership.thumbnail.url} />
-                  </a>
-                ) : (
-                  <Icon name="card-image-fill" />
-                )}
-              </TableCell>
+              <ProductIconCell
+                href={membership.can_edit ? membership.edit_url : membership.url}
+                thumbnail={membership.thumbnail?.url ?? null}
+              />
               <TableCell>
                 <a href={membership.can_edit ? membership.edit_url : membership.url} style={{ textDecoration: "none" }}>
                   <h4 className="font-bold">{membership.name}</h4>
