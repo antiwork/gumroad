@@ -50,37 +50,48 @@ export const PriceEditor = ({
       />
       <Details
         className="toggle"
-        open={isPWYW}
+        open={priceCents === 0 || isPWYW}
         summary={
-          <Toggle value={isPWYW} onChange={setIsPWYW}>
+          <Toggle 
+            value={priceCents === 0 || isPWYW}
+            onChange={(newValue) => {
+              if (priceCents === 0) return;
+              setIsPWYW(newValue);
+            }}>
             <a href="/help/article/133-pay-what-you-want-pricing" target="_blank" rel="noreferrer">
               Allow customers to pay what they want
             </a>
           </Toggle>
         }
       >
-        <div
-          className="dropdown"
-          style={{
-            display: "grid",
-            gap: "var(--spacer-4)",
-            gridTemplateColumns: "repeat(auto-fit, minmax(var(--dynamic-grid), 1fr))",
-          }}
-        >
-          <fieldset>
-            <label htmlFor={`${uid}-minimum-amount`}>Minimum amount</label>
-            <PriceInput id={`${uid}-minimum-amount`} currencyCode={currencyType} cents={priceCents} disabled />
-          </fieldset>
-          <fieldset>
-            <label htmlFor={`${uid}-suggested-price-cents`}>Suggested amount</label>
-            <PriceInput
-              id={`${uid}-suggested-price-cents`}
-              placeholder={formatPriceCentsWithoutCurrencySymbol(currencyType, priceCents)}
-              currencyCode={currencyType}
-              cents={suggestedPriceCents}
-              onChange={setSuggestedPriceCents}
-            />
-          </fieldset>
+        <div className="dropdown" >
+          {priceCents === 0 && (
+            <div className="paragraphs" >
+              Free Products must allow customers to pay what they want.
+            </div>
+          )}
+          <div
+            style={{
+              display: "grid",
+              gap: "var(--spacer-4)",
+              gridTemplateColumns: "repeat(auto-fit, minmax(var(--dynamic-grid), 1fr))",
+            }}
+          >
+            <fieldset>
+              <label htmlFor={`${uid}-minimum-amount`}>Minimum amount</label>
+              <PriceInput id={`${uid}-minimum-amount`} currencyCode={currencyType} cents={priceCents} disabled />
+            </fieldset>
+            <fieldset>
+              <label htmlFor={`${uid}-suggested-price-cents`}>Suggested amount</label>
+              <PriceInput
+                id={`${uid}-suggested-price-cents`}
+                placeholder={formatPriceCentsWithoutCurrencySymbol(currencyType, priceCents)}
+                currencyCode={currencyType}
+                cents={suggestedPriceCents}
+                onChange={setSuggestedPriceCents}
+              />
+            </fieldset>
+          </div>
         </div>
       </Details>
       {eligibleForInstallmentPlans ? (
