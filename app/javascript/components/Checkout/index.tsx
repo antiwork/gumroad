@@ -297,7 +297,7 @@ export const Checkout = ({
                   ) : null}
                   {cart.items.some((item) => item.product.has_offer_codes) ? (
                     <form
-                      className="!flex gap-2"
+                      className="flex! gap-2"
                       onSubmit={(e) => {
                         e.preventDefault();
                         void applyDiscount(newDiscountCode);
