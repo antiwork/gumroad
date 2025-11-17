@@ -20,7 +20,7 @@ const EmailConfirmation = ({ invoice_url }: EmailConfirmationProps) => (
     <header>
       <h2>Generate invoice</h2>
     </header>
-    <form action={invoice_url} className="paragraphs" method="get">
+    <form action={invoice_url} className="flex flex-col gap-4" method="get">
       <input type="text" name="email" placeholder="Email address" />
       <Button type="submit" color="accent">
         Confirm email

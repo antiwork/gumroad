@@ -82,7 +82,7 @@ export const ProductsPageProductsTable = (props: {
   if (!products.length) return null;
 
   return (
-    <div className="paragraphs">
+    <div className="flex flex-col gap-4">
       <table aria-live="polite" aria-busy={isLoading} ref={tableRef}>
         <caption>Products</caption>
         <thead>

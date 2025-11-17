@@ -297,7 +297,7 @@ export const Checkout = ({
                   ) : null}
                   {cart.items.some((item) => item.product.has_offer_codes) ? (
                     <form
-                      className="input-with-button"
+                      className="flex! gap-2"
                       onSubmit={(e) => {
                         e.preventDefault();
                         void applyDiscount(newDiscountCode);
@@ -306,6 +306,7 @@ export const Checkout = ({
                       <input
                         placeholder="Discount code"
                         value={newDiscountCode}
+                        className="flex-1"
                         disabled={discountInputDisabled}
                         onChange={(e) => setNewDiscountCode(e.target.value)}
                       />
@@ -347,7 +348,7 @@ export const Checkout = ({
                 ) : null}
               </div>
               {recommendedProducts && recommendedProducts.length > 0 ? (
-                <section className="paragraphs">
+                <section className="flex flex-col gap-4">
                   <h2>Customers who bought {cart.items.length === 1 ? "this item" : "these items"} also bought</h2>
                   <ProductCardGrid narrow>
                     {recommendedProducts.map((product, idx) => (
@@ -512,7 +513,7 @@ const CartItemComponent = ({
                     open={editPopoverOpen}
                     onToggle={setEditPopoverOpen}
                   >
-                    <div className="paragraphs" style={{ width: "24rem" }}>
+                    <div className="flex w-96 flex-col gap-4">
                       <ConfigurationSelector
                         selection={selection}
                         setSelection={(selection) => {

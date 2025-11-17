@@ -26,7 +26,7 @@ const AdminProductPurchasesContent = ({
     );
 
   return (
-    <div className="paragraphs">
+    <div className="flex flex-col gap-4">
       <div className="stack">
         {purchases.map((purchase) => (
           <AdminProductPurchase key={purchase.id} purchase={purchase} />

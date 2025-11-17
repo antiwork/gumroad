@@ -474,7 +474,7 @@ const AffiliatesTab = () => {
             ) : null}
             {affiliates.length > 0 ? (
               <>
-                <section className="paragraphs">
+                <section className="flex flex-col gap-4">
                   <table aria-busy={navigation.state !== "idle"}>
                     <caption>
                       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
