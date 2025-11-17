@@ -2,9 +2,9 @@
 
 require "spec_helper"
 require "shared_examples/authorize_called"
+require "inertia_rails/rspec"
 
-describe ReviewsController do
-  render_views
+describe ReviewsController, type: :controller, inertia: true do
 
   let(:user) { create(:user) }
 
@@ -18,11 +18,14 @@ describe ReviewsController do
       let(:record) { ProductReview }
     end
 
-    it "initializes the presenter with the correct arguments and sets the title" do
-      expect(ReviewsPresenter).to receive(:new).with(user).and_call_original
+    it "renders Reviews/Index with Inertia and uses ReviewsPresenter" do
+      presenter = instance_double(ReviewsPresenter, reviews_props: { reviews: [], purchases: [] })
+      expect(ReviewsPresenter).to receive(:new).with(user).and_return(presenter)
       get :index
       expect(response).to be_successful
-      expect(response.body).to have_selector("title:contains('Reviews')", visible: false)
+      expect(inertia.component).to eq("Reviews/Index")
+      expect(inertia.props[:reviews]).to eq([])
+      expect(inertia.props[:purchases]).to eq([])
     end
   end
 end
