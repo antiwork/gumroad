@@ -2,9 +2,9 @@
 
 require "spec_helper"
 require "shared_examples/authorize_called"
+require "inertia_rails/rspec"
 
-describe WishlistsController do
-  render_views
+describe WishlistsController, type: :controller, inertia: true do
 
   let(:user) { create(:user) }
   let(:wishlist) { create(:wishlist, user:) }
@@ -20,7 +20,7 @@ describe WishlistsController do
     end
 
     context "when html is requested" do
-      it "renders non-deleted wishlists for the current seller" do
+      it "renders Wishlists/Index with Inertia and non-deleted wishlists for the current seller" do
         wishlist.mark_deleted!
         alive_wishlist = create(:wishlist, user:)
         create(:wishlist)
@@ -28,7 +28,8 @@ describe WishlistsController do
         get :index
 
         expect(response).to be_successful
-        expect(assigns(:wishlists_props)).to contain_exactly(a_hash_including(id: alive_wishlist.external_id))
+        expect(inertia.component).to eq("Wishlists/Index")
+        expect(inertia.props[:wishlists]).to contain_exactly(a_hash_including(id: alive_wishlist.external_id))
       end
     end
 
