@@ -1,5 +1,4 @@
 import * as React from "react";
-import { createCast } from "ts-safe-cast";
 
 import {
   saveThirdPartyAnalytics,
@@ -9,7 +8,6 @@ import {
 } from "$app/data/third_party_analytics";
 import { SettingPage } from "$app/parsers/settings";
 import { asyncVoid } from "$app/utils/promise";
-import { register } from "$app/utils/serverComponentUtil";
 
 import { Button } from "$app/components/Button";
 import { Details } from "$app/components/Details";
@@ -21,13 +19,13 @@ import { TypeSafeOptionSelect } from "$app/components/TypeSafeOptionSelect";
 import Placeholder from "$app/components/ui/Placeholder";
 
 type Products = { permalink: string; name: string }[];
-type Props = {
+export type ThirdPartyAnalyticsPagePropsType = {
   settings_pages: SettingPage[];
   third_party_analytics: ThirdPartyAnalytics;
   products: Products;
 };
 
-const ThirdPartyAnalyticsPage = ({ settings_pages, third_party_analytics, products }: Props) => {
+const ThirdPartyAnalyticsPage = ({ settings_pages, third_party_analytics, products }: ThirdPartyAnalyticsPagePropsType) => {
   const loggedInUser = useLoggedInUser();
   const [thirdPartyAnalytics, setThirdPartyAnalytics] = React.useState(third_party_analytics);
   const updateThirdPartyAnalytics = (update: Partial<ThirdPartyAnalytics>) =>
@@ -322,4 +320,4 @@ const SnippetRow = ({
   );
 };
 
-export default register({ component: ThirdPartyAnalyticsPage, propParser: createCast() });
+export default ThirdPartyAnalyticsPage

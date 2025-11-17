@@ -1,10 +1,12 @@
 # frozen_string_literal: true
 
 class Oauth::ApplicationsController < Doorkeeper::ApplicationsController
+  layout "inertia", only: :edit
   protect_from_forgery
 
   include CsrfTokenInjector
   include Impersonate
+  layout "inertia", only: :edit
 
   before_action :authenticate_user!
   before_action :set_display_vars
@@ -52,7 +54,8 @@ class Oauth::ApplicationsController < Doorkeeper::ApplicationsController
     @title = "Update application"
     authorize([:settings, :authorized_applications, @application])
 
-    @react_component_props = SettingsPresenter.new(pundit_user:).application_props(@application)
+    react_component_props = SettingsPresenter.new(pundit_user:).application_props(@application)
+    render inertia: "Settings/Advanced/Edit/Index", props: react_component_props
   end
 
   def update

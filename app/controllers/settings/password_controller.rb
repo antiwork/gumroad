@@ -1,12 +1,14 @@
 # frozen_string_literal: true
 
 class Settings::PasswordController < Sellers::BaseController
+  layout "inertia", only: :show
   before_action :set_user
   before_action :authorize
 
   def show
     @title = "Settings"
-    @react_component_props = SettingsPresenter.new(pundit_user:).password_props
+    react_component_props = SettingsPresenter.new(pundit_user:).password_props
+    render inertia: "Settings/Password/Index", props: react_component_props
   end
 
   def update

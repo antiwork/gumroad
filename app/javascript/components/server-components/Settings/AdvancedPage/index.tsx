@@ -1,10 +1,9 @@
 import * as React from "react";
-import { cast, createCast } from "ts-safe-cast";
+import { cast } from "ts-safe-cast";
 
 import { SettingPage } from "$app/parsers/settings";
 import { asyncVoid } from "$app/utils/promise";
 import { assertResponseError, request, ResponseError } from "$app/utils/request";
-import { register } from "$app/utils/serverComponentUtil";
 
 import { showAlert } from "$app/components/server-components/Alert";
 import AccountDeletionSection from "$app/components/Settings/AdvancedPage/AccountDeletionSection";
@@ -20,7 +19,7 @@ export type Application = {
   icon_url: string | null;
 };
 
-type Props = {
+export type AdvancedSettingsPropsType = {
   settings_pages: SettingPage[];
   user_id: string;
   notification_endpoint: string;
@@ -32,7 +31,7 @@ type Props = {
   formatted_balance_to_forfeit_on_account_deletion: string | null;
 };
 
-const AdvancedPage = (props: Props) => {
+const AdvancedPage = (props: AdvancedSettingsPropsType) => {
   const [customDomain, setCustomDomain] = React.useState(props.custom_domain_name);
   const [pingEndpoint, setPingEndpoint] = React.useState(props.notification_endpoint);
   const [blockedEmails, setBlockedEmails] = React.useState(props.blocked_customer_emails);
@@ -89,4 +88,4 @@ const AdvancedPage = (props: Props) => {
   );
 };
 
-export default register({ component: AdvancedPage, propParser: createCast() });
+export default AdvancedPage;

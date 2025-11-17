@@ -1,11 +1,10 @@
 import { parseISO } from "date-fns";
 import * as React from "react";
-import { createCast, cast } from "ts-safe-cast";
+import {  cast } from "ts-safe-cast";
 
 import { SettingPage } from "$app/parsers/settings";
 import { asyncVoid } from "$app/utils/promise";
 import { assertResponseError, request } from "$app/utils/request";
-import { register } from "$app/utils/serverComponentUtil";
 
 import { Button } from "$app/components/Button";
 import { Icon } from "$app/components/Icons";
@@ -57,12 +56,12 @@ const SCOPE_DESCRIPTIONS: Record<Scope, string> = {
   creator_api: "Creator API",
 };
 
-type Props = {
+export type AuthorizedApplicationsPagePropsType = {
   settings_pages: SettingPage[];
   authorized_applications: AuthorizedApplication[];
 };
 
-const AuthorizedApplicationsPage = (props: Props) => {
+const AuthorizedApplicationsPage = (props: AuthorizedApplicationsPagePropsType) => {
   const userAgentInfo = useUserAgentInfo();
   const [applications, setApplications] = React.useState(props.authorized_applications);
   const [revokingAccessForApp, setRevokingAccessForApp] = React.useState<{ id: string; revoking?: boolean } | null>(
@@ -187,4 +186,5 @@ const AuthorizedApplicationsPage = (props: Props) => {
     </Layout>
   );
 };
-export default register({ component: AuthorizedApplicationsPage, propParser: createCast() });
+
+export default AuthorizedApplicationsPage;

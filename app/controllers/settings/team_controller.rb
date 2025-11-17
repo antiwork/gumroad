@@ -6,13 +6,14 @@ class Settings::TeamController < Sellers::BaseController
 
   def show
     @title = "Team"
-    @team_presenter = Settings::TeamPresenter.new(pundit_user:)
-    @settings_presenter = SettingsPresenter.new(pundit_user:)
-    @react_component_props = {
-      member_infos: @team_presenter.member_infos,
+    team_presenter = Settings::TeamPresenter.new(pundit_user:)
+    settings_presenter = SettingsPresenter.new(pundit_user:)
+    react_component_props = {
+      member_infos: team_presenter.member_infos,
       can_invite_member: policy([:settings, :team, TeamInvitation]).create?,
-      settings_pages: @settings_presenter.pages,
+      settings_pages: settings_presenter.pages,
     }
+    render inertia: "Settings/Team/Index", props: react_component_props
   end
 
   private

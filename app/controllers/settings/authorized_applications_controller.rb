@@ -5,6 +5,7 @@ class Settings::AuthorizedApplicationsController < Sellers::BaseController
     authorize([:settings, :authorized_applications, OauthApplication])
 
     @title = "Settings"
-    @react_component_props = SettingsPresenter.new(pundit_user:).authorized_applications_props
+    react_component_props = SettingsPresenter.new(pundit_user:).authorized_applications_props
+    render inertia: "Settings/AuthorizedApplications/Index", props: react_component_props
   end
 end

@@ -1,7 +1,7 @@
 import { cx } from "class-variance-authority";
 import * as React from "react";
 import { GroupBase, SelectInstance } from "react-select";
-import { cast, createCast } from "ts-safe-cast";
+import { cast  } from "ts-safe-cast";
 
 import {
   ROLES,
@@ -19,7 +19,6 @@ import { SettingPage } from "$app/parsers/settings";
 import { isValidEmail } from "$app/utils/email";
 import { asyncVoid } from "$app/utils/promise";
 import { assertResponseError } from "$app/utils/request";
-import { register } from "$app/utils/serverComponentUtil";
 
 import { Button } from "$app/components/Button";
 import { useCurrentSeller } from "$app/components/CurrentSeller";
@@ -39,15 +38,17 @@ const ROLE_TITLES: Record<Role, string> = {
   support: "Support",
 };
 
+export type TeamPageProps = {
+  member_infos: MemberInfo[];
+  can_invite_member: boolean;
+  settings_pages: SettingPage[];
+};
+
 const TeamPage = ({
   member_infos,
   can_invite_member,
   settings_pages,
-}: {
-  member_infos: MemberInfo[];
-  can_invite_member: boolean;
-  settings_pages: SettingPage[];
-}) => {
+}: TeamPageProps) => {
   const [memberInfos, setMemberInfos] = React.useState<MemberInfo[]>(member_infos);
 
   const options: Option[] = ROLES.map((role) => ({
@@ -395,4 +396,4 @@ const TeamMembersSection = ({
   );
 };
 
-export default register({ component: TeamPage, propParser: createCast() });
+export default TeamPage;

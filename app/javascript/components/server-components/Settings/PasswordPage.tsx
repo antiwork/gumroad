@@ -1,11 +1,9 @@
 import * as React from "react";
-import { createCast } from "ts-safe-cast";
 
 import { updatePassword } from "$app/data/password";
 import { SettingPage } from "$app/parsers/settings";
 import { asyncVoid } from "$app/utils/promise";
 import { assertResponseError } from "$app/utils/request";
-import { register } from "$app/utils/serverComponentUtil";
 
 import { Button } from "$app/components/Button";
 import { PasswordInput } from "$app/components/PasswordInput";
@@ -15,11 +13,11 @@ import { Layout as SettingsLayout } from "$app/components/Settings/Layout";
 const MIN_PASSWORD_LENGTH = 4;
 const MAX_PASSWORD_LENGTH = 128;
 
-type Props = {
+export type PasswordPagePropsType = {
   settings_pages: SettingPage[];
   require_old_password: boolean;
 };
-const PasswordPage = (props: Props) => {
+const PasswordPage = (props: PasswordPagePropsType) => {
   const uid = React.useId();
   const [password, setPassword] = React.useState({ old: "", new: "" });
   const [requireOldPassword, setRequireOldPassword] = React.useState(props.require_old_password);
@@ -97,4 +95,4 @@ const PasswordPage = (props: Props) => {
   );
 };
 
-export default register({ component: PasswordPage, propParser: createCast() });
+export default PasswordPage;

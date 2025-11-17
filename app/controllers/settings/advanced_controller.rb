@@ -2,10 +2,12 @@
 
 class Settings::AdvancedController < Sellers::BaseController
   before_action :authorize
+  layout "inertia", only: :show
 
   def show
     @title = "Settings"
-    @react_component_props = SettingsPresenter.new(pundit_user:).advanced_props
+    react_component_props = SettingsPresenter.new(pundit_user:).advanced_props
+    render inertia: "Settings/Advanced/Index", props: react_component_props
   end
 
   def update

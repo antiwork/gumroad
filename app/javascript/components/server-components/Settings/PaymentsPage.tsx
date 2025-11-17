@@ -2,7 +2,7 @@ import { StripeCardElement } from "@stripe/stripe-js";
 import cx from "classnames";
 import parsePhoneNumberFromString, { CountryCode } from "libphonenumber-js";
 import * as React from "react";
-import { cast, createCast } from "ts-safe-cast";
+import { cast } from "ts-safe-cast";
 
 import { CardPayoutError, prepareCardTokenForPayouts } from "$app/data/card_payout_data";
 import { SavedCreditCard } from "$app/parsers/card";
@@ -10,7 +10,6 @@ import { SettingPage } from "$app/parsers/settings";
 import { formatPriceCentsWithCurrencySymbol, formatPriceCentsWithoutCurrencySymbol } from "$app/utils/currency";
 import { asyncVoid } from "$app/utils/promise";
 import { request, assertResponseError } from "$app/utils/request";
-import { register } from "$app/utils/serverComponentUtil";
 
 import { Button } from "$app/components/Button";
 import { Icon } from "$app/components/Icons";
@@ -100,7 +99,7 @@ export type ComplianceInfo = {
   business_street_address_kana?: string | null;
 };
 
-type Props = {
+export type PaymentPagePropType = {
   settings_pages: SettingPage[];
   is_form_disabled: boolean;
   should_show_country_modal: boolean;
@@ -210,7 +209,7 @@ export type ErrorMessageInfo = {
   code?: string | null;
 };
 
-const PaymentsPage = (props: Props) => {
+const PaymentsPage = (props: PaymentPagePropType) => {
   const userAgentInfo = useUserAgentInfo();
   const [isSaving, setIsSaving] = React.useState(false);
   const [errorMessage, setErrorMessage] = React.useState<ErrorMessageInfo | null>(null);
@@ -1168,4 +1167,4 @@ const PaymentsPage = (props: Props) => {
   );
 };
 
-export default register({ component: PaymentsPage, propParser: createCast() });
+export default PaymentsPage;

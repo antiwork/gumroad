@@ -1,13 +1,15 @@
 # frozen_string_literal: true
 
 class Settings::MainController < Sellers::BaseController
+  layout "inertia", only: :show
   include ActiveSupport::NumberHelper
 
   before_action :authorize
 
   def show
     @title = "Settings"
-    @react_component_props = SettingsPresenter.new(pundit_user:).main_props
+    react_component_props = SettingsPresenter.new(pundit_user:).main_props
+    render inertia: "Settings/Index", props: react_component_props
   end
 
   def update

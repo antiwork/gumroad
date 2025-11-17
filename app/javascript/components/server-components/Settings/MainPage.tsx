@@ -1,11 +1,10 @@
 import cx from "classnames";
 import * as React from "react";
-import { cast, createCast } from "ts-safe-cast";
+import { cast } from "ts-safe-cast";
 
 import { SettingPage } from "$app/parsers/settings";
 import { asyncVoid } from "$app/utils/promise";
 import { ResponseError, request, assertResponseError } from "$app/utils/request";
-import { register } from "$app/utils/serverComponentUtil";
 
 import { Button } from "$app/components/Button";
 import { Modal } from "$app/components/Modal";
@@ -22,7 +21,7 @@ type ProductLevelSupportEmail = {
   product_ids: string[];
 };
 
-type Props = {
+export type MainPagePropsType = {
   settings_pages: SettingPage[];
   is_form_disabled: boolean;
   invalidate_active_sessions: boolean;
@@ -65,7 +64,7 @@ type Props = {
   };
 };
 
-const MainPage = (props: Props) => {
+const MainPage = (props: MainPagePropsType) => {
   const uid = React.useId();
   const [userSettings, setUserSettings] = React.useState({
     ...props.user,
@@ -612,4 +611,4 @@ const InvalidateActiveSessionsSection = () => {
   );
 };
 
-export default register({ component: MainPage, propParser: createCast() });
+export default MainPage;

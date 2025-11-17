@@ -1,5 +1,4 @@
 import * as React from "react";
-import { createCast } from "ts-safe-cast";
 
 import { updateProfileSettings as requestUpdateProfileSettings, unlinkTwitter } from "$app/data/profile_settings";
 import { CreatorProfile, ProfileSettings } from "$app/parsers/profile";
@@ -7,7 +6,6 @@ import { SettingPage } from "$app/parsers/settings";
 import { getContrastColor } from "$app/utils/color";
 import { asyncVoid } from "$app/utils/promise";
 import { assertResponseError } from "$app/utils/request";
-import { register } from "$app/utils/serverComponentUtil";
 
 import { Button } from "$app/components/Button";
 import { useDomains } from "$app/components/DomainSettings";
@@ -21,7 +19,7 @@ import { Profile, Props as ProfileProps } from "$app/components/server-component
 import { Layout as SettingsLayout } from "$app/components/Settings/Layout";
 import { SocialAuthButton } from "$app/components/SocialAuthButton";
 
-type Props = {
+export type ProfileSettingsPagePropsType = {
   profile_settings: ProfileSettings;
   settings_pages: SettingPage[];
 } & ProfileProps;
@@ -35,7 +33,12 @@ const FONT_DESCRIPTIONS: Record<string, string> = {
   "Roboto Slab": "Personable and fun serif",
 };
 
-const SettingsPage = ({ creator_profile, profile_settings, settings_pages, ...profileProps }: Props) => {
+const SettingsPage = ({
+  creator_profile,
+  profile_settings,
+  settings_pages,
+  ...profileProps
+}: ProfileSettingsPagePropsType) => {
   const { rootDomain, scheme } = useDomains();
   const loggedInUser = useLoggedInUser();
   const [creatorProfile, setCreatorProfile] = React.useState(creator_profile);
@@ -253,4 +256,4 @@ const SettingsPage = ({ creator_profile, profile_settings, settings_pages, ...pr
   );
 };
 
-export default register({ component: SettingsPage, propParser: createCast() });
+export default SettingsPage;

@@ -1,13 +1,15 @@
 # frozen_string_literal: true
 
 class Settings::PaymentsController < Sellers::BaseController
+  layout "inertia", only: :show
   include ActionView::Helpers::SanitizeHelper
 
   before_action :authorize
 
   def show
     @title = "Settings"
-    @react_component_props = SettingsPresenter.new(pundit_user:).payments_props(remote_ip: request.remote_ip)
+    react_component_props = SettingsPresenter.new(pundit_user:).payments_props(remote_ip: request.remote_ip)
+    render inertia: "Settings/Payments/Index", props: react_component_props
   end
 
   def update
