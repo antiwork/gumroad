@@ -338,7 +338,7 @@ describe("Payments Settings Scenario", type: :system, js: true) do
 
       expect do
         click_on("Update settings")
-        expect(page).to have_status(text: "Please select a valid state.")
+        expect(page).to have_status(text: "Please select a valid state or province.")
       end.to_not change { @user.alive_user_compliance_info.reload.state }
 
       select("California", from: "State")
@@ -382,7 +382,7 @@ describe("Payments Settings Scenario", type: :system, js: true) do
 
       expect do
         click_on("Update settings")
-        expect(page).to have_status(text: "Please select a valid state.")
+        expect(page).to have_status(text: "Please select a valid state or province.")
       end.to_not change { @user.alive_user_compliance_info.reload.business_state }
 
       find_field("State", match: :first).select("California")
@@ -1150,7 +1150,7 @@ describe("Payments Settings Scenario", type: :system, js: true) do
         click_on("Update settings")
         expect(page).to_not have_alert(text: "Thanks! You're all set.")
         expect(find_field("State")["aria-invalid"]).to eq "true"
-        expect(page).to have_status(text: "Please select a valid state.")
+        expect(page).to have_status(text: "Please select a valid state or province.")
 
         select("Rio de Janeiro", from: "State")
         click_on("Update settings")

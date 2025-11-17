@@ -602,7 +602,7 @@ const PaymentsPage = (props: Props) => {
       !complianceInfo.state
     ) {
       markFieldInvalid("state");
-      setErrorMessage({ message: "Please select a valid state." });
+      setErrorMessage({ message: "Please select a valid state or province." });
     }
     if (!complianceInfo.zip_code && complianceInfo.country !== "BW") {
       markFieldInvalid("zip_code");
@@ -676,7 +676,7 @@ const PaymentsPage = (props: Props) => {
         !complianceInfo.business_state
       ) {
         markFieldInvalid("business_state");
-        setErrorMessage({ message: "Please select a valid state." });
+        setErrorMessage({ message: "Please select a valid state or province." });
       }
       if (!complianceInfo.business_zip_code && props.user.country_code !== "BW") {
         markFieldInvalid("business_zip_code");

@@ -11,10 +11,13 @@
 @source "../../../public/help/**/*.html";
 
 /*
- * Capybara tests don't support the media query used by Tailwind v4's default hover variant.
- * Defining a legacy-hover variant that uses a basic :hover selector for cases like Capybara test compatibility.
+ * Tailwind's default hover variant is only applied in user agents that actually support mouse hovering.
+ * This makes sense as hover-only UX is an issue on phones and especially screenreaders.
+ * However, this breaks hover in *headless* Capybara (CI), so we're overriding this for now.
+ * Once all hover UX supports alternative methods like keyboard focus and these tests have been adjusted,
+ * we should remove this override.
  */
-@custom-variant legacy-hover (&:hover);
+@custom-variant hover (&:hover);
 
 @theme {
   --color-black: #000000;
@@ -36,6 +39,8 @@
   --color-backdrop: rgb(0 0 0 / 0.8);
   --color-accent: rgb(var(--accent));
   --color-accent-foreground: rgb(var(--contrast-accent));
+  --color-primary: rgb(var(--primary));
+  --color-primary-foreground: rgb(var(--contrast-primary));
   --color-active-bg: rgb(var(--color) / var(--gray-1));
   --color-muted: rgb(var(--color) / var(--gray-3));
   --color-success: rgb(var(--success));
