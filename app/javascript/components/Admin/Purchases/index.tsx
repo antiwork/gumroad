@@ -127,7 +127,7 @@ const Header = ({ purchase }: { purchase: Purchase }) => (
     <h2>
       <Link href={Routes.admin_purchase_path(purchase.id)}>{purchase.formatted_display_price}</Link>
       {purchase.gumroad_responsible_for_tax ? ` + ${purchase.formatted_gumroad_tax_amount} VAT` : null} for{" "}
-      <Link href={Routes.admin_link_path(purchase.product.id)} title={purchase.product.id.toString()}>
+      <Link href={Routes.admin_product_path(purchase.product.id)} title={purchase.product.id.toString()}>
         {purchase.product.name}
       </Link>{" "}
       {purchase.variants_list}{" "}

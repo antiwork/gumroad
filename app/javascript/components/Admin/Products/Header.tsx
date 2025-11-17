@@ -59,7 +59,7 @@ const AdminUsersProductsHeader = ({ product, isCurrentUrl }: Props) => (
       </a>
       {product.admins_can_generate_url_redirects ? (
         <a
-          href={Routes.generate_url_redirect_admin_link_path(product.id)}
+          href={Routes.generate_url_redirect_admin_product_path(product.id)}
           className="button small"
           target="_blank"
           rel="noreferrer noopener"

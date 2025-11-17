@@ -78,31 +78,23 @@ namespace :admin do
 
   resources :affiliates, only: [:index, :show], defaults: { format: "html" }
 
-  resources :links, only: [:show], defaults: { format: "html" } do
-    member do
-      get :access_product_file
-      post :flag_seller_for_tos_violation
-      get :generate_url_redirect
-      get :join_discord
-      get :join_discord_redirect
-    end
-  end
+  get "links/:id", to: redirect("/admin/products/%{id}"), as: :link
 
-  resources :products, only: [:show, :destroy] do
+  resources :products, controller: "links", only: [:show, :destroy] do
     member do
       post :restore
       post :publish
       delete :unpublish
       post :is_adult
-    end
-  end
-
-  resources :products, controller: "links", only: [] do
-    member do
       get "/file/:product_file_id/access", to: "links#access_product_file", as: :admin_access_product_file
       get :legacy_purchases
       get :views_count
       get :sales_stats
+      get :access_product_file
+      post :flag_seller_for_tos_violation
+      get :generate_url_redirect
+      get :join_discord
+      get :join_discord_redirect
     end
     scope module: :products do
       concerns :commentable
