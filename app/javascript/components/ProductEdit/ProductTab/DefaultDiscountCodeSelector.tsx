@@ -1,11 +1,14 @@
 import * as React from "react";
 
-import { useProductEditContext } from "$app/components/ProductEdit/state";
+import { ProductEditContext } from "$app/components/ProductEdit/state";
 import { ToggleSettingRow } from "$app/components/SettingRow";
 import { TypeSafeOptionSelect } from "$app/components/TypeSafeOptionSelect";
 
 export const DefaultDiscountCodeSelector = () => {
-  const { product, updateProduct, availableDiscountCodes } = useProductEditContext();
+  const context = React.useContext(ProductEditContext);
+  if (!context) return null;
+
+  const { product, updateProduct, availableDiscountCodes } = context;
   const defaultDiscountCodeId = product.default_discount_code_id;
 
   const isEnabled = !!defaultDiscountCodeId;

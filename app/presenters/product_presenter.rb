@@ -243,7 +243,9 @@ class ProductPresenter
           id: discount_code.external_id,
           code: discount_code.code,
           name: discount_code.name.presence || "",
-          discount: discount_code.amount_cents.present? ? { type: "cents", value: discount_code.amount_cents } : { type: "percent", value: discount_code.amount_percentage },
+          discount: discount_code.amount_percentage.present? ?
+            { type: "percent", value: discount_code.amount_percentage } :
+            { type: "cents", value: discount_code.amount_cents },
         }
       end,
     }

@@ -2597,6 +2597,54 @@ describe Purchase::CreateService, :vcr do
         expect(purchase.offer_code).to be_nil
         expect(purchase.used_default_discount_code).to be_nil
       end
+
+      it "does not track used_default_discount_code when default discount code has expired" do
+        default_offer_code.update!(valid_at: 2.days.ago, expires_at: 1.day.ago)
+
+        params[:purchase].merge!(
+          discount_code: nil,
+          perceived_price_cents: price,
+        )
+
+        purchase, _ = Purchase::CreateService.new(product:, params:).perform
+
+        expect(purchase).to be_successful
+        expect(purchase.offer_code).to be_nil
+        expect(purchase.used_default_discount_code).to be_nil
+      end
+
+      it "does not track used_default_discount_code when default discount code is sold out" do
+        default_offer_code.update!(max_purchase_count: 0)
+
+        params[:purchase].merge!(
+          discount_code: nil,
+          perceived_price_cents: price,
+        )
+
+        purchase, _ = Purchase::CreateService.new(product:, params:).perform
+
+        expect(purchase).to be_successful
+        expect(purchase.offer_code).to be_nil
+        expect(purchase.used_default_discount_code).to be_nil
+      end
+
+      context "with universal offer code" do
+        let(:default_offer_code) { create(:universal_offer_code, user: product.user, code: "UNIVERSAL10", amount_cents: discount_cents) }
+        let!(:merchant_account) { create(:merchant_account_stripe_connect, user: product.user) }
+
+        it "tracks used_default_discount_code when universal default discount code is used" do
+          params[:purchase].merge!(
+            discount_code: default_offer_code.code,
+            perceived_price_cents: discounted_price,
+          )
+
+          purchase, _ = Purchase::CreateService.new(product:, params:).perform
+
+          expect(purchase).to be_successful
+          expect(purchase.offer_code).to eq(default_offer_code)
+          expect(purchase.used_default_discount_code).to be(true)
+        end
+      end
     end
 
     it "updates the used_count value for the offer code" do
