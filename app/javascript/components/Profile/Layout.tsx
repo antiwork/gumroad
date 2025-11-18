@@ -79,7 +79,7 @@ export const Layout = ({ creatorProfile, hideFollowForm, children }: Props) => {
   return (
     <div className="flex min-h-full flex-col">
       <header className="relative z-20 bg-background text-lg">
-        <div className="mx-auto flex max-w-6xl flex-wrap">
+        <div className="flex flex-wrap">
           <section className={classNames(sectionClassName, "relative grow")}>
             {(loggedInUser?.isGumroadAdmin || loggedInUser?.isImpersonating) &&
             creatorProfile.external_id !== loggedInUser.id ? (
@@ -115,7 +115,7 @@ export const Layout = ({ creatorProfile, hideFollowForm, children }: Props) => {
       </header>
       <main className="flex-1">
         {children}
-        <PoweredByFooter className="mx-auto w-full max-w-6xl" />
+        <PoweredByFooter />
       </main>
     </div>
   );
