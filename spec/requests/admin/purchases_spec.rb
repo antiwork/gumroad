@@ -36,4 +36,53 @@ describe "Admin::PurchasesController Scenario", type: :system, js: true do
       expect(page).to have_button("Undeleted!")
     end
   end
+
+  describe "resend receipt functionality" do
+    let(:new_email) { "newemail@example.com" }
+
+    before do
+      purchase.update!(is_deleted_by_buyer: false)
+    end
+
+    def resend_receipt(email: nil)
+      fill_in "resend_receipt[email_address]", with: email
+      click_on "Send"
+      accept_browser_dialog
+      wait_for_ajax
+    end
+
+    it "successfully resends receipt with a valid email" do
+      visit admin_purchase_path(purchase.id)
+      find("summary", text: "Resend receipt").click
+
+      # With the original email
+      resend_receipt
+      expect(page).to have_alert(text: "Receipt sent successfully.")
+      expect(purchase.reload.email).to eq(purchase.email)
+
+      # With a new email
+      new_email = "newemail@example.com"
+      resend_receipt(email: new_email)
+      expect(page).to have_alert(text: "Receipt sent successfully.")
+      expect(purchase.reload.email).to eq(new_email)
+
+      # With an invalid email, fails with validation error
+      error = ActiveRecord::RecordInvalid.new(purchase)
+      allow(error).to receive(:message).and_return("Validation failed: Email is invalid")
+      allow_any_instance_of(Purchase).to receive(:save!).and_raise(error)
+      resend_receipt(email: "test@example.com")
+      expect(page).to have_alert(text: "Validation failed: Email is invalid")
+      expect(purchase.reload.email).to eq(purchase.email)
+    end
+  end
+
+  describe "tip display" do
+    it "shows tip amount correctly when purchase has a tip" do
+      create(:tip, purchase: purchase, value_usd_cents: 500)
+
+      visit admin_purchase_path(purchase.id)
+
+      expect(page).to have_content("Tip $5", normalize_ws: true)
+    end
+  end
 end

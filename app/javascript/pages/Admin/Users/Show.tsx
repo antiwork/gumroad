@@ -13,7 +13,7 @@ const AdminUsersShow = () => {
   const { user } = cast<PageProps>(usePage().props);
 
   return (
-    <div className="paragraphs">
+    <div className="flex flex-col gap-4">
       <AdminUserAndProductsTabs selectedTab="profile" userId={user.id} />
       <UserCard user={user} />
     </div>

@@ -52,22 +52,25 @@ export const FollowForm = ({
 
   return (
     <form onSubmit={(e) => void submit(e)} style={{ flexGrow: 1 }} noValidate>
-      <fieldset className={cx("input-with-button", { danger: formStatus === "invalid" })}>
-        <input
-          type="email"
-          value={email}
-          onChange={(event) => setEmail(event.target.value)}
-          placeholder="Your email address"
-        />
-        <Button color={buttonColor} disabled={formStatus === "submitting" || formStatus === "success"} type="submit">
-          {buttonLabel && buttonLabel !== "Subscribe"
-            ? buttonLabel
-            : formStatus === "success"
-              ? "Subscribed"
-              : formStatus === "submitting"
-                ? "Subscribing..."
-                : "Subscribe"}
-        </Button>
+      <fieldset className={cx({ danger: formStatus === "invalid" })}>
+        <div className="flex gap-2">
+          <input
+            type="email"
+            value={email}
+            className="flex-1"
+            onChange={(event) => setEmail(event.target.value)}
+            placeholder="Your email address"
+          />
+          <Button color={buttonColor} disabled={formStatus === "submitting" || formStatus === "success"} type="submit">
+            {buttonLabel && buttonLabel !== "Subscribe"
+              ? buttonLabel
+              : formStatus === "success"
+                ? "Subscribed"
+                : formStatus === "submitting"
+                  ? "Subscribing..."
+                  : "Subscribe"}
+          </Button>
+        </div>
       </fieldset>
     </form>
   );

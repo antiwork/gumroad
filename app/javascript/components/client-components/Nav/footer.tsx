@@ -4,7 +4,7 @@ import { useCurrentSeller } from "$app/components/CurrentSeller";
 import { useAppDomain } from "$app/components/DomainSettings";
 import { useLoggedInUser } from "$app/components/LoggedInUser";
 import { NavLink, NavLinkDropdownItem, UnbecomeDropdownItem, NavLinkDropdownMembershipItem } from "$app/components/Nav";
-import { Popover } from "$app/components/Popover";
+import { DashboardNavProfilePopover } from "$app/components/ProfilePopover";
 
 function NavbarFooter() {
   const routeParams = { host: useAppDomain() };
@@ -19,22 +19,14 @@ function NavbarFooter() {
       ) : null}
       <NavLink text="Settings" icon="gear-fill" href={Routes.settings_main_url(routeParams)} />
       <NavLink text="Help" icon="book" href={Routes.help_center_root_url(routeParams)} />
-      <Popover
-        position="top"
-        trigger={
-          <>
-            <img className="user-avatar" src={currentSeller?.avatarUrl} alt="Your avatar" />
-            {currentSeller?.name || currentSeller?.email}
-          </>
-        }
-      >
+      <DashboardNavProfilePopover user={currentSeller}>
         <div role="menu">
           {teamMemberships != null && teamMemberships.length > 0 ? (
             <>
               {teamMemberships.map((teamMembership) => (
                 <NavLinkDropdownMembershipItem key={teamMembership.id} teamMembership={teamMembership} />
               ))}
-              <hr />
+              <hr className="my-2" />
             </>
           ) : null}
           <NavLinkDropdownItem
@@ -46,7 +38,7 @@ function NavbarFooter() {
           <NavLinkDropdownItem text="Logout" icon="box-arrow-in-right-fill" href={Routes.logout_url(routeParams)} />
           {loggedInUser?.isImpersonating ? <UnbecomeDropdownItem /> : null}
         </div>
-      </Popover>
+      </DashboardNavProfilePopover>
     </>
   );
 }

@@ -196,7 +196,7 @@ describe "Affiliates", type: :system, js: true do
     ]
 
     find(:table_row, { "Name" => affiliate_user1.name, "Product" => "2 products" }).click
-    within_section affiliate_user1.name, section_element: :aside do
+    within_modal affiliate_user1.name do
       within_section product.name do
         expect(page).to have_text("Revenue $20", normalize_ws: true)
         expect(page).to have_text("Sales 2", normalize_ws: true)
@@ -215,7 +215,7 @@ describe "Affiliates", type: :system, js: true do
     end
 
     find(:table_row, { "Name" => affiliate_user2.name, "Product" => product.name }).click
-    within_section affiliate_user2.name, section_element: :aside do
+    within_modal affiliate_user2.name do
       within_section product.name do
         expect(page).to have_text("Revenue $10", normalize_ws: true)
         expect(page).to have_text("Sales 1", normalize_ws: true)
@@ -228,7 +228,7 @@ describe "Affiliates", type: :system, js: true do
     end
 
     find(:table_row, { "Name" => affiliate_user3.name, "Product" => product.name }).click
-    within_section affiliate_user3.name, section_element: :aside do
+    within_modal affiliate_user3.name do
       within_section product.name do
         expect(page).to have_text("Revenue $0", normalize_ws: true)
         expect(page).to have_text("Sales 0", normalize_ws: true)
@@ -295,7 +295,7 @@ describe "Affiliates", type: :system, js: true do
         expect(page).to have_table "Requests", with_rows: [{ "Name" => affiliate_request.name }]
 
         find(:table_row, { "Name" => new_affiliate_user.name, "Product" => "2 products" }).click
-        within_section new_affiliate_user.name, section_element: :aside do
+        within_modal new_affiliate_user.name do
           within_section product_one.name do
             expect(page).to have_text("Revenue $0", normalize_ws: true)
             expect(page).to have_text("Sales 0", normalize_ws: true)
@@ -348,7 +348,7 @@ describe "Affiliates", type: :system, js: true do
         ]
 
         find(:table_row, { "Name" => new_affiliate_user.name, "Product" => product_one.name }).click
-        within_section new_affiliate_user.name, section_element: :aside do
+        within_modal new_affiliate_user.name do
           within_section product_one.name do
             expect(page).to have_text("Revenue $0", normalize_ws: true)
             expect(page).to have_text("Sales 0", normalize_ws: true)
@@ -610,7 +610,7 @@ describe "Affiliates", type: :system, js: true do
       ]
 
       find(:table_row, { "Name" => affiliate_user.name, "Product" => product.name }).click
-      within_section affiliate_user.name, section_element: :aside do
+      within_modal affiliate_user.name do
         click_on "Delete"
       end
       wait_for_ajax
