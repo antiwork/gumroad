@@ -24,20 +24,17 @@ module CheckoutHelpers
     end
 
     within find(:article) do
-      buy_button = find(:link, buy_text, wait: 10)
-      expect(buy_button[:href]).to be_present
+      buy_button = find(:link, buy_text)
       uri = URI.parse buy_button[:href]
       expect(uri.path).to eq "/checkout"
       query = Rack::Utils.parse_query(uri.query)
       expect(query["product"]).to eq(product.unique_permalink)
       expect(query["quantity"]).to eq(quantity.to_s)
 
-      # Handle default discount codes: if offer_code is nil, check if product has a valid default discount code
       expected_code = if offer_code.present?
         offer_code.code
       elsif product.default_discount_code.present?
         default_code = product.default_discount_code
-        # Check if default code is valid (not expired, not sold out, meets minimum quantity)
         is_valid = (default_code.valid_at.nil? || default_code.valid_at <= Time.current) &&
                    (default_code.expires_at.nil? || default_code.expires_at >= Time.current) &&
                    (default_code.max_purchase_count.nil? || default_code.times_used < default_code.max_purchase_count) &&
