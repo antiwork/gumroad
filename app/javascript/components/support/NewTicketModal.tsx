@@ -9,6 +9,7 @@ import { FileRowContent } from "$app/components/FileRowContent";
 import { Icon } from "$app/components/Icons";
 import { Modal } from "$app/components/Modal";
 import { showAlert } from "$app/components/server-components/Alert";
+import { Row, Rows } from "$app/components/ui/Rows";
 
 export function NewTicketModal({
   open,
@@ -102,9 +103,9 @@ export function NewTicketModal({
           }}
         />
         {attachments.length > 0 ? (
-          <div role="list" className="rows" aria-label="Files">
+          <Rows role="list" aria-label="Files">
             {attachments.map((file, index) => (
-              <div role="listitem" key={`${file.name}-${index}`}>
+              <Row role="listitem" key={`${file.name}-${index}`}>
                 <div className="content">
                   <FileRowContent
                     name={FileUtils.getFileNameWithoutExtension(file.name)}
@@ -124,9 +125,9 @@ export function NewTicketModal({
                     <Icon name="trash2" />
                   </Button>
                 </div>
-              </div>
+              </Row>
             ))}
-          </div>
+          </Rows>
         ) : null}
       </form>
     </Modal>

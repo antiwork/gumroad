@@ -37,9 +37,14 @@ export const RowActions = ({ className, ...props }: React.HTMLProps<HTMLDivEleme
   <div className={classNames("flex flex-wrap items-center justify-end gap-2", className)} {...props} />
 );
 
-export const RowDetails = ({ className, ...props }: React.HTMLProps<HTMLDivElement>) => (
-  <div className={classNames("grid-col-span-full", className)} {...props} />
-);
+export const RowDetails = ({
+  className,
+  asChild,
+  ...props
+}: { asChild?: boolean } & React.HTMLProps<HTMLDivElement>) => {
+  const Component = asChild ? Slot : "div";
+  return <Component className={classNames("grid-col-span-full", className)} {...props} />;
+};
 
 export const RowDragHandle = ({ className, ...props }: React.HTMLProps<HTMLDivElement>) => (
   <div className={classNames("order-first -ml-4 text-muted", className)} {...props}>
