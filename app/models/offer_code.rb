@@ -37,6 +37,9 @@ class OfferCode < ApplicationRecord
   before_save :to_mongo
 
   after_save :invalidate_product_cache
+  after_save :reindex_associated_products
+  before_destroy :capture_associated_product_ids
+  after_destroy :reindex_captured_products
 
   validates_uniqueness_of :code, scope: %i[user_id deleted_at], if: :universal?, unless: :deleted?, message: "must be unique."
   validate :code_validation, unless: lambda { |offer_code| offer_code.deleted? || offer_code.universal? || offer_code.upsell.present? }
@@ -283,5 +286,19 @@ class OfferCode < ApplicationRecord
       unless product.is_tiered_membership?
         errors.add(:base, "Cancellation discounts can only be added to memberships")
       end
+    end
+
+    def reindex_associated_products(products_to_reindex: products)
+      products_to_reindex.each do |product|
+        product.enqueue_index_update_for(["offer_codes"])
+      end
+    end
+
+    def capture_associated_product_ids
+      @product_ids_to_reindex = products.ids
+    end
+
+    def reindex_captured_products
+      reindex_associated_products(products_to_reindex: Link.where(id: @product_ids_to_reindex)) if @product_ids_to_reindex.present?
     end
 end

@@ -40,13 +40,15 @@ class DiscoverController < ApplicationController
         recommended_by: RecommendationType::GUMROAD_SEARCH_RECOMMENDATION,
         target: Product::Layout::DISCOVER,
         compute_description: false,
-        query: params[:query]
+        query: params[:query],
+        offer_code: params[:offer_code]
       )
     end
 
     create_discover_search!(query: params[:query], taxonomy: @taxonomy) if is_searching?
 
     prepare_discover_page
+
 
     @react_discover_props = {
       search_results: @search_results,

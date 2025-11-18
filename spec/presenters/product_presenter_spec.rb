@@ -885,7 +885,8 @@ describe ProductPresenter do
     let(:product) { create(:product) }
 
     it "returns properties from the card presenter" do
-      expect(described_class.card_for_web(product:, request:, recommended_by: "discover")).to eq(ProductPresenter::Card.new(product:).for_web(request:, recommended_by: "discover"))
+      expect(described_class.card_for_web(product:, request:, recommended_by: "discover", query: "offer_code=BLACKFRIDAY2025"))
+        .to eq(ProductPresenter::Card.new(product:).for_web(request:, recommended_by: "discover", query: "offer_code=BLACKFRIDAY2025"))
     end
 
     it "passes compute_description parameter to the card presenter" do
