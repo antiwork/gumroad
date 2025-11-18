@@ -109,10 +109,10 @@ describe User::LowBalanceFraudCheck do
     end
   end
 
-  describe "#mark_compliant_if_balance_recovered!" do
+  describe "#restore_risk_state_if_balance_recovered!" do
     it "does nothing when user is not on probation" do
       allow(@creator).to receive(:unpaid_balance_cents).and_return(50_00)
-      expect { @creator.mark_compliant_if_balance_recovered! }.not_to change { @creator.reload.user_risk_state }
+      expect { @creator.restore_risk_state_if_balance_recovered! }.not_to change { @creator.reload.user_risk_state }
     end
 
     context "when user is on probation for low balance" do
@@ -122,18 +122,41 @@ describe User::LowBalanceFraudCheck do
 
       it "does nothing when balance is below $100" do
         allow(@creator).to receive(:unpaid_balance_cents).and_return(99_99)
-        expect { @creator.mark_compliant_if_balance_recovered! }.not_to change { @creator.reload.user_risk_state }
+        expect { @creator.restore_risk_state_if_balance_recovered! }.not_to change { @creator.reload.user_risk_state }
       end
 
-      it "marks user compliant, creates compliant comment, and enables refunds when balance is at or above $100" do
-        allow(@creator).to receive(:unpaid_balance_cents).and_return(100_00)
-        expect { @creator.mark_compliant_if_balance_recovered! }
-          .to change { @creator.reload.user_risk_state }.from("on_probation").to("compliant")
+      context "when user was previously compliant" do
+        with_versioning do
+          it "marks user compliant and creates compliant comment when balance is at or above $100" do
+            @creator.update!(user_risk_state: "compliant")
+            @creator.update!(user_risk_state: "flagged_for_fraud")
+            @creator.update!(user_risk_state: "on_probation")
+            allow(@creator).to receive(:unpaid_balance_cents).and_return(100_00)
+            expect { @creator.restore_risk_state_if_balance_recovered! }
+              .to change { @creator.reload.user_risk_state }.from("on_probation").to("compliant")
 
-        compliant_comment = @creator.comments.where(comment_type: Comment::COMMENT_TYPE_COMPLIANT).order(created_at: :desc).first
-        expect(compliant_comment.author_name).to eq("LowBalanceFraudCheck")
-        expect(compliant_comment.content).to include("Marked compliant automatically", "balance has recovered to $100")
-        expect(@creator.reload.refunds_disabled?).to eq(false)
+            compliant_comment = @creator.comments.where(comment_type: Comment::COMMENT_TYPE_COMPLIANT).order(created_at: :desc).first
+            expect(compliant_comment.author_name).to eq("LowBalanceFraudCheck")
+            expect(compliant_comment.content).to include("Marked compliant automatically", "balance has recovered to $100")
+            expect(@creator.reload.refunds_disabled?).to eq(false)
+          end
+        end
+      end
+
+      context "when user was never compliant" do
+        with_versioning do
+          it "reverts to not_reviewed and creates a comment when balance is at or above $100" do
+            @creator.update!(user_risk_state: "not_reviewed")
+            @creator.update!(user_risk_state: "on_probation")
+            allow(@creator).to receive(:unpaid_balance_cents).and_return(100_00)
+            expect { @creator.restore_risk_state_if_balance_recovered! }
+            .to change { @creator.reload.user_risk_state }.from("on_probation").to("not_reviewed")
+
+            comment = @creator.comments.where(comment_type: Comment::COMMENT_TYPE_NOTE).order(created_at: :desc).first
+            expect(comment.author_name).to eq("LowBalanceFraudCheck")
+            expect(comment.content).to include("Risk state reverted to \"Not Reviewed\" automatically", "balance has recovered to $100")
+          end
+        end
       end
     end
 
@@ -146,7 +169,27 @@ describe User::LowBalanceFraudCheck do
 
       it "does not mark user as compliant if balance is above $100" do
         allow(@creator).to receive(:unpaid_balance_cents).and_return(100_00)
-        expect { @creator.mark_compliant_if_balance_recovered! }.not_to change { @creator.reload.user_risk_state }
+        expect { @creator.restore_risk_state_if_balance_recovered! }.not_to change { @creator.reload.user_risk_state }
+      end
+    end
+  end
+
+  describe "#was_ever_compliant?" do
+    with_versioning do
+      it "returns true when user transitioned to compliant" do
+        @creator.update!(user_risk_state: "not_reviewed")
+        @creator.update!(user_risk_state: "compliant")
+        @creator.update!(user_risk_state: "flagged_for_fraud")
+        @creator.update!(user_risk_state: "on_probation")
+
+        expect(@creator.send(:was_ever_compliant?)).to be true
+      end
+
+      it "returns false when user never transitioned to compliant" do
+        @creator.update!(user_risk_state: "not_reviewed")
+        @creator.update!(user_risk_state: "flagged_for_fraud")
+
+        expect(@creator.send(:was_ever_compliant?)).to be false
       end
     end
   end

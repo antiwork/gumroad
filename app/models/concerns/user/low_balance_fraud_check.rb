@@ -31,18 +31,36 @@ module User::LowBalanceFraudCheck
     disable_refunds_and_put_on_probation! unless recently_probated_for_low_balance?
   end
 
-  def mark_compliant_if_balance_recovered!
-    return unless can_recover_from_low_balance_probation?
-    self.mark_compliant!(author_name: LOW_BALANCE_FRAUD_CHECK_AUTHOR_NAME, content: "Marked compliant automatically on #{Time.current.to_fs(:formatted_date_full_month)} as balance has recovered to #{MoneyFormatter.format(LOW_BALANCE_RECOVERY_THRESHOLD, :usd, no_cents_if_whole: true, symbol: true)}")
+  def restore_risk_state_if_balance_recovered!(unpaid_balance_cents = nil)
+    unpaid_balance_cents ||= self.unpaid_balance_cents
+    return unless can_recover_from_low_balance_probation?(unpaid_balance_cents)
+
+    if was_ever_compliant?
+      mark_compliant!(author_name: LOW_BALANCE_FRAUD_CHECK_AUTHOR_NAME, content: "Marked compliant automatically on #{Time.current.to_fs(:formatted_date_full_month)} as balance has recovered to #{MoneyFormatter.format(LOW_BALANCE_RECOVERY_THRESHOLD, :usd, no_cents_if_whole: true, symbol: true)}")
+    else
+      update!(user_risk_state: "not_reviewed")
+      comments.create!(
+        author_name: LOW_BALANCE_FRAUD_CHECK_AUTHOR_NAME,
+        comment_type: Comment::COMMENT_TYPE_NOTE,
+        content: "Risk state reverted to \"Not Reviewed\" automatically on #{Time.current.to_fs(:formatted_date_full_month)} as balance has recovered to #{MoneyFormatter.format(LOW_BALANCE_RECOVERY_THRESHOLD, :usd, no_cents_if_whole: true, symbol: true)}"
+      )
+    end
   end
 
   private
-    def can_recover_from_low_balance_probation?
-      return false unless self.on_probation?
+    def can_recover_from_low_balance_probation?(unpaid_balance_cents = nil)
+      unpaid_balance_cents ||= self.unpaid_balance_cents
+      return false if !self.on_probation?
       comments.with_type_on_probation
               .order(created_at: :desc)
               .first&.author_name == LOW_BALANCE_FRAUD_CHECK_AUTHOR_NAME &&
               unpaid_balance_cents >= LOW_BALANCE_RECOVERY_THRESHOLD
+    end
+
+    def was_ever_compliant?
+      versions
+        .where("JSON_EXTRACT(object_changes, '$.user_risk_state[1]') = ?", "compliant")
+        .exists?
     end
 
     def disable_refunds_and_put_on_probation!

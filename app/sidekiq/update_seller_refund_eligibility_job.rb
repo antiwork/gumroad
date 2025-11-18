@@ -14,6 +14,6 @@ class UpdateSellerRefundEligibilityJob
       user.disable_refunds!
     end
 
-    user.mark_compliant_if_balance_recovered!
+    user.restore_risk_state_if_balance_recovered!(unpaid_balance_cents)
   end
 end
