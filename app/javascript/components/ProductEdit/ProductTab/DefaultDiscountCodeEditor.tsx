@@ -20,20 +20,17 @@ export const DefaultDiscountCodeEditor = ({
   const [isLoading, setIsLoading] = React.useState(false);
   const [selectedCode, setSelectedCode] = React.useState<Option | null>(null);
 
-  // Fetch offer codes once on mount
   React.useEffect(() => {
     if (productId) {
       setIsLoading(true);
       getAllProductOfferCodes(productId)
         .then((codes) => {
           setOfferCodes(codes);
-          // If there's a default code set, find the matching offer to display its name
           if (defaultDiscountCode) {
             const matchingCode = codes.find((c) => c.code === defaultDiscountCode);
             if (matchingCode) {
               setSelectedCode({ id: matchingCode.code, label: matchingCode.name });
             } else {
-              // If code not found in list, show the code itself as label
               setSelectedCode({ id: defaultDiscountCode, label: defaultDiscountCode });
             }
           }

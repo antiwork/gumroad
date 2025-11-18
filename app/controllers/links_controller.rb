@@ -191,7 +191,6 @@ class LinksController < ApplicationController
                                   ChargeProcessor::DEFAULT_CURRENCY_CODE
     @pay_with_card_enabled = @product.user.pay_with_card_enabled?
     presenter = ProductPresenter.new(pundit_user:, product: @product, request:)
-    # URL param discount code takes priority over product's default discount code
     discount_code = params[:offer_code] || params[:code] || @product.default_discount_code
     presenter_props = { recommended_by: params[:recommended_by], discount_code:, quantity: (params[:quantity] || 1).to_i, layout: params[:layout], seller_custom_domain_url: }
     @product_props = params[:embed] || params[:overlay] ? presenter.product_props(**presenter_props) : presenter.product_page_props(**presenter_props)
