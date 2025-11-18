@@ -27,8 +27,13 @@ const FlagForFraud = ({ user }: FlagForFraudProps) => {
           >
             {(isLoading) => (
               <fieldset>
-                <div className="input-with-button" style={{ alignItems: "start" }}>
-                  <textarea name="flag_for_fraud[flag_note]" rows={3} placeholder="Add flag note (optional)" />
+                <div className="flex items-start gap-2">
+                  <textarea
+                    name="flag_for_fraud[flag_note]"
+                    className="flex-1"
+                    rows={3}
+                    placeholder="Add flag note (optional)"
+                  />
                   <button type="submit" className="button" disabled={isLoading}>
                     {isLoading ? "Submitting..." : "Submit"}
                   </button>

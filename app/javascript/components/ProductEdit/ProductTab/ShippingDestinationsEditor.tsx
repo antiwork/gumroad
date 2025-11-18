@@ -88,32 +88,35 @@ const ShippingDestinationRow = ({
 
   return (
     <div aria-label="Shipping destination">
-      <fieldset className="input-with-button">
+      <fieldset>
         <legend>
           <label htmlFor={`${uid}-country`}>Country</label>
         </legend>
-        <select
-          id={`${uid}-country`}
-          aria-label="Country"
-          value={shippingDestination.country_code}
-          onChange={(evt) => updateDestination({ country_code: evt.target.value })}
-        >
-          {availableCountries.map((country) => {
-            const shouldInsertDividerAfter = INSERT_DIVIDERS_AFTER_CODES.includes(country.code);
+        <div className="flex gap-2">
+          <select
+            id={`${uid}-country`}
+            aria-label="Country"
+            className="flex-1"
+            value={shippingDestination.country_code}
+            onChange={(evt) => updateDestination({ country_code: evt.target.value })}
+          >
+            {availableCountries.map((country) => {
+              const shouldInsertDividerAfter = INSERT_DIVIDERS_AFTER_CODES.includes(country.code);
 
-            return (
-              <React.Fragment key={country.code}>
-                <option value={country.code}>{country.name}</option>
-                {shouldInsertDividerAfter ? <option disabled>──────────────</option> : null}
-              </React.Fragment>
-            );
-          })}
-        </select>
-        <WithTooltip position="bottom" tip="Remove">
-          <Button color="danger" outline onClick={onRemove} aria-label="Remove shipping destination">
-            <Icon name="trash2" />
-          </Button>
-        </WithTooltip>
+              return (
+                <React.Fragment key={country.code}>
+                  <option value={country.code}>{country.name}</option>
+                  {shouldInsertDividerAfter ? <option disabled>──────────────</option> : null}
+                </React.Fragment>
+              );
+            })}
+          </select>
+          <WithTooltip position="bottom" tip="Remove">
+            <Button color="danger" outline onClick={onRemove} aria-label="Remove shipping destination">
+              <Icon name="trash2" />
+            </Button>
+          </WithTooltip>
+        </div>
       </fieldset>
       <div style={{ display: "grid", gridAutoFlow: "column", gap: "var(--spacer-3)", width: "100%" }}>
         <fieldset>

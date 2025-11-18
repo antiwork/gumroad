@@ -1,5 +1,4 @@
 import * as React from "react";
-import * as ReactDOM from "react-dom";
 import {
   RouterProvider,
   createBrowserRouter,
@@ -33,6 +32,7 @@ import { Icon } from "$app/components/Icons";
 import { useLoggedInUser } from "$app/components/LoggedInUser";
 import { showAlert } from "$app/components/server-components/Alert";
 import Placeholder from "$app/components/ui/Placeholder";
+import { Sheet, SheetHeader } from "$app/components/ui/Sheet";
 import { WithTooltip } from "$app/components/WithTooltip";
 
 import placeholder from "$assets/images/placeholders/collaborators.png";
@@ -83,13 +83,9 @@ const CollaboratorDetails = ({
   const loggedInUser = useLoggedInUser();
   const navigation = useNavigation();
 
-  return ReactDOM.createPortal(
-    <aside className="flex! flex-col!">
-      <header>
-        <h2>{selectedCollaborator.name}</h2>
-        <button className="close" aria-label="Close" onClick={onClose} />
-      </header>
-
+  return (
+    <Sheet open onOpenChange={onClose}>
+      <SheetHeader>{selectedCollaborator.name}</SheetHeader>
       {selectedCollaborator.setup_incomplete ? (
         <div role="alert" className="warning">
           Collaborators won't receive their cut until they set up a payout account in their Gumroad settings.
@@ -132,8 +128,7 @@ const CollaboratorDetails = ({
           {navigation.state === "submitting" ? "Removing..." : "Remove"}
         </Button>
       </section>
-    </aside>,
-    document.body,
+    </Sheet>
   );
 };
 
