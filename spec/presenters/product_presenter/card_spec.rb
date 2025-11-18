@@ -139,6 +139,44 @@ describe ProductPresenter::Card do
           expect(data[:price_cents]).to eq 0
         end
       end
+
+      it "shows base price when default discount code has expired" do
+        default_offer_code.update!(valid_at: 2.days.ago, expires_at: 1.day.ago)
+
+        data = described_class.new(product:).for_web
+
+        expect(data[:price_cents]).to eq 1000
+        expect(data).not_to have_key(:base_price_cents)
+      end
+
+      it "shows base price when default discount code is not yet valid" do
+        default_offer_code.update!(valid_at: 1.day.from_now, expires_at: 2.days.from_now)
+
+        data = described_class.new(product:).for_web
+
+        expect(data[:price_cents]).to eq 1000
+        expect(data).not_to have_key(:base_price_cents)
+      end
+
+      it "shows base price when default discount code is sold out" do
+        default_offer_code.update!(max_purchase_count: 0)
+
+        data = described_class.new(product:).for_web
+
+        expect(data[:price_cents]).to eq 1000
+        expect(data).not_to have_key(:base_price_cents)
+      end
+
+      context "with universal offer code" do
+        let(:default_offer_code) { create(:universal_offer_code, user: creator, code: "UNIVERSAL10", amount_percentage: 10) }
+
+        it "shows discounted price with universal default discount code" do
+          data = described_class.new(product:).for_web
+
+          expect(data[:price_cents]).to eq 900
+          expect(data[:base_price_cents]).to eq 1000
+        end
+      end
     end
   end
 

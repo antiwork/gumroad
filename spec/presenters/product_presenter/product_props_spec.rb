@@ -288,6 +288,66 @@ describe ProductPresenter::ProductProps do
             expect(discount_code_props[:valid]).to be(false)
             expect(discount_code_props[:error_code]).to be_present
           end
+
+          it "does not apply default discount code when it has expired" do
+            default_offer_code.update!(valid_at: 2.days.ago, expires_at: 1.day.ago)
+
+            discount_code_props = presenter.props(seller_custom_domain_url: nil, request:, pundit_user:, discount_code: nil)[:discount_code]
+
+            expect(discount_code_props[:valid]).to be(false)
+            expect(discount_code_props[:error_code]).to eq(:inactive)
+          end
+
+          it "does not apply default discount code when it is not yet valid" do
+            default_offer_code.update!(valid_at: 1.day.from_now, expires_at: 2.days.from_now)
+
+            discount_code_props = presenter.props(seller_custom_domain_url: nil, request:, pundit_user:, discount_code: nil)[:discount_code]
+
+            expect(discount_code_props[:valid]).to be(false)
+            expect(discount_code_props[:error_code]).to eq(:inactive)
+          end
+
+          it "does not apply default discount code when it is sold out" do
+            default_offer_code.update!(max_purchase_count: 0)
+
+            discount_code_props = presenter.props(seller_custom_domain_url: nil, request:, pundit_user:, discount_code: nil)[:discount_code]
+
+            expect(discount_code_props[:valid]).to be(false)
+            expect(discount_code_props[:error_code]).to eq(:sold_out)
+          end
+
+          it "applies default discount code with minimum quantity requirement when quantity is met" do
+            default_offer_code.update!(minimum_quantity: 2)
+
+            discount_code_props = presenter.props(seller_custom_domain_url: nil, request:, pundit_user:, discount_code: nil, quantity: 2)[:discount_code]
+
+            expect(discount_code_props[:valid]).to be(true)
+            expect(discount_code_props[:code]).to eq("DEFAULT10")
+            expect(discount_code_props[:is_default]).to be(true)
+          end
+
+          it "shows default discount code optimistically when minimum quantity requirement is not met" do
+            default_offer_code.update!(minimum_quantity: 2)
+
+            discount_code_props = presenter.props(seller_custom_domain_url: nil, request:, pundit_user:, discount_code: nil, quantity: 1)[:discount_code]
+
+            # The discount is shown optimistically (as if quantity meets minimum) to encourage users to increase quantity
+            expect(discount_code_props[:valid]).to be(true)
+            expect(discount_code_props[:code]).to eq("DEFAULT10")
+            expect(discount_code_props[:is_default]).to be(true)
+          end
+
+          context "with universal offer code" do
+            let(:default_offer_code) { create(:universal_offer_code, user: product.user, code: "UNIVERSAL10", amount_percentage: 10, valid_at: 1.day.ago, expires_at: 1.day.from_now) }
+
+            it "applies universal default discount code when no discount code is provided in URL" do
+              discount_code_props = presenter.props(seller_custom_domain_url: nil, request:, pundit_user:, discount_code: nil)[:discount_code]
+
+              expect(discount_code_props[:valid]).to be(true)
+              expect(discount_code_props[:code]).to eq("UNIVERSAL10")
+              expect(discount_code_props[:is_default]).to be(true)
+            end
+          end
         end
       end
     end
