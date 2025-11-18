@@ -85,7 +85,7 @@ class ProductPresenter::ProductProps
       return if effective_discount_code.blank?
 
       offer_code_response = OfferCodeDiscountComputingService.new(
-        discount_code,
+        effective_discount_code,
         {
           product.unique_permalink => {
             permalink: product.unique_permalink,
