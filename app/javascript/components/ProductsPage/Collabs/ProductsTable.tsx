@@ -60,7 +60,7 @@ export const CollabsProductsTable = (props: { entries: Product[]; pagination: Pa
   const { items, thProps } = useClientSortingTableDriver<Product>(state.entries);
 
   return (
-    <div className="paragraphs">
+    <div className="flex flex-col gap-4">
       <table aria-live="polite" aria-busy={isLoading} ref={tableRef}>
         <caption>Products</caption>
         <thead>

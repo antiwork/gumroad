@@ -541,7 +541,7 @@ const ContentTabContent = ({ selectedVariantId }: { selectedVariantId: string | 
                       </>
                     }
                   >
-                    <div className="paragraphs">
+                    <div className="flex flex-col gap-4">
                       <input
                         type="text"
                         placeholder="Find your files"
@@ -742,7 +742,7 @@ const ContentTabContent = ({ selectedVariantId }: { selectedVariantId: string | 
           className="md:h-auto! md:flex-1"
           pageList={
             !isDesktop && !showPageList ? null : (
-              <div className="paragraphs">
+              <div className="flex flex-col gap-4">
                 {showPageList ? (
                   <ReactSortable
                     draggable="[role=tab]"

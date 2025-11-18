@@ -74,7 +74,7 @@ const ProductLevelSupportEmailRow = React.memo(
           </Button>
         </div>
         {expanded ? (
-          <div className="paragraphs">
+          <div className="flex flex-col gap-4">
             <fieldset>
               <label htmlFor={`${uid}email`}>Email</label>
               <input
