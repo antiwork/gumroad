@@ -4,6 +4,7 @@ import { CurrencyCode, formatPriceCentsWithoutCurrencySymbol } from "$app/utils/
 
 import { Details } from "$app/components/Details";
 import { PriceInput } from "$app/components/PriceInput";
+import { DefaultDiscountCodeEditor } from "$app/components/ProductEdit/ProductTab/DefaultDiscountCodeEditor";
 import { InstallmentPlanEditor } from "$app/components/ProductEdit/ProductTab/InstallmentPlanEditor";
 import { Toggle } from "$app/components/Toggle";
 
@@ -20,7 +21,10 @@ export const PriceEditor = ({
   numberOfInstallments,
   onAllowInstallmentPlanChange,
   onNumberOfInstallmentsChange,
+  defaultDiscountCode,
+  onDefaultDiscountCodeChange,
   currencyCodeSelector,
+  productId,
 }: {
   priceCents: number;
   suggestedPriceCents: number | null;
@@ -34,7 +38,10 @@ export const PriceEditor = ({
   numberOfInstallments: number | null;
   onAllowInstallmentPlanChange: (allowed: boolean) => void;
   onNumberOfInstallmentsChange: (numberOfInstallments: number) => void;
+  defaultDiscountCode: string | null;
+  onDefaultDiscountCodeChange: (code: string | null) => void;
   currencyCodeSelector?: { options: CurrencyCode[]; onChange: (currencyCode: CurrencyCode) => void };
+  productId?: string;
 }) => {
   const uid = React.useId();
 
@@ -93,6 +100,11 @@ export const PriceEditor = ({
           onNumberOfInstallmentsChange={onNumberOfInstallmentsChange}
         />
       ) : null}
+      <DefaultDiscountCodeEditor
+        defaultDiscountCode={defaultDiscountCode}
+        onDefaultDiscountCodeChange={onDefaultDiscountCodeChange}
+        productId={productId}
+      />
     </fieldset>
   );
 };

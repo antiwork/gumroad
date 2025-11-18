@@ -95,6 +95,9 @@ export const ProductTab = () => {
                 installment_plan: { ...bundle.installment_plan, number_of_installments: value },
               })
             }
+            defaultDiscountCode={bundle.default_discount_code}
+            onDefaultDiscountCodeChange={(code) => updateBundle({ default_discount_code: code })}
+            productId={id}
           />
         </section>
         <ThumbnailEditor

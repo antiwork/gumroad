@@ -55,6 +55,7 @@ export type Bundle = {
   allow_installment_plan: boolean;
   installment_plan: { number_of_installments: number } | null;
   customizable_price: boolean;
+  default_discount_code: string | null;
   collaborating_user: Seller | null;
   custom_button_text_option: CustomButtonTextOption | null;
   custom_summary: string | null;

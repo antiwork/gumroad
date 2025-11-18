@@ -66,6 +66,7 @@ class LinkPolicy < ApplicationPolicy
       :customizable_price,
       :suggested_price_cents,
       :max_purchase_count,
+      :default_discount_code,
       :quantity_enabled,
       :should_show_sales_count,
       :hide_sold_out_variants,

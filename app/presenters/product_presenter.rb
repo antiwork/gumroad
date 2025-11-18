@@ -92,6 +92,7 @@ class ProductPresenter
         customizable_price: !!product.customizable_price,
         suggested_price_cents: product.suggested_price_cents,
         **ProductPresenter::InstallmentPlanProps.new(product:).props,
+        default_discount_code: product.default_discount_code,
         custom_button_text_option: product.custom_button_text_option.presence,
         custom_summary: product.custom_summary,
         custom_attributes: product.custom_attributes,

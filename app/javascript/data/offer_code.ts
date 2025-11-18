@@ -185,3 +185,41 @@ export const getStatistics = (id: string) =>
       return res.json();
     })
     .then((json) => cast<OfferCodeStatistics>(json));
+
+export type SimpleOfferCode = {
+  id: string;
+  name: string;
+  code: string;
+};
+
+export const getAllProductOfferCodes = async (productId: string): Promise<SimpleOfferCode[]> => {
+  const allCodes: OfferCode[] = [];
+  let currentPage = 1;
+  let hasMorePages = true;
+
+  // Fetch all pages of discount codes
+  while (hasMorePages) {
+    const { response } = getPagedDiscounts(currentPage, null, null);
+    const data = await response;
+
+    allCodes.push(...data.offer_codes);
+
+    // Check if there are more pages
+    hasMorePages = data.pagination.pages > currentPage;
+    currentPage++;
+  }
+
+  // Filter codes that apply to this product (either universal or specifically assigned to this product)
+  const applicableCodes = allCodes.filter((offerCode) => {
+    // Universal codes apply to all products
+    if (!offerCode.products) return true;
+    // Check if this product is in the list of products for this offer code
+    return offerCode.products.some((product) => product.id === productId);
+  });
+
+  return applicableCodes.map((offerCode) => ({
+    id: offerCode.id,
+    name: offerCode.name,
+    code: offerCode.code,
+  }));
+};

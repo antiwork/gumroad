@@ -85,4 +85,18 @@ module Product::Validations
 
       errors.add(:base, "Calls must have at least one duration")
     end
+
+    def validate_default_discount_code
+      return if default_discount_code.blank?
+
+      discount = user.offer_codes.find_by(code: default_discount_code)
+
+      if discount.blank?
+        errors.add(:default_discount_code, "Discount code does not exist")
+      elsif !discount.alive?
+        errors.add(:default_discount_code, "Discount code is not active")
+      elsif discount.products.present? && !discount.products.include?(self)
+        errors.add(:default_discount_code, "Discount code is not valid for this product")
+      end
+    end
 end

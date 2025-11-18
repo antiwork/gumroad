@@ -95,6 +95,7 @@ export type Product = {
   eligible_for_installment_plans: boolean;
   allow_installment_plan: boolean;
   installment_plan: InstallmentPlan | null;
+  default_discount_code: string | null;
   custom_button_text_option: CustomButtonTextOption | null;
   custom_summary: string | null;
   custom_attributes: Attribute[];
