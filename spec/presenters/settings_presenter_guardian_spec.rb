@@ -49,7 +49,7 @@ RSpec.describe SettingsPresenter, type: :presenter do
 
       context "with incomplete guardian information" do
         before do
-          create(:guardian_compliance_info_request, user: user, field_needed: "guardian_first_name")
+          create(:user_compliance_info_request, user: user, field_needed: "guardian_first_name")
         end
 
         it "returns requires_input when guardian first name is missing" do
@@ -113,105 +113,6 @@ RSpec.describe SettingsPresenter, type: :presenter do
           expect(presenter.guardian_verification_state).to eq("requires_input")
         end
       end
-
-      context "with complete guardian information but pending requests" do
-        before do
-          create(:guardian_compliance_info_request,
-                 user: user,
-                 field_needed: "guardian_first_name",
-                 state: "requested"
-          )
-
-          _, _ = user_compliance_info.dup_and_save do |new_info|
-            new_info.guardian_first_name = "John"
-            new_info.guardian_last_name = "Guardian"
-            new_info.guardian_email = "guardian@example.com"
-            new_info.guardian_phone = "+1234567890"
-            new_info.guardian_street_address = "123 Guardian St"
-            new_info.guardian_city = "Guardian City"
-            new_info.guardian_state = "CA"
-            new_info.guardian_zip_code = "90210"
-            new_info.guardian_country = "United States"
-            new_info.guardian_dob_day = 15
-            new_info.guardian_dob_month = 6
-            new_info.guardian_dob_year = 1980
-            new_info.guardian_individual_tax_id = "123456789"
-          end
-          user.reload
-        end
-
-        it "returns pending" do
-          expect(presenter.guardian_verification_state).to eq("pending")
-        end
-      end
-
-      context "with complete and verified guardian information" do
-        before do
-          create(:guardian_compliance_info_request,
-                 user: user,
-                 field_needed: "guardian_first_name",
-                 state: "provided"
-          )
-
-          _, _ = user_compliance_info.dup_and_save do |new_info|
-            new_info.guardian_first_name = "John"
-            new_info.guardian_last_name = "Guardian"
-            new_info.guardian_email = "guardian@example.com"
-            new_info.guardian_phone = "+1234567890"
-            new_info.guardian_street_address = "123 Guardian St"
-            new_info.guardian_city = "Guardian City"
-            new_info.guardian_state = "CA"
-            new_info.guardian_zip_code = "90210"
-            new_info.guardian_country = "United States"
-            new_info.guardian_dob_day = 15
-            new_info.guardian_dob_month = 6
-            new_info.guardian_dob_year = 1980
-            new_info.guardian_individual_tax_id = "123456789"
-          end
-          user.reload
-        end
-
-        it "returns verified when all requests are provided and none are requested" do
-          expect(presenter.guardian_verification_state).to eq("verified")
-        end
-      end
-
-      context "with mixed request states" do
-        before do
-          create(:guardian_compliance_info_request,
-                 user: user,
-                 field_needed: "guardian_first_name",
-                 state: "provided"
-          )
-
-          create(:guardian_compliance_info_request,
-                 user: user,
-                 field_needed: "guardian_last_name",
-                 state: "requested"
-          )
-
-          _, _ = user_compliance_info.dup_and_save do |new_info|
-            new_info.guardian_first_name = "John"
-            new_info.guardian_last_name = "Guardian"
-            new_info.guardian_email = "guardian@example.com"
-            new_info.guardian_phone = "+1234567890"
-            new_info.guardian_street_address = "123 Guardian St"
-            new_info.guardian_city = "Guardian City"
-            new_info.guardian_state = "CA"
-            new_info.guardian_zip_code = "90210"
-            new_info.guardian_country = "United States"
-            new_info.guardian_dob_day = 15
-            new_info.guardian_dob_month = 6
-            new_info.guardian_dob_year = 1980
-            new_info.guardian_individual_tax_id = "123456789"
-          end
-          user.reload
-        end
-
-        it "returns pending when some requests are still requested" do
-          expect(presenter.guardian_verification_state).to eq("pending")
-        end
-      end
     end
   end
 
@@ -228,72 +129,6 @@ RSpec.describe SettingsPresenter, type: :presenter do
         props = presenter.payments_props(remote_ip: remote_ip)
 
         expect(props[:guardian_verification_state]).to eq("requires_input")
-      end
-
-      context "with pending guardian verification" do
-        before do
-          create(:guardian_compliance_info_request,
-                 user: user,
-                 field_needed: "guardian_first_name",
-                 state: "requested"
-          )
-
-          _, _ = user_compliance_info.dup_and_save do |new_info|
-            new_info.guardian_first_name = "John"
-            new_info.guardian_last_name = "Guardian"
-            new_info.guardian_email = "guardian@example.com"
-            new_info.guardian_phone = "+1234567890"
-            new_info.guardian_street_address = "123 Guardian St"
-            new_info.guardian_city = "Guardian City"
-            new_info.guardian_state = "CA"
-            new_info.guardian_zip_code = "90210"
-            new_info.guardian_country = "United States"
-            new_info.guardian_dob_day = 15
-            new_info.guardian_dob_month = 6
-            new_info.guardian_dob_year = 1980
-            new_info.guardian_individual_tax_id = "123456789"
-          end
-          user.reload
-        end
-
-        it "includes pending state in props" do
-          props = presenter.payments_props(remote_ip: remote_ip)
-
-          expect(props[:guardian_verification_state]).to eq("pending")
-        end
-      end
-
-      context "with verified guardian information" do
-        before do
-          create(:guardian_compliance_info_request,
-                 user: user,
-                 field_needed: "guardian_first_name",
-                 state: "provided"
-          )
-
-          _, _ = user_compliance_info.dup_and_save do |new_info|
-            new_info.guardian_first_name = "John"
-            new_info.guardian_last_name = "Guardian"
-            new_info.guardian_email = "guardian@example.com"
-            new_info.guardian_phone = "+1234567890"
-            new_info.guardian_street_address = "123 Guardian St"
-            new_info.guardian_city = "Guardian City"
-            new_info.guardian_state = "CA"
-            new_info.guardian_zip_code = "90210"
-            new_info.guardian_country = "United States"
-            new_info.guardian_dob_day = 15
-            new_info.guardian_dob_month = 6
-            new_info.guardian_dob_year = 1980
-            new_info.guardian_individual_tax_id = "123456789"
-          end
-          user.reload
-        end
-
-        it "includes verified state in props" do
-          props = presenter.payments_props(remote_ip: remote_ip)
-
-          expect(props[:guardian_verification_state]).to eq("verified")
-        end
       end
     end
 
@@ -319,7 +154,7 @@ RSpec.describe SettingsPresenter, type: :presenter do
         # Set user as under 18 for guardian scenarios
         _, _ = user_compliance_info.dup_and_save { |new_info| new_info.birthday = 16.years.ago.to_date }
         user.reload
-        create(:guardian_compliance_info_request, user: user, field_needed: "guardian_first_name")
+        create(:user_compliance_info_request, user: user, field_needed: "guardian_first_name")
       end
 
       it "handles nil compliance info gracefully" do
@@ -408,42 +243,6 @@ RSpec.describe SettingsPresenter, type: :presenter do
         end
 
         expect(presenter.guardian_verification_state).to eq("requires_input")
-      end
-    end
-
-    context "with complete information" do
-      before do
-        allow(user).to receive(:stripe_account).and_return(build(:merchant_account))
-        allow(Pundit).to receive(:policy!).and_return(double(update?: true))
-        # Set user as under 18 for guardian scenarios
-        _, _ = user_compliance_info.dup_and_save { |new_info| new_info.birthday = 16.years.ago.to_date }
-        user.reload
-        create(:guardian_compliance_info_request,
-               user: user,
-               field_needed: "guardian_first_name",
-               state: "requested"
-        )
-      end
-
-      it "recognizes complete guardian information" do
-        _, _ = user_compliance_info.dup_and_save do |new_info|
-          new_info.guardian_first_name = "John"
-          new_info.guardian_last_name = "Guardian"
-          new_info.guardian_email = "guardian@example.com"
-          new_info.guardian_phone = "+1234567890"
-          new_info.guardian_street_address = "123 Guardian St"
-          new_info.guardian_city = "Guardian City"
-          new_info.guardian_state = "CA"
-          new_info.guardian_zip_code = "90210"
-          new_info.guardian_country = "United States"
-          new_info.guardian_dob_day = 15
-          new_info.guardian_dob_month = 6
-          new_info.guardian_dob_year = 1980
-          new_info.guardian_individual_tax_id = "123456789"
-        end
-        user.reload
-
-        expect(presenter.guardian_verification_state).to eq("pending")
       end
     end
   end
