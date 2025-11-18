@@ -77,6 +77,7 @@ type Props = {
   seller_refund_policy_enabled: boolean;
   seller_refund_policy: Pick<RefundPolicy, "title" | "fine_print">;
   cancellation_discounts_enabled: boolean;
+  available_offer_codes: Array<{ code: string; name: string | null }>;
 };
 
 const createContextValue = (props: Props) => ({
@@ -133,7 +134,10 @@ const findUpdatedContent = (product: Product, lastSavedProduct: Product) => {
 };
 
 const ProductEditPage = (props: Props) => {
-  const [product, setProduct] = React.useState(props.product);
+  const [product, setProduct] = React.useState({
+    ...props.product,
+    available_offer_codes: props.available_offer_codes,
+  });
   const [contentUpdates, setContentUpdates] = React.useState<ContentUpdates>(null);
   const [currencyType, setCurrencyType] = React.useState<CurrencyCode>(props.currency_type);
   const lastSavedProductRef = React.useRef<Product>(structuredClone(props.product));

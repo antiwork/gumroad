@@ -68,6 +68,7 @@ class ProductPresenter::ProductProps
         bundle_products: product.bundle_products.in_order.includes(:product, :variant).alive.map { bundle_product_props(_1, request:, recommended_by:, layout:) },
         public_files: product.alive_public_files.attached.map { PublicFilePresenter.new(public_file: _1).props },
         audio_previews_enabled: Feature.active?(:audio_previews, product.user),
+        default_discount_code: product.default_discount_code,
       },
       discount_code: discount_code_props(discount_code, quantity),
       purchase: purchase_props(product.purchase_info_for_product_page(pundit_user&.user, request.cookie_jar[:_gumroad_guid])),
@@ -96,7 +97,8 @@ class ProductPresenter::ProductProps
       if offer_code_response[:error_code].present?
         { valid: false, error_code: offer_code_response[:error_code] }
       else
-        { valid: true, code: discount_code, **offer_code_response[:products_data][product.unique_permalink] }
+        discount_data = offer_code_response[:products_data][product.unique_permalink]
+        { valid: true, code: discount_code, discount: discount_data[:discount] }
       end
     end
 

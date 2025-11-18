@@ -72,6 +72,7 @@ export const PLACEHOLDER_CART_ITEM: CartItem = {
     archived: false,
     bundle_products: [],
     can_gift: true,
+    default_discount_code: null,
   },
   price: 100,
   quantity: 1,

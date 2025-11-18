@@ -101,6 +101,7 @@ export const ProductPreview = ({ showRefundPolicyModal }: { showRefundPolicyModa
           })),
           public_files: bundle.public_files,
           audio_previews_enabled: bundle.audio_previews_enabled,
+          default_discount_code: null,
         }}
         purchase={null}
         selection={{

@@ -292,6 +292,9 @@ export const ProductTab = () => {
                           installment_plan: { ...product.installment_plan, number_of_installments: value },
                         })
                       }
+                      defaultDiscountCode={product.default_discount_code}
+                      onDefaultDiscountCodeChange={(code) => updateProduct({ default_discount_code: code })}
+                      availableOfferCodes={product.available_offer_codes || []}
                     />
                     {product.native_type === "commission" ? (
                       <p

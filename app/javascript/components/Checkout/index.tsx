@@ -140,6 +140,13 @@ export const Checkout = ({
       void applyDiscount(code, true);
       url.searchParams.delete("code");
       window.history.replaceState(window.history.state, "", url.toString());
+    } else {
+      // Apply default discount codes if no URL code is present
+      cart.items.forEach((item) => {
+        if (item.product.default_discount_code) {
+          void applyDiscount(item.product.default_discount_code, false);
+        }
+      });
     }
   });
 

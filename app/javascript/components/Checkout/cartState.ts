@@ -54,6 +54,7 @@ export type Product = {
   cross_sells: CrossSell[];
   archived: boolean;
   can_gift: boolean;
+  default_discount_code: string | null;
   bundle_products: {
     product_id: string;
     name: string;

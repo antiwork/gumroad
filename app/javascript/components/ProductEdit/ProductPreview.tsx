@@ -1,9 +1,10 @@
 import * as React from "react";
 
+import { computeOfferDiscount } from "$app/data/offer_code";
 import { recurrenceIds } from "$app/utils/recurringPricing";
 
 import { useCurrentSeller } from "$app/components/CurrentSeller";
-import { Product } from "$app/components/Product";
+import { Product, ProductDiscount } from "$app/components/Product";
 import { useProductUrl } from "$app/components/ProductEdit/Layout";
 import { RefundPolicyModalPreview } from "$app/components/ProductEdit/RefundPolicy";
 import { useProductEditContext } from "$app/components/ProductEdit/state";
@@ -24,6 +25,43 @@ export const ProductPreview = ({ showRefundPolicyModal }: { showRefundPolicyModa
   } = useProductEditContext();
 
   const url = useProductUrl();
+  const [discountCode, setDiscountCode] = React.useState<ProductDiscount | null>(null);
+
+  // Fetch discount details when default_discount_code changes
+  React.useEffect(() => {
+    if (!product.default_discount_code) {
+      setDiscountCode(null);
+      return;
+    }
+
+    void (async () => {
+      try {
+        const discount = await computeOfferDiscount({
+          code: product.default_discount_code!,
+          products: {
+            [uniquePermalink]: { permalink: uniquePermalink, quantity: 1 },
+          },
+        });
+
+        if (discount.valid && "products_data" in discount) {
+          const discountData = discount.products_data[uniquePermalink];
+          if (discountData) {
+            setDiscountCode({
+              valid: true as const,
+              code: product.default_discount_code as unknown as string,
+              discount: discountData,
+            });
+          } else {
+            setDiscountCode(null);
+          }
+        } else {
+          setDiscountCode(null);
+        }
+      } catch {
+        setDiscountCode(null);
+      }
+    })();
+  }, [product.default_discount_code, uniquePermalink]);
 
   if (!currentSeller) return null;
 
@@ -137,6 +175,7 @@ export const ProductPreview = ({ showRefundPolicyModal }: { showRefundPolicyModa
     bundle_products: [],
     public_files: product.public_files,
     audio_previews_enabled: product.audio_previews_enabled,
+    default_discount_code: product.default_discount_code ?? null,
   };
 
   return product.native_type === "coffee" ? (
@@ -161,7 +200,7 @@ export const ProductPreview = ({ showRefundPolicyModal }: { showRefundPolicyModa
         twitter_handle: "",
       }}
       purchase={null}
-      discount_code={null}
+      discount_code={discountCode}
       wishlists={[]}
       selection={{
         optionId: null,
@@ -180,6 +219,7 @@ export const ProductPreview = ({ showRefundPolicyModal }: { showRefundPolicyModa
       <Product
         product={serializedProduct}
         purchase={null}
+        discountCode={discountCode}
         selection={{
           quantity: 1,
           optionId: serializedProduct.options[0]?.id ?? null,

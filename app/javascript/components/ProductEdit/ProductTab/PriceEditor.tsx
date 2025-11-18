@@ -5,6 +5,7 @@ import { CurrencyCode, formatPriceCentsWithoutCurrencySymbol } from "$app/utils/
 import { Details } from "$app/components/Details";
 import { PriceInput } from "$app/components/PriceInput";
 import { InstallmentPlanEditor } from "$app/components/ProductEdit/ProductTab/InstallmentPlanEditor";
+import { Select } from "$app/components/Select";
 import { Toggle } from "$app/components/Toggle";
 
 export const PriceEditor = ({
@@ -21,6 +22,9 @@ export const PriceEditor = ({
   onAllowInstallmentPlanChange,
   onNumberOfInstallmentsChange,
   currencyCodeSelector,
+  defaultDiscountCode,
+  onDefaultDiscountCodeChange,
+  availableOfferCodes = [],
 }: {
   priceCents: number;
   suggestedPriceCents: number | null;
@@ -35,6 +39,9 @@ export const PriceEditor = ({
   onAllowInstallmentPlanChange: (allowed: boolean) => void;
   onNumberOfInstallmentsChange: (numberOfInstallments: number) => void;
   currencyCodeSelector?: { options: CurrencyCode[]; onChange: (currencyCode: CurrencyCode) => void };
+  defaultDiscountCode?: string | null | undefined;
+  onDefaultDiscountCodeChange?: (code: string | null) => void;
+  availableOfferCodes?: Array<{ code: string; name: string | null }>;
 }) => {
   const uid = React.useId();
 
@@ -92,6 +99,53 @@ export const PriceEditor = ({
           onAllowInstallmentPaymentsChange={onAllowInstallmentPlanChange}
           onNumberOfInstallmentsChange={onNumberOfInstallmentsChange}
         />
+      ) : null}
+      {onDefaultDiscountCodeChange ? (
+        <Details
+          className="toggle"
+          open={defaultDiscountCode !== null && defaultDiscountCode !== undefined}
+          summary={
+            <Toggle
+              value={defaultDiscountCode !== null && defaultDiscountCode !== undefined}
+              onChange={(enabled) => {
+                if (!enabled) {
+                  onDefaultDiscountCodeChange(null);
+                } else if (!defaultDiscountCode) {
+                  // When enabling, set to empty string to open the dropdown
+                  onDefaultDiscountCodeChange("");
+                }
+              }}
+            >
+              Apply discount
+            </Toggle>
+          }
+        >
+          <div className="dropdown">
+            <fieldset>
+              <label htmlFor={`${uid}-discount-code`}>Discount code</label>
+              <Select
+                inputId={`${uid}-discount-code`}
+                value={
+                  defaultDiscountCode
+                    ? availableOfferCodes
+                        .map((offer) => ({
+                          id: offer.code,
+                          label: offer.name ? `${offer.name} (${offer.code})` : offer.code,
+                        }))
+                        .find((option) => option.id === defaultDiscountCode) ?? null
+                    : null
+                }
+                onChange={(option) => onDefaultDiscountCodeChange(option && "id" in option ? option.id : null)}
+                placeholder="Begin typing to select a discount code"
+                options={availableOfferCodes.map((offer) => ({
+                  id: offer.code,
+                  label: offer.name ? `${offer.name} (${offer.code})` : offer.code,
+                }))}
+                isClearable
+              />
+            </fieldset>
+          </div>
+        </Details>
       ) : null}
     </fieldset>
   );

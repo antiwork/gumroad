@@ -27,12 +27,14 @@ export const saveProduct = async (permalink: string, id: string, product: Produc
   editor.destroy();
   product.files = product.files.filter((file) => fileIds.has(file.id));
 
+  const { available_offer_codes, ...productData } = product;
+
   const response = await request({
     method: "POST",
     accept: "json",
     url: Routes.link_path(permalink),
     data: {
-      ...product,
+      ...productData,
       price_currency_type: currencyType,
       covers: product.covers.map(({ id }) => id),
       variants: product.variants.map(({ newlyAdded, ...variant }) => (newlyAdded ? { ...variant, id: null } : variant)),

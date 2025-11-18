@@ -91,6 +91,7 @@ class ProductPresenter
         price_cents: product.price_cents,
         customizable_price: !!product.customizable_price,
         suggested_price_cents: product.suggested_price_cents,
+        default_discount_code: product.default_discount_code,
         **ProductPresenter::InstallmentPlanProps.new(product:).props,
         custom_button_text_option: product.custom_button_text_option.presence,
         custom_summary: product.custom_summary,
@@ -237,6 +238,7 @@ class ProductPresenter
         fine_print: product.user.refund_policy.fine_print,
       },
       cancellation_discounts_enabled: Feature.active?(:cancellation_discounts, product.user),
+      available_offer_codes: product.product_and_universal_offer_codes.map { |code| { code: code.code, name: code.name } },
     }
   end
 

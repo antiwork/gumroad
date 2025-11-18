@@ -138,6 +138,7 @@ export type Product = {
   }[];
   public_files: PublicFile[];
   audio_previews_enabled: boolean;
+  default_discount_code: string | null;
 };
 export type Purchase = {
   id: string;
@@ -253,9 +254,16 @@ export const Product = ({
 
   const notForSaleMessage = getNotForSaleMessage(product);
   const [discountCode, setDiscountCode] = React.useState(initialDiscountCode);
+
+  // Update internal discount state when prop changes
+  React.useEffect(() => {
+    setDiscountCode(initialDiscountCode);
+  }, [initialDiscountCode]);
+
   const selectionAttributes = applySelection(product, discountCode?.valid ? discountCode.discount : null, selection);
   let { basePriceCents } = selectionAttributes;
   const { priceCents, discountedPriceCents, pppDiscounted, isPWYW, maxQuantity } = selectionAttributes;
+
   React.useEffect(() => {
     if (maxQuantity !== null && selection.quantity > maxQuantity)
       setSelection?.({ ...selection, quantity: maxQuantity });
