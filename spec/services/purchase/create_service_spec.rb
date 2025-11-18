@@ -2549,6 +2549,55 @@ describe Purchase::CreateService, :vcr do
       end
     end
 
+    context "with default discount code" do
+      let(:default_offer_code) { create(:offer_code, products: [product], code: "DEFAULT10", amount_cents: discount_cents) }
+
+      before do
+        product.update!(default_discount_code: default_offer_code)
+      end
+
+      it "tracks used_default_discount_code when default discount code is used" do
+        params[:purchase].merge!(
+          discount_code: default_offer_code.code,
+          perceived_price_cents: discounted_price,
+        )
+
+        purchase, _ = Purchase::CreateService.new(product:, params:).perform
+
+        expect(purchase).to be_successful
+        expect(purchase.offer_code).to eq(default_offer_code)
+        expect(purchase.used_default_discount_code).to be(true)
+      end
+
+      it "does not track used_default_discount_code when URL discount code is used" do
+        url_offer_code = create(:offer_code, products: [product], code: "URL20", amount_cents: discount_cents)
+
+        params[:purchase].merge!(
+          discount_code: url_offer_code.code,
+          perceived_price_cents: discounted_price,
+        )
+
+        purchase, _ = Purchase::CreateService.new(product:, params:).perform
+
+        expect(purchase).to be_successful
+        expect(purchase.offer_code).to eq(url_offer_code)
+        expect(purchase.used_default_discount_code).to be_nil
+      end
+
+      it "does not track used_default_discount_code when no discount code is used" do
+        params[:purchase].merge!(
+          discount_code: nil,
+          perceived_price_cents: price,
+        )
+
+        purchase, _ = Purchase::CreateService.new(product:, params:).perform
+
+        expect(purchase).to be_successful
+        expect(purchase.offer_code).to be_nil
+        expect(purchase.used_default_discount_code).to be_nil
+      end
+    end
+
     it "updates the used_count value for the offer code" do
       offer_code = create(:offer_code, products: [product], amount_cents: discount_cents)
 

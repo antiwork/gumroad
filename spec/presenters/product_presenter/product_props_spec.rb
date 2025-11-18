@@ -256,6 +256,39 @@ describe ProductPresenter::ProductProps do
             expect(described_class.new(product:).props(seller_custom_domain_url: nil, request:, pundit_user: nil, discount_code: "notreal")[:discount_code]).to eq({ valid: false, error_code: :invalid_offer })
           end
         end
+
+        context "with default discount code" do
+        let(:default_offer_code) { create(:offer_code, products: [product], code: "DEFAULT10", amount_percentage: 10, valid_at: 1.day.ago, expires_at: 1.day.from_now) }
+
+        before do
+          product.update!(default_discount_code: default_offer_code)
+        end
+
+          it "applies default discount code when no discount code is provided in URL" do
+            discount_code_props = presenter.props(seller_custom_domain_url: nil, request:, pundit_user:, discount_code: nil)[:discount_code]
+
+            expect(discount_code_props[:valid]).to be(true)
+            expect(discount_code_props[:code]).to eq("DEFAULT10")
+            expect(discount_code_props[:is_default]).to be(true)
+          end
+
+          it "prioritizes URL discount code over default discount code" do
+            url_offer_code = create(:offer_code, products: [product], code: "URL20", amount_percentage: 20, valid_at: 1.day.ago, expires_at: 1.day.from_now)
+
+            discount_code_props = presenter.props(seller_custom_domain_url: nil, request:, pundit_user:, discount_code: url_offer_code.code)[:discount_code]
+
+            expect(discount_code_props[:valid]).to be(true)
+            expect(discount_code_props[:code]).to eq("URL20")
+            expect(discount_code_props[:is_default]).to be(false)
+          end
+
+          it "does not apply default discount code when URL discount code is invalid" do
+            discount_code_props = presenter.props(seller_custom_domain_url: nil, request:, pundit_user:, discount_code: "INVALID")[:discount_code]
+
+            expect(discount_code_props[:valid]).to be(false)
+            expect(discount_code_props[:error_code]).to be_present
+          end
+        end
       end
     end
 

@@ -154,7 +154,7 @@ export type Purchase = {
 };
 export type ProductDiscount =
   | { valid: false; error_code: "sold_out" | "invalid_offer" | "inactive" | "unmet_minimum_purchase_quantity" }
-  | { valid: true; code: string; discount: Discount }
+  | { valid: true; code: string; discount: Discount; is_default?: boolean }
   | null;
 
 export const getNotForSaleMessage = (product: Product) =>
@@ -253,6 +253,24 @@ export const Product = ({
 
   const notForSaleMessage = getNotForSaleMessage(product);
   const [discountCode, setDiscountCode] = React.useState(initialDiscountCode);
+  const lastUserEnteredCodeRef = React.useRef<ProductDiscount | null>(null);
+
+  React.useEffect(() => {
+    if (initialDiscountCode) {
+      if (initialDiscountCode.valid && !initialDiscountCode.is_default) {
+        lastUserEnteredCodeRef.current = initialDiscountCode;
+        setDiscountCode(initialDiscountCode);
+      } else if (initialDiscountCode.valid && initialDiscountCode.is_default) {
+        if (!lastUserEnteredCodeRef.current) {
+          setDiscountCode(initialDiscountCode);
+        } else {
+          setDiscountCode(lastUserEnteredCodeRef.current);
+        }
+      } else {
+        setDiscountCode(initialDiscountCode);
+      }
+    }
+  }, [initialDiscountCode]);
   const selectionAttributes = applySelection(product, discountCode?.valid ? discountCode.discount : null, selection);
   let { basePriceCents } = selectionAttributes;
   const { priceCents, discountedPriceCents, pppDiscounted, isPWYW, maxQuantity } = selectionAttributes;

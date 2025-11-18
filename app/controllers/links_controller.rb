@@ -359,7 +359,8 @@ class LinksController < ApplicationController
           :shipping_destinations,
           :call_limitation_info,
           :installment_plan,
-          :community_chat_enabled
+          :community_chat_enabled,
+          :default_discount_code_id
         ))
         @product.description = SaveContentUpsellsService.new(seller: @product.user, content: product_permitted_params[:description], old_content: @product.description_was).from_html
         @product.skus_enabled = false
@@ -412,6 +413,7 @@ class LinksController < ApplicationController
         update_availabilities
         update_call_limitation_info
         update_installment_plan
+        update_default_discount_code
 
         Product::SavePostPurchaseCustomFieldsService.new(@product).perform
 
@@ -719,6 +721,20 @@ class LinksController < ApplicationController
 
       if product_permitted_params[:installment_plan].present?
         @product.create_installment_plan!(product_permitted_params[:installment_plan])
+      end
+    end
+
+    def update_default_discount_code
+      default_discount_code_id = product_permitted_params[:default_discount_code_id]
+      if default_discount_code_id.present?
+        discount_code = @product.user.offer_codes.alive.find_by_external_id(default_discount_code_id)
+        if discount_code && (@product.offer_codes.include?(discount_code) || discount_code.universal?)
+          @product.default_discount_code = discount_code
+        else
+          @product.default_discount_code = nil
+        end
+      else
+        @product.default_discount_code = nil
       end
     end
 

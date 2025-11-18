@@ -3,7 +3,7 @@ import * as React from "react";
 import { recurrenceIds } from "$app/utils/recurringPricing";
 
 import { useCurrentSeller } from "$app/components/CurrentSeller";
-import { Product } from "$app/components/Product";
+import { Product, ProductDiscount } from "$app/components/Product";
 import { useProductUrl } from "$app/components/ProductEdit/Layout";
 import { RefundPolicyModalPreview } from "$app/components/ProductEdit/RefundPolicy";
 import { useProductEditContext } from "$app/components/ProductEdit/state";
@@ -21,6 +21,7 @@ export const ProductPreview = ({ showRefundPolicyModal }: { showRefundPolicyModa
     ratings,
     seller_refund_policy_enabled,
     seller_refund_policy,
+    availableDiscountCodes,
   } = useProductEditContext();
 
   const url = useProductUrl();
@@ -29,6 +30,33 @@ export const ProductPreview = ({ showRefundPolicyModal }: { showRefundPolicyModa
 
   const defaultRecurrence =
     product.native_type === "membership" ? (product.subscription_duration ?? recurrenceIds[0]) : null;
+
+  const defaultDiscountCode: ProductDiscount | null = React.useMemo(() => {
+    if (!product.default_discount_code_id || !availableDiscountCodes) return null;
+
+    const defaultDiscountCodeData = availableDiscountCodes.find((code) => code.id === product.default_discount_code_id);
+    if (!defaultDiscountCodeData) return null;
+
+    const discount =
+      defaultDiscountCodeData.discount.type === "cents"
+        ? { type: "fixed" as const, cents: defaultDiscountCodeData.discount.value }
+        : { type: "percent" as const, percents: defaultDiscountCodeData.discount.value };
+
+    return {
+      valid: true as const,
+      code: defaultDiscountCodeData.code,
+      is_default: true,
+      discount: {
+        ...discount,
+        product_ids: null,
+        expires_at: null,
+        minimum_quantity: null,
+        duration_in_billing_cycles: null,
+        minimum_amount_cents: null,
+      },
+    };
+  }, [product.default_discount_code_id, availableDiscountCodes]);
+
   const serializedProduct: Product = {
     id,
     name: product.name,
@@ -161,7 +189,7 @@ export const ProductPreview = ({ showRefundPolicyModal }: { showRefundPolicyModa
         twitter_handle: "",
       }}
       purchase={null}
-      discount_code={null}
+      discount_code={defaultDiscountCode}
       wishlists={[]}
       selection={{
         optionId: null,
@@ -180,6 +208,7 @@ export const ProductPreview = ({ showRefundPolicyModal }: { showRefundPolicyModa
       <Product
         product={serializedProduct}
         purchase={null}
+        discountCode={defaultDiscountCode}
         selection={{
           quantity: 1,
           optionId: serializedProduct.options[0]?.id ?? null,

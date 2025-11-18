@@ -1153,6 +1153,57 @@ describe LinksController, :vcr, inertia: true do
           end
         end
 
+        describe "default discount code" do
+          let(:offer_code) { create(:offer_code, user: @product.user, products: [@product]) }
+          let(:universal_offer_code) { create(:universal_offer_code, user: @product.user) }
+          let(:other_user_offer_code) { create(:offer_code) }
+
+          it "sets the default offer code when a valid product offer code is provided" do
+            @params[:default_discount_code_id] = offer_code.external_id
+            post :update, params: @params, format: :json
+
+            expect(@product.reload.default_discount_code).to eq(offer_code)
+          end
+
+          it "sets the default offer code when a valid universal offer code is provided" do
+            @params[:default_discount_code_id] = universal_offer_code.external_id
+            post :update, params: @params, format: :json
+
+            expect(@product.reload.default_discount_code).to eq(universal_offer_code)
+          end
+
+          it "does not set the default offer code when offer code belongs to another user" do
+            @params[:default_discount_code_id] = other_user_offer_code.external_id
+            post :update, params: @params, format: :json
+
+            expect(@product.reload.default_discount_code).to be_nil
+          end
+
+          it "does not set the default offer code when offer code is not associated with the product" do
+            unassociated_offer_code = create(:offer_code, user: @product.user)
+            @params[:default_discount_code_id] = unassociated_offer_code.external_id
+            post :update, params: @params, format: :json
+
+            expect(@product.reload.default_discount_code).to be_nil
+          end
+
+          it "clears the default offer code when nil is provided" do
+            @product.update!(default_discount_code: offer_code)
+            @params[:default_discount_code_id] = nil
+            post :update, params: @params, format: :json
+
+            expect(@product.reload.default_discount_code).to be_nil
+          end
+
+          it "clears the default offer code when empty string is provided" do
+            @product.update!(default_discount_code: offer_code)
+            @params[:default_discount_code_id] = ""
+            post :update, params: @params, format: :json
+
+            expect(@product.reload.default_discount_code).to be_nil
+          end
+        end
+
         context "with pay-what-you-want pricing" do
           it "sets the suggested prices" do
             @params.merge!(

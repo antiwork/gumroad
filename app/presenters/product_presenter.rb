@@ -192,6 +192,7 @@ class ProductPresenter
             { type: "percent", percents: cancellation_discount.amount_percentage },
           duration_in_billing_cycles: cancellation_discount.duration_in_billing_cycles,
         } : nil,
+        default_discount_code_id: product.default_discount_code&.external_id,
         public_files: product.alive_public_files.attached.map { PublicFilePresenter.new(public_file: _1).props },
         audio_previews_enabled: Feature.active?(:audio_previews, product.user),
         community_chat_enabled: Feature.active?(:communities, product.user) ? product.community_chat_enabled? : nil,
@@ -237,6 +238,14 @@ class ProductPresenter
         fine_print: product.user.refund_policy.fine_print,
       },
       cancellation_discounts_enabled: Feature.active?(:cancellation_discounts, product.user),
+      available_discount_codes: product.product_and_universal_offer_codes.map do |discount_code|
+        {
+          id: discount_code.external_id,
+          code: discount_code.code,
+          name: discount_code.name.presence || "",
+          discount: discount_code.amount_cents.present? ? { type: "cents", value: discount_code.amount_cents } : { type: "percent", value: discount_code.amount_percentage },
+        }
+      end,
     }
   end
 

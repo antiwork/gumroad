@@ -81,14 +81,15 @@ class ProductPresenter::ProductProps
     attr_reader :product, :seller
 
     def discount_code_props(discount_code, quantity)
-      return if discount_code.blank?
+      effective_discount_code = discount_code.presence || product.default_discount_code&.code
+      return if effective_discount_code.blank?
 
       offer_code_response = OfferCodeDiscountComputingService.new(
         discount_code,
         {
           product.unique_permalink => {
             permalink: product.unique_permalink,
-            quantity: [quantity, product.find_offer_code(code: discount_code)&.minimum_quantity || 0].max
+            quantity: [quantity, product.find_offer_code(code: effective_discount_code)&.minimum_quantity || 0].max
           }
         }
       ).process
@@ -96,7 +97,7 @@ class ProductPresenter::ProductProps
       if offer_code_response[:error_code].present?
         { valid: false, error_code: offer_code_response[:error_code] }
       else
-        { valid: true, code: discount_code, **offer_code_response[:products_data][product.unique_permalink] }
+          { valid: true, code: effective_discount_code, is_default: discount_code.blank? && product.default_discount_code.present?, **offer_code_response[:products_data][product.unique_permalink] }
       end
     end
 

@@ -91,6 +91,55 @@ describe ProductPresenter::Card do
         expect(data[:price_cents]).to eq 19_99
       end
     end
+
+    context "with default discount code" do
+      let(:product) { create(:product, user: creator, price_cents: 1000) }
+        let(:default_offer_code) { create(:offer_code, user: creator, products: [product], code: "DEFAULT10", amount_percentage: 10) }
+
+        before do
+          product.update!(default_discount_code: default_offer_code)
+        end
+
+      it "shows discounted price when default discount code is present" do
+        data = described_class.new(product:).for_web
+
+        # 10% off $10.00 = $9.00
+        expect(data[:price_cents]).to eq 900
+        expect(data[:base_price_cents]).to eq 1000
+      end
+
+      it "shows base price when default discount code is invalid" do
+        default_offer_code.update!(max_purchase_count: 0)
+
+        data = described_class.new(product:).for_web
+
+        expect(data[:price_cents]).to eq 1000
+        expect(data).not_to have_key(:base_price_cents)
+      end
+
+      context "with fixed amount discount" do
+        let(:default_offer_code) { create(:offer_code, user: creator, products: [product], code: "DEFAULT5", amount_cents: 500) }
+
+        it "shows discounted price with fixed amount discount" do
+          data = described_class.new(product:).for_web
+
+          # $5.00 off $10.00 = $5.00
+          expect(data[:price_cents]).to eq 500
+          expect(data[:base_price_cents]).to eq 1000
+        end
+      end
+
+      context "when discount would make price negative" do
+        let(:default_offer_code) { create(:offer_code, user: creator, products: [product], code: "DEFAULT200", amount_cents: 2000) }
+
+        it "shows price as 0 when discount exceeds price" do
+          data = described_class.new(product:).for_web
+
+          # $20.00 off $10.00 = $0 (not negative)
+          expect(data[:price_cents]).to eq 0
+        end
+      end
+    end
   end
 
   describe "#for_email" do

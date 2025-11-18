@@ -224,4 +224,36 @@ describe("Product Edit Previews", type: :system, js: true) do
       it_behaves_like "displaying collaborator"
     end
   end
+
+  context "with default discount code" do
+    let(:offer_code) { create(:offer_code, user: seller, products: [product], code: "DEFAULT10", amount_percentage: 10) }
+
+        before do
+          product.update!(default_discount_code: offer_code)
+        end
+
+    it "shows discounted price in preview when default discount code is set" do
+      visit edit_link_path(product.unique_permalink)
+
+      in_preview do
+        # Original price is $1.00, 10% off = $0.90
+        expect(page).to have_content "$0.90"
+        expect(page).to have_content "$1.00", count: 1 # Original price shown as strikethrough
+      end
+    end
+
+    context "with fixed amount discount" do
+      let(:offer_code) { create(:offer_code, user: seller, products: [product], code: "DEFAULT50", amount_cents: 50) }
+
+      it "shows discounted price with fixed amount discount" do
+        visit edit_link_path(product.unique_permalink)
+
+        in_preview do
+          # Original price is $1.00, $0.50 off = $0.50
+          expect(page).to have_content "$0.50"
+          expect(page).to have_content "$1.00", count: 1 # Original price shown as strikethrough
+        end
+      end
+    end
+  end
 end

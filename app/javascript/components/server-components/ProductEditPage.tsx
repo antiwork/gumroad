@@ -77,6 +77,14 @@ type Props = {
   seller_refund_policy_enabled: boolean;
   seller_refund_policy: Pick<RefundPolicy, "title" | "fine_print">;
   cancellation_discounts_enabled: boolean;
+  available_discount_codes:
+    | {
+        id: string;
+        code: string;
+        name: string;
+        discount: { type: "cents" | "percent"; value: number };
+      }[]
+    | null;
 };
 
 const createContextValue = (props: Props) => ({
@@ -110,6 +118,7 @@ const createContextValue = (props: Props) => ({
   seller_refund_policy_enabled: props.seller_refund_policy_enabled,
   seller_refund_policy: props.seller_refund_policy,
   cancellationDiscountsEnabled: props.cancellation_discounts_enabled,
+  availableDiscountCodes: props.available_discount_codes,
   contentUpdates: null,
   setContentUpdates: () => {},
 });
