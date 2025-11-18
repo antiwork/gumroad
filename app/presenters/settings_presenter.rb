@@ -257,7 +257,7 @@ class SettingsPresenter
 
     return "not_required" unless seller.under_18?
 
-    guardian_requests = seller.guardian_compliance_info_requests
+    guardian_requests = seller.user_compliance_info_requests.where("field_needed LIKE 'guardian_%'")
 
     has_submitted_guardian_info = user_compliance_info.present? && (
       user_compliance_info.guardian_first_name.present? &&
