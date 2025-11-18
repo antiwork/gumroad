@@ -7,4 +7,3 @@ class AddDefaultDiscountCodeIdToLinks < ActiveRecord::Migration[7.1]
     add_index :links, :default_discount_code_id
   end
 end
-

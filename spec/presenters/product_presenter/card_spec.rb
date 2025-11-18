@@ -94,11 +94,11 @@ describe ProductPresenter::Card do
 
     context "with default discount code" do
       let(:product) { create(:product, user: creator, price_cents: 1000) }
-        let(:default_offer_code) { create(:offer_code, user: creator, products: [product], code: "DEFAULT10", amount_percentage: 10) }
+      let(:default_offer_code) { create(:offer_code, user: creator, products: [product], code: "DEFAULT10", amount_percentage: 10) }
 
-        before do
-          product.update!(default_discount_code: default_offer_code)
-        end
+      before do
+        product.update!(default_discount_code: default_offer_code)
+      end
 
       it "shows discounted price when default discount code is present" do
         data = described_class.new(product:).for_web

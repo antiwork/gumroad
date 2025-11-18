@@ -258,11 +258,20 @@ describe ProductPresenter::ProductProps do
         end
 
         context "with default discount code" do
-        let(:default_offer_code) { create(:offer_code, products: [product], code: "DEFAULT10", amount_percentage: 10, valid_at: 1.day.ago, expires_at: 1.day.from_now) }
+          let(:default_offer_code) do
+            create(
+              :offer_code,
+              products: [product],
+              code: "DEFAULT10",
+              amount_percentage: 10,
+              valid_at: 1.day.ago,
+              expires_at: 1.day.from_now
+            )
+          end
 
-        before do
-          product.update!(default_discount_code: default_offer_code)
-        end
+          before do
+            product.update!(default_discount_code: default_offer_code)
+          end
 
           it "applies default discount code when no discount code is provided in URL" do
             discount_code_props = presenter.props(seller_custom_domain_url: nil, request:, pundit_user:, discount_code: nil)[:discount_code]
@@ -273,7 +282,14 @@ describe ProductPresenter::ProductProps do
           end
 
           it "prioritizes URL discount code over default discount code" do
-            url_offer_code = create(:offer_code, products: [product], code: "URL20", amount_percentage: 20, valid_at: 1.day.ago, expires_at: 1.day.from_now)
+            url_offer_code = create(
+              :offer_code,
+              products: [product],
+              code: "URL20",
+              amount_percentage: 20,
+              valid_at: 1.day.ago,
+              expires_at: 1.day.from_now
+            )
 
             discount_code_props = presenter.props(seller_custom_domain_url: nil, request:, pundit_user:, discount_code: url_offer_code.code)[:discount_code]
 
@@ -338,7 +354,16 @@ describe ProductPresenter::ProductProps do
           end
 
           context "with universal offer code" do
-            let(:default_offer_code) { create(:universal_offer_code, user: product.user, code: "UNIVERSAL10", amount_percentage: 10, valid_at: 1.day.ago, expires_at: 1.day.from_now) }
+            let(:default_offer_code) do
+              create(
+                :universal_offer_code,
+                user: product.user,
+                code: "UNIVERSAL10",
+                amount_percentage: 10,
+                valid_at: 1.day.ago,
+                expires_at: 1.day.from_now
+              )
+            end
 
             it "applies universal default discount code when no discount code is provided in URL" do
               discount_code_props = presenter.props(seller_custom_domain_url: nil, request:, pundit_user:, discount_code: nil)[:discount_code]

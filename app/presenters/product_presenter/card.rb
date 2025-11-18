@@ -71,7 +71,6 @@ class ProductPresenter::Card
   end
 
   private
-
     def compute_discounted_price_cents(base_price_cents)
       return base_price_cents unless product.default_discount_code.present?
 
