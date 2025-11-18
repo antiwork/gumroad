@@ -226,6 +226,7 @@ describe("Product Edit Previews", type: :system, js: true) do
   end
 
   context "with default discount code" do
+    let(:product) { create(:product_with_pdf_file, user: seller, size: 1024, price_cents: 1000) }
     let(:offer_code) { create(:offer_code, user: seller, products: [product], code: "DEFAULT10", amount_percentage: 10, amount_cents: nil) }
 
     before do
@@ -236,22 +237,22 @@ describe("Product Edit Previews", type: :system, js: true) do
       visit edit_link_path(product.unique_permalink)
 
       in_preview do
-        # Original price is $1.00, 10% off = $0.90
-        expect(page).to have_content "$0.90"
-        expect(page).to have_content "$1.00", count: 1 # Original price shown as strikethrough
+        # Original price is $10.00, 10% off = $9.00
+        expect(page).to have_content "$9.00"
+        expect(page).to have_content "$10.00", count: 1 # Original price shown as strikethrough
       end
     end
 
     context "with fixed amount discount" do
-      let(:offer_code) { create(:offer_code, user: seller, products: [product], code: "DEFAULT100", amount_cents: 100, amount_percentage: nil) }
+      let(:offer_code) { create(:offer_code, user: seller, products: [product], code: "DEFAULT5", amount_cents: 500, amount_percentage: nil) }
 
       it "shows discounted price with fixed amount discount" do
         visit edit_link_path(product.unique_permalink)
 
         in_preview do
-          # Original price is $1.00, $1.00 off = $0.00
-          expect(page).to have_content "$0.00"
-          expect(page).to have_content "$1.00", count: 1 # Original price shown as strikethrough
+          # Original price is $10.00, $5.00 off = $5.00
+          expect(page).to have_content "$5.00"
+          expect(page).to have_content "$10.00", count: 1 # Original price shown as strikethrough
         end
       end
     end

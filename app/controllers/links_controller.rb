@@ -727,13 +727,16 @@ class LinksController < ApplicationController
 
     def update_default_discount_code
       default_discount_code_id = product_permitted_params[:default_discount_code_id]
-      if default_discount_code_id.present?
-        discount_code = @product.user.offer_codes.alive.find_by_external_id(default_discount_code_id)
-        if discount_code && (@product.offer_codes.include?(discount_code) || discount_code.universal?)
-          @product.default_discount_code = discount_code
-        else
-          @product.default_discount_code = nil
-        end
+
+      unless default_discount_code_id.present?
+        @product.default_discount_code = nil
+        return
+      end
+
+      discount_code = @product.user.offer_codes.alive.find_by_external_id(default_discount_code_id)
+
+      if discount_code && (@product.offer_codes.include?(discount_code) || discount_code.universal?)
+        @product.default_discount_code = discount_code
       else
         @product.default_discount_code = nil
       end
