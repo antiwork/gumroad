@@ -57,6 +57,19 @@ class ProductPresenter::Card
     props
   end
 
+  def for_email
+    {
+      name: product.name,
+      thumbnail_url: product.for_email_thumbnail_url,
+      url: product.long_url,
+      seller: {
+        name: product.user.display_name,
+        profile_url: product.user.profile_url,
+        avatar_url: product.user.avatar_url,
+      },
+    }
+  end
+
   private
 
     def compute_discounted_price_cents(base_price_cents)
@@ -90,17 +103,4 @@ class ProductPresenter::Card
         price_cents
       end
     end
-
-  def for_email
-    {
-      name: product.name,
-      thumbnail_url: product.for_email_thumbnail_url,
-      url: product.long_url,
-      seller: {
-        name: product.user.display_name,
-        profile_url: product.user.profile_url,
-        avatar_url: product.user.avatar_url,
-      },
-    }
-  end
 end
