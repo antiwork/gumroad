@@ -12,7 +12,7 @@ const ChargePage = () => (
         <header>
           <h2>Who/what is Gumroad?</h2>
         </header>
-        <div className="paragraphs">
+        <div className="flex flex-col gap-4">
           <p>We are a service that lets creators sell their stuff directly to you. We help thousands of musicians, artists, and authors sell things like music, documentaries, and eBooks.</p>
           <p>We are a venture-backed startup based in San Francisco, CA — funded by Max Levchin, a co-founder of PayPal, and Accel Partners, the lead early investor in Facebook.</p>
         </div>

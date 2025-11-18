@@ -1,10 +1,10 @@
+import { Link, useForm } from "@inertiajs/react";
 import { DirectUpload } from "@rails/activestorage";
 import { findChildren, Node as TiptapNode } from "@tiptap/core";
 import { Plugin } from "@tiptap/pm/state";
 import { EditorContent, NodeViewProps, NodeViewWrapper, ReactNodeViewRenderer } from "@tiptap/react";
 import cx from "classnames";
 import * as React from "react";
-import { Link, useLoaderData, useRevalidator } from "react-router-dom";
 import { cast } from "ts-safe-cast";
 
 import {
@@ -12,15 +12,13 @@ import {
   Workflow,
   InstallmentDeliveryTimePeriod,
   INSTALLMENT_DELIVERY_TIME_PERIODS,
-  saveWorkflowInstallments,
   Installment,
   SaveActionName,
   AbandonedCartProduct,
-} from "$app/data/workflows";
+} from "$app/types/workflow";
 import { assert, assertDefined } from "$app/utils/assert";
 import { ALLOWED_EXTENSIONS } from "$app/utils/file";
 import GuidGenerator from "$app/utils/guid_generator";
-import { asyncVoid } from "$app/utils/promise";
 import { assertResponseError, request } from "$app/utils/request";
 
 import { Button, NavigationButton } from "$app/components/Button";
@@ -42,22 +40,18 @@ import { NumberInput } from "$app/components/NumberInput";
 import { ImageUploadSettingsContext, RichTextEditor, useRichTextEditor } from "$app/components/RichTextEditor";
 import { S3UploadConfigProvider } from "$app/components/S3UploadConfig";
 import { Separator } from "$app/components/Separator";
-import { showAlert } from "$app/components/server-components/Alert";
 import { InvalidNameForEmailDeliveryWarning } from "$app/components/server-components/InvalidNameForEmailDeliveryWarning";
+import Placeholder from "$app/components/ui/Placeholder";
+import { useConfigureEvaporate } from "$app/components/useConfigureEvaporate";
+import { useDebouncedCallback } from "$app/components/useDebouncedCallback";
+import { WithTooltip } from "$app/components/WithTooltip";
 import {
   Layout,
   EditPageNavigation,
   PublishButton,
   sendToPastCustomersCheckboxLabel,
-} from "$app/components/server-components/WorkflowsPage";
-import {
-  determineWorkflowTrigger,
-  WorkflowTrigger,
-} from "$app/components/server-components/WorkflowsPage/WorkflowForm";
-import Placeholder from "$app/components/ui/Placeholder";
-import { useConfigureEvaporate } from "$app/components/useConfigureEvaporate";
-import { useDebouncedCallback } from "$app/components/useDebouncedCallback";
-import { WithTooltip } from "$app/components/WithTooltip";
+} from "$app/components/WorkflowsPage";
+import { determineWorkflowTrigger, WorkflowTrigger } from "$app/components/WorkflowsPage/WorkflowForm";
 
 type EmailFormState = {
   id: string;
@@ -94,14 +88,18 @@ const AbandonedCartProductsContext = React.createContext<{
 const AbandonedCartProductsProvider = AbandonedCartProductsContext.Provider;
 const useAbandonedCartProducts = () => assertDefined(React.useContext(AbandonedCartProductsContext));
 
-const WorkflowEmails = () => {
-  const { context, workflow } = cast<{ context: WorkflowFormContext; workflow: Workflow }>(useLoaderData());
+type WorkflowEmailsProps = {
+  context: WorkflowFormContext;
+  workflow: Workflow;
+};
+
+const WorkflowEmails = ({ context, workflow }: WorkflowEmailsProps) => {
   const currentSeller = useCurrentSeller();
-  const loaderDataRevalidator = useRevalidator();
   const [sendToPastCustomers, setSendToPastCustomers] = React.useState(workflow.send_to_past_customers);
-  const [isSaving, setIsSaving] = React.useState(false);
   const [files, filesDispatch] = React.useReducer(filesReducer, installmentsFilesToFilesState(workflow.installments));
   const [emails, setEmails] = React.useState<EmailFormState[]>(installmentsToEmails(workflow.installments));
+
+  const form = useForm({});
   const workflowTrigger = determineWorkflowTrigger(workflow);
   const isAbandonedCartWorkflow = workflowTrigger === "abandoned_cart";
   const [expandedEmailIds, setExpandedEmailIds] = React.useState<Set<string>>(
@@ -211,83 +209,47 @@ const WorkflowEmails = () => {
     setInvalidFields(invalidFields);
     return invalidFields.length === 0;
   };
-  const handleSave = asyncVoid(
-    async ({
-      sendPreviewForEmailId,
-      saveActionName = "save",
-    }: { sendPreviewForEmailId?: string; saveActionName?: SaveActionName } = {}) => {
-      setFocusedFieldInfo(null);
+  const handleSave = ({
+    sendPreviewForEmailId,
+    saveActionName = "save",
+  }: { sendPreviewForEmailId?: string; saveActionName?: SaveActionName } = {}) => {
+    setFocusedFieldInfo(null);
 
-      if (!validate()) return;
+    if (!validate()) return;
 
-      const payload = {
-        workflow: {
-          send_to_past_customers: sendToPastCustomers,
-          save_action_name: saveActionName,
-          installments: emails.map((email) => {
-            const emailFiles = files.filter((file) => file.email_id === email.id);
-            return {
-              id: email.id,
-              name: email.name,
-              message: email.message,
-              time_period: email.delayed_delivery_time_period,
-              time_duration: email.delayed_delivery_time_duration,
-              send_preview_email: email.id === sendPreviewForEmailId,
-              files: emailFiles.map((file, index) => ({
-                external_id: file.id,
-                url: file.url,
-                position: index,
-                // if email is marked stream-only, all streamable files are considered stream-only
-                stream_only: file.is_streamable && email.stream_only,
-                subtitle_files: file.subtitle_files,
-              })),
-            };
-          }),
-        },
-      };
+    form.transform(() => ({
+      workflow: {
+        send_to_past_customers: sendToPastCustomers,
+        save_action_name: saveActionName,
+        installments: emails.map((email) => {
+          const emailFiles = files.filter((file) => file.email_id === email.id);
+          return {
+            id: email.id,
+            name: email.name,
+            message: email.message,
+            time_period: email.delayed_delivery_time_period,
+            time_duration: email.delayed_delivery_time_duration,
+            send_preview_email: email.id === sendPreviewForEmailId,
+            files: emailFiles.map((file, index) => ({
+              external_id: file.id,
+              url: file.url,
+              position: index,
+              // if email is marked stream-only, all streamable files are considered stream-only
+              stream_only: file.is_streamable && email.stream_only,
+              subtitle_files: file.subtitle_files,
+            })),
+          };
+        }),
+      },
+    }));
 
-      try {
-        setIsSaving(true);
-        const response = await saveWorkflowInstallments(workflow.external_id, payload);
-        if (response.success) {
-          if (sendPreviewForEmailId) {
-            showAlert("A preview has been sent to your email.", "success");
-          } else {
-            showAlert(
-              saveActionName === "save_and_publish"
-                ? "Workflow published!"
-                : saveActionName === "save_and_unpublish"
-                  ? "Unpublished!"
-                  : "Changes saved!",
-              "success",
-            );
-          }
-          setExpandedEmailIds((prev) => {
-            const updated = new Set(prev);
-            Object.entries(response.old_and_new_installment_id_mapping).forEach(([oldId, newId]) => {
-              if (updated.has(oldId) && oldId !== newId) {
-                updated.delete(oldId);
-                updated.add(newId);
-              }
-            });
-            return updated;
-          });
-          loaderDataRevalidator.revalidate();
-          setEmails(installmentsToEmails(response.workflow.installments));
-          filesDispatch({ type: "reset", files: installmentsFilesToFilesState(response.workflow.installments) });
-        } else {
-          showAlert(response.message, "error");
-        }
-      } catch (e) {
-        assertResponseError(e);
-        showAlert("Sorry, something went wrong. Please try again.", "error");
-      } finally {
-        setIsSaving(false);
-      }
-    },
-  );
+    form.patch(Routes.workflow_emails_path(workflow.external_id), {
+      only: ["workflow", "flash"],
+    });
+  };
+
   const isBusy =
-    isSaving ||
+    form.processing ||
     imagesUploading.size > 0 ||
     files.some((file) => isFileUploading(file) || file.subtitle_files.some((subtitle) => isFileUploading(subtitle)));
   const sortedEmails = sortEmailsByDelayedDeliveryTime(emails);
@@ -300,7 +262,7 @@ const WorkflowEmails = () => {
           navigation={<EditPageNavigation workflowExternalId={workflow.external_id} />}
           actions={
             <>
-              <Link to="/workflows" className="button" inert={isBusy}>
+              <Link href={Routes.workflows_path()} className="button" inert={isBusy || undefined}>
                 {workflow.published ? (
                   <>
                     <Icon name="x-square" />
@@ -386,7 +348,7 @@ const WorkflowEmails = () => {
                               onDelete={() => setDeletingEmailId(email.id)}
                               onChange={(value) => updateEmail(email.id, value)}
                               onSendPreviewEmail={() => handleSave({ sendPreviewForEmailId: email.id })}
-                              isSaving={isSaving}
+                              isSaving={form.processing}
                               hasUploadingImages={imagesUploading.size > 0 && email.message.includes('src="blob:')}
                             />
                           ))}
@@ -514,7 +476,7 @@ const EmailRow = ({
         )}
       </div>
       {expanded ? (
-        <form className="paragraphs">
+        <form className="flex flex-col gap-4">
           {isAbandonedCartWorkflow ? null : (
             <div
               style={{
@@ -613,7 +575,7 @@ const EmailPreview = ({
   });
 
   return (
-    <section className="paragraphs" ref={selfRef}>
+    <section className="flex flex-col gap-4" ref={selfRef}>
       <Separator>
         <div className="flex gap-2">
           <Icon name="outline-clock" />
@@ -626,7 +588,7 @@ const EmailPreview = ({
         <EditorContent className="rich-text" editor={editor} />
         {emailFiles.length > 0 ? <Button color="primary">View content</Button> : null}
         <hr />
-        <div className="paragraphs" style={{ justifyItems: "center" }}>
+        <div className="flex flex-col items-center gap-4">
           <p>{gumroadAddress}</p>
           <p>
             Powered by <span style={{ marginLeft: "var(--spacer-1)" }} className="logo-full" />
@@ -641,12 +603,14 @@ const AbandonedCartProductListNodeView = (props: NodeViewProps) => {
   const appDomain = useAppDomain();
   const { abandonedCartProducts, shownProductCount, setShownProductCount, showAddProductCTA } =
     useAbandonedCartProducts();
-  const tooltipUid = React.useId();
   const isPreview = !props.editor.isEditable;
 
   return (
-    <NodeViewWrapper className="paragraphs" style={isPreview ? {} : { userSelect: "none", cursor: "not-allowed" }}>
-      <div className="has-tooltip top" aria-describedby={tooltipUid} style={{ display: "grid" }}>
+    <NodeViewWrapper
+      className="flex flex-col gap-4"
+      style={isPreview ? {} : { userSelect: "none", cursor: "not-allowed" }}
+    >
+      <WithTooltip position="top" tip={isPreview ? null : "This cannot be deleted"}>
         {abandonedCartProducts.length > 0 ? (
           <div className="cart" role="list">
             {abandonedCartProducts.slice(0, shownProductCount).map((product) => (
@@ -690,12 +654,7 @@ const AbandonedCartProductListNodeView = (props: NodeViewProps) => {
             )}
           </Placeholder>
         )}
-        {isPreview ? null : (
-          <div role="tooltip" id={tooltipUid}>
-            This cannot be deleted
-          </div>
-        )}
-      </div>
+      </WithTooltip>
       {abandonedCartProducts.length > shownProductCount ? (
         <button
           className="link"

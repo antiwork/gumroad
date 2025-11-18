@@ -271,7 +271,7 @@ describe "Wishlist show page", :js, type: :system do
 
     click_button "Edit"
 
-    within_section wishlist.name, section_element: :aside do
+    within_modal wishlist.name do
       fill_in "Name", with: "New Wishlist Name"
       click_on "Close"
     end
@@ -280,7 +280,7 @@ describe "Wishlist show page", :js, type: :system do
 
     click_button "Edit"
 
-    within_section "New Wishlist Name", section_element: :aside do
+    within_modal "New Wishlist Name" do
       fill_in "Description", with: "Description Goes Here"
 
       click_on "Close"

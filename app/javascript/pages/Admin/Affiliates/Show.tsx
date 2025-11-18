@@ -13,7 +13,7 @@ const AdminAffiliatesShow = () => {
   const { user } = cast<PageProps>(usePage().props);
 
   return (
-    <div className="paragraphs">
+    <div className="flex flex-col gap-4">
       <AdminUserAndProductsTabs selectedTab="profile" userId={user.id} isAffiliateUser />
       <UserCard user={user} isAffiliateUser />
     </div>

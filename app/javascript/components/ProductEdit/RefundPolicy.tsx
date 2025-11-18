@@ -52,7 +52,7 @@ export const RefundPolicySelector = ({
         </Toggle>
       }
     >
-      <div className="dropdown paragraphs">
+      <div className="dropdown flex flex-col gap-4">
         <fieldset>
           <legend>
             <label htmlFor={`${uid}-max-refund-period-in-days`}>Refund period</label>
@@ -63,7 +63,7 @@ export const RefundPolicySelector = ({
                 onToggle={setIsPopoverOpen}
               >
                 <div
-                  className="paragraphs font-normal"
+                  className="flex flex-col gap-4 font-normal"
                   style={{
                     width: "20rem",
                     maxWidth: "100%",
