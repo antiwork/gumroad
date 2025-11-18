@@ -361,7 +361,7 @@ class LinksController < ApplicationController
           :call_limitation_info,
           :installment_plan,
           :community_chat_enabled,
-          :default_discount_code_id
+          :default_offer_code_id
         ))
         @product.description = SaveContentUpsellsService.new(seller: @product.user, content: product_permitted_params[:description], old_content: @product.description_was).from_html
         @product.skus_enabled = false
@@ -414,7 +414,7 @@ class LinksController < ApplicationController
         update_availabilities
         update_call_limitation_info
         update_installment_plan
-        update_default_discount_code
+        update_default_offer_code
 
         Product::SavePostPurchaseCustomFieldsService.new(@product).perform
 
@@ -725,20 +725,20 @@ class LinksController < ApplicationController
       end
     end
 
-    def update_default_discount_code
-      default_discount_code_id = product_permitted_params[:default_discount_code_id]
+    def update_default_offer_code
+      default_offer_code_id = product_permitted_params[:default_offer_code_id]
 
-      unless default_discount_code_id.present?
-        @product.default_discount_code = nil
+      unless default_offer_code_id.present?
+        @product.default_offer_code = nil
         return
       end
 
-      discount_code = @product.user.offer_codes.alive.find_by_external_id(default_discount_code_id)
+      offer_code = @product.user.offer_codes.alive.find_by_external_id(default_offer_code_id)
 
-      if discount_code && (@product.offer_codes.include?(discount_code) || discount_code.universal?)
-        @product.default_discount_code = discount_code
+      if offer_code && (@product.offer_codes.include?(offer_code) || offer_code.universal?)
+        @product.default_offer_code = offer_code
       else
-        @product.default_discount_code = nil
+        @product.default_offer_code = nil
       end
     end
 

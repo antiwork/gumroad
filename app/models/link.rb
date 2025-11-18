@@ -113,7 +113,7 @@ class Link < ApplicationRecord
   has_many :installments
   has_many :subscriptions
   has_and_belongs_to_many :offer_codes, join_table: "offer_codes_products", foreign_key: "product_id"
-  belongs_to :default_discount_code, class_name: "OfferCode", optional: true, foreign_key: "default_discount_code_id"
+  belongs_to :default_offer_code, class_name: "OfferCode", optional: true, foreign_key: "default_discount_code_id"
   has_many :transcoded_videos
   has_many :imported_customers
   has_many :licenses

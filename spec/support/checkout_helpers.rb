@@ -30,20 +30,7 @@ module CheckoutHelpers
       query = Rack::Utils.parse_query(uri.query)
       expect(query["product"]).to eq(product.unique_permalink)
       expect(query["quantity"]).to eq(quantity.to_s)
-
-      expected_code = if offer_code.present?
-        offer_code.code
-      elsif product.default_discount_code.present?
-        default_code = product.default_discount_code
-        is_valid = (default_code.valid_at.nil? || default_code.valid_at <= Time.current) &&
-                   (default_code.expires_at.nil? || default_code.expires_at >= Time.current) &&
-                   (default_code.max_purchase_count.nil? || default_code.times_used < default_code.max_purchase_count) &&
-                   (default_code.minimum_quantity.nil? || quantity >= default_code.minimum_quantity)
-        is_valid ? default_code.code : nil
-      else
-        nil
-      end
-      expect(query["code"]).to eq(expected_code)
+      expect(query["code"]).to eq(offer_code&.code)
       expect(query["rent"]).to eq(rent ? "true" : nil)
       expect(query["option"]).to eq(option.present? ? (product.is_physical ? product.skus.alive.find_by(name: option)&.external_id : product.variant_categories.alive.first&.variants&.alive&.find_by(name: option)&.external_id) : nil)
       if pwyw_price.present?

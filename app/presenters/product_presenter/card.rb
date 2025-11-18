@@ -72,34 +72,22 @@ class ProductPresenter::Card
 
   private
     def compute_discounted_price_cents(base_price_cents)
-      return base_price_cents unless product.default_discount_code.present?
+      offer_code = product.default_offer_code
+      return base_price_cents unless offer_code.present?
 
-      discount_code_response = OfferCodeDiscountComputingService.new(
-        product.default_discount_code.code,
+      response = OfferCodeDiscountComputingService.new(
+        offer_code.code,
         {
           product.unique_permalink => {
             permalink: product.unique_permalink,
-            quantity: [1, product.default_discount_code.minimum_quantity || 0].max
+            quantity: [1, offer_code.minimum_quantity || 0].max
           }
         }
       ).process
 
-      return base_price_cents if discount_code_response[:error_code].present?
+      return base_price_cents if response[:error_code].present?
 
-      discount = discount_code_response[:products_data][product.unique_permalink]&.dig(:discount)
-      return base_price_cents unless discount.present?
-
-      apply_discount_to_price(base_price_cents, discount)
-    end
-
-    def apply_discount_to_price(price_cents, discount)
-      if discount[:type] == "fixed"
-        [price_cents - discount[:cents], 0].max
-      elsif discount[:type] == "percent"
-        discount_amount = (price_cents * (discount[:percents] / 100.0)).round
-        [price_cents - discount_amount, 0].max
-      else
-        price_cents
-      end
+      discount_amount_cents = offer_code.amount_off(base_price_cents)
+      [base_price_cents - discount_amount_cents, 0].max
     end
 end

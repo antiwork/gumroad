@@ -44,8 +44,8 @@ export const Card = ({
         currencyCode={product.currency_code}
         price={product.price_cents}
         oldPrice={
-          product.base_price_cents && product.base_price_cents > product.price_cents
-            ? product.base_price_cents
+          product.original_price_cents && product.original_price_cents > product.price_cents
+            ? product.original_price_cents
             : undefined
         }
         isPayWhatYouWant={product.is_pay_what_you_want}
@@ -87,8 +87,8 @@ export const HorizontalCard = ({ product, big, eager }: { product: CardProduct; 
           currencyCode={product.currency_code}
           price={product.price_cents}
           oldPrice={
-            product.base_price_cents && product.base_price_cents > product.price_cents
-              ? product.base_price_cents
+            product.original_price_cents && product.original_price_cents > product.price_cents
+              ? product.original_price_cents
               : undefined
           }
           isPayWhatYouWant={product.is_pay_what_you_want}

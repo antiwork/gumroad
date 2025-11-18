@@ -261,9 +261,6 @@ export const Product = ({
   const selectionAttributes = applySelection(product, discountCode?.valid ? discountCode.discount : null, selection);
   let { basePriceCents } = selectionAttributes;
   const { priceCents, discountedPriceCents, pppDiscounted, isPWYW, maxQuantity } = selectionAttributes;
-  // Multiply by quantity to show total price when quantity > 1
-  const totalBasePriceCents = basePriceCents * selection.quantity;
-  const totalDiscountedPriceCents = discountedPriceCents * selection.quantity;
   React.useEffect(() => {
     if (maxQuantity !== null && selection.quantity > maxQuantity)
       setSelection?.({ ...selection, quantity: maxQuantity });
@@ -340,8 +337,8 @@ export const Product = ({
           (basePriceCents !== 0 || product.pwyw) ? (
             <PriceTag
               currencyCode={product.currency_code}
-              oldPrice={totalDiscountedPriceCents < totalBasePriceCents ? totalBasePriceCents : undefined}
-              price={totalDiscountedPriceCents}
+              oldPrice={discountedPriceCents < basePriceCents ? basePriceCents : undefined}
+              price={discountedPriceCents}
               url={product.long_url}
               isPayWhatYouWant={!!product.pwyw}
               isSalesLimited={product.is_sales_limited}

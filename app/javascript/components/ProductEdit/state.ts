@@ -2,6 +2,7 @@ import * as React from "react";
 
 import { OtherRefundPolicy } from "$app/data/products/other_refund_policies";
 import { Thumbnail } from "$app/data/thumbnails";
+import { Discount } from "$app/parsers/checkout";
 import {
   AssetPreview,
   CustomButtonTextOption,
@@ -85,6 +86,13 @@ export type InstallmentPlan = {
   number_of_installments: number;
 };
 
+export type AvailableDiscountCode = {
+  id: string;
+  code: string;
+  name: string;
+  discount: Discount;
+};
+
 export type Product = {
   name: string;
   description: string;
@@ -139,7 +147,7 @@ export type Product = {
   call_limitation_info: CallLimitationInfo | null;
   require_shipping: boolean;
   cancellation_discount: CancellationDiscount | null;
-  default_discount_code_id: string | null;
+  default_offer_code_id: string | null;
   public_files: PublicFileWithStatus[];
   audio_previews_enabled: boolean;
   community_chat_enabled: boolean | null;
@@ -188,14 +196,7 @@ export const ProductEditContext = React.createContext<{
   seller_refund_policy_enabled: boolean;
   seller_refund_policy: Pick<RefundPolicy, "title" | "fine_print">;
   cancellationDiscountsEnabled: boolean;
-  availableDiscountCodes:
-    | {
-        id: string;
-        code: string;
-        name: string;
-        discount: { type: "cents" | "percent"; value: number };
-      }[]
-    | null;
+  availableDiscountCodes: AvailableDiscountCode[] | null;
   contentUpdates: ContentUpdates;
   setContentUpdates: React.Dispatch<React.SetStateAction<ContentUpdates>>;
 } | null>(null);

@@ -543,7 +543,7 @@ describe Link, :vcr do
 
   describe "associations" do
     it { is_expected.to have_many(:self_service_affiliate_products).with_foreign_key(:product_id) }
-    it { is_expected.to belong_to(:default_discount_code).optional.with_foreign_key("default_discount_code_id") }
+    it { is_expected.to belong_to(:default_offer_code).optional.with_foreign_key("default_discount_code_id") }
 
     describe "#confirmed_collaborators" do
       it "returns all confirmed collaborators" do

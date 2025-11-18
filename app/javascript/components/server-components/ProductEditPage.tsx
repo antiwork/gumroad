@@ -28,6 +28,7 @@ import {
   ExistingFileEntry,
   ShippingCountry,
   ContentUpdates,
+  AvailableDiscountCode,
 } from "$app/components/ProductEdit/state";
 import { ImageUploadSettingsContext } from "$app/components/RichTextEditor";
 import { showAlert } from "$app/components/server-components/Alert";
@@ -77,14 +78,7 @@ type Props = {
   seller_refund_policy_enabled: boolean;
   seller_refund_policy: Pick<RefundPolicy, "title" | "fine_print">;
   cancellation_discounts_enabled: boolean;
-  available_discount_codes:
-    | {
-        id: string;
-        code: string;
-        name: string;
-        discount: { type: "cents" | "percent"; value: number };
-      }[]
-    | null;
+  available_discount_codes: AvailableDiscountCode[] | null;
 };
 
 const createContextValue = (props: Props) => ({

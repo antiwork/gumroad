@@ -80,37 +80,65 @@ class ProductPresenter::ProductProps
   private
     attr_reader :product, :seller
 
-    def discount_code_props(discount_code, quantity)
-      if discount_code.presence
-        effective_discount_code = discount_code
-        is_default = false
-      else
-        effective_discount_code = product.default_discount_code&.code
-        is_default = product.default_discount_code.present?
+    def discount_code_props(discount_code_from_url, quantity)
+      candidates = []
+      candidates << { code: discount_code_from_url, is_default: false } if discount_code_from_url.present?
+      if product.default_offer_code.present?
+        candidates << { code: product.default_offer_code.code, is_default: true }
       end
+      candidates.uniq! { |c| c[:code] }
+      return if candidates.empty?
 
-      return if effective_discount_code.blank?
+      best_candidate = nil
+      last_error = nil
 
-      offer_code_response = OfferCodeDiscountComputingService.new(
-        effective_discount_code,
-        {
-          product.unique_permalink => {
-            permalink: product.unique_permalink,
-            quantity: [quantity, product.find_offer_code(code: effective_discount_code)&.minimum_quantity || 0].max
+      candidates.each do |candidate|
+        code = candidate[:code]
+        offer_code = product.find_offer_code(code:)
+
+        unless offer_code
+          last_error ||= { valid: false, error_code: :invalid_offer }
+          next
+        end
+
+        response = OfferCodeDiscountComputingService.new(
+          code,
+          {
+            product.unique_permalink => {
+              permalink: product.unique_permalink,
+              quantity: [quantity, offer_code.minimum_quantity || 0].max
+            }
           }
-        }
-      ).process
+        ).process
 
-      if offer_code_response[:error_code].present?
-        { valid: false, error_code: offer_code_response[:error_code] }
-      else
-        {
-          valid: true,
-          code: effective_discount_code,
-          is_default: is_default,
-          **offer_code_response[:products_data][product.unique_permalink]
+        if response[:error_code].present?
+          last_error ||= { valid: false, error_code: response[:error_code] }
+          next
+        end
+
+        discount = offer_code.discount
+        amount_off_cents = offer_code.amount_off(product.price_cents)
+
+        candidate_data = {
+          code:,
+          is_default: candidate[:is_default],
+          discount:,
+          amount_off_cents:,
         }
+
+        if best_candidate.nil? || candidate_data[:amount_off_cents] > best_candidate[:amount_off_cents]
+          best_candidate = candidate_data
+        end
       end
+
+      return last_error if best_candidate.nil?
+
+      {
+        valid: true,
+        code: best_candidate[:code],
+        is_default: best_candidate[:is_default],
+        discount: best_candidate[:discount],
+      }
     end
 
     def purchase_props(purchase_info)

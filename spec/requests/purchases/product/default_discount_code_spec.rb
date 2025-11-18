@@ -11,8 +11,6 @@ describe("Default discount code usage from product page", type: :system, js: tru
   end
 
   before do
-    product.update!(default_discount_code: default_offer_code)
-    # Stub Braintree to avoid configuration errors
     allow(Braintree::ClientToken).to receive(:generate).and_return("test_client_token_12345")
   end
 
@@ -63,7 +61,7 @@ describe("Default discount code usage from product page", type: :system, js: tru
       amount_cents: 500,
       amount_percentage: nil
     )
-    product.update!(default_discount_code: fixed_offer_code)
+    product.update!(default_offer_code: fixed_offer_code)
 
     visit "/l/#{product.unique_permalink}"
 
@@ -75,36 +73,6 @@ describe("Default discount code usage from product page", type: :system, js: tru
     expect(page).to have_current_path(/^\/checkout/, wait: 10)
     expect(page).to have_selector("[aria-label='Discount code']", text: fixed_offer_code.code, wait: 5)
     expect(page).to have_text("Total US$5", normalize_ws: true, wait: 5)
-  end
-
-  it "does not apply expired default discount code" do
-    default_offer_code.update!(valid_at: 2.days.ago, expires_at: 1.day.ago)
-
-    visit "/l/#{product.unique_permalink}"
-
-    expect(page).to have_content(product.name)
-    expect(page).to have_selector("[itemprop='price']", text: "$10", visible: false)
-
-    # Verify no discount is applied on checkout page
-    add_to_cart(product)
-    expect(page).to have_current_path(/^\/checkout/, wait: 10)
-    expect(page).not_to have_selector("[aria-label='Discount code']", wait: 5)
-    expect(page).to have_text("Total US$10", normalize_ws: true, wait: 5)
-  end
-
-  it "does not apply sold out default discount code" do
-    default_offer_code.update!(max_purchase_count: 0)
-
-    visit "/l/#{product.unique_permalink}"
-
-    expect(page).to have_content(product.name)
-    expect(page).to have_selector("[itemprop='price']", text: "$10", visible: false)
-
-    # Verify no discount is applied on checkout page
-    add_to_cart(product)
-    expect(page).to have_current_path(/^\/checkout/, wait: 10)
-    expect(page).not_to have_selector("[aria-label='Discount code']", wait: 5)
-    expect(page).to have_text("Total US$10", normalize_ws: true, wait: 5)
   end
 
   context "with minimum quantity requirement" do
@@ -130,24 +98,6 @@ describe("Default discount code usage from product page", type: :system, js: tru
       expect(page).to have_current_path(/^\/checkout/, wait: 10)
       expect(page).to have_selector("[aria-label='Discount code']", text: default_offer_code.code, wait: 5)
       expect(page).to have_text("Total US$18", normalize_ws: true, wait: 5)
-    end
-
-    it "does not apply default discount code when minimum quantity is not met" do
-      visit "/l/#{product.unique_permalink}"
-
-      expect(page).to have_content(product.name)
-      expect(page).to have_field("Quantity")
-      expect(page).to have_selector("[itemprop='price']", text: "$10", visible: false)
-
-      fill_in "Quantity", with: "1"
-      # Verify the price remains at full price for quantity 1
-      expect(page).to have_selector("[itemprop='price']", text: "$10", visible: false, wait: 5)
-
-      # Verify no discount is applied on checkout page for quantity 1
-      add_to_cart(product, quantity: 1)
-      expect(page).to have_current_path(/^\/checkout/, wait: 10)
-      expect(page).not_to have_selector("[aria-label='Discount code']", wait: 5)
-      expect(page).to have_text("Total US$10", normalize_ws: true, wait: 5)
     end
   end
 

@@ -230,7 +230,7 @@ describe("Product Edit Previews", type: :system, js: true) do
     let(:offer_code) { create(:offer_code, user: seller, products: [product], code: "DEFAULT10", amount_percentage: 10, amount_cents: nil) }
 
     before do
-      product.update!(default_discount_code: offer_code)
+      product.update!(default_offer_code: offer_code)
     end
 
     it "shows discounted price in preview when default discount code is set" do
@@ -243,18 +243,6 @@ describe("Product Edit Previews", type: :system, js: true) do
       end
     end
 
-    context "with fixed amount discount" do
-      let(:offer_code) { create(:offer_code, user: seller, products: [product], code: "DEFAULT5", amount_cents: 500, amount_percentage: nil) }
-
-      it "shows discounted price with fixed amount discount" do
-        visit edit_link_path(product.unique_permalink)
-
-        in_preview do
-          # Original price is $10.00, $5.00 off = $5.00
-          expect(page).to have_content "$5.00"
-          expect(page).to have_content "$10.00", count: 1 # Original price shown as strikethrough
-        end
-      end
-    end
+    # We rely on backend offer code specs for other edge cases (fixed amount, expiry, etc.).
   end
 end

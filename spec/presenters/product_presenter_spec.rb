@@ -432,11 +432,11 @@ describe ProductPresenter do
       let(:offer_code) { create(:offer_code, user: product.user, products: [product], code: "DEFAULT10", amount_percentage: 10) }
 
       before do
-        product.update!(default_discount_code: offer_code)
+        product.update!(default_offer_code: offer_code)
       end
 
-      it "includes default_discount_code_id in edit_props" do
-        expect(presenter.edit_props[:product][:default_discount_code_id]).to eq(offer_code.external_id)
+      it "includes default_offer_code_id in edit_props" do
+        expect(presenter.edit_props[:product][:default_offer_code_id]).to eq(offer_code.external_id)
       end
 
       it "includes available discount codes in edit_props" do
