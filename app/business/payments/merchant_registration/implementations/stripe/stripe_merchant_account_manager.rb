@@ -995,8 +995,8 @@ module StripeMerchantAccountManager
       mapped_field = map_stripe_guardian_field_to_internal_field(stripe_field, guardian_person_id)
       next unless mapped_field
 
-      unless user.guardian_compliance_info_requests.requested.where(field_needed: mapped_field).exists?
-        user.guardian_compliance_info_requests.create!(
+      unless user.user_compliance_info_requests.requested.where(field_needed: mapped_field).exists?
+        user.user_compliance_info_requests.create!(
           field_needed: mapped_field,
           guardian_person_id: guardian_person_id,
           stripe_event_id: stripe_event_id,
@@ -1006,8 +1006,9 @@ module StripeMerchantAccountManager
     end
 
     # Send email if new guardian requests were created
-    if user.guardian_compliance_info_requests.requested.present?
-      guardian_fields = user.guardian_compliance_info_requests.requested.pluck(:field_needed)
+    guardian_requests = user.user_compliance_info_requests.requested.where("field_needed LIKE 'guardian_%'")
+    if guardian_requests.present?
+      guardian_fields = guardian_requests.pluck(:field_needed)
       ContactingCreatorMailer.more_kyc_needed(user.id, guardian_fields).deliver_later(queue: "critical")
     end
   end
@@ -1036,8 +1037,8 @@ module StripeMerchantAccountManager
       next unless internal_field
 
       # Check if request already exists
-      unless user.guardian_compliance_info_requests.requested.where(field_needed: internal_field).exists?
-        guardian_request = user.guardian_compliance_info_requests.create!(
+      unless user.user_compliance_info_requests.requested.where(field_needed: internal_field).exists?
+        guardian_request = user.user_compliance_info_requests.create!(
           field_needed: internal_field,
           stripe_event_id: stripe_event_id,
           due_at: requirements_due_at
@@ -1106,7 +1107,7 @@ module StripeMerchantAccountManager
     guardian_person_id = stripe_person["id"]
 
     # Mark all guardian compliance info requests as verified for this guardian person
-    user.guardian_compliance_info_requests.provided.where(guardian_person_id: guardian_person_id).find_each do |request|
+    user.user_compliance_info_requests.provided.where(guardian_person_id: guardian_person_id).find_each do |request|
       request.mark_verified!
     end
 
@@ -1129,7 +1130,7 @@ module StripeMerchantAccountManager
     end
 
     if guardian_fields_still_needed.empty?
-      user.guardian_compliance_info_requests.provided.find_each(&:mark_verified!)
+      user.user_compliance_info_requests.provided.where("field_needed LIKE 'guardian_%'").find_each(&:mark_verified!)
     end
   end
 end
