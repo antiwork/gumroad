@@ -5,6 +5,7 @@ import { cast } from "ts-safe-cast";
 
 import { createConsumptionEvent } from "$app/data/consumption_analytics";
 import { trackMediaLocationChanged } from "$app/data/media_location";
+import { classNames } from "$app/utils/classNames";
 import { humanizedDuration } from "$app/utils/duration";
 import FileUtils from "$app/utils/file";
 import { createJWPlayer } from "$app/utils/jwPlayer";
@@ -24,6 +25,7 @@ import {
   useMediaUrls,
   usePurchaseInfo,
 } from "$app/components/server-components/DownloadPage/WithContent";
+import { Row, RowActions, RowContent, RowDetails, Rows } from "$app/components/ui/Rows";
 import { useOnOutsideClick } from "$app/components/useOnOutsideClick";
 import { useRefToLatest } from "$app/components/useRefToLatest";
 import { WithTooltip } from "$app/components/WithTooltip";
@@ -86,7 +88,7 @@ export const FileList = ({ content_items }: Props) => {
   );
 
   return (
-    <div role="tree" aria-label="Files">
+    <Rows role="tree" aria-label="Files">
       {content_items.map((item) =>
         item.type === "folder" ? (
           <FolderRow key={`folder${item.id}`} folder={item}>
@@ -96,7 +98,7 @@ export const FileList = ({ content_items }: Props) => {
           getFileRow(item)
         ),
       )}
-    </div>
+    </Rows>
   );
 };
 
@@ -104,13 +106,15 @@ const FolderRow = ({ folder, children }: { folder: FolderItem; children: React.R
   const [isExpanded, setIsExpanded] = React.useState(false);
 
   return (
-    <div role="treeitem" aria-expanded={isExpanded}>
-      <div className="content" onClick={() => setIsExpanded(!isExpanded)}>
+    <Row role="treeitem" aria-expanded={isExpanded}>
+      <RowContent onClick={() => setIsExpanded(!isExpanded)}>
         <Icon name="solid-folder-open" className="type-icon" />
         <h4>{folder.name}</h4>
+      </RowContent>
+      <div role="group" className={classNames({ hidden: !isExpanded })}>
+        {children}
       </div>
-      <div role="group">{children}</div>
-    </div>
+    </Row>
   );
 };
 
@@ -192,22 +196,24 @@ export const FileRow = ({
   const isEmbeddedVideo = isEmbed && !!streamUrl;
 
   return (
-    <div
+    <Row
       className={cx({ embed: isEmbed }, className)}
       role={isTreeItem || shouldShowSubtitlesForFile(file) ? "treeitem" : undefined}
       aria-expanded={shouldShowSubtitlesForFile(file) ? isExpanded : undefined}
     >
       {isEmbeddedVideo && !isCollapsed ? (
-        <VideoEmbedPreview
-          file={file}
-          resumeLocation={resumeLocation}
-          setResumeLocation={setResumeLocation}
-          fetchMediaUrls={fetchMediaUrls}
-          isFetchingMediaUrls={isFetchingMediaUrls}
-          autoPlay={initialCollapsed}
-        />
+        <RowDetails>
+          <VideoEmbedPreview
+            file={file}
+            resumeLocation={resumeLocation}
+            setResumeLocation={setResumeLocation}
+            fetchMediaUrls={fetchMediaUrls}
+            isFetchingMediaUrls={isFetchingMediaUrls}
+            autoPlay={initialCollapsed}
+          />
+        </RowDetails>
       ) : null}
-      <div className="content" onClick={() => setIsExpanded(!isExpanded)}>
+      <RowContent className="content" onClick={() => setIsExpanded(!isExpanded)}>
         {isEmbeddedVideo && file.thumbnail_url && isCollapsed ? (
           <div className="thumbnail">
             <img src={file.thumbnail_url} />
@@ -238,9 +244,9 @@ export const FileRow = ({
             </>
           }
         />
-      </div>
+      </RowContent>
 
-      <div className="actions">
+      <RowActions>
         {file.latest_media_location && file.content_length ? (
           <div>
             <ProgressPie progress={file.latest_media_location.location / file.content_length} />
@@ -323,10 +329,10 @@ export const FileRow = ({
             ) : null}
           </>
         ) : null}
-      </div>
+      </RowActions>
 
       {FileUtils.isAudioExtension(file.extension) && isShowingAudioDrawer ? (
-        <div className="drawer">
+        <RowDetails className="drawer">
           <AudioPlayerContainer
             fileId={file.id}
             playingAudioForId={playingAudioForId}
@@ -335,7 +341,7 @@ export const FileRow = ({
             setResumeLocation={setResumeLocation}
             contentLength={file.content_length}
           />
-        </div>
+        </RowDetails>
       ) : null}
 
       {file.kindle_data != null && isShowingKindleDrawer ? (
@@ -356,7 +362,7 @@ export const FileRow = ({
       ) : null}
 
       {file.description?.trim() ? <p style={{ whiteSpace: "pre-wrap" }}>{file.description}</p> : null}
-    </div>
+    </Row>
   );
 };
 
