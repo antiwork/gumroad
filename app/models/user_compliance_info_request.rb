@@ -17,6 +17,7 @@ class UserComplianceInfoRequest < ApplicationRecord
   attr_json_data_writer :emails_sent_at
   attr_json_data_accessor :sg_verification_reminder_sent_at
   attr_json_data_accessor :verification_error
+  attr_json_data_accessor :guardian_person_id  # Store Stripe person ID for guardian fields
 
   state_machine :state, initial: :requested do
     before_transition any => :provided, :do => lambda { |user_compliance_info_request|
@@ -26,10 +27,15 @@ class UserComplianceInfoRequest < ApplicationRecord
     event :mark_provided do
       transition requested: :provided
     end
+
+    event :mark_verified do
+      transition provided: :verified
+    end
   end
 
   scope :requested, -> { where(state: :requested) }
   scope :provided, -> { where(state: :provided) }
+  scope :verified, -> { where(state: :verified) }
   scope :only_needs_field_to_be_partially_provided, lambda { |does_only_needs_field_to_be_partially_provided = true|
     where(
       "flags & ? = ?",
