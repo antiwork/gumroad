@@ -14,7 +14,7 @@ type AdminUserActionsProps = {
 };
 
 const AdminUserActions = ({ user }: AdminUserActionsProps) => (
-  <div className="button-group">
+  <div className="flex flex-wrap gap-2">
     <ImpersonateAction user={user} />
     <VerifyAction user={user} />
     <UndeleteAction user={user} />

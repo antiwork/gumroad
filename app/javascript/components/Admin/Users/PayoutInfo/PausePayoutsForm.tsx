@@ -21,16 +21,15 @@ const AdminPausePayoutsForm = ({ user_id, onSuccess }: { user_id: number; onSucc
     >
       {(isLoading) => (
         <fieldset>
-          <div className="input-with-button !items-end">
-            <div className="grid gap-2">
-              <textarea
-                name="pause_payouts[reason]"
-                rows={2}
-                placeholder="Add a reason for pausing payouts. It'll be displayed to the user on their dashboard."
-                value={reason}
-                onChange={onReasonChange}
-              />
-            </div>
+          <div className="flex items-end gap-2">
+            <textarea
+              name="pause_payouts[reason]"
+              rows={2}
+              className="flex-1"
+              placeholder="Add a reason for pausing payouts. It'll be displayed to the user on their dashboard."
+              value={reason}
+              onChange={onReasonChange}
+            />
             <button type="submit" className="button" disabled={isLoading}>
               {isLoading ? "Pausing Payouts" : "Pause Payouts"}
             </button>

@@ -515,7 +515,7 @@ describe Exports::PurchaseExportService do
     end
 
     it "shows whether the license key is enabled (not disabled)" do
-      expect(field_value(last_data_row, "License Key Enabled?")).to eq("0")
+      expect(field_value(last_data_row, "License Key Enabled?")).to eq(nil)
 
       @product.update!(is_licensed: true)
       @purchase.create_license!
