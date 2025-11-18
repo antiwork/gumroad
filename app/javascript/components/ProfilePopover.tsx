@@ -3,18 +3,17 @@ import * as React from "react";
 import { Icon } from "$app/components/Icons";
 import { Popover } from "$app/components/Popover";
 
-type BaseUser = { name?: string | null; email?: string | null };
-type User = BaseUser & ({ avatarUrl: string; avatar_url?: never } | { avatar_url: string; avatarUrl?: never });
+type User = { name: string | null; email: string | null; avatarUrl: string };
 
 export const DashboardNavProfilePopover = ({ children, user }: { children: React.ReactNode; user: User | null }) => (
   <Popover
     position="top"
-    trigger={(open: boolean) => (
+    trigger={(open) => (
       <div className="inline-flex px-6 py-4 hover:text-accent">
         <div className="flex-1">
           <img
             className="user-avatar mr-3 border border-white! dark:border-foreground/35!"
-            src={user?.avatarUrl || user?.avatar_url}
+            src={user?.avatarUrl}
             alt="Your avatar"
           />
           {user?.name || user?.email}
