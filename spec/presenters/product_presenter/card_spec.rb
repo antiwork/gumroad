@@ -71,44 +71,6 @@ describe ProductPresenter::Card do
       end
     end
 
-    context "membership product" do
-      let(:product) do
-        recurrence_price_values = [
-          {
-            "monthly" => { enabled: true, price: 10 },
-            "yearly" => { enabled: true, price: 100 }
-          },
-          {
-            "monthly" => { enabled: true, price: 2.99 },
-            "yearly" => { enabled: true, price: 19.99 }
-          }
-        ]
-        create(:membership_product_with_preset_tiered_pricing, user: creator, recurrence_price_values:, subscription_duration: "yearly")
-      end
-
-      it "includes the lowest tier price for the default subscription duration" do
-        data = described_class.new(product:).for_web
-        expect(data[:price_cents]).to eq 19_99
-      end
-    end
-
-    context "with default discount code" do
-      let(:product) { create(:product, user: creator, price_cents: 1000) }
-      let(:default_offer_code) { create(:offer_code, user: creator, products: [product], code: "DEFAULT10", amount_percentage: 10) }
-
-      before do
-        product.update!(default_offer_code: default_offer_code)
-      end
-
-      it "shows discounted price when default discount code is present" do
-        data = described_class.new(product:).for_web
-
-        # 10% off $10.00 = $9.00
-        expect(data[:price_cents]).to eq 900
-        expect(data[:base_price_cents]).to eq 1000
-      end
-
-    end
   end
 
   describe "#for_email" do

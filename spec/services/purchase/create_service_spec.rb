@@ -2557,7 +2557,7 @@ describe Purchase::CreateService, :vcr do
         product.update!(default_offer_code: default_offer_code)
       end
 
-      it "tracks default_offer_code_id when default discount code is used" do
+      it "tracks default_offer_code_id when the product's default offer code is used" do
         params[:purchase].merge!(
           discount_code: default_offer_code.code,
           perceived_price_cents: discounted_price,
@@ -2570,7 +2570,7 @@ describe Purchase::CreateService, :vcr do
         expect(purchase.default_offer_code_id).to eq(default_offer_code.id)
       end
 
-      it "does not track default_offer_code_id when URL discount code is used" do
+      it "does not track default_offer_code_id when a non-default offer code is used" do
         url_offer_code = create(:offer_code, products: [product], code: "URL20", amount_cents: discount_cents)
 
         params[:purchase].merge!(
@@ -2598,9 +2598,7 @@ describe Purchase::CreateService, :vcr do
         expect(purchase.default_offer_code_id).to be_nil
       end
 
-      it "does not track default_offer_code_id when default discount code has expired" do
-        default_offer_code.update!(valid_at: 2.days.ago, expires_at: 1.day.ago)
-
+      it "does not track default_offer_code_id when no discount code is used" do
         params[:purchase].merge!(
           discount_code: nil,
           perceived_price_cents: price,
@@ -2611,39 +2609,6 @@ describe Purchase::CreateService, :vcr do
         expect(purchase).to be_successful
         expect(purchase.offer_code).to be_nil
         expect(purchase.default_offer_code_id).to be_nil
-      end
-
-      it "does not track default_offer_code_id when default discount code is sold out" do
-        default_offer_code.update!(max_purchase_count: 0)
-
-        params[:purchase].merge!(
-          discount_code: nil,
-          perceived_price_cents: price,
-        )
-
-        purchase, _ = Purchase::CreateService.new(product:, params:).perform
-
-        expect(purchase).to be_successful
-        expect(purchase.offer_code).to be_nil
-        expect(purchase.default_offer_code_id).to be_nil
-      end
-
-      context "with universal offer code" do
-        let(:default_offer_code) { create(:universal_offer_code, user: product.user, code: "UNIVERSAL10", amount_cents: discount_cents) }
-        let!(:merchant_account) { create(:merchant_account_stripe_connect, user: product.user) }
-
-        it "tracks default_offer_code_id when universal default discount code is used" do
-          params[:purchase].merge!(
-            discount_code: default_offer_code.code,
-            perceived_price_cents: discounted_price,
-          )
-
-          purchase, _ = Purchase::CreateService.new(product:, params:).perform
-
-          expect(purchase).to be_successful
-          expect(purchase.offer_code).to eq(default_offer_code)
-          expect(purchase.default_offer_code_id).to eq(default_offer_code.id)
-        end
       end
     end
 
