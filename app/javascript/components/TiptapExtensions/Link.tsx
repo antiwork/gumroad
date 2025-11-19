@@ -250,7 +250,7 @@ const LinkNodeView = ({ node, editor, getPos, deleteNode }: NodeViewProps) => {
               onChange={(evt) => setLink({ ...link, url: evt.target.value })}
               onKeyDown={handleKeyPress}
             />
-            <div className="input-with-button">
+            <div className="flex items-end gap-2">
               {!isButton && (
                 <Button contentEditable={false} color="danger" onClick={removeLink}>
                   Remove link

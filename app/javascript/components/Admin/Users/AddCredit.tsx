@@ -23,8 +23,8 @@ const AdminUserAddCredit = ({ user }: AdminUserAddCreditProps) => (
       >
         {(isLoading) => (
           <fieldset>
-            <div className="input-with-button">
-              <div className="input">
+            <div className="flex gap-2">
+              <div className="input flex-1">
                 <span className="pill">$</span>
                 <input type="text" name="credit[credit_amount]" placeholder="10.25" inputMode="decimal" required />
               </div>
