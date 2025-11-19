@@ -197,6 +197,7 @@ export const ProductEditContext = React.createContext<{
   seller_refund_policy: Pick<RefundPolicy, "title" | "fine_print">;
   cancellationDiscountsEnabled: boolean;
   availableDiscountCodes: AvailableDiscountCode[] | null;
+  setAvailableDiscountCodes: React.Dispatch<React.SetStateAction<AvailableDiscountCode[] | null>>;
   contentUpdates: ContentUpdates;
   setContentUpdates: React.Dispatch<React.SetStateAction<ContentUpdates>>;
 } | null>(null);

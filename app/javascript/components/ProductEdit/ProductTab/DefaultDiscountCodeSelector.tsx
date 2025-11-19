@@ -1,77 +1,55 @@
 import * as React from "react";
 
-import { ComboBox } from "$app/components/ComboBox";
-import { ProductEditContext, AvailableDiscountCode } from "$app/components/ProductEdit/state";
-import { ToggleSettingRow } from "$app/components/SettingRow";
-import { useDebouncedCallback } from "$app/components/useDebouncedCallback";
 import { searchProductOfferCodes } from "$app/data/offer_code";
 import { assertResponseError } from "$app/utils/request";
+
+import { ComboBox } from "$app/components/ComboBox";
+import { useProductEditContext, AvailableDiscountCode } from "$app/components/ProductEdit/state";
 import { showAlert } from "$app/components/server-components/Alert";
+import { ToggleSettingRow } from "$app/components/SettingRow";
+import { useDebouncedCallback } from "$app/components/useDebouncedCallback";
 
 export const DefaultDiscountCodeSelector = () => {
-  const context = React.useContext(ProductEditContext);
-  if (!context) return null;
-
-  const { uniquePermalink, product, updateProduct, availableDiscountCodes } = context;
+  const { uniquePermalink, product, updateProduct, availableDiscountCodes, setAvailableDiscountCodes } =
+    useProductEditContext();
   const defaultOfferCodeId = product.default_offer_code_id;
-
   const isEnabled = !!defaultOfferCodeId;
 
   const selectedDiscountCode = availableDiscountCodes?.find((code) => code.id === defaultOfferCodeId) ?? null;
 
-  const [query, setQuery] = React.useState("");
-  const [options, setOptions] = React.useState<AvailableDiscountCode[]>(availableDiscountCodes ?? []);
+  const formatLabel = (code: AvailableDiscountCode) => code.name || code.code;
 
-  const formatLabel = (code: AvailableDiscountCode) => {
-    const labelBase = code.name || code.code;
-    return labelBase;
-  };
+  const [query, setQuery] = React.useState<string>(() =>
+    selectedDiscountCode ? formatLabel(selectedDiscountCode) : "",
+  );
+  const [options, setOptions] = React.useState<AvailableDiscountCode[]>(availableDiscountCodes ?? []);
+  const [isOpen, setIsOpen] = React.useState(false);
 
   const loadOptions = React.useCallback(
     async (search: string) => {
       if (!uniquePermalink) return;
 
-      const trimmed = search.trim();
-      if (!trimmed) {
-        setOptions(availableDiscountCodes ?? []);
-        return;
-      }
-
       try {
-        const results = await searchProductOfferCodes(uniquePermalink, trimmed);
-        setOptions(results as AvailableDiscountCode[]);
-      } catch (e) {
-        assertResponseError(e);
+        const results = await searchProductOfferCodes(uniquePermalink, search.trim());
+        setOptions(results);
+      } catch (error) {
+        assertResponseError(error);
         showAlert("Sorry, something went wrong while searching discount codes.", "error");
       }
     },
-    [availableDiscountCodes, uniquePermalink],
+    [uniquePermalink],
   );
 
   const debouncedLoadOptions = useDebouncedCallback((search: string) => {
     void loadOptions(search);
   }, 300);
 
-  React.useEffect(() => {
-    if (selectedDiscountCode) {
-      setQuery(formatLabel(selectedDiscountCode));
-      setOptions((prev) => {
-        if (prev.find((code) => code.id === selectedDiscountCode.id)) return prev;
-        return [selectedDiscountCode, ...prev];
-      });
-    } else if (!defaultOfferCodeId) {
-      setQuery("");
-    }
-  }, [defaultOfferCodeId, selectedDiscountCode]);
-  const filteredCodes = query
-    ? options.filter((code) => formatLabel(code).toLowerCase().includes(query.toLowerCase()))
-    : options;
-
   const handleToggleChange = (enabled: boolean) => {
     if (enabled) {
       const firstDiscountCode = availableDiscountCodes?.[0];
       if (!defaultOfferCodeId && firstDiscountCode) {
         updateProduct({ default_offer_code_id: firstDiscountCode.id });
+        setQuery(formatLabel(firstDiscountCode));
       }
     } else {
       updateProduct({ default_offer_code_id: null });
@@ -91,6 +69,8 @@ export const DefaultDiscountCodeSelector = () => {
             <label htmlFor="default-discount-code">Discount code</label>
             <ComboBox<AvailableDiscountCode>
               editable
+              open={isOpen ? options.length > 0 : false}
+              onToggle={setIsOpen}
               className="w-full"
               input={(props) => (
                 <div className="input">
@@ -104,19 +84,27 @@ export const DefaultDiscountCodeSelector = () => {
                       const value = event.target.value;
                       setQuery(value);
                       debouncedLoadOptions(value);
+                      setIsOpen(true);
                     }}
                     aria-autocomplete="list"
                   />
                 </div>
               )}
-              options={filteredCodes}
+              options={options}
               option={(code, props) => (
                 <div
                   {...props}
-                  onClick={(event) => {
-                    props.onClick?.(event);
+                  onClick={(event: React.MouseEvent<HTMLDivElement>) => {
+                    if (props.onClick) {
+                      props.onClick(event);
+                    }
                     updateProduct({ default_offer_code_id: code.id });
                     setQuery(formatLabel(code));
+                    setAvailableDiscountCodes((current) => {
+                      if (!current) return [code];
+                      if (current.find((c) => c.id === code.id)) return current;
+                      return [code, ...current];
+                    });
                   }}
                   aria-selected={code.id === defaultOfferCodeId}
                 >

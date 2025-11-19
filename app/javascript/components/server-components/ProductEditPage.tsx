@@ -115,6 +115,7 @@ const createContextValue = (props: Props) => ({
   availableDiscountCodes: props.available_discount_codes,
   contentUpdates: null,
   setContentUpdates: () => {},
+  setAvailableDiscountCodes: () => {},
 });
 
 const pagesHaveSameContent = (pages1: Page[], pages2: Page[]): boolean => isEqual(pages1, pages2);
@@ -139,6 +140,9 @@ const ProductEditPage = (props: Props) => {
   const [product, setProduct] = React.useState(props.product);
   const [contentUpdates, setContentUpdates] = React.useState<ContentUpdates>(null);
   const [currencyType, setCurrencyType] = React.useState<CurrencyCode>(props.currency_type);
+  const [availableDiscountCodes, setAvailableDiscountCodes] = React.useState<AvailableDiscountCode[] | null>(
+    props.available_discount_codes,
+  );
   const lastSavedProductRef = React.useRef<Product>(structuredClone(props.product));
 
   const updateProduct = (update: Partial<Product> | ((product: Product) => void)) =>
@@ -198,8 +202,10 @@ const ProductEditPage = (props: Props) => {
       saving,
       contentUpdates,
       setContentUpdates,
+      availableDiscountCodes,
+      setAvailableDiscountCodes,
     }),
-    [product, updateProduct, existingFiles, setExistingFiles],
+    [product, updateProduct, existingFiles, setExistingFiles, availableDiscountCodes],
   );
 
   const imageSettings = React.useMemo(
@@ -253,6 +259,7 @@ const ProductEditRouter = async (global: GlobalProps) => {
       value={{
         ...createContextValue(props),
         setCurrencyType: (_currency) => {}, // no-op
+        setAvailableDiscountCodes: () => {}, // no-op in SSR
       }}
     >
       <StaticRouterProvider router={router} context={context} nonce={global.csp_nonce} />
