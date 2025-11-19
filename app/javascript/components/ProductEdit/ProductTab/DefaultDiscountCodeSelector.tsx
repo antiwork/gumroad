@@ -4,18 +4,22 @@ import { searchProductOfferCodes } from "$app/data/offer_code";
 import { assertResponseError } from "$app/utils/request";
 
 import { ComboBox } from "$app/components/ComboBox";
-import { useProductEditContext, AvailableDiscountCode } from "$app/components/ProductEdit/state";
+import { ProductEditContext, AvailableDiscountCode } from "$app/components/ProductEdit/state";
 import { showAlert } from "$app/components/server-components/Alert";
 import { ToggleSettingRow } from "$app/components/SettingRow";
 import { useDebouncedCallback } from "$app/components/useDebouncedCallback";
 
 export const DefaultDiscountCodeSelector = () => {
-  const { uniquePermalink, product, updateProduct, availableDiscountCodes, setAvailableDiscountCodes } =
-    useProductEditContext();
+  const context = React.useContext(ProductEditContext);
+
+  if (!context?.availableDiscountCodes) return null;
+
+  const { uniquePermalink, product, updateProduct, availableDiscountCodes, setAvailableDiscountCodes } = context;
+
   const defaultOfferCodeId = product.default_offer_code_id;
   const isEnabled = !!defaultOfferCodeId;
 
-  const selectedDiscountCode = availableDiscountCodes?.find((code) => code.id === defaultOfferCodeId) ?? null;
+  const selectedDiscountCode = availableDiscountCodes.find((code) => code.id === defaultOfferCodeId) ?? null;
 
   const formatLabel = (code: AvailableDiscountCode) => code.name || code.code;
 
@@ -46,7 +50,7 @@ export const DefaultDiscountCodeSelector = () => {
 
   const handleToggleChange = (enabled: boolean) => {
     if (enabled) {
-      const firstDiscountCode = availableDiscountCodes?.[0];
+      const firstDiscountCode = availableDiscountCodes[0];
       if (!defaultOfferCodeId && firstDiscountCode) {
         updateProduct({ default_offer_code_id: firstDiscountCode.id });
         setQuery(formatLabel(firstDiscountCode));

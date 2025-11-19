@@ -19,7 +19,8 @@ describe("Default discount code usage from product page", type: :system, js: tru
 
     expect(page).to have_content(product.name)
 
-    add_to_cart(product)
+    # We expect the default offer code to be present in the URL/checkout flow
+    add_to_cart(product, offer_code: default_offer_code)
     expect(page).to have_current_path(/^\/checkout/, wait: 10)
     expect(page).to have_selector("[aria-label='Discount code']", text: default_offer_code.code, wait: 5)
   end

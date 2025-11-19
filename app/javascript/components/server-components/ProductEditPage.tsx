@@ -205,7 +205,19 @@ const ProductEditPage = (props: Props) => {
       availableDiscountCodes,
       setAvailableDiscountCodes,
     }),
-    [product, updateProduct, existingFiles, setExistingFiles, availableDiscountCodes],
+    [
+      product,
+      updateProduct,
+      existingFiles,
+      setExistingFiles,
+      availableDiscountCodes,
+      setAvailableDiscountCodes,
+      currencyType,
+      setCurrencyType,
+      saving,
+      contentUpdates,
+      setContentUpdates,
+    ],
   );
 
   const imageSettings = React.useMemo(
@@ -260,6 +272,7 @@ const ProductEditRouter = async (global: GlobalProps) => {
         ...createContextValue(props),
         setCurrencyType: (_currency) => {}, // no-op
         setAvailableDiscountCodes: () => {}, // no-op in SSR
+        setContentUpdates: () => {}, // no-op in SSR
       }}
     >
       <StaticRouterProvider router={router} context={context} nonce={global.csp_nonce} />
