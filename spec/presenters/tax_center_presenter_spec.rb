@@ -61,11 +61,11 @@ describe TaxCenterPresenter do
         expect(document[:type]).to eq("IRS form")
         expect(document[:year]).to eq(2024)
         expect(document[:form_type]).to eq("us_1099_k")
-        expect(document[:gross]).to eq("$30.00")
+        expect(document[:gross]).to eq("$30.55")
         expect(document[:fees]).to eq("$3.00")
         expect(document[:taxes]).to eq("$1.80")
         expect(document[:affiliate_credit]).to eq("$1.50")
-        expect(document[:net]).to eq("$23.70")
+        expect(document[:net]).to eq("$24.25")
       end
 
       it "caches the document data" do

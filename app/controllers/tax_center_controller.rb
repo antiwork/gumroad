@@ -36,8 +36,7 @@ class TaxCenterController < Sellers::BaseController
       return
     end
 
-    api = StripeTaxFormsApi.new(stripe_account_id:, form_type:, year:)
-    pdf_tempfile = api.download_tax_form
+    pdf_tempfile = StripeTaxFormsApi.new(stripe_account_id:, form_type:, year:).download_tax_form
 
     if pdf_tempfile
       filename = "#{form_type.delete_prefix('us_').tr('_', '-').upcase}-#{year}.pdf"

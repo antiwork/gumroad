@@ -6,9 +6,9 @@ import { getTaxDocuments, TaxDocument } from "$app/data/tax_center";
 import { AbortError, assertResponseError } from "$app/utils/request";
 
 import { Button, NavigationButton } from "$app/components/Button";
-import { useClientAlert } from "$app/components/ClientAlertProvider";
 import { Icon } from "$app/components/Icons";
 import { useLoggedInUser } from "$app/components/LoggedInUser";
+import { showAlert } from "$app/components/server-components/Alert";
 import { PageHeader } from "$app/components/ui/PageHeader";
 import Placeholder from "$app/components/ui/Placeholder";
 import { Tab, Tabs } from "$app/components/ui/Tabs";
@@ -101,7 +101,6 @@ const TaxCenterPage = ({
   selected_year: initialSelectedYear,
 }: TaxCenterPageProps) => {
   const loggedInUser = useLoggedInUser();
-  const { showAlert } = useClientAlert();
   const [isLoading, setIsLoading] = React.useState(false);
   const [documents, setDocuments] = React.useState<TaxDocument[]>(initialDocuments);
   const [availableYears, setAvailableYears] = React.useState<number[]>(initialAvailableYears);
@@ -291,7 +290,7 @@ const TaxCenterPage = ({
             </details>
           ))}
         </div>
-        <p className="text-muted mt-4 text-sm">
+        <p className="mt-4 text-sm text-muted">
           Need more help? Search our <a href="/help">Help Center</a>.
         </p>
       </section>

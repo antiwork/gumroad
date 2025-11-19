@@ -11,7 +11,7 @@ RSpec.describe UserTaxForm do
 
   describe "validations" do
     it { is_expected.to validate_presence_of(:tax_year) }
-    it { is_expected.to validate_numericality_of(:tax_year).only_integer.is_greater_than(1900) }
+    it { is_expected.to validate_numericality_of(:tax_year).only_integer.is_greater_than_or_equal_to(UserTaxForm::MIN_TAX_YEAR) }
     it { is_expected.to validate_presence_of(:tax_form_type) }
     it { is_expected.to validate_inclusion_of(:tax_form_type).in_array(UserTaxForm::TAX_FORM_TYPES) }
 

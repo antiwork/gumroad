@@ -24,8 +24,8 @@ class Onetime::BackfillUserTaxForms
         raise ArgumentError, "Invalid tax_form_type: #{tax_form_type}. Must be one of: #{UserTaxForm::TAX_FORM_TYPES.join(', ')}"
       end
 
-      unless tax_year.is_a?(Integer) && tax_year > 2000 && tax_year <= Time.current.year
-        raise ArgumentError, "Invalid year: #{tax_year}. Must be between 2001 and #{Time.current.year}"
+      unless tax_year.is_a?(Integer) && tax_year >= UserTaxForm::MIN_TAX_YEAR && tax_year <= Time.current.year
+        raise ArgumentError, "Invalid year: #{tax_year}. Must be between #{MIN_TAX_YEAR} and #{Time.current.year}"
       end
 
       unless stripe_account_ids.is_a?(Array) && stripe_account_ids.all? { |id| id.is_a?(String) }

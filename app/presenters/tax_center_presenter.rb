@@ -43,7 +43,7 @@ class TaxCenterPresenter
     end
 
     def calculate_gross
-      @_gross ||= sales_scope.sum(:price_cents)
+      @_gross ||= sales_scope.sum(:total_transaction_cents)
     end
 
     def calculate_fees
