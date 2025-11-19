@@ -305,6 +305,23 @@ describe ProductPresenter::ProductProps do
             expect(discount_code_props[:code]).to eq("DEFAULT10")
             expect(discount_code_props[:is_default]).to be(true)
           end
+
+          it "uses default discount code when URL discount code is valid but provides less discount" do
+            worse_offer_code = create(
+              :offer_code,
+              products: [product],
+              code: "WORSE5",
+              amount_percentage: 5,
+              valid_at: 1.day.ago,
+              expires_at: 1.day.from_now
+            )
+
+            discount_code_props = presenter.props(seller_custom_domain_url: nil, request:, pundit_user:, discount_code: worse_offer_code.code)[:discount_code]
+
+            expect(discount_code_props[:valid]).to be(true)
+            expect(discount_code_props[:code]).to eq("DEFAULT10")
+            expect(discount_code_props[:is_default]).to be(true)
+          end
         end
       end
     end
