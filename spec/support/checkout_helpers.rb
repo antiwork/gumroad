@@ -30,7 +30,7 @@ module CheckoutHelpers
       query = Rack::Utils.parse_query(uri.query)
       expect(query["product"]).to eq(product.unique_permalink)
       expect(query["quantity"]).to eq(quantity.to_s)
-      expect(query["code"]).to eq(offer_code.code) if offer_code.present?
+      expect(query["code"]).to eq(offer_code&.code)
       expect(query["rent"]).to eq(rent ? "true" : nil)
       expect(query["option"]).to eq(option.present? ? (product.is_physical ? product.skus.alive.find_by(name: option)&.external_id : product.variant_categories.alive.first&.variants&.alive&.find_by(name: option)&.external_id) : nil)
       if pwyw_price.present?
