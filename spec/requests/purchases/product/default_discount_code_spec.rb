@@ -11,6 +11,7 @@ describe("Default discount code usage from product page", type: :system, js: tru
 
   before do
     allow(Braintree::ClientToken).to receive(:generate).and_return("test_client_token_12345")
+    product.update!(default_offer_code: default_offer_code)
   end
 
   it "applies default discount code on checkout when landing on product page" do

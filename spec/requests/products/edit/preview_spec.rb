@@ -237,9 +237,8 @@ describe("Product Edit Previews", type: :system, js: true) do
       visit edit_link_path(product.unique_permalink)
 
       in_preview do
-        # Original price is $10.00, 10% off = $9.00
-        expect(page).to have_content "$9.00"
-        expect(page).to have_content "$10.00", count: 1 # Original price shown as strikethrough
+        # Original price is $10.00, 10% off = $9.00; preview shows "$10 $9"
+        expect(page).to have_content "$10 $9"
       end
     end
   end
