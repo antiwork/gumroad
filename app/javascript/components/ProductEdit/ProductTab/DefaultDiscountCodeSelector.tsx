@@ -48,12 +48,29 @@ export const DefaultDiscountCodeSelector = () => {
     void loadOptions(search);
   }, 300);
 
-  const handleToggleChange = (enabled: boolean) => {
+  const handleToggleChange = async (enabled: boolean) => {
     if (enabled) {
-      const firstDiscountCode = availableDiscountCodes[0];
-      if (!defaultOfferCodeId && firstDiscountCode) {
+      // If we have loaded codes, use the first one.
+      let firstDiscountCode = availableDiscountCodes[0];
+
+      // If the list is empty try to fetch them dynamically so we can auto-select the most recent one.
+      if (!firstDiscountCode && uniquePermalink) {
+        try {
+          const results = await searchProductOfferCodes(uniquePermalink, "");
+          if (results.length > 0) {
+            setAvailableDiscountCodes(results);
+            firstDiscountCode = results[0];
+          }
+        } catch {
+          showAlert("Sorry, something went wrong while searching discount codes.", "error");
+        }
+      }
+
+      if (firstDiscountCode) {
         updateProduct({ default_offer_code_id: firstDiscountCode.id });
         setQuery(formatLabel(firstDiscountCode));
+      } else {
+        showAlert("You don't have any discount codes yet.", "warning");
       }
     } else {
       updateProduct({ default_offer_code_id: null });
