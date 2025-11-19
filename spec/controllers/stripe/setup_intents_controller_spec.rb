@@ -28,7 +28,7 @@ describe Stripe::SetupIntentsController, :vcr do
       let(:card_with_sca) { StripePaymentMethodHelper.success_indian_card_mandate }
 
       it "creates a Stripe customer and sets up future usage" do
-        expect(Stripe::Customer).to receive(:create).with(hash_including(payment_method: card_with_sca.to_stripejs_payment_method.id)).and_call_original
+        expect(Stripe::Customer).to receive(:create).with(hash_including(payment_method: card_with_sca.to_stripejs_payment_method_id)).and_call_original
         expect(ChargeProcessor).to receive(:setup_future_charges!).with(anything, anything, mandate_options: {
                                                                           payment_method_options: {
                                                                             card: {

@@ -26,12 +26,12 @@ export type UserMembership = {
   id: number;
   seller: Seller;
   role: string;
-  last_accessed_at: string;
+  last_accessed_at: string | null;
   created_at: string;
 };
 
 type BlockedObject = {
-  blocked_at: string;
+  blocked_at: string | null;
   created_at: string;
 };
 

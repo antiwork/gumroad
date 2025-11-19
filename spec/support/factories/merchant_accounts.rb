@@ -70,7 +70,7 @@ FactoryBot.define do
   factory :merchant_account_stripe_connect, class: MerchantAccount do
     user
     charge_processor_id { StripeChargeProcessor.charge_processor_id }
-    charge_processor_merchant_id { "acct_1MFA1rCOxuflorGu" }
+    charge_processor_merchant_id { "acct_1SOb0DEwFhlcVS6d" }
     charge_processor_alive_at { Time.current }
     json_data { { "meta" => { "stripe_connect" => "true" } } }
   end

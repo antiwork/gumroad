@@ -1,0 +1,71 @@
+---
+http_interactions:
+- request:
+    method: delete
+    uri: https://discord.com/api/v9/users/@me/guilds/0
+    body:
+      encoding: US-ASCII
+      string: ''
+    headers:
+      Accept:
+      - "*/*"
+      User-Agent:
+      - DiscordBot (https://github.com/shardlab/discordrb, v3.5.0) rest-client/2.1.0
+        ruby/3.4.3p32 discordrb/3.5.0
+      Authorization:
+      - Bot
+      Accept-Encoding:
+      - gzip;q=1.0,deflate;q=0.6,identity;q=0.3
+      Host:
+      - discord.com
+  response:
+    status:
+      code: 401
+      message: Unauthorized
+    headers:
+      Date:
+      - Tue, 04 Nov 2025 19:47:21 GMT
+      Content-Type:
+      - application/json
+      Content-Length:
+      - '43'
+      Connection:
+      - keep-alive
+      Cf-Ray:
+      - 99969f68acdb4234-EWR
+      Set-Cookie:
+      - __dcfduid=13dccc1cb9b711f0bc93c33987fb2dd4; Expires=Sun, 03-Nov-2030 19:47:21
+        GMT; Max-Age=157680000; Secure; HttpOnly; Path=/; SameSite=Lax
+      - __sdcfduid=13dccc1cb9b711f0bc93c33987fb2dd49e88f729d8c2673198181ab97b4754de3c39384dca26c6919a33d2b936186a40;
+        Expires=Sun, 03-Nov-2030 19:47:21 GMT; Max-Age=157680000; Secure; HttpOnly;
+        Path=/; SameSite=Lax
+      - _cfuvid=9Pc4k82bQww1Z5lqa5IxK6_0RhYbe4nsDD8cjAtQrx4-1762285641273-0.0.1.1-604800000;
+        path=/; domain=.discord.com; HttpOnly; Secure; SameSite=None
+      Strict-Transport-Security:
+      - max-age=31536000; includeSubDomains; preload
+      X-Discord-Features:
+      - guilds
+      Via:
+      - 1.1 google
+      Alt-Svc:
+      - h3=":443"; ma=86400
+      Cf-Cache-Status:
+      - DYNAMIC
+      Report-To:
+      - '{"endpoints":[{"url":"https:\/\/a.nel.cloudflare.com\/report\/v4?s=p3mjaGBr%2FInz9gSdQF5v7f%2FFDBjuBlJ4DxQ%2Bfs9oil9hOrFt3WzddH81C8ueYTCiMvqqKqyxPJNemCk7jjgrh1%2BAY0sshbtjFf4M%2BVMk%2BoigmS1xr%2FNPRDZma%2F7o"}],"group":"cf-nel","max_age":604800}'
+      Nel:
+      - '{"success_fraction":0,"report_to":"cf-nel","max_age":604800}'
+      X-Content-Type-Options:
+      - nosniff
+      Reporting-Endpoints:
+      - csp-sentry="https://o64374.ingest.sentry.io/api/5441894/security/?sentry_key=8fbbce30bf5244ec9429546beef21870&sentry_environment=stable"
+      Content-Security-Policy:
+      - frame-ancestors 'none'; default-src https://o64374.ingest.sentry.io; report-to
+        csp-sentry; report-uri https://o64374.ingest.sentry.io/api/5441894/security/?sentry_key=8fbbce30bf5244ec9429546beef21870&sentry_environment=stable
+      Server:
+      - cloudflare
+    body:
+      encoding: UTF-8
+      string: '{"message": "401: Unauthorized", "code": 0}'
+  recorded_at: Tue, 04 Nov 2025 19:47:21 GMT
+recorded_with: VCR 6.2.0

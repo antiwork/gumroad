@@ -19,17 +19,10 @@ namespace :admin do
       concerns :commentable
 
       resource :impersonator, only: [:create, :destroy]
-      resources :payouts, only: [:index, :show], shallow: true do
+      resources :payouts, only: [:index] do
         collection do
           post :pause
           post :resume
-          post :sync_all
-        end
-        member do
-          post :retry
-          post :cancel
-          post :fail
-          post :sync
         end
       end
       resources :email_changes, only: :index
@@ -37,7 +30,7 @@ namespace :admin do
       resource :payout_info, only: :show
       resources :latest_posts, only: :index
       resources :stats, only: :index
-      resources :products, only: [] do
+      resources :products, only: :index do
         scope module: :products do
           resources :tos_violation_flags, only: [:index, :create]
           resources :purchases, only: :index
@@ -73,7 +66,7 @@ namespace :admin do
   end
 
   resources :affiliates, only: [] do
-    resources :products, only: [], module: :affiliates do
+    resources :products, only: [:index], module: :affiliates do
       resources :purchases, only: :index, module: :products
     end
   end
@@ -116,10 +109,12 @@ namespace :admin do
     end
   end
 
-  resources :payouts, only: [:index]
   resources :comments, only: :create
 
   resources :purchases, only: [:show] do
+    scope module: :purchases do
+      concerns :commentable
+    end
     member do
       post :refund
       post :refund_for_fraud
@@ -144,20 +139,27 @@ namespace :admin do
   end
 
   # Payouts
-  resources :payments, controller: "users/payouts", only: [:show]
-
   post "/paydays/pay_user/:id", to: "paydays#pay_user", as: :pay_user
+  resources :payouts, only: [:show] do
+    member do
+      post :retry
+      post :cancel
+      post :fail
+      post :sync
+    end
+  end
 
   # Search
   namespace :search do
     resources :users, only: :index
+    resources :purchases, only: :index
   end
-  get "/search_purchases", to: "search#purchases", as: :search_purchases
+  get "/search_purchases", to: "search#purchases"
 
   # Compliance
   resources :guids, only: [:show]
   scope module: "compliance" do
-    resources :cards, only: [:index] do
+    resources :cards, only: [] do
       collection do
         post :refund
       end

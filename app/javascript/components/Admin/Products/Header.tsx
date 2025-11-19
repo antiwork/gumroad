@@ -4,19 +4,17 @@ import React from "react";
 import DateTimeWithRelativeTooltip from "$app/components/Admin/DateTimeWithRelativeTooltip";
 import { type Product } from "$app/components/Admin/Products/Product";
 import AdminProductStats from "$app/components/Admin/Products/Stats";
-import { type User } from "$app/components/Admin/Users/User";
 import { Icon } from "$app/components/Icons";
 
 import coverPlaceholder from "$assets/images/cover_placeholder.png";
 
 type Props = {
-  user: User;
   product: Product;
   isCurrentUrl: boolean;
 };
 
-const AdminUsersProductsHeader = ({ product, user, isCurrentUrl }: Props) => (
-  <div className="paragraphs">
+const AdminUsersProductsHeader = ({ product, isCurrentUrl }: Props) => (
+  <div className="flex flex-col gap-4">
     <div className="flex items-center gap-4">
       {product.preview_url ? (
         <a href={product.preview_url} target="_blank" rel="noreferrer noopener">
@@ -42,7 +40,7 @@ const AdminUsersProductsHeader = ({ product, user, isCurrentUrl }: Props) => (
               <DateTimeWithRelativeTooltip date={product.created_at} utc />
             </li>
             <li>
-              <Link href={Routes.admin_user_path(user.id)}>{user.name}</Link>
+              <Link href={Routes.admin_user_path(product.user.id)}>{product.user.name}</Link>
             </li>
             <AdminProductStats product_id={product.id} />
           </ul>
@@ -50,7 +48,7 @@ const AdminUsersProductsHeader = ({ product, user, isCurrentUrl }: Props) => (
       </div>
     </div>
 
-    <div className="button-group">
+    <div className="flex flex-wrap gap-2">
       <a
         href={Routes.edit_link_path(product.unique_permalink)}
         className="button small"
@@ -72,12 +70,12 @@ const AdminUsersProductsHeader = ({ product, user, isCurrentUrl }: Props) => (
       {product.alive_product_files.map((file) => (
         <a
           key={file.external_id}
-          href={Routes.admin_access_product_file_admin_product_path(product.id, file.external_id)}
+          href={Routes.admin_access_product_file_admin_product_path(product.unique_permalink, file.external_id)}
           className="button small"
           target="_blank"
           rel="noreferrer noopener"
         >
-          {file.s3_filename}
+          {file.s3_filename || file.external_id}
         </a>
       ))}
     </div>

@@ -13,8 +13,8 @@ const AdminProductsShow = () => {
   const { user, product } = usePage<AdminProductProps>().props;
 
   return (
-    <div className="paragraphs">
-      <Product key={product.id} product={product} is_affiliate_user={false} />
+    <div className="flex flex-col gap-4">
+      <Product key={product.id} product={product} />
       <User user={user} />
     </div>
   );

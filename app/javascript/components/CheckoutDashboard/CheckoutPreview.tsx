@@ -6,17 +6,16 @@ import { Checkout } from "$app/components/Checkout";
 import { CartItem } from "$app/components/Checkout/cartState";
 import { StateContext as PaymentStateContext, createReducer } from "$app/components/Checkout/payment";
 import { Preview } from "$app/components/Preview";
+import { PreviewSidebar } from "$app/components/PreviewSidebar";
 
 export const CheckoutPreview = ({
   children,
   cartItem,
   recommendedProduct,
-  className,
 }: {
   children?: React.ReactNode;
   cartItem: CartItem;
   recommendedProduct?: CardProduct | undefined;
-  className?: string;
 }) => {
   const paymentState = React.useMemo<ReturnType<typeof createReducer>>(
     () => [
@@ -76,10 +75,7 @@ export const CheckoutPreview = ({
   );
 
   return (
-    <aside aria-label="Preview" className={className}>
-      <header>
-        <h2>Preview</h2>
-      </header>
+    <PreviewSidebar>
       <Preview scaleFactor={0.4} style={{ border: "var(--border)" }}>
         <PaymentStateContext.Provider value={paymentState}>
           <Checkout
@@ -93,6 +89,6 @@ export const CheckoutPreview = ({
           {children}
         </PaymentStateContext.Provider>
       </Preview>
-    </aside>
+    </PreviewSidebar>
   );
 };

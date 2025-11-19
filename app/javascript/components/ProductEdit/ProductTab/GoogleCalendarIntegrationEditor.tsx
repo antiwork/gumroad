@@ -111,7 +111,7 @@ export const GoogleCalendarIntegrationEditor = ({
       }}
       label="Connect with Google Calendar to sync your calls"
       dropdown={
-        <div className="paragraphs">
+        <div className="flex flex-col gap-4">
           {isLoading ? (
             <LoadingSpinner />
           ) : integration ? (

@@ -6,13 +6,13 @@ import { asyncVoid } from "$app/utils/promise";
 import { AbortError, assertResponseError } from "$app/utils/request";
 
 import { Button } from "$app/components/Button";
-import { useClientAlert } from "$app/components/ClientAlertProvider";
 import { CopyToClipboard } from "$app/components/CopyToClipboard";
 import { GlobalAffiliates } from "$app/components/GlobalAffiliates";
 import { Icon } from "$app/components/Icons";
 import { Pagination, PaginationProps } from "$app/components/Pagination";
 import { Popover } from "$app/components/Popover";
 import { ProductsLayout } from "$app/components/ProductsLayout";
+import { showAlert } from "$app/components/server-components/Alert";
 import { Stats as StatsComponent } from "$app/components/Stats";
 import Placeholder from "$app/components/ui/Placeholder";
 import { useDebouncedCallback } from "$app/components/useDebouncedCallback";
@@ -59,7 +59,7 @@ const StatsSection = (stats: Stats) => {
   const { locale } = useUserAgentInfo();
 
   return (
-    <div className="stats-grid" aria-label="Stats">
+    <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4" aria-label="Stats">
       <StatsComponent
         title="Revenue"
         description="Your gross sales from all affiliated products."
@@ -108,7 +108,7 @@ const AffiliatedProductsTable = ({
   }, [sort]);
 
   return (
-    <section className="paragraphs">
+    <section className="flex flex-col gap-4">
       <table aria-live="polite" aria-busy={isLoading}>
         <thead>
           <tr>
@@ -234,7 +234,6 @@ const AffiliatedPage = ({
   const [isShowingGlobalAffiliates, setIsShowingGlobalAffiliates] = React.useState(
     url.searchParams.get("affiliates") === "true",
   );
-  const { showAlert } = useClientAlert();
 
   useGlobalEventListener("popstate", () => {
     setIsShowingGlobalAffiliates(new URL(location.href).searchParams.get("affiliates") === "true");

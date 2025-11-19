@@ -14,7 +14,7 @@ export const AudienceQuickStats = ({
   const userAgentInfo = useUserAgentInfo();
 
   return (
-    <div className="stats-grid">
+    <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
       <Stats
         className="total-followers"
         title={
@@ -30,7 +30,7 @@ export const AudienceQuickStats = ({
         className="new-followers"
         title={
           <>
-            <Icon name="circle-fill" className="text-muted-foreground" />
+            <Icon name="circle-fill" className="text-active-bg" />
             New followers
             <div className="legend" />
           </>

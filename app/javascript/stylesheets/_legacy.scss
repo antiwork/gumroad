@@ -133,19 +133,6 @@ form > main section {
   }
 }
 
-// Adds fallback styles to the .product-content class when @container
-// queries are not supported, ensuring consistent scrollbar behavior
-// across all browsers.
-.product-content {
-  .has-sidebar {
-    @include breakpoint-up(lg) {
-      & > :first-child {
-        max-height: min(100%, 100vh);
-      }
-    }
-  }
-}
-
 // Firefox-specific fix to avoid showing node content as selected text
 .rich-text .selected *::selection {
   background: none;
@@ -182,6 +169,20 @@ article.product-card {
       section {
         flex: 2;
       }
+    }
+  }
+}
+
+// There is erb files yet to be migrated that use this.
+[role="navigation"] {
+  menu {
+    display: grid;
+    gap: spacer(3);
+
+    menu {
+      @include font-size(1);
+      padding-left: spacer(4);
+      margin-top: spacer(3);
     }
   }
 }

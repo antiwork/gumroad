@@ -560,9 +560,9 @@ describe Subscription, :vcr do
         let(:card) { StripePaymentMethodHelper.success_indian_card_mandate }
         let(:card_params) do
           {
-            json_data: { stripe_payment_intent_id: "pi_2ORMJC9e1RjUNIyY1XR51HRc" },
-            processor_payment_method_id: "pm_0ORMJA9e1RjUNIyYs4aGjcbm",
-            stripe_customer_id: "cus_PFs3vfBTEQUdma",
+            json_data: { stripe_payment_intent_id: "pi_3SOdR0IBOqvOFDrf1MBxDys4" },
+            processor_payment_method_id: "pm_1SOdQxIBOqvOFDrfANv6cZO4",
+            stripe_customer_id: "cus_TLK5KncEpdGdIH",
           }
         end
 
@@ -582,9 +582,9 @@ describe Subscription, :vcr do
         let(:card) { StripePaymentMethodHelper.cancelled_indian_card_mandate }
         let(:card_params) do
           {
-            json_data: { stripe_payment_intent_id: "pi_2OToWV9e1RjUNIyY0BJU6iP9" },
-            processor_payment_method_id: "pm_0OToWS9e1RjUNIyYX1ywIsIy",
-            stripe_customer_id: "cus_PIPLGhezunZeyY",
+            json_data: { stripe_payment_intent_id: "pi_3SOdsrIBOqvOFDrf1VLLMqSi" },
+            processor_payment_method_id: "pm_1SOdsoIBOqvOFDrfq67sVBc6",
+            stripe_customer_id: "cus_TLKXDRZTbaggkA",
           }
         end
 

@@ -45,6 +45,10 @@ class Admin::PurchasesController < Admin::BaseController
         @purchase.email = params[:resend_receipt][:email_address]
         @purchase.save!
 
+        if @purchase.subscription.present? && !@purchase.is_original_subscription_purchase?
+          @purchase.original_purchase.update!(email: params[:resend_receipt][:email_address])
+        end
+
         user = User.alive.find_by(email: @purchase.email)
         @purchase.attach_to_user_and_card(user, nil, nil) if user
       end
@@ -52,14 +56,25 @@ class Admin::PurchasesController < Admin::BaseController
       @purchase.resend_receipt
       render json: { success: true }
     else
-      render json: { success: false }
+      e404_json
     end
+  rescue ActiveRecord::RecordInvalid => e
+    render json: { message: e.message }, status: :unprocessable_content
   end
 
   def show
     e404 if @purchase.nil?
     @product = @purchase.link
     @title = "Purchase #{@purchase.id}"
+    purchase = Admin::PurchasePresenter.new(@purchase).props
+    render(
+      inertia: "Admin/Purchases/Show",
+      props: {
+        purchase:,
+        product: Admin::ProductPresenter::Card.new(product: @product, pundit_user:).props,
+        user: Admin::UserPresenter::Card.new(user: @product.user, pundit_user:).props
+      },
+    )
   end
 
   def sync_status_with_charge_processor

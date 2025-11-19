@@ -23,15 +23,8 @@ class Admin::LinksController < Admin::BaseController
     @title = @product.name
     render inertia: "Admin/Products/Show", legacy_template: "admin/links/show", props: {
       title: @product.name,
-      product: @product.as_json(
-        admin: true,
-        admins_can_mark_as_staff_picked: ->(product) { policy([:admin, :products, :staff_picked, product]).create? },
-        admins_can_unmark_as_staff_picked: ->(product) { policy([:admin, :products, :staff_picked, product]).destroy? }
-      ),
-      user: Admin::UserPresenter::Card.new(
-        user: @product.user,
-        impersonatable: policy([:admin, :impersonators, @product.user]).create?
-      ).props
+      product: Admin::ProductPresenter::Card.new(product: @product, pundit_user:).props,
+      user: Admin::UserPresenter::Card.new(user: @product.user, pundit_user:).props
     }
   end
 
@@ -187,7 +180,9 @@ class Admin::LinksController < Admin::BaseController
 
       if @product_matches.size > 1
         @title = "Multiple products matched"
-        render "multiple_matches"
+        render inertia: "Admin/Products/MultipleMatches", legacy_template: "admin/links/multiple_matches", props: {
+          product_matches: @product_matches.map { |product| Admin::ProductPresenter::MultipleMatches.new(product:).props }
+        }
         return
       else
         @product = @product_matches.first || e404

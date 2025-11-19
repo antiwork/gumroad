@@ -45,7 +45,7 @@ describe "Installment Plans", type: :system, js: true do
 
       click_on "Use a different card?"
 
-      fill_in_credit_card(number: StripePaymentMethodHelper.success[:cc_number])
+      fill_in_credit_card(number: CardParamsSpecHelper.card_number(:success))
       expect(page).to have_text "You'll be charged US$10 today."
 
       expect do
@@ -72,7 +72,7 @@ describe "Installment Plans", type: :system, js: true do
 
       click_on "Use a different card?"
 
-      fill_in_credit_card(number: StripePaymentMethodHelper.success[:cc_number])
+      fill_in_credit_card(number: CardParamsSpecHelper.card_number(:success))
 
       expect do
         click_on "Update installment plan"
@@ -101,7 +101,7 @@ describe "Installment Plans", type: :system, js: true do
 
       click_on "Use a different card?"
 
-      fill_in_credit_card(number: StripePaymentMethodHelper.success[:cc_number])
+      fill_in_credit_card(number: CardParamsSpecHelper.card_number(:success))
       expect(page).to have_text "You'll be charged US$10 today."
 
       expect do
