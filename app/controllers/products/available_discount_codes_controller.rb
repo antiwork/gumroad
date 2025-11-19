@@ -31,5 +31,3 @@ class Products::AvailableDiscountCodesController < Sellers::BaseController
       }
     end
 end
-
-
