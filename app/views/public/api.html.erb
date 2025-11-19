@@ -12,7 +12,7 @@
             </p>
           </div>
           <div>
-            <div class="paragraphs">
+            <div class="flex flex-col gap-4">
               <p>
                 To start using the API, you'll need to
                 <%= link_to("register your OAuth application", settings_advanced_path(anchor: "application-form")) %>.
@@ -43,7 +43,7 @@
             <h2>Scopes</h2>
           </div>
           <div>
-            <div class="paragraphs">
+            <div class="flex flex-col gap-4">
               <p>We've provided six scopes that you may request when the user authorizes your application.</p>
               <div class="api-list">
                 <strong>view_profile:</strong>
@@ -73,7 +73,7 @@
             <h2>Resources</h2>
           </div>
           <div>
-            <div class="paragraphs">
+            <div class="flex flex-col gap-4">
               <p>
                 <%= link_to("Create an OAuth application", "#", data: { helper_prompt: "How do I create an OAuth application?" }) %>
                 - A getting started guide for creating an application with our API.
@@ -91,7 +91,7 @@
             <h2>More reading</h2>
           </div>
           <div>
-            <div class="paragraphs">
+            <div class="flex flex-col gap-4">
               <p>If you're interested in learning more about OAuth, here are some links that might be useful:</p>
               <ul>
                 <li><%= link_to("OAuth 2 spec", "http://tools.ietf.org/html/draft-ietf-oauth-v2-07", target: :blank) %></li>

@@ -82,6 +82,37 @@ describe AttributeBlockable do
           expect(user_with_blocked_email.blocked_by_form_email?).to be true
           expect(user_with_unblocked_email.blocked_by_form_email?).to be false
         end
+
+        it "does not consider unblocked records" do
+          user = create(:user, email: "test_unblocked_#{SecureRandom.hex(4)}@example.com")
+          blocked_object = BlockedObject.block!(BLOCKED_OBJECT_TYPES[:email], user.email, 1)
+
+          expect(user.reload.blocked_by_form_email?).to be true
+          expect(user.blocked_by_form_email_object).not_to be_nil
+
+          blocked_object.unblock!
+
+          expect(user.reload.blocked_by_form_email?).to be false
+          expect(user.blocked_by_form_email_object).to be_nil
+        end
+
+        it "finds active block after unblocking and reblocking" do
+          user = create(:user, email: "test_reblock_#{SecureRandom.hex(4)}@example.com")
+
+          first_block = BlockedObject.block!(BLOCKED_OBJECT_TYPES[:email], user.email, 1)
+          expect(user.reload.blocked_by_form_email?).to be true
+
+          first_block.unblock!
+          expect(user.reload.blocked_by_form_email?).to be false
+          expect(user.blocked_by_form_email_object).to be_nil
+
+          second_block = BlockedObject.block!(BLOCKED_OBJECT_TYPES[:email], user.email, 1)
+
+          expect(first_block.id).to eq(second_block.id)
+          expect(user.reload.blocked_by_form_email?).to be true
+          expect(user.blocked_by_form_email_object.id).to eq(first_block.id)
+          expect(user.blocked_by_form_email_object.blocked_at).not_to be_nil
+        end
       end
 
       describe "#block_by_email!" do
@@ -570,12 +601,12 @@ describe AttributeBlockable do
         BlockedObject.block!(BLOCKED_OBJECT_TYPES[:email], custom_blocked_email_2, 1)
         BlockedObject.block!(BLOCKED_OBJECT_TYPES[:email_domain], custom_blocked_email_domain, 1)
 
-        allow(BlockedObject).to receive(:find_objects).and_call_original
+        allow(BlockedObject).to receive(:find_active_objects).and_call_original
 
         User.where(id: test_users.map(&:id)).with_blocked_attributes_for(:form_email, :email_domain).to_a
 
-        expect(BlockedObject).to have_received(:find_objects).with([custom_blocked_email_1, custom_blocked_email_2]).once
-        expect(BlockedObject).to have_received(:find_objects).with([custom_blocked_email_domain]).once
+        expect(BlockedObject).to have_received(:find_active_objects).with([custom_blocked_email_1, custom_blocked_email_2]).once
+        expect(BlockedObject).to have_received(:find_active_objects).with([custom_blocked_email_domain]).once
       end
     end
 
@@ -588,7 +619,7 @@ describe AttributeBlockable do
           BlockedObject.block!(BLOCKED_OBJECT_TYPES[:email], email, 1)
         end
 
-        allow(BlockedObject).to receive(:find_objects).and_call_original
+        allow(BlockedObject).to receive(:find_active_objects).and_call_original
 
         result = User.where(id: perf_users.map(&:id)).with_blocked_attributes_for(:email)
 
@@ -598,7 +629,7 @@ describe AttributeBlockable do
           expect(user.blocked_by_email?).to be true
         end
 
-        expect(BlockedObject).to have_received(:find_objects).once
+        expect(BlockedObject).to have_received(:find_active_objects).once
       end
 
       it "handles empty result sets gracefully" do
@@ -613,6 +644,50 @@ describe AttributeBlockable do
 
         expect(result.blocked_by_email?).to be false
         expect(result.blocked_by_email_object).to be_nil
+      end
+
+      it "only preloads active blocks, ignoring unblocked records" do
+        # Create users with active and unblocked records
+        active_email = "preload_active_#{SecureRandom.hex(4)}@example.com"
+        unblocked_email = "preload_unblocked_#{SecureRandom.hex(4)}@example.com"
+        reblocked_email = "preload_reblocked_#{SecureRandom.hex(4)}@example.com"
+
+        user_active = create(:user, email: active_email)
+        user_unblocked = create(:user, email: unblocked_email)
+        user_reblocked = create(:user, email: reblocked_email)
+
+        # Create active block
+        active_record = BlockedObject.block!(BLOCKED_OBJECT_TYPES[:email], active_email, 1)
+
+        # Create unblocked record (blocked_at is nil)
+        unblocked_record = BlockedObject.block!(BLOCKED_OBJECT_TYPES[:email], unblocked_email, 1)
+        unblocked_record.unblock!
+
+        # Create unblocked record, then block the same email again
+        # find_or_initialize_by ensures it's the same record, just re-blocked
+        BlockedObject.block!(BLOCKED_OBJECT_TYPES[:email], reblocked_email, 1)
+        BlockedObject.send(:email).find_by(object_value: reblocked_email).unblock!
+        reblocked_record = BlockedObject.block!(BLOCKED_OBJECT_TYPES[:email], reblocked_email, 1)
+
+        # Preload blocked attributes
+        users = User.where(id: [user_active.id, user_unblocked.id, user_reblocked.id])
+                    .with_blocked_attributes_for(:email)
+                    .to_a
+
+        # Verify results
+        active_user = users.find { |u| u.id == user_active.id }
+        unblocked_user = users.find { |u| u.id == user_unblocked.id }
+        reblocked_user = users.find { |u| u.id == user_reblocked.id }
+
+        expect(active_user.blocked_by_email?).to be true
+        expect(active_user.blocked_by_email_object.id).to eq(active_record.id)
+
+        expect(unblocked_user.blocked_by_email?).to be false
+        expect(unblocked_user.blocked_by_email_object).to be_nil
+
+        expect(reblocked_user.blocked_by_email?).to be true
+        expect(reblocked_user.blocked_by_email_object.id).to eq(reblocked_record.id)
+        expect(reblocked_user.blocked_by_email_object.blocked_at).not_to be_nil
       end
     end
   end
@@ -669,9 +744,9 @@ describe AttributeBlockable do
 
       user = create(:user, email: expired_email)
 
+      # Expired blocks are treated the same as unblocked - no object returned
       expect(user.blocked_by_email?).to be false
-      expect(user.blocked_by_email_object&.expires_at).to be_present
-      expect(user.blocked_by_email_object&.created_at).to be_present
+      expect(user.blocked_by_email_object).to be_nil
     end
 
     it "handles blocked objects without expires_at" do

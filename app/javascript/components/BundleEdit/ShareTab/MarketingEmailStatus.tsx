@@ -29,7 +29,7 @@ export const MarketingEmailStatus = () => {
 
   return (
     <div role="status" className="info">
-      <div className="paragraphs">
+      <div className="flex flex-col gap-4">
         <strong>
           Your product bundle is ready. Would you like to send an email about this offer to existing customers?
         </strong>

@@ -1,5 +1,4 @@
 import * as React from "react";
-import ReactDOM from "react-dom";
 import { Link, useLoaderData, useNavigate, useNavigation, useRevalidator, useSearchParams } from "react-router-dom";
 import { cast } from "ts-safe-cast";
 
@@ -25,6 +24,7 @@ import { Popover } from "$app/components/Popover";
 import { showAlert } from "$app/components/server-components/Alert";
 import { extractSortParam } from "$app/components/server-components/UtmLinksPage";
 import Placeholder from "$app/components/ui/Placeholder";
+import { Sheet, SheetHeader } from "$app/components/ui/Sheet";
 import { useDebouncedCallback } from "$app/components/useDebouncedCallback";
 import { useUserAgentInfo } from "$app/components/UserAgent";
 import { Sort, useSortingTableDriver } from "$app/components/useSortingTableDriver";
@@ -413,12 +413,9 @@ const UtmLinkDetails = ({
 }) => {
   const userAgentInfo = useUserAgentInfo();
 
-  return ReactDOM.createPortal(
-    <aside>
-      <header>
-        <h2>{utmLink.title}</h2>
-        <button className="close" aria-label="Close details" onClick={onClose} />
-      </header>
+  return (
+    <Sheet open onOpenChange={onClose}>
+      <SheetHeader>{utmLink.title}</SheetHeader>
       <section className="stack">
         <div>
           <h3>Details</h3>
@@ -533,9 +530,7 @@ const UtmLinkDetails = ({
           Delete
         </Button>
       </div>
-    </aside>,
-    document.body,
+    </Sheet>
   );
 };
-
 export default UtmLinkList;

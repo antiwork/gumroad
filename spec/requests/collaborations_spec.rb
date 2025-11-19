@@ -165,7 +165,7 @@ describe "Collaborations", type: :system, js: true do
         )
 
         find(:table_row, { "Name" => collaborator_1.seller.username }).click
-        within_section collaborator_1.seller.username, section_element: :aside do
+        within_modal collaborator_1.seller.username do
           click_on "Remove"
         end
 
