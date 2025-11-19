@@ -933,7 +933,7 @@ const Payouts = ({
         ) : null}
         {processing_payout_periods_data.length > 0 ? (
           <section>
-            <section className="paragraphs">
+            <section className="flex flex-col gap-4">
               {processing_payout_periods_data.map((processingPayoutPeriodData, idx) => (
                 <Period key={idx} payoutPeriodData={processingPayoutPeriodData} />
               ))}
@@ -945,7 +945,7 @@ const Payouts = ({
           <>
             <section>
               <h2>Past payouts</h2>
-              <section className="paragraphs">
+              <section className="flex flex-col gap-4">
                 {pastPayoutPeriodData.map((payoutPeriodData, idx) => (
                   <Period key={idx} payoutPeriodData={payoutPeriodData} />
                 ))}

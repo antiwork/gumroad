@@ -77,7 +77,7 @@ const NodeView = ({ editor, node }: NodeViewProps) => {
           <AudioPlayer src={file.url} />
         ) : null}
         {expanded ? (
-          <div className="drawer paragraphs">
+          <div className="drawer flex flex-col gap-4">
             <fieldset>
               <legend>
                 <label htmlFor={`${uid}-name`}>Name</label>

@@ -108,7 +108,7 @@ const AffiliatedProductsTable = ({
   }, [sort]);
 
   return (
-    <section className="paragraphs">
+    <section className="flex flex-col gap-4">
       <table aria-live="polite" aria-busy={isLoading}>
         <thead>
           <tr>
