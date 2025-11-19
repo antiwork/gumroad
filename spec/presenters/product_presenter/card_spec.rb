@@ -71,6 +71,26 @@ describe ProductPresenter::Card do
       end
     end
 
+    context "membership product" do
+      let(:product) do
+        recurrence_price_values = [
+          {
+            "monthly" => { enabled: true, price: 10 },
+            "yearly" => { enabled: true, price: 100 }
+          },
+          {
+            "monthly" => { enabled: true, price: 2.99 },
+            "yearly" => { enabled: true, price: 19.99 }
+          }
+        ]
+        create(:membership_product_with_preset_tiered_pricing, user: creator, recurrence_price_values:, subscription_duration: "yearly")
+      end
+
+      it "includes the lowest tier price for the default subscription duration" do
+        data = described_class.new(product:).for_web
+        expect(data[:price_cents]).to eq 19_99
+      end
+    end
   end
 
   describe "#for_email" do

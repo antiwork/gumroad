@@ -242,7 +242,5 @@ describe("Product Edit Previews", type: :system, js: true) do
         expect(page).to have_content "$10.00", count: 1 # Original price shown as strikethrough
       end
     end
-
-    # We rely on backend offer code specs for other edge cases (fixed amount, expiry, etc.).
   end
 end
