@@ -3644,11 +3644,23 @@ describe LinksController, :vcr, inertia: true do
       end
 
       describe "canonical urls" do
-        it "renders the canonical meta tag" do
+        it "renders the canonical meta tag on gumroad host" do
           product = create(:product, user: @user)
 
           get :show, params: { id: product.unique_permalink }
-          expect(response.body).to have_selector("link[rel='canonical'][href='#{product.long_url}']", visible: false)
+          expected_url = controller.view_context.url_for_product_page(product, request: @request)
+          expect(response.body).to have_selector("link[rel='canonical'][href='#{expected_url}']", visible: false)
+        end
+
+        it "renders the canonical meta tag on a custom domain host" do
+          custom_domain = create(:custom_domain, user: @user, domain: "shop.example.com")
+          product = create(:product, user: @user)
+          @request.host = custom_domain.domain
+
+          get :show, params: { id: product.unique_permalink }
+          expected_url = controller.view_context.url_for_product_page(product, request: @request)
+
+          expect(response.body).to have_selector("link[rel='canonical'][href='#{expected_url}']", visible: false)
         end
       end
 
