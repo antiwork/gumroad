@@ -374,8 +374,8 @@ const Info = ({ purchase }: { purchase: Purchase }) => (
         </>
       ) : null}
 
-      {purchase.custom_fields.map((field) => (
-        <React.Fragment key={field.name}>
+      {purchase.custom_fields.map((field, index) => (
+        <React.Fragment key={index}>
           <dt>{field.name}</dt>
           <dd>{field.value.toString()} (custom field)</dd>
         </React.Fragment>
