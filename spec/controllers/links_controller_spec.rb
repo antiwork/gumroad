@@ -1200,7 +1200,7 @@ describe LinksController, :vcr, inertia: true do
             @params[:default_offer_code_id] = ""
             post :update, params: @params, format: :json
 
-            expect(@product.reload.default_discount_code).to be_nil
+            expect(@product.reload.default_offer_code).to be_nil
           end
         end
 

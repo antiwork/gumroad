@@ -2597,19 +2597,6 @@ describe Purchase::CreateService, :vcr do
         expect(purchase.offer_code).to be_nil
         expect(purchase.default_offer_code_id).to be_nil
       end
-
-      it "does not track default_offer_code_id when no discount code is used" do
-        params[:purchase].merge!(
-          discount_code: nil,
-          perceived_price_cents: price,
-        )
-
-        purchase, _ = Purchase::CreateService.new(product:, params:).perform
-
-        expect(purchase).to be_successful
-        expect(purchase.offer_code).to be_nil
-        expect(purchase.default_offer_code_id).to be_nil
-      end
     end
 
     it "updates the used_count value for the offer code" do
