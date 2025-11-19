@@ -53,7 +53,12 @@ module ProductsHelper
   end
 
   def url_for_product_page(product, request:, recommended_by: nil, recommender_model_name: nil, layout: nil, affiliate_id: nil, query: nil)
-    if request.present? && user_by_domain(request.host) == product.user
+    custom_domain = request.present? ? CustomDomain.find_by_host(request.host) : nil
+    is_custom_domain_request =
+      custom_domain.present? &&
+      (custom_domain.user == product.user || custom_domain.product == product)
+
+    if request.present? && is_custom_domain_request
       options = { host: request.host_with_port, protocol: request.protocol }
       options[:recommended_by] = recommended_by if recommended_by.present?
       options[:recommender_model_name] = recommender_model_name if recommender_model_name.present?
