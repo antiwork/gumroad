@@ -43,11 +43,7 @@ export const Card = ({
         url={product.url}
         currencyCode={product.currency_code}
         price={product.price_cents}
-        oldPrice={
-          product.original_price_cents && product.original_price_cents > product.price_cents
-            ? product.original_price_cents
-            : undefined
-        }
+        oldPrice={product.original_price_cents ?? undefined}
         isPayWhatYouWant={product.is_pay_what_you_want}
         isSalesLimited={product.is_sales_limited}
         recurrence={
@@ -86,11 +82,7 @@ export const HorizontalCard = ({ product, big, eager }: { product: CardProduct; 
           url={product.url}
           currencyCode={product.currency_code}
           price={product.price_cents}
-          oldPrice={
-            product.original_price_cents && product.original_price_cents > product.price_cents
-              ? product.original_price_cents
-              : undefined
-          }
+          oldPrice={product.original_price_cents ?? undefined}
           isPayWhatYouWant={product.is_pay_what_you_want}
           isSalesLimited={product.is_sales_limited}
           recurrence={

@@ -47,7 +47,7 @@ class ProductPresenter::Card
 
     # Include base_price_cents when there's a discount to show original price with strikethrough
     if price_cents < base_price_cents
-      props[:base_price_cents] = base_price_cents
+      props[:original_price_cents] = base_price_cents
     end
 
     if compute_description
