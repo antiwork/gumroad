@@ -2,8 +2,9 @@
 
 require "spec_helper"
 require "shared_examples/authorize_called"
+require "inertia_rails/rspec"
 
-describe Oauth::ApplicationsController do
+describe Oauth::ApplicationsController, inertia: true do
   shared_examples_for "redirects to page with OAuth apps" do
     it "redirects to settings_advanced_path" do
       raise "no @action in before block of test" unless @action
@@ -110,12 +111,12 @@ describe Oauth::ApplicationsController do
       expect(response).to be_successful
       expect(assigns(:application)).to eq(app)
       pundit_user = SellerContext.new(user: user_with_role_for_seller, seller:)
-      expect(assigns(:react_component_props)).to eq(SettingsPresenter.new(pundit_user:).application_props(app))
+      expect(inertia.props).to include(SettingsPresenter.new(pundit_user:).application_props(app))
     end
 
-    it "renders the right template" do
+    it "renders the right component" do
       get(:edit, params:)
-      expect(response).to render_template(:edit)
+      expect(inertia.component).to eq("Settings/Advanced/Edit/Index")
     end
 
     context "when application has been deleted" do
