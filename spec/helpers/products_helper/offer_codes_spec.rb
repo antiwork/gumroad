@@ -8,6 +8,14 @@ describe ProductsHelper, "url_for_product_page with offer codes" do
   let(:creator) { create(:user, name: "Testy", username: "testy") }
   let(:product) { create(:product, unique_permalink: "test", name: "hello", user: creator) }
 
+  before do
+    Feature.activate(:offer_codes_search)
+  end
+
+  after do
+    Feature.deactivate(:offer_codes_search)
+  end
+
   describe "when offer_code is BLACKFRIDAY2025" do
     context "when on user's domain" do
       let(:request) { instance_double(ActionDispatch::Request, host: "testy.test.gumroad.com", host_with_port: "testy.test.gumroad.com:1234", protocol: "http") }

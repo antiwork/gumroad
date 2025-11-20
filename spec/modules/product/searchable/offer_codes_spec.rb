@@ -7,6 +7,8 @@ describe "Product::Searchable - Offer codes filtering" do
     before do
       Link.__elasticsearch__.create_index!(force: true)
 
+      Feature.activate(:offer_codes_search)
+
       @creator = create(:recommendable_user)
       @offer_code = create(:offer_code, user: @creator, code: "BLACKFRIDAY2025")
 
@@ -20,6 +22,10 @@ describe "Product::Searchable - Offer codes filtering" do
       @product_with_other_offer.offer_codes << @other_offer_code
 
       index_model_records(Link)
+    end
+
+    after do
+      Feature.deactivate(:offer_codes_search)
     end
 
     it "returns only products with BLACKFRIDAY2025 offer code" do

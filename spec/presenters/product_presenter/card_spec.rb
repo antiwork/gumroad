@@ -42,8 +42,11 @@ describe ProductPresenter::Card do
       end
 
       it "returns the URL with the offer code when an allowed offer_code is provided" do
+        Feature.activate(:offer_codes_search)
         data = described_class.new(product:).for_web(request:, recommended_by: "discover", offer_code: "BLACKFRIDAY2025")
         expect(data[:url]).to include("code=BLACKFRIDAY2025")
+      ensure
+        Feature.deactivate(:offer_codes_search)
       end
 
       it "does not return the URL with the offer code when an disallowed offer_code is provided" do
