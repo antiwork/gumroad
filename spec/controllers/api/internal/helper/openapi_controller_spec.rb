@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require "spec_helper"
+require "shared_examples/authorized_helper_api_method"
 
 describe Api::Internal::Helper::OpenapiController do
   it "inherits from Api::Internal::Helper::BaseController" do
@@ -8,6 +9,8 @@ describe Api::Internal::Helper::OpenapiController do
   end
 
   describe "GET index" do
+    include_examples "helper api authorization required", :get, :index
+
     it "returns openapi schema" do
       request.headers["Authorization"] = "Bearer #{GlobalConfig.get("HELPER_TOOLS_TOKEN")}"
       get :index

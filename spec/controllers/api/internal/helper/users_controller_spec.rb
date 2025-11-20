@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require "spec_helper"
+require "shared_examples/authorized_helper_api_method"
 
 describe Api::Internal::Helper::UsersController do
   include HelperAISpecHelper
@@ -17,6 +18,14 @@ describe Api::Internal::Helper::UsersController do
   end
 
   describe "GET user_info" do
+    context "when authorization is invalid" do
+      it "returns unauthorized error" do
+        request.headers["Authorization"] = "Bearer invalid_token"
+        get :user_info, params: @params
+        expect(response).to have_http_status(:unauthorized)
+      end
+    end
+
     context "when email parameter is missing" do
       it "returns unauthorized error" do
         get :user_info, params: { timestamp: Time.current.to_i }
@@ -65,6 +74,8 @@ describe Api::Internal::Helper::UsersController do
   end
 
   describe "GET user_suspension_info" do
+    include_examples "helper api authorization required", :get, :user_suspension_info
+
     let(:auth_headers) { { "Authorization" => "Bearer #{GlobalConfig.get("HELPER_TOOLS_TOKEN")}" } }
 
     before do
@@ -197,6 +208,8 @@ describe Api::Internal::Helper::UsersController do
   end
 
   describe "POST create_appeal" do
+    include_examples "helper api authorization required", :post, :create_appeal
+
     let(:auth_headers) { { "Authorization" => "Bearer #{GlobalConfig.get("HELPER_TOOLS_TOKEN")}" } }
 
     before do
@@ -380,6 +393,8 @@ describe Api::Internal::Helper::UsersController do
   end
 
   describe "POST send_reset_password_instructions" do
+    include_examples "helper api authorization required", :post, :send_reset_password_instructions
+
     let(:auth_headers) { { "Authorization" => "Bearer #{GlobalConfig.get("HELPER_TOOLS_TOKEN")}" } }
 
     context "when email is valid and user exists" do
@@ -431,6 +446,8 @@ describe Api::Internal::Helper::UsersController do
   end
 
   describe "POST update_email" do
+    include_examples "helper api authorization required", :post, :update_email
+
     let(:auth_headers) { { "Authorization" => "Bearer #{GlobalConfig.get("HELPER_TOOLS_TOKEN")}" } }
     let(:new_email) { "new_email@example.com" }
 
@@ -494,6 +511,8 @@ describe Api::Internal::Helper::UsersController do
   end
 
   describe "POST update_two_factor_authentication_enabled" do
+    include_examples "helper api authorization required", :post, :update_two_factor_authentication_enabled
+
     let(:auth_headers) { { "Authorization" => "Bearer #{GlobalConfig.get("HELPER_TOOLS_TOKEN")}" } }
 
     context "when email is valid and user exists" do

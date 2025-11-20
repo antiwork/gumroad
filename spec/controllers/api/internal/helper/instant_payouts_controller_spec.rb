@@ -1,20 +1,18 @@
 # frozen_string_literal: true
 
 require "spec_helper"
+require "shared_examples/authorized_helper_api_method"
 
 describe Api::Internal::Helper::InstantPayoutsController do
   let(:seller) { create(:user) }
-  let(:helper_token) { GlobalConfig.get("HELPER_TOOLS_TOKEN") }
-
-  before do
-    request.headers["Authorization"] = "Bearer #{helper_token}"
-  end
 
   it "inherits from Api::Internal::Helper::BaseController" do
     expect(described_class.superclass).to eq(Api::Internal::Helper::BaseController)
   end
 
   describe "GET index" do
+    include_examples "helper api authorization required", :get, :index
+
     context "when user is not found" do
       it "returns 404" do
         get :index, params: { email: "nonexistent@example.com" }
@@ -46,6 +44,8 @@ describe Api::Internal::Helper::InstantPayoutsController do
   end
 
   describe "POST create" do
+    include_examples "helper api authorization required", :post, :create
+
     let(:params) { { email: seller.email } }
     let(:instant_payouts_service) { instance_double(InstantPayoutsService) }
 

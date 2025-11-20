@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require "spec_helper"
+require "shared_examples/authorized_helper_api_method"
 
 describe Api::Internal::Helper::PayoutsController do
   let(:user) { create(:compliant_user) }
@@ -16,6 +17,8 @@ describe Api::Internal::Helper::PayoutsController do
   end
 
   describe "GET index" do
+    include_examples "helper api authorization required", :get, :index
+
     context "when user is not found" do
       it "returns 404" do
         get :index, params: { email: "nonexistent@example.com" }
@@ -102,6 +105,8 @@ describe Api::Internal::Helper::PayoutsController do
 
   describe "POST create" do
     let(:params) { { email: user.email } }
+
+    include_examples "helper api authorization required", :post, :create
 
     context "when user is not found" do
       it "returns 404" do
