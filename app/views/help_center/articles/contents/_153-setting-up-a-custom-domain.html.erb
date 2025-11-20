@@ -1,5 +1,5 @@
 <% @description = "In this article: DNS configuration Subdomains Update your Gumroad settings Custom domains for profiles Custom domains for products IP address issues Cloudflare " %>
-<div class="scoped-tailwind-preflight prose dark:prose-invert">
+<div class="<%= article_content_classes %>">
   <div>
     <p><strong>In this article:</strong></p>
     <ul>
@@ -61,7 +61,7 @@
     <p>Note: For the CNAME record, you need to put "domains.gumroad.com," not {username}.gumroad.com. We also provide support for custom domains through CNAME records, so you don't have to re-configure nameservers for it.</p>
     <h3 id="subdomains">Subdomains</h3>
     <p>If you wish to use a subdomain, like store.example.com, your DNS records should be as follows:</p>
-    <table>
+    <table class="custom-table">
       <tbody>
         <tr>
           <td><strong>Host name </strong></td>
