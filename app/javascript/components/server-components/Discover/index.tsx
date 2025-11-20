@@ -98,7 +98,6 @@ const Discover = (props: Props) => {
   const defaultSortOrder = props.curated_product_ids.length > 0 ? "curated" : undefined;
   const parseUrlParams = (href: string) => {
     const url = new URL(href);
-    console.log("url", url)
     const parsedParams: SearchRequest = {
       taxonomy: url.pathname === Routes.discover_path() ? undefined : url.pathname.replace("/", ""),
       curated_product_ids: props.curated_product_ids.slice(
