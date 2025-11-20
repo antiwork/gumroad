@@ -83,8 +83,8 @@ const LicenseKeyNodeView = ({ editor, selected }: NodeViewProps) => {
                 <legend>
                   <label htmlFor={`product_id-${uid}`}>Use your product ID to verify licenses through the API.</label>
                 </legend>
-                <div className="input-with-button">
-                  <input id={`product_id-${uid}`} type="text" value={productId} readOnly />
+                <div className="flex gap-2">
+                  <input id={`product_id-${uid}`} type="text" value={productId} className="flex-1" readOnly />
                   <CopyToClipboard text={productId} tooltipPosition="bottom">
                     <a className="button">Copy</a>
                   </CopyToClipboard>

@@ -81,7 +81,7 @@ describe "Collaborators", type: :system, js: true do
           visit collaborators_path
 
           find(:table_row, { "Name" => collaborator_one.affiliate_user.username, "Products" => "2 products", "Cut" => "35% - 50%" }).click
-          within_section collaborator_one.affiliate_user.name, section_element: :aside do
+          within_modal collaborator_one.affiliate_user.name do
             expect(page).to have_text(collaborator_one.affiliate_user.email)
             expect(page).to have_text(product_one.name)
             expect(page).to have_text(product_two.name)
@@ -93,7 +93,7 @@ describe "Collaborators", type: :system, js: true do
           end
 
           find(:table_row, { "Name" => collaborator_two.affiliate_user.username, "Products" => "None", "Cut" => "30%" }).click
-          within_section collaborator_two.affiliate_user.name, section_element: :aside do
+          within_modal collaborator_two.affiliate_user.name do
             expect(page).to have_text(collaborator_two.affiliate_user.email)
             expect(page).to have_link("Edit")
             expect(page).to have_button("Remove")
@@ -417,7 +417,7 @@ describe "Collaborators", type: :system, js: true do
       expect(page).to_not have_table_row({ "Name" => collaborators.first.affiliate_user.username })
 
       find(:table_row, { "Name" => collaborators.second.affiliate_user.username }).click
-      within_section collaborators.second.affiliate_user.username, section_element: :aside do
+      within_modal collaborators.second.affiliate_user.username do
         click_on "Remove"
       end
       wait_for_ajax

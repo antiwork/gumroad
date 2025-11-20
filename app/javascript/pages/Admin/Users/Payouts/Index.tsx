@@ -23,7 +23,7 @@ const Index = () => {
   }
 
   return (
-    <div className="paragraphs">
+    <div className="flex flex-col gap-4">
       <AdminPayouts payouts={payouts} />
       {pagination.pages > 1 && <Pagination pagination={pagination} onChangePage={onChangePage} />}
     </div>

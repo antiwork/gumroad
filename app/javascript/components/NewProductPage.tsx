@@ -16,10 +16,10 @@ import {
 } from "$app/utils/recurringPricing";
 import { assertResponseError, request } from "$app/utils/request";
 
-import { Button, NavigationButton } from "$app/components/Button";
-import { useClientAlert } from "$app/components/ClientAlertProvider";
+import { Button } from "$app/components/Button";
 import { Icon } from "$app/components/Icons";
 import { Popover } from "$app/components/Popover";
+import { showAlert } from "$app/components/server-components/Alert";
 import { TypeSafeOptionSelect } from "$app/components/TypeSafeOptionSelect";
 import { PageHeader } from "$app/components/ui/PageHeader";
 import { WithTooltip } from "$app/components/WithTooltip";
@@ -52,7 +52,6 @@ const NewProductPage = ({
   ai_promo_dismissed,
 }: NewProductPageProps) => {
   const formUID = React.useId();
-  const { showAlert } = useClientAlert();
   const nameInputRef = React.useRef<HTMLInputElement>(null);
   const priceInputRef = React.useRef<HTMLInputElement>(null);
 
@@ -223,11 +222,9 @@ const NewProductPage = ({
         title={show_orientation_text ? "Publish your first product" : "What are you creating?"}
         actions={
           <>
-            <Link href={Routes.products_path()} className="no-underline">
-              <NavigationButton>
-                <Icon name="x-square" />
-                <span>Cancel</span>
-              </NavigationButton>
+            <Link href={Routes.products_path()} className="button">
+              <Icon name="x-square" />
+              <span>Cancel</span>
             </Link>
             {ai_generation_enabled ? (
               <Popover

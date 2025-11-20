@@ -12,6 +12,7 @@ import { showAlert } from "$app/components/server-components/Alert";
 import { useOriginalLocation } from "$app/components/useOriginalLocation";
 
 type NavContextValue = {
+  open: boolean;
   close: () => void;
 };
 
@@ -51,8 +52,17 @@ const BaseNavLink = ({
   const Component = component === "a" ? "a" : component;
 
   return (
-    <Component aria-current={ariaCurrent} href={href} title={text} className="flex items-center" {...props}>
-      {icon ? <Icon name={icon} /> : null}
+    <Component
+      aria-current={ariaCurrent}
+      href={href}
+      title={text}
+      className={classNames(
+        "flex items-center truncate border-y border-white/50 border-b-transparent px-6 py-4 no-underline last:border-b-white/50 hover:text-accent dark:border-foreground/50 dark:border-b-transparent dark:last:border-b-foreground/50",
+        { "text-accent": !!ariaCurrent },
+      )}
+      {...props}
+    >
+      {icon ? <Icon name={icon} className="mr-4" /> : null}
       {text}
       {badge ? (
         <>
@@ -91,8 +101,8 @@ export const NavLinkDropdownItem = ({
   href: string;
   onClick?: (ev: React.MouseEvent<HTMLAnchorElement>) => void;
 }) => (
-  <a role="menuitem" href={href} onClick={onClick}>
-    <Icon name={icon} />
+  <a role="menuitem" href={href} onClick={onClick} className="block truncate border-0 px-4 py-2 no-underline">
+    <Icon name={icon} className="mr-3 ml-1" />
     {text}
   </a>
 );
@@ -101,35 +111,49 @@ type Props = {
   children: React.ReactNode;
   title: string;
   footer: React.ReactNode;
-  compact?: boolean;
 };
 
-export const Nav = ({ title, children, footer, compact }: Props) => {
+export const Nav = ({ title, children, footer }: Props) => {
   const [open, setOpen] = React.useState(false);
   const close = React.useCallback((): void => setOpen(false), []);
   const toggle = React.useCallback((): void => setOpen((prev) => !prev), []);
-  const contextValue = React.useMemo<NavContextValue>(() => ({ close }), [close]);
+  const contextValue = React.useMemo<NavContextValue>(() => ({ open, close }), [open, close]);
 
   return (
     <NavContext.Provider value={contextValue}>
-      <nav aria-label="Main" className={classNames("main-nav", { compact, open })}>
-        <div className="navbar">
-          <a href={Routes.root_url()}>
-            <span className="logo-g">&nbsp;</span>
+      <nav
+        aria-label="Main"
+        className={classNames(
+          "flex flex-col overflow-x-hidden overflow-y-auto bg-black text-white lg:static lg:w-52 dark:text-foreground",
+          { "fixed z-10 size-full": open },
+        )}
+      >
+        <div className="override grid grid-cols-[auto_1fr_auto] items-center gap-3 p-4 text-lg leading-6 lg:hidden">
+          <a href={Routes.root_url()} className="no-underline">
+            <span className="logo-g" />
           </a>
-          <h1>{title}</h1>
-          <button className="toggle" aria-label="Toggle navigation" onClick={toggle} />
+          <h1 className="w-full truncate text-center text-base">{title}</h1>
+          <button aria-label="Toggle navigation" onClick={toggle}>
+            <Icon name={open ? "x" : "outline-menu"} />
+          </button>
         </div>
-        <header>
-          <a href={Routes.root_url()} aria-label="Dashboard">
-            <span className="logo-full">&nbsp;</span>
+        <header className="hidden p-6 lg:grid">
+          <a href={Routes.root_url()} aria-label="Dashboard" className="no-underline">
+            {/* This custom text and line height size is required so the header's bottom border aligns with the main page header’s bottom border */}
+            <span className="logo-full w-full text-[2.5rem] leading-[1.2]" />
           </a>
         </header>
         {children}
-        <footer>{footer}</footer>
+        <footer className={classNames("mt-auto hidden lg:grid", { grid: open })}>{footer}</footer>
       </nav>
     </NavContext.Provider>
   );
+};
+
+export const NavSection = ({ children }: { children: React.ReactNode }) => {
+  const nav = useNav();
+  const isOpen = !!nav?.open;
+  return <section className={classNames("mb-12 hidden lg:grid", { grid: isOpen })}>{children}</section>;
 };
 
 export const UnbecomeDropdownItem = () => {
@@ -181,9 +205,13 @@ export const NavLinkDropdownMembershipItem = ({ teamMembership }: { teamMembersh
       href={Routes.sellers_switch_path()}
       onClick={onClick}
       aria-checked={teamMembership.is_selected}
+      className="flex items-center gap-2"
     >
       <img className="user-avatar" src={teamMembership.seller_avatar_url} alt={teamMembership.seller_name} />
       <span title={teamMembership.seller_name}>{teamMembership.seller_name}</span>
+      {teamMembership.is_selected ? (
+        <Icon name="solid-check-circle" className="float-right mr-3 ml-auto h-5 text-accent" />
+      ) : null}
     </a>
   );
 };

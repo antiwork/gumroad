@@ -747,7 +747,7 @@ export const UpsellModal = ({
   const { discount } = getDiscountedPrice(cart, { ...item, option_id: offeredOption.id });
   return (
     <>
-      <div className="paragraphs">
+      <div className="flex flex-col gap-4">
         <h4 dangerouslySetInnerHTML={{ __html: upsell.description }} />
         <div className="radio-buttons" role="radiogroup">
           <OptionRadioButton

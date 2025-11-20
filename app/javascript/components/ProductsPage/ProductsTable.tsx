@@ -1,3 +1,4 @@
+import { router } from "@inertiajs/react";
 import * as React from "react";
 
 import { getPagedProducts, Product, SortKey } from "$app/data/products";
@@ -81,7 +82,7 @@ export const ProductsPageProductsTable = (props: {
   if (!products.length) return null;
 
   return (
-    <div className="paragraphs">
+    <div className="flex flex-col gap-4">
       <table aria-live="polite" aria-busy={isLoading} ref={tableRef}>
         <caption>Products</caption>
         <thead>
@@ -172,7 +173,7 @@ export const ProductsPageProductsTable = (props: {
                     }}
                     onUnarchive={(hasRemainingArchivedProducts) => {
                       props.setEnableArchiveTab?.(hasRemainingArchivedProducts);
-                      if (!hasRemainingArchivedProducts) window.location.href = Routes.products_path();
+                      if (!hasRemainingArchivedProducts) router.get(Routes.products_path());
                       else void reloadProducts();
                     }}
                   />

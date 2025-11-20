@@ -398,7 +398,7 @@ const WithContent = ({
       ) : null}
 
       {content.rich_content_pages === null && content.posts.length > 0 ? (
-        <div className="paragraphs">
+        <div className="flex flex-col gap-4">
           <DownloadPagePostList posts={content.posts} />
         </div>
       ) : null}

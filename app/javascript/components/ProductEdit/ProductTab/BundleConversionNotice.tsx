@@ -18,7 +18,7 @@ export const BundleConversionNotice = () => {
   return (
     <>
       <div role="status" className="info">
-        <div className="paragraphs">
+        <div className="flex flex-col gap-4">
           <p>
             <strong>Looks like this product could be a great bundle!</strong> With bundles, your customers can get
             access to multiple products at once at a discounted price, without the need to duplicate content or
@@ -44,7 +44,7 @@ export const BundleConversionNotice = () => {
           </>
         }
       >
-        <div className="paragraphs">
+        <div className="flex flex-col gap-4">
           <div>
             <strong>
               A bundle is a special type of product that allows you to offer multiple products together at a discounted
