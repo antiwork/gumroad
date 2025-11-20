@@ -4,10 +4,11 @@ import * as React from "react";
 import { asyncVoid } from "$app/utils/promise";
 import { assertResponseError, request, ResponseError } from "$app/utils/request";
 
-import { Button, NavigationButton } from "$app/components/Button";
+import { Button } from "$app/components/Button";
 import { showAlert } from "$app/components/server-components/Alert";
 import { Application } from "$app/components/server-components/Settings/AdvancedPage";
 import ApplicationForm from "$app/components/Settings/AdvancedPage/ApplicationForm";
+import { NavigationButtonInertia } from "$app/components/NavigationButton";
 
 const CreateApplication = () => (
   <>
@@ -68,7 +69,7 @@ const ApplicationRow = ({ application, onRemove }: { application: Application; o
         <h4>{application.name}</h4>
       </div>
       <div className="actions">
-        <NavigationButton href={Routes.oauth_application_path(application.id)}>Edit</NavigationButton>
+        <NavigationButtonInertia href={Routes.oauth_application_path(application.id)}>Edit</NavigationButtonInertia>
         <Button color="danger" onClick={deleteApp}>
           Delete
         </Button>
