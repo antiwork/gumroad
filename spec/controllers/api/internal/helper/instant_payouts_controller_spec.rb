@@ -33,14 +33,6 @@ describe Api::Internal::Helper::InstantPayoutsController do
         expect(response.parsed_body).to eq("success" => true, "balance" => "$50")
       end
     end
-
-    context "when authorization header is invalid" do
-      it "returns unauthorized" do
-        request.headers["Authorization"] = "Bearer invalid_token"
-        get :index, params: { email: seller.email }
-        expect(response).to have_http_status(:unauthorized)
-      end
-    end
   end
 
   describe "POST create" do
@@ -85,14 +77,6 @@ describe Api::Internal::Helper::InstantPayoutsController do
         post :create, params: params
         expect(response).to have_http_status(:unprocessable_entity)
         expect(response.parsed_body).to eq("success" => false, "message" => "Error message")
-      end
-    end
-
-    context "when authorization header is invalid" do
-      it "returns unauthorized" do
-        request.headers["Authorization"] = "Bearer invalid_token"
-        post :create, params: params
-        expect(response).to have_http_status(:unauthorized)
       end
     end
   end

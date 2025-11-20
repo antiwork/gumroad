@@ -9,10 +9,6 @@ describe Api::Internal::Helper::PurchasesController, :vcr do
   let(:buyer) { create(:user) }
   let(:admin_user) { create(:admin_user) }
 
-  before do
-    request.headers["Authorization"] = "Bearer #{GlobalConfig.get("HELPER_TOOLS_TOKEN")}"
-  end
-
   it "inherits from Api::Internal::Helper::BaseController" do
     expect(described_class.superclass).to eq(Api::Internal::Helper::BaseController)
   end

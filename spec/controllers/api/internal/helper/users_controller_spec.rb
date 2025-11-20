@@ -76,12 +76,6 @@ describe Api::Internal::Helper::UsersController do
   describe "GET user_suspension_info" do
     include_examples "helper api authorization required", :get, :user_suspension_info
 
-    let(:auth_headers) { { "Authorization" => "Bearer #{GlobalConfig.get("HELPER_TOOLS_TOKEN")}" } }
-
-    before do
-      request.headers.merge!(auth_headers)
-    end
-
     context "when email parameter is missing" do
       it "returns a bad request error" do
         get :user_suspension_info
@@ -209,12 +203,6 @@ describe Api::Internal::Helper::UsersController do
 
   describe "POST create_appeal" do
     include_examples "helper api authorization required", :post, :create_appeal
-
-    let(:auth_headers) { { "Authorization" => "Bearer #{GlobalConfig.get("HELPER_TOOLS_TOKEN")}" } }
-
-    before do
-      request.headers.merge!(auth_headers)
-    end
 
     context "when email parameter is missing" do
       it "returns a bad request error" do
@@ -395,11 +383,8 @@ describe Api::Internal::Helper::UsersController do
   describe "POST send_reset_password_instructions" do
     include_examples "helper api authorization required", :post, :send_reset_password_instructions
 
-    let(:auth_headers) { { "Authorization" => "Bearer #{GlobalConfig.get("HELPER_TOOLS_TOKEN")}" } }
-
     context "when email is valid and user exists" do
       it "sends reset password instructions and returns success message" do
-        request.headers.merge!(auth_headers)
         expect_any_instance_of(User).to receive(:send_reset_password_instructions)
 
         post :send_reset_password_instructions, params: { email: user.email }
@@ -413,7 +398,6 @@ describe Api::Internal::Helper::UsersController do
 
     context "when email is valid but user does not exist" do
       it "returns an error message" do
-        request.headers.merge!(auth_headers)
         post :send_reset_password_instructions, params: { email: "nonexistent@example.com" }
 
         expect(response).to have_http_status(:unprocessable_entity)
@@ -424,7 +408,6 @@ describe Api::Internal::Helper::UsersController do
 
     context "when email is invalid" do
       it "returns an error message" do
-        request.headers.merge!(auth_headers)
         post :send_reset_password_instructions, params: { email: "invalid_email" }
 
         expect(response).to have_http_status(:unprocessable_entity)
@@ -435,7 +418,6 @@ describe Api::Internal::Helper::UsersController do
 
     context "when email is missing" do
       it "returns an error message" do
-        request.headers.merge!(auth_headers)
         post :send_reset_password_instructions, params: {}
 
         expect(response).to have_http_status(:unprocessable_entity)
@@ -448,13 +430,10 @@ describe Api::Internal::Helper::UsersController do
   describe "POST update_email" do
     include_examples "helper api authorization required", :post, :update_email
 
-    let(:auth_headers) { { "Authorization" => "Bearer #{GlobalConfig.get("HELPER_TOOLS_TOKEN")}" } }
     let(:new_email) { "new_email@example.com" }
 
     context "when email is valid and user exists" do
       it "updates user email and returns success message" do
-        request.headers.merge!(auth_headers)
-
         post :update_email, params: { current_email: user.email, new_email: new_email }
 
         expect(response).to have_http_status(:success)
@@ -465,8 +444,6 @@ describe Api::Internal::Helper::UsersController do
 
     context "when current email is invalid" do
       it "returns an error message" do
-        request.headers.merge!(auth_headers)
-
         post :update_email, params: { current_email: "nonexistent@example.com", new_email: new_email }
 
         expect(response).to have_http_status(:unprocessable_entity)
@@ -476,8 +453,6 @@ describe Api::Internal::Helper::UsersController do
 
     context "when new email is invalid" do
       it "returns an error message" do
-        request.headers.merge!(auth_headers)
-
         post :update_email, params: { current_email: user.email, new_email: "invalid_email" }
 
         expect(response).to have_http_status(:unprocessable_entity)
@@ -489,8 +464,6 @@ describe Api::Internal::Helper::UsersController do
       let(:another_user) { create(:user) }
 
       it "returns an error message" do
-        request.headers.merge!(auth_headers)
-
         post :update_email, params: { current_email: user.email, new_email: another_user.email }
 
         expect(response).to have_http_status(:unprocessable_entity)
@@ -500,8 +473,6 @@ describe Api::Internal::Helper::UsersController do
 
     context "when required parameters are missing" do
       it "returns an error for missing emails" do
-        request.headers.merge!(auth_headers)
-
         post :update_email, params: {}
 
         expect(response).to have_http_status(:unprocessable_entity)
@@ -513,11 +484,8 @@ describe Api::Internal::Helper::UsersController do
   describe "POST update_two_factor_authentication_enabled" do
     include_examples "helper api authorization required", :post, :update_two_factor_authentication_enabled
 
-    let(:auth_headers) { { "Authorization" => "Bearer #{GlobalConfig.get("HELPER_TOOLS_TOKEN")}" } }
-
     context "when email is valid and user exists" do
       it "enables two-factor authentication and returns success message" do
-        request.headers.merge!(auth_headers)
         user.update!(two_factor_authentication_enabled: false)
 
         post :update_two_factor_authentication_enabled, params: { email: user.email, enabled: true }
@@ -529,7 +497,6 @@ describe Api::Internal::Helper::UsersController do
       end
 
       it "disables two-factor authentication and returns success message" do
-        request.headers.merge!(auth_headers)
         user.update!(two_factor_authentication_enabled: true)
 
         post :update_two_factor_authentication_enabled, params: { email: user.email, enabled: false }
@@ -543,8 +510,6 @@ describe Api::Internal::Helper::UsersController do
 
     context "when email is invalid or user does not exist" do
       it "returns an error message" do
-        request.headers.merge!(auth_headers)
-
         post :update_two_factor_authentication_enabled, params: { email: "nonexistent@example.com", enabled: true }
 
         expect(response).to have_http_status(:unprocessable_entity)
@@ -555,8 +520,6 @@ describe Api::Internal::Helper::UsersController do
 
     context "when required parameters are missing" do
       it "returns an error for missing email" do
-        request.headers.merge!(auth_headers)
-
         post :update_two_factor_authentication_enabled, params: { enabled: true }
 
         expect(response).to have_http_status(:unprocessable_entity)
@@ -565,8 +528,6 @@ describe Api::Internal::Helper::UsersController do
       end
 
       it "returns an error for missing enabled status" do
-        request.headers.merge!(auth_headers)
-
         post :update_two_factor_authentication_enabled, params: { email: user.email }
 
         expect(response).to have_http_status(:unprocessable_entity)

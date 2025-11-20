@@ -5,10 +5,8 @@ require "shared_examples/authorized_helper_api_method"
 
 describe Api::Internal::Helper::PayoutsController do
   let(:user) { create(:compliant_user) }
-  let(:helper_token) { GlobalConfig.get("HELPER_TOOLS_TOKEN") }
 
   before do
-    request.headers["Authorization"] = "Bearer #{helper_token}"
     stub_const("GUMROAD_ADMIN_ID", create(:admin_user).id)
   end
 
@@ -83,22 +81,6 @@ describe Api::Internal::Helper::PayoutsController do
 
         parsed_response = JSON.parse(response.body)
         expect(parsed_response["payout_note"]).to be_nil
-      end
-    end
-
-    context "when authorization header is missing" do
-      it "returns unauthorized" do
-        request.headers["Authorization"] = nil
-        get :index, params: { email: user.email }
-        expect(response.status).to eq(401)
-      end
-    end
-
-    context "when helper token is invalid" do
-      it "returns unauthorized" do
-        request.headers["Authorization"] = "Bearer invalid_token"
-        get :index, params: { email: user.email }
-        expect(response.status).to eq(401)
       end
     end
   end
@@ -249,22 +231,6 @@ describe Api::Internal::Helper::PayoutsController do
             expect(parsed_response["message"]).to eq("Cannot create payout. Payout method not set up.")
           end
         end
-      end
-    end
-
-    context "when authorization header is missing" do
-      it "returns unauthorized" do
-        request.headers["Authorization"] = nil
-        post :create, params: params
-        expect(response.status).to eq(401)
-      end
-    end
-
-    context "when helper token is invalid" do
-      it "returns unauthorized" do
-        request.headers["Authorization"] = "Bearer invalid_token"
-        post :create, params: params
-        expect(response.status).to eq(401)
       end
     end
   end

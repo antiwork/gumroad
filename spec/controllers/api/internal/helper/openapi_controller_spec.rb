@@ -12,7 +12,6 @@ describe Api::Internal::Helper::OpenapiController do
     include_examples "helper api authorization required", :get, :index
 
     it "returns openapi schema" do
-      request.headers["Authorization"] = "Bearer #{GlobalConfig.get("HELPER_TOOLS_TOKEN")}"
       get :index
       expect(response).to have_http_status(:success)
       expect(response.parsed_body).to include(openapi: "3.1.0")
