@@ -4,7 +4,7 @@ import { cast } from "ts-safe-cast";
 
 import ProfileSettingsPage, {
   type ProfileSettingsPagePropsType,
-} from "$app/components/server-components/Profile/SettingsPage";
+} from "$app/components/server-components/Settings/ProfilePage";
 
 const GOOGLE_FONTS = ["Inter", "Domine", "Merriweather", "Roboto Slab", "Roboto Mono"];
 

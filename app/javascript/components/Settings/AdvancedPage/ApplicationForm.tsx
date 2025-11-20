@@ -11,7 +11,7 @@ import { assertResponseError, request, ResponseError } from "$app/utils/request"
 
 import { Button } from "$app/components/Button";
 import { showAlert } from "$app/components/server-components/Alert";
-import { Application } from "$app/components/server-components/Settings/AdvancedPage/EditApplicationPage";
+import { type Application } from "$app/components/server-components/Settings/AdvancedApplicationEditPage";
 import { WithTooltip } from "$app/components/WithTooltip";
 
 const ALLOWED_ICON_EXTENSIONS = ["jpeg", "jpg", "png"];

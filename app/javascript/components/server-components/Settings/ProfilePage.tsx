@@ -13,9 +13,9 @@ import { Icon } from "$app/components/Icons";
 import { useLoggedInUser } from "$app/components/LoggedInUser";
 import { Preview } from "$app/components/Preview";
 import { PreviewSidebar, WithPreviewSidebar } from "$app/components/PreviewSidebar";
-import { LogoInput } from "$app/components/Profile/Settings/LogoInput";
+import { LogoInput } from "$app/components/Settings/ProfilePage/LogoInput";
 import { showAlert } from "$app/components/server-components/Alert";
-import { Profile, Props as ProfileProps } from "$app/components/server-components/Profile/index";
+import { Profile, Props as ProfileProps } from "$app/components/Settings/ProfilePage/ProfileComponent";
 import { Layout as SettingsLayout } from "$app/components/Settings/Layout";
 import { SocialAuthButton } from "$app/components/SocialAuthButton";
 

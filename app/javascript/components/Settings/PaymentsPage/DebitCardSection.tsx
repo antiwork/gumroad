@@ -2,7 +2,7 @@ import * as React from "react";
 
 import { SavedCreditCard } from "$app/parsers/card";
 
-import { PayoutCreditCard } from "$app/components/server-components/PayoutPage/CreditCard";
+import { PayoutCreditCard } from "$app/components/Settings/PaymentsPage/CreditCard";
 import { PayoutDebitCardData } from "$app/components/server-components/Settings/PaymentsPage";
 
 const DebitCardSection = ({

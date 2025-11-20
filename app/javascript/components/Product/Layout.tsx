@@ -31,8 +31,8 @@ import {
   Section as EditableSection,
   ReducerContext as SectionReducerContext,
   useSectionImageUploadSettings,
-} from "$app/components/Profile/EditSections";
-import { Section, SectionLayout, PageProps as SectionsProps } from "$app/components/Profile/Sections";
+} from "$app/components/Settings/ProfilePage/EditSections";
+import { Section, SectionLayout, PageProps as SectionsProps } from "$app/components/Settings/ProfilePage/Sections";
 import { ImageUploadSettingsContext } from "$app/components/RichTextEditor";
 import { showAlert } from "$app/components/server-components/Alert";
 import { useIsAboveBreakpoint } from "$app/components/useIsAboveBreakpoint";

@@ -1,7 +1,4 @@
 import * as React from "react";
-import { createCast } from "ts-safe-cast";
-
-import { register } from "$app/utils/serverComponentUtil";
 
 import { Button } from "$app/components/Button";
 import { Modal } from "$app/components/Modal";
@@ -63,4 +60,4 @@ export const ConfirmBalanceForfeitOnPayoutMethodChangeModal = ({ balance, open, 
   );
 };
 
-export default register({ component: ConfirmBalanceForfeitOnPayoutMethodChangeModal, propParser: createCast() });
+export default ConfirmBalanceForfeitOnPayoutMethodChangeModal;

@@ -30,7 +30,6 @@ import AudiencePage from "$app/components/server-components/AudiencePage";
 import BundleEditPage from "$app/components/server-components/BundleEditPage";
 import CheckoutPage from "$app/components/server-components/CheckoutPage";
 import CommunitiesPage from "$app/components/server-components/CommunitiesPage";
-import CountrySelectionModal from "$app/components/server-components/CountrySelectionModal";
 import CustomersDownloadPopover from "$app/components/server-components/CustomersPage/DownloadPopover";
 import CustomersFilterPopover from "$app/components/server-components/CustomersPage/FilterPopover";
 import DeveloperWidgetsPage from "$app/components/server-components/Developer/WidgetsPage";
@@ -50,12 +49,10 @@ import LibraryPage from "$app/components/server-components/LibraryPage";
 import LoginPage from "$app/components/server-components/LoginPage";
 import Nav from "$app/components/server-components/Nav";
 import PasswordResetPage from "$app/components/server-components/PasswordResetPage";
-import PayoutCreditCard from "$app/components/server-components/PayoutPage/CreditCard";
 import PdfReaderPage from "$app/components/server-components/PdfReaderPage";
 import ProductPage from "$app/components/server-components/Product";
 import ProductIframePage from "$app/components/server-components/Product/IframePage";
 import ProductEditPage from "$app/components/server-components/ProductEditPage";
-import Profile from "$app/components/server-components/Profile";
 import ProfileCoffeePage from "$app/components/server-components/Profile/CoffeePage";
 import ProfilePostPage from "$app/components/server-components/Profile/PostPage";
 import ProfileProductPage from "$app/components/server-components/Profile/ProductPage";
@@ -114,7 +111,6 @@ ReactOnRails.register({
   CheckoutPage,
   CodeSnippet,
   CommunitiesPage,
-  CountrySelectionModal,
   CustomersDownloadPopover,
   CustomersFilterPopover,
   DeveloperWidgetsPage,
@@ -134,13 +130,11 @@ ReactOnRails.register({
   LoginPage,
   Nav,
   PasswordResetPage,
-  PayoutCreditCard,
   PdfReaderPage,
   ProductEditPage,
   ProductIframePage,
   PurchaseProductPage,
   ProductPage,
-  Profile,
   ProfileCoffeePage,
   ProfilePostPage,
   ProfileProductPage,

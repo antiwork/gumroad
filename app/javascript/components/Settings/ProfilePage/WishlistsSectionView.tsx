@@ -6,8 +6,13 @@ import { WishlistsSection } from "$app/data/profile_settings";
 import { fetchWishlists } from "$app/data/wishlists";
 import { assertResponseError } from "$app/utils/request";
 
-import { useReducer, EditorSubmenu, SectionLayout, ProductList } from "$app/components/Profile/EditSections";
-import { WishlistsView } from "$app/components/Profile/Sections";
+import {
+  useReducer,
+  EditorSubmenu,
+  SectionLayout,
+  ProductList,
+} from "$app/components/Settings/ProfilePage/EditSections";
+import { WishlistsView } from "$app/components/Settings/ProfilePage/Sections";
 import { showAlert } from "$app/components/server-components/Alert";
 import { CardWishlist, DummyCardGrid } from "$app/components/Wishlist/Card";
 

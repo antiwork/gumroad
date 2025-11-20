@@ -1,3 +1,4 @@
+import { router } from "@inertiajs/react";
 import { StripeCardElement } from "@stripe/stripe-js";
 import cx from "classnames";
 import parsePhoneNumberFromString, { CountryCode } from "libphonenumber-js";
@@ -15,11 +16,11 @@ import { Button } from "$app/components/Button";
 import { Icon } from "$app/components/Icons";
 import { PriceInput } from "$app/components/PriceInput";
 import { showAlert } from "$app/components/server-components/Alert";
-import { ConfirmBalanceForfeitOnPayoutMethodChangeModal } from "$app/components/server-components/ConfirmBalanceForfeitOnPayoutMethodChangeModal";
-import { CountrySelectionModal } from "$app/components/server-components/CountrySelectionModal";
-import { StripeConnectEmbeddedNotificationBanner } from "$app/components/server-components/PayoutPage/StripeConnectEmbeddedNotificationBanner";
-import { CreditCardForm } from "$app/components/server-components/Settings/CreditCardForm";
-import { UpdateCountryConfirmationModal } from "$app/components/server-components/UpdateCountryConfirmationModal";
+import { ConfirmBalanceForfeitOnPayoutMethodChangeModal } from "$app/components/Settings/PaymentsPage/ConfirmBalanceForfeitOnPayoutMethodChangeModal";
+import { CountrySelectionModal } from "$app/components/Settings/PaymentsPage/CountrySelectionModal";
+import { StripeConnectEmbeddedNotificationBanner } from "$app/components/Settings/PaymentsPage/StripeConnectEmbeddedNotificationBanner";
+import { CreditCardForm } from "$app/components/Settings/PaymentsPage/CreditCardForm";
+import { UpdateCountryConfirmationModal } from "$app/components/Settings/PaymentsPage/UpdateCountryConfirmationModal";
 import { Layout } from "$app/components/Settings/Layout";
 import AccountDetailsSection from "$app/components/Settings/PaymentsPage/AccountDetailsSection";
 import AusBackTaxesSection from "$app/components/Settings/PaymentsPage/AusBackTaxesSection";
@@ -767,7 +768,7 @@ const PaymentsPage = (props: PaymentPagePropType) => {
       >(await response.json());
       if (parsedResponse.success) {
         showAlert("Thanks! You're all set.", "success");
-        window.location.reload();
+        router.visit(window.location.href, { preserveScroll: true });
       } else {
         setErrorMessage({ message: parsedResponse.error_message, code: parsedResponse.error_code ?? null });
       }

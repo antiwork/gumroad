@@ -13,10 +13,10 @@ import { Button, NavigationButton } from "$app/components/Button";
 import { useAppDomain } from "$app/components/DomainSettings";
 import { Icon } from "$app/components/Icons";
 import { Modal } from "$app/components/Modal";
-import { SectionLayout } from "$app/components/Profile/Sections";
+import { SectionLayout } from "$app/components/Settings/ProfilePage/Sections";
 import { ImageUploadSettingsContext } from "$app/components/RichTextEditor";
 import { showAlert } from "$app/components/server-components/Alert";
-import { ProfileProps, TabWithId, useTabs } from "$app/components/server-components/Profile";
+import { ProfileProps, TabWithId, useTabs } from "$app/components/Settings/ProfilePage/ProfileComponent";
 import PlainTextStarterKit from "$app/components/TiptapExtensions/PlainTextStarterKit";
 import { Tabs, Tab } from "$app/components/ui/Tabs";
 import { useIsAboveBreakpoint } from "$app/components/useIsAboveBreakpoint";
@@ -34,7 +34,7 @@ import {
   useSectionImageUploadSettings,
   SectionToolbar,
 } from "./EditSections";
-import { FollowFormBlock } from "./FollowForm";
+import { FollowFormBlock } from "../../Profile/FollowForm";
 
 export type Props = ProfileProps & SectionsProps;
 

@@ -1,9 +1,7 @@
 import { StripeCardElement } from "@stripe/stripe-js";
 import * as React from "react";
-import { createCast } from "ts-safe-cast";
 
 import { SavedCreditCard } from "$app/parsers/card";
-import { register } from "$app/utils/serverComponentUtil";
 
 import { CreditCardInput } from "$app/components/Checkout/CreditCardInput";
 import { PayoutDebitCardData } from "$app/components/server-components/Settings/PaymentsPage";
@@ -34,4 +32,4 @@ export const PayoutCreditCard = ({
   );
 };
 
-export default register({ component: PayoutCreditCard, propParser: createCast() });
+export default PayoutCreditCard;

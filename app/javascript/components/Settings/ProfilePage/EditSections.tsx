@@ -28,7 +28,7 @@ import { Icon } from "$app/components/Icons";
 import { Popover, Props as PopoverProps } from "$app/components/Popover";
 import { Props as ProductProps } from "$app/components/Product";
 import { CardGrid, SORT_BY_LABELS, useSearchReducer } from "$app/components/Product/CardGrid";
-import { WishlistsSectionView } from "$app/components/Profile/EditSections/WishlistsSectionView";
+import { WishlistsSectionView } from "$app/components/Settings/ProfilePage/WishlistsSectionView";
 import { RichTextEditorToolbar, useImageUploadSettings, useRichTextEditor } from "$app/components/RichTextEditor";
 import { Select } from "$app/components/Select";
 import { showAlert } from "$app/components/server-components/Alert";

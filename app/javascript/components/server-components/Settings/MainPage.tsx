@@ -10,7 +10,7 @@ import { Button } from "$app/components/Button";
 import { Modal } from "$app/components/Modal";
 import { NumberInput } from "$app/components/NumberInput";
 import { showAlert } from "$app/components/server-components/Alert";
-import { ProductLevelSupportEmailsForm } from "$app/components/server-components/Settings/ProductLevelSupportEmailsForm";
+import { ProductLevelSupportEmailsForm } from "$app/components/Settings/MainPage/ProductLevelSupportEmailsForm";
 import { ToggleSettingRow } from "$app/components/SettingRow";
 import { Layout } from "$app/components/Settings/Layout";
 import { TagInput } from "$app/components/TagInput";
