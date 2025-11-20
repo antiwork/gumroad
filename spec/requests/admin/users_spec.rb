@@ -23,10 +23,11 @@ describe "Admin::UsersController Scenario", type: :system, js: true do
 
   context "when user has products" do
     before do
-      %w(a b c).each_with_index do |l, i|
-        create(:product, user:, unique_permalink: l, name: "Product #{l}", created_at: i.minutes.ago)
-      end
-      stub_const("Admin::UsersController::PRODUCTS_PER_PAGE", 2)
+      create(:product, user:, unique_permalink: "a", name: "Product a", created_at: 1.minute.ago)
+      create(:product, user:, unique_permalink: "b", name: "Product b", created_at: 2.minutes.ago)
+      create(:product, user:, unique_permalink: "c", name: "Product c", created_at: 3.minutes.ago)
+
+      stub_const("Admin::Users::ListPaginatedProducts::PRODUCTS_PER_PAGE", 2)
     end
 
     it "shows products" do
@@ -41,7 +42,7 @@ describe "Admin::UsersController Scenario", type: :system, js: true do
       expect(page).not_to have_text("Product a")
       expect(page).not_to have_text("Product b")
       expect(page).to have_text("Product c")
-      within("[aria-label='Pagination']") { expect(page).to have_link("1") }
+      within("[aria-label='Pagination']") { expect(page).to have_button("1") }
     end
   end
 
@@ -77,7 +78,7 @@ describe "Admin::UsersController Scenario", type: :system, js: true do
   describe "custom fees" do
     context "when the user has a custom fee set" do
       before do
-        user.update(custom_fee_per_thousand: 50)
+        user.update!(custom_fee_per_thousand: 50)
       end
 
       it "shows the custom fee percentage" do
@@ -213,6 +214,40 @@ describe "Admin::UsersController Scenario", type: :system, js: true do
         expect(page).to have_button("Unmark as adult")
         expect(page).not_to have_button("Mark as adult")
       end
+    end
+  end
+
+  describe "blocked user indicator" do
+    before { BlockedObject.delete_all }
+    after { BlockedObject.delete_all }
+
+    it "shows blocked user indicator with appropriate tooltips for email and domain blocks" do
+      # Initially no block should exist
+      visit admin_user_path(user.id)
+      expect(page).not_to have_css(".icon-solid-shield-exclamation")
+
+      # Block by email
+      BlockedObject.block!(BLOCKED_OBJECT_TYPES[:email], user.form_email, admin.id)
+      page.refresh
+
+      # Verify icon appears and tooltip shows email block
+      expect(page).to have_css(".icon-solid-shield-exclamation")
+      icon = find(".icon-solid-shield-exclamation")
+      icon.hover
+      expect(page).to have_text("Email blocked")
+      expect(page).to have_text("block created")
+
+      # Add domain block
+      BlockedObject.block!(BLOCKED_OBJECT_TYPES[:email_domain], user.form_email_domain, admin.id)
+      page.refresh
+
+      # Verify icon still appears and tooltip shows both blocks
+      expect(page).to have_css(".icon-solid-shield-exclamation")
+      icon = find(".icon-solid-shield-exclamation")
+      icon.hover
+      expect(page).to have_text("Email blocked")
+      expect(page).to have_text("#{user.form_email_domain} blocked")
+      expect(page).to have_text("block created")
     end
   end
 end

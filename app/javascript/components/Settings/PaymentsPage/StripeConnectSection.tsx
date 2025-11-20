@@ -54,7 +54,7 @@ const StripeConnectSection = ({
   return (
     <section>
       <div className="grid gap-8">
-        <div className="paragraphs">
+        <div className="flex flex-col gap-4">
           <div
             dangerouslySetInnerHTML={{
               __html: `${connectAccountFeeInfoText}\n${stripeConnect.supported_countries_help_text}`,
