@@ -19,7 +19,7 @@ import { SalesChart } from "$app/components/Analytics/SalesChart";
 import { SalesQuickStats } from "$app/components/Analytics/SalesQuickStats";
 import { useAnalyticsDateRange } from "$app/components/Analytics/useAnalyticsDateRange";
 import { DateRangePicker } from "$app/components/DateRangePicker";
-import { Progress } from "$app/components/Progress";
+import { LoadingSpinner } from "$app/components/LoadingSpinner";
 import { showAlert } from "$app/components/server-components/Alert";
 import Placeholder from "$app/components/ui/Placeholder";
 
@@ -180,11 +180,11 @@ const Analytics = ({ products: initialProducts, country_codes, state_names }: An
           ) : (
             <>
               <div className="input">
-                <Progress width="1em" />
+                <LoadingSpinner />
                 Loading charts...
               </div>
               <div className="input">
-                <Progress width="1em" />
+                <LoadingSpinner />
                 Loading referrers...
               </div>
             </>
@@ -198,7 +198,7 @@ const Analytics = ({ products: initialProducts, country_codes, state_names }: An
             />
           ) : (
             <div className="input">
-              <Progress width="1em" />
+              <LoadingSpinner />
               Loading locations...
             </div>
           )}

@@ -2,7 +2,7 @@ import React from "react";
 
 import { formatDate } from "$app/utils/date";
 
-import { NoIcon, YesIcon } from "$app/components/Admin/Icons";
+import { BooleanIcon } from "$app/components/Admin/Icons";
 import type { User } from "$app/components/Admin/Users/User";
 
 export type ComplianceInfoProps = {
@@ -64,11 +64,13 @@ const ComplianceInfo = ({ complianceInfo }: ComplianceInfoComponentProps) => {
 
   return (
     <div className="grid gap-4 md:grid-cols-2">
-      <div className="paragraphs">
+      <div className="flex flex-col gap-4">
         <h3>Personal Info</h3>
         <dl>
           <dt>Is Business</dt>
-          <dd>{is_business ? <YesIcon /> : <NoIcon />}</dd>
+          <dd>
+            <BooleanIcon value={!!is_business} />
+          </dd>
 
           <dt>First Name</dt>
           <dd>{first_name}</dd>
@@ -101,12 +103,14 @@ const ComplianceInfo = ({ complianceInfo }: ComplianceInfoComponentProps) => {
           </dd>
 
           <dt>Individual Tax ID Provided</dt>
-          <dd>{has_individual_tax_id ? <YesIcon /> : <NoIcon />}</dd>
+          <dd>
+            <BooleanIcon value={has_individual_tax_id} />
+          </dd>
         </dl>
       </div>
 
       {is_business ? (
-        <div className="paragraphs">
+        <div className="flex flex-col gap-4">
           <h4 className="font-bold">Business Info</h4>
           <dl>
             <dt>Name</dt>
@@ -131,7 +135,9 @@ const ComplianceInfo = ({ complianceInfo }: ComplianceInfoComponentProps) => {
             <dd>{business_type}</dd>
 
             <dt>Tax ID Provided</dt>
-            <dd>{has_business_tax_id ? <YesIcon /> : <NoIcon />}</dd>
+            <dd>
+              <BooleanIcon value={has_business_tax_id} />
+            </dd>
           </dl>
         </div>
       ) : null}
@@ -142,7 +148,7 @@ const ComplianceInfo = ({ complianceInfo }: ComplianceInfoComponentProps) => {
 const AdminUserComplianceInfo = ({ user }: AdminUserComplianceInfoProps) => (
   <>
     <hr />
-    <ComplianceInfo complianceInfo={user.alive_user_compliance_info} />
+    <ComplianceInfo complianceInfo={user.alive_user_compliance_info ?? null} />
   </>
 );
 

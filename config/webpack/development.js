@@ -24,7 +24,7 @@ export default configs.map((config, idx) =>
         ? {
             compress: dev_server.compress,
             allowedHosts: dev_server.allowed_hosts,
-            host: dev_server.host,
+            host: process.env.SHAKAPACKER_DEV_SERVER_HOST || dev_server.host,
             port: dev_server.port,
             server: dev_server.server,
             hot: dev_server.hmr,

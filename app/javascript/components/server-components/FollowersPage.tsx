@@ -9,13 +9,14 @@ import { Button } from "$app/components/Button";
 import { CopyToClipboard } from "$app/components/CopyToClipboard";
 import { useCurrentSeller } from "$app/components/CurrentSeller";
 import { Icon } from "$app/components/Icons";
+import { LoadingSpinner } from "$app/components/LoadingSpinner";
 import { useLoggedInUser } from "$app/components/LoggedInUser";
 import { Popover } from "$app/components/Popover";
-import { Progress } from "$app/components/Progress";
 import { showAlert } from "$app/components/server-components/Alert";
 import { ExportSubscribersPopover } from "$app/components/server-components/FollowersPage/ExportSubscribersPopover";
 import { PageHeader } from "$app/components/ui/PageHeader";
 import Placeholder from "$app/components/ui/Placeholder";
+import { Sheet, SheetHeader } from "$app/components/ui/Sheet";
 import { Tabs, Tab } from "$app/components/ui/Tabs";
 import { useUserAgentInfo } from "$app/components/UserAgent";
 import { WithTooltip } from "$app/components/WithTooltip";
@@ -174,7 +175,7 @@ export const FollowersPage = ({ followers: initialFollowers, per_page, total }: 
       <div className="space-y-4 p-4 md:p-8">
         {loading ? (
           <div className="flex justify-center">
-            <Progress width="5rem" />
+            <LoadingSpinner className="size-20" />
           </div>
         ) : followers.length > 0 ? (
           <div>
@@ -205,11 +206,12 @@ export const FollowersPage = ({ followers: initialFollowers, per_page, total }: 
               </Button>
             ) : null}
             {selectedFollower ? (
-              <aside className={selectedFollower.can_update ? "" : "js-team-member-read-only"}>
-                <header>
-                  <h2>Details</h2>
-                  <button className="close" onClick={() => setSelectedFollowerId(null)} title="Close" />
-                </header>
+              <Sheet
+                open
+                onOpenChange={() => setSelectedFollowerId(null)}
+                className={selectedFollower.can_update ? "" : "js-team-member-read-only"}
+              >
+                <SheetHeader>Details</SheetHeader>
                 <div className="stack">
                   <div>
                     <div>
@@ -226,7 +228,7 @@ export const FollowersPage = ({ followers: initialFollowers, per_page, total }: 
                     </div>
                   </div>
                 </div>
-              </aside>
+              </Sheet>
             ) : null}
           </div>
         ) : (

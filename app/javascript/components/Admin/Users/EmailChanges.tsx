@@ -4,8 +4,8 @@ import { cast } from "ts-safe-cast";
 import { request } from "$app/utils/request";
 
 import DateTimeWithRelativeTooltip from "$app/components/Admin/DateTimeWithRelativeTooltip";
-import Loading from "$app/components/Admin/Loading";
 import type { User } from "$app/components/Admin/Users/User";
+import { LoadingSpinner } from "$app/components/LoadingSpinner";
 
 type AdminUserEmailChangesProps = {
   user: User;
@@ -28,7 +28,7 @@ type EmailChangesComponentProps = {
 };
 
 const EmailChanges = ({ fields, emailChanges, isLoading }: EmailChangesComponentProps) => {
-  if (isLoading) return <Loading />;
+  if (isLoading) return <LoadingSpinner />;
 
   if (emailChanges.length === 0) return <div>No email changes found.</div>;
 

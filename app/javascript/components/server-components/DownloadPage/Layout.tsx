@@ -8,6 +8,7 @@ import { asyncVoid } from "$app/utils/promise";
 import { assertResponseError, request } from "$app/utils/request";
 
 import { Button, NavigationButton } from "$app/components/Button";
+import { PageListLayout } from "$app/components/Download/PageListLayout";
 import { Icon } from "$app/components/Icons";
 import { useLoggedInUser } from "$app/components/LoggedInUser";
 import { Modal } from "$app/components/Modal";
@@ -176,7 +177,7 @@ export const Layout = ({
               {receiptPurchaseId ? (
                 <details>
                   <summary>Receipt</summary>
-                  <div className="paragraphs">
+                  <div className="flex flex-col gap-4">
                     <NavigationButton
                       href={
                         purchase.email
@@ -195,7 +196,7 @@ export const Layout = ({
               {loggedInUser !== null ? (
                 <details>
                   <summary>Library</summary>
-                  <div className="paragraphs">
+                  <div className="flex flex-col gap-4">
                     <PurchaseArchiveButton purchase_id={purchase.id} initial_is_archived={purchase.is_archived} />
                     <PurchaseDeleteButton purchase_id={purchase.id} product_name={purchase.product_name} />
                   </div>
@@ -234,23 +235,27 @@ export const Layout = ({
           {!headerVisible ? <strong>{purchase?.product_name}</strong> : null}
         </div>
       ) : null}
-      <div className="product-content flex-1">
+      <div className="flex flex-1 flex-col">
         {is_mobile_app_web_view ? null : (
           <PageHeader ref={headerRef} title={purchase?.product_name ?? ""} actions={headerActions} />
         )}
         {settings || pageList ? (
-          <div className="has-sidebar p-4 md:p-8">
-            <div className="paragraphs">
-              {pageList}
-              {isDesktop ? settings : null}
-            </div>
-            <div className="paragraphs">
+          <PageListLayout
+            className="flex-1"
+            pageList={
+              <>
+                {pageList}
+                {isDesktop ? settings : null}
+              </>
+            }
+          >
+            <div className="flex flex-col gap-4">
               {children}
               {!isDesktop ? settings : null}
             </div>
-          </div>
+          </PageListLayout>
         ) : (
-          <div className="paragraphs flex-1 p-4 md:p-8">{children}</div>
+          <div className="flex flex-1 flex-col gap-4 p-4 md:p-8">{children}</div>
         )}
       </div>
     </>

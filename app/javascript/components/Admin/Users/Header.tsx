@@ -13,23 +13,18 @@ import { WithTooltip } from "$app/components/WithTooltip";
 
 type HeaderProps = {
   user: User;
-  is_affiliate_user?: boolean;
+  isAffiliateUser?: boolean;
   url: string;
 };
 
-const Header = ({ user, is_affiliate_user = false, url }: HeaderProps) => {
+const Header = ({ user, isAffiliateUser = false, url }: HeaderProps) => {
   const displayName = user.name || `User ${user.username}`;
-  const adminUserUrl = is_affiliate_user ? Routes.admin_affiliate_url(user.id) : Routes.admin_user_url(user.id);
+  const adminUserUrl = isAffiliateUser ? Routes.admin_affiliate_url(user.id) : Routes.admin_user_url(user.id);
 
   return (
-    <div className="paragraphs">
+    <div className="flex flex-col gap-4">
       <div className="flex items-center gap-4">
-        <img
-          src={user.avatar_url}
-          className="user-avatar"
-          style={{ width: "var(--form-element-height)" }}
-          alt={user.name}
-        />
+        <img src={user.avatar_url} className="user-avatar" style={{ width: "var(--form-element-height)" }} alt="" />
         <div className="grid gap-2">
           <h2>
             <Link href={adminUserUrl} className={classNames({ active: url === adminUserUrl })}>
@@ -70,7 +65,7 @@ const Header = ({ user, is_affiliate_user = false, url }: HeaderProps) => {
                   tip="Custom fee that will be charged on all their new direct (non-discover) sales"
                   position="bottom"
                 >
-                  <span>Custom fee: {user.custom_fee_per_thousand / 10}%</span>
+                  <span>Custom fee: {(user.custom_fee_per_thousand / 10).toFixed(1)}%</span>
                 </WithTooltip>
               </li>
             ) : null}

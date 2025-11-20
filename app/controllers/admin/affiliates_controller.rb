@@ -2,6 +2,7 @@
 
 class Admin::AffiliatesController < Admin::BaseController
   include Pagy::Backend
+  include Admin::ListPaginatedUsers
 
   before_action :fetch_affiliate, only: [:show]
   before_action :clean_search_query, only: [:index]
@@ -11,18 +12,22 @@ class Admin::AffiliatesController < Admin::BaseController
 
   def index
     @title = "Affiliate results"
-    @users = @users.joins(:direct_affiliate_accounts).distinct.limit(25)
+    @users = @users.joins(:direct_affiliate_accounts).distinct
+    @users = @users.with_blocked_attributes_for(:form_email, :form_email_domain)
 
-    redirect_to admin_affiliate_path(@users.first) if @users.length == 1
+    list_paginated_users users: @users, template: "Admin/Affiliates/Index", legacy_template: "admin/affiliates/index", single_result_redirect_path: method(:admin_affiliate_path)
   end
 
   def show
     @title = "#{@affiliate_user.display_name} affiliate on Gumroad"
-    products_scope = @affiliate_user.directly_affiliated_products.unscope(where: :purchase_disabled_at).order(Arel.sql(Admin::UsersController::PRODUCTS_ORDER))
-    @pagy, @products = pagy(products_scope, limit: Admin::UsersController::PRODUCTS_PER_PAGE)
     respond_to do |format|
-      format.html
-      format.json { render json: @affiliate }
+      format.html do
+        render inertia: "Admin/Affiliates/Show",
+               props: {
+                 user: Admin::UserPresenter::Card.new(user: @affiliate_user, pundit_user:).props,
+               }
+      end
+      format.json { render json: @affiliate_user }
     end
   end
 

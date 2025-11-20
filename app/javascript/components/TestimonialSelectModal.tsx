@@ -92,6 +92,7 @@ export const TestimonialSelectModal = ({
 
   return (
     <Modal
+      className="max-h-11/12"
       open={isOpen}
       onClose={onClose}
       title="Insert reviews"
@@ -110,10 +111,10 @@ export const TestimonialSelectModal = ({
         </>
       }
     >
-      <div>
+      <div className="flex min-h-0 flex-col gap-2">
         {isLoading && state.reviews.length === 0 ? (
           <div className="flex items-center justify-center">
-            <LoadingSpinner width="2em" />
+            <LoadingSpinner className="size-8" />
           </div>
         ) : !isLoading && state.reviews.length === 0 ? (
           <p>No reviews with text or video yet.</p>
@@ -129,7 +130,7 @@ export const TestimonialSelectModal = ({
               />
               <p>Select all</p>
             </div>
-            <section className="paragraphs" style={{ marginTop: "var(--spacer-2)" }}>
+            <section className="flex flex-col gap-4 overflow-y-auto p-1">
               {state.reviews.map((review) => (
                 <SelectableReviewCard
                   key={review.id}

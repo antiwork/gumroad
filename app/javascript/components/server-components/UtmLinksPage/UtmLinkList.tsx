@@ -1,5 +1,4 @@
 import * as React from "react";
-import ReactDOM from "react-dom";
 import { Link, useLoaderData, useNavigate, useNavigation, useRevalidator, useSearchParams } from "react-router-dom";
 import { cast } from "ts-safe-cast";
 
@@ -18,13 +17,14 @@ import { AnalyticsLayout } from "$app/components/Analytics/AnalyticsLayout";
 import { Button, NavigationButton } from "$app/components/Button";
 import { CopyToClipboard } from "$app/components/CopyToClipboard";
 import { Icon } from "$app/components/Icons";
+import { LoadingSpinner } from "$app/components/LoadingSpinner";
 import { Modal } from "$app/components/Modal";
 import { Pagination, PaginationProps } from "$app/components/Pagination";
 import { Popover } from "$app/components/Popover";
-import { Progress } from "$app/components/Progress";
 import { showAlert } from "$app/components/server-components/Alert";
 import { extractSortParam } from "$app/components/server-components/UtmLinksPage";
 import Placeholder from "$app/components/ui/Placeholder";
+import { Sheet, SheetHeader } from "$app/components/ui/Sheet";
 import { useDebouncedCallback } from "$app/components/useDebouncedCallback";
 import { useUserAgentInfo } from "$app/components/UserAgent";
 import { Sort, useSortingTableDriver } from "$app/components/useSortingTableDriver";
@@ -151,7 +151,7 @@ const UtmLinkList = () => {
     >
       {navigation.state === "loading" && utmLinks.length === 0 ? (
         <div style={{ justifySelf: "center" }}>
-          <Progress width="5rem" />
+          <LoadingSpinner className="size-20" />
         </div>
       ) : utmLinks.length > 0 ? (
         <section className="p-4 md:p-8">
@@ -413,12 +413,9 @@ const UtmLinkDetails = ({
 }) => {
   const userAgentInfo = useUserAgentInfo();
 
-  return ReactDOM.createPortal(
-    <aside>
-      <header>
-        <h2>{utmLink.title}</h2>
-        <button className="close" aria-label="Close details" onClick={onClose} />
-      </header>
+  return (
+    <Sheet open onOpenChange={onClose}>
+      <SheetHeader>{utmLink.title}</SheetHeader>
       <section className="stack">
         <div>
           <h3>Details</h3>
@@ -473,7 +470,7 @@ const UtmLinkDetails = ({
         <div>
           <h5>Sales</h5>
           <div aria-busy={utmLink.sales_count === null} aria-live="polite">
-            {utmLink.sales_count !== null ? utmLink.sales_count : <Progress width="1rem" />}
+            {utmLink.sales_count !== null ? utmLink.sales_count : <LoadingSpinner />}
           </div>
         </div>
         <div>
@@ -482,7 +479,7 @@ const UtmLinkDetails = ({
             {utmLink.revenue_cents !== null ? (
               `$${fixedDecimalPointNumber(utmLink.revenue_cents / 100)}`
             ) : (
-              <Progress width="1rem" />
+              <LoadingSpinner />
             )}
           </div>
         </div>
@@ -492,7 +489,7 @@ const UtmLinkDetails = ({
             {utmLink.conversion_rate !== null ? (
               `${fixedDecimalPointNumber(utmLink.conversion_rate * 100)}%`
             ) : (
-              <Progress width="1rem" />
+              <LoadingSpinner />
             )}
           </div>
         </div>
@@ -533,9 +530,7 @@ const UtmLinkDetails = ({
           Delete
         </Button>
       </div>
-    </aside>,
-    document.body,
+    </Sheet>
   );
 };
-
 export default UtmLinkList;

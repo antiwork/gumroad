@@ -1,6 +1,8 @@
 # frozen_string_literal: false
 
 describe Order::ChargeService, :vcr do
+  include StripeMerchantAccountHelper
+
   describe "#perform" do
     let(:seller_1) { create(:user) }
     let(:seller_2) { create(:user) }
@@ -156,7 +158,7 @@ describe Order::ChargeService, :vcr do
     end
 
     it "charges all purchases in the order when seller has a Stripe merchant account" do
-      seller_stripe_account = create(:merchant_account_stripe, user: seller_1)
+      seller_stripe_account = create(:merchant_account, user: seller_1, charge_processor_merchant_id: create_verified_stripe_account(country: "US").id)
 
       params = line_items_params.merge!(common_order_params_without_payment).merge!(successful_payment_params)
 
@@ -188,7 +190,7 @@ describe Order::ChargeService, :vcr do
     end
 
     it "charges 2.9% + 30c of processor fee when seller has a Stripe merchant account and existing credit card is used for payment" do
-      seller_stripe_account = create(:merchant_account_stripe, user: seller_1)
+      seller_stripe_account = create(:merchant_account, user: seller_1, charge_processor_merchant_id: create_verified_stripe_account(country: "US").id)
 
       buyer = create(:user)
       buyer.credit_card = create(:credit_card)
@@ -227,7 +229,7 @@ describe Order::ChargeService, :vcr do
 
     it "does not charge Gumroad fee and taxes when seller has a Brazilian Stripe Connect account" do
       seller_1.update!(check_merchant_account_is_linked: true)
-      seller_stripe_account = create(:merchant_account_stripe_connect, user: seller_1, country: "BR", charge_processor_merchant_id: "acct_1QADdCGy0w4tFIUe")
+      seller_stripe_account = create(:merchant_account_stripe_connect, user: seller_1, country: "BR", charge_processor_merchant_id: "acct_1SOZwzEbKUAyPzq3")
 
       params = line_items_params.merge!(common_order_params_without_payment).merge!(successful_payment_params)
 
@@ -261,7 +263,7 @@ describe Order::ChargeService, :vcr do
     it "charges the correct custom fee when seller has custom Gumroad fee set" do
       seller_1.update!(custom_fee_per_thousand: 50)
 
-      seller_stripe_account = create(:merchant_account_stripe, user: seller_1)
+      seller_stripe_account = create(:merchant_account, user: seller_1, charge_processor_merchant_id: create_verified_stripe_account(country: "US").id)
 
       params = line_items_params.merge!(common_order_params_without_payment).merge!(successful_payment_params)
 

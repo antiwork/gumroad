@@ -52,7 +52,7 @@ const PayPalConnectSection = ({
           Learn more
         </a>
       </header>
-      <div className="paragraphs">
+      <div className="flex flex-col gap-4">
         {!paypalConnect.charge_processor_merchant_id ? (
           <>
             <p>

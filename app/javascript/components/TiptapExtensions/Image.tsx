@@ -130,7 +130,7 @@ const ImageNodeView = ({ node, editor, getPos }: NodeViewProps) => {
                 transform: "translate(-50%, -50%)",
               }}
             >
-              <LoadingSpinner width="4em" />
+              <LoadingSpinner className="size-16" />
             </div>
           </div>
         ) : null}

@@ -14,12 +14,12 @@ import { useDomains } from "$app/components/DomainSettings";
 import { Icon } from "$app/components/Icons";
 import { useLoggedInUser } from "$app/components/LoggedInUser";
 import { Preview } from "$app/components/Preview";
+import { PreviewSidebar, WithPreviewSidebar } from "$app/components/PreviewSidebar";
 import { LogoInput } from "$app/components/Profile/Settings/LogoInput";
 import { showAlert } from "$app/components/server-components/Alert";
 import { Profile, Props as ProfileProps } from "$app/components/server-components/Profile/index";
 import { Layout as SettingsLayout } from "$app/components/Settings/Layout";
 import { SocialAuthButton } from "$app/components/SocialAuthButton";
-import { WithTooltip } from "$app/components/WithTooltip";
 
 type Props = {
   profile_settings: ProfileSettings;
@@ -76,8 +76,8 @@ const SettingsPage = ({ creator_profile, profile_settings, settings_pages, ...pr
     `${parseInt(hex.slice(1, 3), 16)} ${parseInt(hex.slice(3, 5), 16)} ${parseInt(hex.slice(5), 16)}`;
 
   return (
-    <SettingsLayout currentPage="profile" pages={settings_pages} onSave={handleSave} canUpdate={canUpdate} hasAside>
-      <div className="fixed-aside lg:grid lg:grid-cols-[1fr_30vw]">
+    <SettingsLayout currentPage="profile" pages={settings_pages} onSave={handleSave} canUpdate={canUpdate}>
+      <WithPreviewSidebar>
         <form>
           <section className="p-4! md:p-8!">
             <header>
@@ -217,21 +217,17 @@ const SettingsPage = ({ creator_profile, profile_settings, settings_pages, ...pr
             </div>
           </section>
         </form>
-        <aside>
-          <header>
-            <h2>Preview</h2>
-            <WithTooltip tip="Preview" position="bottom">
-              <a
-                className="button"
-                href={Routes.root_url({ host: creatorProfile.subdomain })}
-                target="_blank"
-                aria-label="Preview"
-                rel="noreferrer"
-              >
-                <Icon name="arrow-diagonal-up-right" />
-              </a>
-            </WithTooltip>
-          </header>
+        <PreviewSidebar
+          previewLink={(props) => (
+            <a
+              {...props}
+              className="button"
+              href={Routes.root_url({ host: creatorProfile.subdomain })}
+              target="_blank"
+              rel="noreferrer"
+            />
+          )}
+        >
           <Preview
             scaleFactor={0.35}
             style={{
@@ -251,8 +247,8 @@ const SettingsPage = ({ creator_profile, profile_settings, settings_pages, ...pr
           >
             <Profile creator_profile={creatorProfile} {...profileProps} bio={profileSettings.bio} />
           </Preview>
-        </aside>
-      </div>
+        </PreviewSidebar>
+      </WithPreviewSidebar>
     </SettingsLayout>
   );
 };

@@ -4,7 +4,7 @@ import { cast } from "ts-safe-cast";
 
 import { request } from "$app/utils/request";
 
-import Loading from "$app/components/Admin/Loading";
+import { LoadingSpinner } from "$app/components/LoadingSpinner";
 
 type UserGuids = { guid: string; user_ids: number[] }[];
 
@@ -16,14 +16,14 @@ type GuidProps = {
 const Guid = ({ guid, user_ids }: GuidProps) => (
   <div>
     <h5>
-      <Link href={Routes.admin_compliance_guids_path(guid)}>{guid}</Link>
+      <Link href={Routes.admin_guid_path(guid)}>{guid}</Link>
     </h5>
     <span>{user_ids.length} users</span>
   </div>
 );
 
 const UserGuidsContent = ({ userGuids, isLoading }: { userGuids: UserGuids; isLoading: boolean }) => {
-  if (isLoading) return <Loading />;
+  if (isLoading) return <LoadingSpinner />;
   if (userGuids.length > 0)
     return (
       <div className="stack">
@@ -48,7 +48,7 @@ const AdminUserGuids = ({ user_id }: { user_id: number }) => {
     setIsLoading(true);
     const response = await request({
       method: "GET",
-      url: Routes.admin_compliance_guids_path(user_id, { format: "json" }),
+      url: Routes.admin_user_guids_path(user_id, { format: "json" }),
       accept: "json",
     });
     setUserGuids(cast<UserGuids>(await response.json()));

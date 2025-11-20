@@ -57,7 +57,7 @@ const UpsellCardHeader = ({ product, variant }: UpsellCardHeaderProps) => (
   <header>
     <h3>
       {product.name}
-      {variant ? <span className="text-muted ml-2">({variant.name})</span> : null}
+      {variant ? <span className="ml-2 text-muted">({variant.name})</span> : null}
     </h3>
   </header>
 );

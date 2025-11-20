@@ -2,8 +2,9 @@
 
 require "spec_helper"
 require "shared_examples/admin_base_controller_concern"
+require "inertia_rails/rspec"
 
-describe Admin::PurchasesController, :vcr do
+describe Admin::PurchasesController, :vcr, inertia: true do
   it_behaves_like "inherits from Admin::BaseController"
 
   before do
@@ -14,6 +15,14 @@ describe Admin::PurchasesController, :vcr do
   describe "#show" do
     before do
       @purchase = create(:purchase)
+    end
+
+    it "returns successful response with Inertia page data" do
+      expect(Admin::PurchasePresenter).to receive(:new).with(@purchase).and_call_original
+      get :show, params: { id: @purchase.id }
+
+      expect(response).to be_successful
+      expect(inertia.component).to eq("Admin/Purchases/Show")
     end
 
     it "raises ActionController::RoutingError when purchase is not found" do
@@ -167,6 +176,33 @@ describe Admin::PurchasesController, :vcr do
 
     it "raises error when purchase is not found" do
       expect { post :undelete, params: { id: "invalid-id" } }.to raise_error(ActionController::RoutingError)
+    end
+  end
+
+  describe "POST resend_receipt" do
+    let(:buyer) { create(:user) }
+    let(:new_email) { "new@example.com" }
+
+    context "when updating email for subscription purchases" do
+      it "updates original_purchase email for subscription purchases" do
+        subscription = create(:subscription, user: buyer)
+        create(:purchase, email: "old@example.com", purchaser: buyer, is_original_subscription_purchase: true, subscription: subscription)
+        recurring_purchase = create(:purchase, email: "old@example.com", purchaser: buyer, subscription: subscription)
+
+        post :resend_receipt, params: {
+          id: recurring_purchase.id,
+          resend_receipt: { email_address: new_email }
+        }
+
+        expect(response).to be_successful
+        expect(response.parsed_body["success"]).to be(true)
+
+        recurring_purchase.reload
+        expect(recurring_purchase.email).to eq(new_email)
+
+        subscription.reload
+        expect(subscription.original_purchase.email).to eq(new_email)
+      end
     end
   end
 end
