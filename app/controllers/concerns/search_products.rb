@@ -33,7 +33,7 @@ module SearchProducts
           params[:offer_codes] = ["__no_match__"] if params[:offer_codes].empty?
         end
       else
-        params[:offer_codes] = nil
+        params[:offer_codes] = ["__no_match__"]
       end
 
       if params[:size].is_a?(String)
