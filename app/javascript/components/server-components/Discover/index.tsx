@@ -169,9 +169,12 @@ const Discover = (props: Props) => {
     dispatch({ type: "set-params", params: { ...state.params, from: undefined, ...newParams } });
 
   const [recommendedProducts, setRecommendedProducts] = React.useState<CardProduct[]>(props.recommended_products);
+
+  const hasOfferCodes = state.params.offer_codes && state.params.offer_codes.length > 0;
+
   useOnChange(
     asyncVoid(async () => {
-      if (state.params.query) return;
+      if (state.params.query || hasOfferCodes) return;
       setRecommendedProducts([]);
       try {
         setRecommendedProducts(await getRecommendedProducts({ taxonomy: state.params.taxonomy }));
@@ -179,14 +182,14 @@ const Discover = (props: Props) => {
         assertResponseError(e);
       }
     }),
-    [state.params.taxonomy],
+    [state.params.taxonomy, hasOfferCodes],
   );
 
   const isCuratedProducts =
     recommendedProducts[0] &&
     new URL(recommendedProducts[0].url).searchParams.get("recommended_by") === "products_for_you";
 
-  const showRecommendedSections = recommendedProducts.length && !state.params.query;
+  const showRecommendedSections = recommendedProducts.length && !state.params.query && !hasOfferCodes;
 
   return (
     <Layout
@@ -212,13 +215,13 @@ const Discover = (props: Props) => {
         <section className="flex flex-col gap-4">
           <div style={{ display: "flex", justifyContent: "space-between", gap: "var(--spacer-2)", flexWrap: "wrap" }}>
             <h2>
-              {state.params.query
+              {state.params.query || hasOfferCodes
                 ? state.results?.products.length
                   ? `Showing 1-${state.results.products.length} of ${state.results.total} products`
                   : null
                 : sortTitles[is<keyof typeof sortTitles>(state.params.sort) ? state.params.sort : "trending"]}
             </h2>
-            {state.params.query ? null : (
+            {state.params.query || hasOfferCodes ? null : (
               <Tabs>
                 {props.curated_product_ids.length > 0 ? (
                   <Tab
@@ -260,11 +263,11 @@ const Discover = (props: Props) => {
             state={state}
             dispatchAction={dispatch}
             currencyCode={props.currency_code}
-            hideSort={!state.params.query}
+            hideSort={!state.params.query && !hasOfferCodes}
             defaults={{
               taxonomy: state.params.taxonomy,
               query: state.params.query,
-              sort: state.params.query ? "default" : state.params.sort,
+              sort: state.params.query || hasOfferCodes ? "default" : state.params.sort,
             }}
             appendFilters={
               <details>
