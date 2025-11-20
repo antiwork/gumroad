@@ -81,4 +81,3 @@ describe SearchProducts do
     end
   end
 end
-
