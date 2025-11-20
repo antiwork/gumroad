@@ -53,6 +53,28 @@ describe OneOffMailer do
       mail = described_class.email(email:, subject:, body:)
       expect(mail.reply_to).to be(nil)
     end
+
+    it "uses default from email when from parameter is not provided" do
+      mail = described_class.email(email:, subject:, body:)
+      expect(mail.from).to eq(["hi@#{CUSTOMERS_MAIL_DOMAIN}"])
+    end
+
+    it "uses custom from email when from parameter is provided" do
+      custom_from = "Custom Name <custom@#{CREATOR_CONTACTING_CUSTOMERS_MAIL_DOMAIN}>"
+      mail = described_class.email(email:, subject:, body:, from: custom_from, sender_domain: "creators")
+      expect(mail.from).to eq(["custom@#{CREATOR_CONTACTING_CUSTOMERS_MAIL_DOMAIN}"])
+    end
+
+    it "uses default sender_domain (customers) when sender_domain parameter is not provided" do
+      expect(MailerInfo).to receive(:random_delivery_method_options).with(domain: :customers).and_call_original
+      described_class.email(email:, subject:, body:).deliver_now
+    end
+
+    it "uses custom sender_domain when sender_domain parameter is provided" do
+      expect(MailerInfo).to receive(:random_delivery_method_options).with(domain: :creators).and_call_original
+      custom_from = "Custom Name <custom@#{CREATOR_CONTACTING_CUSTOMERS_MAIL_DOMAIN}>"
+      described_class.email(email:, subject:, body:, from: custom_from, sender_domain: "creators").deliver_now
+    end
   end
 
   describe "#email_using_installment" do

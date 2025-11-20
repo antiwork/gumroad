@@ -85,4 +85,13 @@ describe "Admin::PurchasesController Scenario", type: :system, js: true do
       expect(page).to have_content("Tip $5", normalize_ws: true)
     end
   end
+
+  it "shows custom fields" do
+    create(:purchase_custom_field, purchase:)
+    create(:purchase_custom_field, purchase:, name: "Boolean field", field_type: CustomField::TYPE_CHECKBOX, value: true)
+
+    visit admin_purchase_path(purchase.id)
+
+    expect(page).to have_content("Custom field custom field value (custom field) Boolean field true (custom field)", normalize_ws: true)
+  end
 end
