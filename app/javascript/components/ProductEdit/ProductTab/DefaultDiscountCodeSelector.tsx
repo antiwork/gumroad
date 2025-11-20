@@ -11,7 +11,6 @@ import { useDebouncedCallback } from "$app/components/useDebouncedCallback";
 
 export const DefaultDiscountCodeSelector = () => {
   const context = React.useContext(ProductEditContext);
-
   if (!context?.availableDiscountCodes) return null;
 
   const { uniquePermalink, product, updateProduct, availableDiscountCodes, setAvailableDiscountCodes } = context;
@@ -26,15 +25,30 @@ export const DefaultDiscountCodeSelector = () => {
   const [query, setQuery] = React.useState<string>(() =>
     selectedDiscountCode ? formatLabel(selectedDiscountCode) : "",
   );
-  const [options, setOptions] = React.useState<AvailableDiscountCode[]>(availableDiscountCodes ?? []);
+  const [options, setOptions] = React.useState<AvailableDiscountCode[]>(availableDiscountCodes);
   const [isOpen, setIsOpen] = React.useState(false);
+  const [isTogglePending, setIsTogglePending] = React.useState(false);
+  const showDropdown = isEnabled || isTogglePending;
+
+  React.useEffect(() => {
+    if (defaultOfferCodeId) {
+      setIsTogglePending(false);
+    }
+  }, [defaultOfferCodeId]);
 
   const loadOptions = React.useCallback(
     async (search: string) => {
       if (!uniquePermalink) return;
 
+      const trimmedSearch = search.trim();
+      if (!trimmedSearch) {
+        setOptions([]);
+        setIsOpen(false);
+        return;
+      }
+
       try {
-        const results = await searchProductOfferCodes(uniquePermalink, search.trim());
+        const results = await searchProductOfferCodes(uniquePermalink, trimmedSearch);
         setOptions(results);
       } catch (error) {
         assertResponseError(error);
@@ -48,39 +62,22 @@ export const DefaultDiscountCodeSelector = () => {
     void loadOptions(search);
   }, 300);
 
-  const handleToggleChange = async (enabled: boolean) => {
+  const handleToggleChange = (enabled: boolean) => {
     if (enabled) {
-      // If we have loaded codes, use the first one.
-      let firstDiscountCode = availableDiscountCodes[0];
-
-      // If the list is empty try to fetch them dynamically so we can auto-select the most recent one.
-      if (!firstDiscountCode && uniquePermalink) {
-        try {
-          const results = await searchProductOfferCodes(uniquePermalink, "");
-          if (results.length > 0) {
-            setAvailableDiscountCodes(results);
-            firstDiscountCode = results[0];
-          }
-        } catch {
-          showAlert("Sorry, something went wrong while searching discount codes.", "error");
-        }
-      }
-
-      if (firstDiscountCode) {
-        updateProduct({ default_offer_code_id: firstDiscountCode.id });
-        setQuery(formatLabel(firstDiscountCode));
-      } else {
-        showAlert("You don't have any discount codes yet.", "warning");
-      }
+      setIsTogglePending(true);
+      setQuery("");
+      setOptions([]);
     } else {
+      setIsTogglePending(false);
       updateProduct({ default_offer_code_id: null });
       setQuery("");
+      setOptions([]);
     }
   };
 
   return (
     <ToggleSettingRow
-      value={isEnabled}
+      value={showDropdown}
       onChange={handleToggleChange}
       disabled={false}
       label="Automatically apply discount code"
@@ -99,11 +96,16 @@ export const DefaultDiscountCodeSelector = () => {
                     {...props}
                     id="default-discount-code"
                     type="search"
-                    placeholder="Search discount codes"
+                    placeholder="Begin typing to select a discount code"
                     value={query}
                     onChange={(event) => {
                       const value = event.target.value;
                       setQuery(value);
+                      if (value.trim().length === 0) {
+                        setIsOpen(false);
+                        setOptions([]);
+                        return;
+                      }
                       debouncedLoadOptions(value);
                       setIsOpen(true);
                     }}
@@ -121,6 +123,7 @@ export const DefaultDiscountCodeSelector = () => {
                     }
                     updateProduct({ default_offer_code_id: code.id });
                     setQuery(formatLabel(code));
+                    setIsTogglePending(false);
                     setAvailableDiscountCodes((current) => {
                       if (!current) return [code];
                       if (current.find((c) => c.id === code.id)) return current;
