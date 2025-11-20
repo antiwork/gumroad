@@ -229,7 +229,7 @@ export const Wishlist = ({
       <PageHeader
         className={classNames(
           { "lg:px-16": layout === "discover" },
-          { "mx-auto w-full max-w-6xl border-0 md:px-0": layout === "profile" },
+          { "*:mx-auto *:w-full *:max-w-6xl": layout === "profile" },
         )}
         title={name}
         actions={
@@ -269,13 +269,7 @@ export const Wishlist = ({
         ) : null}
         {description ? <h4>{description}</h4> : null}
       </PageHeader>
-      <section
-        className={classNames(
-          "p-4 md:p-8",
-          { "lg:px-16": layout === "discover" },
-          { "border-t border-border md:px-0": layout === "profile" },
-        )}
-      >
+      <section className={classNames("p-4 md:p-8", { "lg:px-16": layout === "discover" })}>
         <div className={classNames({ "mx-auto w-full max-w-6xl": layout === "profile" })}>
           <ProductCardGrid ref={gridRef}>
             {items.map((item) => (
@@ -292,28 +286,28 @@ export const Wishlist = ({
               />
             ))}
           </ProductCardGrid>
+
+          {items.length === 0 ? (
+            <Placeholder>
+              <figure>
+                <Icon name="gift-fill" />
+              </figure>
+              {can_edit ? "Products from your wishlist will be displayed here" : "This wishlist is currently empty"}
+            </Placeholder>
+          ) : null}
+
+          {isEditing ? (
+            <WishlistEditor
+              id={id}
+              name={name}
+              setName={setName}
+              description={description}
+              setDescription={setDescription}
+              isDiscoverable={!discover_opted_out}
+              onClose={() => setIsEditing(false)}
+            />
+          ) : null}
         </div>
-
-        {items.length === 0 ? (
-          <Placeholder>
-            <figure>
-              <Icon name="gift-fill" />
-            </figure>
-            {can_edit ? "Products from your wishlist will be displayed here" : "This wishlist is currently empty"}
-          </Placeholder>
-        ) : null}
-
-        {isEditing ? (
-          <WishlistEditor
-            id={id}
-            name={name}
-            setName={setName}
-            description={description}
-            setDescription={setDescription}
-            isDiscoverable={!discover_opted_out}
-            onClose={() => setIsEditing(false)}
-          />
-        ) : null}
       </section>
     </>
   );
