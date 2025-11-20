@@ -30,11 +30,9 @@ module SearchProducts
       if Feature.active?(:offer_codes_search)
         if params[:offer_codes].is_a?(String)
           params[:offer_codes] = params[:offer_codes].split(",").map(&:squish).select { |code| ALLOWED_OFFER_CODES.include?(code) }
-        elsif params[:offer_codes].is_a?(Array)
-          params[:offer_codes] = params[:offer_codes].select { |code| ALLOWED_OFFER_CODES.include?(code) }
+          params[:offer_codes] = ["__no_match__"] if params[:offer_codes].empty?
         end
       else
-        # Remove offer_codes from search params when feature flag is disabled
         params[:offer_codes] = nil
       end
 
