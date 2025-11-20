@@ -253,25 +253,15 @@ class LinksController < ApplicationController
 
     results = search_products(search_params)
     results[:products] = results[:products].includes(ProductPresenter::ASSOCIATIONS_FOR_CARD).map do |product|
-      if on_profile
-        ProductPresenter.card_for_web(
-          product:,
-          request:,
-          recommended_by:,
-          target: Product::Layout::PROFILE,
-          show_seller: false
-        )
-      else
-        ProductPresenter.card_for_web(
-          product:,
-          request:,
-          recommended_by:,
-          target: Product::Layout::DISCOVER,
-          show_seller: true,
-          query: (search_params[:query]),
-          offer_code: (search_params[:offer_codes]&.first)
-        )
-      end
+      ProductPresenter.card_for_web(
+        product:,
+        request:,
+        recommended_by:,
+        target: on_profile ? Product::Layout::PROFILE : Product::Layout::DISCOVER,
+        show_seller: !on_profile,
+        query: (search_params[:query] unless on_profile),
+        offer_code: (search_params[:offer_code] unless on_profile)
+      )
     end
     render json: results
   end
