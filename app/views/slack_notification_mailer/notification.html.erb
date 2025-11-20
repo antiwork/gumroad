@@ -1,6 +1,4 @@
-<p>
-  Slack notification from <strong><%= @room_name.titleize %></strong> (<code>#<%= @slack_channel %></code>) sent by <strong><%= @sender %></strong>.
-</p>
+<%= header_section("Slack Notification", "from #{@room_name.titleize} (##{@slack_channel}) by #{@sender}") %>
 
 <% message_lines = Array(@message_text).flatten.compact.map(&:to_s).map(&:strip).reject(&:blank?) %>
 <% if message_lines.present? %>
