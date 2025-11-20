@@ -59,7 +59,7 @@ export const DiscordIntegrationEditor = ({
       }}
       label="Invite your customers to a Discord server"
       dropdown={
-        <div className="paragraphs">
+        <div className="flex flex-col gap-4">
           People who purchase your product will be automatically invited to your Discord server.
           {isLoading ? (
             <LoadingSpinner className="size-6" />

@@ -59,7 +59,7 @@ export const Drawer = ({ className, children, ...rest }: React.HTMLAttributes<HT
   if (shouldCollapseDrawer) return null;
 
   return (
-    <div className={cx("drawer", "paragraphs", className)} {...rest}>
+    <div className={cx("drawer", "flex flex-col gap-4", className)} {...rest}>
       {children}
     </div>
   );

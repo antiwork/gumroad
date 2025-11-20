@@ -444,7 +444,7 @@ const MainPage = (props: MainPagePropsType) => {
               disabled={props.is_form_disabled}
               label="Enable purchasing power parity"
               dropdown={
-                <div className="paragraphs">
+                <div className="flex flex-col gap-4">
                   <fieldset>
                     <legend>
                       <label htmlFor={`${uid}-ppp-discount-percentage`}>Maximum PPP discount</label>

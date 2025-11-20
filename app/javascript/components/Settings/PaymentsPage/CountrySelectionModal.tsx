@@ -65,7 +65,7 @@ export const CountrySelectionModal = ({ country: initialCountry, countries }: Pr
           </Button>
         }
       >
-        <div className="paragraphs">
+        <div className="flex flex-col gap-4">
           <fieldset className={cx({ danger: !!error })}>
             <legend>
               <label htmlFor={`${uid}country`}>Country</label>
