@@ -42,12 +42,12 @@ describe ProductPresenter::Card do
       end
 
       it "returns the URL with the offer code when an allowed offer_code is provided" do
-        data = described_class.new(product:).for_web(request:, recommended_by: "discover", query: "offer_code=BLACKFRIDAY2025")
+        data = described_class.new(product:).for_web(request:, recommended_by: "discover", offer_code: "BLACKFRIDAY2025")
         expect(data[:url]).to include("code=BLACKFRIDAY2025")
       end
 
       it "does not return the URL with the offer code when an disallowed offer_code is provided" do
-        data = described_class.new(product:).for_web(request:, recommended_by: "discover", query: "offer_code=SUMMER2025")
+        data = described_class.new(product:).for_web(request:, recommended_by: "discover", offer_code: "SUMMER2025")
         expect(data[:url]).not_to include("code=SUMMER2025")
       end
 
