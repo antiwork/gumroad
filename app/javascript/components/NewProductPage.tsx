@@ -16,7 +16,7 @@ import {
 } from "$app/utils/recurringPricing";
 import { assertResponseError, request } from "$app/utils/request";
 
-import { Button, NavigationButton } from "$app/components/Button";
+import { Button } from "$app/components/Button";
 import { Icon } from "$app/components/Icons";
 import { Popover } from "$app/components/Popover";
 import { showAlert } from "$app/components/server-components/Alert";
@@ -222,11 +222,9 @@ const NewProductPage = ({
         title={show_orientation_text ? "Publish your first product" : "What are you creating?"}
         actions={
           <>
-            <Link href={Routes.products_path()} className="no-underline">
-              <NavigationButton>
-                <Icon name="x-square" />
-                <span>Cancel</span>
-              </NavigationButton>
+            <Link href={Routes.products_path()} className="button">
+              <Icon name="x-square" />
+              <span>Cancel</span>
             </Link>
             {ai_generation_enabled ? (
               <Popover
