@@ -54,7 +54,7 @@ module ProductsHelper
 
   def url_for_product_page(product, request:, recommended_by: nil, recommender_model_name: nil, layout: nil, affiliate_id: nil, query: nil, offer_code: nil)
     options = {}
-    options[:code] = offer_code if offer_code.present? && Link.searchable_offer_codes.include?(offer_code)
+    options[:code] = offer_code if offer_code.present? && SearchProducts::ALLOWED_OFFER_CODES.include?(offer_code)
     if request.present? && user_by_domain(request.host) == product.user
       options.merge!(host: request.host_with_port, protocol: request.protocol)
       options[:recommended_by] = recommended_by if recommended_by.present?

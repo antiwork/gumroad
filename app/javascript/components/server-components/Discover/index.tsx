@@ -114,7 +114,7 @@ const Discover = (props: Props) => {
 
     parseParams(["sort", "query"], (value) => value);
     parseParams(["min_price", "max_price", "rating"], (value) => Number(value));
-    parseParams(["filetypes", "tags"], (value) => value.split(","));
+    parseParams(["filetypes", "tags", "offer_codes"], (value) => value.split(","));
     if (!parsedParams.sort) parsedParams.sort = defaultSortOrder;
     return parsedParams;
   };
@@ -145,7 +145,7 @@ const Discover = (props: Props) => {
       };
       serializeParams(["sort", "query"], (value) => value);
       serializeParams(["min_price", "max_price", "rating"], (value) => value.toString());
-      serializeParams(["filetypes", "tags"], (value) => value.join(","));
+      serializeParams(["filetypes", "tags", "offer_codes"], (value) => value.join(","));
       window.history.pushState(state.params, "", url);
     } else fromUrl.current = false;
     document.title = discoverTitleGenerator(state.params, props.taxonomies_for_nav);

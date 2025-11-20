@@ -1,6 +1,8 @@
 # frozen_string_literal: true
 
 module SearchProducts
+  ALLOWED_OFFER_CODES = ["BLACKFRIDAY2025"].freeze
+
   private
     def search_products(params)
       filetype_options = Link.filetype_options(params)
@@ -23,6 +25,17 @@ module SearchProducts
 
       if params[:filetypes].is_a?(String)
         params[:filetypes] = params[:filetypes].split(",").map { |f| f.squish.downcase }
+      end
+
+      if Feature.active?(:offer_codes_search)
+        if params[:offer_codes].is_a?(String)
+          params[:offer_codes] = params[:offer_codes].split(",").map(&:squish).select { |code| ALLOWED_OFFER_CODES.include?(code) }
+        elsif params[:offer_codes].is_a?(Array)
+          params[:offer_codes] = params[:offer_codes].select { |code| ALLOWED_OFFER_CODES.include?(code) }
+        end
+      else
+        # Remove offer_codes from search params when feature flag is disabled
+        params[:offer_codes] = nil
       end
 
       if params[:size].is_a?(String)

@@ -506,7 +506,7 @@ class Link < ApplicationRecord
     options[:layout] = layout if layout.present?
     options[:query] = query if query.present?
     options[:affiliate_id] = affiliate_id if affiliate_id.present?
-    options[:code] = code if code.present? && self.class.searchable_offer_codes.include?(code)
+    options[:code] = code if code.present? && SearchProducts::ALLOWED_OFFER_CODES.include?(code)
     options[:autocomplete] = "true" if autocomplete
 
     product_long_url = Rails.application.routes.url_helpers.short_link_url(general_permalink, options)

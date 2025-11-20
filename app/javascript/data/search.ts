@@ -7,6 +7,7 @@ type SearchRequestType = {
   from: number;
   tags: string[];
   filetypes: string[];
+  offer_codes: string[];
   sort: string;
   min_price: number;
   max_price: number;

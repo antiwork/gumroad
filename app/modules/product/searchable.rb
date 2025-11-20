@@ -8,8 +8,6 @@ module Product::Searchable
   RECOMMENDED_PRODUCTS_PER_PAGE = 9
   MAX_NUMBER_OF_FILETYPES = 8
 
-  SEARCHABLE_OFFER_CODES = ["BLACKFRIDAY2025"].freeze
-
   ATTRIBUTE_TO_SEARCH_FIELDS_MAP = {
     "name" => ["name", "rated_as_adult"],
     "description" => ["description", "rated_as_adult"],
@@ -149,10 +147,6 @@ module Product::Searchable
   end
 
   class_methods do
-    def searchable_offer_codes
-      Feature.active?(:offer_codes_search) ? SEARCHABLE_OFFER_CODES : []
-    end
-
     def search_options(params)
       search_options = Elasticsearch::DSL::Search.search do
         size params.fetch(:size, RECOMMENDED_PRODUCTS_PER_PAGE)
@@ -302,16 +296,8 @@ module Product::Searchable
             end
 
             if params[:offer_codes].present?
-              if (offer_codes = Array.wrap(params[:offer_codes]) & searchable_offer_codes).any?
-                must do
-                  terms "offer_codes.code" => offer_codes
-                end
-              else
-                # We do not allow search by offer codes that are not searchable
-                # and force the search to return empty results
-                must do
-                  term _id: "__non_existent_id__"
-                end
+              must do
+                terms "offer_codes.code" => Array.wrap(params[:offer_codes])
               end
             end
           end
