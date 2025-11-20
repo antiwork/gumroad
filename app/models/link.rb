@@ -817,10 +817,9 @@ class Link < ApplicationRecord
   #
   # Returns list of offer codes.
   def product_and_universal_offer_codes
-    offer_codes
-      .or(user.offer_codes.universal_with_matching_currency(price_currency_type))
-      .alive
-      .order(:created_at)
+    product_code_ids = offer_codes.alive.ids
+    universal_code_ids = user.offer_codes.universal_with_matching_currency(price_currency_type).alive.ids
+    OfferCode.where(id: product_code_ids + universal_code_ids).order(:created_at)
   end
 
   def purchase_info_for_product_page(requested_user, browser_guid)
