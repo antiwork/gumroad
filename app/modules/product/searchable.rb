@@ -303,7 +303,7 @@ module Product::Searchable
                   terms "offer_codes.code" => offer_codes
                 end
               else
-                # We do not allow offer codes that are not in the ALLOWED_OFFER_CODES array
+                # We do not allow search by offer codes that are not in the ALLOWED_OFFER_CODES array
                 # and force the search to return empty results
                 must do
                   term _id: "__non_existent_id__"

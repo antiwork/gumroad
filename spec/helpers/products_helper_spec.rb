@@ -102,7 +102,7 @@ describe ProductsHelper do
 
       context "when offer_code is present" do
         it "returns the long_url with the offer_code" do
-          expect(helper.url_for_product_page(product, request: @request, recommended_by: "test", offer_code: "BLACKFRIDAY2025")).to eq product.long_url(recommended_by: "test", offer_code: "BLACKFRIDAY2025")
+          expect(helper.url_for_product_page(product, request: @request, recommended_by: "test", offer_code: "BLACKFRIDAY2025")).to eq product.long_url(recommended_by: "test", code: "BLACKFRIDAY2025")
         end
       end
     end
