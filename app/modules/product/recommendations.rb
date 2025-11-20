@@ -2,7 +2,6 @@
 
 module Product::Recommendations
   def recommendable?
-    return true
     recommendable_reasons.values.all?
   end
   alias_method :recommendable, :recommendable?
