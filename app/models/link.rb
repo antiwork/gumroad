@@ -506,7 +506,7 @@ class Link < ApplicationRecord
     options[:layout] = layout if layout.present?
     options[:query] = query if query.present?
     options[:affiliate_id] = affiliate_id if affiliate_id.present?
-    options[:code] = code if code.present? && SearchProducts::ALLOWED_OFFER_CODES.include?(code)
+    options[:code] = code if code.present?
     options[:autocomplete] = "true" if autocomplete
 
     product_long_url = Rails.application.routes.url_helpers.short_link_url(general_permalink, options)
@@ -817,9 +817,7 @@ class Link < ApplicationRecord
   #
   # Returns list of offer codes.
   def product_and_universal_offer_codes
-    product_codes = offer_codes.alive.to_a
-    universal_codes = user.offer_codes.universal_with_matching_currency(price_currency_type).alive.to_a
-    (product_codes + universal_codes).sort_by(&:created_at)
+    (offer_codes.alive + user.offer_codes.universal_with_matching_currency(price_currency_type).alive).sort_by(&:created_at)
   end
 
   def purchase_info_for_product_page(requested_user, browser_guid)
