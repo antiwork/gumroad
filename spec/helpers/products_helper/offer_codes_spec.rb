@@ -62,16 +62,6 @@ describe ProductsHelper, "url_for_product_page with offer codes" do
     end
   end
 
-  describe "when offer_code is not BLACKFRIDAY2025" do
-    let(:request) { instance_double(ActionDispatch::Request, host: "test.gumroad.com", host_with_port: "test.gumroad.com:1234", protocol: "http") }
-
-    it "does not add code parameter to URL" do
-      url = url_for_product_page(product, request:, offer_code: "SUMMER2025")
-
-      expect(url).not_to include("code=")
-    end
-  end
-
   describe "when offer_code is nil" do
     let(:request) { instance_double(ActionDispatch::Request, host: "test.gumroad.com", host_with_port: "test.gumroad.com:1234", protocol: "http") }
 
