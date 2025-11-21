@@ -94,13 +94,13 @@ export const AnalyticsCountriesTable = ({
         {items.length ? (
           items.map(({ name, totals, sales, views }) => (
             <TableRow key={name}>
-              <TableCell label="Country">
+              <TableCell>
                 <CountryFlag countryCode={countries[name] || ""} />
                 {name}
               </TableCell>
-              <TableCell label="Views">{views}</TableCell>
-              <TableCell label="Sales">{sales}</TableCell>
-              <TableCell label="Total">
+              <TableCell>{views}</TableCell>
+              <TableCell>{sales}</TableCell>
+              <TableCell>
                 {formatPriceCentsWithCurrencySymbol("usd", totals, { symbolFormat: "short", noCentsIfWhole: true })}
               </TableCell>
             </TableRow>
@@ -164,10 +164,10 @@ export const AnalyticsStatesTable = ({ locationData, selectedProducts, locations
         <TableBody>
           {items.map(({ name, totals, sales, views }) => (
             <TableRow key={name}>
-              <TableCell label="State">{name}</TableCell>
-              <TableCell label="Views">{views}</TableCell>
-              <TableCell label="Sales">{sales}</TableCell>
-              <TableCell label="Total">
+              <TableCell>{name}</TableCell>
+              <TableCell>{views}</TableCell>
+              <TableCell>{sales}</TableCell>
+              <TableCell>
                 {formatPriceCentsWithCurrencySymbol("usd", totals, { symbolFormat: "short", noCentsIfWhole: true })}
               </TableCell>
             </TableRow>

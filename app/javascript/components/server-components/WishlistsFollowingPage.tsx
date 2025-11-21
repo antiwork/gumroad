@@ -62,7 +62,7 @@ const WishlistsFollowingPage = ({
             <TableBody>
               {wishlists.map((wishlist) => (
                 <TableRow key={wishlist.id}>
-                  <TableCell label="Wishlist">
+                  <TableCell>
                     <a href={wishlist.url} target="_blank" rel="noreferrer" style={{ textDecoration: "none" }}>
                       <h4>{wishlist.name}</h4>
                     </a>
@@ -70,8 +70,8 @@ const WishlistsFollowingPage = ({
                       <small>{wishlist.url}</small>
                     </a>
                   </TableCell>
-                  <TableCell label="Products">{wishlist.product_count}</TableCell>
-                  <TableCell label="Creator">
+              <TableCell>{wishlist.product_count}</TableCell>
+              <TableCell>
                     <a
                       href={wishlist.creator.profile_url}
                       style={{ display: "flex", alignItems: "center", gap: "var(--spacer-2)" }}

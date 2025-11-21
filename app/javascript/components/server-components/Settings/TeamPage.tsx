@@ -303,7 +303,7 @@ const TeamMembersSection = ({
         <TableBody>
           {memberInfos.map((memberInfo) => (
             <TableRow key={`${memberInfo.type}-${memberInfo.id}`}>
-              <TableCell label="Member">
+              <TableCell>
                 <div style={{ display: "flex", alignItems: "center", gap: "var(--spacer-4)" }}>
                   <img
                     className="user-avatar"
@@ -331,7 +331,7 @@ const TeamMembersSection = ({
                   </div>
                 </div>
               </TableCell>
-              <TableCell label="Role">
+              <TableCell>
                 {memberInfo.leave_team_option ? (
                   <div className="flex justify-end">
                     <Button color="danger" disabled={loading} onClick={() => setConfirming(memberInfo)}>

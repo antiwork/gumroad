@@ -136,7 +136,7 @@ export const ProductsPageProductsTable = (props: {
                 </div>
               </TableCell>
 
-              <TableCell label="Sales" className="whitespace-nowrap lg:px-8">
+              <TableCell className="whitespace-nowrap lg:px-8">
                 <a href={Routes.customers_link_id_path(product.permalink)}>
                   {product.successful_sales_count.toLocaleString(locale)}
                 </a>
@@ -146,15 +146,15 @@ export const ProductsPageProductsTable = (props: {
                 ) : null}
               </TableCell>
 
-              <TableCell label="Revenue" className="whitespace-nowrap lg:px-8">
+              <TableCell className="whitespace-nowrap lg:px-8">
                 {formatPriceCentsWithCurrencySymbol("usd", product.revenue, { symbolFormat: "short" })}
               </TableCell>
 
-              <TableCell label="Price" className="whitespace-nowrap lg:px-8">
+              <TableCell className="whitespace-nowrap lg:px-8">
                 {product.price_formatted}
               </TableCell>
 
-              <TableCell label="Status" className="whitespace-nowrap lg:px-8">
+              <TableCell className="whitespace-nowrap lg:px-8">
                 {(() => {
                   switch (product.status) {
                     case "unpublished":
@@ -191,7 +191,7 @@ export const ProductsPageProductsTable = (props: {
         <TableFooter>
           <TableRow>
             <TableCell colSpan={2}>Totals</TableCell>
-            <TableCell label="Sales" className="whitespace-nowrap lg:px-8">
+            <TableCell className="whitespace-nowrap lg:px-8">
               {products.reduce((sum, product) => sum + product.successful_sales_count, 0).toLocaleString(locale)}
             </TableCell>
 

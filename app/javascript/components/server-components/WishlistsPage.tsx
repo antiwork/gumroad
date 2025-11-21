@@ -99,7 +99,7 @@ const WishlistsPage = ({
             <TableBody>
               {wishlists.map((wishlist) => (
                 <TableRow key={wishlist.id}>
-                  <TableCell label="Wishlist">
+                  <TableCell>
                     <a href={wishlist.url} target="_blank" rel="noreferrer" style={{ textDecoration: "none" }}>
                       <h4>{wishlist.name}</h4>
                     </a>
@@ -107,8 +107,8 @@ const WishlistsPage = ({
                       <small>{wishlist.url}</small>
                     </a>
                   </TableCell>
-                  <TableCell label="Products">{wishlist.product_count}</TableCell>
-                  <TableCell label="Discoverable">
+              <TableCell>{wishlist.product_count}</TableCell>
+              <TableCell>
                     <Toggle
                       value={!wishlist.discover_opted_out}
                       onChange={(checked) => void updateDiscoverOptOut(wishlist.id, !checked)}

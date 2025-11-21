@@ -51,13 +51,13 @@ const AdminSalesReportsJobHistory = ({ countries, jobHistory }: Props) => {
         <TableBody>
           {jobHistory.map((job, index) => (
             <TableRow key={index}>
-              <TableCell label="Country">{countryCodeToName[job.country_code] || job.country_code}</TableCell>
-              <TableCell label="Date range">
+              <TableCell>{countryCodeToName[job.country_code] || job.country_code}</TableCell>
+              <TableCell>
                 {job.start_date} to {job.end_date}
               </TableCell>
-              <TableCell label="Enqueued at">{new Date(job.enqueued_at).toLocaleString()}</TableCell>
-              <TableCell label="Status">{job.status}</TableCell>
-              <TableCell label="Download">
+              <TableCell>{new Date(job.enqueued_at).toLocaleString()}</TableCell>
+              <TableCell>{job.status}</TableCell>
+              <TableCell>
                 {job.status === "completed" && job.download_url ? (
                   <a href={job.download_url} className="button small" target="_blank" rel="noopener noreferrer">
                     Download CSV

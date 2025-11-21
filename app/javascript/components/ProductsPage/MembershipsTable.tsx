@@ -132,7 +132,7 @@ export const ProductsPageMembershipsTable = (props: {
                 </a>
               </TableCell>
 
-              <TableCell label="Members" className="text-nowrap">
+              <TableCell className="text-nowrap">
                 {membership.successful_sales_count.toLocaleString(userAgentInfo.locale)}
 
                 {membership.remaining_for_sale_count ? (
@@ -140,7 +140,7 @@ export const ProductsPageMembershipsTable = (props: {
                 ) : null}
               </TableCell>
 
-              <TableCell label="Revenue" className="text-nowrap">
+              <TableCell className="text-nowrap">
                 {formatPriceCentsWithCurrencySymbol("usd", membership.revenue, { symbolFormat: "short" })}
 
                 <small>
@@ -158,11 +158,11 @@ export const ProductsPageMembershipsTable = (props: {
                 </small>
               </TableCell>
 
-              <TableCell label="Price" className="text-nowrap">
+              <TableCell className="text-nowrap">
                 {membership.price_formatted}
               </TableCell>
 
-              <TableCell label="Status" className="text-nowrap">
+              <TableCell className="text-nowrap">
                 {(() => {
                   switch (membership.status) {
                     case "unpublished":

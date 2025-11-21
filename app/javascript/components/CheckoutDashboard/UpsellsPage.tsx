@@ -284,7 +284,7 @@ const UpsellsPage = (props: UpsellsPageProps) => {
                       onClick={() => setSelectedUpsellId(upsell.id)}
                       selected={selectedUpsellId === upsell.id}
                     >
-                      <TableCell label="Upsell">
+                      <TableCell>
                         <div>
                           <div>
                             <b>{upsell.name}</b>
@@ -292,7 +292,7 @@ const UpsellsPage = (props: UpsellsPageProps) => {
                           <small>{formatOfferedProductName(upsell.product.name, upsell.product.variant?.name)}</small>
                         </div>
                       </TableCell>
-                      <TableCell label="Revenue" aria-busy={!statistics}>
+                      <TableCell aria-busy={!statistics}>
                         {statistics ? (
                           formatPriceCentsWithCurrencySymbol(upsell.product.currency_type, statistics.revenue_cents, {
                             symbolFormat: "short",
@@ -301,10 +301,10 @@ const UpsellsPage = (props: UpsellsPageProps) => {
                           <Skeleton className="h-4 w-16" />
                         )}
                       </TableCell>
-                      <TableCell label="Uses" aria-busy={!statistics}>
+                      <TableCell aria-busy={!statistics}>
                         {statistics ? statistics.uses.total : <Skeleton className="h-4 w-16" />}
                       </TableCell>
-                      <TableCell label="Status">{upsell.paused ? "Paused" : "Live"}</TableCell>
+                      <TableCell>{upsell.paused ? "Paused" : "Live"}</TableCell>
                     </TableRow>
                   );
                 })}

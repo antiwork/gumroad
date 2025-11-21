@@ -195,8 +195,8 @@ export const FollowersPage = ({ followers: initialFollowers, per_page, total }: 
                     onClick={() => setSelectedFollowerId(follower.id === selectedFollowerId ? null : follower.id)}
                     selected={selectedFollowerId === follower.id}
                   >
-                    <TableCell label="Email">{follower.email}</TableCell>
-                    <TableCell label="Date Added">{follower.formatted_confirmed_on}</TableCell>
+              <TableCell>{follower.email}</TableCell>
+              <TableCell>{follower.formatted_confirmed_on}</TableCell>
                   </TableRow>
                 ))}
               </TableBody>

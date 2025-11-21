@@ -196,7 +196,7 @@ const Collaborators = () => {
                     selected={collaborator.id === selectedCollaborator?.id}
                     onClick={() => setSelectedCollaborator(collaborator)}
                   >
-                    <TableCell label="Name">
+                    <TableCell>
                       <div className="flex items-center gap-4">
                         <img
                           className="user-avatar"
@@ -219,13 +219,13 @@ const Collaborators = () => {
                         ) : null}
                       </div>
                     </TableCell>
-                    <TableCell label="Products">
+                    <TableCell>
                       <span className="line-clamp-2">{formatProductNames(collaborator)}</span>
                     </TableCell>
-                    <TableCell label="Cut" className="whitespace-nowrap">
+                    <TableCell className="whitespace-nowrap">
                       {formatCommission(collaborator)}
                     </TableCell>
-                    <TableCell label="Status" className="whitespace-nowrap">
+                    <TableCell className="whitespace-nowrap">
                       {collaborator.invitation_accepted ? <>Accepted</> : <>Pending</>}
                     </TableCell>
                     <TableCell actions onClick={(e) => e.stopPropagation()}>

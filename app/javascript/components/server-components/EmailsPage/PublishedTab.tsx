@@ -126,8 +126,8 @@ export const PublishedTab = () => {
                     selected={installment.external_id === selectedInstallmentId}
                     onClick={() => setSelectedInstallmentId(installment.external_id)}
                   >
-                    <TableCell label="Subject">{installment.name}</TableCell>
-                    <TableCell label="Date" className="whitespace-nowrap">
+              <TableCell>{installment.name}</TableCell>
+              <TableCell className="whitespace-nowrap">
                       {new Date(installment.published_at).toLocaleDateString(userAgentInfo.locale, {
                         day: "numeric",
                         month: "short",
@@ -135,15 +135,15 @@ export const PublishedTab = () => {
                         timeZone: currentSeller.timeZone.name,
                       })}
                     </TableCell>
-                    <TableCell label="Emailed" className="whitespace-nowrap">
+                    <TableCell className="whitespace-nowrap">
                       {installment.send_emails ? formatStatNumber({ value: installment.sent_count }) : "n/a"}
                     </TableCell>
-                    <TableCell label="Opened" className="whitespace-nowrap">
+                    <TableCell className="whitespace-nowrap">
                       {installment.send_emails
                         ? formatStatNumber({ value: installment.open_rate, suffix: "%" })
                         : "n/a"}
                     </TableCell>
-                    <TableCell label="Clicks" className="whitespace-nowrap">
+                    <TableCell className="whitespace-nowrap">
                       {installment.clicked_urls.length > 0 ? (
                         <WithTooltip
                           tooltipProps={{ className: "w-[20rem] p-0" }}
@@ -170,7 +170,7 @@ export const PublishedTab = () => {
                         formatStatNumber({ value: installment.click_count })
                       )}
                     </TableCell>
-                    <TableCell label="Views" className="whitespace-nowrap">
+                    <TableCell className="whitespace-nowrap">
                       {formatStatNumber({
                         value: installment.view_count,
                         placeholder: "n/a",

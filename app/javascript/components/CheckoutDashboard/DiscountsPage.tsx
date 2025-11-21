@@ -351,7 +351,7 @@ const DiscountsPage = ({ offer_codes, pages, products, pagination: initialPagina
                       selected={offerCode.id === selectedOfferCodeId}
                       onClick={() => setSelectedOfferCodeId(offerCode.id)}
                     >
-                      <TableCell label="Discount">
+                      <TableCell>
                         <div className="grid gap-2">
                           <div>
                             <div className="pill small mr-2" aria-label="Offer code">
@@ -364,20 +364,20 @@ const DiscountsPage = ({ offer_codes, pages, products, pagination: initialPagina
                           </small>
                         </div>
                       </TableCell>
-                      <TableCell label="Revenue" className="whitespace-nowrap" aria-busy={!statistics}>
+                      <TableCell className="whitespace-nowrap" aria-busy={!statistics}>
                         {statistics ? formatRevenue(statistics.revenue_cents) : <Skeleton className="h-4 w-16" />}
                       </TableCell>
-                      <TableCell label="Uses" className="whitespace-nowrap" aria-busy={!statistics}>
+                      <TableCell className="whitespace-nowrap" aria-busy={!statistics}>
                         {statistics ? (
                           formatUses(statistics.uses.total, offerCode.limit)
                         ) : (
                           <Skeleton className="h-4 w-16" />
                         )}
                       </TableCell>
-                      <TableCell label="Term">{`${validAt ? `${formatDate(validAt)} - ` : ""}${
+                      <TableCell>{`${validAt ? `${formatDate(validAt)} - ` : ""}${
                         expiresAt ? formatDate(expiresAt) : "No end date"
                       }`}</TableCell>
-                      <TableCell label="Status" className="whitespace-nowrap">
+                      <TableCell className="whitespace-nowrap">
                         <div className="grid grid-cols-[min-content_1fr] gap-2">
                           {validAt && currentDate < validAt ? (
                             <>Scheduled</>

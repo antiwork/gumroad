@@ -203,15 +203,15 @@ const MainPage = (props: Props) => {
               </TableHeader>
               <TableBody>
                 <TableRow>
-                  <TableCell>Purchases</TableCell>
-                  <TableCell label="Email">
+                  <TableCell hideLabel>Purchases</TableCell>
+                  <TableCell>
                     <Toggle
                       value={userSettings.enable_payment_email}
                       onChange={(value) => updateUserSettings({ enable_payment_email: value })}
                       disabled={props.is_form_disabled}
                     />
                   </TableCell>
-                  <TableCell label="Mobile">
+                  <TableCell>
                     <Toggle
                       value={userSettings.enable_payment_push_notification}
                       onChange={(value) => updateUserSettings({ enable_payment_push_notification: value })}
@@ -220,15 +220,15 @@ const MainPage = (props: Props) => {
                   </TableCell>
                 </TableRow>
                 <TableRow>
-                  <TableCell>Recurring payments</TableCell>
-                  <TableCell label="Email">
+                  <TableCell hideLabel>Recurring payments</TableCell>
+                  <TableCell>
                     <Toggle
                       value={userSettings.enable_recurring_subscription_charge_email}
                       onChange={(value) => updateUserSettings({ enable_recurring_subscription_charge_email: value })}
                       disabled={props.is_form_disabled}
                     />
                   </TableCell>
-                  <TableCell label="Mobile">
+                  <TableCell>
                     <Toggle
                       value={userSettings.enable_recurring_subscription_charge_push_notification}
                       onChange={(value) =>
@@ -241,15 +241,15 @@ const MainPage = (props: Props) => {
                   </TableCell>
                 </TableRow>
                 <TableRow>
-                  <TableCell>Free downloads</TableCell>
-                  <TableCell label="Email">
+                  <TableCell hideLabel>Free downloads</TableCell>
+                  <TableCell>
                     <Toggle
                       value={userSettings.enable_free_downloads_email}
                       onChange={(value) => updateUserSettings({ enable_free_downloads_email: value })}
                       disabled={props.is_form_disabled}
                     />
                   </TableCell>
-                  <TableCell label="Mobile">
+                  <TableCell>
                     <Toggle
                       value={userSettings.enable_free_downloads_push_notification}
                       onChange={(value) => updateUserSettings({ enable_free_downloads_push_notification: value })}
@@ -258,30 +258,30 @@ const MainPage = (props: Props) => {
                   </TableCell>
                 </TableRow>
                 <TableRow>
-                  <TableCell>Personalized product announcements</TableCell>
-                  <TableCell label="Email">
+                  <TableCell hideLabel>Personalized product announcements</TableCell>
+                  <TableCell>
                     <Toggle
                       value={userSettings.announcement_notification_enabled}
                       onChange={(value) => updateUserSettings({ announcement_notification_enabled: value })}
                       disabled={props.is_form_disabled}
                     />
                   </TableCell>
-                  <TableCell label="Mobile"></TableCell>
+                  <TableCell></TableCell>
                 </TableRow>
                 <TableRow>
-                  <TableCell>Comments</TableCell>
-                  <TableCell label="Email">
+                  <TableCell hideLabel>Comments</TableCell>
+                  <TableCell>
                     <Toggle
                       value={!userSettings.disable_comments_email}
                       onChange={(value) => updateUserSettings({ disable_comments_email: !value })}
                       disabled={props.is_form_disabled}
                     />
                   </TableCell>
-                  <TableCell label="Mobile"></TableCell>
+                  <TableCell></TableCell>
                 </TableRow>
                 <TableRow>
-                  <TableCell>Reviews</TableCell>
-                  <TableCell label="Email">
+                  <TableCell hideLabel>Reviews</TableCell>
+                  <TableCell>
                     <Toggle
                       value={!userSettings.disable_reviews_email}
                       onChange={(value) => updateUserSettings({ disable_reviews_email: !value })}
@@ -289,7 +289,7 @@ const MainPage = (props: Props) => {
                       ariaLabel="Reviews"
                     />
                   </TableCell>
-                  <TableCell label="Mobile"></TableCell>
+                  <TableCell></TableCell>
                 </TableRow>
               </TableBody>
             </Table>

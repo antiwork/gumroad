@@ -222,7 +222,7 @@ export const ProductRow = ({ product, disabled, onChange }: ProductRowProps) => 
 
   return (
     <TableRow>
-      <TableCell label="Enable">
+      <TableCell>
         <input
           id={uid}
           type="checkbox"
@@ -233,10 +233,10 @@ export const ProductRow = ({ product, disabled, onChange }: ProductRowProps) => 
           disabled={disabled}
         />
       </TableCell>
-      <TableCell label="Product">
+      <TableCell>
         <label htmlFor={uid}>{product.name}</label>
       </TableCell>
-      <TableCell label="Commission">
+      <TableCell>
         <fieldset className={cx({ danger: invalidAttrs.has("commission") })}>
           <NumberInput onChange={(value) => onChange({ fee_percent: value ?? 0 })} value={product.fee_percent}>
             {(inputProps) => (
@@ -254,7 +254,7 @@ export const ProductRow = ({ product, disabled, onChange }: ProductRowProps) => 
           </NumberInput>
         </fieldset>
       </TableCell>
-      <TableCell label="Destination URL (optional)">
+      <TableCell>
         <fieldset className={cx({ danger: invalidAttrs.has("destination_url") })}>
           <input
             type="text"

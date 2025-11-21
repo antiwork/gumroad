@@ -133,25 +133,25 @@ const AffiliatedProductsTable = ({
         <TableBody>
           {affiliatedProducts.map((affiliatedProduct) => (
             <TableRow key={affiliatedProduct.url}>
-              <TableCell label="Product">
+              <TableCell>
                 <a href={affiliatedProduct.url} title={affiliatedProduct.url} target="_blank" rel="noreferrer">
                   {affiliatedProduct.product_name}
                 </a>
               </TableCell>
 
-              <TableCell label="Sales" className="text-nowrap">
+              <TableCell className="text-nowrap">
                 {affiliatedProduct.sales_count.toLocaleString(userAgentInfo.locale)}
               </TableCell>
 
-              <TableCell label="Type" className="text-nowrap">
+              <TableCell className="text-nowrap">
                 {affiliatedProduct.affiliate_type === "direct_affiliate" ? "Direct" : "Gumroad"}
               </TableCell>
 
-              <TableCell label="Commission">
+              <TableCell>
                 {(affiliatedProduct.fee_percentage / 100).toLocaleString([], { style: "percent" })}
               </TableCell>
 
-              <TableCell label="Revenue" className="text-nowrap">
+              <TableCell className="text-nowrap">
                 {affiliatedProduct.humanized_revenue}
               </TableCell>
 

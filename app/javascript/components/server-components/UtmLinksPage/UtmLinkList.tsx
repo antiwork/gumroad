@@ -179,7 +179,7 @@ const UtmLinkList = () => {
                   selected={link.id === selectedUtmLink?.id}
                   onClick={() => setSelectedUtmLink(link)}
                 >
-                  <TableCell label="Link">
+                  <TableCell>
                     <div>
                       <h4>
                         <TruncatedTextWithTooltip text={link.title} maxLength={35} />
@@ -191,26 +191,26 @@ const UtmLinkList = () => {
                       </small>
                     </div>
                   </TableCell>
-                  <TableCell label="Source">
+                  <TableCell>
                     <TruncatedTextWithTooltip text={link.source} maxLength={16} />
                   </TableCell>
-                  <TableCell label="Medium">
+                  <TableCell>
                     <TruncatedTextWithTooltip text={link.medium} maxLength={16} />
                   </TableCell>
-                  <TableCell label="Campaign">
+                  <TableCell>
                     <TruncatedTextWithTooltip text={link.campaign} maxLength={16} />
                   </TableCell>
-                  <TableCell label="Clicks" className="text-nowrap">
+                  <TableCell className="text-nowrap">
                     {link.clicks}
                   </TableCell>
-                  <TableCell label="Revenue" aria-busy={link.revenue_cents === null} className="text-nowrap">
+                  <TableCell aria-busy={link.revenue_cents === null} className="text-nowrap">
                     {link.revenue_cents !== null ? (
                       `$${fixedDecimalPointNumber(link.revenue_cents / 100)}`
                     ) : (
                       <Skeleton className="h-4 w-16" />
                     )}
                   </TableCell>
-                  <TableCell label="Conversion" aria-busy={link.conversion_rate === null} className="text-nowrap">
+                  <TableCell aria-busy={link.conversion_rate === null} className="text-nowrap">
                     {link.conversion_rate !== null ? (
                       `${fixedDecimalPointNumber(link.conversion_rate * 100)}%`
                     ) : (

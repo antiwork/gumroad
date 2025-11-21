@@ -107,13 +107,13 @@ export const CollabsProductsTable = (props: { entries: Product[]; pagination: Pa
                 </div>
               </TableCell>
 
-              <TableCell label="Price" className="text-nowrap">
+              <TableCell className="text-nowrap">
                 {product.price_formatted}
               </TableCell>
 
-              <TableCell label="Cut">{product.cut}%</TableCell>
+              <TableCell>{product.cut}%</TableCell>
 
-              <TableCell label="Sales" className="text-nowrap">
+              <TableCell className="text-nowrap">
                 <a href={Routes.customers_link_id_path(product.permalink)}>
                   {product.successful_sales_count.toLocaleString(userAgentInfo.locale)}
                 </a>
@@ -123,7 +123,7 @@ export const CollabsProductsTable = (props: { entries: Product[]; pagination: Pa
                 ) : null}
               </TableCell>
 
-              <TableCell label="Revenue" className="text-nowrap">
+              <TableCell className="text-nowrap">
                 {formatPriceCentsWithCurrencySymbol("usd", product.revenue, { symbolFormat: "short" })}
               </TableCell>
             </TableRow>

@@ -273,9 +273,9 @@ const AffiliateRequestsTable = ({
                   <small>{affiliateRequest.email}</small>
                 </TableCell>
 
-                <TableCell label="Promotion">{affiliateRequest.promotion}</TableCell>
+                <TableCell>{affiliateRequest.promotion}</TableCell>
 
-                <TableCell label="Date">
+                <TableCell>
                   {parseISO(affiliateRequest.date).toLocaleDateString(userAgentInfo.locale)}
                 </TableCell>
 
@@ -509,8 +509,8 @@ const AffiliatesTab = () => {
                             selected={affiliate.id === selectedAffiliate?.id}
                             onClick={() => setSelectedAffiliate(affiliate)}
                           >
-                            <TableCell label="Name">{affiliate.affiliate_user_name}</TableCell>
-                            <TableCell label="Products">
+              <TableCell>{affiliate.affiliate_user_name}</TableCell>
+              <TableCell>
                               <WithTooltip
                                 tip={enabledProducts.length <= 1 ? null : productTooltipLabel(enabledProducts)}
                               >
@@ -519,8 +519,8 @@ const AffiliatesTab = () => {
                                 </a>
                               </WithTooltip>
                             </TableCell>
-                            <TableCell label="Commission">{formattedFeePercentLabel(affiliate)}</TableCell>
-                            <TableCell label="Sales" aria-busy={!statistics}>
+              <TableCell>{formattedFeePercentLabel(affiliate)}</TableCell>
+              <TableCell aria-busy={!statistics}>
                               {statistics ? (
                                 formattedSalesVolumeAmount(statistics.total_volume_cents)
                               ) : (
@@ -835,7 +835,7 @@ const Form = ({ title, headerLabel, submitLabel }: FormProps) => {
             </TableHeader>
             <TableBody>
               <TableRow>
-                <TableCell label="Enable">
+                <TableCell>
                   <input
                     id={`${uid}enableAllProducts`}
                     type="checkbox"
@@ -845,10 +845,10 @@ const Form = ({ title, headerLabel, submitLabel }: FormProps) => {
                     aria-label="Enable all products"
                   />
                 </TableCell>
-                <TableCell label="Product">
+                <TableCell>
                   <label htmlFor={`${uid}enableAllProducts`}>All products</label>
                 </TableCell>
-                <TableCell label="Commission">
+                <TableCell>
                   <fieldset className={cx({ danger: errors.has("feePercent") })}>
                     <NumberInput
                       onChange={(value) =>

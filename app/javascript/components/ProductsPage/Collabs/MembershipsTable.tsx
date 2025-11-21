@@ -104,11 +104,11 @@ export const CollabsMembershipsTable = (props: { entries: Membership[]; paginati
                 </a>
               </TableCell>
 
-              <TableCell label="Price">{membership.price_formatted}</TableCell>
+              <TableCell>{membership.price_formatted}</TableCell>
 
-              <TableCell label="Cut">{membership.cut}%</TableCell>
+              <TableCell>{membership.cut}%</TableCell>
 
-              <TableCell label="Members">
+              <TableCell>
                 {membership.successful_sales_count.toLocaleString(locale)}
 
                 {membership.remaining_for_sale_count ? (
@@ -116,7 +116,7 @@ export const CollabsMembershipsTable = (props: { entries: Membership[]; paginati
                 ) : null}
               </TableCell>
 
-              <TableCell label="Revenue">
+              <TableCell>
                 {formatPriceCentsWithCurrencySymbol("usd", membership.revenue, { symbolFormat: "short" })}
 
                 <small>

@@ -52,10 +52,10 @@ export function ConversationList({
         <TableBody>
           {conversations.map((c) => (
             <TableRow key={c.slug} aria-selected={false} onClick={() => onSelect(c.slug)}>
-              <TableCell className={c.isUnread ? "w-full font-bold" : "w-full"} label="Subject">
+              <TableCell className={c.isUnread ? "w-full font-bold" : "w-full"}>
                 {c.subject}
               </TableCell>
-              <TableCell className="whitespace-nowrap" label="Last updated">
+              <TableCell className="whitespace-nowrap">
                 {c.latestMessageAt
                   ? new Date(c.latestMessageAt).toLocaleDateString(undefined, {
                       day: "numeric",

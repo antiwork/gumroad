@@ -254,7 +254,7 @@ const CollaboratorForm = () => {
               </TableHeader>
               <TableBody>
                 <TableRow>
-                  <TableCell label="All products">
+                  <TableCell>
                     <input
                       id="all-products-cut"
                       type="checkbox"
@@ -270,10 +270,10 @@ const CollaboratorForm = () => {
                       aria-label="All products"
                     />
                   </TableCell>
-                  <TableCell label="Product">
+                  <TableCell>
                     <label htmlFor="all-products-cut">All products</label>
                   </TableCell>
-                  <TableCell label="Cut">
+                  <TableCell>
                     <fieldset className={cx({ danger: defaultPercentCommission.hasError })}>
                       <NumberInput value={defaultPercentCommission.value} onChange={handleDefaultCommissionChange}>
                         {(inputProps) => (
@@ -314,7 +314,7 @@ const CollaboratorForm = () => {
 
                   return shouldShowProduct(product) ? (
                     <TableRow key={product.id}>
-                      <TableCell label="Enable for product">
+                      <TableCell>
                         <input
                           id={`enable-product-${product.id}`}
                           type="checkbox"
@@ -325,7 +325,7 @@ const CollaboratorForm = () => {
                           aria-label="Enable all products"
                         />
                       </TableCell>
-                      <TableCell label="Enable for product">
+                      <TableCell>
                         <label htmlFor={`enable-product-${product.id}`}>{product.name}</label>
                         {product.has_another_collaborator || product.has_affiliates ? (
                           <small>
@@ -335,7 +335,7 @@ const CollaboratorForm = () => {
                           </small>
                         ) : null}
                       </TableCell>
-                      <TableCell label="Cut">
+                      <TableCell>
                         <fieldset className={cx({ danger: product.has_error })}>
                           <NumberInput
                             value={product.percent_commission}

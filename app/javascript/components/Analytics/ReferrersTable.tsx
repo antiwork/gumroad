@@ -53,11 +53,11 @@ export const ReferrersTable = ({ data }: { data: AnalyticsReferrerTotals }) => {
         <TableBody>
           {items.slice(0, maxRowsShown).map(({ referrer, sales, views, totals, conversion }) => (
             <TableRow key={referrer}>
-              <TableCell label="Source">{referrer === "direct" ? "Direct, email, IM" : referrer}</TableCell>
-              <TableCell label="Views">{views}</TableCell>
-              <TableCell label="Sales">{sales}</TableCell>
-              <TableCell label="Conversion">{`${(conversion * 100).toFixed(1).replace(".0", "")}%`}</TableCell>
-              <TableCell label="Total">
+              <TableCell>{referrer === "direct" ? "Direct, email, IM" : referrer}</TableCell>
+              <TableCell>{views}</TableCell>
+              <TableCell>{sales}</TableCell>
+              <TableCell>{`${(conversion * 100).toFixed(1).replace(".0", "")}%`}</TableCell>
+              <TableCell>
                 {formatPriceCentsWithCurrencySymbol("usd", totals, { symbolFormat: "short", noCentsIfWhole: true })}
               </TableCell>
             </TableRow>

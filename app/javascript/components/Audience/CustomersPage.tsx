@@ -467,7 +467,7 @@ const CustomersPage = ({
                       selected={selectedCustomerId === customer.id}
                       onClick={() => setSelectedCustomerId(customer.id)}
                     >
-                      <TableCell label="Email">
+                      <TableCell>
                         {customer.shipping && !customer.shipping.tracking.shipped ? (
                           <WithTooltip tip="Not Shipped">
                             <Icon name="truck" style={{ marginRight: "var(--spacer-2)" }} aria-label="Not Shipped" />
@@ -475,8 +475,8 @@ const CustomersPage = ({
                         ) : null}
                         {customer.email.length <= 30 ? customer.email : `${customer.email.slice(0, 27)}...`}
                       </TableCell>
-                      <TableCell label="Name">{customer.name}</TableCell>
-                      <TableCell label="Product">
+                      <TableCell>{customer.name}</TableCell>
+                      <TableCell>
                         {customer.product.name}
                         {customer.subscription?.is_installment_plan ? (
                           <span className="pill small" style={{ marginLeft: "var(--spacer-2)" }}>
@@ -524,7 +524,7 @@ const CustomersPage = ({
                           </WithTooltip>
                         ) : null}
                       </TableCell>
-                      <TableCell label="Purchase Date">
+                      <TableCell>
                         {createdAt.toLocaleDateString(userAgentInfo.locale, {
                           day: "numeric",
                           month: "short",
@@ -534,7 +534,7 @@ const CustomersPage = ({
                           hour12: true,
                         })}
                       </TableCell>
-                      <TableCell label="Price">
+                      <TableCell>
                         {customer.transaction_url_for_seller ? (
                           <a href={customer.transaction_url_for_seller}>{price}</a>
                         ) : (

@@ -109,7 +109,7 @@ const AuthorizedApplicationsPage = (props: Props) => {
             <TableBody>
               {applications.map((application) => (
                 <TableRow key={application.id}>
-                  <TableCell>
+                  <TableCell hideLabel>
                     <div className="flex gap-3">
                       <div>
                         <img
@@ -138,14 +138,14 @@ const AuthorizedApplicationsPage = (props: Props) => {
                       </div>
                     </div>
                   </TableCell>
-                  <TableCell label="Permissions">
+                  <TableCell>
                     <ul>
                       {application.scopes.map((scope) => (
                         <li key={scope}>{SCOPE_DESCRIPTIONS[scope]}</li>
                       ))}
                     </ul>
                   </TableCell>
-                  <TableCell label="Actions">
+                  <TableCell>
                     <Button color="danger" outline onClick={() => setRevokingAccessForApp({ id: application.id })}>
                       <Icon name="x-square"></Icon>
                       Revoke access

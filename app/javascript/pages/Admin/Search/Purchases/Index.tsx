@@ -90,7 +90,7 @@ export default function Purchases() {
             <TableBody>
               {purchases.map((purchase) => (
                 <TableRow key={purchase.id}>
-                  <TableCell label="Purchase">
+                  <TableCell>
                     <Link href={Routes.admin_purchase_path(purchase.id)}>
                       {purchase.formatted_display_price}
                       {purchase.gumroad_responsible_for_tax ? ` + ${purchase.formatted_gumroad_tax_amount} VAT` : null}
@@ -120,7 +120,7 @@ export default function Purchases() {
                       </ul>
                     </div>
                   </TableCell>
-                  <TableCell label="By">
+                  <TableCell>
                     <Link href={Routes.admin_search_purchases_path({ query: purchase.email })}>{purchase.email}</Link>{" "}
                     <CopyToClipboard text={purchase.email}>
                       <Icon name="outline-duplicate" />

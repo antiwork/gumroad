@@ -162,19 +162,19 @@ const WorkflowRow = ({
       <TableBody>
         {workflow.installments.map((installment) => (
           <TableRow key={installment.external_id}>
-            <TableCell label="Email">{installment.name}</TableCell>
+              <TableCell>{installment.name}</TableCell>
             {workflow.published ? (
               <>
-                <TableCell label="Delay">
+                  <TableCell>
                   {installment.delayed_delivery_time_duration} {installment.displayed_delayed_delivery_time_period}
                 </TableCell>
-                <TableCell label="Sent" className="text-nowrap">
+                  <TableCell className="text-nowrap">
                   {formatStatNumber({ value: installment.sent_count ?? 0 })}
                 </TableCell>
-                <TableCell label="Opens" className="text-nowrap">
+                  <TableCell className="text-nowrap">
                   {`${formatStatNumber({ value: installment.open_rate ?? 0 })}%`}
                 </TableCell>
-                <TableCell label="Clicks" className="text-nowrap">
+                  <TableCell className="text-nowrap">
                   {formatStatNumber({ value: installment.click_count })}
                 </TableCell>
               </>

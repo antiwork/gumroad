@@ -54,10 +54,10 @@ const EmailChanges = ({ fields, emailChanges, isLoading }: EmailChangesComponent
 
               return (
                 <TableRow key={created_at}>
-                  <TableCell label="Field">{field}</TableCell>
-                  <TableCell label="Old">{oldValue || "(Not set)"}</TableCell>
-                  <TableCell label="New">{newValue || "(Not set)"}</TableCell>
-                  <TableCell label="Changed">
+                  <TableCell>{field}</TableCell>
+                  <TableCell>{oldValue || "(Not set)"}</TableCell>
+                  <TableCell>{newValue || "(Not set)"}</TableCell>
+                  <TableCell>
                     <DateTimeWithRelativeTooltip date={created_at} />
                   </TableCell>
                 </TableRow>

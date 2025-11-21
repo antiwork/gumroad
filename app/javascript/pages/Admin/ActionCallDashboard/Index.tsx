@@ -31,10 +31,10 @@ const AdminActionCallDashboard = () => {
         <TableBody>
           {adminActionCallInfos.map((info, index) => (
             <TableRow key={info.id}>
-              <TableCell label="#">{index + 1}</TableCell>
-              <TableCell label="Controller">{info.controller_name}</TableCell>
-              <TableCell label="Action">{info.action_name}</TableCell>
-              <TableCell label="Call Count">{info.call_count}</TableCell>
+                <TableCell>{index + 1}</TableCell>
+                <TableCell>{info.controller_name}</TableCell>
+                <TableCell>{info.action_name}</TableCell>
+                <TableCell>{info.call_count}</TableCell>
             </TableRow>
           ))}
         </TableBody>

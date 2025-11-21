@@ -19,7 +19,7 @@ const ProductMatch = ({ product }: { product: ProductMatchProps }) => {
 
   return (
     <TableRow>
-      <TableCell label="Product" className="space-x-1">
+              <TableCell className="space-x-1">
         <span>{product.price_formatted}</span>
         <span>&bull;</span>
         <Link href={Routes.admin_product_url(product.id)} title={product.id.toString()}>
@@ -30,7 +30,7 @@ const ProductMatch = ({ product }: { product: ProductMatchProps }) => {
         </a>
       </TableCell>
 
-      <TableCell label="By">
+              <TableCell>
         <Link href={Routes.admin_user_path(product.user.id)} title={product.user.id.toString()}>
           {userName}
         </Link>
