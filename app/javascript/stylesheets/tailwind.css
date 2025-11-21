@@ -9,7 +9,6 @@
 @source "../**/*.{ts,tsx}";
 @source "../../views/**/*.erb";
 @source "../../../public/help/**/*.html";
-@source "../../helpers/help_center_helper.rb";
 
 /*
  * Tailwind's default hover variant is only applied in user agents that actually support mouse hovering.
