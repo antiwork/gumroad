@@ -190,11 +190,17 @@ const Row = ({ review, onChange }: { review: Review; onChange: (review: Review) 
           </a>
         </div>
       </TableCell>
-              <TableCell hideLabel className="text-nowrap" aria-label={`${review.rating} ${review.rating === 1 ? "star" : "stars"}`}>
+      <TableCell
+        hideLabel
+        className="text-nowrap"
+        aria-label={`${review.rating} ${review.rating === 1 ? "star" : "stars"}`}
+      >
         <RatingStars rating={review.rating} />
       </TableCell>
-              <TableCell hideLabel className="break-words">{review.message ? `"${review.message}"` : null}</TableCell>
-              <TableCell hideLabel>
+      <TableCell hideLabel className="break-words">
+        {review.message ? `"${review.message}"` : null}
+      </TableCell>
+      <TableCell hideLabel>
         <div className="actions">
           <Popover
             open={isEditing}

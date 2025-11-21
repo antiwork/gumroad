@@ -275,9 +275,7 @@ const AffiliateRequestsTable = ({
 
                 <TableCell>{affiliateRequest.promotion}</TableCell>
 
-                <TableCell>
-                  {parseISO(affiliateRequest.date).toLocaleDateString(userAgentInfo.locale)}
-                </TableCell>
+                <TableCell>{parseISO(affiliateRequest.date).toLocaleDateString(userAgentInfo.locale)}</TableCell>
 
                 <TableCell actions>
                   <Button
@@ -509,8 +507,8 @@ const AffiliatesTab = () => {
                             selected={affiliate.id === selectedAffiliate?.id}
                             onClick={() => setSelectedAffiliate(affiliate)}
                           >
-              <TableCell>{affiliate.affiliate_user_name}</TableCell>
-              <TableCell>
+                            <TableCell>{affiliate.affiliate_user_name}</TableCell>
+                            <TableCell>
                               <WithTooltip
                                 tip={enabledProducts.length <= 1 ? null : productTooltipLabel(enabledProducts)}
                               >
@@ -519,8 +517,8 @@ const AffiliatesTab = () => {
                                 </a>
                               </WithTooltip>
                             </TableCell>
-              <TableCell>{formattedFeePercentLabel(affiliate)}</TableCell>
-              <TableCell aria-busy={!statistics}>
+                            <TableCell>{formattedFeePercentLabel(affiliate)}</TableCell>
+                            <TableCell aria-busy={!statistics}>
                               {statistics ? (
                                 formattedSalesVolumeAmount(statistics.total_volume_cents)
                               ) : (

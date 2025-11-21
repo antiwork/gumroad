@@ -200,9 +200,7 @@ const UtmLinkList = () => {
                   <TableCell>
                     <TruncatedTextWithTooltip text={link.campaign} maxLength={16} />
                   </TableCell>
-                  <TableCell className="text-nowrap">
-                    {link.clicks}
-                  </TableCell>
+                  <TableCell className="text-nowrap">{link.clicks}</TableCell>
                   <TableCell aria-busy={link.revenue_cents === null} className="text-nowrap">
                     {link.revenue_cents !== null ? (
                       `$${fixedDecimalPointNumber(link.revenue_cents / 100)}`

@@ -126,8 +126,8 @@ export const PublishedTab = () => {
                     selected={installment.external_id === selectedInstallmentId}
                     onClick={() => setSelectedInstallmentId(installment.external_id)}
                   >
-              <TableCell>{installment.name}</TableCell>
-              <TableCell className="whitespace-nowrap">
+                    <TableCell>{installment.name}</TableCell>
+                    <TableCell className="whitespace-nowrap">
                       {new Date(installment.published_at).toLocaleDateString(userAgentInfo.locale, {
                         day: "numeric",
                         month: "short",

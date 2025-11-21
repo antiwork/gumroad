@@ -256,29 +256,23 @@ const ProductsTable = ({ sales }: TableProps) => {
         {items.map(({ id, name, thumbnail, today, last_7, last_30, sales, visits, revenue }) => (
           <TableRow key={id}>
             <ProductIconCell href={Routes.edit_link_url({ id }, { host: appDomain })} thumbnail={thumbnail} />
-                <TableCell>
+            <TableCell>
               <a href={Routes.edit_link_url({ id }, { host: appDomain })} className="line-clamp-2" title={name}>
                 {name}
               </a>
             </TableCell>
-                <TableCell title={sales.toLocaleString(locale)} className="text-nowrap">
+            <TableCell title={sales.toLocaleString(locale)} className="text-nowrap">
               {sales.toLocaleString(locale, { notation: "compact" })}
             </TableCell>
-                <TableCell title={formatPrice(revenue)} className="text-nowrap">
+            <TableCell title={formatPrice(revenue)} className="text-nowrap">
               {formatPrice(revenue)}
             </TableCell>
-                <TableCell title={visits.toLocaleString(locale)} className="text-nowrap">
+            <TableCell title={visits.toLocaleString(locale)} className="text-nowrap">
               {visits.toLocaleString(locale, { notation: "compact" })}
             </TableCell>
-                <TableCell className="text-nowrap">
-              {formatPrice(today)}
-            </TableCell>
-                <TableCell className="text-nowrap">
-              {formatPrice(last_7)}
-            </TableCell>
-                <TableCell className="text-nowrap">
-              {formatPrice(last_30)}
-            </TableCell>
+            <TableCell className="text-nowrap">{formatPrice(today)}</TableCell>
+            <TableCell className="text-nowrap">{formatPrice(last_7)}</TableCell>
+            <TableCell className="text-nowrap">{formatPrice(last_30)}</TableCell>
           </TableRow>
         ))}
       </TableBody>

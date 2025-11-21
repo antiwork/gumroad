@@ -148,15 +148,15 @@ export const ScheduledTab = () => {
                       aria-selected={installment.external_id === selectedInstallmentId}
                       onClick={() => setSelectedInstallmentId(installment.external_id)}
                     >
-              <TableCell>{installment.name}</TableCell>
-              <TableCell>{installment.recipient_description}</TableCell>
-              <TableCell
-                aria-busy={audienceCountValue(audienceCounts, installment.external_id) === null}
-                className="whitespace-nowrap"
-              >
-                {audienceCountValue(audienceCounts, installment.external_id)}
-              </TableCell>
-              <TableCell className="whitespace-nowrap">
+                      <TableCell>{installment.name}</TableCell>
+                      <TableCell>{installment.recipient_description}</TableCell>
+                      <TableCell
+                        aria-busy={audienceCountValue(audienceCounts, installment.external_id) === null}
+                        className="whitespace-nowrap"
+                      >
+                        {audienceCountValue(audienceCounts, installment.external_id)}
+                      </TableCell>
+                      <TableCell className="whitespace-nowrap">
                         {new Date(installment.to_be_published_at).toLocaleTimeString(userAgentInfo.locale, {
                           hour: "numeric",
                           minute: "numeric",

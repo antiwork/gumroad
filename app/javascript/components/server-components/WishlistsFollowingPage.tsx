@@ -70,8 +70,8 @@ const WishlistsFollowingPage = ({
                       <small>{wishlist.url}</small>
                     </a>
                   </TableCell>
-              <TableCell>{wishlist.product_count}</TableCell>
-              <TableCell>
+                  <TableCell>{wishlist.product_count}</TableCell>
+                  <TableCell>
                     <a
                       href={wishlist.creator.profile_url}
                       style={{ display: "flex", alignItems: "center", gap: "var(--spacer-2)" }}

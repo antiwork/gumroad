@@ -127,7 +127,7 @@ const IncomingCollaboratorsTableRow = ({
   disabled: boolean;
 }) => (
   <TableRow key={incomingCollaborator.id} aria-selected={isSelected} onClick={onSelect}>
-              <TableCell>
+    <TableCell>
       <div className="flex items-center gap-4">
         <img
           className="user-avatar w-8!"
@@ -140,13 +140,11 @@ const IncomingCollaboratorsTableRow = ({
         </div>
       </div>
     </TableCell>
-              <TableCell>
+    <TableCell>
       <span className="line-clamp-2">{formatProductNames(incomingCollaborator)}</span>
     </TableCell>
-              <TableCell className="whitespace-nowrap">
-      {formatCommission(incomingCollaborator)}
-    </TableCell>
-              <TableCell className="whitespace-nowrap">
+    <TableCell className="whitespace-nowrap">{formatCommission(incomingCollaborator)}</TableCell>
+    <TableCell className="whitespace-nowrap">
       {incomingCollaborator.invitation_accepted ? <>Accepted</> : <>Pending</>}
     </TableCell>
     <TableCell>

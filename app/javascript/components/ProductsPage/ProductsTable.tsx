@@ -150,9 +150,7 @@ export const ProductsPageProductsTable = (props: {
                 {formatPriceCentsWithCurrencySymbol("usd", product.revenue, { symbolFormat: "short" })}
               </TableCell>
 
-              <TableCell className="whitespace-nowrap lg:px-8">
-                {product.price_formatted}
-              </TableCell>
+              <TableCell className="whitespace-nowrap lg:px-8">{product.price_formatted}</TableCell>
 
               <TableCell className="whitespace-nowrap lg:px-8">
                 {(() => {

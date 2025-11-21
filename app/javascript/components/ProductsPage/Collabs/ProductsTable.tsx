@@ -107,9 +107,7 @@ export const CollabsProductsTable = (props: { entries: Product[]; pagination: Pa
                 </div>
               </TableCell>
 
-              <TableCell className="text-nowrap">
-                {product.price_formatted}
-              </TableCell>
+              <TableCell className="text-nowrap">{product.price_formatted}</TableCell>
 
               <TableCell>{product.cut}%</TableCell>
 

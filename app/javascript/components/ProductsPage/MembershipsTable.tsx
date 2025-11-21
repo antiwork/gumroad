@@ -158,9 +158,7 @@ export const ProductsPageMembershipsTable = (props: {
                 </small>
               </TableCell>
 
-              <TableCell className="text-nowrap">
-                {membership.price_formatted}
-              </TableCell>
+              <TableCell className="text-nowrap">{membership.price_formatted}</TableCell>
 
               <TableCell className="text-nowrap">
                 {(() => {

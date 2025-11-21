@@ -222,9 +222,7 @@ const Collaborators = () => {
                     <TableCell>
                       <span className="line-clamp-2">{formatProductNames(collaborator)}</span>
                     </TableCell>
-                    <TableCell className="whitespace-nowrap">
-                      {formatCommission(collaborator)}
-                    </TableCell>
+                    <TableCell className="whitespace-nowrap">{formatCommission(collaborator)}</TableCell>
                     <TableCell className="whitespace-nowrap">
                       {collaborator.invitation_accepted ? <>Accepted</> : <>Pending</>}
                     </TableCell>
