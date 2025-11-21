@@ -12,6 +12,6 @@
 
   <div class="flex-1 bg-[rgb(var(--filled))] border border-[rgb(var(--parent-color)/var(--border-alpha))] p-8 rounded-sm grow">
     <h2 class="text-3xl font-bold mb-6"><%= title %></h2>
-    <%= yield %>
+    <div class="scoped-tailwind-preflight prose dark:prose-invert"><%= yield %></div>
   </div>
 </div>
