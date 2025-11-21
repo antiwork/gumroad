@@ -4,7 +4,7 @@ import { cast } from "ts-safe-cast";
 import { asyncVoid } from "$app/utils/promise";
 import { request } from "$app/utils/request";
 
-import { Button } from "$app/components/Button";
+import { Button, NavigationButton } from "$app/components/Button";
 import { Icon } from "$app/components/Icons";
 import { showAlert } from "$app/components/server-components/Alert";
 
@@ -64,15 +64,15 @@ const PayPalConnectSection = ({
             {paypalConnect.show_paypal_connect ? (
               <>
                 <div>
-                  <a
-                    className="button button-paypal paypal-connect"
+                  <NavigationButton
+                    brand="paypal"
                     href={Routes.connect_paypal_path({
                       referer: Routes.settings_payments_path(),
                     })}
-                    inert={isFormDisabled || !paypalConnect.allow_paypal_connect}
+                    disabled={isFormDisabled || !paypalConnect.allow_paypal_connect}
                   >
                     Connect with Paypal
-                  </a>
+                  </NavigationButton>
                 </div>
                 {!paypalConnect.allow_paypal_connect ? (
                   <div role="alert" className="warning">
@@ -107,7 +107,7 @@ const PayPalConnectSection = ({
                   <p>
                     <Button
                       color="danger"
-                      className="button-paypal"
+                      brand="paypal"
                       aria-label="Disconnect PayPal account"
                       disabled={isFormDisabled || !paypalConnect.paypal_disconnect_allowed}
                       onClick={disconnectPayPal}
@@ -131,15 +131,15 @@ const PayPalConnectSection = ({
             {paypalConnect.show_paypal_connect ? (
               <>
                 <p>
-                  <a
-                    className="button button-paypal paypal-connect"
+                  <NavigationButton
+                    brand="paypal"
                     href={Routes.connect_paypal_path({
                       referer: Routes.settings_payments_path(),
                     })}
-                    inert={isFormDisabled || !paypalConnect.allow_paypal_connect}
+                    disabled={isFormDisabled || !paypalConnect.allow_paypal_connect}
                   >
                     Connect with Paypal
-                  </a>
+                  </NavigationButton>
                 </p>
                 {!paypalConnect.allow_paypal_connect ? (
                   <div role="alert" className="warning">

@@ -13,13 +13,14 @@ $accent-color: map-get($colors, "pink"); // [1]
   @include font-size(2);
   padding: spacer(3);
 
-  & > .main,
-  & > .footer {
+  &>.main,
+  &>.footer {
     max-width: $main-stack-width;
 
     table {
       // [5]
       gap: 0;
+
       tr:not(:last-child) {
         margin-bottom: spacer(4);
       }
@@ -29,13 +30,13 @@ $accent-color: map-get($colors, "pink"); // [1]
         border-collapse: separate;
         border-spacing: 0;
 
-        & > tbody,
-        & > tfoot {
-          & > * {
+        &>tbody,
+        &>tfoot {
+          &>* {
             display: revert;
             border: none;
 
-            & > * {
+            &>* {
               display: revert;
               border: none;
               padding: 0;
@@ -43,26 +44,27 @@ $accent-color: map-get($colors, "pink"); // [1]
           }
         }
 
-        & > tbody > * {
+        &>tbody>* {
           background-color: unset;
         }
 
-        & > :last-child > :last-child > * {
+        &> :last-child> :last-child>* {
           border: none;
         }
 
-        & > tbody > :first-child {
-          & > :first-child {
+        &>tbody> :first-child {
+          &> :first-child {
             border-radius: unset;
           }
 
-          & > :last-child {
+          &> :last-child {
             border-top-right-radius: unset;
           }
         }
       }
 
       &.stats {
+
         // [3]
         tr {
           &:first-child {
@@ -83,7 +85,7 @@ $accent-color: map-get($colors, "pink"); // [1]
               padding-left: spacer(3);
             }
 
-            > *:last-child {
+            >*:last-child {
               @include font-size(4);
             }
           }
@@ -91,8 +93,9 @@ $accent-color: map-get($colors, "pink"); // [1]
       }
 
       &.list {
+
         // [3]
-        & > thead {
+        &>thead {
           display: revert;
         }
 
@@ -132,26 +135,28 @@ $accent-color: map-get($colors, "pink"); // [1]
       }
 
       &.table-stack {
+
         // [3]
         &,
-        & > * {
+        &>* {
           display: revert;
         }
 
-        & > thead,
-        & > tbody,
-        & > tfoot {
+        &>thead,
+        &>tbody,
+        &>tfoot {
+
           &,
-          & > *,
-          & > * > * {
+          &>*,
+          &>*>* {
             display: revert;
             border: none;
           }
         }
 
-        & > tbody,
-        & > tfoot {
-          & > * > * {
+        &>tbody,
+        &>tfoot {
+          &>*>* {
             border-top: $border;
 
             &:first-child {
@@ -163,27 +168,27 @@ $accent-color: map-get($colors, "pink"); // [1]
             }
           }
 
-          &:last-child > tr:last-child > * {
+          &:last-child>tr:last-child>* {
             border-bottom: $border;
           }
         }
 
-        & > tbody > :first-child {
-          & > :first-child {
+        &>tbody> :first-child {
+          &> :first-child {
             border-top-left-radius: $table-border-radius;
           }
 
-          & > :last-child {
+          &> :last-child {
             border-top-right-radius: $table-border-radius;
           }
         }
 
-        & > :last-child > :last-child {
-          & > :first-child {
+        &> :last-child> :last-child {
+          &> :first-child {
             border-bottom-left-radius: $table-border-radius;
           }
 
-          & > :last-child {
+          &> :last-child {
             border-bottom-right-radius: $table-border-radius;
           }
         }
@@ -194,7 +199,7 @@ $accent-color: map-get($colors, "pink"); // [1]
         width: 100%;
 
         // [5]
-        & > tbody > tr > td {
+        &>tbody>tr>td {
           display: block;
 
           &:first-child {
@@ -203,8 +208,9 @@ $accent-color: map-get($colors, "pink"); // [1]
         }
 
         @include breakpoint-up(sm) {
+
           // [2]
-          & > tbody > tr > td {
+          &>tbody>tr>td {
             display: revert !important;
             width: 50% !important;
 
@@ -260,11 +266,11 @@ $accent-color: map-get($colors, "pink"); // [1]
     }
   }
 
-  & > .main {
+  &>.main {
     border: $border;
     margin: spacer(4) auto;
 
-    & > * {
+    &>* {
       padding: spacer(3);
       border-bottom: $border;
 
@@ -272,7 +278,7 @@ $accent-color: map-get($colors, "pink"); // [1]
         border-bottom: none;
       }
 
-      > * {
+      >* {
         margin: spacer(4) 0 0;
 
         &:first-child {
@@ -282,6 +288,17 @@ $accent-color: map-get($colors, "pink"); // [1]
 
       button,
       .button {
+        /* Base button styles (previously inherited from _button.scss) */
+        padding: spacer(3) spacer(4);
+        border: solid calc(size(1) / 16) currentColor;
+        border-radius: border-radius(1);
+        font-size: nth($font-sizes, 2);
+        line-height: nth($line-heights, 2);
+        font-family: inherit;
+        cursor: pointer;
+        text-decoration: none;
+
+        /* Email-specific overrides */
         /* Needed to expand button full width in emails */
         display: block;
         text-align: center;
@@ -290,11 +307,13 @@ $accent-color: map-get($colors, "pink"); // [1]
         /* Some email clients don't support CSS variables: https://www.caniemail.com/search/?s=var */
         background-color: transparent;
         color: #000000;
+        border-color: #000000;
 
         &.primary {
           /* Some email clients don't support CSS variables: https://www.caniemail.com/search/?s=var */
           background-color: #000000;
           color: #ffffff;
+          border-color: #000000;
         }
       }
 
@@ -331,19 +350,19 @@ $accent-color: map-get($colors, "pink"); // [1]
     }
   }
 
-  & > .footer {
+  &>.footer {
     margin: spacer(6) auto spacer(4);
     text-align: center;
 
-    & > .paragraphs {
+    &>.paragraphs {
       display: block;
 
-      & > :not(:last-child) {
+      &> :not(:last-child) {
         margin-bottom: spacer(3);
       }
     }
 
-    & > .wordmark {
+    &>.wordmark {
       display: inline-block;
       margin-top: spacer(6);
       text-decoration: none;
@@ -376,7 +395,7 @@ $accent-color: map-get($colors, "pink"); // [1]
       border-bottom: $border;
       height: size(8);
 
-      & > .figure {
+      &>.figure {
         // [3]
         display: table-cell;
         background: url("~images/placeholders/product-cover.png");
@@ -385,7 +404,7 @@ $accent-color: map-get($colors, "pink"); // [1]
         border-right: $border;
       }
 
-      & > .section {
+      &>.section {
         display: table-cell;
         padding: spacer(4);
 
@@ -395,14 +414,14 @@ $accent-color: map-get($colors, "pink"); // [1]
           width: 100%;
           height: 100%;
 
-          & > * {
+          &>* {
             display: table-row;
 
             &:first-child {
               height: 100%;
             }
 
-            & > * {
+            &>* {
               display: block;
               @include text-singleline;
               // Gmail inserts `wbr`s to break long text into multiple lines, which can result in
@@ -424,7 +443,7 @@ $accent-color: map-get($colors, "pink"); // [1]
               }
 
               &.product-stats {
-                & > * {
+                &>* {
                   // To vertically align the icon and text
                   line-height: size(0.875);
 
@@ -447,7 +466,7 @@ $accent-color: map-get($colors, "pink"); // [1]
     .details {
       padding: spacer(4);
 
-      & > * {
+      &>* {
         margin: spacer(4) 0 0;
 
         &:first-child {
@@ -461,7 +480,7 @@ $accent-color: map-get($colors, "pink"); // [1]
 // TODO: Remove this along with CreatorMailer.gumroad_day_fee_saved mailer once emails are sent
 .announcement {
   .main {
-    & > .header {
+    &>.header {
       padding: 0;
 
       @include breakpoint-up(sm) {
@@ -470,7 +489,7 @@ $accent-color: map-get($colors, "pink"); // [1]
       }
     }
 
-    & > *:not(.header) {
+    &>*:not(.header) {
       padding: spacer(6);
 
       @include breakpoint-up(sm) {
@@ -502,12 +521,12 @@ $accent-color: map-get($colors, "pink"); // [1]
   .main {
     border: none;
 
-    & > * {
+    &>* {
       margin-bottom: spacer(5);
       padding: 0;
       border-bottom: none;
 
-      > * {
+      >* {
         margin-top: spacer(5);
       }
 
@@ -547,7 +566,7 @@ $accent-color: map-get($colors, "pink"); // [1]
     @extend header;
     display: block; // [5]
 
-    & > :not(:last-child) {
+    &> :not(:last-child) {
       @include text-singleline;
       padding-bottom: spacer(2);
     }
@@ -559,7 +578,7 @@ $accent-color: map-get($colors, "pink"); // [1]
     .user {
       display: inline;
 
-      & > :last-child {
+      &> :last-child {
         padding-top: spacer(2); // [5]
       }
 
@@ -591,12 +610,13 @@ $accent-color: map-get($colors, "pink"); // [1]
     .figure {
       width: size(8);
     }
+
     .thumbnails {
       display: block;
       text-align: center;
       background-color: $accent-color; // [1]
 
-      > * {
+      >* {
         display: inline-block;
         width: 100%;
       }
@@ -633,8 +653,8 @@ $accent-color: map-get($colors, "pink"); // [1]
 }
 
 .review {
-  > .content {
-    > * {
+  >.content {
+    >* {
       margin: spacer(2) 0 0;
 
       &:first-child {
@@ -642,10 +662,11 @@ $accent-color: map-get($colors, "pink"); // [1]
       }
     }
 
-    > .byline {
-      > * {
+    >.byline {
+      >* {
         vertical-align: middle;
       }
+
       .user-avatar {
         display: inline;
       }

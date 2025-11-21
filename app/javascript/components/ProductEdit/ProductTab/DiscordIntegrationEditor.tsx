@@ -66,7 +66,7 @@ export const DiscordIntegrationEditor = ({
           ) : !integration ? (
             <div>
               <Button
-                className="button-discord"
+                brand="discord"
                 onClick={() => {
                   setIsLoading(true);
                   const oauthPopup = window.open(getDiscordUrl(), "discord", "popup=yes");

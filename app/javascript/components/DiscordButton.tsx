@@ -74,7 +74,7 @@ export const DiscordButton = ({
       <LoadingSpinner className="size-8" />
     </div>
   ) : (
-    <Button className="button-discord" onClick={discordConnected ? leaveDiscord : openJoinDiscordPopup}>
+    <Button brand="discord" onClick={discordConnected ? leaveDiscord : openJoinDiscordPopup}>
       {discordConnected ? "Leave Discord" : "Join Discord"}
     </Button>
   );

@@ -4,6 +4,7 @@ import React, { useEffect, useRef } from "react"
 import { lookupCharges, lookupPaypalCharges } from "$app/data/charge"
 import { assertResponseError } from "$app/utils/request"
 
+import { Button } from "$app/components/Button"
 import { showAlert } from "$app/components/server-components/Alert"
 import { PageHeader } from "$app/components/ui/PageHeader"
 
@@ -174,13 +175,13 @@ const LookupLayout = ({ children, title, type }: {
               />
             </fieldset>
             <fieldset>
-              <button
-                className="button button-paypal"
+              <Button
+                brand="paypal"
                 type="submit"
                 disabled={isPaypalLoading}
               >
                 {isPaypalLoading ? "Searching..." : "Search"}
-              </button>
+              </Button>
             </fieldset>
           </section>
         </form>

@@ -1,9 +1,8 @@
-import cx from "classnames";
 import * as React from "react";
 import * as ReactDOM from "react-dom";
 import { cast } from "ts-safe-cast";
 
-import { Button, ButtonProps } from "$app/components/Button";
+import { BrandName, Button, ButtonProps } from "$app/components/Button";
 import { useRunOnce } from "$app/components/useRunOnce";
 
 export const SocialAuthButton = ({
@@ -12,7 +11,7 @@ export const SocialAuthButton = ({
   ...props
 }: {
   href: string;
-  provider: "facebook" | "google" | "twitter" | "stripe";
+  provider: BrandName;
 } & ButtonProps) => {
   const formRef = React.useRef<HTMLFormElement>(null);
   const [csrfToken, setCsrfToken] = React.useState("");
@@ -32,7 +31,7 @@ export const SocialAuthButton = ({
         : null}
       <Button
         {...props}
-        className={cx(props.className, `button-${provider}`)}
+        brand={provider}
         onClick={() => formRef.current?.submit()}
       />
     </>

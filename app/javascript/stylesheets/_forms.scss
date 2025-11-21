@@ -64,7 +64,7 @@ fieldset {
       font-weight: normal;
     }
 
-    & > :last-child:not(:only-child) {
+    &> :last-child:not(:only-child) {
       float: right;
       margin-left: auto;
     }
@@ -76,6 +76,7 @@ fieldset {
 
   &[role="group"] label {
     width: 100%;
+
     input {
       margin-left: auto;
     }
@@ -84,6 +85,7 @@ fieldset {
 
 @each $name in $states {
   fieldset.#{$name} {
+
     #{$input-fields},
     input[type="radio"],
     input[type="checkbox"] {
@@ -136,7 +138,7 @@ fieldset {
     }
   }
 
-  & > .pill {
+  &>.pill {
     flex-shrink: 0;
 
     &:first-child {
@@ -148,7 +150,7 @@ fieldset {
     }
   }
 
-  & > .icon {
+  &>.icon {
     @include text-muted;
   }
 }
@@ -178,9 +180,11 @@ input[type="checkbox"] {
   background: full-color(filled);
   flex-shrink: 0;
   @include font-size($form-element-font-size);
+
   &:checked {
     @include bg-color(accent);
   }
+
   &:disabled {
     @extend %input-disabled;
   }
@@ -191,6 +195,7 @@ input[type="radio"] {
 
   &:checked {
     padding: spacer(2) - 2 * $border-width;
+
     &::after {
       content: "";
       background-color: full-color(color);
@@ -209,6 +214,31 @@ input[type="checkbox"]:not([role="switch"]) {
     margin-inline: auto;
     @extend %icon, .icon-outline-check;
   }
+}
+
+%select-button {
+  text-align: initial;
+  align-items: flex-start;
+  justify-content: initial;
+  gap: spacer(3);
+
+  h4 {
+    font-weight: bold;
+  }
+
+  &> :first-child {
+    flex-shrink: 0;
+  }
+
+  &.vertical {
+    flex-flow: column;
+  }
+}
+
+%select-button-active {
+  background-color: var(--active-bg);
+  transform: translate(-$button-hover-transform-length, -$button-hover-transform-length);
+  box-shadow: box-shadow(1);
 }
 
 .radio-buttons[role="radiogroup"] {
@@ -305,13 +335,14 @@ input[type="search"] {
 }
 
 form {
-  & > section {
+  &>section {
     $y-gap: spacer(6);
     display: grid;
     padding: spacer(7) 0;
     border-top: $border;
     gap: $y-gap;
-    & > header {
+
+    &>header {
       display: grid;
       gap: spacer(3);
       align-content: start;
@@ -331,11 +362,13 @@ form {
       gap: 0 spacer(8);
       padding-bottom: spacer(7) - $y-gap;
       grid-template-columns: 25% 1fr;
-      & > * {
+
+      &>* {
         margin-bottom: $y-gap;
         grid-column: 2;
       }
-      & > header {
+
+      &>header {
         grid-column: 1/2;
         grid-row: 1/10;
       }
@@ -373,6 +406,7 @@ form {
       cursor: pointer;
       display: flex;
       align-items: center;
+
       &.focused,
       &:focus {
         @include bg-color(primary);
@@ -388,6 +422,7 @@ form {
     }
 
     &[aria-multiselectable="true"] {
+
       option,
       [role="option"] {
         &[aria-selected="true"]:after {
@@ -426,7 +461,7 @@ textarea {
   border-radius: border-radius(3);
   max-width: fit-content;
 
-  > input[type="color"] {
+  >input[type="color"] {
     position: absolute;
     width: 200%;
     height: 200%;

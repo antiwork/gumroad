@@ -141,9 +141,9 @@ const SettingsPage = ({ creator_profile, profile_settings, settings_pages, ...pr
               <fieldset>
                 <legend>Social links</legend>
                 {creatorProfile.twitter_handle ? (
-                  <button type="button" className="button button-twitter" onClick={handleUnlinkTwitter}>
+                  <Button type="button" brand="twitter" onClick={handleUnlinkTwitter}>
                     Disconnect {creatorProfile.twitter_handle} from X
-                  </button>
+                  </Button>
                 ) : (
                   <SocialAuthButton
                     provider="twitter"

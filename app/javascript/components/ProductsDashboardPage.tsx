@@ -9,6 +9,7 @@ import { Popover } from "$app/components/Popover";
 import { ProductsLayout } from "$app/components/ProductsLayout";
 import Placeholder from "$app/components/ui/Placeholder";
 import { WithTooltip } from "$app/components/WithTooltip";
+import { Button } from "$app/components/Button";
 
 import ProductsPage from "./ProductsPage";
 
@@ -54,9 +55,9 @@ export const ProductsDashboardPage = ({
               aria-label="Toggle Search"
               trigger={
                 <WithTooltip tip="Search" position="bottom">
-                  <div className="button">
+                  <Button>
                     <Icon name="solid-search" />
-                  </div>
+                  </Button>
                 </WithTooltip>
               }
             >
