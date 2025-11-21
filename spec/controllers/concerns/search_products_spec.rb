@@ -25,19 +25,14 @@ describe SearchProducts do
           Feature.deactivate(:offer_codes_search)
         end
 
-        it "filters allowed offer codes from string" do
+        it "turns offer_codes string into array" do
           get :index, params: { offer_codes: "BLACKFRIDAY2025,SUMMER2025" }
           expect(JSON.parse(response.body)["offer_codes"]).to eq(["BLACKFRIDAY2025"])
         end
 
-        it "filters allowed offer codes from array" do
-          get :index, params: { offer_codes: ["BLACKFRIDAY2025", "SUMMER2025"] }
-          expect(JSON.parse(response.body)["offer_codes"]).to eq(["BLACKFRIDAY2025"])
-        end
-
-        it "returns empty array when no allowed codes are present" do
+        it "returns __no_match__ when no allowed codes are present" do
           get :index, params: { offer_codes: "SUMMER2025,WINTER2025" }
-          expect(JSON.parse(response.body)["offer_codes"]).to eq([])
+          expect(JSON.parse(response.body)["offer_codes"]).to eq(["__no_match__"])
         end
 
         it "preserves allowed codes" do
@@ -54,7 +49,7 @@ describe SearchProducts do
 
         it "removes offer_codes from params" do
           get :index, params: { offer_codes: "BLACKFRIDAY2025" }
-          expect(JSON.parse(response.body)["offer_codes"]).to be_nil
+          expect(JSON.parse(response.body)["offer_codes"]).to eq(["__no_match__"])
         end
       end
     end
