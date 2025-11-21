@@ -2,8 +2,6 @@ import React from "react";
 import { useLoaderData } from "react-router-dom";
 import { cast } from "ts-safe-cast";
 
-import { classNames } from "$app/utils/classNames";
-
 import {
   deleteInstallment,
   getAudienceCount,
@@ -12,6 +10,7 @@ import {
   ScheduledInstallment,
 } from "$app/data/installments";
 import { assertDefined } from "$app/utils/assert";
+import { classNames } from "$app/utils/classNames";
 import { asyncVoid } from "$app/utils/promise";
 import { AbortError, assertResponseError } from "$app/utils/request";
 
@@ -133,7 +132,11 @@ export const ScheduledTab = () => {
         {installments.length > 0 ? (
           <>
             {Object.keys(installmentsByDate).map((date) => (
-              <Table key={date} aria-live="polite" className={classNames("mb-16", isLoading && "pointer-events-none opacity-50")}>
+              <Table
+                key={date}
+                aria-live="polite"
+                className={classNames("mb-16", isLoading && "pointer-events-none opacity-50")}
+              >
                 <TableCaption>Scheduled for {date}</TableCaption>
                 <TableHeader>
                   <TableRow>
