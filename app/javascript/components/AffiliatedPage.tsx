@@ -1,6 +1,7 @@
 import * as React from "react";
 
 import { getPagedAffiliatedProducts } from "$app/data/affiliated_products";
+import { classNames } from "$app/utils/classNames";
 import { formatPriceCentsWithCurrencySymbol } from "$app/utils/currency";
 import { asyncVoid } from "$app/utils/promise";
 import { AbortError, assertResponseError } from "$app/utils/request";
@@ -110,7 +111,7 @@ const AffiliatedProductsTable = ({
 
   return (
     <section className="flex flex-col gap-4">
-      <Table busy={isLoading}>
+      <Table aria-live="polite" className={classNames(isLoading && "pointer-events-none opacity-50")}>
         <TableHeader>
           <TableRow>
             <TableHead {...thProps("product_name")} title="Sort by Product">

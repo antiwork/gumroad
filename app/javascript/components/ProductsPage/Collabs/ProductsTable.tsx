@@ -1,6 +1,7 @@
 import * as React from "react";
 
 import { getPagedProducts, ProductsParams, Product } from "$app/data/collabs";
+import { classNames } from "$app/utils/classNames";
 import { formatPriceCentsWithCurrencySymbol } from "$app/utils/currency";
 import { asyncVoid } from "$app/utils/promise";
 import { AbortError, assertResponseError } from "$app/utils/request";
@@ -71,7 +72,7 @@ export const CollabsProductsTable = (props: { entries: Product[]; pagination: Pa
 
   return (
     <div className="flex flex-col gap-4">
-      <Table busy={isLoading} ref={tableRef}>
+      <Table aria-live="polite" className={classNames(isLoading && "pointer-events-none opacity-50")} ref={tableRef}>
         <TableCaption>Products</TableCaption>
         <TableHeader>
           <TableRow>

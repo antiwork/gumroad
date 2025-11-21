@@ -473,7 +473,10 @@ const AffiliatesTab = () => {
             {affiliates.length > 0 ? (
               <>
                 <section className="flex flex-col gap-4">
-                  <Table busy={navigation.state !== "idle"}>
+                  <Table
+                    aria-live="polite"
+                    className={cx(navigation.state !== "idle" && "pointer-events-none opacity-50")}
+                  >
                     <TableCaption>
                       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
                         Affiliates

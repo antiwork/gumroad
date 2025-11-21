@@ -442,7 +442,7 @@ const CustomersPage = ({
       <section className="p-4 md:p-8">
         {customers.length > 0 ? (
           <section className="flex flex-col gap-4">
-            <Table busy={isLoading}>
+            <Table aria-live="polite" className={cx(isLoading && "pointer-events-none opacity-50")}>
               <TableCaption>{`All sales (${count})`}</TableCaption>
               <TableHeader>
                 <TableRow>

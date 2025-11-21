@@ -4,6 +4,7 @@ import { cast } from "ts-safe-cast";
 
 import { deleteInstallment, getPublishedInstallments, Pagination, PublishedInstallment } from "$app/data/installments";
 import { assertDefined } from "$app/utils/assert";
+import { classNames } from "$app/utils/classNames";
 import { formatStatNumber } from "$app/utils/formatStatNumber";
 import { AbortError, assertResponseError } from "$app/utils/request";
 
@@ -99,7 +100,11 @@ export const PublishedTab = () => {
       <div className="space-y-4 p-4 md:p-8">
         {installments.length > 0 ? (
           <>
-            <Table busy={isLoading} aria-label="Published">
+            <Table
+              aria-live="polite"
+              className={classNames(isLoading && "pointer-events-none opacity-50")}
+              aria-label="Published"
+            >
               <TableHeader>
                 <TableRow>
                   <TableHead>Subject</TableHead>

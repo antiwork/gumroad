@@ -2,6 +2,7 @@ import { router } from "@inertiajs/react";
 import * as React from "react";
 
 import { getPagedProducts, Product, SortKey } from "$app/data/products";
+import { classNames } from "$app/utils/classNames";
 import { formatPriceCentsWithCurrencySymbol } from "$app/utils/currency";
 import { AbortError, assertResponseError } from "$app/utils/request";
 
@@ -93,7 +94,7 @@ export const ProductsPageProductsTable = (props: {
 
   return (
     <div className="flex flex-col gap-4">
-      <Table ref={tableRef} busy={isLoading}>
+      <Table ref={tableRef} aria-live="polite" className={classNames(isLoading && "pointer-events-none opacity-50")}>
         <TableCaption>Products</TableCaption>
         <TableHeader>
           <TableRow>

@@ -266,7 +266,7 @@ const UpsellsPage = (props: UpsellsPageProps) => {
       <section className="p-4 md:p-8">
         {upsells.length > 0 ? (
           <section className="flex flex-col gap-4">
-            <Table busy={isLoading} aria-label="Upsells">
+            <Table aria-live="polite" className={cx(isLoading && "pointer-events-none opacity-50")} aria-label="Upsells">
               <TableHeader>
                 <TableRow>
                   <TableHead {...thProps("name")}>Upsell</TableHead>

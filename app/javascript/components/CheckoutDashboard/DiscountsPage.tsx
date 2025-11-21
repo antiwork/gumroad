@@ -327,7 +327,7 @@ const DiscountsPage = ({ offer_codes, pages, products, pagination: initialPagina
       <section className="p-4 md:p-8">
         {offerCodes.length > 0 ? (
           <section className="flex flex-col gap-4">
-            <Table busy={isLoading}>
+            <Table aria-live="polite" className={cx(isLoading && "pointer-events-none opacity-50")}>
               <TableHeader>
                 <TableRow>
                   <TableHead {...thProps("name")}>Discount</TableHead>

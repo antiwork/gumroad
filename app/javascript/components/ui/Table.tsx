@@ -4,38 +4,31 @@ import { assertDefined } from "$app/utils/assert";
 import { classNames } from "$app/utils/classNames";
 
 const TableContext = React.createContext<{
-  busy?: boolean | undefined;
   headerLabels?: (string | null)[];
   setHeaderLabels: (headerLabels: (string | null)[]) => void;
 }>({ setHeaderLabels: () => {} });
 const useTable = () => assertDefined(React.useContext(TableContext), "useTable must be used within a Table");
 
-export const Table = React.forwardRef<
-  HTMLTableElement,
-  Omit<React.HTMLAttributes<HTMLTableElement>, "aria-busy"> & { busy?: boolean }
->(({ className, busy, children, ...props }, ref) => {
-  const [headerLabels, setHeaderLabels] = React.useState<(string | null)[]>([]);
-  const contextValue = React.useMemo(
-    () => ({ busy, headerLabels, setHeaderLabels }),
-    [busy, headerLabels, setHeaderLabels],
-  );
-  return (
-    <TableContext.Provider value={contextValue}>
-      <table
-        ref={ref}
-        aria-live={busy == null ? undefined : "polite"}
-        aria-busy={busy}
-        className={classNames(
-          "grid w-full border-spacing-0 gap-4 lg:table lg:rounded-sm lg:border lg:border-border",
-          className,
-        )}
-        {...props}
-      >
-        {children}
-      </table>
-    </TableContext.Provider>
-  );
-});
+export const Table = React.forwardRef<HTMLTableElement, React.HTMLAttributes<HTMLTableElement>>(
+  ({ className, children, ...props }, ref) => {
+    const [headerLabels, setHeaderLabels] = React.useState<(string | null)[]>([]);
+    const contextValue = React.useMemo(() => ({ headerLabels, setHeaderLabels }), [headerLabels, setHeaderLabels]);
+    return (
+      <TableContext.Provider value={contextValue}>
+        <table
+          ref={ref}
+          className={classNames(
+            "grid w-full border-spacing-0 gap-4 lg:table lg:rounded-sm lg:border lg:border-border",
+            className,
+          )}
+          {...props}
+        >
+          {children}
+        </table>
+      </TableContext.Provider>
+    );
+  },
+);
 Table.displayName = "Table";
 
 export const TableCaption = ({ className, children, ...props }: React.HTMLAttributes<HTMLTableCaptionElement>) => (
@@ -50,37 +43,17 @@ export const TableHeader = ({ className, children, ...props }: React.HTMLAttribu
   </thead>
 );
 
-export const TableBody = ({ className, children, ...props }: React.HTMLAttributes<HTMLTableSectionElement>) => {
-  const { busy } = useTable();
-  return (
-    <tbody
-      className={classNames(
-        "contents lg:table-row-group lg:rounded-sm",
-        busy && "pointer-events-none opacity-50",
-        className,
-      )}
-      {...props}
-    >
-      {children}
-    </tbody>
-  );
-};
+export const TableBody = ({ className, children, ...props }: React.HTMLAttributes<HTMLTableSectionElement>) => (
+  <tbody className={classNames("contents lg:table-row-group lg:rounded-sm", className)} {...props}>
+    {children}
+  </tbody>
+);
 
-export const TableFooter = ({ className, children, ...props }: React.HTMLAttributes<HTMLTableSectionElement>) => {
-  const { busy } = useTable();
-  return (
-    <tfoot
-      className={classNames(
-        "contents font-bold lg:table-footer-group",
-        busy && "pointer-events-none opacity-50",
-        className,
-      )}
-      {...props}
-    >
-      {children}
-    </tfoot>
-  );
-};
+export const TableFooter = ({ className, children, ...props }: React.HTMLAttributes<HTMLTableSectionElement>) => (
+  <tfoot className={classNames("contents font-bold lg:table-footer-group", className)} {...props}>
+    {children}
+  </tfoot>
+);
 
 export const TableRow = ({
   className,

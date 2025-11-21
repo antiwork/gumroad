@@ -2,6 +2,8 @@ import React from "react";
 import { useLoaderData } from "react-router-dom";
 import { cast } from "ts-safe-cast";
 
+import { classNames } from "$app/utils/classNames";
+
 import {
   deleteInstallment,
   getAudienceCount,
@@ -131,7 +133,7 @@ export const ScheduledTab = () => {
         {installments.length > 0 ? (
           <>
             {Object.keys(installmentsByDate).map((date) => (
-              <Table key={date} className="mb-16" busy={isLoading}>
+              <Table key={date} aria-live="polite" className={classNames("mb-16", isLoading && "pointer-events-none opacity-50")}>
                 <TableCaption>Scheduled for {date}</TableCaption>
                 <TableHeader>
                   <TableRow>

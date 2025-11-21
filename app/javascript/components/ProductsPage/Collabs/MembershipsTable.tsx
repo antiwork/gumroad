@@ -1,6 +1,7 @@
 import * as React from "react";
 
 import { getPagedMemberships, MembershipsParams, Membership } from "$app/data/collabs";
+import { classNames } from "$app/utils/classNames";
 import { formatPriceCentsWithCurrencySymbol } from "$app/utils/currency";
 import { asyncVoid } from "$app/utils/promise";
 import { AbortError, assertResponseError } from "$app/utils/request";
@@ -63,7 +64,7 @@ export const CollabsMembershipsTable = (props: { entries: Membership[]; paginati
 
   return (
     <section className="flex flex-col gap-4">
-      <Table busy={isLoading}>
+      <Table aria-live="polite" className={classNames(isLoading && "pointer-events-none opacity-50")}>
         <TableCaption>Memberships</TableCaption>
         <TableHeader>
           <TableRow>

@@ -11,6 +11,7 @@ import {
   Pagination,
 } from "$app/data/installments";
 import { assertDefined } from "$app/utils/assert";
+import { classNames } from "$app/utils/classNames";
 import { asyncVoid } from "$app/utils/promise";
 import { AbortError, assertResponseError } from "$app/utils/request";
 
@@ -117,7 +118,11 @@ export const DraftsTab = () => {
       <div className="space-y-4 p-4 md:p-8">
         {installments.length > 0 ? (
           <>
-            <Table aria-label="Drafts" busy={isLoading}>
+            <Table
+              aria-live="polite"
+              aria-label="Drafts"
+              className={classNames(isLoading && "pointer-events-none opacity-50")}
+            >
               <TableHeader>
                 <TableRow>
                   <TableHead>Subject</TableHead>

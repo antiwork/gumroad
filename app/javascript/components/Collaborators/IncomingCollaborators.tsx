@@ -8,6 +8,7 @@ import {
   removeCollaborator,
 } from "$app/data/collaborators";
 import { IncomingCollaborator, IncomingCollaboratorsData } from "$app/data/incoming_collaborators";
+import { classNames } from "$app/utils/classNames";
 import { assertResponseError } from "$app/utils/request";
 
 import { Button } from "$app/components/Button";
@@ -209,7 +210,7 @@ const IncomingCollaboratorsTable = ({
   onRemove: (collaborator: IncomingCollaborator) => void;
 }) => (
   <section className="p-4 md:p-8">
-    <Table busy={loading || disabled}>
+    <Table aria-live="polite" className={classNames((loading || disabled) && "pointer-events-none opacity-50")}>
       <TableHeader>
         <TableRow>
           <TableHead>From</TableHead>
