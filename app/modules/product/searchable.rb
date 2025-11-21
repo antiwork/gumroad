@@ -295,9 +295,9 @@ module Product::Searchable
               end
             end
 
-            if params[:offer_codes].present?
+            if params[:offer_code].present?
               must do
-                terms "offer_codes.code" => Array.wrap(params[:offer_codes])
+                term "offer_codes.code" => params[:offer_code]
               end
             end
           end

@@ -14,7 +14,7 @@ describe SearchProducts do
   end
 
   describe "#format_search_params!" do
-    context "with offer_codes parameter" do
+    context "with offer_code parameter" do
       context "when feature flag is active" do
         before do
           Feature.activate(:offer_codes_search)
@@ -25,19 +25,14 @@ describe SearchProducts do
           Feature.deactivate(:offer_codes_search)
         end
 
-        it "turns offer_codes string into array" do
-          get :index, params: { offer_codes: "BLACKFRIDAY2025,SUMMER2025" }
-          expect(JSON.parse(response.body)["offer_codes"]).to eq(["BLACKFRIDAY2025"])
+        it "preserves allowed offer code" do
+          get :index, params: { offer_code: "BLACKFRIDAY2025" }
+          expect(JSON.parse(response.body)["offer_code"]).to eq("BLACKFRIDAY2025")
         end
 
-        it "returns __no_match__ when no allowed codes are present" do
-          get :index, params: { offer_codes: "SUMMER2025,WINTER2025" }
-          expect(JSON.parse(response.body)["offer_codes"]).to eq(["__no_match__"])
-        end
-
-        it "preserves allowed codes" do
-          get :index, params: { offer_codes: "BLACKFRIDAY2025" }
-          expect(JSON.parse(response.body)["offer_codes"]).to eq(["BLACKFRIDAY2025"])
+        it "returns __no_match__ when code is not allowed" do
+          get :index, params: { offer_code: "SUMMER2025" }
+          expect(JSON.parse(response.body)["offer_code"]).to eq("__no_match__")
         end
       end
 
@@ -47,9 +42,9 @@ describe SearchProducts do
           routes.draw { get "index" => "anonymous#index" }
         end
 
-        it "removes offer_codes from params" do
-          get :index, params: { offer_codes: "BLACKFRIDAY2025" }
-          expect(JSON.parse(response.body)["offer_codes"]).to eq(["__no_match__"])
+        it "blocks offer_code when feature is disabled" do
+          get :index, params: { offer_code: "BLACKFRIDAY2025" }
+          expect(JSON.parse(response.body)["offer_code"]).to eq("__no_match__")
         end
       end
     end

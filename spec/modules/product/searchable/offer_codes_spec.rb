@@ -29,7 +29,7 @@ describe "Product::Searchable - Offer codes filtering" do
     end
 
     it "returns only products with BLACKFRIDAY2025 offer code" do
-      args = Link.search_options(offer_codes: ["BLACKFRIDAY2025"])
+      args = Link.search_options(offer_code: "BLACKFRIDAY2025")
       records = Link.__elasticsearch__.search(args).records.to_a
 
       expect(records).to include(@product_with_offer)
@@ -37,7 +37,7 @@ describe "Product::Searchable - Offer codes filtering" do
       expect(records).not_to include(@product_with_other_offer)
     end
 
-    it "returns all products when offer_codes param is not provided" do
+    it "returns all products when offer_code param is not provided" do
       args = Link.search_options({})
       records = Link.__elasticsearch__.search(args).records.to_a
 
@@ -46,16 +46,13 @@ describe "Product::Searchable - Offer codes filtering" do
       expect(records).to include(@product_with_other_offer)
     end
 
-    it "returns all products when searching for a non-BLACKFRIDAY2025 code" do
-      # When feature flag is active, non-allowed codes are filtered out by SearchProducts concern
-      # The controller filters the codes before passing to search_options, resulting in an empty array
-      # An empty array is not present, so no filtering is applied and all products are returned
-      args = Link.search_options(offer_codes: [])
+    it "returns no products when searching with __no_match__ code" do
+      # When feature flag is inactive or invalid code is provided,
+      # SearchProducts concern sets offer_code to "__no_match__"
+      args = Link.search_options(offer_code: "__no_match__")
       records = Link.__elasticsearch__.search(args).records.to_a
 
-      expect(records).to include(@product_with_offer)
-      expect(records).to include(@product_without_offer)
-      expect(records).to include(@product_with_other_offer)
+      expect(records).to be_empty
     end
 
     it "returns products when offer code is deleted and reindexed" do
@@ -63,7 +60,7 @@ describe "Product::Searchable - Offer codes filtering" do
       @product_with_offer.enqueue_index_update_for(["offer_codes"])
       index_model_records(Link)
 
-      args = Link.search_options(offer_codes: ["BLACKFRIDAY2025"])
+      args = Link.search_options(offer_code: "BLACKFRIDAY2025")
       records = Link.__elasticsearch__.search(args).records.to_a
 
       expect(records).not_to include(@product_with_offer)

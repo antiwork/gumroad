@@ -41,7 +41,7 @@ class DiscoverController < ApplicationController
         target: Product::Layout::DISCOVER,
         compute_description: false,
         query: params[:query],
-        offer_code: params[:offer_codes]&.first
+        offer_code: params[:offer_code]
       )
     end
 

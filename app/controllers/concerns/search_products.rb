@@ -27,13 +27,13 @@ module SearchProducts
         params[:filetypes] = params[:filetypes].split(",").map { |f| f.squish.downcase }
       end
 
-      if Feature.active?(:offer_codes_search)
-        if params[:offer_codes].is_a?(String)
-          params[:offer_codes] = params[:offer_codes].split(",").map(&:squish).select { |code| ALLOWED_OFFER_CODES.include?(code) }
-          params[:offer_codes] = ["__no_match__"] if params[:offer_codes].empty?
+      if params[:offer_code].present?
+        if Feature.active?(:offer_codes_search) && ALLOWED_OFFER_CODES.include?(params[:offer_code])
+          # Keep the valid offer code
+        else
+          # Block disallowed or unauthorized offer codes
+          params[:offer_code] = "__no_match__"
         end
-      elsif params[:offer_codes].present?
-        params[:offer_codes] = ["__no_match__"]
       end
 
       if params[:size].is_a?(String)
