@@ -18,7 +18,7 @@ import { LoadingSpinner } from "$app/components/LoadingSpinner";
 import { Popover } from "$app/components/Popover";
 import { showAlert } from "$app/components/server-components/Alert";
 import { NodeActionsMenu } from "$app/components/TiptapExtensions/NodeActionsMenu";
-import { Row, Rows } from "$app/components/ui/Rows";
+import { Row, RowDetails, Rows } from "$app/components/ui/Rows";
 import { useRunOnce } from "$app/components/useRunOnce";
 
 type FileEntry = {
@@ -226,13 +226,15 @@ const FileEmbedGroupNodeView = ({
               ) : null}
             </div>
           ) : null}
-          {hasStreamable ? (
-            <NodeViewContent id={uid} role="group" className={classNames({ hidden: !expanded })} />
-          ) : (
-            <Rows role="group" className={classNames({ hidden: !expanded })}>
-              <NodeViewContent id={uid} />
-            </Rows>
-          )}
+          <RowDetails className={classNames({ hidden: !expanded })}>
+            {hasStreamable ? (
+              <NodeViewContent id={uid} role="group" />
+            ) : (
+              <Rows role="group">
+                <NodeViewContent id={uid} />
+              </Rows>
+            )}
+          </RowDetails>
         </Row>
       </Rows>
     </NodeViewWrapper>

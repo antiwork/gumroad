@@ -7,7 +7,6 @@ import { cast } from "ts-safe-cast";
 
 import { RichContent } from "$app/parsers/richContent";
 import { assertDefined } from "$app/utils/assert";
-import { classNames } from "$app/utils/classNames";
 import { asyncVoid } from "$app/utils/promise";
 import { assertResponseError } from "$app/utils/request";
 
@@ -27,7 +26,7 @@ import { ExternalMediaFileEmbed } from "$app/components/TiptapExtensions/MediaEm
 import { MoreLikeThis } from "$app/components/TiptapExtensions/MoreLikeThis";
 import { Posts } from "$app/components/TiptapExtensions/Posts";
 import { ShortAnswer } from "$app/components/TiptapExtensions/ShortAnswer";
-import { Row, RowActions, RowContent, Rows } from "$app/components/ui/Rows";
+import { Row, RowActions, RowContent, RowDetails, RowExpandIndicator, Rows } from "$app/components/ui/Rows";
 import { useRunOnce } from "$app/components/useRunOnce";
 
 type SaleInfo = { sale_id: string; product_id: string | null; product_permalink: string | null };
@@ -280,8 +279,9 @@ const FileEmbedGroupNodeView = ({ node }: NodeViewProps) => {
   return (
     <NodeViewWrapper>
       <Rows role="tree" ref={ref}>
-        <Row role="treeitem" aria-expanded={expanded}>
+        <Row role="treeitem" isExpanded={expanded}>
           <RowContent className="content" onClick={() => setExpanded(!expanded)} contentEditable={false}>
+            <RowExpandIndicator />
             <Icon name="solid-folder-open" className="type-icon" />
             <div>
               <h4>{folderTitle}</h4>
@@ -292,13 +292,15 @@ const FileEmbedGroupNodeView = ({ node }: NodeViewProps) => {
               <FileGroupDownloadAllButton folderId={folderId} files={downloadableFilesInFolder} />
             </RowActions>
           ) : null}
-          {hasStreamable ? (
-            <NodeViewContent id={uid} role="group" className={classNames({ hidden: !expanded })} />
-          ) : (
-            <Rows role="group" className={classNames({ hidden: !expanded })}>
-              <NodeViewContent id={uid} />
-            </Rows>
-          )}
+          <RowDetails>
+            {hasStreamable ? (
+              <NodeViewContent id={uid} role="group" />
+            ) : (
+              <Rows role="group">
+                <NodeViewContent id={uid} />
+              </Rows>
+            )}
+          </RowDetails>
         </Row>
       </Rows>
     </NodeViewWrapper>
