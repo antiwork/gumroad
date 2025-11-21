@@ -99,42 +99,58 @@ export const buttonVariants = cva(
 // Legacy props for backward compatibility
 type ButtonVariation = {
   color?: ButtonColor | undefined;
-  outline?: boolean;
-  small?: boolean;
+  outline?: boolean | undefined;
+  small?: boolean | undefined;
   brand?: BrandName | undefined;
 };
 
 export interface ButtonProps extends Omit<React.ComponentPropsWithoutRef<"button">, "color">, ButtonVariation {}
 
+const useButtonCommon = ({
+  className,
+  color,
+  outline,
+  small,
+  brand,
+}: ButtonVariation & { className?: string | undefined }) => {
+  useValidateClassName(className);
+
+  const variant = outline ? "outline" : color === "danger" ? "destructive" : "default";
+  const size = small ? "sm" : "default";
+
+  // If brand is specified, use brand colors
+  const brandStyle = brand
+    ? {
+        backgroundColor: brandColors[brand].bg,
+        color: brandColors[brand].text,
+        borderColor: brandColors[brand].bg,
+      }
+    : undefined;
+
+  const classes = classNames(
+    buttonVariants({ variant, size, color: color && !outline && !brand ? color : undefined }),
+    className,
+  );
+
+  const icon = brand && <span className={`brand-icon brand-icon-${brand}`} />;
+
+  return { classes, style: brandStyle, icon };
+};
+
 export const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
   ({ className, color, outline, small, brand, disabled, children, ...props }, ref) => {
-    useValidateClassName(className);
-
-    const variant = outline ? "outline" : color === "danger" ? "destructive" : "default";
-    const size = small ? "sm" : "default";
-
-    // If brand is specified, use brand colors
-    const brandStyle = brand
-      ? {
-          backgroundColor: brandColors[brand].bg,
-          color: brandColors[brand].text,
-          borderColor: brandColors[brand].bg,
-        }
-      : undefined;
+    const { classes, style, icon } = useButtonCommon({ className, color, outline, small, brand });
 
     return (
       <button
-        className={classNames(
-          buttonVariants({ variant, size, color: color && !outline && !brand ? color : undefined }),
-          className,
-        )}
-        style={brandStyle}
+        className={classes}
+        style={style}
         ref={ref}
         disabled={disabled}
         type="button"
         {...props}
       >
-        {brand && <span className={`brand-icon brand-icon-${brand}`} />}
+        {icon}
         {children}
       </button>
     );
@@ -148,27 +164,12 @@ export interface NavigationButtonProps extends Omit<React.ComponentPropsWithoutR
 
 export const NavigationButton = React.forwardRef<HTMLAnchorElement, NavigationButtonProps>(
   ({ className, color, outline, small, brand, disabled, children, ...props }, ref) => {
-    useValidateClassName(className);
-
-    const variant = outline ? "outline" : color === "danger" ? "destructive" : "default";
-    const size = small ? "sm" : "default";
-
-    // If brand is specified, use brand colors
-    const brandStyle = brand
-      ? {
-          backgroundColor: brandColors[brand].bg,
-          color: brandColors[brand].text,
-          borderColor: brandColors[brand].bg,
-        }
-      : undefined;
+    const { classes, style, icon } = useButtonCommon({ className, color, outline, small, brand });
 
     return (
       <a
-        className={classNames(
-          buttonVariants({ variant, size, color: color && !outline && !brand ? color : undefined }),
-          className,
-        )}
-        style={brandStyle}
+        className={classes}
+        style={style}
         ref={ref}
         inert={disabled}
         {...props}
@@ -182,7 +183,7 @@ export const NavigationButton = React.forwardRef<HTMLAnchorElement, NavigationBu
           evt.stopPropagation();
         }}
       >
-        {brand && <span className={`brand-icon brand-icon-${brand}`} />}
+        {icon}
         {children}
       </a>
     );
