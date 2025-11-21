@@ -114,9 +114,7 @@ describe DiscoverController do
         Link.import(refresh: true, force: true)
       end
 
-      # TODO: This test was already failing on main branch before Black Friday changes
-      # Issue seems to be with Elasticsearch indexing/timing or count calculation
-      xit "renders the correct total search result size in the meta description" do
+      it "renders the correct total search result size in the meta description" do
         get :index, params: { tags: "3d models" }
 
         description = "Browse over #{total_products} 3D assets including 3D models, CG textures, HDRI environments & more" \

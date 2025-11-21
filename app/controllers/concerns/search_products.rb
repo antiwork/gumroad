@@ -32,7 +32,7 @@ module SearchProducts
           params[:offer_codes] = params[:offer_codes].split(",").map(&:squish).select { |code| ALLOWED_OFFER_CODES.include?(code) }
           params[:offer_codes] = ["__no_match__"] if params[:offer_codes].empty?
         end
-      else
+      elsif params[:offer_codes].present?
         params[:offer_codes] = ["__no_match__"]
       end
 
