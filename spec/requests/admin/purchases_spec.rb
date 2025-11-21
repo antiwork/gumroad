@@ -102,10 +102,6 @@ describe "Admin::PurchasesController Scenario", type: :system, js: true do
     let(:giftee_purchase) { create(:purchase, :gift_receiver, email: giftee_email) }
     let!(:gift) { create(:gift, gifter_email: gifter_purchase.email, giftee_email: giftee_email, gifter_purchase: gifter_purchase, giftee_purchase: giftee_purchase) }
 
-    # before do
-    #   gifter_purchase.update!(is_deleted_by_buyer: false)
-    # end
-
     it "allows updating giftee email for a gift purchase" do
       visit admin_purchase_path(gifter_purchase.id)
       select_disclosure "Edit giftee email" do
