@@ -125,7 +125,7 @@ export const ProductsPageProductsTable = (props: {
               />
               <TableCell className="w-full">
                 <div>
-                  {/* Safari currently doesn't support position: relative on <tr>, so we can't use stretched-link here */}
+                  {/* Safari currently doesn't support position: relative on <tr>, so we can't make the whole row a link here */}
                   <a href={product.can_edit ? product.edit_url : product.url} style={{ textDecoration: "none" }}>
                     <h4 className="font-bold">{product.name}</h4>
                   </a>

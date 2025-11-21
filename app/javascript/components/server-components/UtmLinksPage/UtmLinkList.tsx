@@ -200,15 +200,15 @@ const UtmLinkList = () => {
                   <TableCell>
                     <TruncatedTextWithTooltip text={link.campaign} maxLength={16} />
                   </TableCell>
-                  <TableCell className="text-nowrap">{link.clicks}</TableCell>
-                  <TableCell aria-busy={link.revenue_cents === null} className="text-nowrap">
+                  <TableCell className="whitespace-nowrap">{link.clicks}</TableCell>
+                  <TableCell aria-busy={link.revenue_cents === null} className="whitespace-nowrap">
                     {link.revenue_cents !== null ? (
                       `$${fixedDecimalPointNumber(link.revenue_cents / 100)}`
                     ) : (
                       <Skeleton className="h-4 w-16" />
                     )}
                   </TableCell>
-                  <TableCell aria-busy={link.conversion_rate === null} className="text-nowrap">
+                  <TableCell aria-busy={link.conversion_rate === null} className="whitespace-nowrap">
                     {link.conversion_rate !== null ? (
                       `${fixedDecimalPointNumber(link.conversion_rate * 100)}%`
                     ) : (

@@ -124,6 +124,7 @@ export const ProductsPageMembershipsTable = (props: {
                 thumbnail={membership.thumbnail?.url ?? null}
               />
               <TableCell>
+                {/* Safari currently doesn't support position: relative on <tr>, so we can't make the whole row a link here */}
                 <a href={membership.can_edit ? membership.edit_url : membership.url} style={{ textDecoration: "none" }}>
                   <h4 className="font-bold">{membership.name}</h4>
                 </a>
@@ -132,7 +133,7 @@ export const ProductsPageMembershipsTable = (props: {
                 </a>
               </TableCell>
 
-              <TableCell className="text-nowrap">
+              <TableCell className="whitespace-nowrap">
                 {membership.successful_sales_count.toLocaleString(userAgentInfo.locale)}
 
                 {membership.remaining_for_sale_count ? (
@@ -140,7 +141,7 @@ export const ProductsPageMembershipsTable = (props: {
                 ) : null}
               </TableCell>
 
-              <TableCell className="text-nowrap">
+              <TableCell className="whitespace-nowrap">
                 {formatPriceCentsWithCurrencySymbol("usd", membership.revenue, { symbolFormat: "short" })}
 
                 <small>
@@ -158,9 +159,9 @@ export const ProductsPageMembershipsTable = (props: {
                 </small>
               </TableCell>
 
-              <TableCell className="text-nowrap">{membership.price_formatted}</TableCell>
+              <TableCell className="whitespace-nowrap">{membership.price_formatted}</TableCell>
 
-              <TableCell className="text-nowrap">
+              <TableCell className="whitespace-nowrap">
                 {(() => {
                   switch (membership.status) {
                     case "unpublished":
@@ -198,13 +199,13 @@ export const ProductsPageMembershipsTable = (props: {
           <TableRow>
             <TableCell colSpan={2}>Totals</TableCell>
 
-            <TableCell className="text-nowrap">
+            <TableCell className="whitespace-nowrap">
               {memberships
                 .reduce((sum, membership) => sum + membership.successful_sales_count, 0)
                 .toLocaleString(userAgentInfo.locale)}
             </TableCell>
 
-            <TableCell colSpan={4} className="text-nowrap">
+            <TableCell colSpan={4} className="whitespace-nowrap">
               {formatPriceCentsWithCurrencySymbol(
                 "usd",
                 memberships.reduce((sum, membership) => sum + membership.revenue, 0),

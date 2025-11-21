@@ -168,13 +168,15 @@ const WorkflowRow = ({
                 <TableCell>
                   {installment.delayed_delivery_time_duration} {installment.displayed_delayed_delivery_time_period}
                 </TableCell>
-                <TableCell className="text-nowrap">
+                <TableCell className="whitespace-nowrap">
                   {formatStatNumber({ value: installment.sent_count ?? 0 })}
                 </TableCell>
-                <TableCell className="text-nowrap">
+                <TableCell className="whitespace-nowrap">
                   {`${formatStatNumber({ value: installment.open_rate ?? 0 })}%`}
                 </TableCell>
-                <TableCell className="text-nowrap">{formatStatNumber({ value: installment.click_count })}</TableCell>
+                <TableCell className="whitespace-nowrap">
+                  {formatStatNumber({ value: installment.click_count })}
+                </TableCell>
               </>
             ) : null}
           </TableRow>

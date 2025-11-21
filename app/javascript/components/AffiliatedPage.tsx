@@ -139,17 +139,17 @@ const AffiliatedProductsTable = ({
                 </a>
               </TableCell>
 
-              <TableCell className="text-nowrap">
+              <TableCell className="whitespace-nowrap">
                 {affiliatedProduct.sales_count.toLocaleString(userAgentInfo.locale)}
               </TableCell>
 
-              <TableCell className="text-nowrap">
+              <TableCell className="whitespace-nowrap">
                 {affiliatedProduct.affiliate_type === "direct_affiliate" ? "Direct" : "Gumroad"}
               </TableCell>
 
               <TableCell>{(affiliatedProduct.fee_percentage / 100).toLocaleString([], { style: "percent" })}</TableCell>
 
-              <TableCell className="text-nowrap">{affiliatedProduct.humanized_revenue}</TableCell>
+              <TableCell className="whitespace-nowrap">{affiliatedProduct.humanized_revenue}</TableCell>
 
               <TableCell>
                 <div className="actions">

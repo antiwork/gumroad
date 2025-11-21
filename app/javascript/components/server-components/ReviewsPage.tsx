@@ -192,7 +192,7 @@ const Row = ({ review, onChange }: { review: Review; onChange: (review: Review) 
       </TableCell>
       <TableCell
         hideLabel
-        className="text-nowrap"
+        className="whitespace-nowrap"
         aria-label={`${review.rating} ${review.rating === 1 ? "star" : "stars"}`}
       >
         <RatingStars rating={review.rating} />

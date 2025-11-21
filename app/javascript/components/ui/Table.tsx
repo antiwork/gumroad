@@ -26,7 +26,7 @@ export const Table = React.forwardRef<
         aria-live={busy == null ? undefined : "polite"}
         aria-busy={busy}
         className={classNames(
-          "custom-table grid w-full border-spacing-0 gap-4 lg:table lg:rounded-sm lg:border lg:border-border",
+          "grid w-full border-spacing-0 gap-4 lg:table lg:rounded-sm lg:border lg:border-border",
           className,
         )}
         {...props}
@@ -122,8 +122,8 @@ export const TableRow = ({
     <tr
       aria-selected={selected}
       className={classNames(
-        "block rounded-sm border border-border bg-background lg:table-row lg:border-0 lg:bg-transparent",
-        selected && "cursor-pointer hover:bg-active-bg",
+        "block rounded-sm border border-border lg:table-row [tbody_>_&]:bg-background",
+        selected && "cursor-pointer bg-active-bg",
         className,
       )}
       {...props}
@@ -133,8 +133,12 @@ export const TableRow = ({
   );
 };
 
+const cellRoundingClasses =
+  "lg:[table_>_:last-child_>_tr:last-child_>_&:first-child]:rounded-bl-sm lg:[table_>_:last-child_>_tr:last-child_>_&:last-child]:rounded-br-sm";
+
 export const TableHead = ({
   className,
+  scope,
   sortDirection,
   onSort,
   children,
@@ -145,9 +149,12 @@ export const TableHead = ({
 }) => (
   <th
     aria-sort={sortDirection}
+    scope={scope}
     onClick={onSort}
     className={classNames(
-      "px-4 py-3 text-left align-middle lg:table-cell lg:whitespace-nowrap",
+      "px-4 py-3 text-left align-middle lg:table-cell lg:whitespace-nowrap lg:[tbody_>_tr_>_&]:border-t lg:[tbody_>_tr_>_&]:border-border",
+      cellRoundingClasses,
+      scope === "row" && "font-normal",
       sortDirection && "cursor-pointer",
       className,
     )}
@@ -177,7 +184,7 @@ export const TableCell = ({
   <td
     className={classNames(
       "block p-4 text-left align-middle not-first:border-t not-first:border-border lg:table-cell lg:border-t lg:border-border",
-      "lg:[table_>_:last-child_>_tr:last-child_>_&:first-child]:rounded-bl-sm lg:[table_>_:last-child_>_tr:last-child_>_&:last-child]:rounded-br-sm lg:[tbody_>_tr_>_&]:bg-background",
+      cellRoundingClasses,
       className,
     )}
     {...props}

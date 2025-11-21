@@ -261,18 +261,18 @@ const ProductsTable = ({ sales }: TableProps) => {
                 {name}
               </a>
             </TableCell>
-            <TableCell title={sales.toLocaleString(locale)} className="text-nowrap">
+            <TableCell title={sales.toLocaleString(locale)} className="whitespace-nowrap">
               {sales.toLocaleString(locale, { notation: "compact" })}
             </TableCell>
-            <TableCell title={formatPrice(revenue)} className="text-nowrap">
+            <TableCell title={formatPrice(revenue)} className="whitespace-nowrap">
               {formatPrice(revenue)}
             </TableCell>
-            <TableCell title={visits.toLocaleString(locale)} className="text-nowrap">
+            <TableCell title={visits.toLocaleString(locale)} className="whitespace-nowrap">
               {visits.toLocaleString(locale, { notation: "compact" })}
             </TableCell>
-            <TableCell className="text-nowrap">{formatPrice(today)}</TableCell>
-            <TableCell className="text-nowrap">{formatPrice(last_7)}</TableCell>
-            <TableCell className="text-nowrap">{formatPrice(last_30)}</TableCell>
+            <TableCell className="whitespace-nowrap">{formatPrice(today)}</TableCell>
+            <TableCell className="whitespace-nowrap">{formatPrice(last_7)}</TableCell>
+            <TableCell className="whitespace-nowrap">{formatPrice(last_30)}</TableCell>
           </TableRow>
         ))}
       </TableBody>

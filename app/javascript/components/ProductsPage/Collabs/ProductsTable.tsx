@@ -96,7 +96,7 @@ export const CollabsProductsTable = (props: { entries: Product[]; pagination: Pa
 
               <TableCell>
                 <div>
-                  {/* Safari currently doesn't support position: relative on <tr>, so we can't use stretched-link here */}
+                  {/* Safari currently doesn't support position: relative on <tr>, so we can't make the whole row a link here */}
                   <a href={product.can_edit ? product.edit_url : product.url} style={{ textDecoration: "none" }}>
                     <h4 className="font-bold">{product.name}</h4>
                   </a>
@@ -107,11 +107,11 @@ export const CollabsProductsTable = (props: { entries: Product[]; pagination: Pa
                 </div>
               </TableCell>
 
-              <TableCell className="text-nowrap">{product.price_formatted}</TableCell>
+              <TableCell className="whitespace-nowrap">{product.price_formatted}</TableCell>
 
               <TableCell>{product.cut}%</TableCell>
 
-              <TableCell className="text-nowrap">
+              <TableCell className="whitespace-nowrap">
                 <a href={Routes.customers_link_id_path(product.permalink)}>
                   {product.successful_sales_count.toLocaleString(userAgentInfo.locale)}
                 </a>
@@ -121,7 +121,7 @@ export const CollabsProductsTable = (props: { entries: Product[]; pagination: Pa
                 ) : null}
               </TableCell>
 
-              <TableCell className="text-nowrap">
+              <TableCell className="whitespace-nowrap">
                 {formatPriceCentsWithCurrencySymbol("usd", product.revenue, { symbolFormat: "short" })}
               </TableCell>
             </TableRow>
