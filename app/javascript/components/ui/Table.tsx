@@ -3,14 +3,22 @@ import * as React from "react";
 import { assertDefined } from "$app/utils/assert";
 import { classNames } from "$app/utils/classNames";
 
-const TableContext = React.createContext<{ busy?: boolean | undefined }>({});
+const TableContext = React.createContext<{
+  busy?: boolean | undefined;
+  headerLabels?: (string | null)[];
+  setHeaderLabels: (headerLabels: (string | null)[]) => void;
+}>({ setHeaderLabels: () => {} });
 const useTable = () => assertDefined(React.useContext(TableContext), "useTable must be used within a Table");
 
 export const Table = React.forwardRef<
   HTMLTableElement,
   Omit<React.HTMLAttributes<HTMLTableElement>, "aria-busy"> & { busy?: boolean }
 >(({ className, busy, children, ...props }, ref) => {
-  const contextValue = React.useMemo(() => ({ busy }), [busy]);
+  const [headerLabels, setHeaderLabels] = React.useState<(string | null)[]>([]);
+  const contextValue = React.useMemo(
+    () => ({ busy, headerLabels, setHeaderLabels }),
+    [busy, headerLabels, setHeaderLabels],
+  );
   return (
     <TableContext.Provider value={contextValue}>
       <table
@@ -79,19 +87,51 @@ export const TableRow = ({
   selected,
   children,
   ...props
-}: Omit<React.HTMLAttributes<HTMLTableRowElement>, "aria-selected"> & { selected?: boolean; footer?: boolean }) => (
-  <tr
-    aria-selected={selected}
-    className={classNames(
-      "block rounded-sm border border-border bg-background lg:table-row lg:border-0 lg:bg-transparent",
-      selected && "cursor-pointer hover:bg-active-bg",
-      className,
-    )}
-    {...props}
-  >
-    {children}
-  </tr>
-);
+}: Omit<React.HTMLAttributes<HTMLTableRowElement>, "aria-selected"> & { selected?: boolean; footer?: boolean }) => {
+  const { headerLabels: headers, setHeaderLabels: setHeaders } = useTable();
+
+  React.useEffect(() => {
+    const isHeaderRow = React.Children.toArray(children).every(
+      (child) => React.isValidElement(child) && child.type === TableHead,
+    );
+    if (!isHeaderRow) return;
+
+    setHeaders(
+      React.Children.toArray(children).map<string | null>((child) => {
+        if (React.isValidElement(child) && child.type === TableHead) {
+          // eslint-disable-next-line @typescript-eslint/consistent-type-assertions
+          const props = child.props as React.ComponentProps<typeof TableHead>;
+          return typeof props.children === "string" ? props.children : null;
+        }
+        return null;
+      }),
+    );
+  }, [children]);
+
+  const childrenWithLabels = React.Children.map(children, (child, index) => {
+    if (React.isValidElement(child) && child.type === TableCell) {
+      // eslint-disable-next-line @typescript-eslint/consistent-type-assertions
+      const cell = child as React.FunctionComponentElement<React.ComponentProps<typeof TableCell>>;
+      const label = cell.props.label ?? headers?.[index] ?? null;
+      return React.cloneElement(cell, label ? { label } : {});
+    }
+    return child;
+  });
+
+  return (
+    <tr
+      aria-selected={selected}
+      className={classNames(
+        "block rounded-sm border border-border bg-background lg:table-row lg:border-0 lg:bg-transparent",
+        selected && "cursor-pointer hover:bg-active-bg",
+        className,
+      )}
+      {...props}
+    >
+      {childrenWithLabels}
+    </tr>
+  );
+};
 
 export const TableHead = ({
   className,
@@ -125,11 +165,13 @@ export const TableHead = ({
 export const TableCell = ({
   className,
   actions,
+  hideLabel,
   label,
   children,
   ...props
 }: Omit<React.TdHTMLAttributes<HTMLTableCellElement>, "aria-busy"> & {
   actions?: boolean;
+  hideLabel?: boolean;
   label?: string;
 }) => (
   <td
@@ -140,7 +182,7 @@ export const TableCell = ({
     )}
     {...props}
   >
-    {label ? <div className="mb-2 font-bold lg:hidden">{label}</div> : null}
+    {label ? <div className={classNames("mb-2 font-bold lg:hidden", hideLabel && "sr-only")}>{label}</div> : null}
     {actions ? <div className="flex flex-wrap gap-3 lg:justify-end">{children}</div> : children}
   </td>
 );
