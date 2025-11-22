@@ -280,7 +280,7 @@ const FileEmbedGroupNodeView = ({ node }: NodeViewProps) => {
     <NodeViewWrapper>
       <Rows role="tree" ref={ref}>
         <Row role="treeitem" isExpanded={expanded}>
-          <RowContent className="content" onClick={() => setExpanded(!expanded)} contentEditable={false}>
+          <RowContent onClick={() => setExpanded(!expanded)} contentEditable={false}>
             <RowExpandIndicator />
             <Icon name="solid-folder-open" className="type-icon" />
             <div>

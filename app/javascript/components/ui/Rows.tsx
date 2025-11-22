@@ -39,10 +39,15 @@ export const Row = ({
   );
 };
 
-export const RowContent = ({ className, ...props }: React.HTMLProps<HTMLDivElement>) => {
+export const RowContent = ({
+  className,
+  asChild,
+  ...props
+}: React.HTMLProps<HTMLDivElement> & { asChild?: boolean }) => {
   const { isExpanded } = useRowContext();
+  const Component = asChild ? Slot : "div";
   return (
-    <div
+    <Component
       className={classNames("flex items-center gap-2", { "cursor-pointer": isExpanded !== undefined }, className)}
       {...props}
     />

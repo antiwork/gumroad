@@ -18,7 +18,7 @@ import { LoadingSpinner } from "$app/components/LoadingSpinner";
 import { Popover } from "$app/components/Popover";
 import { showAlert } from "$app/components/server-components/Alert";
 import { NodeActionsMenu } from "$app/components/TiptapExtensions/NodeActionsMenu";
-import { Row, RowDetails, Rows } from "$app/components/ui/Rows";
+import { Row, RowActions, RowContent, RowDetails, Rows } from "$app/components/ui/Rows";
 import { useRunOnce } from "$app/components/useRunOnce";
 
 type FileEntry = {
@@ -147,7 +147,7 @@ const FileEmbedGroupNodeView = ({
       >
         <Row role="treeitem" aria-expanded={expanded} className={cx({ selected })}>
           {editor.isEditable ? <NodeActionsMenu editor={editor} /> : null}
-          <div className="content" onClick={() => setExpanded(!expanded)} contentEditable={false}>
+          <RowContent onClick={() => setExpanded(!expanded)} contentEditable={false}>
             <Icon name="solid-folder-open" className="type-icon" />
             {editing ? (
               <input
@@ -169,9 +169,9 @@ const FileEmbedGroupNodeView = ({
                 <h4>{folderTitle}</h4>
               </div>
             )}
-          </div>
+          </RowContent>
           {showDownloadButton || editor.isEditable ? (
-            <div className="actions">
+            <RowActions>
               {showDownloadButton ? (
                 <Popover
                   trigger={
@@ -224,7 +224,7 @@ const FileEmbedGroupNodeView = ({
                   <Icon name={editing ? "outline-check" : "pencil"} />
                 </Button>
               ) : null}
-            </div>
+            </RowActions>
           ) : null}
           <RowDetails className={classNames({ hidden: !expanded })}>
             {hasStreamable ? (

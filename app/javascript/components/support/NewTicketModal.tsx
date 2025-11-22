@@ -9,7 +9,7 @@ import { FileRowContent } from "$app/components/FileRowContent";
 import { Icon } from "$app/components/Icons";
 import { Modal } from "$app/components/Modal";
 import { showAlert } from "$app/components/server-components/Alert";
-import { Row, Rows } from "$app/components/ui/Rows";
+import { Row, RowActions, RowContent, Rows } from "$app/components/ui/Rows";
 
 export function NewTicketModal({
   open,
@@ -106,7 +106,7 @@ export function NewTicketModal({
           <Rows role="list" aria-label="Files">
             {attachments.map((file, index) => (
               <Row role="listitem" key={`${file.name}-${index}`}>
-                <div className="content">
+                <RowContent>
                   <FileRowContent
                     name={FileUtils.getFileNameWithoutExtension(file.name)}
                     extension={FileUtils.getFileExtension(file.name).toUpperCase()}
@@ -114,8 +114,8 @@ export function NewTicketModal({
                     isUploading={false}
                     details={<li>{FileUtils.getReadableFileSize(file.size)}</li>}
                   />
-                </div>
-                <div className="actions">
+                </RowContent>
+                <RowActions>
                   <Button
                     outline
                     color="danger"
@@ -124,7 +124,7 @@ export function NewTicketModal({
                   >
                     <Icon name="trash2" />
                   </Button>
-                </div>
+                </RowActions>
               </Row>
             ))}
           </Rows>
