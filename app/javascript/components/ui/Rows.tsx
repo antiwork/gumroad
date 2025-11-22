@@ -63,11 +63,14 @@ export const RowDetails = ({
   return <Component className={classNames("col-span-full", className, { hidden: isExpanded === false })} {...props} />;
 };
 
-export const RowDragHandle = ({ className, ...props }: React.HTMLProps<HTMLDivElement>) => (
-  <div className={classNames("order-first -ml-4 text-muted", className)} {...props}>
-    <Icon name="outline-drag" />
-  </div>
+export const RowDragHandle = React.forwardRef<HTMLDivElement, React.HTMLProps<HTMLDivElement>>(
+  ({ className, ...props }, ref) => (
+    <div ref={ref} className={classNames("order-first -ml-4 text-muted", className)} {...props}>
+      <Icon name="outline-drag" />
+    </div>
+  ),
 );
+RowDragHandle.displayName = "RowDragHandle";
 
 export const RowExpandIndicator = (props: React.HTMLProps<HTMLSpanElement>) => {
   const { isExpanded } = useRowContext();
