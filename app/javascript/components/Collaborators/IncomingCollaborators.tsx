@@ -127,7 +127,7 @@ const IncomingCollaboratorsTableRow = ({
   onReject: () => void;
   disabled: boolean;
 }) => (
-  <TableRow key={incomingCollaborator.id} aria-selected={isSelected} onClick={onSelect}>
+  <TableRow key={incomingCollaborator.id} selected={isSelected} onClick={onSelect}>
     <TableCell>
       <div className="flex items-center gap-4">
         <img
