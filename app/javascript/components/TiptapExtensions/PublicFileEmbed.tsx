@@ -35,7 +35,7 @@ const NodeView = ({ editor, node }: NodeViewProps) => {
     <NodeViewWrapper contentEditable={false}>
       <Row className={cx("embed", { selected })}>
         {editor.isEditable ? <NodeActionsMenu editor={editor} /> : null}
-        <RowContent>
+        <RowContent className="content">
           <FileRowContent
             extension={file.extension}
             name={file.name.trim() || "Untitled"}

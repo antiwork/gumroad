@@ -49,7 +49,7 @@ const LicenseKeyNodeView = ({ editor, selected }: NodeViewProps) => {
     <NodeViewWrapper>
       <Row className={cx("embed", { selected })}>
         {editor.isEditable ? <NodeActionsMenu editor={editor} /> : null}
-        <RowContent contentEditable={false}>
+        <RowContent className="content" contentEditable={false}>
           <Icon name="solid-key" className="type-icon" />
           <div>
             <h4 className="text-singleline">{licenseKey}</h4>

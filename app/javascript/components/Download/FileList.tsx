@@ -459,7 +459,7 @@ const MobileAppAudioFileRow = ({ file }: { file: FileItem }) => {
         >
           <RowContent asChild>
             <button
-              className={classNames({ "text-muted": isProcessing })}
+              className={classNames("content", { "text-muted": isProcessing })}
               style={{
                 gridColumn: "3 span",
                 userSelect: "none",

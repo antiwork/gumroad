@@ -430,7 +430,7 @@ const FileEmbedNodeView = ({ node, editor, getPos, updateAttributes }: NodeViewP
           editor={editor}
           actions={!isInGroup || fileEmbedGroups.length > 0 || parentNode.childCount > 1 ? [folderAction] : []}
         />
-        <RowContent>
+        <RowContent className="content">
           {file.is_streamable && node.attrs.collapsed ? (
             <label className="thumbnail" aria-label="Upload a thumbnail">
               {loadingVideo ? (
