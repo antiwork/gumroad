@@ -152,13 +152,11 @@ export const TableHead = ({
 
 export const TableCell = ({
   className,
-  actions,
   hideLabel,
   label,
   children,
   ...props
 }: React.TdHTMLAttributes<HTMLTableCellElement> & {
-  actions?: boolean;
   hideLabel?: boolean;
   label?: React.ReactNode;
 }) => {
@@ -177,7 +175,7 @@ export const TableCell = ({
           {label ?? cellContext?.label}
         </div>
       ) : null}
-      {actions ? <div className="flex flex-wrap gap-3 lg:justify-end">{children}</div> : children}
+      {children}
     </td>
   );
 };

@@ -80,14 +80,16 @@ const WishlistsFollowingPage = ({
                       <span>{wishlist.creator.name}</span>
                     </a>
                   </TableCell>
-                  <TableCell actions>
-                    <Popover aria-label="Actions" trigger={<Icon name="three-dots" />}>
-                      <div role="menu">
-                        <div role="menuitem" className="danger" onClick={() => void destroy(wishlist)}>
-                          <Icon name="bookmark-x" /> Unfollow
+                  <TableCell>
+                    <div className="flex flex-wrap gap-3 lg:justify-end">
+                      <Popover aria-label="Actions" trigger={<Icon name="three-dots" />}>
+                        <div role="menu">
+                          <div role="menuitem" className="danger" onClick={() => void destroy(wishlist)}>
+                            <Icon name="bookmark-x" /> Unfollow
+                          </div>
                         </div>
-                      </div>
-                    </Popover>
+                      </Popover>
+                    </div>
                   </TableCell>
                 </TableRow>
               ))}

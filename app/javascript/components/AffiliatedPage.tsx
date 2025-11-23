@@ -152,13 +152,15 @@ const AffiliatedProductsTable = ({
 
               <TableCell className="whitespace-nowrap">{affiliatedProduct.humanized_revenue}</TableCell>
 
-              <TableCell actions>
-                <CopyToClipboard tooltipPosition="bottom" copyTooltip="Copy link" text={affiliatedProduct.url}>
-                  <Button>
-                    <Icon name="link" />
-                    Copy link
-                  </Button>
-                </CopyToClipboard>
+              <TableCell>
+                <div className="flex flex-wrap gap-3 lg:justify-end">
+                  <CopyToClipboard tooltipPosition="bottom" copyTooltip="Copy link" text={affiliatedProduct.url}>
+                    <Button>
+                      <Icon name="link" />
+                      Copy link
+                    </Button>
+                  </CopyToClipboard>
+                </div>
               </TableCell>
             </TableRow>
           ))}

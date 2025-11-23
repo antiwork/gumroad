@@ -215,29 +215,31 @@ const UtmLinkList = () => {
                       <Skeleton className="h-4 w-16" />
                     )}
                   </TableCell>
-                  <TableCell actions>
-                    <UtmLinkActions link={link}>
-                      <div role="menu">
-                        <div role="menuitem" onClick={() => navigate(editLinkPath(link))}>
-                          <Icon name="pencil" />
-                          &ensp;Edit
+                  <TableCell>
+                    <div className="flex flex-wrap gap-3 lg:justify-end">
+                      <UtmLinkActions link={link}>
+                        <div role="menu">
+                          <div role="menuitem" onClick={() => navigate(editLinkPath(link))}>
+                            <Icon name="pencil" />
+                            &ensp;Edit
+                          </div>
+                          <div role="menuitem" onClick={() => navigate(duplicateLinkPath(link))}>
+                            <Icon name="outline-duplicate" />
+                            &ensp;Duplicate
+                          </div>
+                          <div
+                            className="danger"
+                            role="menuitem"
+                            onClick={() =>
+                              setDeletingUtmLink({ id: link.id, title: link.title, state: "delete-confirmation" })
+                            }
+                          >
+                            <Icon name="trash2" />
+                            &ensp;Delete
+                          </div>
                         </div>
-                        <div role="menuitem" onClick={() => navigate(duplicateLinkPath(link))}>
-                          <Icon name="outline-duplicate" />
-                          &ensp;Duplicate
-                        </div>
-                        <div
-                          className="danger"
-                          role="menuitem"
-                          onClick={() =>
-                            setDeletingUtmLink({ id: link.id, title: link.title, state: "delete-confirmation" })
-                          }
-                        >
-                          <Icon name="trash2" />
-                          &ensp;Delete
-                        </div>
-                      </div>
-                    </UtmLinkActions>
+                      </UtmLinkActions>
+                    </div>
                   </TableCell>
                 </TableRow>
               ))}

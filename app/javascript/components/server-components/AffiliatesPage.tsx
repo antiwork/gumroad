@@ -277,41 +277,43 @@ const AffiliateRequestsTable = ({
 
                 <TableCell>{parseISO(affiliateRequest.date).toLocaleDateString(userAgentInfo.locale)}</TableCell>
 
-                <TableCell actions>
-                  <Button
-                    disabled={
-                      !loggedInUser?.policies.direct_affiliate.update || isLoading || !!affiliateRequest.processingState
-                    }
-                    onClick={() => update(affiliateRequest, "ignore")}
-                  >
-                    {affiliateRequest.processingState === "ignore" ? "Ignoring" : "Ignore"}
-                  </Button>
-
-                  <WithTooltip
-                    tip={
-                      affiliateRequest.state === "approved"
-                        ? "You have approved this request but the affiliate hasn't created a Gumroad account yet"
-                        : null
-                    }
-                    position="bottom"
-                  >
+                <TableCell>
+                  <div className="flex flex-wrap gap-3 lg:justify-end">
                     <Button
-                      color="primary"
-                      onClick={() => update(affiliateRequest, "approve")}
                       disabled={
-                        !loggedInUser?.policies.direct_affiliate.update ||
-                        isLoading ||
-                        affiliateRequest.state === "approved" ||
-                        !!affiliateRequest.processingState
+                        !loggedInUser?.policies.direct_affiliate.update || isLoading || !!affiliateRequest.processingState
                       }
+                      onClick={() => update(affiliateRequest, "ignore")}
                     >
-                      {affiliateRequest.state === "approved"
-                        ? "Approved"
-                        : affiliateRequest.processingState === "approve"
-                          ? "Approving"
-                          : "Approve"}
+                      {affiliateRequest.processingState === "ignore" ? "Ignoring" : "Ignore"}
                     </Button>
-                  </WithTooltip>
+
+                    <WithTooltip
+                      tip={
+                        affiliateRequest.state === "approved"
+                          ? "You have approved this request but the affiliate hasn't created a Gumroad account yet"
+                          : null
+                      }
+                      position="bottom"
+                    >
+                      <Button
+                        color="primary"
+                        onClick={() => update(affiliateRequest, "approve")}
+                        disabled={
+                          !loggedInUser?.policies.direct_affiliate.update ||
+                          isLoading ||
+                          affiliateRequest.state === "approved" ||
+                          !!affiliateRequest.processingState
+                        }
+                      >
+                        {affiliateRequest.state === "approved"
+                          ? "Approved"
+                          : affiliateRequest.processingState === "approve"
+                            ? "Approving"
+                            : "Approve"}
+                      </Button>
+                    </WithTooltip>
+                  </div>
                 </TableCell>
               </TableRow>
             ))}
@@ -528,35 +530,37 @@ const AffiliatesTab = () => {
                                 <Skeleton className="h-4 w-16" />
                               )}
                             </TableCell>
-                            <TableCell actions onClick={(e) => e.stopPropagation()}>
-                              <CopyToClipboard
-                                tooltipPosition="bottom"
-                                copyTooltip="Copy link"
-                                text={affiliate.product_referral_url}
-                              >
-                                <Button>Copy link</Button>
-                              </CopyToClipboard>
+                            <TableCell onClick={(e) => e.stopPropagation()}>
+                              <div className="flex flex-wrap gap-3 lg:justify-end">
+                                <CopyToClipboard
+                                  tooltipPosition="bottom"
+                                  copyTooltip="Copy link"
+                                  text={affiliate.product_referral_url}
+                                >
+                                  <Button>Copy link</Button>
+                                </CopyToClipboard>
 
-                              <Link
-                                to={`/affiliates/${affiliate.id}/edit`}
-                                className="button"
-                                aria-label="Edit"
-                                inert={!loggedInUser?.policies.direct_affiliate.update || navigation.state !== "idle"}
-                              >
-                                <Icon name="pencil" />
-                              </Link>
+                                <Link
+                                  to={`/affiliates/${affiliate.id}/edit`}
+                                  className="button"
+                                  aria-label="Edit"
+                                  inert={!loggedInUser?.policies.direct_affiliate.update || navigation.state !== "idle"}
+                                >
+                                  <Icon name="pencil" />
+                                </Link>
 
-                              <Button
-                                type="submit"
-                                color="danger"
-                                onClick={() => remove(affiliate.id)}
-                                aria-label="Delete"
-                                disabled={
-                                  !loggedInUser?.policies.direct_affiliate.update || navigation.state !== "idle"
-                                }
-                              >
-                                <Icon name="trash2" />
-                              </Button>
+                                <Button
+                                  type="submit"
+                                  color="danger"
+                                  onClick={() => remove(affiliate.id)}
+                                  aria-label="Delete"
+                                  disabled={
+                                    !loggedInUser?.policies.direct_affiliate.update || navigation.state !== "idle"
+                                  }
+                                >
+                                  <Icon name="trash2" />
+                                </Button>
+                              </div>
                             </TableCell>
                           </TableRow>
                         );

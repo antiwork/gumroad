@@ -388,62 +388,64 @@ const DiscountsPage = ({ offer_codes, pages, products, pagination: initialPagina
                           )}
                         </div>
                       </TableCell>
-                      <TableCell actions>
-                        <Button
-                          aria-label="Edit"
-                          disabled={!offerCode.can_update || isLoading}
-                          onClick={() => {
-                            setSelectedOfferCodeId(offerCode.id);
-                            setView("edit");
-                          }}
-                        >
-                          <Icon name="pencil" />
-                        </Button>
-                        <Popover
-                          open={popoverOfferCodeId === offerCode.id}
-                          onToggle={(open) => setPopoverOfferCodeId(open ? offerCode.id : null)}
-                          aria-label="Open discount action menu"
-                          trigger={
-                            <div className="button">
-                              <Icon name="three-dots" />
-                            </div>
-                          }
-                        >
-                          <div role="menu">
-                            <div
-                              role="menuitem"
-                              inert={!offerCode.can_update || isLoading}
-                              onClick={() => {
-                                setPopoverOfferCodeId(null);
-                                setSelectedOfferCodeId(offerCode.id);
-                                setView("create");
-                              }}
-                            >
-                              <Icon name="outline-duplicate" />
-                              &ensp;Duplicate
-                            </div>
-                            <div
-                              role="menuitem"
-                              className="danger"
-                              inert={!offerCode.can_update || isLoading}
-                              onClick={asyncVoid(async (e) => {
-                                e.stopPropagation();
-                                try {
-                                  setIsLoading(true);
+                      <TableCell>
+                        <div className="flex flex-wrap gap-3 lg:justify-end">
+                          <Button
+                            aria-label="Edit"
+                            disabled={!offerCode.can_update || isLoading}
+                            onClick={() => {
+                              setSelectedOfferCodeId(offerCode.id);
+                              setView("edit");
+                            }}
+                          >
+                            <Icon name="pencil" />
+                          </Button>
+                          <Popover
+                            open={popoverOfferCodeId === offerCode.id}
+                            onToggle={(open) => setPopoverOfferCodeId(open ? offerCode.id : null)}
+                            aria-label="Open discount action menu"
+                            trigger={
+                              <div className="button">
+                                <Icon name="three-dots" />
+                              </div>
+                            }
+                          >
+                            <div role="menu">
+                              <div
+                                role="menuitem"
+                                inert={!offerCode.can_update || isLoading}
+                                onClick={() => {
                                   setPopoverOfferCodeId(null);
-                                  await deleteOfferCode(offerCode.id);
-                                } catch (e) {
-                                  assertResponseError(e);
-                                  showAlert(e.message, "error");
-                                }
-                                setIsLoading(false);
-                              })}
-                            >
-                              <Icon name="trash2" />
-                              &ensp;Delete
+                                  setSelectedOfferCodeId(offerCode.id);
+                                  setView("create");
+                                }}
+                              >
+                                <Icon name="outline-duplicate" />
+                                &ensp;Duplicate
+                              </div>
+                              <div
+                                role="menuitem"
+                                className="danger"
+                                inert={!offerCode.can_update || isLoading}
+                                onClick={asyncVoid(async (e) => {
+                                  e.stopPropagation();
+                                  try {
+                                    setIsLoading(true);
+                                    setPopoverOfferCodeId(null);
+                                    await deleteOfferCode(offerCode.id);
+                                  } catch (e) {
+                                    assertResponseError(e);
+                                    showAlert(e.message, "error");
+                                  }
+                                  setIsLoading(false);
+                                })}
+                              >
+                                <Icon name="trash2" />
+                                &ensp;Delete
+                              </div>
                             </div>
-                          </div>
-                        </Popover>
+                          </Popover>
+                        </div>
                       </TableCell>
                     </TableRow>
                   );

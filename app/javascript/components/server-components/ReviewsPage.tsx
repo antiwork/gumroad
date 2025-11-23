@@ -197,26 +197,28 @@ const Row = ({ review, onChange }: { review: Review; onChange: (review: Review) 
         <RatingStars rating={review.rating} />
       </TableCell>
       <TableCell className="break-words">{review.message ? `"${review.message}"` : null}</TableCell>
-      <TableCell actions>
-        <Popover
-          open={isEditing}
-          onToggle={setIsEditing}
-          trigger={
-            <Button aria-label="Edit">
-              <Icon name="pencil" />
-            </Button>
-          }
-        >
-          <div className="stack">
-            <ReviewForm
-              permalink={review.product.permalink}
-              purchaseId={review.purchase_id}
-              purchaseEmailDigest={review.purchase_email_digest}
-              review={review}
-              onChange={(newReview) => onChange({ ...review, ...newReview })}
-            />
-          </div>
-        </Popover>
+      <TableCell>
+        <div className="flex flex-wrap gap-3 lg:justify-end">
+          <Popover
+            open={isEditing}
+            onToggle={setIsEditing}
+            trigger={
+              <Button aria-label="Edit">
+                <Icon name="pencil" />
+              </Button>
+            }
+          >
+            <div className="stack">
+              <ReviewForm
+                permalink={review.product.permalink}
+                purchaseId={review.purchase_id}
+                purchaseEmailDigest={review.purchase_email_digest}
+                review={review}
+                onChange={(newReview) => onChange({ ...review, ...newReview })}
+              />
+            </div>
+          </Popover>
+        </div>
       </TableCell>
     </TableRow>
   );

@@ -226,25 +226,27 @@ const Collaborators = () => {
                     <TableCell className="whitespace-nowrap">
                       {collaborator.invitation_accepted ? <>Accepted</> : <>Pending</>}
                     </TableCell>
-                    <TableCell actions onClick={(e) => e.stopPropagation()}>
-                      <Link
-                        to={`/collaborators/${collaborator.id}/edit`}
-                        className="button"
-                        aria-label="Edit"
-                        inert={!loggedInUser?.policies.collaborator.update || navigation.state !== "idle"}
-                      >
-                        <Icon name="pencil" />
-                      </Link>
+                    <TableCell onClick={(e) => e.stopPropagation()}>
+                      <div className="flex flex-wrap gap-3 lg:justify-end">
+                        <Link
+                          to={`/collaborators/${collaborator.id}/edit`}
+                          className="button"
+                          aria-label="Edit"
+                          inert={!loggedInUser?.policies.collaborator.update || navigation.state !== "idle"}
+                        >
+                          <Icon name="pencil" />
+                        </Link>
 
-                      <Button
-                        type="submit"
-                        color="danger"
-                        onClick={() => remove(collaborator.id)}
-                        aria-label="Delete"
-                        disabled={!loggedInUser?.policies.collaborator.update || navigation.state !== "idle"}
-                      >
-                        <Icon name="trash2" />
-                      </Button>
+                        <Button
+                          type="submit"
+                          color="danger"
+                          onClick={() => remove(collaborator.id)}
+                          aria-label="Delete"
+                          disabled={!loggedInUser?.policies.collaborator.update || navigation.state !== "idle"}
+                        >
+                          <Icon name="trash2" />
+                        </Button>
+                      </div>
                     </TableCell>
                   </TableRow>
                 ))}

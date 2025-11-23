@@ -166,21 +166,23 @@ export const ProductsPageProductsTable = (props: {
                 })()}
               </TableCell>
               {product.can_duplicate || product.can_destroy ? (
-                <TableCell actions className="lg:px-8">
-                  <ActionsPopover
-                    product={product}
-                    onDuplicate={() => void loadProducts(1)}
-                    onDelete={() => void reloadProducts()}
-                    onArchive={() => {
-                      props.setEnableArchiveTab?.(true);
-                      void reloadProducts();
-                    }}
-                    onUnarchive={(hasRemainingArchivedProducts) => {
-                      props.setEnableArchiveTab?.(hasRemainingArchivedProducts);
-                      if (!hasRemainingArchivedProducts) router.get(Routes.products_path());
-                      else void reloadProducts();
-                    }}
-                  />
+                <TableCell className="lg:px-8">
+                  <div className="flex flex-wrap gap-3 lg:justify-end">
+                    <ActionsPopover
+                      product={product}
+                      onDuplicate={() => void loadProducts(1)}
+                      onDelete={() => void reloadProducts()}
+                      onArchive={() => {
+                        props.setEnableArchiveTab?.(true);
+                        void reloadProducts();
+                      }}
+                      onUnarchive={(hasRemainingArchivedProducts) => {
+                        props.setEnableArchiveTab?.(hasRemainingArchivedProducts);
+                        if (!hasRemainingArchivedProducts) router.get(Routes.products_path());
+                        else void reloadProducts();
+                      }}
+                    />
+                  </div>
                 </TableCell>
               ) : null}
             </TableRow>
