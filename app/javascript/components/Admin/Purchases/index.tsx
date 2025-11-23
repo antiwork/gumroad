@@ -25,7 +25,7 @@ type Gift = {
   is_sender_purchase: boolean;
   other_purchase_id: number;
   other_email: string;
-  note: string;
+  note: string | null;
 };
 
 export type Purchase = PurchaseStatesInfo & {
