@@ -115,17 +115,15 @@ const WishlistsPage = ({
                       ariaLabel="Discoverable"
                     />
                   </TableCell>
-                  <TableCell>
-                    <div className="actions">
-                      <Button
-                        color="danger"
-                        outline
-                        aria-label="Delete wishlist"
-                        onClick={() => setConfirmingDeleteWishlist(wishlist)}
-                      >
-                        <Icon name="trash2" />
-                      </Button>
-                    </div>
+                  <TableCell actions>
+                    <Button
+                      color="danger"
+                      outline
+                      aria-label="Delete wishlist"
+                      onClick={() => setConfirmingDeleteWishlist(wishlist)}
+                    >
+                      <Icon name="trash2" />
+                    </Button>
                   </TableCell>
                 </TableRow>
               ))}

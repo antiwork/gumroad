@@ -191,37 +191,32 @@ const Row = ({ review, onChange }: { review: Review; onChange: (review: Review) 
         </div>
       </TableCell>
       <TableCell
-        hideLabel
         className="whitespace-nowrap"
         aria-label={`${review.rating} ${review.rating === 1 ? "star" : "stars"}`}
       >
         <RatingStars rating={review.rating} />
       </TableCell>
-      <TableCell hideLabel className="break-words">
-        {review.message ? `"${review.message}"` : null}
-      </TableCell>
-      <TableCell hideLabel>
-        <div className="actions">
-          <Popover
-            open={isEditing}
-            onToggle={setIsEditing}
-            trigger={
-              <Button aria-label="Edit">
-                <Icon name="pencil" />
-              </Button>
-            }
-          >
-            <div className="stack">
-              <ReviewForm
-                permalink={review.product.permalink}
-                purchaseId={review.purchase_id}
-                purchaseEmailDigest={review.purchase_email_digest}
-                review={review}
-                onChange={(newReview) => onChange({ ...review, ...newReview })}
-              />
-            </div>
-          </Popover>
-        </div>
+      <TableCell className="break-words">{review.message ? `"${review.message}"` : null}</TableCell>
+      <TableCell actions>
+        <Popover
+          open={isEditing}
+          onToggle={setIsEditing}
+          trigger={
+            <Button aria-label="Edit">
+              <Icon name="pencil" />
+            </Button>
+          }
+        >
+          <div className="stack">
+            <ReviewForm
+              permalink={review.product.permalink}
+              purchaseId={review.purchase_id}
+              purchaseEmailDigest={review.purchase_email_digest}
+              review={review}
+              onChange={(newReview) => onChange({ ...review, ...newReview })}
+            />
+          </div>
+        </Popover>
       </TableCell>
     </TableRow>
   );
