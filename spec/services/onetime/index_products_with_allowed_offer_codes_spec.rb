@@ -27,7 +27,7 @@ describe Onetime::IndexProductsWithAllowedOfferCodes do
           expect(es_product1._source.offer_codes).to eq([])
           expect(es_product2._source.offer_codes).to eq([])
 
-          offer_code = create(:offer_code, user: creator, code: "BLACKFRIDAY2025", products: [product1, product2])
+          create(:offer_code, user: creator, code: "BLACKFRIDAY2025", products: [product1, product2])
 
           described_class.process
 
@@ -48,7 +48,7 @@ describe Onetime::IndexProductsWithAllowedOfferCodes do
           es_product1 = Link.search(query: { term: { _id: product1.id } }).results.first
           expect(es_product1._source.offer_codes).to eq([])
 
-          universal_code = create(:offer_code,
+          create(:offer_code,
             user: creator,
             code: "BLACKFRIDAY2025",
             universal: true,
