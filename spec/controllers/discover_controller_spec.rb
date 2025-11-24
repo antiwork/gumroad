@@ -11,9 +11,6 @@ describe DiscoverController do
     allow_any_instance_of(Link).to receive(:update_asset_preview)
     @buyer = create(:user)
     @product = create(:product, user: create(:user, name: "Gumstein"))
-    @taxonomy_3d = Taxonomy.find_or_create_by!(slug: "3d")
-    @taxonomy_3d_modeling = Taxonomy.find_or_create_by!(slug: "3d-modeling", parent: @taxonomy_3d)
-
     sign_in @buyer
   end
 
