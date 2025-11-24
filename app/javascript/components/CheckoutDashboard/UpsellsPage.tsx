@@ -302,11 +302,11 @@ const UpsellsPage = (props: UpsellsPageProps) => {
                             symbolFormat: "short",
                           })
                         ) : (
-                          <Skeleton className="h-4 w-16" />
+                          <Skeleton className="w-16" />
                         )}
                       </TableCell>
                       <TableCell aria-busy={!statistics}>
-                        {statistics ? statistics.uses.total : <Skeleton className="h-4 w-16" />}
+                        {statistics ? statistics.uses.total : <Skeleton className="w-16" />}
                       </TableCell>
                       <TableCell>{upsell.paused ? "Paused" : "Live"}</TableCell>
                     </TableRow>

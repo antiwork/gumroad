@@ -205,14 +205,14 @@ const UtmLinkList = () => {
                     {link.revenue_cents !== null ? (
                       `$${fixedDecimalPointNumber(link.revenue_cents / 100)}`
                     ) : (
-                      <Skeleton className="h-4 w-16" />
+                      <Skeleton className="w-16" />
                     )}
                   </TableCell>
                   <TableCell aria-busy={link.conversion_rate === null} className="whitespace-nowrap">
                     {link.conversion_rate !== null ? (
                       `${fixedDecimalPointNumber(link.conversion_rate * 100)}%`
                     ) : (
-                      <Skeleton className="h-4 w-16" />
+                      <Skeleton className="w-16" />
                     )}
                   </TableCell>
                   <TableCell>

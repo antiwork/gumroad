@@ -281,7 +281,9 @@ const AffiliateRequestsTable = ({
                   <div className="flex flex-wrap gap-3 lg:justify-end">
                     <Button
                       disabled={
-                        !loggedInUser?.policies.direct_affiliate.update || isLoading || !!affiliateRequest.processingState
+                        !loggedInUser?.policies.direct_affiliate.update ||
+                        isLoading ||
+                        !!affiliateRequest.processingState
                       }
                       onClick={() => update(affiliateRequest, "ignore")}
                     >
@@ -527,7 +529,7 @@ const AffiliatesTab = () => {
                               {statistics ? (
                                 formattedSalesVolumeAmount(statistics.total_volume_cents)
                               ) : (
-                                <Skeleton className="h-4 w-16" />
+                                <Skeleton className="w-16" />
                               )}
                             </TableCell>
                             <TableCell onClick={(e) => e.stopPropagation()}>

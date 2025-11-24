@@ -156,13 +156,11 @@ export const PublishedTab = () => {
                             <Table>
                               <TableBody>
                                 {installment.clicked_urls.map(({ url, count }) => (
-                                  <TableRow key={`${installment.external_id}-${url}`}>
+                                  <TableRow key={`${installment.external_id}-${url}`} className="bg-transparent">
                                     <TableHead scope="row" className="max-w-56 whitespace-break-spaces">
                                       {url}
                                     </TableHead>
-                                    <TableCell className="bg-transparent!">
-                                      {formatStatNumber({ value: count })}
-                                    </TableCell>
+                                    <TableCell>{formatStatNumber({ value: count })}</TableCell>
                                   </TableRow>
                                 ))}
                               </TableBody>

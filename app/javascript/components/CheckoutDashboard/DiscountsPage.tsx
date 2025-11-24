@@ -365,13 +365,13 @@ const DiscountsPage = ({ offer_codes, pages, products, pagination: initialPagina
                         </div>
                       </TableCell>
                       <TableCell className="whitespace-nowrap" aria-busy={!statistics}>
-                        {statistics ? formatRevenue(statistics.revenue_cents) : <Skeleton className="h-4 w-16" />}
+                        {statistics ? formatRevenue(statistics.revenue_cents) : <Skeleton className="w-16" />}
                       </TableCell>
                       <TableCell className="whitespace-nowrap" aria-busy={!statistics}>
                         {statistics ? (
                           formatUses(statistics.uses.total, offerCode.limit)
                         ) : (
-                          <Skeleton className="h-4 w-16" />
+                          <Skeleton className="w-16" />
                         )}
                       </TableCell>
                       <TableCell>{`${validAt ? `${formatDate(validAt)} - ` : ""}${
