@@ -124,7 +124,7 @@ describe Admin::SalesReportsController, type: :controller, inertia: true do
                                                    country_code: ["Please select a country"],
                                                    start_date: ["Invalid date format. Please use YYYY-MM-DD format"],
                                                    end_date: ["Invalid date format. Please use YYYY-MM-DD format"],
-                                                   sales_type: ["is not included in the list"]
+                                                   sales_type: ["Invalid sales type, should be all_sales or discover_sales."]
                                                  }
                                                })
       end

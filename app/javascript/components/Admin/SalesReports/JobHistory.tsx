@@ -9,7 +9,7 @@ export type JobHistoryItem = {
   country_code: string;
   start_date: string;
   end_date: string;
-  sales_type?: string;
+  sales_type: string;
   enqueued_at: string;
   status: string;
   download_url?: string;
@@ -72,7 +72,7 @@ const AdminSalesReportsJobHistory = ({ countries, sales_types, jobHistory }: Pro
               <td>
                 {job.start_date} - {job.end_date}
               </td>
-              <td>{job.sales_type ? salesTypeCodeToName[job.sales_type] : null}</td>
+              <td>{job.sales_type ? salesTypeCodeToName[job.sales_type] : sales_types[0]?.[1]}</td>
               <td>{new Date(job.enqueued_at).toLocaleString()}</td>
               <td>
                 {job.status === "completed" && job.download_url ? (
