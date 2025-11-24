@@ -22,20 +22,22 @@ export function SupportHeader({
   recaptchaSiteKey?: string | null;
 }) {
   const { pathname, searchParams } = new URL(useOriginalLocation());
-  const isHelpArticle =
-    pathname.startsWith(Routes.help_center_root_path()) && pathname !== Routes.help_center_root_path();
-  const isAnonymousUserOnHelpCenter = !hasHelperSession && pathname === Routes.help_center_root_path();
+  const isHelpCenterHome = pathname === Routes.help_center_root_path();
+  const isHelpArticle = pathname.startsWith(Routes.help_center_root_path()) && !isHelpCenterHome;
+  const isAnonymousUserOnHelpCenter = !hasHelperSession && isHelpCenterHome;
 
   const [isUnauthenticatedNewTicketOpen, setIsUnauthenticatedNewTicketOpen] = React.useState(
     isAnonymousUserOnHelpCenter && !!searchParams.get("new_ticket"),
   );
 
   React.useEffect(() => {
-    if (isAnonymousUserOnHelpCenter) {
-      const url = new URL(location.href);
-      if (!isUnauthenticatedNewTicketOpen && url.searchParams.get("new_ticket")) {
+    const url = new URL(location.href);
+    if (url.searchParams.get("new_ticket")) {
+      if (isAnonymousUserOnHelpCenter && !isUnauthenticatedNewTicketOpen) {
         url.searchParams.delete("new_ticket");
         history.replaceState(null, "", url.toString());
+      } else if (hasHelperSession && isHelpCenterHome) {
+        onOpenNewTicket();
       }
     }
   }, [isUnauthenticatedNewTicketOpen, isAnonymousUserOnHelpCenter]);
