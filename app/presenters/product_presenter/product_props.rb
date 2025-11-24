@@ -117,7 +117,8 @@ class ProductPresenter::ProductProps
         end
 
         discount = offer_code.discount
-        amount_off_cents = offer_code.amount_off(product.price_cents)
+        price_for_discount = product.is_tiered_membership? ? product.display_base_price_cents : product.price_cents
+        amount_off_cents = offer_code.amount_off(price_for_discount)
 
         candidate_data = {
           code:,
@@ -126,7 +127,9 @@ class ProductPresenter::ProductProps
           amount_off_cents:,
         }
 
-        if best_candidate.nil? || candidate_data[:amount_off_cents] > best_candidate[:amount_off_cents]
+        if best_candidate.nil? ||
+           candidate_data[:amount_off_cents] > best_candidate[:amount_off_cents] ||
+           (candidate_data[:amount_off_cents] == best_candidate[:amount_off_cents] && candidate_data[:is_default] && !best_candidate[:is_default])
           best_candidate = candidate_data
         end
       end

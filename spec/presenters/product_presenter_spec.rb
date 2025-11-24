@@ -369,6 +369,7 @@ describe ProductPresenter do
             native_type: "ebook",
             require_shipping: false,
             cancellation_discount: nil,
+            default_offer_code_id: nil,
             public_files: [],
             audio_previews_enabled: false,
             community_chat_enabled: nil,
@@ -612,6 +613,7 @@ describe ProductPresenter do
                 },
                 duration_in_billing_cycles: 3
               },
+              default_offer_code_id: nil,
               public_files: [],
               audio_previews_enabled: false,
               community_chat_enabled: nil,
@@ -648,6 +650,7 @@ describe ProductPresenter do
               fine_print: nil,
             },
             cancellation_discounts_enabled: true,
+            available_discount_codes: [],
           }
         )
       end
@@ -816,6 +819,7 @@ describe ProductPresenter do
               native_type: "digital",
               require_shipping: false,
               cancellation_discount: nil,
+              default_offer_code_id: nil,
               public_files: [],
               audio_previews_enabled: false,
               community_chat_enabled: nil,
@@ -852,6 +856,7 @@ describe ProductPresenter do
               fine_print: nil,
             },
             cancellation_discounts_enabled: false,
+            available_discount_codes: [],
           }
         )
       end
