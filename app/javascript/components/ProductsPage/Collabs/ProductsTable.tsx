@@ -95,7 +95,7 @@ export const CollabsProductsTable = (props: { entries: Product[]; pagination: Pa
                 thumbnail={product.thumbnail?.url ?? null}
               />
 
-              <TableCell>
+              <TableCell hideLabel>
                 <div>
                   {/* Safari currently doesn't support position: relative on <tr>, so we can't make the whole row a link here */}
                   <a href={product.can_edit ? product.edit_url : product.url} style={{ textDecoration: "none" }}>

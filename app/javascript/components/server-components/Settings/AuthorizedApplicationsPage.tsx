@@ -145,7 +145,7 @@ const AuthorizedApplicationsPage = (props: Props) => {
                       ))}
                     </ul>
                   </TableCell>
-                  <TableCell>
+                  <TableCell hideLabel>
                     <Button color="danger" outline onClick={() => setRevokingAccessForApp({ id: application.id })}>
                       <Icon name="x-square"></Icon>
                       Revoke access

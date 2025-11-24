@@ -351,7 +351,7 @@ const DiscountsPage = ({ offer_codes, pages, products, pagination: initialPagina
                       selected={offerCode.id === selectedOfferCodeId}
                       onClick={() => setSelectedOfferCodeId(offerCode.id)}
                     >
-                      <TableCell>
+                      <TableCell hideLabel>
                         <div className="grid gap-2">
                           <div>
                             <div className="pill small mr-2" aria-label="Offer code">

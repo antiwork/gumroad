@@ -165,16 +165,16 @@ const WorkflowRow = ({
             <TableCell>{installment.name}</TableCell>
             {workflow.published ? (
               <>
-                <TableCell>
+                <TableCell label="Delay">
                   {installment.delayed_delivery_time_duration} {installment.displayed_delayed_delivery_time_period}
                 </TableCell>
-                <TableCell className="whitespace-nowrap">
+                <TableCell label="Sent" className="whitespace-nowrap">
                   {formatStatNumber({ value: installment.sent_count ?? 0 })}
                 </TableCell>
-                <TableCell className="whitespace-nowrap">
+                <TableCell label="Opens" className="whitespace-nowrap">
                   {`${formatStatNumber({ value: installment.open_rate ?? 0 })}%`}
                 </TableCell>
-                <TableCell className="whitespace-nowrap">
+                <TableCell label="Clicks" className="whitespace-nowrap">
                   {formatStatNumber({ value: installment.click_count })}
                 </TableCell>
               </>
