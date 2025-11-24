@@ -26,4 +26,3 @@ class Onetime::IndexProductsWithAllowedOfferCodes
     Rails.logger.info "Enqueued #{indexed_product_ids.size} reindex jobs"
   end
 end
-

@@ -49,11 +49,11 @@ describe Onetime::IndexProductsWithAllowedOfferCodes do
           expect(es_product1._source.offer_codes).to eq([])
 
           create(:offer_code,
-            user: creator,
-            code: "BLACKFRIDAY2025",
-            universal: true,
-            currency_type: product1.price_currency_type,
-            amount_percentage: 20)
+                 user: creator,
+                 code: "BLACKFRIDAY2025",
+                 universal: true,
+                 currency_type: product1.price_currency_type,
+                 amount_percentage: 20)
 
           described_class.process
 
@@ -69,4 +69,3 @@ describe Onetime::IndexProductsWithAllowedOfferCodes do
     end
   end
 end
-
