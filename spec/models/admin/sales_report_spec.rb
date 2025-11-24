@@ -324,7 +324,7 @@ describe Admin::SalesReport do
       expect(errors[:sales_report][:country_code]).to include("Please select a country")
       expect(errors[:sales_report][:start_date]).to include("Invalid date format. Please use YYYY-MM-DD format")
       expect(errors[:sales_report][:end_date]).to include("Invalid date format. Please use YYYY-MM-DD format")
-      expect(errors[:sales_report][:sales_type]).to include("is not included in the list")
+      expect(errors[:sales_report][:sales_type]).to include("Invalid sales type, should be all_sales or discover_sales.")
     end
 
     it "returns empty hash when there are no errors" do

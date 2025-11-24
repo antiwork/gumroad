@@ -44,6 +44,8 @@ class GenerateSalesReportJob
             row += [purchase.link.is_physical? ? "DTC" : "BS", purchase.zip_tax_rate_id, purchase.purchase_sales_tax_info.business_vat_id]
           end
 
+          # Do not include free recommendations like library and more-like-this in the discover sales report
+          # because we don't charge our discover/marketplace fee in those cases.
           next if sales_type == DISCOVER_SALES && RecommendationType.is_free_recommendation_type?(purchase.recommended_by)
 
           temp_file.write(row.to_csv)

@@ -120,7 +120,13 @@ describe GenerateSalesReportJob do
 
     it "creates a CSV file for discover sales into the United Kingdom sales_type is set as discover_sales",
        vcr: { cassette_name: "GenerateSalesReportJob/happy_case/creates_a_CSV_file_for_discover_sales_into_the_United_Kingdom" } do
-      expect(ExpiringS3FileService).to receive(:new).and_return(@mock_service)
+      expect(ExpiringS3FileService).to receive(:new) do |args|
+        expect(args[:path]).to eq("sales-tax/gb-sales-quarterly")
+        expect(args[:filename]).to include("united-kingdom-discover-sales-report-2015-01-01-to-2015-03-31")
+        expect(args[:bucket]).to eq(REPORTING_S3_BUCKET)
+        expect(args[:expiry]).to eq(1.week)
+        @mock_service
+      end
 
       described_class.new.perform(country_code, start_date, end_date, GenerateSalesReportJob::DISCOVER_SALES)
 

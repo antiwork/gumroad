@@ -1,5 +1,9 @@
 import * as React from "react";
 
+import { Button } from "$app/components/Button";
+import { Icon } from "$app/components/Icons";
+import Placeholder from "$app/components/ui/Placeholder";
+
 export type JobHistoryItem = {
   job_id: string;
   country_code: string;
@@ -21,9 +25,14 @@ const AdminSalesReportsJobHistory = ({ countries, sales_types, jobHistory }: Pro
   if (jobHistory.length === 0) {
     return (
       <section>
-        <div className="placeholder">
-          <h2>No sales reports generated yet.</h2>
-        </div>
+        <Placeholder>
+          <h2>Generate your first sales report</h2>
+          Create a report to view sales data by country for a specified date range.
+          <Button color="primary">
+            <Icon name="plus" />
+            New report
+          </Button>
+        </Placeholder>
       </section>
     );
   }
@@ -52,8 +61,7 @@ const AdminSalesReportsJobHistory = ({ countries, sales_types, jobHistory }: Pro
             <th>Country</th>
             <th>Date range</th>
             <th>Type of sales</th>
-            <th>Enqueued at</th>
-            <th>Status</th>
+            <th>Generated at</th>
             <th>Download</th>
           </tr>
         </thead>
@@ -62,18 +70,23 @@ const AdminSalesReportsJobHistory = ({ countries, sales_types, jobHistory }: Pro
             <tr key={index}>
               <td>{countryCodeToName[job.country_code] || job.country_code}</td>
               <td>
-                {job.start_date} to {job.end_date}
+                {job.start_date} - {job.end_date}
               </td>
               <td>{job.sales_type ? salesTypeCodeToName[job.sales_type] : null}</td>
               <td>{new Date(job.enqueued_at).toLocaleString()}</td>
-              <td>{job.status}</td>
               <td>
                 {job.status === "completed" && job.download_url ? (
-                  <a href={job.download_url} className="button small" target="_blank" rel="noopener noreferrer">
-                    Download CSV
+                  <a href={job.download_url} target="_blank" rel="noopener noreferrer">
+                    <div className="grid grid-cols-[auto_1fr] gap-2">
+                      <Icon name="download" />
+                      {countryCodeToName[job.country_code]}_{job.sales_type}_report_{job.start_date}_{job.end_date}
+                    </div>
                   </a>
                 ) : (
-                  <span>-</span>
+                  <div className="grid grid-cols-[auto_1fr] gap-2">
+                    <Icon name="circle" />
+                    <span>Processing</span>
+                  </div>
                 )}
               </td>
             </tr>

@@ -15,17 +15,13 @@ describe "Admin::SalesReportsController", type: :system, js: true do
 
       # displays the sales reports page
       expect(page).to have_text("Sales reports")
-      expect(page).to have_text("Generate sales report with custom date ranges")
-
-      # shows country dropdown with full country names
-      expect(page).to have_select("sales_report[country_code]", with_options: ["United Kingdom", "United States", "Canada"])
-
-      # shows date input fields
-      expect(page).to have_text("Sales reports")
-      expect(page).to have_text("Generate sales report with custom date ranges")
 
       # shows no jobs message
-      expect(page).to have_text("No sales reports generated yet.")
+      expect(page).to have_text("Generate your first sales report")
+      expect(page).to have_text("Create a report to view sales data by country for a specified date range.")
+
+      # shows new report button
+      expect(page).to have_button("New report")
     end
 
     context "when there are no jobs in history" do
@@ -34,7 +30,7 @@ describe "Admin::SalesReportsController", type: :system, js: true do
 
         visit admin_sales_reports_path
 
-        expect(page).to have_text("No sales reports generated yet.")
+        expect(page).to have_text("Generate your first sales report")
       end
     end
 
@@ -49,6 +45,15 @@ describe "Admin::SalesReportsController", type: :system, js: true do
             sales_type: "all_sales",
             enqueued_at: Time.current.to_s,
             status: "processing"
+          }.to_json,
+          {
+            job_id: "124",
+            country_code: "JP",
+            start_date: "2023-01-01",
+            end_date: "2023-06-30",
+            sales_type: "discover_sales",
+            enqueued_at: Time.current.to_s,
+            status: "processing"
           }.to_json
         ]
         allow($redis).to receive(:lrange).with(RedisKey.sales_report_jobs, 0, 19).and_return(job_data)
@@ -59,8 +64,13 @@ describe "Admin::SalesReportsController", type: :system, js: true do
 
         expect(page).to have_table
         expect(page).to have_text("United Kingdom")
-        expect(page).to have_text("2023-01-01 to 2023-03-31")
-        expect(page).to have_text("processing")
+        expect(page).to have_text("2023-01-01 - 2023-03-31")
+        expect(page).to have_text("All sales")
+        expect(page).to have_text("Processing")
+        expect(page).to have_text("Japan")
+        expect(page).to have_text("2023-01-01 - 2023-06-30")
+        expect(page).to have_text("Discover sales")
+        expect(page).to have_text("Processing")
       end
     end
   end
@@ -79,7 +89,7 @@ describe "Admin::SalesReportsController", type: :system, js: true do
       fill_in "sales_report[start_date]", with: "2023-01-01"
       fill_in "sales_report[end_date]", with: "2023-03-31"
       select "All sales", from: "sales_report[sales_type]"
-      click_button "Generate report"
+      click_button "Generate"
 
       wait_for_ajax
 

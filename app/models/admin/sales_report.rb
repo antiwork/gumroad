@@ -19,7 +19,7 @@ class Admin::SalesReport
   validates :end_date, presence: { message: INVALID_DATE_FORMAT_MESSAGE }
   validates :start_date, comparison: { less_than: :end_date, message: "must be before end date", if: %i[start_date? end_date?] }
   validates :start_date, comparison: { less_than_or_equal_to: -> { Date.current }, message: "cannot be in the future", if: :start_date? }
-  validates :sales_type, inclusion: { in: GenerateSalesReportJob::SALES_TYPES }
+  validates_inclusion_of :sales_type, in: GenerateSalesReportJob::SALES_TYPES, message: "Invalid sales type, should be #{GenerateSalesReportJob::SALES_TYPES.join(" or ")}."
 
   class << self
     def fetch_job_history
