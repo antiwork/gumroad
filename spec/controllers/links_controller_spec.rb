@@ -3648,7 +3648,7 @@ describe LinksController, :vcr, inertia: true do
           product = create(:product, user: @user)
 
           get :show, params: { id: product.unique_permalink }
-          expected_url = controller.view_context.url_for_product_page(product, request: @request)
+          expected_url = "#{@request.protocol}#{@request.host_with_port}/l/#{product.general_permalink}"
           expect(response.body).to have_selector("link[rel='canonical'][href='#{expected_url}']", visible: false)
         end
 
@@ -3658,7 +3658,7 @@ describe LinksController, :vcr, inertia: true do
           @request.host = custom_domain.domain
 
           get :show, params: { id: product.unique_permalink }
-          expected_url = "http://#{custom_domain.domain}/l/#{product.unique_permalink}"
+          expected_url = "#{@request.protocol}#{@request.host_with_port}/l/#{product.general_permalink}"
 
           expect(response.body).to have_selector("link[rel='canonical'][href='#{expected_url}']", visible: false)
         end
