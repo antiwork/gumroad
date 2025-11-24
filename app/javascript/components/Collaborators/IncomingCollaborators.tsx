@@ -150,7 +150,7 @@ const IncomingCollaboratorsTableRow = ({
     </TableCell>
     <TableCell>
       {incomingCollaborator.invitation_accepted ? null : (
-        <div className="actions" onClick={(e) => e.stopPropagation()}>
+        <div className="flex flex-wrap gap-3 lg:justify-end" onClick={(e) => e.stopPropagation()}>
           <Button type="submit" aria-label="Accept" onClick={onAccept} disabled={disabled}>
             <Icon name="outline-check" />
           </Button>

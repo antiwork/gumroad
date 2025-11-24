@@ -102,16 +102,16 @@ export const ProductsPageProductsTable = (props: {
             <TableHead {...thProps("name")} title="Sort by Name" className="lg:relative lg:-left-20">
               Name
             </TableHead>
-            <TableHead {...thProps("successful_sales_count")} title="Sort by Sales" className="lg:px-8">
+            <TableHead {...thProps("successful_sales_count")} title="Sort by Sales">
               Sales
             </TableHead>
-            <TableHead {...thProps("revenue")} title="Sort by Revenue" className="lg:px-8">
+            <TableHead {...thProps("revenue")} title="Sort by Revenue">
               Revenue
             </TableHead>
-            <TableHead {...thProps("display_price_cents")} title="Sort by Price" className="lg:px-8">
+            <TableHead {...thProps("display_price_cents")} title="Sort by Price">
               Price
             </TableHead>
-            <TableHead {...thProps("status")} title="Sort by Status" className="lg:px-8">
+            <TableHead {...thProps("status")} title="Sort by Status">
               Status
             </TableHead>
           </TableRow>
@@ -137,7 +137,7 @@ export const ProductsPageProductsTable = (props: {
                 </div>
               </TableCell>
 
-              <TableCell className="whitespace-nowrap lg:px-8">
+              <TableCell className="whitespace-nowrap">
                 <a href={Routes.customers_link_id_path(product.permalink)}>
                   {product.successful_sales_count.toLocaleString(locale)}
                 </a>
@@ -147,13 +147,13 @@ export const ProductsPageProductsTable = (props: {
                 ) : null}
               </TableCell>
 
-              <TableCell className="whitespace-nowrap lg:px-8">
+              <TableCell className="whitespace-nowrap">
                 {formatPriceCentsWithCurrencySymbol("usd", product.revenue, { symbolFormat: "short" })}
               </TableCell>
 
-              <TableCell className="whitespace-nowrap lg:px-8">{product.price_formatted}</TableCell>
+              <TableCell className="whitespace-nowrap">{product.price_formatted}</TableCell>
 
-              <TableCell className="whitespace-nowrap lg:px-8">
+              <TableCell className="whitespace-nowrap">
                 {(() => {
                   switch (product.status) {
                     case "unpublished":
@@ -166,7 +166,7 @@ export const ProductsPageProductsTable = (props: {
                 })()}
               </TableCell>
               {product.can_duplicate || product.can_destroy ? (
-                <TableCell className="lg:px-8">
+                <TableCell>
                   <div className="flex flex-wrap gap-3 lg:justify-end">
                     <ActionsPopover
                       product={product}
@@ -192,11 +192,11 @@ export const ProductsPageProductsTable = (props: {
         <TableFooter>
           <TableRow>
             <TableCell colSpan={2}>Totals</TableCell>
-            <TableCell className="whitespace-nowrap lg:px-8">
+            <TableCell className="whitespace-nowrap">
               {products.reduce((sum, product) => sum + product.successful_sales_count, 0).toLocaleString(locale)}
             </TableCell>
 
-            <TableCell colSpan={5} label="Revenue" className="whitespace-nowrap lg:px-8">
+            <TableCell colSpan={5} label="Revenue" className="whitespace-nowrap">
               {formatPriceCentsWithCurrencySymbol(
                 "usd",
                 products.reduce((sum, product) => sum + product.revenue, 0),

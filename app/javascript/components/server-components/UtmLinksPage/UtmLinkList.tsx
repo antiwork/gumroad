@@ -216,30 +216,28 @@ const UtmLinkList = () => {
                     )}
                   </TableCell>
                   <TableCell>
-                    <div className="flex flex-wrap gap-3 lg:justify-end">
-                      <UtmLinkActions link={link}>
-                        <div role="menu">
-                          <div role="menuitem" onClick={() => navigate(editLinkPath(link))}>
-                            <Icon name="pencil" />
-                            &ensp;Edit
-                          </div>
-                          <div role="menuitem" onClick={() => navigate(duplicateLinkPath(link))}>
-                            <Icon name="outline-duplicate" />
-                            &ensp;Duplicate
-                          </div>
-                          <div
-                            className="danger"
-                            role="menuitem"
-                            onClick={() =>
-                              setDeletingUtmLink({ id: link.id, title: link.title, state: "delete-confirmation" })
-                            }
-                          >
-                            <Icon name="trash2" />
-                            &ensp;Delete
-                          </div>
+                    <UtmLinkActions link={link}>
+                      <div role="menu">
+                        <div role="menuitem" onClick={() => navigate(editLinkPath(link))}>
+                          <Icon name="pencil" />
+                          &ensp;Edit
                         </div>
-                      </UtmLinkActions>
-                    </div>
+                        <div role="menuitem" onClick={() => navigate(duplicateLinkPath(link))}>
+                          <Icon name="outline-duplicate" />
+                          &ensp;Duplicate
+                        </div>
+                        <div
+                          className="danger"
+                          role="menuitem"
+                          onClick={() =>
+                            setDeletingUtmLink({ id: link.id, title: link.title, state: "delete-confirmation" })
+                          }
+                        >
+                          <Icon name="trash2" />
+                          &ensp;Delete
+                        </div>
+                      </div>
+                    </UtmLinkActions>
                   </TableCell>
                 </TableRow>
               ))}
@@ -339,7 +337,7 @@ const UtmLinkActions = ({ link, children }: { link: SavedUtmLink; children: Reac
   const [open, setOpen] = React.useState(false);
 
   return (
-    <div className="actions" onClick={(e) => e.stopPropagation()}>
+    <div className="flex flex-wrap gap-3 lg:justify-end" onClick={(e) => e.stopPropagation()}>
       <CopyToClipboard copyTooltip="Copy short link" text={link.short_url}>
         <Button aria-label="Copy link">
           <Icon name="link" />

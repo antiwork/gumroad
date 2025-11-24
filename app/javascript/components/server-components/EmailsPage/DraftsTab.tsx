@@ -138,16 +138,15 @@ export const DraftsTab = () => {
                     aria-selected={installment.external_id === selectedInstallmentId}
                     onClick={() => setSelectedInstallmentId(installment.external_id)}
                   >
-                    <TableCell hideLabel>{installment.name}</TableCell>
-                    <TableCell hideLabel>{installment.recipient_description}</TableCell>
+                    <TableCell>{installment.name}</TableCell>
+                    <TableCell>{installment.recipient_description}</TableCell>
                     <TableCell
-                      hideLabel
                       aria-busy={audienceCountValue(audienceCounts, installment.external_id) === null}
                       className="whitespace-nowrap"
                     >
                       {audienceCountValue(audienceCounts, installment.external_id)}
                     </TableCell>
-                    <TableCell hideLabel className="whitespace-nowrap">
+                    <TableCell className="whitespace-nowrap">
                       {formatDistanceToNow(installment.updated_at)} ago
                     </TableCell>
                   </TableRow>
