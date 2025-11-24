@@ -11,8 +11,8 @@ describe DiscoverController do
     allow_any_instance_of(Link).to receive(:update_asset_preview)
     @buyer = create(:user)
     @product = create(:product, user: create(:user, name: "Gumstein"))
-    @taxonomy_3d = create(:taxonomy, slug: "3d")
-    @taxonomy_3d_modeling = create(:taxonomy, slug: "3d-modeling", parent: @taxonomy_3d)
+    @taxonomy_3d = Taxonomy.find_or_create_by!(slug: "3d")
+    @taxonomy_3d_modeling = Taxonomy.find_or_create_by!(slug: "3d-modeling", parent: @taxonomy_3d)
 
     sign_in @buyer
   end
@@ -176,7 +176,7 @@ describe DiscoverController do
 
     it "returns search results when taxonomy is present" do
       taxonomy = Taxonomy.find_by!(slug: "3d")
-      other_taxonomy = create(:taxonomy, slug: "other")
+      other_taxonomy = Taxonomy.find_or_create_by!(slug: "other")
       taxonomy_product = create(:product, :recommendable, taxonomy:)
       child_taxonomy_product = create(:product, :recommendable, taxonomy: taxonomy.children.first)
       create(:product, :recommendable, taxonomy: other_taxonomy)
