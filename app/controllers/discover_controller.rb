@@ -109,12 +109,12 @@ class DiscoverController < ApplicationController
     end
 
     def show_curated_products?
-      return false if params[:offer_codes].present?
+      return false if params[:offer_code].present?
       !taxonomy && curated_products.any?
     end
 
     def is_searching?
-      params.values_at(:query, :tags, :category, :offer_codes).any?(&:present?) ||
+      params.values_at(:query, :tags, :category, :offer_code).any?(&:present?) ||
         (params[:taxonomy].present? && params.values_at(:sort, :min_price, :max_price, :rating, :filetypes).any?(&:present?))
     end
 
