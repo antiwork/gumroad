@@ -3,7 +3,6 @@
 class Api::Internal::Helper::InstantPayoutsController < Api::Internal::Helper::BaseController
   include CurrencyHelper
 
-  before_action :authorize_helper_token!
   before_action :fetch_user
 
   INSTANT_PAYOUT_BALANCE_OPENAPI = {

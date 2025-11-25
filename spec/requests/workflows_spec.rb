@@ -636,7 +636,7 @@ describe("Workflows", js: true, type: :system) do
           expect(page).to have_link("Complete checkout", href: checkout_index_url(host: UrlService.domain_with_protocol))
         end
       end
-      within find("[aria-label=Preview]") do
+      within_section "Preview", section_element: :aside do
         within_section "You left something in your cart" do
           expect(page).to have_text("24 hours after cart abandonment")
           expect(page).to have_text("When you're ready to buy, complete checking out", normalize_ws: true)
@@ -663,7 +663,7 @@ describe("Workflows", js: true, type: :system) do
           expect(page).to_not have_text("more product")
         end
       end
-      within find("[aria-label=Preview]") do
+      within_section "Preview", section_element: :aside do
         expect(page).to have_abandoned_cart_item(product5.name)
         expect(page).to_not have_text("more product")
       end
@@ -680,7 +680,7 @@ describe("Workflows", js: true, type: :system) do
           expect(page).to have_abandoned_cart_item(product5.name)
         end
       end
-      within find("[aria-label=Preview]") do
+      within_section "Preview", section_element: :aside do
         expect(page).to have_text("New description line")
         expect(page).to_not have_text("When you're ready to buy, complete checking out.")
         expect(page).to have_abandoned_cart_item(@product.name)
@@ -1473,7 +1473,7 @@ describe("Workflows", js: true, type: :system) do
         message_editor = find("[aria-label='Email message']")
         set_rich_text_editor_input(message_editor, to_text: "You're lucky!")
       end
-      within find("[aria-label=Preview]") do
+      within_section "Preview", section_element: :aside do
         within_section "Thank you!" do
           expect(page).to have_text("1 day after purchase")
           expect(page).to have_text("An important message")
@@ -1535,7 +1535,7 @@ describe("Workflows", js: true, type: :system) do
         click_on "Edit"
         check "Disable file downloads (stream only)"
       end
-      within find("[aria-label=Preview]") do
+      within_section "Preview", section_element: :aside do
         within_section "Thank you!" do
           expect(page).to have_text("1 day after purchase")
           expect(page).to have_text("An important message")

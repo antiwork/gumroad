@@ -25,7 +25,7 @@ type Gift = {
   is_sender_purchase: boolean;
   other_purchase_id: number;
   other_email: string;
-  note: string;
+  note: string | null;
 };
 
 export type Purchase = PurchaseStatesInfo & {
@@ -101,7 +101,7 @@ export type Purchase = PurchaseStatesInfo & {
   state: string | null;
   zip_code: string | null;
   country: string | null;
-  custom_fields: { name: string; value: string }[];
+  custom_fields: { name: string; value: string | boolean }[];
   license: { serial: string } | null;
   affiliate_email: string | null;
   refund_policy:
@@ -147,7 +147,7 @@ const Header = ({ purchase }: { purchase: Purchase }) => (
 );
 
 const Info = ({ purchase }: { purchase: Purchase }) => (
-  <div className="paragraphs">
+  <div className="flex flex-col gap-4">
     <h3>Info</h3>
     <dl>
       {purchase.seller.support_email ? (
@@ -374,11 +374,11 @@ const Info = ({ purchase }: { purchase: Purchase }) => (
         </>
       ) : null}
 
-      {purchase.custom_fields.map((field) => (
-        <>
+      {purchase.custom_fields.map((field, index) => (
+        <React.Fragment key={index}>
           <dt>{field.name}</dt>
-          <dd>{field.value} (custom field)</dd>
-        </>
+          <dd>{field.value.toString()} (custom field)</dd>
+        </React.Fragment>
       ))}
 
       {purchase.purchase_state === "preorder_authorization_successful" ? (
@@ -497,8 +497,8 @@ const GiftInfo = ({ purchaseId, gift }: { purchaseId: number; gift: Gift }) =>
           onSuccess={() => showAlert("Successfully updated the giftee email.", "success")}
         >
           {(isLoading) => (
-            <div className="input-with-button">
-              <input type="text" name="giftee_email" placeholder="Enter new giftee email" required />
+            <div className="flex gap-2">
+              <input type="text" className="flex-1" name="giftee_email" placeholder="Enter new giftee email" required />
               <button type="submit" className="button" disabled={isLoading}>
                 {isLoading ? "Updating..." : "Update"}
               </button>
@@ -528,7 +528,7 @@ const GiftInfo = ({ purchaseId, gift }: { purchaseId: number; gift: Gift }) =>
   );
 
 const ActionButtons = ({ purchase }: { purchase: Purchase }) => (
-  <div className="button-group">
+  <div className="flex flex-wrap gap-2">
     {purchase.can_force_update || purchase.failed ? (
       <AdminActionButton
         label="Sync with Stripe/PayPal"

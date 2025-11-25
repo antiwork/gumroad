@@ -179,7 +179,7 @@ class Exports::PurchaseExportService
         "Review" => main_or_giftee_purchase&.original_product_review&.message,
         "License Key" => main_or_giftee_purchase&.license_key,
         "License Key Activation Count" => main_or_giftee_purchase&.license&.uses,
-        "License Key Enabled?" => (main_or_giftee_purchase&.license && !main_or_giftee_purchase&.license&.disabled?) ? 1 : 0,
+        "License Key Enabled?" => main_or_giftee_purchase&.license&.then { |l| l.disabled? ? 0 : 1 },
         "Payment Type" => ((purchase.card_type == "paypal" ? "PayPal" : "Card") if purchase.card_type.present?),
         "PayPal Transaction ID" => (purchase.stripe_transaction_id if purchase.paypal_order_id?),
         "PayPal Fee Amount" => (purchase.processor_fee_dollars if purchase.paypal_order_id?),
