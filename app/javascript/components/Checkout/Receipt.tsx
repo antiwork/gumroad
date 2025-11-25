@@ -206,7 +206,7 @@ export const CreateAccountForm = ({
         evt.preventDefault();
         void startAccountCreation();
       }}
-      className="paragraphs"
+      className="flex flex-col gap-4"
     >
       {status === "success" ? (
         <div className="success" role="alert">

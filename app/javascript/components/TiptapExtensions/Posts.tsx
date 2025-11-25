@@ -4,7 +4,7 @@ import cx from "classnames";
 import { formatDistanceToNow, parseISO } from "date-fns";
 import * as React from "react";
 
-import { Post } from "$app/data/workflows";
+import { type Post } from "$app/types/workflow";
 import { assertDefined } from "$app/utils/assert";
 
 import { Button } from "$app/components/Button";

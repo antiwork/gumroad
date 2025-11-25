@@ -4,48 +4,13 @@ require "spec_helper"
 
 describe Admin::ProductPresenter::Card do
   describe "#props" do
+    let(:admin_user) { create(:user) }
     let(:user) { create(:named_user) }
     let(:product) { create(:product, user:) }
-    let(:admins_can_mark_as_staff_picked) { ->(_product) { true } }
-    let(:admins_can_unmark_as_staff_picked) { ->(_product) { false } }
-    let(:presenter) do
-      described_class.new(
-        product:,
-        admins_can_mark_as_staff_picked:,
-        admins_can_unmark_as_staff_picked:
-      )
-    end
+    let(:pundit_user) { SellerContext.new(user: admin_user, seller: admin_user) }
+    let(:presenter) { described_class.new(product:, pundit_user:) }
 
     subject(:props) { presenter.props }
-
-    describe "basic structure" do
-      it "returns a hash with all expected keys" do
-        expect(props).to include(
-          :id,
-          :name,
-          :long_url,
-          :price_cents,
-          :currency_code,
-          :unique_permalink,
-          :preview_url,
-          :cover_placeholder_url,
-          :price_formatted,
-          :created_at,
-          :user,
-          :admins_can_generate_url_redirects,
-          :alive_product_files,
-          :html_safe_description,
-          :alive,
-          :is_adult,
-          :active_integrations,
-          :admins_can_mark_as_staff_picked,
-          :admins_can_unmark_as_staff_picked,
-          :is_tiered_membership,
-          :updated_at,
-          :deleted_at
-        )
-      end
-    end
 
     describe "fields" do
       it "returns the correct values" do
@@ -121,35 +86,6 @@ describe Admin::ProductPresenter::Card do
           expect(props[:active_integrations].size).to eq(1)
           expect(props[:active_integrations].first[:type]).to eq("DiscordIntegration")
         end
-      end
-    end
-
-    describe "permission callbacks" do
-      context "when admin can mark as staff picked" do
-        let(:admins_can_mark_as_staff_picked) { ->(product) { true } }
-        let(:admins_can_unmark_as_staff_picked) { ->(product) { false } }
-
-        it "returns the correct permission values" do
-          expect(props[:admins_can_mark_as_staff_picked]).to be(true)
-          expect(props[:admins_can_unmark_as_staff_picked]).to be(false)
-        end
-      end
-
-      context "when admin can unmark as staff picked" do
-        let(:admins_can_mark_as_staff_picked) { ->(product) { false } }
-        let(:admins_can_unmark_as_staff_picked) { ->(product) { true } }
-
-        it "returns the correct permission values" do
-          expect(props[:admins_can_mark_as_staff_picked]).to be(false)
-          expect(props[:admins_can_unmark_as_staff_picked]).to be(true)
-        end
-      end
-
-      it "calls the permission callbacks with the product" do
-        expect(admins_can_mark_as_staff_picked).to receive(:call).with(product).and_return(true)
-        expect(admins_can_unmark_as_staff_picked).to receive(:call).with(product).and_return(false)
-
-        props
       end
     end
 

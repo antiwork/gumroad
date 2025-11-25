@@ -22,7 +22,7 @@ const Header = ({ user, isAffiliateUser = false, url }: HeaderProps) => {
   const adminUserUrl = isAffiliateUser ? Routes.admin_affiliate_url(user.id) : Routes.admin_user_url(user.id);
 
   return (
-    <div className="paragraphs">
+    <div className="flex flex-col gap-4">
       <div className="flex items-center gap-4">
         <img src={user.avatar_url} className="user-avatar" style={{ width: "var(--form-element-height)" }} alt="" />
         <div className="grid gap-2">
@@ -65,7 +65,7 @@ const Header = ({ user, isAffiliateUser = false, url }: HeaderProps) => {
                   tip="Custom fee that will be charged on all their new direct (non-discover) sales"
                   position="bottom"
                 >
-                  <span>Custom fee: {user.custom_fee_per_thousand / 10}%</span>
+                  <span>Custom fee: {(user.custom_fee_per_thousand / 10).toFixed(1)}%</span>
                 </WithTooltip>
               </li>
             ) : null}

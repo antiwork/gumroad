@@ -1,5 +1,4 @@
 import { Link } from "@inertiajs/react";
-import cx from "classnames";
 import * as React from "react";
 
 import { PageHeader } from "$app/components/ui/PageHeader";
@@ -17,38 +16,20 @@ export const Layout = ({
   children,
   pages,
   actions,
-  hasAside,
 }: {
   currentPage: Page;
   children: React.ReactNode;
   pages: Page[];
   actions?: React.ReactNode;
-  hasAside?: boolean;
-}) =>
-  hasAside ? (
-    <>
-      <Header actions={actions} pages={pages} currentPage={currentPage} sticky />
-      <div className="squished">{children}</div>
-    </>
-  ) : (
-    <div>
-      <Header actions={actions} pages={pages} currentPage={currentPage} />
-      {children}
-    </div>
-  );
-
-const Header = ({
-  actions,
-  pages,
-  currentPage,
-  sticky,
-}: {
-  currentPage: Page;
-  pages: Page[];
-  actions?: React.ReactNode;
-  sticky?: boolean;
 }) => (
-  <PageHeader className={cx({ "sticky-top": sticky })} title="Checkout" actions={actions}>
+  <div>
+    <Header actions={actions} pages={pages} currentPage={currentPage} />
+    {children}
+  </div>
+);
+
+const Header = ({ actions, pages, currentPage }: { currentPage: Page; pages: Page[]; actions?: React.ReactNode }) => (
+  <PageHeader title="Checkout" actions={actions}>
     <Tabs>
       {pages.map((page) => (
         <Tab key={page} isSelected={page === currentPage} asChild>

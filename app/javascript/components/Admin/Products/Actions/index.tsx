@@ -15,7 +15,7 @@ type AdminProductActionsProps = {
 const AdminProductActions = ({ product }: AdminProductActionsProps) => (
   <>
     <hr />
-    <div className="button-group">
+    <div className="flex flex-wrap gap-2">
       <PublishAction product={product} />
       <DeleteAction product={product} />
       <MakeAdultAction product={product} />

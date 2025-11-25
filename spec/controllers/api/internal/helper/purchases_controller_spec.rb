@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require "spec_helper"
+require "shared_examples/authorized_helper_api_method"
 
 describe Api::Internal::Helper::PurchasesController, :vcr do
   include HelperAISpecHelper
@@ -8,15 +9,13 @@ describe Api::Internal::Helper::PurchasesController, :vcr do
   let(:buyer) { create(:user) }
   let(:admin_user) { create(:admin_user) }
 
-  before do
-    request.headers["Authorization"] = "Bearer #{GlobalConfig.get("HELPER_TOOLS_TOKEN")}"
-  end
-
   it "inherits from Api::Internal::Helper::BaseController" do
     expect(described_class.superclass).to eq(Api::Internal::Helper::BaseController)
   end
 
   describe "POST reassign_purchases" do
+    include_examples "helper api authorization required", :post, :reassign_purchases
+
     let(:from_email) { "old@example.com" }
     let(:to_email) { "new@example.com" }
     let!(:target_user) { create(:user, email: to_email) }
@@ -53,6 +52,44 @@ describe Api::Internal::Helper::PurchasesController, :vcr do
 
         subscription.reload
         expect(subscription.user).to eq(target_user)
+      end
+
+      it "updates original_purchase email for subscription purchases" do
+        subscription = create(:subscription, user: buyer)
+        original_purchase = create(:purchase, email: "old_original_purchase@example.com", purchaser: buyer, is_original_subscription_purchase: true, subscription: subscription)
+        recurring_purchase = create(:purchase, email: from_email, purchaser: buyer, subscription: subscription)
+
+        post :reassign_purchases, params: { from: from_email, to: to_email }
+
+        expect(response).to have_http_status(:success)
+        expect(response.parsed_body["success"]).to eq(true)
+
+        original_purchase.reload
+        expect(original_purchase.email).to eq(to_email)
+
+        recurring_purchase.reload
+        expect(recurring_purchase.email).to eq(to_email)
+
+        subscription.reload
+        expect(subscription.original_purchase.email).to eq(to_email)
+      end
+
+      it "updates the original purchase once only when there are multiple recurring purchases sharing the same original purchase" do
+        from_email = "recurring_purchase@example.com"
+
+        subscription = create(:subscription, user: buyer)
+        create(:purchase, email: "old_original_purchase@example.com", purchaser: buyer, is_original_subscription_purchase: true, subscription: subscription)
+
+        create(:purchase, email: from_email, purchaser: buyer, subscription: subscription)
+        create(:purchase, email: from_email, purchaser: buyer, subscription: subscription)
+        create(:purchase, email: from_email, purchaser: buyer, subscription: subscription)
+
+        post :reassign_purchases, params: { from: from_email, to: to_email }
+
+        expect(response).to have_http_status(:success)
+        expect(response.parsed_body["success"]).to eq(true)
+
+        expect(response.parsed_body["count"]).to eq(4)
       end
 
       it "reassigns purchases and sets purchaser_id to nil when target user doesn't exist" do
@@ -120,6 +157,8 @@ describe Api::Internal::Helper::PurchasesController, :vcr do
   end
 
   describe "POST refund_last_purchase" do
+    include_examples "helper api authorization required", :post, :refund_last_purchase
+
     before do
       @purchase = create(:purchase_in_progress, email: buyer.email, purchaser: buyer, chargeable: create(:chargeable))
       @purchase.process!
@@ -159,6 +198,8 @@ describe Api::Internal::Helper::PurchasesController, :vcr do
   end
 
   describe "POST resend_last_receipt" do
+    include_examples "helper api authorization required", :post, :resend_last_receipt
+
     before do
       @purchase = create(:purchase_in_progress, email: buyer.email, purchaser: buyer, chargeable: create(:chargeable))
       @purchase.process!
@@ -177,6 +218,8 @@ describe Api::Internal::Helper::PurchasesController, :vcr do
   end
 
   describe "POST resend_receipt_by_number" do
+    include_examples "helper api authorization required", :post, :resend_receipt_by_number
+
     before do
       @purchase = create(:purchase_in_progress, email: buyer.email, purchaser: buyer, chargeable: create(:chargeable))
       @purchase.process!
@@ -200,6 +243,8 @@ describe Api::Internal::Helper::PurchasesController, :vcr do
   end
 
   describe "POST search" do
+    include_examples "helper api authorization required", :post, :search
+
     before do
       @purchase = create(:purchase_in_progress, email: buyer.email, purchaser: buyer, chargeable: create(:chargeable))
       @purchase.process!
@@ -329,6 +374,8 @@ describe Api::Internal::Helper::PurchasesController, :vcr do
   end
 
   describe "POST auto_refund_purchase" do
+    include_examples "helper api authorization required", :post, :auto_refund_purchase
+
     let(:purchase) { instance_double(Purchase, id: 1, email: "test@example.com", external_id_numeric: 1) }
     let(:params) { { purchase_id: "12345", email: "test@example.com" } }
     let(:purchase_refund_policy) { double("PurchaseRefundPolicy", fine_print: nil) }
@@ -411,6 +458,8 @@ describe Api::Internal::Helper::PurchasesController, :vcr do
   end
 
   describe "POST refund_taxes_only" do
+    include_examples "helper api authorization required", :post, :refund_taxes_only
+
     let(:purchase) { instance_double(Purchase, id: 1, email: "test@example.com", external_id_numeric: 1) }
     let(:purchase) { instance_double(Purchase, id: 1, email: "test@example.com", external_id_numeric: 1) }
     let(:params) { { purchase_id: "12345", email: "test@example.com" } }

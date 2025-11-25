@@ -2453,6 +2453,10 @@ describe Link, :vcr do
       expect(@product.long_url(recommended_by: "abc")).to eq "#{@product.user.subdomain_with_protocol}/l/#{@product.general_permalink}?recommended_by=abc"
     end
 
+    it "appends the 'code' query parameter if one is present" do
+      expect(@product.long_url(code: "BLACKFRIDAY2025")).to eq "#{@product.user.subdomain_with_protocol}/l/#{@product.general_permalink}?code=BLACKFRIDAY2025"
+    end
+
     it "does not append the 'recommended_by' query parameter if the value is blank" do
       expect(@product.long_url(recommended_by: "")).to eq "#{@product.user.subdomain_with_protocol}/l/#{@product.general_permalink}"
       expect(@product.long_url(recommended_by: " ")).to eq "#{@product.user.subdomain_with_protocol}/l/#{@product.general_permalink}"
@@ -4085,7 +4089,7 @@ describe Link, :vcr do
         context "when there is a previous purchase received as a gift with the browser guid" do
           let!(:purchase) { create(:purchase, :gift_receiver, link: product) }
           it "returns the purchase" do
-            expect(product.purchase_info_for_product_page(user, purchase.browser_guid)[:id]).to eq(purchase.external_id)
+            expect(product.purchase_info_for_product_page(user, purchase.browser_guid)).to eq(nil)
           end
         end
       end
@@ -4135,8 +4139,8 @@ describe Link, :vcr do
 
         context "when there is a previous purchase received as a gift with the browser guid" do
           let!(:purchase) { create(:purchase, :gift_receiver, link: product) }
-          it "returns the purchase" do
-            expect(product.purchase_info_for_product_page(user, purchase.browser_guid)[:id]).to eq(purchase.external_id)
+          it "returns nil" do
+            expect(product.purchase_info_for_product_page(user, purchase.browser_guid)).to eq(nil)
           end
         end
       end
@@ -4162,8 +4166,8 @@ describe Link, :vcr do
 
         context "when there is a previous purchase received as a gift with the browser guid" do
           let!(:purchase) { create(:preorder_authorization_purchase, :gift_receiver, link: product) }
-          it "returns the purchase" do
-            expect(product.purchase_info_for_product_page(user, purchase.browser_guid)[:id]).to eq(purchase.external_id)
+          it "returns nil" do
+            expect(product.purchase_info_for_product_page(user, purchase.browser_guid)).to eq(nil)
           end
         end
       end

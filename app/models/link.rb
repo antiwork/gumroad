@@ -498,7 +498,7 @@ class Link < ApplicationRecord
     self
   end
 
-  def long_url(recommended_by: nil, recommender_model_name: nil, include_protocol: true, layout: nil, affiliate_id: nil, query: nil, autocomplete: false)
+  def long_url(recommended_by: nil, recommender_model_name: nil, include_protocol: true, layout: nil, affiliate_id: nil, query: nil, code: nil, autocomplete: false)
     host = user.subdomain_with_protocol || UrlService.domain_with_protocol
     options = { host: }
     options[:recommended_by] = recommended_by if recommended_by.present?
@@ -506,6 +506,7 @@ class Link < ApplicationRecord
     options[:layout] = layout if layout.present?
     options[:query] = query if query.present?
     options[:affiliate_id] = affiliate_id if affiliate_id.present?
+    options[:code] = code if code.present?
     options[:autocomplete] = "true" if autocomplete
 
     product_long_url = Rails.application.routes.url_helpers.short_link_url(general_permalink, options)
@@ -816,9 +817,7 @@ class Link < ApplicationRecord
   #
   # Returns list of offer codes.
   def product_and_universal_offer_codes
-    (offer_codes.alive + user.offer_codes.universal_with_matching_currency(price_currency_type).alive).sort_by do |offer_code|
-      offer_code["created_at"]
-    end
+    (offer_codes.alive + user.offer_codes.universal_with_matching_currency(price_currency_type).alive).sort_by(&:created_at)
   end
 
   def purchase_info_for_product_page(requested_user, browser_guid)
@@ -826,7 +825,11 @@ class Link < ApplicationRecord
 
     eligible_purchases = Purchase.none
     eligible_purchases = requested_user.purchases.where(link: self) if requested_user
-    eligible_purchases = sales.where(browser_guid:, purchaser_id: nil) if browser_guid && eligible_purchases.blank?
+
+    # When a gift purchase is made, we set the same browser_guid for the gifter and giftee purchases.
+    # When fetching purchases using browser_guid, exclude gift receiver purchases so that we won't show
+    # the giftee purchase to gifter on the same browser.
+    eligible_purchases = sales.not_is_gift_receiver_purchase.where(browser_guid:, purchaser_id: nil) if browser_guid && eligible_purchases.blank?
 
     eligible_purchases = if is_in_preorder_state
       eligible_purchases.preorder_authorization_successful_or_gift
