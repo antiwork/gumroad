@@ -1,7 +1,8 @@
 # frozen_string_literal: true
 
 module SearchProducts
-  ALLOWED_OFFER_CODES = ["BLACKFRIDAY2025"].freeze
+  BLACK_FRIDAY_CODE = "BLACKFRIDAY2025".freeze
+  ALLOWED_OFFER_CODES = [BLACK_FRIDAY_CODE].freeze
 
   private
     def search_products(params)
