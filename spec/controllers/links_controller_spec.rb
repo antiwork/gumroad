@@ -3648,7 +3648,8 @@ describe LinksController, :vcr, inertia: true do
           product = create(:product, user: @user)
 
           get :show, params: { id: product.unique_permalink }
-          expected_url = "#{PROTOCOL}://#{@request.host_with_port}/l/#{product.general_permalink}"
+          expect(response.body).to have_selector("link[rel='canonical'][href='#{product.long_url.gsub(/:\d+/, '')}']", visible: false)
+          expected_url = "#{PROTOCOL}://#{@request.host}/l/#{product.general_permalink}"
           expect(response.body).to have_selector("link[rel='canonical'][href='#{expected_url}']", visible: false)
         end
 
