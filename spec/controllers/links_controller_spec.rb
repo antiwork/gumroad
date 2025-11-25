@@ -3648,18 +3648,19 @@ describe LinksController, :vcr, inertia: true do
           product = create(:product, user: @user)
 
           get :show, params: { id: product.unique_permalink }
-          expect(response.body).to have_selector("link[rel='canonical'][href='#{product.long_url}']", visible: false)
+          expect(response.body).to have_selector("link[rel='canonical'][href='#{product.long_url.gsub(/:\d+/, '')}']", visible: false)
+          expected_url = "#{PROTOCOL}://#{@request.host}/l/#{product.general_permalink}"
+          expect(response.body).to have_selector("link[rel='canonical'][href='#{expected_url}']", visible: false)
         end
 
-        it "renders the canonical meta tag with the custom domain host" do
+        it "renders the canonical meta tag on a custom domain host" do
+          custom_domain = create(:custom_domain, user: @user, domain: "shop.example.com")
           product = create(:product, user: @user)
-          custom_domain = create(:custom_domain, user: @user, domain: "creator.example.com")
           @request.host = custom_domain.domain
 
           get :show, params: { id: product.unique_permalink }
-
-          canonical_href = short_link_url(product.general_permalink, host: @request.host_with_port, protocol: @request.protocol)
-          expect(response.body).to have_selector("link[rel='canonical'][href='#{canonical_href}']", visible: false)
+          expected_url = "#{PROTOCOL}://#{custom_domain.domain}/l/#{product.general_permalink}"
+          expect(response.body).to have_selector("link[rel='canonical'][href='#{expected_url}']", visible: false)
         end
       end
 
