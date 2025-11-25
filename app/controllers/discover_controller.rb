@@ -66,7 +66,7 @@ class DiscoverController < ApplicationController
   private
     def recommendations
       # Don't show any recommended/featured products when offer codes are present
-      return [] if params[:offer_codes].present?
+      return [] if params[:offer_code].present?
 
       if show_curated_products?
         curated_products.take(RECOMMENDED_PRODUCTS_COUNT).map do |product_info|
