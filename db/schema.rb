@@ -1123,7 +1123,6 @@ ActiveRecord::Schema[7.1].define(version: 2025_11_24_133549) do
     t.string "native_type", default: "digital", null: false
     t.integer "discover_fee_per_thousand", default: 100, null: false
     t.string "support_email"
-    t.boolean "apply_discounts", default: false, null: false
     t.index ["banned_at"], name: "index_links_on_banned_at"
     t.index ["custom_permalink"], name: "index_links_on_custom_permalink", length: 191
     t.index ["deleted_at"], name: "index_links_on_deleted_at"
