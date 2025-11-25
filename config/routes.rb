@@ -969,6 +969,7 @@ Rails.application.routes.draw do
     get "/CHARGE" => redirect("/charge")
 
     # discover
+    get "/blackfriday", to: redirect("/discover?offer_code=BLACKFRIDAY2025"), as: :blackfriday
     get "/discover", to: "discover#index"
     get "/discover/categories",          to: "discover#categories"
     get "/discover_search_autocomplete", to: "discover/search_autocomplete#search"
