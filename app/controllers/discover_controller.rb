@@ -40,7 +40,8 @@ class DiscoverController < ApplicationController
         recommended_by: RecommendationType::GUMROAD_SEARCH_RECOMMENDATION,
         target: Product::Layout::DISCOVER,
         compute_description: false,
-        query: params[:query]
+        query: params[:query],
+        offer_code: params[:offer_code]
       )
     end
 
@@ -64,6 +65,9 @@ class DiscoverController < ApplicationController
 
   private
     def recommendations
+      # Don't show any recommended/featured products when offer codes are present
+      return [] if params[:offer_code].present?
+
       if show_curated_products?
         curated_products.take(RECOMMENDED_PRODUCTS_COUNT).map do |product_info|
           ProductPresenter.card_for_web(
@@ -105,11 +109,12 @@ class DiscoverController < ApplicationController
     end
 
     def show_curated_products?
+      return false if params[:offer_code].present?
       !taxonomy && curated_products.any?
     end
 
     def is_searching?
-      params.values_at(:query, :tags, :category).any?(&:present?) ||
+      params.values_at(:query, :tags, :category, :offer_code).any?(&:present?) ||
         (params[:taxonomy].present? && params.values_at(:sort, :min_price, :max_price, :rating, :filetypes).any?(&:present?))
     end
 
