@@ -57,33 +57,35 @@ const NewSalesReportPopover = () => {
       onToggle={setOpen}
       aria-label="New Sales Report"
       trigger={
-        <WithTooltip tip="New Report" position="bottom">
+        <WithTooltip tip="Generate a new sales report" position="bottom">
           <div className="button primary">New report</div>
         </WithTooltip>
       }
     >
       <div className="grid w-96 max-w-full gap-3">
         <form onSubmit={handleSubmit} style={{ display: "contents" }}>
-          <label htmlFor="country_code">Country</label>
-          <select
-            name="sales_report[country_code]"
-            id="country_code"
-            onChange={(event: React.ChangeEvent<HTMLSelectElement>) =>
-              form.setData("sales_report.country_code", event.target.value)
-            }
-            value={form.data.sales_report.country_code}
-            required
-          >
-            <option value="">Select a country</option>
-            {countries.map(([name, code]) => (
-              <option key={code} value={code}>
-                {name}
-              </option>
-            ))}
-          </select>
-          <Errors errors={errors.sales_report?.country_code} label="Country code" />
+          <div className="grid grid-rows-[auto_1fr] gap-3">
+            <label htmlFor="country_code">Country</label>
+            <select
+              name="sales_report[country_code]"
+              id="country_code"
+              onChange={(event: React.ChangeEvent<HTMLSelectElement>) =>
+                form.setData("sales_report.country_code", event.target.value)
+              }
+              value={form.data.sales_report.country_code}
+              required
+            >
+              <option value="">Select a country</option>
+              {countries.map(([name, code]) => (
+                <option key={code} value={code}>
+                  {name}
+                </option>
+              ))}
+            </select>
+            <Errors errors={errors.sales_report?.country_code} label="Country code" />
+          </div>
 
-          <div className="grid grid-cols-[1fr_auto] gap-3">
+          <div className="grid grid-cols-2 gap-3">
             <div className="grid grid-rows-[auto_1fr] gap-3">
               <label htmlFor="start_date">Start Date</label>
               <input
@@ -115,23 +117,25 @@ const NewSalesReportPopover = () => {
             </div>
           </div>
 
-          <label htmlFor="sales_type">Sale Type</label>
-          <select
-            name="sales_report[sales_type]"
-            id="sales_type"
-            onChange={(event: React.ChangeEvent<HTMLSelectElement>) =>
-              form.setData("sales_report.sales_type", event.target.value)
-            }
-            value={form.data.sales_report.sales_type}
-            required
-          >
-            {sales_types.map(([code, name]) => (
-              <option key={code} value={code}>
-                {name}
-              </option>
-            ))}
-          </select>
-          <Errors errors={errors.sales_report?.sales_type} label="Type of sales" />
+          <div className="grid grid-rows-[auto_1fr] gap-3">
+            <label htmlFor="sales_type">Sale Type</label>
+            <select
+              name="sales_report[sales_type]"
+              id="sales_type"
+              onChange={(event: React.ChangeEvent<HTMLSelectElement>) =>
+                form.setData("sales_report.sales_type", event.target.value)
+              }
+              value={form.data.sales_report.sales_type}
+              required
+            >
+              {sales_types.map(([code, name]) => (
+                <option key={code} value={code}>
+                  {name}
+                </option>
+              ))}
+            </select>
+            <Errors errors={errors.sales_report?.sales_type} label="Type of sales" />
+          </div>
 
           <button type="submit" className="button primary" disabled={form.processing}>
             {form.processing ? "Generating..." : "Generate"}

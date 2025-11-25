@@ -31,7 +31,7 @@ const AdminSalesReportsForm = ({ countries, sales_types, authenticityToken }: Pr
       country_code: "",
       start_date: defaultStartDate,
       end_date: defaultEndDate,
-      sales_type: "",
+      sales_type: sales_types[0]?.[0],
     },
   });
 
@@ -51,69 +51,78 @@ const AdminSalesReportsForm = ({ countries, sales_types, authenticityToken }: Pr
       <section>
         <header>Generate sales report with custom date ranges</header>
 
-        <label htmlFor="country_code">Country</label>
-        <select
-          name="sales_report[country_code]"
-          id="country_code"
-          onChange={(event: React.ChangeEvent<HTMLSelectElement>) =>
-            form.setData("sales_report.country_code", event.target.value)
-          }
-          value={form.data.sales_report.country_code}
-          required
-        >
-          <option value="">Select country</option>
-          {countries.map(([name, code]) => (
-            <option key={code} value={code}>
-              {name}
-            </option>
-          ))}
-        </select>
-        <Errors errors={errors.sales_report?.country_code} label="Country code" />
+        <div className="grid grid-rows-[auto_1fr] gap-3">
+          <label htmlFor="country_code">Country</label>
+          <select
+            name="sales_report[country_code]"
+            id="country_code"
+            onChange={(event: React.ChangeEvent<HTMLSelectElement>) =>
+              form.setData("sales_report.country_code", event.target.value)
+            }
+            value={form.data.sales_report.country_code}
+            required
+          >
+            <option value="">Select country</option>
+            {countries.map(([name, code]) => (
+              <option key={code} value={code}>
+                {name}
+              </option>
+            ))}
+          </select>
+          <Errors errors={errors.sales_report?.country_code} label="Country code" />
+        </div>
 
-        <label htmlFor="start_date">Start date</label>
-        <input
-          name="sales_report[start_date]"
-          id="start_date"
-          type="date"
-          required
-          onChange={(event: React.ChangeEvent<HTMLInputElement>) =>
-            form.setData("sales_report.start_date", event.target.value)
-          }
-          value={form.data.sales_report.start_date}
-        />
-        <Errors errors={errors.sales_report?.start_date} label="Start date" />
+        <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-rows-[auto_1fr] gap-3">
+            <label htmlFor="start_date">Start date</label>
+            <input
+              name="sales_report[start_date]"
+              id="start_date"
+              type="date"
+              required
+              onChange={(event: React.ChangeEvent<HTMLInputElement>) =>
+                form.setData("sales_report.start_date", event.target.value)
+              }
+              value={form.data.sales_report.start_date}
+            />
+            <Errors errors={errors.sales_report?.start_date} label="Start date" />
+          </div>
 
-        <label htmlFor="end_date">End date</label>
-        <input
-          name="sales_report[end_date]"
-          id="end_date"
-          type="date"
-          required
-          onChange={(event: React.ChangeEvent<HTMLInputElement>) =>
-            form.setData("sales_report.end_date", event.target.value)
-          }
-          value={form.data.sales_report.end_date}
-        />
-        <Errors errors={errors.sales_report?.end_date} label="End date" />
+          <div className="grid grid-rows-[auto_1fr] gap-3">
+            <label htmlFor="end_date">End date</label>
+            <input
+              name="sales_report[end_date]"
+              id="end_date"
+              type="date"
+              required
+              onChange={(event: React.ChangeEvent<HTMLInputElement>) =>
+                form.setData("sales_report.end_date", event.target.value)
+              }
+              value={form.data.sales_report.end_date}
+            />
+            <Errors errors={errors.sales_report?.end_date} label="End date" />
+          </div>
+        </div>
 
-        <label htmlFor="sales_type">Type of sales</label>
-        <select
-          name="sales_report[sales_type]"
-          id="sales_type"
-          onChange={(event: React.ChangeEvent<HTMLSelectElement>) =>
-            form.setData("sales_report.sales_type", event.target.value)
-          }
-          value={form.data.sales_report.sales_type}
-          required
-        >
-          <option value="">Select type of sales</option>
-          {sales_types.map(([code, name]) => (
-            <option key={code} value={code}>
-              {name}
-            </option>
-          ))}
-        </select>
-        <Errors errors={errors.sales_report?.sales_type} label="Type of sales" />
+        <div className="grid grid-rows-[auto_1fr] gap-3">
+          <label htmlFor="sales_type">Type of sales</label>
+          <select
+            name="sales_report[sales_type]"
+            id="sales_type"
+            onChange={(event: React.ChangeEvent<HTMLSelectElement>) =>
+              form.setData("sales_report.sales_type", event.target.value)
+            }
+            value={form.data.sales_report.sales_type}
+            required
+          >
+            {sales_types.map(([code, name]) => (
+              <option key={code} value={code}>
+                {name}
+              </option>
+            ))}
+          </select>
+          <Errors errors={errors.sales_report?.sales_type} label="Type of sales" />
+        </div>
 
         <button type="submit" className="button primary" disabled={form.processing}>
           {form.processing ? "Generating..." : "Generate report"}

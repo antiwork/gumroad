@@ -11,9 +11,21 @@ type PageProps = {
 };
 
 const AdminSalesReports = () => {
-  const { countries, sales_types, job_history: jobHistory } = usePage<PageProps>().props;
+  const {
+    countries,
+    sales_types,
+    job_history: jobHistory,
+    authenticity_token: authenticityToken,
+  } = usePage<PageProps>().props;
 
-  return <AdminSalesReportsJobHistory countries={countries} sales_types={sales_types} jobHistory={jobHistory} />;
+  return (
+    <AdminSalesReportsJobHistory
+      countries={countries}
+      sales_types={sales_types}
+      jobHistory={jobHistory}
+      authenticityToken={authenticityToken}
+    />
+  );
 };
 
 export default AdminSalesReports;

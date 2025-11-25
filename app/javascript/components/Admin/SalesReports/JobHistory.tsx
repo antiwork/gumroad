@@ -1,5 +1,6 @@
 import * as React from "react";
 
+import AdminSalesReportsForm from "$app/components/Admin/SalesReports/Form";
 import { Button } from "$app/components/Button";
 import { Icon } from "$app/components/Icons";
 import Placeholder from "$app/components/ui/Placeholder";
@@ -19,23 +20,11 @@ type Props = {
   countries: [string, string][];
   sales_types: [string, string][];
   jobHistory: JobHistoryItem[];
+  authenticityToken: string;
 };
 
-const AdminSalesReportsJobHistory = ({ countries, sales_types, jobHistory }: Props) => {
-  if (jobHistory.length === 0) {
-    return (
-      <section>
-        <Placeholder>
-          <h2>Generate your first sales report</h2>
-          Create a report to view sales data by country for a specified date range.
-          <Button color="primary">
-            <Icon name="plus" />
-            New report
-          </Button>
-        </Placeholder>
-      </section>
-    );
-  }
+const AdminSalesReportsJobHistory = ({ countries, sales_types, jobHistory, authenticityToken }: Props) => {
+  const [showNewSalesReportForm, setShowNewSalesReportForm] = React.useState(false);
 
   const countryCodeToName = React.useMemo(() => {
     const map: Record<string, string> = {};
@@ -52,6 +41,23 @@ const AdminSalesReportsJobHistory = ({ countries, sales_types, jobHistory }: Pro
     });
     return map;
   }, [sales_types]);
+
+  if (jobHistory.length === 0) {
+    return showNewSalesReportForm ? (
+      <AdminSalesReportsForm countries={countries} sales_types={sales_types} authenticityToken={authenticityToken} />
+    ) : (
+      <section>
+        <Placeholder>
+          <h2>Generate your first sales report</h2>
+          Create a report to view sales data by country for a specified date range.
+          <Button color="primary" onClick={() => setShowNewSalesReportForm(true)}>
+            <Icon name="plus" />
+            New report
+          </Button>
+        </Placeholder>
+      </section>
+    );
+  }
 
   return (
     <section>
