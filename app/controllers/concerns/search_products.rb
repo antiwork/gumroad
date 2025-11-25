@@ -1,7 +1,7 @@
 # frozen_string_literal: true
 
 module SearchProducts
-  BLACK_FRIDAY_CODE = "BLACKFRIDAY2025".freeze
+  BLACK_FRIDAY_CODE = "BLACKFRIDAY2025"
   ALLOWED_OFFER_CODES = [BLACK_FRIDAY_CODE].freeze
 
   private
