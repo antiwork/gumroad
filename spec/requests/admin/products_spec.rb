@@ -10,7 +10,7 @@ describe "Admin::LinksController Scenario", type: :system, js: true do
   end
 
   it "renders the product page", :sidekiq_inline, :elasticsearch_wait_for_refresh do
-    # it renders stats
+    # It renders stats
     purchases = Purchase.where(link: product)
     Event.destroy_by(purchase: purchases)
     purchases.destroy_all
