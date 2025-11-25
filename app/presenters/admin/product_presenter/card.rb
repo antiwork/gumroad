@@ -9,7 +9,7 @@ class Admin::ProductPresenter::Card
   end
 
   def props
-    link_policy = Admin::Products::StaffPicked::LinkPolicy.new(SellerContext.new(user: pundit_user, seller: product.user), product)
+    link_policy = Admin::Products::StaffPicked::LinkPolicy.new(pundit_user, product)
     {
       id: product.id,
       name: product.name,

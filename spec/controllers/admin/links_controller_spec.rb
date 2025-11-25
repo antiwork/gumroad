@@ -79,8 +79,8 @@ describe Admin::LinksController, type: :controller, inertia: true do
       expect(response).to be_successful
       expect(inertia.component).to eq("Admin/Products/Show")
       expect(inertia.props[:title]).to eq(product.name)
-      expect(inertia.props[:product]).to eq(Admin::ProductPresenter::Card.new(product:, pundit_user: admin_user).props)
-      expect(inertia.props[:user]).to eq(Admin::UserPresenter::Card.new(user: product.user, pundit_user: admin_user).props)
+      expect(inertia.props[:product]).to eq(Admin::ProductPresenter::Card.new(product:, pundit_user: SellerContext.new(user: admin_user, seller: product.user)).props)
+      expect(inertia.props[:user]).to eq(Admin::UserPresenter::Card.new(user: product.user, pundit_user: SellerContext.new(user: admin_user, seller: product.user)).props)
     end
 
     describe "multiple matches by permalink" do
@@ -107,8 +107,8 @@ describe Admin::LinksController, type: :controller, inertia: true do
           expect(response).to be_successful
           expect(inertia.component).to eq("Admin/Products/Show")
           expect(inertia.props[:title]).to eq(product.name)
-          expect(inertia.props[:product]).to eq(Admin::ProductPresenter::Card.new(product:, pundit_user: admin_user).props)
-          expect(inertia.props[:user]).to eq(Admin::UserPresenter::Card.new(user: product.user, pundit_user: admin_user).props)
+          expect(inertia.props[:product]).to eq(Admin::ProductPresenter::Card.new(product:, pundit_user: SellerContext.new(user: admin_user, seller: product.user)).props)
+          expect(inertia.props[:user]).to eq(Admin::UserPresenter::Card.new(user: product.user, pundit_user: SellerContext.new(user: admin_user, seller: product.user)).props)
         end
       end
 
