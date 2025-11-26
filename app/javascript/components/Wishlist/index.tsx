@@ -224,51 +224,56 @@ export const Wishlist = ({
     return () => observer.disconnect();
   }, [pagination, items]);
 
+  const headerActions = (
+    <>
+      <CopyToClipboard tooltipPosition="bottom" copyTooltip="Copy link" text={url}>
+        <Button aria-label="Copy link">
+          <Icon name="link" />
+        </Button>
+      </CopyToClipboard>
+      {can_edit ? (
+        <Button onClick={() => setIsEditing(true)}>
+          <Icon name="pencil" />
+          Edit
+        </Button>
+      ) : null}
+      {can_follow ? <FollowButton wishlistId={id} wishlistName={name} initialValue={following} /> : null}
+      <WithTooltip tip={checkout_enabled ? null : "None of the products on this wishlist are available for purchase"}>
+        <NavigationButton
+          color="accent"
+          href={Routes.checkout_index_url({ params: { wishlist: id } })}
+          disabled={!checkout_enabled}
+        >
+          <Icon name="cart3-fill" />
+          Buy this wishlist
+        </NavigationButton>
+      </WithTooltip>
+    </>
+  );
+
   return (
     <>
-      <PageHeader
-        className={classNames(
-          { "lg:px-16": layout === "discover" },
-          { "*:mx-auto *:w-full *:max-w-6xl": layout === "profile" },
-        )}
-        title={name}
-        actions={
-          <>
-            <CopyToClipboard tooltipPosition="bottom" copyTooltip="Copy link" text={url}>
-              <Button aria-label="Copy link">
-                <Icon name="link" />
-              </Button>
-            </CopyToClipboard>
-            {can_edit ? (
-              <Button onClick={() => setIsEditing(true)}>
-                <Icon name="pencil" />
-                Edit
-              </Button>
-            ) : null}
-            {can_follow ? <FollowButton wishlistId={id} wishlistName={name} initialValue={following} /> : null}
-            <WithTooltip
-              tip={checkout_enabled ? null : "None of the products on this wishlist are available for purchase"}
-            >
-              <NavigationButton
-                color="accent"
-                href={Routes.checkout_index_url({ params: { wishlist: id } })}
-                disabled={!checkout_enabled}
-              >
-                <Icon name="cart3-fill" />
-                Buy this wishlist
-              </NavigationButton>
-            </WithTooltip>
-          </>
-        }
-      >
-        {user ? (
-          <a className="flex items-center gap-2" href={user.profile_url}>
-            <img className="user-avatar w-6" src={user.avatar_url} />
-            <h4>{user.name}</h4>
-          </a>
-        ) : null}
-        {description ? <h4>{description}</h4> : null}
-      </PageHeader>
+      {layout === "profile" ? (
+        <header className="border-b border-border p-4 md:p-8">
+          <div className="mx-auto flex w-full max-w-6xl flex-col gap-4">
+            <div className="flex items-center justify-between gap-2">
+              <h1 className="line-clamp-2 text-2xl">{name}</h1>
+              <div className="flex gap-2">{headerActions}</div>
+            </div>
+            {description ? <p>{description}</p> : null}
+          </div>
+        </header>
+      ) : (
+        <PageHeader className="lg:px-16" title={name} actions={headerActions}>
+          {user ? (
+            <a className="flex items-center gap-2" href={user.profile_url}>
+              <img className="user-avatar w-6" src={user.avatar_url} />
+              <h4>{user.name}</h4>
+            </a>
+          ) : null}
+          {description ? <h4>{description}</h4> : null}
+        </PageHeader>
+      )}
       <section className={classNames("p-4 md:p-8", { "lg:px-16": layout === "discover" })}>
         <div className={classNames({ "mx-auto w-full max-w-6xl": layout === "profile" })}>
           <ProductCardGrid ref={gridRef}>
