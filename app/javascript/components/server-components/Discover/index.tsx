@@ -24,6 +24,9 @@ import { useOnChange } from "$app/components/useOnChange";
 import { useOriginalLocation } from "$app/components/useOriginalLocation";
 import { useScrollableCarousel } from "$app/components/useScrollableCarousel";
 
+import blackFridayImage from "$assets/images/illustrations/black_friday.svg";
+import saleImage from "$assets/images/illustrations/sale.svg";
+
 type Props = {
   currency_code: CurrencyCode;
   search_results: SearchResults;
@@ -263,27 +266,27 @@ const Discover = (props: Props) => {
         <header className="relative flex flex-col items-center justify-center">
           <div className="relative flex min-h-[72vh] w-full flex-col items-center justify-center bg-black">
             <img
-              src="/assets/illustrations/sale.svg"
+              src={saleImage}
               alt="Sale"
               className="absolute top-1/2 left-40 hidden w-32 -translate-y-1/2 rotate-[-24deg] object-contain md:left-12 md:block md:w-40 lg:left-36 lg:w-48 xl:left-60 xl:w-60"
               draggable={false}
             />
             <div className="relative">
               <img
-                src="/assets/illustrations/black_friday.svg"
+                src={blackFridayImage}
                 alt="Black Friday"
                 className="max-w-96 object-contain"
                 draggable={false}
               />
               <img
-                src="/assets/illustrations/sale.svg"
+                src={saleImage}
                 alt="Sale"
                 className="absolute right-0 bottom-0 w-27.5 rotate-[16deg] object-contain md:hidden"
                 draggable={false}
               />
             </div>
             <img
-              src="/assets/illustrations/sale.svg"
+              src={saleImage}
               alt="Sale"
               className="absolute top-1/2 right-40 hidden w-32 -translate-y-1/2 rotate-[24deg] object-contain md:right-12 md:block md:w-40 lg:right-36 lg:w-48 xl:right-60 xl:w-60"
               draggable={false}
