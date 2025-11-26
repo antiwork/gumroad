@@ -152,7 +152,7 @@ RSpec.configure do |config|
   config.before(:each) do |example|
     unless example.metadata[:skip_ssrf_stub]
       allow(SsrfFilter).to receive(:get) do |url, **_args|
-        Net::HTTP.get_response(URI(url))
+        HTTParty.get(url)
       end
     end
   end
