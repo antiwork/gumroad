@@ -331,7 +331,7 @@ const TeamMembersSection = ({
                 </div>
               </td>
               <td data-label="Role">
-                <div className="flex items-center justify-between gap-2">
+                <div className="flex items-center gap-2">
                   <Select
                     instanceId={memberInfo.id}
                     options={memberInfo.options}
