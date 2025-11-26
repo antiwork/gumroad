@@ -85,4 +85,32 @@ describe "Admin::PurchasesController Scenario", type: :system, js: true do
       expect(page).to have_content("Tip $5", normalize_ws: true)
     end
   end
+
+  it "shows custom fields" do
+    create(:purchase_custom_field, purchase:)
+    create(:purchase_custom_field, purchase:, name: "Boolean field", field_type: CustomField::TYPE_CHECKBOX, value: true)
+
+    visit admin_purchase_path(purchase.id)
+
+    expect(page).to have_content("Custom field custom field value (custom field) Boolean field true (custom field)", normalize_ws: true)
+  end
+
+  describe "update giftee email functionality" do
+    let(:giftee_email) { "original_giftee@example.com" }
+    let(:new_giftee_email) { "new_giftee@example.com" }
+    let(:gifter_purchase) { create(:purchase, :gift_sender) }
+    let(:giftee_purchase) { create(:purchase, :gift_receiver, email: giftee_email) }
+    let!(:gift) { create(:gift, gifter_email: gifter_purchase.email, giftee_email: giftee_email, gifter_purchase: gifter_purchase, giftee_purchase: giftee_purchase) }
+
+    it "allows updating giftee email for a gift purchase" do
+      visit admin_purchase_path(gifter_purchase.id)
+      select_disclosure "Edit giftee email" do
+        fill_in "giftee_email", with: new_giftee_email
+        click_on "Update"
+      end
+      expect(page).to have_alert(text: "Successfully updated the giftee email.")
+      expect(gift.reload.giftee_email).to eq(new_giftee_email)
+      expect(giftee_purchase.reload.email).to eq(new_giftee_email)
+    end
+  end
 end

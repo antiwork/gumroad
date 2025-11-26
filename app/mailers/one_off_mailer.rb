@@ -8,18 +8,21 @@ class OneOffMailer < ApplicationMailer
   # Mailer used to send one-off emails to user, usually via Rails console
   # `from` email address is not being monitored. If you need to receive replies from users, pass the optional
   # param `reply_to`, e.g. reply_to: ApplicationMailer::NOREPLY_EMAIL_WITH_NAME
-  def email(user_id: nil, email: nil, subject:, body:, reply_to: nil)
+  def email(user_id: nil, email: nil, from: nil, subject:, body:, reply_to: nil, sender_domain: nil)
     email ||= User.alive.not_suspended.find_by(id: user_id)&.form_email
     return unless EmailFormatValidator.valid?(email)
+
+    from ||= "Gumroad <hi@#{CUSTOMERS_MAIL_DOMAIN}>"
+    sender_domain ||= :customers
 
     @subject = subject
     @body = body
 
     options = {
       to: email,
-      from: "Gumroad <hi@#{CUSTOMERS_MAIL_DOMAIN}>",
+      from: from,
       subject: @subject,
-      delivery_method_options: MailerInfo.random_delivery_method_options(domain: :customers)
+      delivery_method_options: MailerInfo.random_delivery_method_options(domain: sender_domain.to_sym)
     }
     options[:reply_to] = reply_to if reply_to.present?
 

@@ -173,9 +173,10 @@ describe DiscoverController do
 
     it "returns search results when taxonomy is present" do
       taxonomy = Taxonomy.find_by!(slug: "3d")
+      other_taxonomy = Taxonomy.find_or_create_by!(slug: "other")
       taxonomy_product = create(:product, :recommendable, taxonomy:)
       child_taxonomy_product = create(:product, :recommendable, taxonomy: taxonomy.children.first)
-      create(:product, :recommendable, taxonomy: Taxonomy.last)
+      create(:product, :recommendable, taxonomy: other_taxonomy)
       Link.import(refresh: true, force: true)
 
       get :recommended_products, params: { taxonomy: "3d" }, format: :json

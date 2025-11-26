@@ -25,7 +25,7 @@ type Gift = {
   is_sender_purchase: boolean;
   other_purchase_id: number;
   other_email: string;
-  note: string;
+  note: string | null;
 };
 
 export type Purchase = PurchaseStatesInfo & {
@@ -101,7 +101,7 @@ export type Purchase = PurchaseStatesInfo & {
   state: string | null;
   zip_code: string | null;
   country: string | null;
-  custom_fields: { name: string; value: string }[];
+  custom_fields: { name: string; value: string | boolean }[];
   license: { serial: string } | null;
   affiliate_email: string | null;
   refund_policy:
@@ -374,11 +374,11 @@ const Info = ({ purchase }: { purchase: Purchase }) => (
         </>
       ) : null}
 
-      {purchase.custom_fields.map((field) => (
-        <>
+      {purchase.custom_fields.map((field, index) => (
+        <React.Fragment key={index}>
           <dt>{field.name}</dt>
-          <dd>{field.value} (custom field)</dd>
-        </>
+          <dd>{field.value.toString()} (custom field)</dd>
+        </React.Fragment>
       ))}
 
       {purchase.purchase_state === "preorder_authorization_successful" ? (

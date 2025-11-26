@@ -1,7 +1,6 @@
 # frozen_string_literal: true
 
 class Api::Internal::Helper::PurchasesController < Api::Internal::Helper::BaseController
-  before_action :authorize_helper_token!
   before_action :fetch_last_purchase, only: [:refund_last_purchase, :resend_last_receipt]
 
   REFUND_LAST_PURCHASE_OPENAPI = {

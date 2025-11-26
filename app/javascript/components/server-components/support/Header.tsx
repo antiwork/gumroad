@@ -59,7 +59,13 @@ export function SupportHeader({
                 rel="noopener noreferrer"
                 className="flex items-center gap-2"
               >
-                <svg width="16" height="16" viewBox="0 0 98 96" xmlns="http://www.w3.org/2000/svg" className="fill-current">
+                <svg
+                  width="16"
+                  height="16"
+                  viewBox="0 0 98 96"
+                  xmlns="http://www.w3.org/2000/svg"
+                  className="fill-current"
+                >
                   <path
                     fillRule="evenodd"
                     clipRule="evenodd"
@@ -83,7 +89,13 @@ export function SupportHeader({
                 rel="noopener noreferrer"
                 className="flex items-center gap-2"
               >
-                <svg width="16" height="16" viewBox="0 0 98 96" xmlns="http://www.w3.org/2000/svg" className="fill-current">
+                <svg
+                  width="16"
+                  height="16"
+                  viewBox="0 0 98 96"
+                  xmlns="http://www.w3.org/2000/svg"
+                  className="fill-current"
+                >
                   <path
                     fillRule="evenodd"
                     clipRule="evenodd"
