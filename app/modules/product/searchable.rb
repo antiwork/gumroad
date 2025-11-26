@@ -46,6 +46,7 @@ module Product::Searchable
     total_fee_cents
     past_year_fee_cents
     staff_picked_at
+    offer_codes
   ] + ATTRIBUTE_TO_SEARCH_FIELDS_MAP.values.flatten)
 
   MAX_PARTIAL_SEARCH_RESULTS = 5
@@ -135,6 +136,9 @@ module Product::Searchable
         indexes :total_fee_cents, type: :long
         indexes :past_year_fee_cents, type: :long
         indexes :staff_picked_at, type: :date
+        indexes :offer_codes, type: :text do
+          indexes :code, type: :keyword, ignore_above: 256
+        end
       end
 
       after_create :enqueue_search_index!
@@ -288,6 +292,12 @@ module Product::Searchable
             if params.key?(:is_alive)
               must do
                 term is_alive: params[:is_alive]
+              end
+            end
+
+            if params[:offer_code].present?
+              must do
+                term "offer_codes.code" => params[:offer_code]
               end
             end
           end
@@ -481,6 +491,7 @@ module Product::Searchable
       when "total_fee_cents" then total_fee_cents(created_after: DEFAULT_SALES_VOLUME_RECENTNESS.ago)
       when "past_year_fee_cents" then total_fee_cents(created_after: 1.year.ago)
       when "staff_picked_at" then staff_picked_at
+      when "offer_codes" then product_and_universal_offer_codes.pluck(:code)
       else
         raise "Error building search properties. #{attribute_key} is not a valid property"
       end

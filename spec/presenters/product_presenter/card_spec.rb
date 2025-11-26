@@ -41,6 +41,12 @@ describe ProductPresenter::Card do
         )
       end
 
+      it "returns the URL with the offer code" do
+        data = described_class.new(product:).for_web(request:, recommended_by: "discover", offer_code: "BLACKFRIDAY2025")
+        expect(data[:url]).to include("code=BLACKFRIDAY2025")
+      end
+
+
       it "does not return the URL of a deleted thumbnail" do
         create(:thumbnail, product:)
         result = described_class.new(product:).for_web
