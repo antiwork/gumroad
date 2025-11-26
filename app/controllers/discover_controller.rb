@@ -49,12 +49,6 @@ class DiscoverController < ApplicationController
 
     prepare_discover_page
 
-    blackfriday_cta_path = if params[:taxonomy].present?
-      discover_taxonomy_path(params[:taxonomy], offer_code: SearchProducts::BLACK_FRIDAY_CODE)
-    else
-      blackfriday_path
-    end
-
     @react_discover_props = {
       search_results: @search_results,
       currency_code: logged_in_user&.currency_type || "usd",
