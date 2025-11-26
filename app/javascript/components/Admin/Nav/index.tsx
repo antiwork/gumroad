@@ -3,7 +3,7 @@ import * as React from "react";
 
 import AdminNavFooter from "$app/components/Admin/Nav/Footer";
 import { useAppDomain } from "$app/components/DomainSettings";
-import { Nav as NavFramework, NavLink, InertiaNavLink } from "$app/components/Nav";
+import { Nav as NavFramework, NavLink, InertiaNavLink, NavSection } from "$app/components/Nav";
 
 type PageProps = { title: string };
 
@@ -13,7 +13,7 @@ const Nav = () => {
 
   return (
     <NavFramework title={title} footer={<AdminNavFooter />}>
-      <section>
+      <NavSection>
         <InertiaNavLink
           text="Suspend users"
           icon="shield-exclamation"
@@ -46,7 +46,7 @@ const Nav = () => {
           href={Routes.admin_sales_reports_url(routeParams)}
           component={Link}
         />
-      </section>
+      </NavSection>
     </NavFramework>
   );
 };
