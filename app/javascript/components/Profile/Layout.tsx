@@ -28,110 +28,51 @@ export const Layout = ({ creatorProfile, hideFollowForm, children }: LayoutProps
 
   const showExtras = Boolean(creatorProfile.twitter_handle || cartItemsCount);
 
+  const extras = (
+    <div className="ml-auto flex items-center gap-3">
+      {creatorProfile.twitter_handle ? (
+        <NavigationButton outline href={`https://twitter.com/${creatorProfile.twitter_handle}`} target="_blank">
+          <Icon name="twitter" />
+        </NavigationButton>
+      ) : null}
+      <CartNavigationButton />
+    </div>
+  );
+
   return (
     <div className="flex min-h-full flex-col">
       <header className="relative z-20 border-border bg-background text-lg lg:border-b lg:px-4 lg:py-6">
-        {isDesktop ? (
-          <DesktopHeaderInner
-            creatorProfile={creatorProfile}
-            hideFollowForm={hideFollowForm}
-            canImpersonate={canImpersonate}
-            showExtras={showExtras}
-          />
-        ) : (
-          <MobileHeaderInner
-            creatorProfile={creatorProfile}
-            hideFollowForm={hideFollowForm}
-            canImpersonate={canImpersonate}
-            showExtras={showExtras}
-          />
-        )}
+        <div className="mx-auto flex max-w-6xl flex-wrap lg:flex-nowrap lg:items-center lg:gap-6">
+          <div className="relative flex grow items-center gap-3 border-b border-border px-4 py-8 lg:flex-1 lg:border-0 lg:p-0">
+            {canImpersonate ? (
+              <NavigationButton
+                href={Routes.admin_impersonate_url({
+                  user_identifier: creatorProfile.external_id,
+                })}
+                className="absolute left-3"
+                color="filled"
+              >
+                Impersonate
+              </NavigationButton>
+            ) : null}
+            <img className="user-avatar" src={creatorProfile.avatar_url} alt="Profile Picture" />
+            <a href={Routes.root_path()} className="no-underline">
+              {creatorProfile.name}
+            </a>
+            {!isDesktop && showExtras ? extras : null}
+          </div>
+          {!hideFollowForm ? (
+            <div className="flex basis-full items-center gap-3 border-b border-border px-4 py-8 lg:basis-auto lg:border-0 lg:p-0">
+              <FollowForm creatorProfile={creatorProfile} />
+            </div>
+          ) : null}
+          {isDesktop && showExtras ? extras : null}
+        </div>
       </header>
       <main className="flex-1">
         {children}
-        <PoweredByFooter className="*:mx-auto *:w-full *:max-w-6xl lg:py-6 lg:text-left" />
+        <PoweredByFooter className="mx-auto w-full max-w-6xl lg:py-6 lg:text-left" />
       </main>
     </div>
   );
 };
-
-type HeaderInnerProps = {
-  creatorProfile: CreatorProfile;
-  hideFollowForm: boolean | undefined;
-  canImpersonate: boolean | undefined;
-  showExtras: boolean;
-};
-
-const DesktopHeaderInner = ({ creatorProfile, hideFollowForm, canImpersonate, showExtras }: HeaderInnerProps) => (
-  <div className="mx-auto flex max-w-6xl items-center gap-6">
-    <div className="relative flex flex-1 items-center gap-3">
-      {canImpersonate ? (
-        <NavigationButton
-          href={Routes.admin_impersonate_url({
-            user_identifier: creatorProfile.external_id,
-          })}
-          className="absolute left-3"
-          color="filled"
-        >
-          Impersonate
-        </NavigationButton>
-      ) : null}
-      <img className="user-avatar" src={creatorProfile.avatar_url} alt="Profile Picture" />
-      <a href={Routes.root_path()} className="no-underline">
-        {creatorProfile.name}
-      </a>
-    </div>
-    {!hideFollowForm ? (
-      <div className="flex items-center gap-3">
-        <FollowForm creatorProfile={creatorProfile} />
-      </div>
-    ) : null}
-    {showExtras ? (
-      <div className="ml-auto flex items-center gap-3">
-        {creatorProfile.twitter_handle ? (
-          <NavigationButton outline href={`https://twitter.com/${creatorProfile.twitter_handle}`} target="_blank">
-            <Icon name="twitter" />
-          </NavigationButton>
-        ) : null}
-        <CartNavigationButton />
-      </div>
-    ) : null}
-  </div>
-);
-
-const MobileHeaderInner = ({ creatorProfile, hideFollowForm, canImpersonate, showExtras }: HeaderInnerProps) => (
-  <div className="mx-auto flex max-w-6xl flex-wrap">
-    <div className="relative flex grow items-center gap-3 border-b border-border px-4 py-8">
-      {canImpersonate ? (
-        <NavigationButton
-          href={Routes.admin_impersonate_url({
-            user_identifier: creatorProfile.external_id,
-          })}
-          className="absolute left-3"
-          color="filled"
-        >
-          Impersonate
-        </NavigationButton>
-      ) : null}
-      <img className="user-avatar" src={creatorProfile.avatar_url} alt="Profile Picture" />
-      <a href={Routes.root_path()} className="no-underline">
-        {creatorProfile.name}
-      </a>
-      {showExtras ? (
-        <div className="ml-auto flex items-center gap-3">
-          {creatorProfile.twitter_handle ? (
-            <NavigationButton outline href={`https://twitter.com/${creatorProfile.twitter_handle}`} target="_blank">
-              <Icon name="twitter" />
-            </NavigationButton>
-          ) : null}
-          <CartNavigationButton />
-        </div>
-      ) : null}
-    </div>
-    {!hideFollowForm ? (
-      <div className="flex basis-full items-center gap-3 border-b border-border px-4 py-8">
-        <FollowForm creatorProfile={creatorProfile} />
-      </div>
-    ) : null}
-  </div>
-);
