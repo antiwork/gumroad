@@ -49,6 +49,12 @@ class DiscoverController < ApplicationController
 
     prepare_discover_page
 
+    blackfriday_cta_path = if params[:taxonomy].present?
+      discover_taxonomy_path(params[:taxonomy], offer_code: SearchProducts::BLACK_FRIDAY_CODE)
+    else
+      blackfriday_path
+    end
+
     @react_discover_props = {
       search_results: @search_results,
       currency_code: logged_in_user&.currency_type || "usd",
@@ -58,7 +64,7 @@ class DiscoverController < ApplicationController
       search_offset: params[:from] || 0,
       show_black_friday_hero: black_friday_feature_active?,
       is_black_friday_page: params[:offer_code] == SearchProducts::BLACK_FRIDAY_CODE,
-      black_friday_button_html: render_to_string(partial: "home/shared/button", locals: { text: "Get Black Friday deals", url: blackfriday_path, variant: "pink", size: "default" }, layout: false),
+      black_friday_offer_code: SearchProducts::BLACK_FRIDAY_CODE,
       black_friday_stats: black_friday_feature_active? ? BlackFridayStatsService.fetch_stats : nil,
     }
   end
