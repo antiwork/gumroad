@@ -142,6 +142,13 @@ describe AssetPreview, :vcr do
     let(:asset_preview) { create(:asset_preview) }
 
     it "works as expected with a public URL" do
+      # Stub SsrfFilter to allow localhost in tests
+      allow(SsrfFilter).to receive(:get) do |url|
+        URI.open(url) do |remote_file|
+          double(body: remote_file.read, content_type: remote_file.content_type)
+        end
+      end
+
       expect do
         asset_preview.url = "#{AWS_S3_ENDPOINT}/#{S3_BUCKET}/specs/test.png"
         asset_preview.analyze_file
@@ -153,6 +160,13 @@ describe AssetPreview, :vcr do
     end
 
     it "works as expected when a URL with square brackets is encoded and passed as an argument" do
+      # Stub SsrfFilter to allow localhost in tests
+      allow(SsrfFilter).to receive(:get) do |url|
+        URI.open(url) do |remote_file|
+          double(body: remote_file.read, content_type: remote_file.content_type)
+        end
+      end
+
       expect do
         asset_preview.url = "#{AWS_S3_ENDPOINT}/#{S3_BUCKET}/specs/test-small+with+%5Bsquare+brackets%5D.jpg"
         asset_preview.analyze_file
@@ -167,6 +181,27 @@ describe AssetPreview, :vcr do
       expect do
         asset_preview.url = "/etc/sudoers"
       end.to raise_error(URI::InvalidURIError, /not a web url/)
+    end
+
+    it "blocks SSRF attempts to localhost" do
+      expect do
+        asset_preview.url = "http://127.0.0.1:6379/"
+        asset_preview.save!
+      end.to raise_error(SsrfFilter::PrivateIPAddress)
+    end
+
+    it "blocks SSRF attempts to cloud metadata endpoint" do
+      expect do
+        asset_preview.url = "http://169.254.169.254/latest/meta-data/"
+        asset_preview.save!
+      end.to raise_error(SsrfFilter::PrivateIPAddress)
+    end
+
+    it "blocks SSRF attempts to private IP ranges" do
+      expect do
+        asset_preview.url = "http://192.168.1.1/"
+        asset_preview.save!
+      end.to raise_error(SsrfFilter::PrivateIPAddress)
     end
   end
 
