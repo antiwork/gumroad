@@ -4,9 +4,10 @@ import { createCast, is } from "ts-safe-cast";
 
 import { getRecommendedProducts } from "$app/data/discover";
 import { SearchResults, SearchRequest } from "$app/data/search";
+import { useScrollToElement } from "$app/hooks/useScrollToElement";
 import { CardProduct } from "$app/parsers/product";
 import { last } from "$app/utils/array";
-import { CurrencyCode } from "$app/utils/currency";
+import { CurrencyCode, formatPriceCentsWithCurrencySymbol } from "$app/utils/currency";
 import { discoverTitleGenerator, Taxonomy } from "$app/utils/discover";
 import { asyncVoid } from "$app/utils/promise";
 import { assertResponseError } from "$app/utils/request";
@@ -29,6 +30,14 @@ type Props = {
   taxonomies_for_nav: Taxonomy[];
   recommended_products: CardProduct[];
   curated_product_ids: string[];
+  show_black_friday_hero: boolean;
+  is_black_friday_page: boolean;
+  black_friday_button_html: string;
+  black_friday_stats: {
+    active_deals_count: number;
+    revenue_cents: number;
+    average_discount_percentage: number;
+  } | null;
 };
 
 const sortTitles = {
@@ -84,6 +93,50 @@ const ProductsCarousel = ({ products, title }: { products: CardProduct[]; title:
   );
 };
 
+const BlackFridayBanner = ({
+  stats,
+  currencyCode,
+}: {
+  stats: { active_deals_count: number; revenue_cents: number; average_discount_percentage: number };
+  currencyCode: CurrencyCode;
+}) => (
+  <div className="flex h-full shrink-0 items-center gap-x-4 [&>*]:flex-shrink-0">
+    <span className="mx-2 inline-block text-lg">✦</span>
+    <span className="flex items-center text-xl font-medium text-black">BLACK FRIDAY IS LIVE</span>
+    {stats.active_deals_count > 0 && (
+      <>
+        <span className="mx-2 inline-block text-lg">✦</span>
+        <span className="flex items-center text-xl font-medium text-black">
+          <span className="mr-1.5 font-bold">{stats.active_deals_count.toLocaleString()}</span>ACTIVE DEALS
+        </span>
+      </>
+    )}
+    <span className="mx-2 inline-block text-lg">✦</span>
+    <span className="flex items-center text-xl font-medium text-black">CREATOR-MADE PRODUCTS</span>
+    {stats.revenue_cents > 0 && (
+      <>
+        <span className="mx-2 inline-block text-lg">✦</span>
+        <span className="flex items-center text-xl font-medium text-black">
+          <span className="mr-1.5 font-bold">
+            {formatPriceCentsWithCurrencySymbol(currencyCode, stats.revenue_cents, { symbolFormat: "short" })}
+          </span>
+          IN SALES SO FAR
+        </span>
+      </>
+    )}
+    <span className="mx-2 inline-block text-lg">✦</span>
+    <span className="flex items-center text-xl font-medium text-black">BIG SAVINGS</span>
+    {stats.average_discount_percentage > 0 && (
+      <>
+        <span className="mx-2 inline-block text-lg">✦</span>
+        <span className="flex items-center text-xl font-medium text-black">
+          <span className="mr-1.5 font-bold">{stats.average_discount_percentage}%</span>AVERAGE DISCOUNT
+        </span>
+      </>
+    )}
+  </div>
+);
+
 // Featured products and search results overlap when there are no filters, so we skip over the featured products in the search request
 // See DiscoverController::RECOMMENDED_PRODUCTS_COUNT
 const recommendedProductsCount = 8;
@@ -94,6 +147,7 @@ const addInitialOffset = (params: SearchRequest) =>
 
 const Discover = (props: Props) => {
   const location = useOriginalLocation();
+  const resultsRef = useScrollToElement(props.is_black_friday_page && props.show_black_friday_hero);
 
   const defaultSortOrder = props.curated_product_ids.length > 0 ? "curated" : undefined;
   const parseUrlParams = (href: string) => {
@@ -205,6 +259,54 @@ const Discover = (props: Props) => {
       query={state.params.query}
       setQuery={(query) => dispatch({ type: "set-params", params: { query, taxonomy: taxonomyPath } })}
     >
+      {props.show_black_friday_hero ? (
+        <header className="relative flex flex-col items-center justify-center">
+          <div className="relative flex min-h-[72vh] w-full flex-col items-center justify-center bg-black">
+            <img
+              src="/assets/illustrations/sale.svg"
+              alt="Sale"
+              className="absolute top-1/2 left-40 hidden w-32 -translate-y-1/2 rotate-[-24deg] object-contain md:left-12 md:block md:w-40 lg:left-36 lg:w-48 xl:left-60 xl:w-60"
+              draggable={false}
+            />
+            <div className="relative">
+              <img
+                src="/assets/illustrations/black_friday.svg"
+                alt="Black Friday"
+                className="max-w-96 object-contain"
+                draggable={false}
+              />
+              <img
+                src="/assets/illustrations/sale.svg"
+                alt="Sale"
+                className="absolute right-0 bottom-0 w-27.5 rotate-[16deg] object-contain md:hidden"
+                draggable={false}
+              />
+            </div>
+            <img
+              src="/assets/illustrations/sale.svg"
+              alt="Sale"
+              className="absolute top-1/2 right-40 hidden w-32 -translate-y-1/2 rotate-[24deg] object-contain md:right-12 md:block md:w-40 lg:right-36 lg:w-48 xl:right-60 xl:w-60"
+              draggable={false}
+            />
+            <div className="font-regular mx-12 text-center text-xl text-white">
+              Snag creator-made deals <br className="block sm:hidden" /> before they're gone.
+            </div>
+            {!props.is_black_friday_page && (
+              <div className="mt-8 text-base" dangerouslySetInnerHTML={{ __html: props.black_friday_button_html }} />
+            )}
+          </div>
+          <div className="h-14 w-full overflow-hidden border-b border-black bg-yellow-400">
+            <div className="flex h-14 min-w-fit items-center gap-x-4 whitespace-nowrap hover:[animation-play-state:paused] motion-safe:animate-[marquee-scroll_42s_linear_infinite] motion-reduce:animate-none">
+              {props.black_friday_stats ? (
+                <>
+                  <BlackFridayBanner stats={props.black_friday_stats} currencyCode={props.currency_code} />
+                  <BlackFridayBanner stats={props.black_friday_stats} currencyCode={props.currency_code} />
+                </>
+              ) : null}
+            </div>
+          </div>
+        </header>
+      ) : null}
       <div className="grid gap-16! px-4 py-16 lg:ps-16 lg:pe-16">
         {showRecommendedSections ? (
           <ProductsCarousel
@@ -212,7 +314,7 @@ const Discover = (props: Props) => {
             title={isCuratedProducts ? "Recommended" : "Featured products"}
           />
         ) : null}
-        <section className="flex flex-col gap-4">
+        <section ref={resultsRef} className="flex flex-col gap-4">
           <div style={{ display: "flex", justifyContent: "space-between", gap: "var(--spacer-2)", flexWrap: "wrap" }}>
             <h2>
               {state.params.query || hasOfferCode
