@@ -146,6 +146,35 @@ describe SubscriptionsController do
         end
       end
 
+      context "when subscription is a gift" do
+        let(:gifter) { create(:user) }
+        let(:giftee) { create(:user) }
+        let(:product) { create(:membership_product, user: seller) }
+        let(:gifter_purchase) { create(:purchase, :gift_sender, link: product, purchaser: gifter, is_original_subscription_purchase: true) }
+        let(:giftee_purchase) { create(:purchase, :gift_receiver, link: product, purchaser: giftee) }
+        let!(:gift) { create(:gift, gifter_purchase:, giftee_purchase:, link: product) }
+        let!(:gifted_subscription) { create(:subscription, link: product, user: giftee) }
+
+        before do
+          gifter_purchase.update!(subscription: gifted_subscription, gift_given: gift)
+          giftee_purchase.update!(subscription: gifted_subscription, gift_received: gift)
+        end
+
+        it "allows gifter to access manage page" do
+          sign_in gifter
+          get :manage, params: { id: gifted_subscription.external_id }
+
+          expect(response).to be_successful
+        end
+
+        it "allows giftee to access manage page" do
+          sign_in giftee
+          get :manage, params: { id: gifted_subscription.external_id }
+
+          expect(response).to be_successful
+        end
+      end
+
       context "when the token param is same as subscription's token" do
         it "renders the manage page" do
           @subscription.update!(token: "valid_token", token_expires_at: 1.day.from_now)
