@@ -1,6 +1,8 @@
 import orderBy from "lodash/orderBy";
 import * as React from "react";
 
+import { TableHead } from "$app/components/ui/Table";
+
 type Direction = "asc" | "desc";
 export type Sort<Key> = { key: Key; direction: Direction };
 
@@ -35,7 +37,7 @@ export const useClientSortingTableDriver = <Item>(
 
 export const useSortingTableDriver =
   <Item>(sort: Sort<Item> | null, setSort: (sort: Sort<Item>) => void) =>
-  (key: Item): React.ComponentPropsWithoutRef<"th"> => ({
-    "aria-sort": sort?.key === key ? (sort.direction === "asc" ? "ascending" : "descending") : "none",
+  (key: Item): React.ComponentProps<typeof TableHead> => ({
+    sortDirection: sort?.key === key ? (sort.direction === "asc" ? "ascending" : "descending") : "none",
     onClick: () => setSort({ key, direction: sort?.key === key ? (sort.direction === "asc" ? "desc" : "asc") : "asc" }),
   });

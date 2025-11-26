@@ -1,13 +1,24 @@
 import * as React from "react";
 
 import { getPagedMemberships, MembershipsParams, Membership } from "$app/data/collabs";
+import { classNames } from "$app/utils/classNames";
 import { formatPriceCentsWithCurrencySymbol } from "$app/utils/currency";
 import { asyncVoid } from "$app/utils/promise";
 import { AbortError, assertResponseError } from "$app/utils/request";
 
-import { Icon } from "$app/components/Icons";
 import { Pagination, PaginationProps } from "$app/components/Pagination";
+import { ProductIconCell } from "$app/components/ProductsPage/ProductIconCell";
 import { showAlert } from "$app/components/server-components/Alert";
+import {
+  Table,
+  TableBody,
+  TableCaption,
+  TableCell,
+  TableFooter,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "$app/components/ui/Table";
 import { useUserAgentInfo } from "$app/components/UserAgent";
 import { useClientSortingTableDriver } from "$app/components/useSortingTableDriver";
 
@@ -53,66 +64,61 @@ export const CollabsMembershipsTable = (props: { entries: Membership[]; paginati
 
   return (
     <section className="flex flex-col gap-4">
-      <table aria-busy={isLoading}>
-        <caption>Memberships</caption>
-        <thead>
-          <tr>
-            <th />
-            <th {...thProps("name")} title="Sort by Name">
+      <Table aria-live="polite" className={classNames(isLoading && "pointer-events-none opacity-50")}>
+        <TableCaption>Memberships</TableCaption>
+        <TableHeader>
+          <TableRow>
+            <TableHead />
+            <TableHead {...thProps("name")} title="Sort by Name">
               Name
-            </th>
+            </TableHead>
 
-            <th {...thProps("display_price_cents")} title="Sort by Price">
+            <TableHead {...thProps("display_price_cents")} title="Sort by Price">
               Price
-            </th>
-            <th {...thProps("cut")} title="Sort by Cut">
+            </TableHead>
+            <TableHead {...thProps("cut")} title="Sort by Cut">
               Cut
-            </th>
-            <th {...thProps("successful_sales_count")} title="Sort by Members">
+            </TableHead>
+            <TableHead {...thProps("successful_sales_count")} title="Sort by Members">
               Members
-            </th>
-            <th {...thProps("revenue")} title="Sort by Revenue">
+            </TableHead>
+            <TableHead {...thProps("revenue")} title="Sort by Revenue">
               Revenue
-            </th>
-          </tr>
-        </thead>
+            </TableHead>
+          </TableRow>
+        </TableHeader>
 
-        <tbody>
+        <TableBody>
           {memberships.map((membership) => (
-            <tr key={membership.id}>
-              <td className="icon-cell">
-                {membership.thumbnail ? (
-                  <a href={membership.can_edit ? membership.edit_url : membership.url}>
-                    <img alt={membership.name} src={membership.thumbnail.url} />
-                  </a>
-                ) : (
-                  <Icon name="card-image-fill" />
-                )}
-              </td>
+            <TableRow key={membership.id}>
+              <ProductIconCell
+                href={membership.can_edit ? membership.edit_url : membership.url}
+                thumbnail={membership.thumbnail?.url ?? null}
+              />
 
-              <td>
-                {/* Safari currently doesn't support position: relative on <tr>, so we can't use stretched-link here */}
+              <TableCell hideLabel>
+                {/* Safari currently doesn't support position: relative on <tr>, so we can't make the whole row a link here */}
                 <a href={membership.can_edit ? membership.edit_url : membership.url} style={{ textDecoration: "none" }}>
-                  <h4>{membership.name}</h4>
+                  <h4 className="font-bold">{membership.name}</h4>
                 </a>
                 <a href={membership.url} title={membership.url} target="_blank" rel="noreferrer">
                   <small>{membership.url_without_protocol}</small>
                 </a>
-              </td>
+              </TableCell>
 
-              <td data-label="Price">{membership.price_formatted}</td>
+              <TableCell>{membership.price_formatted}</TableCell>
 
-              <td data-label="Cut">{membership.cut}%</td>
+              <TableCell>{membership.cut}%</TableCell>
 
-              <td data-label="Members">
+              <TableCell>
                 {membership.successful_sales_count.toLocaleString(locale)}
 
                 {membership.remaining_for_sale_count ? (
                   <small>{membership.remaining_for_sale_count.toLocaleString(locale)} remaining</small>
                 ) : null}
-              </td>
+              </TableCell>
 
-              <td data-label="Revenue">
+              <TableCell>
                 {formatPriceCentsWithCurrencySymbol("usd", membership.revenue, { symbolFormat: "short" })}
 
                 <small>
@@ -132,31 +138,31 @@ export const CollabsMembershipsTable = (props: { entries: Membership[]; paginati
                         },
                       )} /mo`}
                 </small>
-              </td>
-            </tr>
+              </TableCell>
+            </TableRow>
           ))}
-        </tbody>
+        </TableBody>
 
-        <tfoot>
-          <tr>
-            <td colSpan={4}>Totals</td>
+        <TableFooter>
+          <TableRow>
+            <TableCell colSpan={4}>Totals</TableCell>
 
-            <td>
+            <TableCell>
               {memberships
                 .reduce((sum, membership) => sum + membership.successful_sales_count, 0)
                 .toLocaleString(locale)}
-            </td>
+            </TableCell>
 
-            <td>
+            <TableCell>
               {formatPriceCentsWithCurrencySymbol(
                 "usd",
                 memberships.reduce((sum, membership) => sum + membership.revenue, 0),
                 { symbolFormat: "short" },
               )}
-            </td>
-          </tr>
-        </tfoot>
-      </table>
+            </TableCell>
+          </TableRow>
+        </TableFooter>
+      </Table>
 
       {pagination.pages > 1 ? (
         <Pagination onChangePage={(page) => loadMemberships({ query: state.query, page })} pagination={pagination} />

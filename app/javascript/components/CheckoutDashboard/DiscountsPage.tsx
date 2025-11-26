@@ -31,10 +31,12 @@ import { Popover } from "$app/components/Popover";
 import { PriceInput } from "$app/components/PriceInput";
 import { Select, Option } from "$app/components/Select";
 import { showAlert } from "$app/components/server-components/Alert";
+import { Skeleton } from "$app/components/Skeleton";
 import { TypeSafeOptionSelect } from "$app/components/TypeSafeOptionSelect";
 import { PageHeader } from "$app/components/ui/PageHeader";
 import Placeholder from "$app/components/ui/Placeholder";
 import { Sheet, SheetHeader } from "$app/components/ui/Sheet";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "$app/components/ui/Table";
 import { useDebouncedCallback } from "$app/components/useDebouncedCallback";
 import { useGlobalEventListener } from "$app/components/useGlobalEventListener";
 import { useOriginalLocation } from "$app/components/useOriginalLocation";
@@ -325,17 +327,18 @@ const DiscountsPage = ({ offer_codes, pages, products, pagination: initialPagina
       <section className="p-4 md:p-8">
         {offerCodes.length > 0 ? (
           <section className="flex flex-col gap-4">
-            <table aria-live="polite" aria-busy={isLoading}>
-              <thead>
-                <tr>
-                  <th {...thProps("name")}>Discount</th>
-                  <th {...thProps("revenue")}>Revenue</th>
-                  <th {...thProps("uses")}>Uses</th>
-                  <th {...thProps("term")}>Term</th>
-                  <th>Status</th>
-                </tr>
-              </thead>
-              <tbody>
+            <Table aria-live="polite" className={cx(isLoading && "pointer-events-none opacity-50")}>
+              <TableHeader>
+                <TableRow>
+                  <TableHead {...thProps("name")}>Discount</TableHead>
+                  <TableHead {...thProps("revenue")}>Revenue</TableHead>
+                  <TableHead {...thProps("uses")}>Uses</TableHead>
+                  <TableHead {...thProps("term")}>Term</TableHead>
+                  <TableHead>Status</TableHead>
+                  <TableHead />
+                </TableRow>
+              </TableHeader>
+              <TableBody>
                 {offerCodes.map((offerCode) => {
                   const validAt = offerCode.valid_at ? new Date(offerCode.valid_at) : null;
                   const expiresAt = offerCode.expires_at ? new Date(offerCode.expires_at) : null;
@@ -343,12 +346,12 @@ const DiscountsPage = ({ offer_codes, pages, products, pagination: initialPagina
                   const statistics = offerCodeStatistics[offerCode.id];
 
                   return (
-                    <tr
+                    <TableRow
                       key={offerCode.id}
-                      aria-selected={offerCode.id === selectedOfferCodeId}
+                      selected={offerCode.id === selectedOfferCodeId}
                       onClick={() => setSelectedOfferCodeId(offerCode.id)}
                     >
-                      <td>
+                      <TableCell hideLabel>
                         <div className="grid gap-2">
                           <div>
                             <div className="pill small mr-2" aria-label="Offer code">
@@ -360,22 +363,21 @@ const DiscountsPage = ({ offer_codes, pages, products, pagination: initialPagina
                             {formatAmount(offerCode)} off of {formatProducts(offerCode)}
                           </small>
                         </div>
-                      </td>
-                      {statistics != null ? (
-                        <>
-                          <td className="whitespace-nowrap">{formatRevenue(statistics.revenue_cents)}</td>
-                          <td className="whitespace-nowrap">{formatUses(statistics.uses.total, offerCode.limit)}</td>
-                        </>
-                      ) : (
-                        <>
-                          <td aria-busy />
-                          <td aria-busy />
-                        </>
-                      )}
-                      <td>{`${validAt ? `${formatDate(validAt)} - ` : ""}${
+                      </TableCell>
+                      <TableCell className="whitespace-nowrap" aria-busy={!statistics}>
+                        {statistics ? formatRevenue(statistics.revenue_cents) : <Skeleton className="w-16" />}
+                      </TableCell>
+                      <TableCell className="whitespace-nowrap" aria-busy={!statistics}>
+                        {statistics ? (
+                          formatUses(statistics.uses.total, offerCode.limit)
+                        ) : (
+                          <Skeleton className="w-16" />
+                        )}
+                      </TableCell>
+                      <TableCell>{`${validAt ? `${formatDate(validAt)} - ` : ""}${
                         expiresAt ? formatDate(expiresAt) : "No end date"
-                      }`}</td>
-                      <td className="whitespace-nowrap">
+                      }`}</TableCell>
+                      <TableCell className="whitespace-nowrap">
                         <div className="grid grid-cols-[min-content_1fr] gap-2">
                           {validAt && currentDate < validAt ? (
                             <>Scheduled</>
@@ -385,9 +387,9 @@ const DiscountsPage = ({ offer_codes, pages, products, pagination: initialPagina
                             <>Live</>
                           )}
                         </div>
-                      </td>
-                      <td>
-                        <div className="actions">
+                      </TableCell>
+                      <TableCell>
+                        <div className="flex flex-wrap gap-3 lg:justify-end">
                           <Button
                             aria-label="Edit"
                             disabled={!offerCode.can_update || isLoading}
@@ -444,12 +446,12 @@ const DiscountsPage = ({ offer_codes, pages, products, pagination: initialPagina
                             </div>
                           </Popover>
                         </div>
-                      </td>
-                    </tr>
+                      </TableCell>
+                    </TableRow>
                   );
                 })}
-              </tbody>
-            </table>
+              </TableBody>
+            </Table>
             {pagination.pages > 1 ? (
               <Pagination
                 onChangePage={(newPage) => loadDiscounts({ page: newPage, query: searchQuery, sort })}

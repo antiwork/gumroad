@@ -20,6 +20,7 @@ import { AffiliatesNavigation, Layout } from "$app/components/server-components/
 import { showAlert } from "$app/components/server-components/Alert";
 import { ToggleSettingRow } from "$app/components/SettingRow";
 import Placeholder from "$app/components/ui/Placeholder";
+import { Table, TableBody, TableCaption, TableCell, TableHead, TableHeader, TableRow } from "$app/components/ui/Table";
 import { WithTooltip } from "$app/components/WithTooltip";
 
 import placeholderImage from "$assets/images/placeholders/affiliate-signup-form.png";
@@ -162,17 +163,17 @@ export const AffiliateSignupForm = () => {
               <h2>Affiliate products</h2>
               <p>Enable specific products you want your affiliates to earn a commission with.</p>
             </header>
-            <table>
-              <caption>Enable specific products</caption>
-              <thead>
-                <tr>
-                  <th>Enable</th>
-                  <th>Product</th>
-                  <th>Commission</th>
-                  <th>Destination URL (optional)</th>
-                </tr>
-              </thead>
-              <tbody>
+            <Table>
+              <TableCaption>Enable specific products</TableCaption>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Enable</TableHead>
+                  <TableHead>Product</TableHead>
+                  <TableHead>Commission</TableHead>
+                  <TableHead>Destination URL (optional)</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
                 {products.map((product) => (
                   <ProductRow
                     key={product.id}
@@ -181,8 +182,8 @@ export const AffiliateSignupForm = () => {
                     onChange={(value) => handleProductChange(product.id, value)}
                   />
                 ))}
-              </tbody>
-            </table>
+              </TableBody>
+            </Table>
           </section>
           <section className="p-4! md:p-8!">
             <header>
@@ -220,8 +221,8 @@ export const ProductRow = ({ product, disabled, onChange }: ProductRowProps) => 
   const uid = React.useId();
 
   return (
-    <tr>
-      <td data-label="Enable">
+    <TableRow>
+      <TableCell>
         <input
           id={uid}
           type="checkbox"
@@ -231,11 +232,11 @@ export const ProductRow = ({ product, disabled, onChange }: ProductRowProps) => 
           aria-label="Enable product"
           disabled={disabled}
         />
-      </td>
-      <td data-label="Product">
+      </TableCell>
+      <TableCell>
         <label htmlFor={uid}>{product.name}</label>
-      </td>
-      <td data-label="Commission">
+      </TableCell>
+      <TableCell>
         <fieldset className={cx({ danger: invalidAttrs.has("commission") })}>
           <NumberInput onChange={(value) => onChange({ fee_percent: value ?? 0 })} value={product.fee_percent}>
             {(inputProps) => (
@@ -252,8 +253,8 @@ export const ProductRow = ({ product, disabled, onChange }: ProductRowProps) => 
             )}
           </NumberInput>
         </fieldset>
-      </td>
-      <td data-label="Destination URL (optional)">
+      </TableCell>
+      <TableCell>
         <fieldset className={cx({ danger: invalidAttrs.has("destination_url") })}>
           <input
             type="text"
@@ -264,7 +265,7 @@ export const ProductRow = ({ product, disabled, onChange }: ProductRowProps) => 
             onChange={(event) => onChange({ destination_url: event.target.value.trim() })}
           />
         </fieldset>
-      </td>
-    </tr>
+      </TableCell>
+    </TableRow>
   );
 };
