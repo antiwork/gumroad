@@ -95,7 +95,7 @@ export default function Purchases() {
                       {purchase.formatted_display_price}
                       {purchase.gumroad_responsible_for_tax ? ` + ${purchase.formatted_gumroad_tax_amount} VAT` : null}
                     </Link>{" "}
-                    <Link href={Routes.admin_link_url(purchase.product.id)}>{purchase.product.name}</Link>{" "}
+                    <Link href={Routes.admin_product_url(purchase.product.id)}>{purchase.product.name}</Link>{" "}
                     {purchase.variants_list}{" "}
                     <Link href={purchase.product.long_url} target="_blank" rel="noopener noreferrer nofollow">
                       <Icon name="arrow-up-right-square" />
