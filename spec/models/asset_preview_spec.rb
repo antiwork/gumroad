@@ -169,21 +169,21 @@ describe AssetPreview, :vcr do
       end.to raise_error(URI::InvalidURIError, /not a web url/)
     end
 
-    it "blocks SSRF attempts to localhost", skip_ssrf_stub: true do
+    it "blocks SSRF attempts to localhost", :skip_ssrf_stub do
       expect do
         asset_preview.url = "http://127.0.0.1:6379/"
         asset_preview.save!
       end.to raise_error(SsrfFilter::PrivateIPAddress)
     end
 
-    it "blocks SSRF attempts to cloud metadata endpoint", skip_ssrf_stub: true do
+    it "blocks SSRF attempts to cloud metadata endpoint", :skip_ssrf_stub do
       expect do
         asset_preview.url = "http://169.254.169.254/latest/meta-data/"
         asset_preview.save!
       end.to raise_error(SsrfFilter::PrivateIPAddress)
     end
 
-    it "blocks SSRF attempts to private IP ranges", skip_ssrf_stub: true do
+    it "blocks SSRF attempts to private IP ranges", :skip_ssrf_stub do
       expect do
         asset_preview.url = "http://192.168.1.1/"
         asset_preview.save!
