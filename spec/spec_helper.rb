@@ -152,10 +152,7 @@ RSpec.configure do |config|
   config.before(:each) do |example|
     unless example.metadata[:skip_ssrf_stub]
       allow(SsrfFilter).to receive(:get) do |url, **_args|
-        uri = URI(url)
-        http_response = Net::HTTP.get_response(uri)
-        content_type = http_response.content_type || "application/octet-stream"
-        OpenStruct.new(body: http_response.body, content_type:)
+        Net::HTTP.get_response(URI(url))
       end
     end
   end
