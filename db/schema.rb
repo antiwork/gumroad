@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[7.1].define(version: 2025_11_25_000002) do
+ActiveRecord::Schema[7.1].define(version: 2025_11_24_133549) do
   create_table "active_storage_attachments", charset: "utf8mb4", collation: "utf8mb4_unicode_ci", force: :cascade do |t|
     t.string "name", limit: 191, null: false
     t.string "record_type", limit: 191, null: false
@@ -1234,7 +1234,6 @@ ActiveRecord::Schema[7.1].define(version: 2025_11_25_000002) do
     t.integer "minimum_amount_cents"
     t.bigint "flags", default: 0, null: false
     t.index ["code", "link_id"], name: "index_offer_codes_on_code_and_link_id"
-    t.index ["created_at"], name: "index_offer_codes_on_created_at"
     t.index ["link_id"], name: "index_offer_codes_on_link_id"
     t.index ["name", "link_id"], name: "index_offer_codes_on_name_and_link_id", length: { name: 191 }
     t.index ["universal"], name: "index_offer_codes_on_universal"
