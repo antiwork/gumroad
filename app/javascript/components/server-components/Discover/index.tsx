@@ -272,12 +272,7 @@ const Discover = (props: Props) => {
               draggable={false}
             />
             <div className="relative">
-              <img
-                src={blackFridayImage}
-                alt="Black Friday"
-                className="max-w-96 object-contain"
-                draggable={false}
-              />
+              <img src={blackFridayImage} alt="Black Friday" className="max-w-96 object-contain" draggable={false} />
               <img
                 src={saleImage}
                 alt="Sale"
