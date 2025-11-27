@@ -4,7 +4,7 @@ import React from "react";
 import { formatPriceCentsWithCurrencySymbol } from "$app/utils/currency";
 
 import AdminActionButton from "$app/components/Admin/ActionButton";
-import Comments from "$app/components/Admin/Commentable";
+import AdminCommentableComments from "$app/components/Admin/Commentable";
 import DateTimeWithRelativeTooltip from "$app/components/Admin/DateTimeWithRelativeTooltip";
 import { Form } from "$app/components/Admin/Form";
 import { NoIcon, BooleanIcon } from "$app/components/Admin/Icons";
@@ -127,7 +127,7 @@ const Header = ({ purchase }: { purchase: Purchase }) => (
     <h2>
       <Link href={Routes.admin_purchase_path(purchase.id)}>{purchase.formatted_display_price}</Link>
       {purchase.gumroad_responsible_for_tax ? ` + ${purchase.formatted_gumroad_tax_amount} VAT` : null} for{" "}
-      <Link href={Routes.admin_link_path(purchase.product.id)} title={purchase.product.id.toString()}>
+      <Link href={Routes.admin_product_path(purchase.product.id)} title={purchase.product.id.toString()}>
         {purchase.product.name}
       </Link>{" "}
       {purchase.variants_list}{" "}
@@ -678,7 +678,7 @@ const AdminPurchase = ({ purchase }: { purchase: Purchase }) => (
     ) : null}
     <hr />
     <ActionButtons purchase={purchase} />
-    <Comments
+    <AdminCommentableComments
       count={purchase.comments_count}
       endpoint={Routes.admin_purchase_comments_path(purchase.id)}
       commentableType="purchase"

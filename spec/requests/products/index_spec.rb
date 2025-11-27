@@ -28,7 +28,7 @@ describe "Products Page Scenario", type: :system, js: true do
 
       visit(products_path)
       within find_product_row product do
-        find_and_click("[data-label='Sales'] a")
+        find(:table_cell, "Sales").find("a").click
       end
 
       expect(page).to have_section("Sales")

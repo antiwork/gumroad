@@ -16,6 +16,7 @@ import { ToggleSettingRow } from "$app/components/SettingRow";
 import { Layout } from "$app/components/Settings/Layout";
 import { TagInput } from "$app/components/TagInput";
 import { Toggle } from "$app/components/Toggle";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "$app/components/ui/Table";
 
 type ProductLevelSupportEmail = {
   email: string;
@@ -192,42 +193,42 @@ const MainPage = (props: Props) => {
             </div>
           </header>
           <fieldset>
-            <table>
-              <thead>
-                <tr>
-                  <th>Notifications</th>
-                  <th>Email</th>
-                  <th>Mobile</th>
-                </tr>
-              </thead>
-              <tbody>
-                <tr>
-                  <th scope="row">Purchases</th>
-                  <td data-label="Email">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Notifications</TableHead>
+                  <TableHead>Email</TableHead>
+                  <TableHead>Mobile</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                <TableRow>
+                  <TableHead scope="row">Purchases</TableHead>
+                  <TableCell>
                     <Toggle
                       value={userSettings.enable_payment_email}
                       onChange={(value) => updateUserSettings({ enable_payment_email: value })}
                       disabled={props.is_form_disabled}
                     />
-                  </td>
-                  <td data-label="Mobile">
+                  </TableCell>
+                  <TableCell>
                     <Toggle
                       value={userSettings.enable_payment_push_notification}
                       onChange={(value) => updateUserSettings({ enable_payment_push_notification: value })}
                       disabled={props.is_form_disabled}
                     />
-                  </td>
-                </tr>
-                <tr>
-                  <th scope="row">Recurring payments</th>
-                  <td data-label="Email">
+                  </TableCell>
+                </TableRow>
+                <TableRow>
+                  <TableHead scope="row">Recurring payments</TableHead>
+                  <TableCell>
                     <Toggle
                       value={userSettings.enable_recurring_subscription_charge_email}
                       onChange={(value) => updateUserSettings({ enable_recurring_subscription_charge_email: value })}
                       disabled={props.is_form_disabled}
                     />
-                  </td>
-                  <td data-label="Mobile">
+                  </TableCell>
+                  <TableCell>
                     <Toggle
                       value={userSettings.enable_recurring_subscription_charge_push_notification}
                       onChange={(value) =>
@@ -237,61 +238,61 @@ const MainPage = (props: Props) => {
                       }
                       disabled={props.is_form_disabled}
                     />
-                  </td>
-                </tr>
-                <tr>
-                  <th scope="row">Free downloads</th>
-                  <td data-label="Email">
+                  </TableCell>
+                </TableRow>
+                <TableRow>
+                  <TableHead scope="row">Free downloads</TableHead>
+                  <TableCell>
                     <Toggle
                       value={userSettings.enable_free_downloads_email}
                       onChange={(value) => updateUserSettings({ enable_free_downloads_email: value })}
                       disabled={props.is_form_disabled}
                     />
-                  </td>
-                  <td data-label="Mobile">
+                  </TableCell>
+                  <TableCell>
                     <Toggle
                       value={userSettings.enable_free_downloads_push_notification}
                       onChange={(value) => updateUserSettings({ enable_free_downloads_push_notification: value })}
                       disabled={props.is_form_disabled}
                     />
-                  </td>
-                </tr>
-                <tr>
-                  <th scope="row">Personalized product announcements</th>
-                  <td data-label="Email">
+                  </TableCell>
+                </TableRow>
+                <TableRow>
+                  <TableHead scope="row">Personalized product announcements</TableHead>
+                  <TableCell>
                     <Toggle
                       value={userSettings.announcement_notification_enabled}
                       onChange={(value) => updateUserSettings({ announcement_notification_enabled: value })}
                       disabled={props.is_form_disabled}
                     />
-                  </td>
-                  <td data-label="Mobile"></td>
-                </tr>
-                <tr>
-                  <th scope="row">Comments</th>
-                  <td data-label="Email">
+                  </TableCell>
+                  <TableCell></TableCell>
+                </TableRow>
+                <TableRow>
+                  <TableHead scope="row">Comments</TableHead>
+                  <TableCell>
                     <Toggle
                       value={!userSettings.disable_comments_email}
                       onChange={(value) => updateUserSettings({ disable_comments_email: !value })}
                       disabled={props.is_form_disabled}
                     />
-                  </td>
-                  <td data-label="Mobile"></td>
-                </tr>
-                <tr>
-                  <th scope="row">Reviews</th>
-                  <td data-label="Email">
+                  </TableCell>
+                  <TableCell></TableCell>
+                </TableRow>
+                <TableRow>
+                  <TableHead scope="row">Reviews</TableHead>
+                  <TableCell>
                     <Toggle
                       value={!userSettings.disable_reviews_email}
                       onChange={(value) => updateUserSettings({ disable_reviews_email: !value })}
                       disabled={props.is_form_disabled}
                       ariaLabel="Reviews"
                     />
-                  </td>
-                  <td data-label="Mobile"></td>
-                </tr>
-              </tbody>
-            </table>
+                  </TableCell>
+                  <TableCell></TableCell>
+                </TableRow>
+              </TableBody>
+            </Table>
           </fieldset>
         </section>
         <section className="p-4! md:p-8!">

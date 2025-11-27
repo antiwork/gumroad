@@ -29,6 +29,7 @@ import { Modal } from "$app/components/Modal";
 import { Option, Select } from "$app/components/Select";
 import { showAlert } from "$app/components/server-components/Alert";
 import { Layout as SettingsLayout } from "$app/components/Settings/Layout";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "$app/components/ui/Table";
 import { WithTooltip } from "$app/components/WithTooltip";
 
 const ROLE_TITLES: Record<Role, string> = {
@@ -292,17 +293,17 @@ const TeamMembersSection = ({
           </button>
         </div>
       ) : null}
-      <table>
-        <thead>
-          <tr>
-            <th>Member</th>
-            <th>Role</th>
-          </tr>
-        </thead>
-        <tbody>
+      <Table>
+        <TableHeader>
+          <TableRow>
+            <TableHead>Member</TableHead>
+            <TableHead>Role</TableHead>
+          </TableRow>
+        </TableHeader>
+        <TableBody>
           {memberInfos.map((memberInfo) => (
-            <tr key={`${memberInfo.type}-${memberInfo.id}`}>
-              <td data-label="Member">
+            <TableRow key={`${memberInfo.type}-${memberInfo.id}`}>
+              <TableCell>
                 <div style={{ display: "flex", alignItems: "center", gap: "var(--spacer-4)" }}>
                   <img
                     className="user-avatar"
@@ -329,8 +330,8 @@ const TeamMembersSection = ({
                     ) : null}
                   </div>
                 </div>
-              </td>
-              <td data-label="Role">
+              </TableCell>
+              <TableCell>
                 <div className="flex items-center gap-2">
                   <Select
                     instanceId={memberInfo.id}
@@ -352,11 +353,11 @@ const TeamMembersSection = ({
                     </Button>
                   ) : null}
                 </div>
-              </td>
-            </tr>
+              </TableCell>
+            </TableRow>
           ))}
-        </tbody>
-      </table>
+        </TableBody>
+      </Table>
       {confirming ? (
         <Modal
           open
