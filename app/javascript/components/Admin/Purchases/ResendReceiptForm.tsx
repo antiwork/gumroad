@@ -4,7 +4,7 @@ import { Form } from "$app/components/Admin/Form";
 import { showAlert } from "$app/components/server-components/Alert";
 
 type AdminResendReceiptFormProps = {
-  purchase_id: number;
+  purchase_id: string;
   email: string;
 };
 

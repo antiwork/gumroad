@@ -23,13 +23,13 @@ type UrlRedirect = {
 
 type Gift = {
   is_sender_purchase: boolean;
-  other_purchase_id: number;
+  other_purchase_id: string;
   other_email: string;
   note: string | null;
 };
 
 export type Purchase = PurchaseStatesInfo & {
-  id: number;
+  id: string;
   external_id: string;
   seller: {
     support_email: string | null;
@@ -50,7 +50,7 @@ export type Purchase = PurchaseStatesInfo & {
   formatted_affiliate_credit_amount: string | null;
   gumroad_responsible_for_tax: boolean;
   product: {
-    id: number;
+    id: string;
     name: string;
     long_url: string;
   };
@@ -66,7 +66,7 @@ export type Purchase = PurchaseStatesInfo & {
   external_id_numeric: number;
   quantity: number;
   refunds: {
-    user: { id: number; name: string | null } | null;
+    user: { id: string; name: string | null } | null;
     status: string;
     created_at: string;
   }[];
@@ -107,7 +107,8 @@ export type Purchase = PurchaseStatesInfo & {
   refund_policy:
     | (RefundPolicy & {
         fine_print: string | null;
-        max_refund_period_in_days: number | null;
+        max_refund_period_in_days: number;
+        last_chargebacked_purchase: string | null;
       })
     | null;
   can_contact: boolean;
@@ -465,7 +466,7 @@ const Info = ({ purchase }: { purchase: Purchase }) => (
   </div>
 );
 
-const GiftInfo = ({ purchaseId, gift }: { purchaseId: number; gift: Gift }) =>
+const GiftInfo = ({ purchaseId, gift }: { purchaseId: string; gift: Gift }) =>
   gift.is_sender_purchase ? (
     <>
       <details>
