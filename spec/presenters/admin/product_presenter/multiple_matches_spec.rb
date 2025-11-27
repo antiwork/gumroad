@@ -36,13 +36,13 @@ describe Admin::ProductPresenter::MultipleMatches do
     describe "user association" do
       it "returns user information" do
         expect(props[:user]).to eq(
-          id: user.id,
+          id: user.external_id,
           name: user.name
         )
       end
 
       it "returns the correct user id and name" do
-        expect(props[:user][:id]).to eq(user.id)
+        expect(props[:user][:id]).to eq(user.external_id)
         expect(props[:user][:name]).to eq("Test User")
       end
     end

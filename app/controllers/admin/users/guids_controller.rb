@@ -2,10 +2,6 @@
 
 class Admin::Users::GuidsController < Admin::Users::BaseController
   def index
-    if params[:user_id].to_i.to_s == params[:user_id] && user = User.find_by(id: params[:user_id])
-      return redirect_to admin_user_guids_path(user.external_id)
-    end
-
     user = User.find_by_external_id(user_param) || e404
     guids = Event.where(user_id: user.id).distinct.pluck(:browser_guid)
 
