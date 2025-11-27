@@ -354,9 +354,12 @@ const Discover = (props: Props) => {
               {props.black_friday_stats ? (
                 <>
                   {/* Duplicate enough times to ensure seamless infinite scroll */}
-                  {Array.from({ length: 5 }, (_, i) => (
-                    <BlackFridayBanner key={i} stats={props.black_friday_stats!} currencyCode={props.currency_code} />
-                  ))}
+                  {(() => {
+                    const stats = props.black_friday_stats;
+                    return Array.from({ length: 5 }, (_, i) => (
+                      <BlackFridayBanner key={i} stats={stats} currencyCode={props.currency_code} />
+                    ));
+                  })()}
                 </>
               ) : null}
             </div>
