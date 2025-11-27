@@ -15,7 +15,7 @@ describe Admin::ProductPresenter::Card do
     describe "fields" do
       it "returns the correct values" do
         expect(props.except(:cover_placeholder_url)).to eq(
-          id: product.id,
+          id: product.external_id,
           name: product.name,
           long_url: product.long_url,
           price_cents: product.price_cents,

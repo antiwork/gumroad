@@ -25,7 +25,7 @@ describe Admin::ProductPresenter::MultipleMatches do
 
     describe "fields" do
       it "returns the correct field values" do
-        expect(props[:id]).to eq(product.id)
+        expect(props[:id]).to eq(product.external_id)
         expect(props[:name]).to eq(product.name)
         expect(props[:created_at]).to eq(product.created_at)
         expect(props[:long_url]).to eq(product.long_url)

@@ -5,7 +5,7 @@ import { showAlert } from "$app/components/server-components/Alert";
 
 type AdminSuspendForTosFormProps = {
   user_id: number;
-  product_id: number;
+  product_id: string;
   success_message: string;
   confirm_message: string;
   reasons: Record<string, string>;

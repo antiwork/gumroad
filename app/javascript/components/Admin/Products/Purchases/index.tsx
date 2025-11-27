@@ -7,7 +7,7 @@ import AdminProductPurchasesContent from "./Content";
 import { type ProductPurchase } from "./Purchase";
 
 type AdminProductPurchasesProps = {
-  productId: number;
+  productId: string;
   isAffiliateUser?: boolean;
   userId: number | null;
 };

@@ -31,7 +31,7 @@ export type ProductUser = {
 };
 
 export type Product = {
-  id: number;
+  id: string;
   name: string;
   long_url: string;
   price_cents: number;

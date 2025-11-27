@@ -7,7 +7,7 @@ import AdminProductStatsSales, { type AdminProductStatsSalesProps } from "$app/c
 import AdminProductStatsViewCount from "$app/components/Admin/Products/Stats/ViewCount";
 import { useIsIntersecting } from "$app/components/useIsIntersecting";
 
-const AdminProductStats = ({ product_id }: { product_id: number }) => {
+const AdminProductStats = ({ product_id }: { product_id: string }) => {
   const {
     data: { views_count: viewsCount },
     isLoading: isViewsCountLoading,

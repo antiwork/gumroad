@@ -11,7 +11,7 @@ class Admin::ProductPresenter::Card
   def props
     link_policy = Admin::Products::StaffPicked::LinkPolicy.new(pundit_user, product)
     {
-      id: product.id,
+      id: product.external_id,
       name: product.name,
       long_url: product.long_url,
       price_cents: product.price_cents,

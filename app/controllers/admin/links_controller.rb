@@ -1,10 +1,15 @@
 # frozen_string_literal: true
 
 class Admin::LinksController < Admin::BaseController
-  before_action :fetch_product!, except: :show
+  before_action :fetch_product!, except: [:show, :legacy_purchases]
 
   def show
-    @product_matches = Link.where(id: params[:id]).or(Link.by_general_permalink(params["id"]))
+    if params[:id].to_i.to_s == params[:id] && product = Link.find_by(id: params[:id])
+      return redirect_to admin_product_path(product.external_id)
+    end
+
+    product_by_external_id = Link.find_by_external_id(params[:id])
+    @product_matches = product_by_external_id ? [product_by_external_id] : Link.by_general_permalink(params[:id])
 
     if @product_matches.many?
       @title = "Multiple products matched"
@@ -176,7 +181,7 @@ class Admin::LinksController < Admin::BaseController
 
   private
     def fetch_product!
-      @product = Link.find_by(id: params[:id])
+      @product = Link.find_by_external_id(params[:id])
       @product || e404
     end
 

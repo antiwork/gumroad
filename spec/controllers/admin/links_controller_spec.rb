@@ -73,8 +73,14 @@ describe Admin::LinksController, type: :controller, inertia: true do
   end
 
   describe "GET show" do
-    it "renders the product page if looked up via ID" do
+    it "redirects numeric ID to external_id" do
       get :show, params: { id: product.id }
+
+      expect(response).to redirect_to(admin_product_path(product.external_id))
+    end
+
+    it "renders the product page if looked up via external_id" do
+      get :show, params: { id: product.external_id }
 
       expect(response).to be_successful
       expect(inertia.component).to eq("Admin/Products/Show")
@@ -94,7 +100,7 @@ describe Admin::LinksController, type: :controller, inertia: true do
 
           expect(response).to be_successful
           expect(inertia.component).to eq("Admin/Products/MultipleMatches")
-          expect(inertia.props[:product_matches]).to contain_exactly(hash_including(id: product_1.id), hash_including(id: product_2.id))
+          expect(inertia.props[:product_matches]).to contain_exactly(hash_including(id: product_1.external_id), hash_including(id: product_2.external_id))
         end
       end
 
@@ -124,7 +130,7 @@ describe Admin::LinksController, type: :controller, inertia: true do
 
   describe "DELETE destroy" do
     it "deletes the product" do
-      delete :destroy, params: { id: product.id }
+      delete :destroy, params: { id: product.external_id }
 
       expect(response).to be_successful
       expect(product.reload.deleted_at).to be_present
@@ -141,7 +147,7 @@ describe Admin::LinksController, type: :controller, inertia: true do
     let(:product) { create(:product, deleted_at: 1.day.ago) }
 
     it "restores the product" do
-      post :restore, params: { id: product.id }
+      post :restore, params: { id: product.external_id }
 
       expect(response).to be_successful
       expect(product.reload.deleted_at).to be_nil
@@ -158,7 +164,7 @@ describe Admin::LinksController, type: :controller, inertia: true do
     let(:product) { create(:product, purchase_disabled_at: Time.current) }
 
     it "publishes the product" do
-      post :publish, params: { id: product.id }
+      post :publish, params: { id: product.external_id }
 
       expect(response).to be_successful
       expect(product.reload.purchase_disabled_at).to be_nil
@@ -175,7 +181,7 @@ describe Admin::LinksController, type: :controller, inertia: true do
     let(:product) { create(:product, purchase_disabled_at: nil) }
 
     it "unpublishes the product" do
-      delete :unpublish, params: { id: product.id }
+      delete :unpublish, params: { id: product.external_id }
 
       expect(response).to be_successful
       expect(product.reload.purchase_disabled_at).to be_present
@@ -190,12 +196,12 @@ describe Admin::LinksController, type: :controller, inertia: true do
 
   describe "POST is_adult" do
     it "marks the product as adult" do
-      post :is_adult, params: { id: product.id, is_adult: true }
+      post :is_adult, params: { id: product.external_id, is_adult: true }
 
       expect(response).to be_successful
       expect(product.reload.is_adult).to be(true)
 
-      post :is_adult, params: { id: product.id, is_adult: false }
+      post :is_adult, params: { id: product.external_id, is_adult: false }
 
       expect(response).to be_successful
       expect(product.reload.is_adult).to be(false)
