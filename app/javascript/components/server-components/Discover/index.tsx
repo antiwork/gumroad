@@ -1,13 +1,13 @@
 import range from "lodash/range";
 import * as React from "react";
 import { createCast, is } from "ts-safe-cast";
-import { classNames } from "$app/utils/classNames";
 
 import { getRecommendedProducts } from "$app/data/discover";
 import { SearchResults, SearchRequest } from "$app/data/search";
 import { useScrollToElement } from "$app/hooks/useScrollToElement";
 import { CardProduct } from "$app/parsers/product";
 import { last } from "$app/utils/array";
+import { classNames } from "$app/utils/classNames";
 import { CurrencyCode, formatPriceCentsWithCurrencySymbol } from "$app/utils/currency";
 import { discoverTitleGenerator, Taxonomy } from "$app/utils/discover";
 import { asyncVoid } from "$app/utils/promise";
@@ -161,34 +161,36 @@ const BlackFridayButton = ({
   taxonomy: string | undefined;
 }) => {
   const variantClasses = {
-    'light': 'bg-black text-white',
-    'dark': 'bg-white text-black',
-    'pink': 'bg-pink text-black'
-  }
+    light: "bg-black text-white",
+    dark: "bg-white text-black",
+    pink: "bg-pink text-black",
+  };
 
   const sizeClasses = {
-    'small': 'h-12 px-3 text-base lg:h-12 lg:px-6 lg:text-base',
-    'default': 'h-14 px-8 text-xl lg:h-16 lg:px-10 lg:text-xl'
-  }
+    small: "h-12 px-3 text-base lg:h-12 lg:px-6 lg:text-base",
+    default: "h-14 px-8 text-xl lg:h-16 lg:px-10 lg:text-xl",
+  };
 
   const buttonClasses = classNames(
     "relative inline-flex rounded-sm no-underline items-center justify-center border border-black transition-all duration-150 group-hover:-translate-x-2 group-hover:-translate-y-2 z-3 w-full lg:w-auto",
     variantClasses[variant],
-    sizeClasses[size]
-  )
+    sizeClasses[size],
+  );
 
-  const url = taxonomy ? Routes.discover_taxonomy_path(taxonomy, { offer_code: offerCode }) : Routes.discover_path({ offer_code: offerCode });
+  const url = taxonomy
+    ? Routes.discover_taxonomy_path(taxonomy, { offer_code: offerCode })
+    : Routes.discover_path({ offer_code: offerCode });
 
   return (
-    <div className="relative inline-block group">
-      <div className="absolute inset-0 rounded-sm bg-yellow border border-black transition-transform duration-150 z-2"></div>
-      <div className="absolute inset-0 rounded-sm bg-red border border-black transition-transform duration-150 group-hover:translate-x-2 group-hover:translate-y-2 z-1"></div>
+    <div className="group relative inline-block">
+      <div className="absolute inset-0 z-2 rounded-sm border border-black bg-yellow transition-transform duration-150"></div>
+      <div className="absolute inset-0 z-1 rounded-sm border border-black bg-red transition-transform duration-150 group-hover:translate-x-2 group-hover:translate-y-2"></div>
       <a href={url} className={buttonClasses}>
         Get Black Friday deals
       </a>
     </div>
-  )
-}
+  );
+};
 
 const Discover = (props: Props) => {
   const location = useOriginalLocation();
@@ -341,7 +343,11 @@ const Discover = (props: Props) => {
             <div className="font-regular mx-12 text-center text-xl text-white">
               Snag creator-made deals <br className="block sm:hidden" /> before they're gone.
             </div>
-            {!isBlackFridayPage && <div className="mt-8 text-base"><BlackFridayButton offerCode={props.black_friday_offer_code} taxonomy={taxonomyPath} /></div>}
+            {!isBlackFridayPage && (
+              <div className="mt-8 text-base">
+                <BlackFridayButton offerCode={props.black_friday_offer_code} taxonomy={taxonomyPath} />
+              </div>
+            )}
           </div>
           <div className="h-14 w-full overflow-hidden border-b border-black bg-yellow-400">
             <div className="flex h-14 min-w-fit items-center gap-x-4 whitespace-nowrap hover:[animation-play-state:paused] motion-safe:animate-[marquee-scroll_42s_linear_infinite] motion-reduce:animate-none">
