@@ -350,11 +350,16 @@ const Discover = (props: Props) => {
             )}
           </div>
           <div className="h-14 w-full overflow-hidden border-b border-black bg-yellow-400">
-            <div className="flex h-14 min-w-fit items-center gap-x-4 whitespace-nowrap hover:[animation-play-state:paused] motion-safe:animate-[marquee-scroll_42s_linear_infinite] motion-reduce:animate-none">
+            <div className="flex h-14 min-w-fit items-center gap-x-4 whitespace-nowrap hover:[animation-play-state:paused] motion-safe:animate-[marquee-scroll_80s_linear_infinite] motion-reduce:animate-none">
               {props.black_friday_stats ? (
                 <>
-                  <BlackFridayBanner stats={props.black_friday_stats} currencyCode={props.currency_code} />
-                  <BlackFridayBanner stats={props.black_friday_stats} currencyCode={props.currency_code} />
+                  {/* Duplicate enough times to ensure seamless infinite scroll */}
+                  {(() => {
+                    const stats = props.black_friday_stats;
+                    return Array.from({ length: 5 }, (_, i) => (
+                      <BlackFridayBanner key={i} stats={stats} currencyCode={props.currency_code} />
+                    ));
+                  })()}
                 </>
               ) : null}
             </div>
