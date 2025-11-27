@@ -40,7 +40,7 @@ describe("Black Friday 2025", js: true, type: :system) do
 
       expect(page).to have_selector("header img[alt='Black Friday']")
       expect(page).to have_text("Snag creator-made deals")
-      expect(page).to have_link("Get Black Friday deals", href: /\/blackfriday/)
+      expect(page).to have_link("Get Black Friday deals", href: discover_path(offer_code: SearchProducts::BLACK_FRIDAY_CODE))
       expect(page).to have_text("BLACK FRIDAY IS LIVE")
       expect(page).to have_text("1")
       expect(page).to have_text("ACTIVE DEALS")
@@ -48,6 +48,10 @@ describe("Black Friday 2025", js: true, type: :system) do
       expect(page).to have_text("IN SALES SO FAR")
       expect(page).to have_text("25%")
       expect(page).to have_text("AVERAGE DISCOUNT")
+
+      # When visiting a taxonomy page, the CTA should be the taxonomy page with the offer code
+      click_on("Films")
+      expect(page).to have_link("Get Black Friday deals", href: discover_taxonomy_path(taxonomy: "films", offer_code: SearchProducts::BLACK_FRIDAY_CODE))
     end
 
     it "shows hero on blackfriday page without CTA when feature is enabled", :sidekiq_inline do
