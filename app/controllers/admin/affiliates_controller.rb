@@ -15,7 +15,7 @@ class Admin::AffiliatesController < Admin::BaseController
     @users = @users.joins(:direct_affiliate_accounts).distinct
     @users = @users.with_blocked_attributes_for(:form_email, :form_email_domain)
 
-    list_paginated_users users: @users, template: "Admin/Affiliates/Index", legacy_template: "admin/affiliates/index", single_result_redirect_path: method(:admin_affiliate_path)
+    list_paginated_users users: @users, template: "Admin/Affiliates/Index", legacy_template: "admin/affiliates/index", single_result_redirect_path: ->(user) { admin_affiliate_path(user.external_id) }
   end
 
   def show
@@ -33,8 +33,11 @@ class Admin::AffiliatesController < Admin::BaseController
 
   private
     def fetch_affiliate
+      if params[:id].to_i.to_s == params[:id] && user = User.find_by(id: params[:id])
+        return redirect_to admin_affiliate_path(user.external_id)
+      end
+
       @affiliate_user = User.find_by(username: params[:id])
-      @affiliate_user ||= User.find_by(id: params[:id])
       @affiliate_user ||= User.find_by_external_id(params[:id].gsub(/^ext-/, ""))
 
       e404 if @affiliate_user.nil? || @affiliate_user.direct_affiliate_accounts.blank?
