@@ -21,7 +21,7 @@ type ResponseData = {
   chargeback_count: string;
 };
 
-const AdminUserStats = ({ user_id }: { user_id: number }) => {
+const AdminUserStats = ({ user_id }: { user_id: string }) => {
   const [userStats, setUserStats] = React.useState<UserStatsProps | null>(null);
 
   const elementRef = useIsIntersecting<HTMLUListElement>((isIntersecting) => {

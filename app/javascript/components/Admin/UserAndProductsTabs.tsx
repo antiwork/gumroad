@@ -5,7 +5,7 @@ import { Tab, Tabs } from "$app/components/ui/Tabs";
 
 type Props = {
   selectedTab: string;
-  userId: number;
+  userId: string;
   isAffiliateUser?: boolean;
 };
 

@@ -39,7 +39,7 @@ const UserGuidsContent = ({ userGuids, isLoading }: { userGuids: UserGuids; isLo
   );
 };
 
-const AdminUserGuids = ({ user_id }: { user_id: number }) => {
+const AdminUserGuids = ({ user_id }: { user_id: string }) => {
   const [open, setOpen] = React.useState(false);
   const [isLoading, setIsLoading] = React.useState(false);
   const [userGuids, setUserGuids] = React.useState<UserGuids>([]);

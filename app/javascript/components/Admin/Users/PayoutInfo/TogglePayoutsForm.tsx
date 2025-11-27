@@ -9,7 +9,7 @@ const AdminTogglePayoutsForm = ({
   payouts_paused_by,
   reason: currentReason,
 }: {
-  user_id: number;
+  user_id: string;
   payouts_paused_by: "stripe" | "admin" | "system" | "user" | null;
   reason: string | null;
 }) => {

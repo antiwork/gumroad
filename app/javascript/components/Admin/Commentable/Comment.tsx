@@ -5,7 +5,7 @@ import ReactMarkdown from "react-markdown";
 import DateTimeWithRelativeTooltip from "$app/components/Admin/DateTimeWithRelativeTooltip";
 
 type AuthorProps = {
-  id: number;
+  external_id: string;
   email: string;
   name: string | null;
 };
@@ -29,7 +29,9 @@ const AdminCommentableComment = ({ comment }: { comment: CommentProps }) => (
           </li>
           <li>
             {comment.author ? (
-              <Link href={Routes.admin_user_url(comment.author.id)}>{comment.author.name || comment.author.email}</Link>
+              <Link href={Routes.admin_user_url(comment.author.external_id)}>
+                {comment.author.name || comment.author.email}
+              </Link>
             ) : (
               comment.author_name
             )}

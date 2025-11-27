@@ -39,7 +39,7 @@ type ManualPayoutInfoProps = {
 };
 
 type PayoutInfoComponentProps = {
-  user_id: number;
+  user_id: string;
   isLoading: boolean;
   payoutInfo: PayoutInfoProps | null;
 };

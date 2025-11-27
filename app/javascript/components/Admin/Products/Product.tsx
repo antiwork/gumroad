@@ -24,7 +24,7 @@ export type ActiveIntegration = {
 };
 
 export type ProductUser = {
-  id: number;
+  id: string;
   name: string | null;
   suspended: boolean;
   flagged_for_tos_violation: boolean;

@@ -39,7 +39,7 @@ type Props = {
 };
 
 type AdminUsersProductsProps = {
-  user: { id: number };
+  user: { id: string };
   products: ProductType[];
   pagination: PaginationProps;
 };

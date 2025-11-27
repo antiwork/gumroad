@@ -9,7 +9,7 @@ import { type ProductPurchase } from "./Purchase";
 type AdminProductPurchasesProps = {
   productId: string;
   isAffiliateUser?: boolean;
-  userId: number | null;
+  userId: string | null;
 };
 
 const AdminProductPurchases = ({ productId, isAffiliateUser = false, userId }: AdminProductPurchasesProps) => {

@@ -17,7 +17,7 @@ import AdminUserPayoutInfo from "$app/components/Admin/Users/PayoutInfo";
 import AdminUserPermissionRisk from "$app/components/Admin/Users/PermissionRisk";
 
 export type Seller = {
-  id: number;
+  id: string;
   display_name_or_email: string;
   avatar_url: string;
 };
@@ -36,7 +36,7 @@ type BlockedObject = {
 };
 
 export type User = {
-  id: number;
+  id: string;
   email: string;
   support_email?: string | null;
   name: string | null;

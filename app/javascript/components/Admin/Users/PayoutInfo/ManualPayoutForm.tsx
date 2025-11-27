@@ -14,7 +14,7 @@ export const AdminManualPayoutForm = ({
   currency,
   ask_confirmation,
 }: {
-  user_id: number;
+  user_id: string;
   stripe: {
     unpaid_balance_held_by_gumroad: string;
     unpaid_balance_held_by_stripe: string;
