@@ -15,6 +15,7 @@ class Admin::MerchantAccountPresenter
       created_at: merchant_account.created_at,
       external_id: merchant_account.external_id,
       user_id: merchant_account.user_id,
+      user_external_id: merchant_account.user&.external_id,
       country: merchant_account.country,
       country_name:,
       currency: merchant_account.currency,

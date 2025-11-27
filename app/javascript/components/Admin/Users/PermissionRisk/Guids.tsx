@@ -6,11 +6,11 @@ import { request } from "$app/utils/request";
 
 import { LoadingSpinner } from "$app/components/LoadingSpinner";
 
-type UserGuids = { guid: string; user_ids: number[] }[];
+type UserGuids = { guid: string; user_ids: string[] }[];
 
 type GuidProps = {
   guid: string;
-  user_ids: number[];
+  user_ids: string[];
 };
 
 const Guid = ({ guid, user_ids }: GuidProps) => (

@@ -11,7 +11,7 @@ type AuthorProps = {
 };
 
 export type CommentProps = {
-  id: number;
+  external_id: string;
   author_name: string | null;
   comment_type: string;
   updated_at: string;

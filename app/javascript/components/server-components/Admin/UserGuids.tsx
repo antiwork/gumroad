@@ -7,7 +7,7 @@ import { register } from "$app/utils/serverComponentUtil";
 import { LoadingSpinner } from "$app/components/LoadingSpinner";
 import { showAlert } from "$app/components/server-components/Alert";
 
-type UserGuids = { guid: string; user_ids: number[] }[];
+type UserGuids = { guid: string; user_ids: string[] }[];
 
 const AdminUserGuids = ({ user_id }: { user_id: number }) => {
   const [userGuids, setUserGuids] = React.useState<UserGuids | null>(null);

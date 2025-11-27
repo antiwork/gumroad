@@ -3,7 +3,7 @@ import React from "react";
 export type ProductPurchase = {
   email: string;
   created: string;
-  id: number;
+  id: string;
   amount: number;
   displayed_price: string;
   formatted_gumroad_tax_amount: string;
@@ -11,7 +11,7 @@ export type ProductPurchase = {
   stripe_refunded: boolean | null;
   is_chargedback: boolean;
   is_chargeback_reversed: boolean;
-  refunded_by: { id: number; email: string }[];
+  refunded_by: { id: string; email: string }[];
   error_code: string | null;
   purchase_state: string;
   gumroad_responsible_for_tax: boolean;

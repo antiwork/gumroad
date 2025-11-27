@@ -4,6 +4,13 @@ class Admin::Users::LatestPostsController < Admin::Users::BaseController
   before_action :fetch_user
 
   def index
-    render json: @user.last_5_created_posts
+    posts = @user.last_5_created_posts.map do |post|
+      {
+        id: post.external_id,
+        name: post.name,
+        created_at: post.created_at
+      }
+    end
+    render json: posts
   end
 end

@@ -14,6 +14,7 @@ describe Admin::PaymentPresenter do
       it "returns a hash with all expected keys" do
         expect(props).to include(
           :id,
+          :external_id,
           :displayed_amount,
           :payout_period_end_date,
           :created_at,
@@ -47,6 +48,7 @@ describe Admin::PaymentPresenter do
     describe "fields" do
       it "returns the correct field values" do
         expect(props[:id]).to eq(payment.id)
+        expect(props[:external_id]).to eq(payment.external_id)
         expect(props[:displayed_amount]).to eq(payment.displayed_amount)
         expect(props[:payout_period_end_date]).to eq(payment.payout_period_end_date)
         expect(props[:created_at]).to eq(payment.created_at)
@@ -81,7 +83,7 @@ describe Admin::PaymentPresenter do
 
         it "returns user information" do
           expect(props[:user]).to eq(
-            id: user.id,
+            id: user.external_id,
             name: user.name
           )
         end

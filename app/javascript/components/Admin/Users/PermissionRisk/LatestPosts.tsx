@@ -11,7 +11,7 @@ type LatestPostsProps = {
 };
 
 export type PostProps = {
-  id: number;
+  id: string;
   name: string;
   created_at: string;
 };

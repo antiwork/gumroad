@@ -53,7 +53,7 @@ RSpec.shared_examples_for "Admin::Commentable" do
         expect(json_response["comments"]).to eq(
           [
             {
-              "id" => comment2.id,
+              "external_id" => comment2.external_id,
               "content" => "Second comment",
               "author" => {
                 "external_id" => admin_user.external_id,
@@ -65,7 +65,7 @@ RSpec.shared_examples_for "Admin::Commentable" do
               "updated_at" => comment2.updated_at.iso8601
             },
             {
-              "id" => comment1.id,
+              "external_id" => comment1.external_id,
               "content" => "First comment",
               "author" => {
                 "external_id" => admin_user.external_id,
@@ -88,7 +88,7 @@ RSpec.shared_examples_for "Admin::Commentable" do
         json_response = response.parsed_body
 
         expect(json_response["comments"].length).to eq(1)
-        expect(json_response["comments"].first["id"]).to eq(comment2.id)
+        expect(json_response["comments"].first["external_id"]).to eq(comment2.external_id)
         expect(json_response["comments"].first["content"]).to eq("Second comment")
 
         expect(json_response["pagination"]).to be_present
@@ -102,7 +102,7 @@ RSpec.shared_examples_for "Admin::Commentable" do
         json_response = response.parsed_body
 
         expect(json_response["comments"].length).to eq(1)
-        expect(json_response["comments"].first["id"]).to eq(comment1.id)
+        expect(json_response["comments"].first["external_id"]).to eq(comment1.external_id)
         expect(json_response["comments"].first["content"]).to eq("First comment")
 
         expect(json_response["pagination"]).to be_present
@@ -138,7 +138,7 @@ RSpec.shared_examples_for "Admin::Commentable" do
       comment = commentable_object.comments.last
       expect(response.parsed_body["success"]).to be true
       expect(response.parsed_body["comment"]).to eq(
-        "id" => comment.id,
+        "external_id" => comment.external_id,
         "content" => "This is a test comment",
         "author" => {
           "external_id" => admin_user.external_id,
