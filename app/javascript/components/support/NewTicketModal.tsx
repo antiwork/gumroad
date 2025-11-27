@@ -9,6 +9,7 @@ import { FileRowContent } from "$app/components/FileRowContent";
 import { Icon } from "$app/components/Icons";
 import { Modal } from "$app/components/Modal";
 import { showAlert } from "$app/components/server-components/Alert";
+import { ALLOWED_ATTACHMENT_MIMETYPES } from "$app/components/support/ConversationDetail";
 
 export function NewTicketModal({
   open,
@@ -20,16 +21,8 @@ export function NewTicketModal({
   onCreated: (slug: string) => void;
 }) {
   const { apiDomain } = useDomains();
-  const { mutateAsync: createConversation } = useCreateConversation({
-    onError: (error) => {
-      showAlert(error.message, "error");
-    },
-  });
-  const { mutateAsync: createMessage } = useCreateMessage({
-    onError: (error) => {
-      showAlert(error.message, "error");
-    },
-  });
+  const { mutateAsync: createConversation } = useCreateConversation();
+  const { mutateAsync: createMessage } = useCreateMessage();
 
   const [subject, setSubject] = React.useState("");
   const [message, setMessage] = React.useState("");
@@ -75,6 +68,8 @@ export function NewTicketModal({
                 customerInfoUrl: Routes.user_info_api_internal_helper_users_url({ host: apiDomain }),
               });
               onCreated(conversationSlug);
+            } catch (error) {
+              showAlert(error instanceof Error ? error.message : "Something went wrong.", "error");
             } finally {
               setIsSubmitting(false);
             }
@@ -94,6 +89,7 @@ export function NewTicketModal({
           ref={fileInputRef}
           type="file"
           multiple
+          accept={ALLOWED_ATTACHMENT_MIMETYPES}
           onChange={(e) => {
             const files = Array.from(e.target.files ?? []);
             if (files.length === 0) return;
