@@ -197,18 +197,22 @@ Capybara.modify_selector(:combo_box) do
 end
 
 # override table_row selector to support colspan
-Capybara.modify_selector(:table_row) do
-  def position(xpath)
+class Capybara::Selector
+  # TODO: This appears not to work - see the empty header workaround in ProductsTable and MembershipsTable. We should investigate and fix the XPath.
+  def position_considering_colspan(xpath)
     siblings = xpath.preceding_sibling
     siblings[XPath.attr(:colspan).inverse].count.plus(siblings.attr(:colspan).sum).plus(1)
   end
+end
+
+Capybara.modify_selector(:table_row) do
   xpath do |locator|
     xpath = XPath.descendant(:tr)
     if locator.is_a? Hash
       locator.reduce(xpath) do |xp, (header, cell)|
         header_xp = XPath.ancestor(:table)[1].descendant(:tr)[1].descendant(:th)[XPath.string.n.is(header)]
         cell_xp = XPath.descendant(:td)[
-          XPath.string.n.is(cell) & position(XPath).equals(position(header_xp))
+          XPath.string.n.is(cell) & position_considering_colspan(XPath).equals(position_considering_colspan(header_xp))
         ]
         xp.where(cell_xp)
       end
@@ -220,6 +224,13 @@ Capybara.modify_selector(:table_row) do
     else
       xpath
     end
+  end
+end
+
+Capybara.add_selector(:table_cell) do
+  xpath do |header|
+    header_xp = XPath.ancestor(:table)[1].descendant(:tr)[1].descendant(:th)[XPath.string.n.is(header)]
+    XPath.descendant(:td)[position_considering_colspan(XPath).equals(position_considering_colspan(header_xp))]
   end
 end
 

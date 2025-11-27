@@ -2,14 +2,25 @@ import { router } from "@inertiajs/react";
 import * as React from "react";
 
 import { getPagedMemberships, Membership, SortKey } from "$app/data/products";
+import { classNames } from "$app/utils/classNames";
 import { formatPriceCentsWithCurrencySymbol } from "$app/utils/currency";
 import { AbortError, assertResponseError } from "$app/utils/request";
 
-import { Icon } from "$app/components/Icons";
 import { Pagination, PaginationProps } from "$app/components/Pagination";
 import { Tab } from "$app/components/ProductsLayout";
 import ActionsPopover from "$app/components/ProductsPage/ActionsPopover";
+import { ProductIconCell } from "$app/components/ProductsPage/ProductIconCell";
 import { showAlert } from "$app/components/server-components/Alert";
+import {
+  Table,
+  TableBody,
+  TableCaption,
+  TableCell,
+  TableFooter,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "$app/components/ui/Table";
 import { useDebouncedCallback } from "$app/components/useDebouncedCallback";
 import { useUserAgentInfo } from "$app/components/UserAgent";
 import { Sort, useSortingTableDriver } from "$app/components/useSortingTableDriver";
@@ -82,60 +93,56 @@ export const ProductsPageMembershipsTable = (props: {
 
   return (
     <section className="flex flex-col gap-4">
-      <table aria-busy={isLoading}>
-        <caption>Memberships</caption>
-        <thead>
-          <tr>
-            <th />
-            <th {...thProps("name")} title="Sort by Name" className="lg:relative lg:-left-20">
+      <Table aria-live="polite" className={classNames(isLoading && "pointer-events-none opacity-50")}>
+        <TableCaption>Memberships</TableCaption>
+        <TableHeader>
+          <TableRow>
+            <TableHead />
+            <TableHead {...thProps("name")} title="Sort by Name" className="lg:relative lg:-left-20">
               Name
-            </th>
-            <th {...thProps("successful_sales_count")} title="Sort by Members" className="lg:px-8">
+            </TableHead>
+            <TableHead {...thProps("successful_sales_count")} title="Sort by Members">
               Members
-            </th>
-            <th {...thProps("revenue")} title="Sort by Revenue" className="lg:px-8">
+            </TableHead>
+            <TableHead {...thProps("revenue")} title="Sort by Revenue">
               Revenue
-            </th>
-            <th {...thProps("display_price_cents")} title="Sort by Price" className="lg:px-8">
+            </TableHead>
+            <TableHead {...thProps("display_price_cents")} title="Sort by Price">
               Price
-            </th>
-            <th {...thProps("status")} title="Sort by Status" className="lg:px-8">
+            </TableHead>
+            <TableHead {...thProps("status")} title="Sort by Status">
               Status
-            </th>
-          </tr>
-        </thead>
+            </TableHead>
+            <TableHead />
+          </TableRow>
+        </TableHeader>
 
-        <tbody>
+        <TableBody>
           {memberships.map((membership) => (
-            <tr key={membership.id}>
-              <td className="icon-cell">
-                {membership.thumbnail ? (
-                  <a href={membership.can_edit ? membership.edit_url : membership.url}>
-                    <img alt={membership.name} src={membership.thumbnail.url} />
-                  </a>
-                ) : (
-                  <Icon name="card-image-fill" />
-                )}
-              </td>
-              <td className="w-full">
-                {/* Safari currently doesn't support position: relative on <tr>, so we can't use stretched-link here */}
+            <TableRow key={membership.id}>
+              <ProductIconCell
+                href={membership.can_edit ? membership.edit_url : membership.url}
+                thumbnail={membership.thumbnail?.url ?? null}
+              />
+              <TableCell hideLabel>
+                {/* Safari currently doesn't support position: relative on <tr>, so we can't make the whole row a link here */}
                 <a href={membership.can_edit ? membership.edit_url : membership.url} style={{ textDecoration: "none" }}>
-                  <h4>{membership.name}</h4>
+                  <h4 className="font-bold">{membership.name}</h4>
                 </a>
                 <a href={membership.url} title={membership.url} target="_blank" rel="noreferrer">
                   <small>{membership.url_without_protocol}</small>
                 </a>
-              </td>
+              </TableCell>
 
-              <td data-label="Members" className="whitespace-nowrap lg:px-8">
+              <TableCell className="whitespace-nowrap">
                 {membership.successful_sales_count.toLocaleString(userAgentInfo.locale)}
 
                 {membership.remaining_for_sale_count ? (
                   <small>{membership.remaining_for_sale_count.toLocaleString(userAgentInfo.locale)} remaining</small>
                 ) : null}
-              </td>
+              </TableCell>
 
-              <td data-label="Revenue" className="whitespace-nowrap lg:px-8">
+              <TableCell className="whitespace-nowrap">
                 {formatPriceCentsWithCurrencySymbol("usd", membership.revenue, { symbolFormat: "short" })}
 
                 <small>
@@ -151,13 +158,11 @@ export const ProductsPageMembershipsTable = (props: {
                         symbolFormat: "short",
                       })} /mo`}
                 </small>
-              </td>
+              </TableCell>
 
-              <td data-label="Price" className="whitespace-nowrap lg:px-8">
-                {membership.price_formatted}
-              </td>
+              <TableCell className="whitespace-nowrap">{membership.price_formatted}</TableCell>
 
-              <td data-label="Status" className="whitespace-nowrap lg:px-8">
+              <TableCell className="whitespace-nowrap">
                 {(() => {
                   switch (membership.status) {
                     case "unpublished":
@@ -168,9 +173,9 @@ export const ProductsPageMembershipsTable = (props: {
                       return <>Published</>;
                   }
                 })()}
-              </td>
+              </TableCell>
               {membership.can_duplicate || membership.can_destroy ? (
-                <td className="lg:px-8">
+                <TableCell>
                   <ActionsPopover
                     product={membership}
                     onDuplicate={() => void loadMemberships(1)}
@@ -185,32 +190,32 @@ export const ProductsPageMembershipsTable = (props: {
                       else void reloadMemberships();
                     }}
                   />
-                </td>
+                </TableCell>
               ) : null}
-            </tr>
+            </TableRow>
           ))}
-        </tbody>
+        </TableBody>
 
-        <tfoot>
-          <tr>
-            <td colSpan={2}>Totals</td>
+        <TableFooter>
+          <TableRow>
+            <TableCell colSpan={2}>Totals</TableCell>
 
-            <td className="whitespace-nowrap lg:px-8">
+            <TableCell className="whitespace-nowrap">
               {memberships
                 .reduce((sum, membership) => sum + membership.successful_sales_count, 0)
                 .toLocaleString(userAgentInfo.locale)}
-            </td>
+            </TableCell>
 
-            <td colSpan={4} className="whitespace-nowrap lg:px-8">
+            <TableCell colSpan={4} className="whitespace-nowrap">
               {formatPriceCentsWithCurrencySymbol(
                 "usd",
                 memberships.reduce((sum, membership) => sum + membership.revenue, 0),
                 { symbolFormat: "short" },
               )}
-            </td>
-          </tr>
-        </tfoot>
-      </table>
+            </TableCell>
+          </TableRow>
+        </TableFooter>
+      </Table>
 
       {pagination.pages > 1 ? (
         <Pagination onChangePage={(page) => void loadMemberships(page)} pagination={pagination} />
