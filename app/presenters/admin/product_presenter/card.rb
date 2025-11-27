@@ -36,6 +36,7 @@ class Admin::ProductPresenter::Card
       admins_can_mark_as_staff_picked: link_policy.create?,
       admins_can_unmark_as_staff_picked: link_policy.destroy?,
       is_tiered_membership: product.is_tiered_membership?,
+      comments_count: product.comments.size,
       updated_at: product.updated_at,
       deleted_at: product.deleted_at
     }

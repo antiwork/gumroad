@@ -14,7 +14,7 @@ const JoinDiscordAction = ({ product }: JoinDiscordActionProps) => {
   return (
     hasDiscordIntegration && (
       <a
-        href={Routes.join_discord_redirect_admin_link_path(product.id)}
+        href={Routes.join_discord_redirect_admin_product_path(product.id)}
         className="button small"
         target="_blank"
         rel="noreferrer noopener"

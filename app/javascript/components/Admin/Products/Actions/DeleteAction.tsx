@@ -10,7 +10,7 @@ type DeleteActionProps = {
 const DeleteAction = ({ product }: DeleteActionProps) =>
   product.deleted_at ? (
     <AdminActionButton
-      url={Routes.restore_admin_product_path(product.unique_permalink)}
+      url={Routes.restore_admin_product_path(product.id)}
       label="Undelete"
       loading="Undeleting..."
       done="Undeleted!"
@@ -18,7 +18,7 @@ const DeleteAction = ({ product }: DeleteActionProps) =>
     />
   ) : (
     <AdminActionButton
-      url={Routes.admin_product_path(product.unique_permalink)}
+      url={Routes.admin_product_path(product.id)}
       method="DELETE"
       label="Delete"
       loading="Deleting..."
