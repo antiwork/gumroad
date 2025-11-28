@@ -15,7 +15,7 @@ module ProductFileListHelpers
 
   def have_embed(name:, count: nil)
     options = { text: name, exact_text: true, count: }.compact
-    have_selector(".embed .content h4", **options)
+    have_selector(".embed h4", **options)
   end
 
   def find_embed(name:)
