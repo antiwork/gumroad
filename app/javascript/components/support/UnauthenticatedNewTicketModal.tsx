@@ -85,7 +85,7 @@ export function UnauthenticatedNewTicketModal({
     >
       <form
         ref={formRef}
-        className="space-y-4 md:w-[700px]"
+        className="space-y-4 md:w-[700px] [&_.grecaptcha-badge]:invisible"
         onSubmit={(e) => {
           void handleSubmit(e);
         }}
@@ -115,6 +115,17 @@ export function UnauthenticatedNewTicketModal({
           />
         </div>
         {recaptchaContainer}
+        <p className="text-sm text-muted">
+          This site is protected by reCAPTCHA and the Google{" "}
+          <a href="https://policies.google.com/privacy" target="_blank" rel="noopener noreferrer">
+            Privacy Policy
+          </a>{" "}
+          and{" "}
+          <a href="https://policies.google.com/terms" target="_blank" rel="noopener noreferrer">
+            Terms of Service
+          </a>{" "}
+          apply.
+        </p>
       </form>
     </Modal>
   );
