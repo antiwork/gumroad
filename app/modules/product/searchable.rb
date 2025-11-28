@@ -7,6 +7,7 @@ module Product::Searchable
   MAX_NUMBER_OF_TAGS = 8
   RECOMMENDED_PRODUCTS_PER_PAGE = 9
   MAX_NUMBER_OF_FILETYPES = 8
+  MAX_OFFER_CODES_IN_INDEX = 300
 
   ATTRIBUTE_TO_SEARCH_FIELDS_MAP = {
     "name" => ["name", "rated_as_adult"],
@@ -491,7 +492,7 @@ module Product::Searchable
       when "total_fee_cents" then total_fee_cents(created_after: DEFAULT_SALES_VOLUME_RECENTNESS.ago)
       when "past_year_fee_cents" then total_fee_cents(created_after: 1.year.ago)
       when "staff_picked_at" then staff_picked_at
-      when "offer_codes" then product_and_universal_offer_codes.pluck(:code)
+      when "offer_codes" then product_and_universal_offer_codes.last(MAX_OFFER_CODES_IN_INDEX).map(&:code)
       else
         raise "Error building search properties. #{attribute_key} is not a valid property"
       end

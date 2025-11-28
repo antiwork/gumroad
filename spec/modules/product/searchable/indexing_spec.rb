@@ -64,6 +64,38 @@ describe "Product::Searchable - Indexing scenarios" do
     end
   end
 
+  describe "#build_search_property for offer_codes" do
+    it "returns all codes when total is less than MAX_OFFER_CODES_IN_INDEX" do
+      stub_const("Product::Searchable::MAX_OFFER_CODES_IN_INDEX", 5)
+      3.times { |i| @product.offer_codes << create(:offer_code, user: @product.user, code: "CODE#{i}") }
+
+      codes = @product.send(:build_search_property, "offer_codes")
+      expect(codes.size).to eq(3)
+    end
+
+    it "limits to MAX_OFFER_CODES_IN_INDEX most recent codes when total exceeds limit" do
+      stub_const("Product::Searchable::MAX_OFFER_CODES_IN_INDEX", 5)
+
+      # Create older codes
+      2.times do |i|
+        create(:offer_code, user: @product.user, code: "OLD#{i}", created_at: 100.days.ago)
+      end
+
+      # Create newer codes
+      newest_codes = 7.times.map do |i|
+        create(:offer_code, user: @product.user, code: "NEW#{i}", created_at: 1.day.ago).code
+      end
+
+      @product.offer_codes = OfferCode.where(user: @product.user)
+
+      codes = @product.send(:build_search_property, "offer_codes")
+
+      expect(codes.size).to eq(5)
+      expect(codes).to all(start_with("NEW"))
+      expect(codes).to all(be_in(newest_codes))
+    end
+  end
+
   describe "#enqueue_search_index!" do
     it "indexes product via ProductIndexingService" do
       expect(ProductIndexingService).to receive(:perform).with(product: @product, action: "index", on_failure: :async).and_call_original

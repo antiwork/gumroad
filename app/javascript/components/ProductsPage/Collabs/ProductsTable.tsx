@@ -1,13 +1,24 @@
 import * as React from "react";
 
 import { getPagedProducts, ProductsParams, Product } from "$app/data/collabs";
+import { classNames } from "$app/utils/classNames";
 import { formatPriceCentsWithCurrencySymbol } from "$app/utils/currency";
 import { asyncVoid } from "$app/utils/promise";
 import { AbortError, assertResponseError } from "$app/utils/request";
 
-import { Icon } from "$app/components/Icons";
 import { Pagination, PaginationProps } from "$app/components/Pagination";
+import { ProductIconCell } from "$app/components/ProductsPage/ProductIconCell";
 import { showAlert } from "$app/components/server-components/Alert";
+import {
+  Table,
+  TableBody,
+  TableCaption,
+  TableCell,
+  TableFooter,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "$app/components/ui/Table";
 import { useUserAgentInfo } from "$app/components/UserAgent";
 import { useClientSortingTableDriver } from "$app/components/useSortingTableDriver";
 
@@ -61,62 +72,47 @@ export const CollabsProductsTable = (props: { entries: Product[]; pagination: Pa
 
   return (
     <div className="flex flex-col gap-4">
-      <table aria-live="polite" aria-busy={isLoading} ref={tableRef}>
-        <caption>Products</caption>
-        <thead>
-          <tr>
-            <th />
-            <th {...thProps("name")} title="Sort by Name">
+      <Table aria-live="polite" className={classNames(isLoading && "pointer-events-none opacity-50")} ref={tableRef}>
+        <TableCaption>Products</TableCaption>
+        <TableHeader>
+          <TableRow>
+            <TableHead />
+            <TableHead {...thProps("name")} className="lg:relative lg:-left-20">
               Name
-            </th>
-            <th {...thProps("display_price_cents")} title="Sort by Price">
-              Price
-            </th>
-            <th {...thProps("cut")} title="Sort by Cut">
-              Cut
-            </th>
-            <th {...thProps("successful_sales_count")} title="Sort by Sales">
-              Sales
-            </th>
-            <th {...thProps("revenue")} title="Sort by Revenue">
-              Revenue
-            </th>
-          </tr>
-        </thead>
+            </TableHead>
+            <TableHead {...thProps("display_price_cents")}>Price</TableHead>
+            <TableHead {...thProps("cut")}>Cut</TableHead>
+            <TableHead {...thProps("successful_sales_count")}>Sales</TableHead>
+            <TableHead {...thProps("revenue")}>Revenue</TableHead>
+          </TableRow>
+        </TableHeader>
 
-        <tbody>
+        <TableBody>
           {items.map((product) => (
-            <tr key={product.id}>
-              <td className="icon-cell">
-                {product.thumbnail ? (
-                  <a href={product.can_edit ? product.edit_url : product.url}>
-                    <img alt={product.name} src={product.thumbnail.url} />
-                  </a>
-                ) : (
-                  <Icon name="card-image-fill" />
-                )}
-              </td>
+            <TableRow key={product.id}>
+              <ProductIconCell
+                href={product.can_edit ? product.edit_url : product.url}
+                thumbnail={product.thumbnail?.url ?? null}
+              />
 
-              <td>
+              <TableCell hideLabel>
                 <div>
-                  {/* Safari currently doesn't support position: relative on <tr>, so we can't use stretched-link here */}
+                  {/* Safari currently doesn't support position: relative on <tr>, so we can't make the whole row a link here */}
                   <a href={product.can_edit ? product.edit_url : product.url} style={{ textDecoration: "none" }}>
-                    <h4>{product.name}</h4>
+                    <h4 className="font-bold">{product.name}</h4>
                   </a>
 
                   <a href={product.url} title={product.url} target="_blank" rel="noreferrer">
                     <small>{product.url_without_protocol}</small>
                   </a>
                 </div>
-              </td>
+              </TableCell>
 
-              <td data-label="Price" style={{ whiteSpace: "nowrap" }}>
-                {product.price_formatted}
-              </td>
+              <TableCell className="whitespace-nowrap">{product.price_formatted}</TableCell>
 
-              <td data-label="Cut">{product.cut}%</td>
+              <TableCell>{product.cut}%</TableCell>
 
-              <td data-label="Sales" style={{ whiteSpace: "nowrap" }}>
+              <TableCell className="whitespace-nowrap">
                 <a href={Routes.customers_link_id_path(product.permalink)}>
                   {product.successful_sales_count.toLocaleString(userAgentInfo.locale)}
                 </a>
@@ -124,34 +120,34 @@ export const CollabsProductsTable = (props: { entries: Product[]; pagination: Pa
                 {product.remaining_for_sale_count ? (
                   <small>{product.remaining_for_sale_count.toLocaleString(userAgentInfo.locale)} remaining</small>
                 ) : null}
-              </td>
+              </TableCell>
 
-              <td data-label="Revenue" style={{ whiteSpace: "nowrap" }}>
+              <TableCell className="whitespace-nowrap">
                 {formatPriceCentsWithCurrencySymbol("usd", product.revenue, { symbolFormat: "short" })}
-              </td>
-            </tr>
+              </TableCell>
+            </TableRow>
           ))}
-        </tbody>
+        </TableBody>
 
-        <tfoot>
-          <tr>
-            <td colSpan={4}>Totals</td>
-            <td>
+        <TableFooter>
+          <TableRow>
+            <TableCell colSpan={4}>Totals</TableCell>
+            <TableCell>
               {products
                 .reduce((sum, product) => sum + product.successful_sales_count, 0)
                 .toLocaleString(userAgentInfo.locale)}
-            </td>
+            </TableCell>
 
-            <td>
+            <TableCell>
               {formatPriceCentsWithCurrencySymbol(
                 "usd",
                 products.reduce((sum, product) => sum + product.revenue, 0),
                 { symbolFormat: "short" },
               )}
-            </td>
-          </tr>
-        </tfoot>
-      </table>
+            </TableCell>
+          </TableRow>
+        </TableFooter>
+      </Table>
 
       {pagination.pages > 1 ? (
         <Pagination onChangePage={(page) => loadProducts({ page, query: state.query })} pagination={pagination} />
