@@ -1,6 +1,8 @@
 import { usePage } from "@inertiajs/react";
 import React from "react";
 
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "$app/components/ui/Table";
+
 type ActionCallInfo = {
   id: number;
   controller_name: string;
@@ -17,26 +19,26 @@ const AdminActionCallDashboard = () => {
 
   return (
     <section>
-      <table className="w-full">
-        <thead>
-          <tr>
-            <th className="text-left">#</th>
-            <th className="text-left">Controller</th>
-            <th className="text-left">Action</th>
-            <th className="text-left">Call Count</th>
-          </tr>
-        </thead>
-        <tbody>
+      <Table>
+        <TableHeader>
+          <TableRow>
+            <TableHead>#</TableHead>
+            <TableHead>Controller</TableHead>
+            <TableHead>Action</TableHead>
+            <TableHead>Call Count</TableHead>
+          </TableRow>
+        </TableHeader>
+        <TableBody>
           {adminActionCallInfos.map((info, index) => (
-            <tr key={info.id}>
-              <td>{index + 1}</td>
-              <td>{info.controller_name}</td>
-              <td>{info.action_name}</td>
-              <td>{info.call_count}</td>
-            </tr>
+            <TableRow key={info.id}>
+              <TableCell>{index + 1}</TableCell>
+              <TableCell>{info.controller_name}</TableCell>
+              <TableCell>{info.action_name}</TableCell>
+              <TableCell>{info.call_count}</TableCell>
+            </TableRow>
           ))}
-        </tbody>
-      </table>
+        </TableBody>
+      </Table>
     </section>
   );
 };

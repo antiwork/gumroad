@@ -1,15 +1,33 @@
 # frozen_string_literal: true
 
 class Admin::LinksController < Admin::BaseController
-  before_action :fetch_product_by_general_permalink, except: %i[legacy_purchases
-                                                                flag_seller_for_tos_violation
-                                                                views_count sales_stats
-                                                                join_discord
-                                                                join_discord_redirect]
-  before_action :fetch_product, only: %i[views_count
-                                         sales_stats
-                                         join_discord
-                                         join_discord_redirect]
+  before_action :fetch_product!, except: :show
+
+  def show
+    @product_matches = Link.where(id: params[:id]).or(Link.by_general_permalink(params["id"]))
+
+    if @product_matches.many?
+      @title = "Multiple products matched"
+      render inertia: "Admin/Products/MultipleMatches", legacy_template: "admin/links/multiple_matches", props: {
+        product_matches: @product_matches.map { |product| Admin::ProductPresenter::MultipleMatches.new(product:).props }
+      }
+    elsif @product_matches.one?
+      @product = @product_matches.first
+      @title = @product.name
+      render inertia: "Admin/Products/Show", legacy_template: "admin/links/show", props: {
+        title: @product.name,
+        product: Admin::ProductPresenter::Card.new(product: @product, pundit_user:).props,
+        user: Admin::UserPresenter::Card.new(user: @product.user, pundit_user:).props
+      }
+    else
+      e404
+    end
+  end
+
+  def destroy
+    @product.delete!
+    render json: { success: true }
+  end
 
   def generate_url_redirect
     url_redirect = UrlRedirect.create!(link: @product)
@@ -19,27 +37,8 @@ class Admin::LinksController < Admin::BaseController
     redirect_to url_redirect.download_page_url
   end
 
-  def show
-    @title = @product.name
-    render inertia: "Admin/Products/Show", legacy_template: "admin/links/show", props: {
-      title: @product.name,
-      product: Admin::ProductPresenter::Card.new(product: @product, pundit_user:).props,
-      user: Admin::UserPresenter::Card.new(user: @product.user, pundit_user:).props
-    }
-  end
-
-  def access_product_file
-    url_redirect = @product.url_redirects.build
-    product_file = ProductFile.find_by_external_id(params[:product_file_id])
-
-    redirect_to url_redirect.signed_location_for_file(product_file), allow_other_host: true
-  end
-
-  def is_adult
-    @product.is_adult = params[:is_adult]
-    @product.save!
-
-    render json: { success: true }
+  def restore
+    render json: { success: @product.update_attribute(:deleted_at, nil) }
   end
 
   def publish
@@ -61,14 +60,18 @@ class Admin::LinksController < Admin::BaseController
     render json: { success: true }
   end
 
-  def destroy
-    @product.delete!
+  def is_adult
+    @product.is_adult = params[:is_adult]
+    @product.save!
 
     render json: { success: true }
   end
 
-  def restore
-    render json: { success: @product.update_attribute(:deleted_at, nil) }
+  def access_product_file
+    url_redirect = @product.url_redirects.build
+    product_file = ProductFile.find_by_external_id(params[:product_file_id])
+
+    redirect_to url_redirect.signed_location_for_file(product_file), allow_other_host: true
   end
 
   def legacy_purchases
@@ -172,29 +175,8 @@ class Admin::LinksController < Admin::BaseController
   end
 
   private
-    def fetch_product_by_general_permalink
+    def fetch_product!
       @product = Link.find_by(id: params[:id])
-      return redirect_to admin_product_path(@product.unique_permalink) if @product
-
-      @product_matches = Link.by_general_permalink(params["id"])
-
-      if @product_matches.size > 1
-        @title = "Multiple products matched"
-        render inertia: "Admin/Products/MultipleMatches", legacy_template: "admin/links/multiple_matches", props: {
-          product_matches: @product_matches.map { |product| Admin::ProductPresenter::MultipleMatches.new(product:).props }
-        }
-        return
-      else
-        @product = @product_matches.first || e404
-      end
-
-      if @product && @product.unique_permalink != params["id"]
-        redirect_to admin_product_path(@product.unique_permalink)
-      end
-    end
-
-    def fetch_product
-      @product = Link.where(id: params[:id]).or(Link.where(unique_permalink: params[:id])).first
       @product || e404
     end
 
