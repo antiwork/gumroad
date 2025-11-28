@@ -108,12 +108,13 @@ const FolderRow = ({ folder, children }: { folder: FolderItem; children: React.R
   return (
     <Row role="treeitem" aria-expanded={isExpanded}>
       <RowContent onClick={() => setIsExpanded(!isExpanded)}>
+        <Icon name={isExpanded ? "outline-cheveron-down" : "outline-cheveron-right"} />
         <Icon name="solid-folder-open" className="type-icon" />
         <h4>{folder.name}</h4>
       </RowContent>
-      <div role="group" className={classNames({ hidden: !isExpanded })}>
+      <RowDetails role="group" className={classNames({ hidden: !isExpanded })}>
         {children}
-      </div>
+      </RowDetails>
     </Row>
   );
 };
@@ -214,6 +215,9 @@ export const FileRow = ({
         </RowDetails>
       ) : null}
       <RowContent onClick={() => setIsExpanded(!isExpanded)}>
+        {shouldShowSubtitlesForFile(file) ? (
+          <Icon name={isExpanded ? "outline-cheveron-down" : "outline-cheveron-right"} />
+        ) : null}
         {isEmbeddedVideo && file.thumbnail_url && isCollapsed ? (
           <div className="thumbnail">
             <img src={file.thumbnail_url} />
@@ -354,11 +358,13 @@ export const FileRow = ({
       ) : null}
 
       {shouldShowSubtitlesForFile(file) ? (
-        <Rows role="list">
-          {file.subtitle_files?.map((subtitleFile) => (
-            <SubtitleRow key={subtitleFile.url} subtitleFile={subtitleFile} />
-          ))}
-        </Rows>
+        <RowDetails role="group" className={classNames({ hidden: !isExpanded })}>
+          <Rows role="list">
+            {file.subtitle_files?.map((subtitleFile) => (
+              <SubtitleRow key={subtitleFile.url} subtitleFile={subtitleFile} />
+            ))}
+          </Rows>
+        </RowDetails>
       ) : null}
 
       {file.description?.trim() ? <p style={{ whiteSpace: "pre-wrap" }}>{file.description}</p> : null}

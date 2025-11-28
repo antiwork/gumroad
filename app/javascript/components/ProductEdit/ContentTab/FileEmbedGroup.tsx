@@ -148,6 +148,7 @@ const FileEmbedGroupNodeView = ({
         <Row role="treeitem" aria-expanded={expanded} className={cx({ selected })}>
           {editor.isEditable ? <NodeActionsMenu editor={editor} /> : null}
           <RowContent onClick={() => setExpanded(!expanded)} contentEditable={false}>
+            <Icon name={expanded ? "outline-cheveron-down" : "outline-cheveron-right"} />
             <Icon name="solid-folder-open" className="type-icon" />
             {editing ? (
               <input
@@ -226,11 +227,11 @@ const FileEmbedGroupNodeView = ({
               ) : null}
             </RowActions>
           ) : null}
-          <RowDetails className={classNames({ hidden: !expanded })}>
+          <RowDetails role="group" className={classNames({ hidden: !expanded })}>
             {hasStreamable ? (
-              <NodeViewContent id={uid} role="group" />
+              <NodeViewContent id={uid} />
             ) : (
-              <Rows role="group">
+              <Rows>
                 <NodeViewContent id={uid} />
               </Rows>
             )}
