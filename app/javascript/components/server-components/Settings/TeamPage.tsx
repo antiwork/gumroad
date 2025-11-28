@@ -272,7 +272,7 @@ const TeamMembersSection = ({
             {deletedMember.name !== "" ? deletedMember.name : deletedMember.email} was removed from team members
           </div>
           <button
-            className="close"
+            className="close underline"
             type="button"
             onClick={asyncVoid(async () => {
               try {
