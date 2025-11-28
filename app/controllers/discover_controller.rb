@@ -40,7 +40,8 @@ class DiscoverController < ApplicationController
         recommended_by: RecommendationType::GUMROAD_SEARCH_RECOMMENDATION,
         target: Product::Layout::DISCOVER,
         compute_description: false,
-        query: params[:query]
+        query: params[:query],
+        offer_code: params[:offer_code]
       )
     end
 
@@ -55,6 +56,10 @@ class DiscoverController < ApplicationController
       recommended_products: recommendations,
       curated_product_ids: curated_products.map { _1.product.external_id },
       search_offset: params[:from] || 0,
+      show_black_friday_hero: black_friday_feature_active?,
+      is_black_friday_page: params[:offer_code] == SearchProducts::BLACK_FRIDAY_CODE,
+      black_friday_offer_code: SearchProducts::BLACK_FRIDAY_CODE,
+      black_friday_stats: black_friday_feature_active? ? BlackFridayStatsService.fetch_stats : nil,
     }
   end
 
@@ -64,6 +69,9 @@ class DiscoverController < ApplicationController
 
   private
     def recommendations
+      # Don't show any recommended/featured products when offer codes are present
+      return [] if params[:offer_code].present?
+
       if show_curated_products?
         curated_products.take(RECOMMENDED_PRODUCTS_COUNT).map do |product_info|
           ProductPresenter.card_for_web(
@@ -105,11 +113,12 @@ class DiscoverController < ApplicationController
     end
 
     def show_curated_products?
+      return false if params[:offer_code].present?
       !taxonomy && curated_products.any?
     end
 
     def is_searching?
-      params.values_at(:query, :tags, :category).any?(&:present?) ||
+      params.values_at(:query, :tags, :category, :offer_code).any?(&:present?) ||
         (params[:taxonomy].present? && params.values_at(:sort, :min_price, :max_price, :rating, :filetypes).any?(&:present?))
     end
 
@@ -128,5 +137,9 @@ class DiscoverController < ApplicationController
         @title = "#{presenter.title} | Gumroad"
         @discover_tag_meta_description = presenter.meta_description
       end
+    end
+
+    def black_friday_feature_active?
+      Feature.active?(:offer_codes_search) || (params[:feature_key].present? && ActiveSupport::SecurityUtils.secure_compare(params[:feature_key].to_s, ENV["SECRET_FEATURE_KEY"].to_s))
     end
 end

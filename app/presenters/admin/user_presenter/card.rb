@@ -10,7 +10,7 @@ class Admin::UserPresenter::Card
 
   def props
     {
-      impersonatable: Admin::Impersonators::UserPolicy.new(pundit_user, @user).create?,
+      impersonatable: Admin::Impersonators::UserPolicy.new(pundit_user, user).create?,
 
       # Identification
       id: user.id,
