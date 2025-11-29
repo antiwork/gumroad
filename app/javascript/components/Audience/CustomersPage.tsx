@@ -1014,7 +1014,7 @@ const CustomerDrawer = ({
                 {field.type === "text" ? (
                   field.value
                 ) : (
-                  <Rows role="list" style={{ marginTop: "var(--spacer-2)" }}>
+                  <Rows role="list" className="mt-2">
                     {field.files.map((file) => (
                       <FileRow file={file} key={file.key} />
                     ))}

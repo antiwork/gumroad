@@ -567,7 +567,7 @@ const FileEmbedNodeView = ({ node, editor, getPos, updateAttributes }: NodeViewP
 
         {file.description?.trim() && !expanded ? (
           <RowDetails>
-            <p style={{ marginLeft: "var(--spacer-2)", whiteSpace: "pre-wrap" }}>{file.description}</p>
+            <p className="ml-2 whitespace-pre-wrap">{file.description}</p>
           </RowDetails>
         ) : null}
 

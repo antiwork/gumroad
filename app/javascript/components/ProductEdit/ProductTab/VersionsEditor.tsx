@@ -173,9 +173,7 @@ const VersionEditor = ({
                 onChange={(evt) => updateVersion({ description: evt.target.value })}
               />
             </fieldset>
-            <section
-              style={{ display: "grid", gap: "var(--spacer-5)", gridAutoFlow: "column", alignItems: "flex-end" }}
-            >
+            <section className="grid grid-flow-col items-end gap-6">
               <fieldset>
                 <label htmlFor={`${uid}-price`}>Additional amount</label>
                 <PriceInput
