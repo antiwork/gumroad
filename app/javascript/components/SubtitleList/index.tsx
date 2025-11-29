@@ -19,7 +19,7 @@ export const SubtitleList = ({
   if (subtitleFiles.length === 0) return null;
 
   return (
-    <Rows className="subtitle-list" role="list">
+    <Rows role="list">
       {subtitleFiles.map((subtitleFile) => (
         <SubtitleRow
           key={subtitleFile.url}

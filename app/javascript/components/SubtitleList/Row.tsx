@@ -8,7 +8,7 @@ import { summarizeUploadProgress } from "$app/utils/summarizeUploadProgress";
 import { Button } from "$app/components/Button";
 import { Icon } from "$app/components/Icons";
 import { LoadingSpinner } from "$app/components/LoadingSpinner";
-import { Row, RowActions, RowContent } from "$app/components/ui/Rows";
+import { Row, RowActions, RowContent, RowDetails } from "$app/components/ui/Rows";
 import { UploadProgressBar } from "$app/components/UploadProgressBar";
 import { UploadProgress } from "$app/components/useConfigureEvaporate";
 
@@ -41,7 +41,9 @@ export const SubtitleRow = ({ subtitleFile, onRemove, onCancel, onChangeLanguage
     <Row className={cx("subtitle-row-container", "subtitle-row", "relative", { complete: !progress })} role="listitem">
       {progress ? (
         <>
-          <UploadProgressBar progress={progress.percent} />
+          <RowDetails>
+            <UploadProgressBar progress={progress.percent} />
+          </RowDetails>
           <RowContent>
             <LoadingSpinner className="size-8" />
             <div>
@@ -80,7 +82,12 @@ export const SubtitleRow = ({ subtitleFile, onRemove, onCancel, onChangeLanguage
 
 type SelectProps = { currentLanguage: string; onChange: (newLanguage: string) => void };
 const SubtitleLanguageSelect = ({ currentLanguage, onChange }: SelectProps) => (
-  <select aria-label="Language" value={currentLanguage} onChange={(evt) => onChange(evt.target.value)}>
+  <select
+    aria-label="Language"
+    value={currentLanguage}
+    onChange={(evt) => onChange(evt.target.value)}
+    className="w-auto"
+  >
     {SUBTITLE_LANGUAGES.map((language) => (
       <option key={language} value={language}>
         {language}
