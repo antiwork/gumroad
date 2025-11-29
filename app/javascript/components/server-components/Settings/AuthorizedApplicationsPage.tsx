@@ -13,6 +13,7 @@ import { Modal } from "$app/components/Modal";
 import { showAlert } from "$app/components/server-components/Alert";
 import { Layout } from "$app/components/Settings/Layout";
 import Placeholder from "$app/components/ui/Placeholder";
+import { Table, TableBody, TableCaption, TableCell, TableHead, TableHeader, TableRow } from "$app/components/ui/Table";
 import { useUserAgentInfo } from "$app/components/UserAgent";
 
 import placeholderAppIcon from "$assets/images/gumroad_app.png";
@@ -96,12 +97,19 @@ const AuthorizedApplicationsPage = (props: Props) => {
     <Layout currentPage="authorized_applications" pages={props.settings_pages}>
       {applications.length > 0 ? (
         <section className="p-4! md:p-8!">
-          <table>
-            <caption>You've authorized the following applications to use your Gumroad account.</caption>
-            <tbody>
+          <Table>
+            <TableCaption>You've authorized the following applications to use your Gumroad account.</TableCaption>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Application</TableHead>
+                <TableHead>Permissions</TableHead>
+                <TableHead>Actions</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
               {applications.map((application) => (
-                <tr key={application.id}>
-                  <td>
+                <TableRow key={application.id}>
+                  <TableCell hideLabel>
                     <div className="flex gap-3">
                       <div>
                         <img
@@ -117,7 +125,6 @@ const AuthorizedApplicationsPage = (props: Props) => {
                           {application.name}
                           {application.is_own_app ? <span> (Your application)</span> : null}
                         </h3>
-
                         <p>
                           <small>
                             First authorized on:{" "}
@@ -130,24 +137,24 @@ const AuthorizedApplicationsPage = (props: Props) => {
                         </p>
                       </div>
                     </div>
-                  </td>
-                  <td>
+                  </TableCell>
+                  <TableCell>
                     <ul>
                       {application.scopes.map((scope) => (
                         <li key={scope}>{SCOPE_DESCRIPTIONS[scope]}</li>
                       ))}
                     </ul>
-                  </td>
-                  <td>
+                  </TableCell>
+                  <TableCell hideLabel>
                     <Button color="danger" outline onClick={() => setRevokingAccessForApp({ id: application.id })}>
                       <Icon name="x-square"></Icon>
                       Revoke access
                     </Button>
-                  </td>
-                </tr>
+                  </TableCell>
+                </TableRow>
               ))}
-            </tbody>
-          </table>
+            </TableBody>
+          </Table>
           {revokingAccessForApp ? (
             <Modal
               open
