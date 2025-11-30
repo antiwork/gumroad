@@ -596,9 +596,7 @@ const ContentTabContent = ({ selectedVariantId }: { selectedVariantId: string | 
                     <Tab isSelected aria-controls={`${uid}-embed-tab`} asChild>
                       <button type="button">
                         <Icon name="link" />
-                        <div>
-                          <h4>Embed link</h4>
-                        </div>
+                        <h4>Embed link</h4>
                       </button>
                     </Tab>
                     <Tab isSelected={false} asChild>
@@ -620,9 +618,7 @@ const ContentTabContent = ({ selectedVariantId }: { selectedVariantId: string | 
                           }}
                         />
                         <Icon name="upload-fill" />
-                        <div>
                           <h4>Upload</h4>
-                        </div>
                       </label>
                     </Tab>
                   </Tabs>
