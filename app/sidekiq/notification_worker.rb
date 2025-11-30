@@ -5,23 +5,32 @@ class NotificationWorker
   sidekiq_options retry: 9, queue: :default
 
   ##
-  # Sends email notifications for system events
+  # Sends email and Slack notifications for system events
+  #
+  # All messages from development or staging will appear with 'test' category in emails
+  # and can be conditionally sent to Slack based on feature flag
   #
   # Examples
   #
-  # NotificationWorker.perform_async("payments", "Canada Sales Reporting", "Canada 2024-11 sales report is ready - https://...")
-  # NotificationWorker.perform_async("payments", "VAT Reporting", "Report ready", [{ title: "Link", text: "URL" }])
-  def perform(notification_category, source, message_text, attachments = [])
+  # NotificationWorker.perform_async("payments", "Canada Sales Reporting", "Canada 2024-11 sales report is ready - https://...", "green")
+  # NotificationWorker.perform_async("payments", "VAT Reporting", "Report ready", "gray", { "attachments" => [{ title: "Link", text: "URL" }] })
+  def perform(notification_category, source, message_text, color = "gray", options = {})
+    attachments = Array(options["attachments"] || options[:attachments])
     notifications_email = GlobalConfig.get("NOTIFICATIONS_EMAIL_ADDRESS")
 
-    return unless notifications_email.present?
+    if notifications_email.present?
+      NotificationMailer.with(
+        notification_category:,
+        source:,
+        message_text:,
+        attachments:,
+        notifications_email:
+      ).notification.deliver_now
+    end
 
-    NotificationMailer.with(
-      notification_category:,
-      source:,
-      message_text:,
-      attachments: Array(attachments),
-      notifications_email:
-    ).notification.deliver_now
+    # Send to Slack unless feature flag is active
+    return if Feature.active?(:skip_slack_notifications)
+
+    SlackMessageWorker.perform_async(notification_category, source, message_text, color, options)
   end
 end

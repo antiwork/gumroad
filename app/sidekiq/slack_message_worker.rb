@@ -28,20 +28,6 @@ class SlackMessageWorker
     return if chat_room.nil?
 
     attachments = Array(options["attachments"] || options[:attachments])
-    notifications_email = GlobalConfig.get("NOTIFICATIONS_EMAIL_ADDRESS")
-
-    if notifications_email.present?
-      NotificationMailer.with(
-        notification_category: room_name,
-        source: sender,
-        message_text:,
-        attachments:,
-        notifications_email:
-      ).notification.deliver_now
-    end
-
-    return if Feature.active?(:skip_slack_notifications)
-
     hex_color = Color::CSS[color].html
 
     Timeout.timeout(SLACK_MESSAGE_SEND_TIMEOUT) do
