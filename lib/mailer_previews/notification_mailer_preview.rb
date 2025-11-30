@@ -1,11 +1,10 @@
 # frozen_string_literal: true
 
-class SlackNotificationMailerPreview < ActionMailer::Preview
+class NotificationMailerPreview < ActionMailer::Preview
   def notification
-    SlackNotificationMailer.with(
-      room_name: "payments",
-      slack_channel: "accounting-alerts",
-      sender: "VAT Reporting Bot",
+    NotificationMailer.with(
+      notification_category: "payments",
+      source: "VAT Reporting Bot",
       message_text: ["Quarterly report is ready"],
       attachments: [
         {
@@ -17,4 +16,3 @@ class SlackNotificationMailerPreview < ActionMailer::Preview
     ).notification
   end
 end
-

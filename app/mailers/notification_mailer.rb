@@ -1,10 +1,9 @@
 # frozen_string_literal: true
 
-class SlackNotificationMailer < ApplicationMailer
+class NotificationMailer < ApplicationMailer
   def notification
-    @room_name = params[:room_name].to_s
-    @slack_channel = params[:slack_channel]
-    @sender = params[:sender]
+    @notification_category = params[:notification_category].to_s
+    @source = params[:source]
     @message_text = params[:message_text]
     @attachments = Array(params[:attachments])
     notifications_email = params[:notifications_email]
@@ -20,9 +19,9 @@ class SlackNotificationMailer < ApplicationMailer
 
   private
     def formatted_subject
-      readable_room = @room_name.titleize
+      readable_category = @notification_category.titleize
       base_subject = Array(@message_text).flatten.compact.join(" ").squish
-      suffix = base_subject.presence || "Slack notification"
-      "[Gumroad Notifications][#{readable_room}] #{suffix}"
+      suffix = base_subject.presence || "System notification"
+      "[Gumroad Notifications][#{readable_category}] #{suffix}"
     end
 end

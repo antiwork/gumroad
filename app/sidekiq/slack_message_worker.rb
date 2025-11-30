@@ -31,12 +31,11 @@ class SlackMessageWorker
     notifications_email = GlobalConfig.get("NOTIFICATIONS_EMAIL_ADDRESS")
 
     if notifications_email.present?
-      SlackNotificationMailer.with(
-        room_name:,
-        sender:,
+      NotificationMailer.with(
+        notification_category: room_name,
+        source: sender,
         message_text:,
         attachments:,
-        slack_channel: chat_room[:channel],
         notifications_email:
       ).notification.deliver_now
     end

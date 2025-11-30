@@ -1,41 +1,37 @@
-<%= header_section("Slack Notification", "from #{@room_name.titleize} (##{@slack_channel}) by #{@sender}") %>
+<%= header_section(@notification_category.titleize, @source) %>
 
 <% message_lines = Array(@message_text).flatten.compact.map(&:to_s).map(&:strip).reject(&:blank?) %>
 <% if message_lines.present? %>
-  <p><strong>Message:</strong></p>
   <div>
-    <%= simple_format(message_lines.join("\n")) %>
+    <% message_lines.each do |line| %>
+      <p><%= auto_link(line, html: { target: "_blank", rel: "noopener noreferrer" }) %></p>
+    <% end %>
   </div>
 <% end %>
 
 <% attachments = Array(@attachments).flatten.compact %>
 <% if attachments.present? %>
-  <p><strong>Attachments:</strong></p>
-  <ul>
+  <div>
     <% attachments.each do |raw_attachment| %>
       <% attachment = raw_attachment.respond_to?(:with_indifferent_access) ? raw_attachment.with_indifferent_access : raw_attachment %>
       <% attachment_hash = attachment.respond_to?(:[]) ? attachment : {} %>
       <% title = attachment_hash[:title].presence || attachment_hash["title"].presence %>
       <% text = attachment_hash[:text].presence || attachment_hash["text"].presence %>
       <% url = attachment_hash[:url].presence || attachment_hash["url"].presence || attachment_hash[:title_link].presence || attachment_hash["title_link"].presence %>
-      <li>
-        <% if title.present? %>
-          <strong>
-            <% if url.present? %>
-              <%= link_to title, url, target: "_blank", rel: "noopener noreferrer" %>
-            <% else %>
-              <%= title %>
-            <% end %>
-          </strong>
+
+      <p>
+        <% if title.present? && url.present? %>
+          <strong><%= link_to title, url, target: "_blank", rel: "noopener noreferrer" %></strong>
+        <% elsif title.present? %>
+          <strong><%= title %></strong>
         <% elsif url.present? %>
-          <strong><%= link_to url, url, target: "_blank", rel: "noopener noreferrer" %></strong>
+          <%= link_to url, url, target: "_blank", rel: "noopener noreferrer" %>
         <% end %>
-        <% if text.present? %>
-          <div>
-            <%= simple_format(text) %>
-          </div>
+
+        <% if text.present? && text != url %>
+          <br><%= simple_format(text, {}, wrapper_tag: "span") %>
         <% end %>
-      </li>
+      </p>
     <% end %>
-  </ul>
+  </div>
 <% end %>
