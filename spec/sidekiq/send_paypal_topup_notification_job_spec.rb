@@ -8,8 +8,20 @@ describe SendPaypalTopupNotificationJob do
       create(:payment, state: "completed", txn_id: "txn_id_1", processor_fee_cents: 1, user: seller)
       create(:payment, state: "completed", txn_id: "txn_id_2", processor_fee_cents: 2, user: seller2)
 
+
       allow(Rails.env).to receive(:production?).and_return(true)
       allow(PaypalPayoutProcessor).to receive(:current_paypal_balance_cents).and_return(125_000_00)
+
+      # Stub GumroadAddress to prevent nil alpha2 errors during tax calculation
+      stub_const("GumroadAddress::COUNTRY", ISO3166::Country["US"])
+      stub_const("GumroadAddress::STATE", "CA")
+      stub_const("GumroadAddress::ZIP", "94104")
+
+      # Create Gumroad's merchant account for Stripe
+      create(:merchant_account, user: nil, charge_processor_id: StripeChargeProcessor.charge_processor_id, charge_processor_merchant_id: nil)
+
+      # Bypass financial transaction validation for test purchases
+      allow_any_instance_of(Purchase).to receive(:financial_transaction_validation).and_return(nil)
     end
 
     it "sends a notification to slack with the required topup amount" do

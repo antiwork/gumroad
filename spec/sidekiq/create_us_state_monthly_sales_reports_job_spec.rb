@@ -31,6 +31,17 @@ describe CreateUsStateMonthlySalesReportsJob do
     end
 
     before do
+      # Stub GumroadAddress to prevent nil alpha2 errors during tax calculation
+      stub_const("GumroadAddress::COUNTRY", ISO3166::Country["US"])
+      stub_const("GumroadAddress::STATE", "CA")
+      stub_const("GumroadAddress::ZIP", "94104")
+
+      # Create Gumroad's merchant account for Stripe
+      create(:merchant_account, user: nil, charge_processor_id: StripeChargeProcessor.charge_processor_id, charge_processor_merchant_id: nil)
+
+      # Bypass financial transaction validation for test purchases
+      allow_any_instance_of(Purchase).to receive(:financial_transaction_validation).and_return(nil)
+
       travel_to(Time.find_zone("UTC").local(2022, 8, 10)) do
         product = create(:product, price_cents: 100_00, native_type: "digital")
 
