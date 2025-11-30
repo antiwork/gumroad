@@ -267,8 +267,8 @@ const LibraryPage = ({ results, creators, bundles, reviews_page_enabled, followi
     return filtered;
   }, [state.results, state.search]);
 
-  const [resultsLimit, setResultsLimit] = React.useState(9);
-  React.useEffect(() => setResultsLimit(9), [filteredResults]);
+  const [resultsLimit, setResultsLimit] = React.useState(15);
+  React.useEffect(() => setResultsLimit(15), [filteredResults]);
 
   const isDesktop = useIsAboveBreakpoint("lg");
   const [mobileFiltersExpanded, setMobileFiltersExpanded] = React.useState(false);
@@ -336,7 +336,7 @@ const LibraryPage = ({ results, creators, bundles, reviews_page_enabled, followi
   return (
     <Layout
       selectedTab="purchases"
-      onScrollToBottom={() => setResultsLimit((prevNumberOfResults) => prevNumberOfResults + 9)}
+      onScrollToBottom={() => setResultsLimit((prevNumberOfResults) => prevNumberOfResults + 15)}
       reviewsPageEnabled={reviews_page_enabled}
       followingWishlistsEnabled={following_wishlists_enabled}
     >
