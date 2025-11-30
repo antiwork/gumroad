@@ -42,7 +42,7 @@ describe("Email List", :js, :sidekiq_inline, :elasticsearch_wait_for_refresh, ty
 
         within_table "Published" do
           expect(page).to have_table_row({ "Subject" => "Email 1 (sent)", "Emailed" => "1", "Opened" => "100%", "Clicks" => "123", "Views" => "n/a" })
-          cell = page.find("td[data-label='Clicks'] [aria-describedby]", text: "123", visible: :all)
+          cell = find(:table_cell, "Clicks", text: "123", visible: :all).find("[aria-describedby]", visible: :all)
           expect(cell).to have_tooltip(text: url1, visible: false)
           expect(cell).to have_tooltip(text: url2.truncate(70), visible: false)
           expect(page).to have_table_row({ "Subject" => "Email 3 (sent)", "Emailed" => "--", "Opened" => "--", "Clicks" => "0", "Views" => "0" })
@@ -53,7 +53,7 @@ describe("Email List", :js, :sidekiq_inline, :elasticsearch_wait_for_refresh, ty
         end
 
         # Opens a sidebar drawer with additional information of the selected email
-        find(:table_row, { name: "Email 1 (sent)" }).click
+        find(:table_row, { "Subject" => "Email 1 (sent)" }).click
         within_modal "Email 1 (sent)" do
           expect(page).to have_text("Sent #{installment1.published_at.in_time_zone(seller.timezone).strftime("%-m/%-d/%Y, %-I:%M:%S %p")}", normalize_ws: true)
           expect(page).to have_text("Emailed 1", normalize_ws: true)
@@ -77,7 +77,7 @@ describe("Email List", :js, :sidekiq_inline, :elasticsearch_wait_for_refresh, ty
         end
         expect(page).to_not have_modal
 
-        find(:table_row, { name: "Email 3 (sent)" }).click
+        find(:table_row, { "Subject" => "Email 3 (sent)" }).click
         within_modal "Email 3 (sent)" do
           expect(page).to have_text("Sent #{installment3.published_at.in_time_zone(seller.timezone).strftime("%-m/%-d/%Y, %-I:%M:%S %p")}", normalize_ws: true)
           expect(page).to have_text("Emailed --", normalize_ws: true)
@@ -139,7 +139,7 @@ describe("Email List", :js, :sidekiq_inline, :elasticsearch_wait_for_refresh, ty
       it "deletes an email" do
         visit "#{emails_path}/published"
 
-        find(:table_row, { name: "Email 1 (sent)" }).click
+        find(:table_row, { "Subject" => "Email 1 (sent)" }).click
         within_modal "Email 1 (sent)" do
           click_on "Delete"
         end
@@ -182,7 +182,7 @@ describe("Email List", :js, :sidekiq_inline, :elasticsearch_wait_for_refresh, ty
         visit "#{emails_path}/scheduled"
         wait_for_ajax
 
-        find(:table_row, { name: "Email 5 (scheduled)" }).click
+        find(:table_row, { "Subject" => "Email 5 (scheduled)" }).click
         within_modal "Email 5 (scheduled)" do
           click_on "Delete"
         end
@@ -245,7 +245,7 @@ describe("Email List", :js, :sidekiq_inline, :elasticsearch_wait_for_refresh, ty
         visit "#{emails_path}/drafts"
         wait_for_ajax
 
-        find(:table_row, { name: "Email 2 (draft)" }).click
+        find(:table_row, { "Subject" => "Email 2 (draft)" }).click
         within_modal "Email 2 (draft)" do
           click_on "Delete"
         end

@@ -32,7 +32,7 @@ describe("Email Editing Flow", :js, :elasticsearch_wait_for_refresh, type: :syst
 
     select_tab "Drafts"
     wait_for_ajax
-    find(:table_row, { name: "Original email" }).click
+    find(:table_row, { "Subject" => "Original email" }).click
     click_on "Edit"
     expect(page).to have_text("Edit email")
 
@@ -125,7 +125,7 @@ describe("Email Editing Flow", :js, :elasticsearch_wait_for_refresh, type: :syst
     select_tab "Drafts"
     wait_for_ajax
 
-    find(:table_row, { name: "Original email" }).click
+    find(:table_row, { "Subject" => "Original email" }).click
     click_on "Edit"
     expect(page).to have_text("Edit email")
 
@@ -178,7 +178,7 @@ describe("Email Editing Flow", :js, :elasticsearch_wait_for_refresh, type: :syst
     # Ensure that the "Scheduled" tab is open by default on accessing the /emails page where there's at least one scheduled email
     expect(page).to have_current_path("#{emails_path}/scheduled")
     expect(page).to have_tab_button("Scheduled", open: true)
-    find(:table_row, { name: "Scheduled email" }).click
+    find(:table_row, { "Subject" => "Scheduled email" }).click
     click_on "Edit"
 
     expect(page).to have_current_path("#{emails_path}/#{scheduled_installment.external_id}/edit")
@@ -207,7 +207,7 @@ describe("Email Editing Flow", :js, :elasticsearch_wait_for_refresh, type: :syst
 
     # Check that the publish date is displayed
     expect(page).to have_current_path("#{emails_path}/published")
-    find(:table_row, { name: "Updated scheduled email" }).click
+    find(:table_row, { "Subject" => "Updated scheduled email" }).click
     click_on "Edit"
     expect(page).to have_checked_field("Send email", disabled: true)
     expect(page).to have_field("Publish date", with: scheduled_installment.published_at.to_date.to_s)
@@ -222,7 +222,7 @@ describe("Email Editing Flow", :js, :elasticsearch_wait_for_refresh, type: :syst
     expect(page).to have_text("Schedule an email to be sent exactly when you want.")
 
     select_tab "Drafts"
-    find(:table_row, { name: "Original email" }).click
+    find(:table_row, { "Subject" => "Original email" }).click
     click_on "Edit"
 
     expect(page).to have_current_path("#{emails_path}/#{installment.external_id}/edit")
@@ -250,7 +250,7 @@ describe("Email Editing Flow", :js, :elasticsearch_wait_for_refresh, type: :syst
 
     # Check that the publish date is displayed
     expect(page).to have_current_path("#{emails_path}/published")
-    find(:table_row, { name: "Updated email" }).click
+    find(:table_row, { "Subject" => "Updated email" }).click
     click_on "Edit"
     expect(page).to have_checked_field("Send email", disabled: true)
     expect(page).to have_field("Publish date", with: installment.published_at.to_date.to_s)
@@ -273,7 +273,7 @@ describe("Email Editing Flow", :js, :elasticsearch_wait_for_refresh, type: :syst
 
     # Ensure that the "Published" tab is open by default on accessing the /emails page where there are no scheduled emails
     expect(page).to have_tab_button("Published", open: true)
-    find(:table_row, { name: "Hello" }).click
+    find(:table_row, { "Subject" => "Hello" }).click
     click_on "Edit"
 
     expect(page).to have_current_path("#{emails_path}/#{published_installment.external_id}/edit")
@@ -358,7 +358,7 @@ describe("Email Editing Flow", :js, :elasticsearch_wait_for_refresh, type: :syst
 
     # The "Send email" field is disabled after the email is blasted (which happens when the email is published)
     expect(page).to have_current_path("#{emails_path}/published")
-    find(:table_row, { name: "Hello - edit 3" }).click
+    find(:table_row, { "Subject" => "Hello - edit 3" }).click
     click_on "Edit"
     expect(page).to have_checked_field("Send email", disabled: true)
     expect(page).to have_checked_field("Post to profile", disabled: false)
@@ -372,7 +372,7 @@ describe("Email Editing Flow", :js, :elasticsearch_wait_for_refresh, type: :syst
     visit emails_path
 
     select_tab "Drafts"
-    find(:table_row, { name: "Original email" }).click
+    find(:table_row, { "Subject" => "Original email" }).click
     click_on "Edit"
 
     # Ensure that it saves the edited fields and sends a preview email
@@ -424,7 +424,7 @@ describe("Email Editing Flow", :js, :elasticsearch_wait_for_refresh, type: :syst
     expect(installment.ready_to_publish?).to be(false)
 
     click_on "Cancel"
-    find(:table_row, { name: "Updated original email - edit 2" }).click
+    find(:table_row, { "Subject" => "Updated original email - edit 2" }).click
     click_on "Edit"
     wait_for_ajax
 
@@ -443,7 +443,7 @@ describe("Email Editing Flow", :js, :elasticsearch_wait_for_refresh, type: :syst
 
     # When both channels are checked, the "Preview" button is disclosure
     expect(page).to have_current_path("#{emails_path}/scheduled")
-    find(:table_row, { name: "Updated original email - scheduled" }).click
+    find(:table_row, { "Subject" => "Updated original email - scheduled" }).click
     click_on "Edit"
     check "Send email"
     fill_in "Title", with: "Updated original email - scheduled - edit 2"
@@ -474,7 +474,7 @@ describe("Email Editing Flow", :js, :elasticsearch_wait_for_refresh, type: :syst
 
     # Preview the published post in a new window
     expect(page).to have_current_path("#{emails_path}/published")
-    find(:table_row, { name: "Updated original email - published" }).click
+    find(:table_row, { "Subject" => "Updated original email - published" }).click
     click_on "Edit"
     expect(page).to have_checked_field("Send email", disabled: true)
     expect(page).to have_checked_field("Post to profile", disabled: false)
@@ -555,7 +555,7 @@ describe("Email Editing Flow", :js, :elasticsearch_wait_for_refresh, type: :syst
     expect(section1.reload.shown_posts).to be_empty
     expect(section2.reload.shown_posts).to eq([installment.id])
 
-    find(:table_row, { name: "Original email" }).click
+    find(:table_row, { "Subject" => "Original email" }).click
     click_on "Edit"
     expect(page).to have_unchecked_field("Posts section 1")
     expect(page).to have_checked_field("Unnamed section")

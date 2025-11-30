@@ -20,7 +20,7 @@ export const AdminSuspendForTosForm = ({
   default_reason: string;
 }) => (
   <Form
-    url={Routes.flag_seller_for_tos_violation_admin_link_path(product_id)}
+    url={Routes.flag_seller_for_tos_violation_admin_product_path(product_id)}
     method="POST"
     confirmMessage={confirm_message}
     onSuccess={() => showAlert(success_message, "success")}

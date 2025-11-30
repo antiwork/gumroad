@@ -164,7 +164,7 @@ describe("Email Creation Flow", :js, type: :system) do
     wait_for_ajax
     expect(page).to have_table_row({ "Subject" => "Hello", "Sent to" => "Customers of Sample product", "Audience" => "0" })
 
-    find(:table_row, { name: "Hello" }).click
+    find(:table_row, { "Subject" => "Hello" }).click
     click_on "Edit"
     expect(page).to have_attachment(name: "thing")
     expect(page).to have_checked_field("Disable file downloads (stream only)")
