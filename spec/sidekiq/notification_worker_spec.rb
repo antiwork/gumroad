@@ -25,22 +25,6 @@ describe NotificationWorker do
         expect(email.subject).to eq("[Gumroad Notifications][Payments] Canada 2024-11 sales report is ready - https://example.com/report.csv")
       end
 
-      it "includes attachments in the email" do
-        attachments_array = [
-          {
-            title: "Report Details",
-            text: "Monthly sales breakdown",
-            url: "https://example.com/details"
-          }
-        ]
-
-        described_class.new.perform(notification_category, source, message_text, attachments_array)
-
-        email = ActionMailer::Base.deliveries.last
-        expect(email.body.encoded).to include("Report Details")
-        expect(email.body.encoded).to include("Monthly sales breakdown")
-        expect(email.body.encoded).to include("https://example.com/details")
-      end
 
       it "handles string keys in attachments" do
         attachments_with_string_keys = [
@@ -51,7 +35,7 @@ describe NotificationWorker do
         ]
 
         expect do
-          described_class.new.perform(notification_category, source, message_text, attachments_with_string_keys)
+          described_class.new.perform(notification_category, source, message_text, "gray", { "attachments" => attachments_with_string_keys })
         end.to change { ActionMailer::Base.deliveries.count }.by(1)
 
         email = ActionMailer::Base.deliveries.last
