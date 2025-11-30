@@ -19,7 +19,7 @@ class ProductPresenter::Card
     @product = product
   end
 
-  def for_web(request: nil, recommended_by: nil, recommender_model_name: nil, target: nil, show_seller: true, affiliate_id: nil, query: nil, compute_description: true)
+  def for_web(request: nil, recommended_by: nil, recommender_model_name: nil, target: nil, show_seller: true, affiliate_id: nil, query: nil, offer_code: nil, compute_description: true)
     default_recurrence = product.default_price_recurrence
     props = {
       id: product.external_id,
@@ -37,7 +37,7 @@ class ProductPresenter::Card
       price_cents: product.display_price_cents(for_default_duration: true),
       currency_code: product.price_currency_type.downcase,
       is_pay_what_you_want: product.has_customizable_price_option?,
-      url: url_for_product_page(product, request:, recommended_by:, recommender_model_name:, layout: target, affiliate_id:, query:),
+      url: url_for_product_page(product, request:, recommended_by:, recommender_model_name:, layout: target, affiliate_id:, query:, offer_code:),
       duration_in_months: product.duration_in_months,
       recurrence: default_recurrence&.recurrence,
     }

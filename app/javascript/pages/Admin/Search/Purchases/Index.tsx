@@ -8,6 +8,7 @@ import { type RefundPolicy, RefundPolicyTitle } from "$app/components/Admin/Purc
 import { PurchaseStates } from "$app/components/Admin/Purchases/States";
 import { CopyToClipboard } from "$app/components/CopyToClipboard";
 import { Icon } from "$app/components/Icons";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "$app/components/ui/Table";
 import { useOriginalLocation } from "$app/components/useOriginalLocation";
 
 type Purchase = {
@@ -79,22 +80,22 @@ export default function Purchases() {
               </Link>
             ) : null}
           </form>
-          <table>
-            <thead>
-              <tr>
-                <th>Purchase</th>
-                <th>By</th>
-              </tr>
-            </thead>
-            <tbody>
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Purchase</TableHead>
+                <TableHead>By</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
               {purchases.map((purchase) => (
-                <tr key={purchase.id}>
-                  <td data-label="Purchase">
+                <TableRow key={purchase.id}>
+                  <TableCell>
                     <Link href={Routes.admin_purchase_path(purchase.id)}>
                       {purchase.formatted_display_price}
                       {purchase.gumroad_responsible_for_tax ? ` + ${purchase.formatted_gumroad_tax_amount} VAT` : null}
                     </Link>{" "}
-                    <Link href={Routes.admin_link_url(purchase.product.id)}>{purchase.product.name}</Link>{" "}
+                    <Link href={Routes.admin_product_url(purchase.product.id)}>{purchase.product.name}</Link>{" "}
                     {purchase.variants_list}{" "}
                     <Link href={purchase.product.long_url} target="_blank" rel="noopener noreferrer nofollow">
                       <Icon name="arrow-up-right-square" />
@@ -118,8 +119,8 @@ export default function Purchases() {
                         ) : null}
                       </ul>
                     </div>
-                  </td>
-                  <td data-label="By">
+                  </TableCell>
+                  <TableCell>
                     <Link href={Routes.admin_search_purchases_path({ query: purchase.email })}>{purchase.email}</Link>{" "}
                     <CopyToClipboard text={purchase.email}>
                       <Icon name="outline-duplicate" />
@@ -127,11 +128,11 @@ export default function Purchases() {
                     <small>
                       <DateTimeWithRelativeTooltip date={purchase.created_at} />
                     </small>
-                  </td>
-                </tr>
+                  </TableCell>
+                </TableRow>
               ))}
-            </tbody>
-          </table>
+            </TableBody>
+          </Table>
           <PaginatedLoader itemsLength={purchases.length} pagination={pagination} only={["purchases", "pagination"]} />
         </>
       ) : (

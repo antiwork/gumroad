@@ -37,6 +37,7 @@ export const PriceEditor = ({
   currencyCodeSelector?: { options: CurrencyCode[]; onChange: (currencyCode: CurrencyCode) => void };
 }) => {
   const uid = React.useId();
+  const isFreeProduct = priceCents === 0;
 
   return (
     <fieldset>
@@ -48,11 +49,16 @@ export const PriceEditor = ({
         onChange={(newAmount) => setPriceCents(newAmount ?? 0)}
         currencyCodeSelector={currencyCodeSelector}
       />
+      {isFreeProduct ? (
+        <div role="alert" className="info">
+          Free products require a pay what they want price.
+        </div>
+      ) : null}
       <Details
         className="toggle"
         open={isPWYW}
         summary={
-          <Toggle value={isPWYW} onChange={setIsPWYW}>
+          <Toggle value={isPWYW} onChange={setIsPWYW} disabled={isFreeProduct}>
             <a href="/help/article/133-pay-what-you-want-pricing" target="_blank" rel="noreferrer">
               Allow customers to pay what they want
             </a>

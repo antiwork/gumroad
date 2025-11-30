@@ -259,7 +259,8 @@ class LinksController < ApplicationController
         recommended_by:,
         target: on_profile ? Product::Layout::PROFILE : Product::Layout::DISCOVER,
         show_seller: !on_profile,
-        query: (search_params[:query] unless on_profile)
+        query: (search_params[:query] unless on_profile),
+        offer_code: (search_params[:offer_code] unless on_profile)
       )
     end
     render json: results
