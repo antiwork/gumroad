@@ -10,6 +10,7 @@ import { Layout } from "$app/components/Library/Layout";
 import { Popover } from "$app/components/Popover";
 import { showAlert } from "$app/components/server-components/Alert";
 import Placeholder from "$app/components/ui/Placeholder";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "$app/components/ui/Table";
 
 import placeholder from "$assets/images/placeholders/wishlists-following.png";
 
@@ -49,28 +50,28 @@ const WishlistsFollowingPage = ({
     <Layout selectedTab="following_wishlists" reviewsPageEnabled={reviews_page_enabled} followingWishlistsEnabled>
       <section className="p-4 md:p-8">
         {wishlists.length > 0 ? (
-          <table>
-            <thead>
-              <tr>
-                <th>Wishlist</th>
-                <th>Products</th>
-                <th>Creator</th>
-                <th />
-              </tr>
-            </thead>
-            <tbody>
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Wishlist</TableHead>
+                <TableHead>Products</TableHead>
+                <TableHead>Creator</TableHead>
+                <TableHead />
+              </TableRow>
+            </TableHeader>
+            <TableBody>
               {wishlists.map((wishlist) => (
-                <tr key={wishlist.id}>
-                  <td>
+                <TableRow key={wishlist.id}>
+                  <TableCell>
                     <a href={wishlist.url} target="_blank" rel="noreferrer" style={{ textDecoration: "none" }}>
                       <h4>{wishlist.name}</h4>
                     </a>
                     <a href={wishlist.url} target="_blank" rel="noreferrer">
                       <small>{wishlist.url}</small>
                     </a>
-                  </td>
-                  <td>{wishlist.product_count}</td>
-                  <td>
+                  </TableCell>
+                  <TableCell>{wishlist.product_count}</TableCell>
+                  <TableCell>
                     <a
                       href={wishlist.creator.profile_url}
                       style={{ display: "flex", alignItems: "center", gap: "var(--spacer-2)" }}
@@ -78,9 +79,9 @@ const WishlistsFollowingPage = ({
                       <img className="user-avatar" src={wishlist.creator.avatar_url} />
                       <span>{wishlist.creator.name}</span>
                     </a>
-                  </td>
-                  <td>
-                    <div className="actions">
+                  </TableCell>
+                  <TableCell>
+                    <div className="flex flex-wrap gap-3 lg:justify-end">
                       <Popover aria-label="Actions" trigger={<Icon name="three-dots" />}>
                         <div role="menu">
                           <div role="menuitem" className="danger" onClick={() => void destroy(wishlist)}>
@@ -89,11 +90,11 @@ const WishlistsFollowingPage = ({
                         </div>
                       </Popover>
                     </div>
-                  </td>
-                </tr>
+                  </TableCell>
+                </TableRow>
               ))}
-            </tbody>
-          </table>
+            </TableBody>
+          </Table>
         ) : (
           <Placeholder>
             <figure>

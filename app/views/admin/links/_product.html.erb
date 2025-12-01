@@ -1,10 +1,10 @@
-<article class="grid gap-4 rounded border border-border bg-background p-4" data-product-id="<%= product.unique_permalink %>">
+<article class="grid gap-4 rounded border border-border bg-background p-4" data-product-id="<%= product.id %>">
   <div class="paragraphs">
     <div style="display: flex; gap: var(--spacer-4); align-items: center">
       <%= link_to_if(product.preview_url, image_tag(cdn_url_for(product.preview_url) || asset_path("cover_placeholder.png"), style: "width: var(--form-element-height)", alt: "Preview image"), product.preview_url, target: "_blank") %>
       <div style="display: grid; gap: var(--spacer-2)">
         <h2>
-          <%= product.price_formatted %>, <%= link_to_unless_current(h(product.name), admin_link_url(product), title: product.id) %>
+          <%= product.price_formatted %>, <%= link_to_unless_current(h(product.name), admin_product_url(product), title: product.id) %>
           <%= link_to(tag.span(nil, class: "icon icon-arrow-up-right-square"), product.long_url, target: "_blank") %>
         </h2>
         <div>
@@ -20,7 +20,7 @@
     <div class="button-group">
       <%= link_to "Edit", edit_link_path(product), target: "_blank", class: "button small" %>
       <% if product.admins_can_generate_url_redirects? %>
-        <%= link_to "View download page", generate_url_redirect_admin_link_path(product.unique_permalink), target: "_blank", class: "button small" %>
+        <%= link_to "View download page", generate_url_redirect_admin_product_url(product.unique_permalink), target: "_blank", class: "button small" %>
       <% end %>
       <% product.alive_product_files.each do |file| %>
         <%= link_to file.s3_filename, admin_access_product_file_admin_product_path(product.unique_permalink, file.external_id), target: "_blank", class: "button small" %>
@@ -137,19 +137,19 @@
   <hr>
   <div class="button-group">
     <% if product.alive? %>
-      <%= admin_action label: "Unpublish", url: unpublish_admin_link_path(product.unique_permalink), loading: "Unpublishing product...", done: "Unpublished!", success_message: "Unpublished!" %>
+      <%= admin_action label: "Unpublish", url: unpublish_admin_product_path(product.id), loading: "Unpublishing product...", done: "Unpublished!", success_message: "Unpublished!" %>
     <% else %>
-      <%= admin_action label: "Publish", url: publish_admin_link_path(product.unique_permalink), loading: "Publishing product...", done: "Published!", success_message: "Published!" %>
+      <%= admin_action label: "Publish", url: publish_product_link_path(product.id), loading: "Publishing product...", done: "Published!", success_message: "Published!" %>
     <% end %>
     <% if product.deleted_at %>
-      <%= admin_action label: "Undelete", url: restore_admin_product_path(product.unique_permalink), loading: "Undeleting product...", done: "Undeleted!", success_message: "Undeleted!" %>
+      <%= admin_action label: "Undelete", url: restore_admin_product_path(product.id), loading: "Undeleting product...", done: "Undeleted!", success_message: "Undeleted!" %>
     <% else %>
-      <%= admin_action label: "Delete", url: admin_product_path(product.unique_permalink), method: "DELETE", loading: "Deleting product...", done: "Deleted!", success_message: "Deleted!" %>
+      <%= admin_action label: "Delete", url: admin_product_path(product.id), method: "DELETE", loading: "Deleting product...", done: "Deleted!", success_message: "Deleted!" %>
     <% end %>
     <% if product.is_adult %>
-      <%= admin_action label: "Make non-adult", url: is_adult_admin_link_path(product.unique_permalink, is_adult: "0"), loading: "Making non-adult...", done: "It's not adult!", success_message: "It's not adult!" %>
+      <%= admin_action label: "Make non-adult", url: is_adult_admin_product_path(product.id, is_adult: "0"), loading: "Making non-adult...", done: "It's not adult!", success_message: "It's not adult!" %>
     <% else %>
-      <%= admin_action label: "Make adult", url: is_adult_admin_link_path(product.unique_permalink, is_adult: "1"), loading: "Making adult...", done: "It's adult!", success_message: "It's adult!" %>
+      <%= admin_action label: "Make adult", url: is_adult_admin_product_path(product.id, is_adult: "1"), loading: "Making adult...", done: "It's adult!", success_message: "It's adult!" %>
     <% end %>
     <% if policy([:admin, :products, :staff_picked, product]).create? %>
       <%= admin_action label: "Mark as staff-picked", url: admin_product_staff_picked_path(product.id), loading: "Marking as staff-picked...", done: "Marked as staff-picked!", success_message: "Marked as staff-picked!" %>
@@ -158,7 +158,7 @@
       <%= admin_action label: "Unmark as staff-picked", url: admin_product_staff_picked_path(product.id), method: "DELETE", loading: "Unmarking as staff-picked...", done: "Unmarked as staff-picked!", success_message: "Unmarked as staff-picked!" %>
     <% end %>
     <% if product.has_integration?(DiscordIntegration.name) %>
-      <%= link_to "Join Discord", join_discord_redirect_admin_link_path(product.id), target: "_blank", class: "button small" %>
+      <%= link_to "Join Discord", join_discord_redirect_admin_product_path(product.id), target: "_blank", class: "button small" %>
     <% end %>
   </div>
 

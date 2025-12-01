@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[7.1].define(version: 2025_11_10_144032) do
+ActiveRecord::Schema[7.1].define(version: 2025_11_24_133549) do
   create_table "active_storage_attachments", charset: "utf8mb4", collation: "utf8mb4_unicode_ci", force: :cascade do |t|
     t.string "name", limit: 191, null: false
     t.string "record_type", limit: 191, null: false
@@ -413,6 +413,7 @@ ActiveRecord::Schema[7.1].define(version: 2025_11_10_144032) do
     t.boolean "pay_in_installments", default: false, null: false
     t.index ["cart_id", "product_id", "deleted_at"], name: "index_cart_products_on_cart_id_and_product_id_and_deleted_at", unique: true
     t.index ["cart_id"], name: "index_cart_products_on_cart_id"
+    t.index ["deleted_at", "cart_id"], name: "index_cart_products_on_deleted_at_and_cart_id"
     t.index ["product_id"], name: "index_cart_products_on_product_id"
   end
 
@@ -430,6 +431,7 @@ ActiveRecord::Schema[7.1].define(version: 2025_11_10_144032) do
     t.string "ip_address"
     t.index ["browser_guid"], name: "index_carts_on_browser_guid"
     t.index ["created_at"], name: "index_carts_on_created_at"
+    t.index ["deleted_at", "updated_at"], name: "index_carts_on_deleted_at_and_updated_at"
     t.index ["email"], name: "index_carts_on_email"
     t.index ["order_id"], name: "index_carts_on_order_id"
     t.index ["updated_at"], name: "index_carts_on_updated_at"
