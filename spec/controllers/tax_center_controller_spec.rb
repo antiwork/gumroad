@@ -100,6 +100,69 @@ describe TaxCenterController, type: :controller, inertia: true do
       end
     end
 
+    context "when tax form has stripe_account_id stored" do
+      it "uses the stored stripe_account_id if it belongs to the seller" do
+        tax_form = UserTaxForm.last
+        tax_form.stripe_account_id = stripe_account_id
+        tax_form.save!
+
+        pdf_tempfile = Tempfile.new(["tax_form", ".pdf"])
+        pdf_tempfile.write("PDF content")
+        pdf_tempfile.rewind
+
+        allow_any_instance_of(StripeTaxFormsApi).to receive(:download_tax_form).and_return(pdf_tempfile)
+
+        get :download, params: { year:, form_type: }
+
+        expect(response).to be_successful
+
+        pdf_tempfile.close
+        pdf_tempfile.unlink
+      end
+    end
+
+    context "when tax form was filed with a different Stripe account" do
+      let(:old_stripe_account_id) { "acct_old_account" }
+
+      before do
+        create(:merchant_account, user: seller, charge_processor_merchant_id: old_stripe_account_id)
+
+        tax_form = UserTaxForm.last
+        tax_form.stripe_account_id = old_stripe_account_id
+        tax_form.save!
+      end
+
+      it "uses the old Stripe account stored in the tax form" do
+        pdf_tempfile = Tempfile.new(["tax_form", ".pdf"])
+        pdf_tempfile.write("PDF content")
+        pdf_tempfile.rewind
+
+        allow_any_instance_of(StripeTaxFormsApi).to receive(:download_tax_form).and_return(pdf_tempfile)
+
+        get :download, params: { year:, form_type: }
+
+        expect(response).to be_successful
+
+        pdf_tempfile.close
+        pdf_tempfile.unlink
+      end
+    end
+
+    context "when stored stripe_account_id does not belong to seller" do
+      before do
+        tax_form = UserTaxForm.last
+        tax_form.stripe_account_id = "acct_someone_else"
+        tax_form.save
+      end
+
+      it "redirects with error message" do
+        get :download, params: { year:, form_type: }
+
+        expect(response).to redirect_to(tax_center_path(year:))
+        expect(flash[:alert]).to eq("Tax form not available for download.")
+      end
+    end
+
     context "when download fails from Stripe API" do
       before do
         allow_any_instance_of(StripeTaxFormsApi).to receive(:download_tax_form).and_return(nil)

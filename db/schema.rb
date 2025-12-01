@@ -2458,6 +2458,7 @@ ActiveRecord::Schema[7.1].define(version: 2025_11_24_133549) do
     t.bigint "user_id", null: false
     t.integer "tax_year", null: false
     t.string "tax_form_type", null: false
+    t.text "json_data"
     t.datetime "created_at", null: false
     t.datetime "updated_at", null: false
     t.index ["user_id", "tax_year", "tax_form_type"], name: "index_user_tax_forms_on_user_id_and_tax_year_and_tax_form_type", unique: true

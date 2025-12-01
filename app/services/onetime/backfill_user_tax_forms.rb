@@ -34,7 +34,7 @@ class Onetime::BackfillUserTaxForms
     end
 
     def backfill_stripe_account(stripe_account_id)
-      merchant_account = MerchantAccount.alive.stripe.find_by(charge_processor_merchant_id: stripe_account_id)
+      merchant_account = MerchantAccount.stripe.find_by(charge_processor_merchant_id: stripe_account_id)
 
       unless merchant_account
         @results[:errors][stripe_account_id] ||= []
@@ -47,9 +47,10 @@ class Onetime::BackfillUserTaxForms
       tax_form = UserTaxForm.find_or_initialize_by(user:, tax_year:, tax_form_type:)
 
       if tax_form.new_record?
+        tax_form.stripe_account_id = stripe_account_id
         if tax_form.save
           @results[:created] += 1
-          puts "[CREATED] user_id=#{user.id}, year=#{tax_year}, type=#{tax_form_type}"
+          puts "[CREATED] user_id=#{user.id}, year=#{tax_year}, type=#{tax_form_type}, stripe_account_id=#{stripe_account_id}"
         else
           @results[:errors][stripe_account_id] ||= []
           @results[:errors][stripe_account_id] << "Failed to save for user_id=#{user.id}: #{tax_form.errors.full_messages.join(', ')}"

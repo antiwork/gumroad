@@ -6,6 +6,7 @@ class CreateUserTaxForms < ActiveRecord::Migration[7.1]
       t.references :user, null: false, index: true
       t.integer :tax_year, null: false
       t.string :tax_form_type, null: false
+      t.text :json_data
       t.timestamps
 
       t.index [:user_id, :tax_year, :tax_form_type], unique: true

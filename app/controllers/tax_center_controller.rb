@@ -30,8 +30,8 @@ class TaxCenterController < Sellers::BaseController
       return
     end
 
-    stripe_account_id = current_seller.stripe_account&.charge_processor_merchant_id
-    if stripe_account_id.blank?
+    stripe_account_id = tax_form.stripe_account_id || current_seller.stripe_account&.charge_processor_merchant_id
+    if stripe_account_id && !current_seller.merchant_accounts.stripe.exists?(charge_processor_merchant_id: stripe_account_id)
       redirect_to tax_center_path(year:), alert: error_message
       return
     end
