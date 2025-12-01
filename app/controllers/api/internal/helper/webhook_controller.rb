@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 class Api::Internal::Helper::WebhookController < Api::Internal::Helper::BaseController
+  skip_before_action :authorize_helper_token!
   before_action :authorize_hmac_signature!
   before_action :require_params!
 

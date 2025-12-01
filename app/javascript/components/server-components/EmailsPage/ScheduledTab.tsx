@@ -10,6 +10,7 @@ import {
   ScheduledInstallment,
 } from "$app/data/installments";
 import { assertDefined } from "$app/utils/assert";
+import { classNames } from "$app/utils/classNames";
 import { asyncVoid } from "$app/utils/promise";
 import { AbortError, assertResponseError } from "$app/utils/request";
 
@@ -29,6 +30,7 @@ import {
   ViewEmailButton,
 } from "$app/components/server-components/EmailsPage";
 import { Sheet, SheetHeader } from "$app/components/ui/Sheet";
+import { Table, TableBody, TableCaption, TableCell, TableHead, TableHeader, TableRow } from "$app/components/ui/Table";
 import { useDebouncedCallback } from "$app/components/useDebouncedCallback";
 import { useOnChange } from "$app/components/useOnChange";
 import { useUserAgentInfo } from "$app/components/UserAgent";
@@ -130,43 +132,46 @@ export const ScheduledTab = () => {
         {installments.length > 0 ? (
           <>
             {Object.keys(installmentsByDate).map((date) => (
-              <table key={date} className="mb-16" aria-live="polite" aria-busy={isLoading}>
-                <caption>Scheduled for {date}</caption>
-                <thead>
-                  <tr>
-                    <th>Subject</th>
-                    <th>Sent to</th>
-                    <th>Audience</th>
-                    <th>Delivery Time</th>
-                  </tr>
-                </thead>
-                <tbody>
+              <Table
+                key={date}
+                aria-live="polite"
+                className={classNames("mb-16", isLoading && "pointer-events-none opacity-50")}
+              >
+                <TableCaption>Scheduled for {date}</TableCaption>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Subject</TableHead>
+                    <TableHead>Sent to</TableHead>
+                    <TableHead>Audience</TableHead>
+                    <TableHead>Delivery Time</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
                   {installmentsByDate[date]?.map((installment) => (
-                    <tr
+                    <TableRow
                       key={installment.external_id}
                       aria-selected={installment.external_id === selectedInstallmentId}
                       onClick={() => setSelectedInstallmentId(installment.external_id)}
                     >
-                      <td data-label="Subject">{installment.name}</td>
-                      <td data-label="Sent to">{installment.recipient_description}</td>
-                      <td
-                        data-label="Audience"
+                      <TableCell>{installment.name}</TableCell>
+                      <TableCell>{installment.recipient_description}</TableCell>
+                      <TableCell
                         aria-busy={audienceCountValue(audienceCounts, installment.external_id) === null}
                         className="whitespace-nowrap"
                       >
                         {audienceCountValue(audienceCounts, installment.external_id)}
-                      </td>
-                      <td data-label="Delivery Time" className="whitespace-nowrap">
+                      </TableCell>
+                      <TableCell className="whitespace-nowrap">
                         {new Date(installment.to_be_published_at).toLocaleTimeString(userAgentInfo.locale, {
                           hour: "numeric",
                           minute: "numeric",
                           timeZone: currentSeller.timeZone.name,
                         })}
-                      </td>
-                    </tr>
+                      </TableCell>
+                    </TableRow>
                   ))}
-                </tbody>
-              </table>
+                </TableBody>
+              </Table>
             ))}
             {pagination.next ? (
               <Button color="primary" disabled={isLoading} onClick={() => void fetchInstallments()}>
