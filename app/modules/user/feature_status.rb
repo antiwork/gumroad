@@ -24,6 +24,14 @@ class User
         !active_preorders?(charge_processor_id: PaypalChargeProcessor.charge_processor_id)
     end
 
+    def can_setup_bank_payouts?
+      active_bank_account.present? || native_payouts_supported? || signed_up_from_united_arab_emirates?
+    end
+
+    def can_setup_paypal_payouts?
+      payment_address.present? || !native_payouts_supported? || signed_up_from_united_arab_emirates? || signed_up_from_egypt?
+    end
+
     def charge_paypal_payout_fee?
       Feature.active?(:paypal_payout_fee, self) &&
         !paypal_payout_fee_waived? &&

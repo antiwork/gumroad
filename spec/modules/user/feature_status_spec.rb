@@ -176,6 +176,68 @@ describe User::FeatureStatus do
     end
   end
 
+  describe "can_setup_bank_payouts?" do
+    it "returns true if country is in Stripe supported list" do
+      User::Compliance.const_get(:SUPPORTED_COUNTRIES).each do |country|
+        seller = create(:user)
+        create(:user_compliance_info, user: seller, country: country.common_name)
+        expect(seller.can_setup_bank_payouts?).to be true
+      end
+    end
+
+    it "returns true if user has an active bank account" do
+      seller = create(:user)
+      create(:ach_account_stripe_succeed, user: seller)
+      expect(seller.can_setup_bank_payouts?).to be true
+    end
+
+    it "returns false if country is not in Stripe supported list and there's no active bank account" do
+      seller = create(:user)
+      create(:user_compliance_info, user: seller, country: "Brazil")
+      expect(seller.can_setup_bank_payouts?).to be false
+    end
+
+    it "returns true if user is from UAE" do
+      seller = create(:user)
+      create(:user_compliance_info, user: seller, country: "United Arab Emirates")
+      expect(seller.can_setup_bank_payouts?).to be true
+    end
+  end
+
+  describe "can_setup_paypal_payouts?" do
+    it "returns true if user already has a payment address set" do
+      seller = create(:user, payment_address: "paypal@example.com")
+      create(:user_compliance_info, user: seller, country: "United States")
+      expect(seller.can_setup_paypal_payouts?).to be true
+    end
+
+    it "returns true if country is not in Stripe supported list" do
+      seller = create(:user, payment_address: nil)
+      create(:user_compliance_info, user: seller, country: "Brazil")
+      expect(seller.can_setup_paypal_payouts?).to be true
+    end
+
+    it "returns true if user is from UAE" do
+      seller = create(:user, payment_address: nil)
+      create(:user_compliance_info, user: seller, country: "United Arab Emirates")
+      expect(seller.can_setup_paypal_payouts?).to be true
+    end
+
+    it "returns true if user is from Egypt" do
+      seller = create(:user, payment_address: nil)
+      create(:user_compliance_info, user: seller, country: "Egypt")
+      expect(seller.can_setup_paypal_payouts?).to be true
+    end
+
+    it "returns false for all Stripe supported countries except UAE and Egypt" do
+      (User::Compliance.const_get(:SUPPORTED_COUNTRIES) - [Compliance::Countries::ARE, Compliance::Countries::EGY]).each do |country|
+        seller = create(:user, payment_address: nil)
+        create(:user_compliance_info, user: seller, country: country.common_name)
+        expect(seller.can_setup_paypal_payouts?).to be false
+      end
+    end
+  end
+
   describe "#paypal_connect_allowed?" do
     let!(:seller) { create(:user) }
 
