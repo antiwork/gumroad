@@ -10,6 +10,7 @@ import { useLoggedInUser } from "$app/components/LoggedInUser";
 import { Modal } from "$app/components/Modal";
 import { showAlert } from "$app/components/server-components/Alert";
 import Placeholder from "$app/components/ui/Placeholder";
+import { Table, TableBody, TableCaption, TableCell, TableHead, TableHeader, TableRow } from "$app/components/ui/Table";
 import { Layout } from "$app/components/WorkflowsPage";
 
 import placeholder from "$assets/images/placeholders/workflows.png";
@@ -143,45 +144,45 @@ const WorkflowRow = ({
   );
 
   return workflow.installments.length > 0 ? (
-    <table key={workflow.external_id}>
-      <caption>{header}</caption>
-      <thead>
-        <tr>
-          <th style={workflow.published ? { width: "40%" } : undefined}>Email</th>
+    <Table key={workflow.external_id}>
+      <TableCaption>{header}</TableCaption>
+      <TableHeader>
+        <TableRow>
+          <TableHead style={workflow.published ? { width: "40%" } : undefined}>Email</TableHead>
           {workflow.published ? (
             <>
-              <th>Delay</th>
-              <th>Sent</th>
-              <th>Opens</th>
-              <th>Clicks</th>
+              <TableHead>Delay</TableHead>
+              <TableHead>Sent</TableHead>
+              <TableHead>Opens</TableHead>
+              <TableHead>Clicks</TableHead>
             </>
           ) : null}
-        </tr>
-      </thead>
-      <tbody>
+        </TableRow>
+      </TableHeader>
+      <TableBody>
         {workflow.installments.map((installment) => (
-          <tr key={installment.external_id}>
-            <td data-label="Email">{installment.name}</td>
+          <TableRow key={installment.external_id}>
+            <TableCell>{installment.name}</TableCell>
             {workflow.published ? (
               <>
-                <td data-label="Delay">
+                <TableCell label="Delay">
                   {installment.delayed_delivery_time_duration} {installment.displayed_delayed_delivery_time_period}
-                </td>
-                <td data-label="Sent" style={{ whiteSpace: "nowrap" }}>
+                </TableCell>
+                <TableCell label="Sent" className="whitespace-nowrap">
                   {formatStatNumber({ value: installment.sent_count ?? 0 })}
-                </td>
-                <td data-label="Opens" style={{ whiteSpace: "nowrap" }}>
+                </TableCell>
+                <TableCell label="Opens" className="whitespace-nowrap">
                   {`${formatStatNumber({ value: installment.open_rate ?? 0 })}%`}
-                </td>
-                <td data-label="Clicks" style={{ whiteSpace: "nowrap" }}>
+                </TableCell>
+                <TableCell label="Clicks" className="whitespace-nowrap">
                   {formatStatNumber({ value: installment.click_count })}
-                </td>
+                </TableCell>
               </>
             ) : null}
-          </tr>
+          </TableRow>
         ))}
-      </tbody>
-    </table>
+      </TableBody>
+    </Table>
   ) : (
     <section className="flex flex-col gap-4" key={workflow.external_id}>
       {header}
