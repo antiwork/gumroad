@@ -150,15 +150,10 @@ describe SubscriptionsController do
         let(:gifter) { create(:user) }
         let(:giftee) { create(:user) }
         let(:product) { create(:membership_product, user: seller) }
-        let(:gifter_purchase) { create(:purchase, :gift_sender, link: product, purchaser: gifter, is_original_subscription_purchase: true) }
-        let(:giftee_purchase) { create(:purchase, :gift_receiver, link: product, purchaser: giftee) }
-        let!(:gift) { create(:gift, gifter_purchase:, giftee_purchase:, link: product) }
         let!(:gifted_subscription) { create(:subscription, link: product, user: giftee) }
-
-        before do
-          gifter_purchase.update!(subscription: gifted_subscription, gift_given: gift)
-          giftee_purchase.update!(subscription: gifted_subscription, gift_received: gift)
-        end
+        let!(:gifter_purchase) { create(:purchase, :gift_sender, link: product, purchaser: gifter, is_original_subscription_purchase: true, subscription: gifted_subscription) }
+        let!(:giftee_purchase) { create(:purchase, :gift_receiver, link: product, purchaser: giftee, subscription: gifted_subscription) }
+        let!(:gift) { create(:gift, gifter_purchase:, giftee_purchase:, link: product) }
 
         it "allows gifter to access manage page" do
           sign_in gifter
