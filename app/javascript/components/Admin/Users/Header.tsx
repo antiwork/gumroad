@@ -76,7 +76,7 @@ const Header = ({ user, isAffiliateUser = false, url }: HeaderProps) => {
             </li>
           </ul>
 
-          <AdminUserStats user_id={user.external_id} />
+          <AdminUserStats user_external_id={user.external_id} />
         </div>
       </div>
     </div>

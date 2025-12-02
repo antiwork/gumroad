@@ -39,7 +39,7 @@ const UserGuidsContent = ({ userGuids, isLoading }: { userGuids: UserGuids; isLo
   );
 };
 
-const AdminUserGuids = ({ user_id }: { user_id: string }) => {
+const AdminUserGuids = ({ user_external_id }: { user_external_id: string }) => {
   const [open, setOpen] = React.useState(false);
   const [isLoading, setIsLoading] = React.useState(false);
   const [userGuids, setUserGuids] = React.useState<UserGuids>([]);
@@ -48,7 +48,7 @@ const AdminUserGuids = ({ user_id }: { user_id: string }) => {
     setIsLoading(true);
     const response = await request({
       method: "GET",
-      url: Routes.admin_user_guids_path(user_id, { format: "json" }),
+      url: Routes.admin_user_guids_path(user_external_id, { format: "json" }),
       accept: "json",
     });
     setUserGuids(cast<UserGuids>(await response.json()));

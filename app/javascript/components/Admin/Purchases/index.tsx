@@ -478,7 +478,7 @@ const GiftInfo = ({ purchaseExternalId, gift }: { purchaseExternalId: string; gi
           <dt>Note</dt>
           <dd>{gift.note}</dd>
 
-          <dt>Receiver purchase id</dt>
+          <dt>Receiver purchase external id</dt>
           <dd>
             <Link href={Routes.admin_purchase_path(gift.other_purchase_external_id)}>
               {gift.other_purchase_external_id}

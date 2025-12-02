@@ -35,7 +35,7 @@ const AdminUserPayoutInfo = ({ user }: AdminUserPayoutInfoProps) => {
   return (
     <div ref={elementRef}>
       <h3>Payout Info</h3>
-      <PayoutInfo user_id={user.external_id} payoutInfo={data} isLoading={isLoading} />
+      <PayoutInfo user_external_id={user.external_id} payoutInfo={data} isLoading={isLoading} />
     </div>
   );
 };

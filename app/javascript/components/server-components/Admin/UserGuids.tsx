@@ -9,7 +9,7 @@ import { showAlert } from "$app/components/server-components/Alert";
 
 type UserGuids = { guid: string; user_external_ids: string[] }[];
 
-const AdminUserGuids = ({ user_id }: { user_id: number }) => {
+const AdminUserGuids = ({ user_external_id }: { user_external_id: string }) => {
   const [userGuids, setUserGuids] = React.useState<UserGuids | null>(null);
 
   const fetchUserGuids = async () => {
@@ -18,7 +18,7 @@ const AdminUserGuids = ({ user_id }: { user_id: number }) => {
       const response = await request({
         method: "GET",
         accept: "json",
-        url: Routes.admin_user_guids_path(user_id, { format: "json" }),
+        url: Routes.admin_user_guids_path(user_external_id, { format: "json" }),
       });
       setUserGuids(cast<UserGuids>(await response.json()));
     } catch (e) {
