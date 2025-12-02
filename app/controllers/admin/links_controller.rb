@@ -4,10 +4,6 @@ class Admin::LinksController < Admin::BaseController
   before_action :fetch_product!, except: [:show, :legacy_purchases]
 
   def show
-    if params[:id].to_i.to_s == params[:id] && product = Link.find_by(id: params[:id])
-      return redirect_to admin_product_path(product.external_id)
-    end
-
     product_by_external_id = Link.find_by_external_id(params[:id])
     @product_matches = product_by_external_id ? [product_by_external_id] : Link.by_general_permalink(params[:id])
 

@@ -155,11 +155,6 @@ class Admin::PurchasesController < Admin::BaseController
 
   private
     def fetch_purchase
-      if params[:id].to_i.to_s == params[:id] && purchase = Purchase.find_by(id: params[:id])
-        new_path = request.fullpath.sub("/#{params[:id]}", "/#{purchase.external_id}")
-        return redirect_to new_path
-      end
-
       @purchase = Purchase.find_by_external_id(params[:id])
       @purchase ||= Purchase.find_by_external_id_numeric(params[:id].to_i)
       @purchase ||= Purchase.find_by_stripe_transaction_id(params[:id])

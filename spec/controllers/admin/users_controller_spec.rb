@@ -25,11 +25,6 @@ describe Admin::UsersController, type: :controller, inertia: true do
       @params = { id: @user.external_id }
     end
 
-    it "redirects numeric ID to external_id" do
-      get :verify, params: { id: @user.id }
-      expect(response).to redirect_to(verify_admin_user_path(@user.external_id))
-    end
-
     it "successfully verifies and unverifies users" do
       expect(@user.verified.nil?).to be(true)
       get :verify, params: @params
@@ -57,11 +52,6 @@ describe Admin::UsersController, type: :controller, inertia: true do
 
   describe "GET 'show'" do
     let(:user) { create(:user) }
-
-    it "redirects numeric ID to external_id" do
-      get "show", params: { id: user.id }
-      expect(response).to redirect_to(admin_user_path(user.external_id))
-    end
 
     it "returns page successfully when using external_id" do
       get "show", params: { id: user.external_id }

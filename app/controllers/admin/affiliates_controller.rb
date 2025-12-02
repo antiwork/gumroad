@@ -33,10 +33,6 @@ class Admin::AffiliatesController < Admin::BaseController
 
   private
     def fetch_affiliate
-      if params[:id].to_i.to_s == params[:id] && user = User.find_by(id: params[:id])
-        return redirect_to admin_affiliate_path(user.external_id)
-      end
-
       @affiliate_user = User.find_by(username: params[:id])
       @affiliate_user ||= User.find_by_external_id(params[:id].gsub(/^ext-/, ""))
 
