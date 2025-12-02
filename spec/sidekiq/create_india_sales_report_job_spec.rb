@@ -142,10 +142,11 @@ describe CreateIndiaSalesReportJob do
                                         "Expected Tax (cents, rounded)",
                                         "Expected Tax (cents, floored)",
                                         "Tax Difference (rounded)",
-                                        "Tax Difference (floored)"
+                                        "Tax Difference (floored)",
+                                        "Buyer Tax ID"
                                       ])
 
-      expect(actual_payload.length).to eq(2)
+      expect(actual_payload.length).to eq(3)
 
       data_row = actual_payload[1]
 
@@ -160,11 +161,12 @@ describe CreateIndiaSalesReportJob do
       expect(data_row[8]).to eq("180")                        # Expected Tax (cents, floored) - (1000 * 0.18).floor = 180
       expect(data_row[9]).to eq("0")                          # Tax Difference (rounded) - 180 - 180 = 0
       expect(data_row[10]).to eq("0")                         # Tax Difference (floored) - 180 - 180 = 0
+      expect(data_row[11]).to eq("")
 
       temp_file.close(true)
     end
 
-    it "excludes purchases with business VAT ID" do
+    it "includes purchases with business VAT ID" do
       expect(s3_bucket_double).to receive(:object).and_return(@s3_object)
 
       described_class.new.perform(6, 2023)
@@ -174,7 +176,14 @@ describe CreateIndiaSalesReportJob do
       temp_file.rewind
       actual_payload = CSV.read(temp_file)
 
-      expect(actual_payload.length).to eq(2)
+      # Should now include 3 rows: header + 2 purchases (regular + VAT ID)
+      expect(actual_payload.length).to eq(3)
+
+      # Find the row with VAT ID
+      vat_row = actual_payload.find { |row| row[11] == "GST123456789" }
+      expect(vat_row).to be_present
+      expect(vat_row[11]).to eq("GST123456789")
+
       temp_file.close(true)
     end
 
@@ -221,6 +230,7 @@ describe CreateIndiaSalesReportJob do
       expect(invalid_state_row[8]).to eq("90")                                # Expected Tax (cents, floored) - (500 * 0.18).floor = 90
       expect(invalid_state_row[9]).to eq("90")                                # Tax Difference (rounded) - 90 - 0 = 90
       expect(invalid_state_row[10]).to eq("90")                               # Tax Difference (floored) - 90 - 0 = 90
+      expect(invalid_state_row[11]).to eq("")
 
       temp_file.close(true)
     end
