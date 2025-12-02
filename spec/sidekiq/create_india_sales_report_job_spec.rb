@@ -176,10 +176,8 @@ describe CreateIndiaSalesReportJob do
       temp_file.rewind
       actual_payload = CSV.read(temp_file)
 
-      # Should now include 3 rows: header + 2 purchases (regular + VAT ID)
       expect(actual_payload.length).to eq(3)
 
-      # Find the row with VAT ID
       vat_row = actual_payload.find { |row| row[11] == "GST123456789" }
       expect(vat_row).to be_present
       expect(vat_row[11]).to eq("GST123456789")
