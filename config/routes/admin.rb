@@ -58,7 +58,6 @@ namespace :admin do
       post :suspend_for_fraud_from_iffy
       post :flag_for_explicit_nsfw_tos_violation_from_iffy
       post :suspend_for_tos_violation
-      post :put_on_probation
       post :flag_for_fraud
       post :set_custom_fee
       post :toggle_adult_products

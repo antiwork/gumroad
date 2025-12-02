@@ -316,7 +316,7 @@ class User < ApplicationRecord
                       :do => :not_verified?
     after_transition any => %i[suspended_for_fraud suspended_for_tos_violation], :do => :invalidate_active_sessions!
     after_transition any => %i[suspended_for_fraud suspended_for_tos_violation], :do => :disable_links_and_tell_chat
-    after_transition any => %i[on_probation compliant flagged_for_tos_violation flagged_for_fraud suspended_for_tos_violation suspended_for_fraud],
+    after_transition any => %i[on_probation compliant flagged_for_tos_violation flagged_for_fraud suspended_for_tos_violation suspended_for_fraud not_reviewed],
                      :do => :add_user_comment
     after_transition any => [:flagged_for_tos_violation], :do => :add_product_comment
 
@@ -327,22 +327,26 @@ class User < ApplicationRecord
 
     after_transition any => :compliant, :do => :enable_refunds!
 
-    after_transition %i[suspended_for_fraud suspended_for_tos_violation] => %i[compliant on_probation],
+    after_transition %i[suspended_for_fraud suspended_for_tos_violation] => :compliant,
                      :do => :enable_links_and_tell_chat
-    after_transition %i[suspended_for_fraud suspended_for_tos_violation not_reviewed] => %i[compliant on_probation], :do => :unblock_seller_ip!
+    after_transition %i[suspended_for_fraud suspended_for_tos_violation not_reviewed] => :compliant, :do => :unblock_seller_ip!
     after_transition %i[suspended_for_fraud suspended_for_tos_violation] => :compliant, do: :enable_sellers_other_accounts
-    after_transition %i[suspended_for_fraud suspended_for_tos_violation] => %i[compliant on_probation], :do => :create_updated_stripe_apple_pay_domain
+    after_transition %i[suspended_for_fraud suspended_for_tos_violation] => :compliant, :do => :create_updated_stripe_apple_pay_domain
 
     event :mark_compliant do
       transition all => :compliant
     end
 
+    event :mark_not_reviewed do
+      transition %i[on_probation] => :not_reviewed
+    end
+
     event :flag_for_tos_violation do
-      transition %i[not_reviewed compliant flagged_for_fraud] => :flagged_for_tos_violation
+      transition %i[not_reviewed compliant flagged_for_fraud on_probation] => :flagged_for_tos_violation
     end
 
     event :flag_for_fraud do
-      transition %i[not_reviewed compliant flagged_for_tos_violation] => :flagged_for_fraud
+      transition %i[not_reviewed compliant flagged_for_tos_violation on_probation] => :flagged_for_fraud
     end
 
     event :suspend_for_fraud do
@@ -354,7 +358,7 @@ class User < ApplicationRecord
     end
 
     event :put_on_probation do
-      transition all => :on_probation
+      transition %i[not_reviewed compliant flagged_for_fraud flagged_for_tos_violation] => :on_probation
     end
   end
 

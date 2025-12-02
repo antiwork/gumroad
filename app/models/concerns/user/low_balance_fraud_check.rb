@@ -3,10 +3,10 @@
 module User::LowBalanceFraudCheck
   extend ActiveSupport::Concern
 
-  LOW_BALANCE_THRESHOLD = -100_00 # USD -100
+  LOW_BALANCE_THRESHOLD_IN_CENTS = -100_00 # USD -100
 
-  LOW_BALANCE_RECOVERY_THRESHOLD = 100_00 # USD 100
-  private_constant :LOW_BALANCE_RECOVERY_THRESHOLD
+  LOW_BALANCE_RECOVERY_THRESHOLD_IN_CENTS = 100_00 # USD 100
+  private_constant :LOW_BALANCE_RECOVERY_THRESHOLD_IN_CENTS
 
   LOW_BALANCE_PROBATION_WAIT_TIME = 2.months
   private_constant :LOW_BALANCE_PROBATION_WAIT_TIME
@@ -25,7 +25,7 @@ module User::LowBalanceFraudCheck
   end
 
   def check_for_low_balance_and_probate(refunded_or_disputed_purchase_id)
-    return if unpaid_balance_cents > LOW_BALANCE_THRESHOLD
+    return if unpaid_balance_cents > LOW_BALANCE_THRESHOLD_IN_CENTS
 
     AdminMailer.low_balance_notify(id, refunded_or_disputed_purchase_id).deliver_later
     disable_refunds_and_put_on_probation! unless recently_probated_for_low_balance?
@@ -35,15 +35,26 @@ module User::LowBalanceFraudCheck
     unpaid_balance_cents ||= self.unpaid_balance_cents
     return unless can_recover_from_low_balance_probation?(unpaid_balance_cents)
 
-    if was_ever_compliant?
-      mark_compliant!(author_name: LOW_BALANCE_FRAUD_CHECK_AUTHOR_NAME, content: "Marked compliant automatically on #{Time.current.to_fs(:formatted_date_full_month)} as balance has recovered to #{MoneyFormatter.format(LOW_BALANCE_RECOVERY_THRESHOLD, :usd, no_cents_if_whole: true, symbol: true)}")
+    probation_version = find_probation_version
+    previous_risk_state = PaperTrail.serializer.load(probation_version.object_changes).dig("user_risk_state")&.first
+    previous_comment = find_previous_comment_for_state(previous_risk_state, probation_version)
+    content = "Risk state reverted automatically on #{Time.current.to_fs(:formatted_date_full_month)} to \"#{previous_comment.content}\" as balance has recovered to #{MoneyFormatter.format(LOW_BALANCE_RECOVERY_THRESHOLD_IN_CENTS, :usd, no_cents_if_whole: true, symbol: true)}"
+
+    case previous_risk_state
+    when "compliant"
+      mark_compliant!(author_name: LOW_BALANCE_FRAUD_CHECK_AUTHOR_NAME, content:)
+    when "not_reviewed"
+      mark_not_reviewed!(author_name: LOW_BALANCE_FRAUD_CHECK_AUTHOR_NAME, content:)
+    when "flagged_for_fraud"
+      flag_for_fraud!(author_name: LOW_BALANCE_FRAUD_CHECK_AUTHOR_NAME, content:)
+    when "flagged_for_tos_violation"
+      flag_for_tos_violation!(author_name: LOW_BALANCE_FRAUD_CHECK_AUTHOR_NAME, content:, bulk: true)
+    when "suspended_for_fraud"
+      suspend_for_fraud!(author_name: LOW_BALANCE_FRAUD_CHECK_AUTHOR_NAME, content:)
+    when "suspended_for_tos_violation"
+      suspend_for_tos_violation!(author_name: LOW_BALANCE_FRAUD_CHECK_AUTHOR_NAME, content:)
     else
-      update!(user_risk_state: "not_reviewed")
-      comments.create!(
-        author_name: LOW_BALANCE_FRAUD_CHECK_AUTHOR_NAME,
-        comment_type: Comment::COMMENT_TYPE_NOTE,
-        content: "Risk state reverted to \"Not Reviewed\" automatically on #{Time.current.to_fs(:formatted_date_full_month)} as balance has recovered to #{MoneyFormatter.format(LOW_BALANCE_RECOVERY_THRESHOLD, :usd, no_cents_if_whole: true, symbol: true)}"
-      )
+      raise ArgumentError, "Unknown previous state for recovery: #{previous_risk_state}"
     end
   end
 
@@ -54,13 +65,34 @@ module User::LowBalanceFraudCheck
       comments.with_type_on_probation
               .order(created_at: :desc)
               .first&.author_name == LOW_BALANCE_FRAUD_CHECK_AUTHOR_NAME &&
-              unpaid_balance_cents >= LOW_BALANCE_RECOVERY_THRESHOLD
+              unpaid_balance_cents >= LOW_BALANCE_RECOVERY_THRESHOLD_IN_CENTS
     end
 
-    def was_ever_compliant?
+    def find_probation_version
       versions
-        .where("JSON_EXTRACT(object_changes, '$.user_risk_state[1]') = ?", "compliant")
-        .exists?
+        .where("JSON_EXTRACT(object_changes, '$.user_risk_state[1]') = ?", "on_probation")
+        .reorder(created_at: :desc)
+        .first
+    end
+
+    def find_previous_comment_for_state(previous_risk_state, probation_version)
+      comment_type = case previous_risk_state
+                     when "compliant"
+                       Comment::COMMENT_TYPE_COMPLIANT
+                     when "not_reviewed"
+                       Comment::COMMENT_TYPE_NOTE
+                     when "flagged_for_fraud", "flagged_for_tos_violation"
+                       Comment::COMMENT_TYPE_FLAGGED
+                     when "suspended_for_fraud", "suspended_for_tos_violation"
+                       Comment::COMMENT_TYPE_SUSPENDED
+      end
+
+      Comment
+        .unscoped
+        .where(commentable_type: "User", commentable_id: id, comment_type:)
+        .where("created_at < ?", probation_version.created_at)
+        .order(created_at: :desc)
+        .first
     end
 
     def disable_refunds_and_put_on_probation!
