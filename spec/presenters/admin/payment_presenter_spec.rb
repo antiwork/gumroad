@@ -83,7 +83,7 @@ describe Admin::PaymentPresenter do
 
         it "returns user information" do
           expect(props[:user]).to eq(
-            id: user.external_id,
+            external_id: user.external_id,
             name: user.name
           )
         end

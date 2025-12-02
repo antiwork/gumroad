@@ -15,7 +15,7 @@ class Admin::PaymentPresenter
       payout_period_end_date: payment.payout_period_end_date,
       created_at: payment.created_at,
       user: payment.user ? {
-        id: payment.user.external_id,
+        external_id: payment.user.external_id,
         name: payment.user.name,
       } : nil,
 

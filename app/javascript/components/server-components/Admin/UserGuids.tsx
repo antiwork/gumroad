@@ -7,7 +7,7 @@ import { register } from "$app/utils/serverComponentUtil";
 import { LoadingSpinner } from "$app/components/LoadingSpinner";
 import { showAlert } from "$app/components/server-components/Alert";
 
-type UserGuids = { guid: string; user_ids: string[] }[];
+type UserGuids = { guid: string; user_external_ids: string[] }[];
 
 const AdminUserGuids = ({ user_id }: { user_id: number }) => {
   const [userGuids, setUserGuids] = React.useState<UserGuids | null>(null);
@@ -40,7 +40,7 @@ const AdminUserGuids = ({ user_id }: { user_id: number }) => {
                 <h5>
                   <a href={`/admin/guids/${guidData.guid}`}>{guidData.guid}</a>
                 </h5>
-                <span>{guidData.user_ids.length} users</span>
+                <span>{guidData.user_external_ids.length} users</span>
               </div>
             ))}
           </div>

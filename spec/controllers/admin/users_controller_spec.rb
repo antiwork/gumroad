@@ -67,14 +67,14 @@ describe Admin::UsersController, type: :controller, inertia: true do
       get "show", params: { id: user.external_id }
       expect(response).to be_successful
       expect(inertia.component).to eq("Admin/Users/Show")
-      expect(inertia.props[:user][:id]).to eq(user.external_id)
+      expect(inertia.props[:user][:external_id]).to eq(user.external_id)
     end
 
     it "returns page successfully when using email" do
       get "show", params: { id: user.email }
       expect(response).to be_successful
       expect(inertia.component).to eq("Admin/Users/Show")
-      expect(inertia.props[:user][:id]).to eq(user.external_id)
+      expect(inertia.props[:user][:external_id]).to eq(user.external_id)
     end
   end
 

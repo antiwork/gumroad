@@ -100,7 +100,7 @@ describe Admin::LinksController, type: :controller, inertia: true do
 
           expect(response).to be_successful
           expect(inertia.component).to eq("Admin/Products/MultipleMatches")
-          expect(inertia.props[:product_matches]).to contain_exactly(hash_including(id: product_1.external_id), hash_including(id: product_2.external_id))
+          expect(inertia.props[:product_matches]).to contain_exactly(hash_including(external_id: product_1.external_id), hash_including(external_id: product_2.external_id))
         end
       end
 

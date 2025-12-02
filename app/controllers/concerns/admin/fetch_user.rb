@@ -3,7 +3,7 @@
 module Admin::FetchUser
   private
     def fetch_user
-      if !user_param.include?("@") && user_param.to_i.to_s == user_param && user = User.find_by(id: user_param)
+      if user_param.to_i.to_s == user_param && user = User.find_by(id: user_param)
         new_path = request.fullpath.sub("/#{user_param}", "/#{user.external_id}")
         return redirect_to new_path
       end

@@ -34,9 +34,9 @@ describe Admin::Users::GuidsController do
       expect(response).to be_successful
 
       expected_value = [
-        { "guid" => browser_guid1, "user_ids" => [user1.external_id] },
-        { "guid" => browser_guid2, "user_ids" => match_array([user1.external_id, user2.external_id]) },
-        { "guid" => browser_guid3, "user_ids" => match_array([user1.external_id, user2.external_id, user3.external_id]) }
+        { "guid" => browser_guid1, "user_external_ids" => [user1.external_id] },
+        { "guid" => browser_guid2, "user_external_ids" => match_array([user1.external_id, user2.external_id]) },
+        { "guid" => browser_guid3, "user_external_ids" => match_array([user1.external_id, user2.external_id, user3.external_id]) }
       ]
 
       expect(response.parsed_body).to match_array(expected_value)

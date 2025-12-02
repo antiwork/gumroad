@@ -23,7 +23,7 @@ describe Admin::Users::Products::TosViolationFlagsController do
       expect(response).to be_successful
 
       payload = response.parsed_body
-      expect(payload["tos_violation_flags"]).to eq(tos_violation_flags.as_json(only: %i[id content]))
+      expect(payload["tos_violation_flags"]).to eq(tos_violation_flags.as_json(only: %i[content], methods: %i[external_id]))
     end
 
     context "when the user is not flagged for TOS violation" do

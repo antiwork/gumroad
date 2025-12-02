@@ -23,20 +23,20 @@ type UrlRedirect = {
 
 type Gift = {
   is_sender_purchase: boolean;
-  other_purchase_id: string;
+  other_purchase_external_id: string;
   other_email: string;
   note: string | null;
 };
 
 export type Purchase = PurchaseStatesInfo & {
-  id: string;
+  id: number;
   external_id: string;
   seller: {
     support_email: string | null;
     email: string;
   };
   merchant_account: {
-    id: number;
+    external_id: string;
     charge_processor_id: string;
     holder_of_funds: string;
   } | null;
@@ -50,7 +50,7 @@ export type Purchase = PurchaseStatesInfo & {
   formatted_affiliate_credit_amount: string | null;
   gumroad_responsible_for_tax: boolean;
   product: {
-    id: string;
+    external_id: string;
     name: string;
     long_url: string;
   };
@@ -66,7 +66,7 @@ export type Purchase = PurchaseStatesInfo & {
   external_id_numeric: number;
   quantity: number;
   refunds: {
-    user: { id: string; name: string | null } | null;
+    user: { external_id: string; name: string | null } | null;
     status: string;
     created_at: string;
   }[];
@@ -80,7 +80,6 @@ export type Purchase = PurchaseStatesInfo & {
   ip_country: string | null;
   is_preorder_authorization: boolean;
   subscription: {
-    id: number;
     external_id: string;
     cancelled_at: string | null;
     cancelled_by_buyer: boolean | null;
@@ -107,8 +106,7 @@ export type Purchase = PurchaseStatesInfo & {
   refund_policy:
     | (RefundPolicy & {
         fine_print: string | null;
-        max_refund_period_in_days: number;
-        last_chargebacked_purchase: string | null;
+        max_refund_period_in_days: number | null;
       })
     | null;
   can_contact: boolean;
@@ -126,9 +124,9 @@ export type Purchase = PurchaseStatesInfo & {
 const Header = ({ purchase }: { purchase: Purchase }) => (
   <div className="grid gap-2">
     <h2>
-      <Link href={Routes.admin_purchase_path(purchase.id)}>{purchase.formatted_display_price}</Link>
+      <Link href={Routes.admin_purchase_path(purchase.external_id)}>{purchase.formatted_display_price}</Link>
       {purchase.gumroad_responsible_for_tax ? ` + ${purchase.formatted_gumroad_tax_amount} VAT` : null} for{" "}
-      <Link href={Routes.admin_product_path(purchase.product.id)} title={purchase.product.id.toString()}>
+      <Link href={Routes.admin_product_path(purchase.product.external_id)} title={purchase.product.external_id}>
         {purchase.product.name}
       </Link>{" "}
       {purchase.variants_list}{" "}
@@ -174,8 +172,8 @@ const Info = ({ purchase }: { purchase: Purchase }) => (
         <>
           <dt>Merchant account</dt>
           <dd>
-            <Link href={Routes.admin_merchant_account_path(purchase.merchant_account.id)}>
-              {purchase.merchant_account.id} – {purchase.merchant_account.charge_processor_id}
+            <Link href={Routes.admin_merchant_account_path(purchase.merchant_account.external_id)}>
+              {purchase.merchant_account.external_id} – {purchase.merchant_account.charge_processor_id}
             </Link>
           </dd>
           <dt>Funds held by</dt>
@@ -246,7 +244,7 @@ const Info = ({ purchase }: { purchase: Purchase }) => (
           )
         ) : null}
         {" | "}
-        <Link href={Routes.admin_purchase_path(purchase.id)}>{purchase.id}</Link>
+        <Link href={Routes.admin_purchase_path(purchase.external_id)}>{purchase.id}</Link>
       </dd>
 
       <dt>Order number</dt>
@@ -274,8 +272,8 @@ const Info = ({ purchase }: { purchase: Purchase }) => (
                   <li>
                     Refunder:
                     {refund.user ? (
-                      <Link href={Routes.admin_user_path(refund.user.id)}>
-                        {refund.user.name || `User ${refund.user.id}`}
+                      <Link href={Routes.admin_user_path(refund.user.external_id)}>
+                        {refund.user.name || `User ${refund.user.external_id}`}
                       </Link>
                     ) : (
                       "(unknown)"
@@ -466,7 +464,7 @@ const Info = ({ purchase }: { purchase: Purchase }) => (
   </div>
 );
 
-const GiftInfo = ({ purchaseId, gift }: { purchaseId: string; gift: Gift }) =>
+const GiftInfo = ({ purchaseExternalId, gift }: { purchaseExternalId: string; gift: Gift }) =>
   gift.is_sender_purchase ? (
     <>
       <details>
@@ -482,7 +480,9 @@ const GiftInfo = ({ purchaseId, gift }: { purchaseId: string; gift: Gift }) =>
 
           <dt>Receiver purchase id</dt>
           <dd>
-            <Link href={Routes.admin_purchase_path(gift.other_purchase_id)}>{gift.other_purchase_id}</Link>
+            <Link href={Routes.admin_purchase_path(gift.other_purchase_external_id)}>
+              {gift.other_purchase_external_id}
+            </Link>
           </dd>
         </dl>
       </details>
@@ -493,7 +493,7 @@ const GiftInfo = ({ purchaseId, gift }: { purchaseId: string; gift: Gift }) =>
           <h3>Edit giftee email</h3>
         </summary>
         <Form
-          url={Routes.update_giftee_email_admin_purchase_path(purchaseId)}
+          url={Routes.update_giftee_email_admin_purchase_path(purchaseExternalId)}
           method="POST"
           onSuccess={() => showAlert("Successfully updated the giftee email.", "success")}
         >
@@ -520,9 +520,11 @@ const GiftInfo = ({ purchaseId, gift }: { purchaseId: string; gift: Gift }) =>
         <dt>Note</dt>
         <dd>{gift.note}</dd>
 
-        <dt>Sender purchase id</dt>
+        <dt>Sender purchase external id</dt>
         <dd>
-          <Link href={Routes.admin_purchase_path(gift.other_purchase_id)}>{gift.other_purchase_id}</Link>
+          <Link href={Routes.admin_purchase_path(gift.other_purchase_external_id)}>
+            {gift.other_purchase_external_id}
+          </Link>
         </dd>
       </dl>
     </details>
@@ -620,7 +622,7 @@ const ActionButtons = ({ purchase }: { purchase: Purchase }) => (
     {purchase.is_deleted_by_buyer ? (
       <AdminActionButton
         label="Undelete"
-        url={Routes.undelete_admin_purchase_path(purchase)}
+        url={Routes.undelete_admin_purchase_path(purchase.external_id)}
         loading="Undeleting..."
         done="Undeleted!"
         confirm_message="Are you sure you want to undelete this purchase?"
@@ -661,7 +663,7 @@ const AdminPurchase = ({ purchase }: { purchase: Purchase }) => (
     {purchase.gift ? (
       <>
         <hr />
-        <GiftInfo purchaseId={purchase.id} gift={purchase.gift} />
+        <GiftInfo purchaseExternalId={purchase.external_id} gift={purchase.gift} />
       </>
     ) : null}
     {purchase.successful ||
@@ -673,7 +675,7 @@ const AdminPurchase = ({ purchase }: { purchase: Purchase }) => (
           <summary>
             <h3>Resend receipt</h3>
           </summary>
-          <AdminResendReceiptForm purchase_id={purchase.id} email={purchase.email} />
+          <AdminResendReceiptForm purchase_external_id={purchase.external_id} email={purchase.email} />
         </details>
       </>
     ) : null}
@@ -681,7 +683,7 @@ const AdminPurchase = ({ purchase }: { purchase: Purchase }) => (
     <ActionButtons purchase={purchase} />
     <AdminCommentableComments
       count={purchase.comments_count}
-      endpoint={Routes.admin_purchase_comments_path(purchase.id)}
+      endpoint={Routes.admin_purchase_comments_path(purchase.external_id)}
       commentableType="purchase"
     />
     <hr />

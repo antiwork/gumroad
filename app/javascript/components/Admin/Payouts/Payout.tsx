@@ -12,7 +12,7 @@ export type Payout = {
   id: number;
   external_id: string;
   displayed_amount: string;
-  user: { id: string; name: string };
+  user: { external_id: string; name: string };
   processor: string;
   payout_period_end_date: string;
   processor_fee_cents: number;
@@ -51,7 +51,7 @@ const Payout = ({ payout }: Props) => (
     <div>
       <h3>
         <span>{payout.displayed_amount} to&nbsp;</span>
-        <Link href={Routes.admin_user_path(payout.user.id)} title={payout.user.id}>
+        <Link href={Routes.admin_user_path(payout.user.external_id)} title={payout.user.external_id}>
           {payout.user.name}
         </Link>
       </h3>

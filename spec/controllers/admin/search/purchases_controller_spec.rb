@@ -33,8 +33,8 @@ describe Admin::Search::PurchasesController, type: :controller, inertia: true do
 
       expect(response).to be_successful
       expect(response.content_type).to match(%r{application/json})
-      expect(response.parsed_body["purchases"]).to contain_exactly(hash_including("id" => purchase_3.external_id), hash_including("id" => purchase_2.external_id))
-      expect(response.parsed_body["purchases"]).not_to include(hash_including("id" => purchase_1.external_id))
+      expect(response.parsed_body["purchases"]).to contain_exactly(hash_including("id" => purchase_3.id), hash_including("id" => purchase_2.id))
+      expect(response.parsed_body["purchases"]).not_to include(hash_including("id" => purchase_1.id))
       expect(response.parsed_body["pagination"]).to be_present
     end
 
