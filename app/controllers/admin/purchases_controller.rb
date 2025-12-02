@@ -133,7 +133,7 @@ class Admin::PurchasesController < Admin::BaseController
   end
 
   def update_giftee_email
-    new_giftee_email = params[:update_giftee_email][:giftee_email]
+    new_giftee_email = params[:giftee_email]
     gift = Gift.find_by(gifter_purchase_id: params[:id])
 
     if gift.present? && new_giftee_email != gift.giftee_email

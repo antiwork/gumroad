@@ -29,6 +29,7 @@ import { Modal } from "$app/components/Modal";
 import { Option, Select } from "$app/components/Select";
 import { showAlert } from "$app/components/server-components/Alert";
 import { Layout as SettingsLayout } from "$app/components/Settings/Layout";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "$app/components/ui/Table";
 import { WithTooltip } from "$app/components/WithTooltip";
 
 const ROLE_TITLES: Record<Role, string> = {
@@ -271,7 +272,7 @@ const TeamMembersSection = ({
             {deletedMember.name !== "" ? deletedMember.name : deletedMember.email} was removed from team members
           </div>
           <button
-            className="close"
+            className="close underline"
             type="button"
             onClick={asyncVoid(async () => {
               try {
@@ -292,17 +293,17 @@ const TeamMembersSection = ({
           </button>
         </div>
       ) : null}
-      <table>
-        <thead>
-          <tr>
-            <th>Member</th>
-            <th>Role</th>
-          </tr>
-        </thead>
-        <tbody>
+      <Table>
+        <TableHeader>
+          <TableRow>
+            <TableHead>Member</TableHead>
+            <TableHead>Role</TableHead>
+          </TableRow>
+        </TableHeader>
+        <TableBody>
           {memberInfos.map((memberInfo) => (
-            <tr key={`${memberInfo.type}-${memberInfo.id}`}>
-              <td data-label="Member">
+            <TableRow key={`${memberInfo.type}-${memberInfo.id}`}>
+              <TableCell>
                 <div style={{ display: "flex", alignItems: "center", gap: "var(--spacer-4)" }}>
                   <img
                     className="user-avatar"
@@ -329,15 +330,9 @@ const TeamMembersSection = ({
                     ) : null}
                   </div>
                 </div>
-              </td>
-              <td data-label="Role">
-                {memberInfo.leave_team_option ? (
-                  <div className="flex justify-end">
-                    <Button color="danger" disabled={loading} onClick={() => setConfirming(memberInfo)}>
-                      {memberInfo.leave_team_option.label}
-                    </Button>
-                  </div>
-                ) : (
+              </TableCell>
+              <TableCell>
+                <div className="flex items-center gap-2">
                   <Select
                     instanceId={memberInfo.id}
                     options={memberInfo.options}
@@ -350,13 +345,19 @@ const TeamMembersSection = ({
                     isClearable={false}
                     isDisabled={loading || memberInfo.options.length === 1}
                     value={memberInfo.options.find((o) => o.id === memberInfo.role) ?? null}
+                    className="flex-1"
                   />
-                )}
-              </td>
-            </tr>
+                  {memberInfo.leave_team_option ? (
+                    <Button color="danger" disabled={loading} onClick={() => setConfirming(memberInfo)}>
+                      {memberInfo.leave_team_option.label}
+                    </Button>
+                  ) : null}
+                </div>
+              </TableCell>
+            </TableRow>
           ))}
-        </tbody>
-      </table>
+        </TableBody>
+      </Table>
       {confirming ? (
         <Modal
           open

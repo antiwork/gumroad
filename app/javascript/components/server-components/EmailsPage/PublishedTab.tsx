@@ -4,6 +4,7 @@ import { cast } from "ts-safe-cast";
 
 import { deleteInstallment, getPublishedInstallments, Pagination, PublishedInstallment } from "$app/data/installments";
 import { assertDefined } from "$app/utils/assert";
+import { classNames } from "$app/utils/classNames";
 import { formatStatNumber } from "$app/utils/formatStatNumber";
 import { AbortError, assertResponseError } from "$app/utils/request";
 
@@ -21,6 +22,7 @@ import {
   ViewEmailButton,
 } from "$app/components/server-components/EmailsPage";
 import { Sheet, SheetHeader } from "$app/components/ui/Sheet";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "$app/components/ui/Table";
 import { useDebouncedCallback } from "$app/components/useDebouncedCallback";
 import { useOnChange } from "$app/components/useOnChange";
 import { useUserAgentInfo } from "$app/components/UserAgent";
@@ -98,15 +100,19 @@ export const PublishedTab = () => {
       <div className="space-y-4 p-4 md:p-8">
         {installments.length > 0 ? (
           <>
-            <table aria-label="Published" aria-live="polite" aria-busy={isLoading} className="mb-4">
-              <thead>
-                <tr>
-                  <th>Subject</th>
-                  <th>Date</th>
-                  <th>Emailed</th>
-                  <th>Opened</th>
-                  <th>Clicks</th>
-                  <th>
+            <Table
+              aria-live="polite"
+              className={classNames(isLoading && "pointer-events-none opacity-50")}
+              aria-label="Published"
+            >
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Subject</TableHead>
+                  <TableHead>Date</TableHead>
+                  <TableHead>Emailed</TableHead>
+                  <TableHead>Opened</TableHead>
+                  <TableHead>Clicks</TableHead>
+                  <TableHead>
                     Views{" "}
                     <WithTooltip
                       position="top"
@@ -115,50 +121,50 @@ export const PublishedTab = () => {
                     >
                       <Icon name="info-circle" />
                     </WithTooltip>
-                  </th>
-                </tr>
-              </thead>
-              <tbody>
+                  </TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
                 {installments.map((installment) => (
-                  <tr
+                  <TableRow
                     key={installment.external_id}
-                    aria-selected={installment.external_id === selectedInstallmentId}
+                    selected={installment.external_id === selectedInstallmentId}
                     onClick={() => setSelectedInstallmentId(installment.external_id)}
                   >
-                    <td data-label="Subject">{installment.name}</td>
-                    <td data-label="Date" className="whitespace-nowrap">
+                    <TableCell>{installment.name}</TableCell>
+                    <TableCell className="whitespace-nowrap">
                       {new Date(installment.published_at).toLocaleDateString(userAgentInfo.locale, {
                         day: "numeric",
                         month: "short",
                         year: "numeric",
                         timeZone: currentSeller.timeZone.name,
                       })}
-                    </td>
-                    <td data-label="Emailed" className="whitespace-nowrap">
+                    </TableCell>
+                    <TableCell className="whitespace-nowrap">
                       {installment.send_emails ? formatStatNumber({ value: installment.sent_count }) : "n/a"}
-                    </td>
-                    <td data-label="Opened" className="whitespace-nowrap">
+                    </TableCell>
+                    <TableCell className="whitespace-nowrap">
                       {installment.send_emails
                         ? formatStatNumber({ value: installment.open_rate, suffix: "%" })
                         : "n/a"}
-                    </td>
-                    <td data-label="Clicks" className="whitespace-nowrap">
+                    </TableCell>
+                    <TableCell className="whitespace-nowrap">
                       {installment.clicked_urls.length > 0 ? (
                         <WithTooltip
                           tooltipProps={{ className: "w-[20rem] p-0" }}
                           tip={
-                            <table>
-                              <tbody>
+                            <Table>
+                              <TableBody>
                                 {installment.clicked_urls.map(({ url, count }) => (
-                                  <tr key={`${installment.external_id}-${url}`}>
-                                    <th scope="row" className="max-w-56 whitespace-break-spaces">
+                                  <TableRow key={`${installment.external_id}-${url}`} className="bg-transparent">
+                                    <TableHead scope="row" className="max-w-56 whitespace-break-spaces">
                                       {url}
-                                    </th>
-                                    <td>{formatStatNumber({ value: count })}</td>
-                                  </tr>
+                                    </TableHead>
+                                    <TableCell>{formatStatNumber({ value: count })}</TableCell>
+                                  </TableRow>
                                 ))}
-                              </tbody>
-                            </table>
+                              </TableBody>
+                            </Table>
                           }
                         >
                           {formatStatNumber({ value: installment.click_count })}
@@ -166,17 +172,17 @@ export const PublishedTab = () => {
                       ) : (
                         formatStatNumber({ value: installment.click_count })
                       )}
-                    </td>
-                    <td data-label="Views" className="whitespace-nowrap">
+                    </TableCell>
+                    <TableCell className="whitespace-nowrap">
                       {formatStatNumber({
                         value: installment.view_count,
                         placeholder: "n/a",
                       })}
-                    </td>
-                  </tr>
+                    </TableCell>
+                  </TableRow>
                 ))}
-              </tbody>
-            </table>
+              </TableBody>
+            </Table>
             {pagination.next ? (
               <Button color="primary" disabled={isLoading} onClick={() => void fetchInstallments({ reset: false })}>
                 Load more

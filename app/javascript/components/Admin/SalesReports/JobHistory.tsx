@@ -1,5 +1,7 @@
 import * as React from "react";
 
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "$app/components/ui/Table";
+
 export type JobHistoryItem = {
   job_id: string;
   country_code: string;
@@ -36,26 +38,26 @@ const AdminSalesReportsJobHistory = ({ countries, jobHistory }: Props) => {
 
   return (
     <section>
-      <table>
-        <thead>
-          <tr>
-            <th>Country</th>
-            <th>Date range</th>
-            <th>Enqueued at</th>
-            <th>Status</th>
-            <th>Download</th>
-          </tr>
-        </thead>
-        <tbody>
+      <Table>
+        <TableHeader>
+          <TableRow>
+            <TableHead>Country</TableHead>
+            <TableHead>Date range</TableHead>
+            <TableHead>Enqueued at</TableHead>
+            <TableHead>Status</TableHead>
+            <TableHead>Download</TableHead>
+          </TableRow>
+        </TableHeader>
+        <TableBody>
           {jobHistory.map((job, index) => (
-            <tr key={index}>
-              <td>{countryCodeToName[job.country_code] || job.country_code}</td>
-              <td>
+            <TableRow key={index}>
+              <TableCell>{countryCodeToName[job.country_code] || job.country_code}</TableCell>
+              <TableCell>
                 {job.start_date} to {job.end_date}
-              </td>
-              <td>{new Date(job.enqueued_at).toLocaleString()}</td>
-              <td>{job.status}</td>
-              <td>
+              </TableCell>
+              <TableCell>{new Date(job.enqueued_at).toLocaleString()}</TableCell>
+              <TableCell>{job.status}</TableCell>
+              <TableCell>
                 {job.status === "completed" && job.download_url ? (
                   <a href={job.download_url} className="button small" target="_blank" rel="noopener noreferrer">
                     Download CSV
@@ -63,11 +65,11 @@ const AdminSalesReportsJobHistory = ({ countries, jobHistory }: Props) => {
                 ) : (
                   <span>-</span>
                 )}
-              </td>
-            </tr>
+              </TableCell>
+            </TableRow>
           ))}
-        </tbody>
-      </table>
+        </TableBody>
+      </Table>
     </section>
   );
 };
