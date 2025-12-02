@@ -155,8 +155,8 @@ class Admin::PurchasesController < Admin::BaseController
 
   private
     def fetch_purchase
-      @purchase = Purchase.find_by_external_id(params[:id])
-      @purchase ||= Purchase.find_by_external_id_numeric(params[:id].to_i)
-      @purchase ||= Purchase.find_by_stripe_transaction_id(params[:id])
+      @purchase = Purchase.find_by_external_id(params[:external_id])
+      @purchase ||= Purchase.find_by_external_id_numeric(params[:external_id].to_i)
+      @purchase ||= Purchase.find_by_stripe_transaction_id(params[:external_id])
     end
 end

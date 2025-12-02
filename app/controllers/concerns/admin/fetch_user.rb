@@ -15,6 +15,6 @@ module Admin::FetchUser
     end
 
     def user_param
-      params[:id]
+      params[:external_id]
     end
 end

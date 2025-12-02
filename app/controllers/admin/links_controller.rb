@@ -4,8 +4,8 @@ class Admin::LinksController < Admin::BaseController
   before_action :fetch_product!, except: [:show, :legacy_purchases]
 
   def show
-    product_by_external_id = Link.find_by_external_id(params[:id])
-    @product_matches = product_by_external_id ? [product_by_external_id] : Link.by_general_permalink(params[:id])
+    product_by_external_id = Link.find_by_external_id(params[:external_id])
+    @product_matches = product_by_external_id ? [product_by_external_id] : Link.by_general_permalink(params[:external_id])
 
     if @product_matches.many?
       @title = "Multiple products matched"
@@ -76,8 +76,8 @@ class Admin::LinksController < Admin::BaseController
   end
 
   def legacy_purchases
-    product_id = params[:id].to_i
-    product = Link.find_by(id: product_id)
+    product = Link.find_by_external_id(params[:external_id])
+    product_id = product&.id
 
     if parse_boolean(params[:is_affiliate_user])
       affiliate_user = User.find(params[:user_id])
@@ -96,7 +96,7 @@ class Admin::LinksController < Admin::BaseController
   end
 
   def flag_seller_for_tos_violation
-    product = Link.find_by(id: params[:id])
+    product = Link.find_by_external_id(params[:external_id])
     user = product.user
     suspend_tos_reason = params.try(:[], :suspend_tos).try(:[], :reason) || params[:reason]
     raise "Invalid request" if user.nil? || !suspend_tos_reason
@@ -177,7 +177,7 @@ class Admin::LinksController < Admin::BaseController
 
   private
     def fetch_product!
-      @product = Link.find_by_external_id(params[:id])
+      @product = Link.find_by_external_id(params[:external_id])
       @product || e404
     end
 

@@ -67,6 +67,6 @@ class Admin::PayoutsController < Admin::BaseController
 
   private
     def fetch_payment
-      @payment = Payment.find_by_external_id(params[:id]) || e404
+      @payment = Payment.find_by_external_id(params[:external_id]) || e404
     end
 end

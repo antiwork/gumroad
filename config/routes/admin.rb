@@ -14,7 +14,7 @@ namespace :admin do
 
   get "action_call_dashboard", to: "action_call_dashboard#index"
 
-  resources :users, only: [:show, :destroy], defaults: { format: "html" } do
+  resources :users, only: [:show, :destroy], defaults: { format: "html" }, param: :external_id do
     scope module: :users do
       concerns :commentable
 
@@ -65,7 +65,7 @@ namespace :admin do
     end
   end
 
-  resources :affiliates, only: [] do
+  resources :affiliates, only: [], param: :external_id do
     resources :products, only: [:index], module: :affiliates do
       resources :purchases, only: :index, module: :products
     end
@@ -76,11 +76,11 @@ namespace :admin do
   resource :suspend_users, only: [:show, :update]
   resource :refund_queue, only: [:show]
 
-  resources :affiliates, only: [:index, :show], defaults: { format: "html" }
+  resources :affiliates, only: [:index, :show], defaults: { format: "html" }, param: :external_id
 
   get "links/:id", to: redirect("/admin/products/%{id}"), as: :link
 
-  resources :products, controller: "links", only: [:show, :destroy] do
+  resources :products, controller: "links", only: [:show, :destroy], param: :external_id do
     member do
       post :restore
       post :publish
@@ -108,7 +108,7 @@ namespace :admin do
 
   resources :comments, only: :create
 
-  resources :purchases, only: [:show] do
+  resources :purchases, only: [:show], param: :external_id do
     scope module: :purchases do
       concerns :commentable
     end
@@ -129,15 +129,15 @@ namespace :admin do
 
   resources :sales_reports, only: [:index, :create]
 
-  resources :merchant_accounts, only: [:show] do
+  resources :merchant_accounts, only: [:show], param: :external_id do
     member do
       get :live_attributes
     end
   end
 
   # Payouts
-  post "/paydays/pay_user/:id", to: "paydays#pay_user", as: :pay_user
-  resources :payouts, only: [:show] do
+  post "/paydays/pay_user/:external_id", to: "paydays#pay_user", as: :pay_user
+  resources :payouts, only: [:show], param: :external_id do
     member do
       post :retry
       post :cancel
@@ -154,7 +154,7 @@ namespace :admin do
   get "/search_purchases", to: "search#purchases"
 
   # Compliance
-  resources :guids, only: [:show]
+  resources :guids, only: [:show], param: :external_id
   scope module: "compliance" do
     resources :cards, only: [] do
       collection do

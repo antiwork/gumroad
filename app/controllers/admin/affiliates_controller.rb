@@ -33,8 +33,8 @@ class Admin::AffiliatesController < Admin::BaseController
 
   private
     def fetch_affiliate
-      @affiliate_user = User.find_by(username: params[:id])
-      @affiliate_user ||= User.find_by_external_id(params[:id].gsub(/^ext-/, ""))
+      @affiliate_user = User.find_by(username: params[:external_id])
+      @affiliate_user ||= User.find_by_external_id(params[:external_id].gsub(/^ext-/, ""))
 
       e404 if @affiliate_user.nil? || @affiliate_user.direct_affiliate_accounts.blank?
     end

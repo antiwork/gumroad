@@ -19,14 +19,14 @@ describe Admin::MerchantAccountsController, type: :controller, inertia: true do
     let(:merchant_account) { MerchantAccount.gumroad(StripeChargeProcessor.charge_processor_id) }
 
     it "renders the page successfully with external_id" do
-      get :show, params: { id: merchant_account.external_id }
+      get :show, params: { external_id: merchant_account.external_id }
 
       expect(response).to be_successful
       expect(inertia.component).to eq("Admin/MerchantAccounts/Show")
     end
 
     it "renders the page successfully with charge_processor_merchant_id" do
-      get :show, params: { id: merchant_account.charge_processor_merchant_id }
+      get :show, params: { external_id: merchant_account.charge_processor_merchant_id }
 
       expect(response).to be_successful
       expect(inertia.component).to eq("Admin/MerchantAccounts/Show")

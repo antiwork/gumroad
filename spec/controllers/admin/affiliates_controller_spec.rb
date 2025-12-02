@@ -64,7 +64,7 @@ describe Admin::AffiliatesController, inertia: true do
       end
 
       it "returns page successfully with external_id" do
-        get :show, params: { id: affiliate_user.external_id }
+        get :show, params: { external_id: affiliate_user.external_id }
 
         expect(response).to be_successful
         expect(response.body).to have_text(affiliate_user.name)
@@ -75,7 +75,7 @@ describe Admin::AffiliatesController, inertia: true do
     context "when affiliate account is not present" do
       it "raises ActionController::RoutingError" do
         expect do
-          get :show, params: { id: affiliate_user.external_id }
+          get :show, params: { external_id: affiliate_user.external_id }
         end.to raise_error(ActionController::RoutingError, "Not Found")
       end
     end
