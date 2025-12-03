@@ -105,7 +105,6 @@ describe PostsController do
         @post2 = create(:installment, link:)
         @purchase = build(:purchase, seller:, link:, created_at: Time.current)
         @purchase.save!(validate: false)
-        allow(Installment).to receive(:missed_for_purchase).with(@purchase).and_return([@post1, @post2])
       end
 
       before do
@@ -114,7 +113,7 @@ describe PostsController do
       end
 
       it_behaves_like "authorize called for action", :post, :send_all_for_purchase do
-        let(:record) { Installment }
+        let(:record) { Purchase }
         let(:request_params) { { purchase_id: @purchase.external_id } }
       end
 
@@ -135,18 +134,31 @@ describe PostsController do
       end
 
       it "enqueues job to send all missed posts" do
-        expect(SendAllMissedPostsJob).to receive(:perform_async).with(seller.id, @purchase.id, [@post1.id, @post2.id])
+        expect(SendAllMissedPostsJob).to receive(:perform_async).with(seller.id, @purchase.id)
         post :send_all_for_purchase, params: { purchase_id: @purchase.external_id }
         expect(response).to be_successful
-        expect(response.parsed_body).to eq("message" => "Sending all missed posts", "count" => 2)
+        expect(response).to have_http_status(:no_content)
       end
 
-      it "handles case with no missed posts" do
-        allow(Installment).to receive(:missed_for_purchase).with(@purchase).and_return([])
-        expect(SendAllMissedPostsJob).to receive(:perform_async).with(seller.id, @purchase.id, [])
-        post :send_all_for_purchase, params: { purchase_id: @purchase.external_id }
-        expect(response).to be_successful
-        expect(response.parsed_body).to eq("message" => "Sending all missed posts", "count" => 0)
+      it "works end-to-end: controller enqueues job and job processes missed posts" do
+        link = create(:product, user: seller)
+        post1 = create(:installment, link:, seller:, published_at: 2.days.ago, send_emails: true)
+        post2 = create(:installment, link:, seller:, published_at: 1.day.ago, send_emails: true)
+        purchase = build(:purchase, seller:, link:, created_at: Time.current)
+        purchase.save!(validate: false)
+
+        # Controller enqueues the job
+        expect(SendAllMissedPostsJob).to receive(:perform_async).with(seller.id, purchase.id)
+        post :send_all_for_purchase, params: { purchase_id: purchase.external_id }
+        expect(response).to have_http_status(:no_content)
+
+        # Job retrieves posts at execution time and sends them
+        allow(PostEmailApi).to receive(:process)
+        SendAllMissedPostsJob.new.perform(seller.id, purchase.id)
+
+        # Verify cache was set (throttling in place)
+        expect(Rails.cache.read("post_email:#{post1.id}:#{purchase.id}")).to be_truthy
+        expect(Rails.cache.read("post_email:#{post2.id}:#{purchase.id}")).to be_truthy
       end
     end
   end

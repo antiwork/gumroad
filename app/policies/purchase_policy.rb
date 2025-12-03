@@ -18,4 +18,10 @@ class PurchasePolicy < ApplicationPolicy
   def delete?
     index?
   end
+
+  def send_all_for_purchase?
+    user.role_admin_for?(seller) ||
+    user.role_marketing_for?(seller) ||
+    user.role_support_for?(seller)
+  end
 end

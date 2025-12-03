@@ -723,9 +723,9 @@ const CustomerDrawer = ({
 
     setIsResendingAll(true);
     try {
-      const result = await resendAllPosts(customer.id);
+      await resendAllPosts(customer.id);
       missedPosts.forEach(post => sentEmailIds.current.add(post.id));
-      showAlert(`Sending ${result.count} missed posts`, "success");
+      showAlert("Sending all missed posts", "success");
 
       setTimeout(() => {
         getCustomerEmails(customer.id).then(setEmails, (e: unknown) => {

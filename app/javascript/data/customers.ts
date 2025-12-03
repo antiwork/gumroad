@@ -248,7 +248,6 @@ export const resendAllPosts = async (purchaseId: string) => {
     url: `/posts/send_all_for_purchase/${purchaseId}`,
   });
   if (!response.ok) throw new ResponseError(cast<{ message: string }>(await response.json()).message);
-  return response.json();
 };
 
 export const updatePurchase = (

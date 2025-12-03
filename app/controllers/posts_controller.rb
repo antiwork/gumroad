@@ -78,10 +78,9 @@ class PostsController < ApplicationController
 
   def send_all_for_purchase
     purchase = current_seller.sales.find_by_external_id!(params[:purchase_id])
-    missed_posts = Installment.missed_for_purchase(purchase)
-    authorize(missed_posts.first || Installment)
-    SendAllMissedPostsJob.perform_async(current_seller.id, purchase.id, missed_posts.pluck(:id))
-    render json: { message: "Sending all missed posts", count: missed_posts.count }
+    authorize purchase
+    SendAllMissedPostsJob.perform_async(current_seller.id, purchase.id)
+    head :no_content
   end
 
   def increment_post_views
