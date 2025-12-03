@@ -165,8 +165,8 @@ describe LibraryController, :vcr, type: :controller, inertia: true do
       expect do
         patch :archive, params: { id: purchase.external_id }
 
-        expect(response).to be_successful
-        expect(response.parsed_body["success"]).to eq(true)
+        expect(response).to redirect_to(library_path)
+        expect(flash[:notice]).to eq("Product archived!")
       end.to change { purchase.reload.is_archived }.from(false).to(true)
     end
   end
@@ -183,8 +183,8 @@ describe LibraryController, :vcr, type: :controller, inertia: true do
       expect do
         patch :unarchive, params: { id: purchase.external_id }
 
-        expect(response).to be_successful
-        expect(response.parsed_body["success"]).to eq(true)
+        expect(response).to redirect_to(library_path)
+        expect(flash[:notice]).to eq("Product unarchived!")
       end.to change { purchase.reload.is_archived }.from(true).to(false)
     end
   end
@@ -201,8 +201,8 @@ describe LibraryController, :vcr, type: :controller, inertia: true do
       expect do
         patch :delete, params: { id: purchase.external_id }
 
-        expect(response).to be_successful
-        expect(response.parsed_body["success"]).to eq(true)
+        expect(response).to redirect_to(library_path)
+        expect(flash[:notice]).to eq("Product deleted!")
       end.to change { purchase.reload.is_deleted_by_buyer }.from(false).to(true)
     end
   end
