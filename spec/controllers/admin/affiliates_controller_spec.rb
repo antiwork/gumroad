@@ -63,6 +63,11 @@ describe Admin::AffiliatesController, inertia: true do
         create(:direct_affiliate, affiliate_user:)
       end
 
+      it "redirects numeric ID to external_id" do
+        get :show, params: { external_id: affiliate_user.id }
+        expect(response).to redirect_to admin_affiliate_path(affiliate_user.external_id)
+      end
+
       it "returns page successfully with external_id" do
         get :show, params: { external_id: affiliate_user.external_id }
 

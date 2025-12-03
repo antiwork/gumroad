@@ -73,6 +73,12 @@ describe Admin::LinksController, type: :controller, inertia: true do
   end
 
   describe "GET show" do
+    it "redirects numeric ID to external_id" do
+      get :show, params: { external_id: product.id }
+
+      expect(response).to redirect_to(admin_product_path(product.external_id))
+    end
+
     it "renders the product page if looked up via external_id" do
       get :show, params: { external_id: product.external_id }
 

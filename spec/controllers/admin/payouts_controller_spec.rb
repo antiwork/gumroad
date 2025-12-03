@@ -11,6 +11,12 @@ describe Admin::PayoutsController, type: :controller, inertia: true do
   let(:payment) { create(:payment_completed) }
 
   describe "GET show" do
+    it "redirects numeric ID to external_id" do
+      sign_in admin_user
+      get :show, params: { external_id: payment.id }
+      expect(response).to redirect_to admin_payout_path(payment.external_id)
+    end
+
     it "shows a payout with external_id" do
       sign_in admin_user
       get :show, params: { external_id: payment.external_id }

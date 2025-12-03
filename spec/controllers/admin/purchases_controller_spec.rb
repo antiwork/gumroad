@@ -17,6 +17,11 @@ describe Admin::PurchasesController, :vcr, inertia: true do
       @purchase = create(:purchase)
     end
 
+    it "redirects numeric ID to external_id" do
+      get :show, params: { external_id: @purchase.id }
+      expect(response).to redirect_to(admin_purchase_path(@purchase.external_id))
+    end
+
     it "returns successful response with Inertia page data when using external_id" do
       expect(Admin::PurchasePresenter).to receive(:new).with(@purchase).and_call_original
       get :show, params: { external_id: @purchase.external_id }
