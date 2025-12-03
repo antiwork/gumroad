@@ -1,8 +1,5 @@
+import { router } from "@inertiajs/react";
 import * as React from "react";
-
-import { setPurchaseArchived } from "$app/data/library";
-import { asyncVoid } from "$app/utils/promise";
-import { assertResponseError } from "$app/utils/request";
 
 import { Button } from "$app/components/Button";
 import { showAlert } from "$app/components/server-components/Alert";
@@ -13,21 +10,28 @@ export const PurchaseArchiveButton = ({ purchase_id, initial_is_archived }: Prop
   const [isArchived, setIsArchived] = React.useState<boolean>(initial_is_archived);
   const [processing, setProcessing] = React.useState<boolean>(false);
 
-  const toggleArchive = asyncVoid(async () => {
+  const toggleArchive = () => {
     const shouldBeArchived = !isArchived;
 
     setProcessing(true);
 
-    try {
-      await setPurchaseArchived({ is_archived: shouldBeArchived, purchase_id });
-      setIsArchived(shouldBeArchived);
-      showAlert(shouldBeArchived ? "Product archived!" : "Product unarchived!", "success");
-    } catch (e) {
-      assertResponseError(e);
-      showAlert("Something went wrong.", "error");
-    }
-    setProcessing(false);
-  });
+    router.patch(
+      shouldBeArchived ? Routes.library_archive_path(purchase_id) : Routes.library_unarchive_path(purchase_id),
+      {},
+      {
+        only: ["results", "creators", "bundles", "flash"],
+        preserveScroll: true,
+        onSuccess: () => {
+          setIsArchived(shouldBeArchived);
+          setProcessing(false);
+        },
+        onError: () => {
+          setProcessing(false);
+          showAlert("Sorry, something went wrong. Please try again.", "error");
+        },
+      },
+    );
+  };
 
   return (
     <Button onClick={toggleArchive} disabled={processing}>

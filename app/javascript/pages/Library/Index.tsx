@@ -1,14 +1,11 @@
-import { usePage } from "@inertiajs/react";
+import { router, usePage } from "@inertiajs/react";
 import React from "react";
 import { cast, is } from "ts-safe-cast";
 import { produce } from "immer";
 
-import { deletePurchasedProduct, setPurchaseArchived } from "$app/data/library";
 import { ProductNativeType } from "$app/parsers/product";
 import { assertDefined } from "$app/utils/assert";
 import { classNames } from "$app/utils/classNames";
-import { asyncVoid } from "$app/utils/promise";
-import { assertResponseError } from "$app/utils/request";
 import { writeQueryParams } from "$app/utils/url";
 
 import { Button } from "$app/components/Button";
@@ -53,30 +50,28 @@ export type Result = {
   };
 };
 
-export const Card = ({
-  result,
-  onArchive,
-  onDelete,
-}: {
-  result: Result;
-  onArchive: () => void;
-  onDelete: (confirm?: boolean) => void;
-}) => {
+export const Card = ({ result, onDelete }: { result: Result; onDelete: () => void }) => {
   const { product, purchase } = result;
   const [isPopoverOpen, setIsPopoverOpen] = React.useState(false);
 
-  const toggleArchived = asyncVoid(async () => {
-    const data = { purchase_id: result.purchase.id, is_archived: !result.purchase.is_archived };
-    try {
-      await setPurchaseArchived(data);
-      onArchive();
-      showAlert(result.purchase.is_archived ? "Product unarchived!" : "Product archived!", "success");
-      setIsPopoverOpen(false);
-    } catch (e) {
-      assertResponseError(e);
-      showAlert("Something went wrong.", "error");
-    }
-  });
+  const toggleArchived = () => {
+    const shouldBeArchived = !result.purchase.is_archived;
+
+    router.patch(
+      shouldBeArchived
+        ? Routes.library_archive_path(result.purchase.id)
+        : Routes.library_unarchive_path(result.purchase.id),
+      {},
+      {
+        only: ["results", "creators", "bundles", "flash"],
+        preserveScroll: true,
+        onSuccess: () => setIsPopoverOpen(false),
+        onError: () => {
+          showAlert("Something went wrong.", "error");
+        },
+      },
+    );
+  };
 
   const name = purchase.variants ? `${product.name} - ${purchase.variants}` : product.name;
 
@@ -126,25 +121,31 @@ export const Card = ({
   );
 };
 
-export const DeleteProductModal = ({
-  deleting,
-  onCancel,
-  onDelete,
-}: {
-  deleting: Result | null;
-  onCancel: () => void;
-  onDelete: (deleted: Result) => void;
-}) => {
-  const deletePurchase = asyncVoid(async (result: Result) => {
-    try {
-      await deletePurchasedProduct({ purchase_id: result.purchase.id });
-      onDelete(result);
-      showAlert("Product deleted!", "success");
-    } catch (e) {
-      assertResponseError(e);
-      showAlert("Something went wrong.", "error");
-    }
-  });
+export const DeleteProductModal = ({ deleting, onCancel }: { deleting: Result | null; onCancel: () => void }) => {
+  const [isDeleting, setIsDeleting] = React.useState(false);
+
+  const handleDelete = () => {
+    const result = assertDefined(deleting, "Invalid state");
+
+    setIsDeleting(true);
+
+    router.patch(
+      Routes.library_delete_path(result.purchase.id),
+      {},
+      {
+        only: ["results", "creators", "bundles", "flash"],
+        preserveScroll: true,
+        onSuccess: () => {
+          setIsDeleting(false);
+          onCancel();
+        },
+        onError: () => {
+          setIsDeleting(false);
+          showAlert("Something went wrong.", "error");
+        },
+      },
+    );
+  };
 
   return (
     <Modal
@@ -154,8 +155,8 @@ export const DeleteProductModal = ({
       footer={
         <>
           <Button onClick={onCancel}>Cancel</Button>
-          <Button color="danger" onClick={() => deletePurchase(assertDefined(deleting, "Invalid state"))}>
-            Confirm
+          <Button color="danger" disabled={isDeleting} onClick={handleDelete}>
+            {isDeleting ? "Deleting..." : "Confirm"}
           </Button>
         </>
       }
@@ -182,15 +183,10 @@ type Params = {
 };
 
 type State = {
-  results: Result[];
   search: Params;
 };
 
-type Action =
-  | { type: "set-search"; search: Partial<Params> }
-  | { type: "update-search"; search: Partial<Params> }
-  | { type: "set-archived"; purchaseId: string; isArchived: boolean }
-  | { type: "delete-purchase"; id: string };
+type Action = { type: "set-search"; search: Partial<Params> } | { type: "update-search"; search: Partial<Params> };
 
 const reducer: React.Reducer<State, Action> = produce((state, action) => {
   switch (action.type) {
@@ -201,19 +197,6 @@ const reducer: React.Reducer<State, Action> = produce((state, action) => {
       state.search = { ...state.search, ...action.search };
       updateUrl(state.search);
       break;
-    case "set-archived": {
-      const result = state.results.find((result) => result.purchase.id === action.purchaseId);
-      if (result) result.purchase.is_archived = action.isArchived;
-      if (!state.results.some((result) => result.purchase.is_archived && state.search.showArchivedOnly))
-        state.search.showArchivedOnly = false;
-      updateUrl(state.search);
-      break;
-    }
-    case "delete-purchase": {
-      const index = state.results.findIndex((result) => result.purchase.id === action.id);
-      if (index !== -1) state.results.splice(index, 1);
-      break;
-    }
   }
 });
 
@@ -244,7 +227,6 @@ const LibraryPage = ({ results, creators, bundles, reviews_page_enabled, followi
   const discoverUrl = useDiscoverUrl();
   const [state, dispatch] = React.useReducer(reducer, null, () => ({
     search: extractParams(new URL(originalLocation).searchParams),
-    results,
   }));
   const [enteredQuery, setEnteredQuery] = React.useState(state.search.query);
   useGlobalEventListener("popstate", (e: PopStateEvent) => {
@@ -253,7 +235,7 @@ const LibraryPage = ({ results, creators, bundles, reviews_page_enabled, followi
     setEnteredQuery(search.query);
   });
   const filteredResults = React.useMemo(() => {
-    const filtered = state.results.filter(
+    const filtered = results.filter(
       (result) =>
         !result.purchase.is_bundle_purchase &&
         result.purchase.is_archived === state.search.showArchivedOnly &&
@@ -265,7 +247,7 @@ const LibraryPage = ({ results, creators, bundles, reviews_page_enabled, followi
     if (state.search.sort !== "purchase_date")
       filtered.sort((a, b) => b.product.updated_at.localeCompare(a.product.updated_at));
     return filtered;
-  }, [state.results, state.search]);
+  }, [results, state.search]);
 
   const [resultsLimit, setResultsLimit] = React.useState(15);
   React.useEffect(() => setResultsLimit(15), [filteredResults]);
@@ -273,26 +255,14 @@ const LibraryPage = ({ results, creators, bundles, reviews_page_enabled, followi
   const isDesktop = useIsAboveBreakpoint("lg");
   const [mobileFiltersExpanded, setMobileFiltersExpanded] = React.useState(false);
   const [showingAllCreators, setShowingAllCreators] = React.useState(false);
-  const archivedCount = state.results.filter((result) => result.purchase.is_archived).length;
-  const showArchivedNotice =
-    !state.search.showArchivedOnly && !state.results.some((result) => !result.purchase.is_archived);
+  const archivedCount = results.filter((result) => result.purchase.is_archived).length;
+  const showArchivedNotice = !state.search.showArchivedOnly && !results.some((result) => !result.purchase.is_archived);
   const hasParams =
     state.search.showArchivedOnly || state.search.query || state.search.creators.length || state.search.bundles.length;
   const [deleting, setDeleting] = React.useState<Result | null>(null);
 
   const sortUid = React.useId();
   const bundlesUid = React.useId();
-
-  const deletePurchase = asyncVoid(async (result: Result) => {
-    try {
-      await deletePurchasedProduct({ purchase_id: result.purchase.id });
-      dispatch({ type: "delete-purchase", id: result.purchase.id });
-      showAlert("Product deleted!", "success");
-    } catch (e) {
-      assertResponseError(e);
-      showAlert("Something went wrong.", "error");
-    }
-  });
 
   const url = new URL(useOriginalLocation());
   const addThirdPartyAnalytics = useAddThirdPartyAnalytics();
@@ -331,7 +301,7 @@ const LibraryPage = ({ results, creators, bundles, reviews_page_enabled, followi
     if (e.key === "Enter") dispatch({ type: "update-search", search: { query: enteredQuery } });
   };
 
-  const shouldShowFilter = !showArchivedNotice && (hasParams || archivedCount > 0 || state.results.length > 9);
+  const shouldShowFilter = !showArchivedNotice && (hasParams || archivedCount > 0 || results.length > 9);
 
   return (
     <Layout
@@ -341,14 +311,14 @@ const LibraryPage = ({ results, creators, bundles, reviews_page_enabled, followi
       followingWishlistsEnabled={following_wishlists_enabled}
     >
       <section className="space-y-4 p-4 md:p-8">
-        {state.results.length === 0 || showArchivedNotice ? (
+        {results.length === 0 || showArchivedNotice ? (
           <Placeholder>
-            {state.results.length === 0 ? (
+            {results.length === 0 ? (
               <figure>
                 <img src={placeholder} />
               </figure>
             ) : null}
-            {state.results.length === 0 ? (
+            {results.length === 0 ? (
               <>
                 <h2 className="library-header">You haven't bought anything... yet!</h2>
                 Once you do, it'll show up here so you can download, watch, read, or listen to all your purchases.
@@ -534,29 +504,11 @@ const LibraryPage = ({ results, creators, bundles, reviews_page_enabled, followi
           ) : null}
           <ProductCardGrid>
             {filteredResults.slice(0, resultsLimit).map((result) => (
-              <Card
-                key={result.purchase.id}
-                result={result}
-                onArchive={() =>
-                  dispatch({
-                    type: "set-archived",
-                    purchaseId: result.purchase.id,
-                    isArchived: !result.purchase.is_archived,
-                  })
-                }
-                onDelete={(confirm = true) => (confirm ? setDeleting(result) : deletePurchase(result))}
-              />
+              <Card key={result.purchase.id} result={result} onDelete={() => setDeleting(result)} />
             ))}
           </ProductCardGrid>
         </div>
-        <DeleteProductModal
-          deleting={deleting}
-          onCancel={() => setDeleting(null)}
-          onDelete={(deleting) => {
-            dispatch({ type: "delete-purchase", id: deleting.purchase.id });
-            setDeleting(null);
-          }}
-        />
+        <DeleteProductModal deleting={deleting} onCancel={() => setDeleting(null)} />
       </section>
     </Layout>
   );
