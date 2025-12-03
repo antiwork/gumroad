@@ -8,6 +8,11 @@ class LibraryController < Sellers::BaseController
   before_action :check_user_confirmed, only: [:index]
   before_action :set_purchase, only: [:archive, :unarchive, :delete]
 
+  FLASH_PURCHASE_ARCHIVED = "Product archived!"
+  FLASH_PURCHASE_UNARCHIVED = "Product unarchived!"
+  FLASH_PURCHASE_DELETED = "Product deleted!"
+  private_constant :FLASH_PURCHASE_ARCHIVED, :FLASH_PURCHASE_UNARCHIVED, :FLASH_PURCHASE_DELETED
+
   RESEND_CONFIRMATION_EMAIL_TIME_LIMIT = 24.hours
   private_constant :RESEND_CONFIRMATION_EMAIL_TIME_LIMIT
 
@@ -29,34 +34,25 @@ class LibraryController < Sellers::BaseController
   def archive
     authorize @purchase
 
-    @purchase.is_archived = true
-    @purchase.save!
+    @purchase.update!(is_archived: true)
 
-    render json: {
-      success: true
-    }
+    redirect_to library_path, notice: FLASH_PURCHASE_ARCHIVED, status: :see_other
   end
 
   def unarchive
     authorize @purchase
 
-    @purchase.is_archived = false
-    @purchase.save!
+    @purchase.update!(is_archived: false)
 
-    render json: {
-      success: true
-    }
+    redirect_to library_path, notice: FLASH_PURCHASE_UNARCHIVED, status: :see_other
   end
 
   def delete
     authorize @purchase
 
-    @purchase.is_deleted_by_buyer = true
-    @purchase.save!
+    @purchase.update!(is_deleted_by_buyer: true)
 
-    render json: {
-      success: true
-    }
+    redirect_to library_path, notice: FLASH_PURCHASE_DELETED, status: :see_other
   end
 
   private
