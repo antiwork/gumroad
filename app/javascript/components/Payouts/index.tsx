@@ -840,16 +840,19 @@ const Payouts = ({
                         )}
                       </div>
                     </div>
-                    <PayoutLineItem title="Amount" price={instantPayoutAmountCents} />
+                    <PayoutLineItem
+                      title="Amount"
+                      price={`$${formatPriceCentsWithoutCurrencySymbol("usd", instantPayoutAmountCents)}`}
+                    />
                     <PayoutLineItem
                       title={`Instant payout fee (${INSTANT_PAYOUT_FEE_PERCENTAGE * 100}%)`}
-                      price={-instantPayoutFee}
+                      price={`-$${formatPriceCentsWithoutCurrencySymbol("usd", instantPayoutFee)}`}
                     />
                   </div>
-                  <footer className="grid gap-4 p-4">
+                  <footer className="grid gap-4 border-t border-border p-4">
                     <PayoutLineItem
                       title="You'll receive"
-                      price={instantPayoutAmountCents - instantPayoutFee}
+                      price={`$${formatPriceCentsWithoutCurrencySymbol("usd", instantPayoutAmountCents - instantPayoutFee)}`}
                       className="*:text-lg"
                     />
                   </footer>
@@ -962,19 +965,13 @@ export function PayoutLineItem({
   className,
 }: {
   title: React.ReactNode;
-  price?: number | null;
+  price: React.ReactNode;
   className?: string;
 }) {
-  if (price === null || price === undefined) {
-    return null;
-  }
-
   return (
     <div className={classNames("grid grid-flow-col justify-between gap-4", className)}>
       <h4 className="inline-flex flex-wrap gap-2">{title}</h4>
-      <div>
-        {price < 0 ? "-" : ""}${formatPriceCentsWithoutCurrencySymbol("usd", Math.abs(price))}
-      </div>
+      <div>{price}</div>
     </div>
   );
 }

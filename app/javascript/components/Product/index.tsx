@@ -34,7 +34,6 @@ import {
   CartItemMedia,
   CartItemTitle,
   CartItemList,
-  CartItemFooterItem,
 } from "$app/components/CartList";
 import { Icon } from "$app/components/Icons";
 import { useLoggedInUser } from "$app/components/LoggedInUser";
@@ -405,13 +404,13 @@ export const Product = ({
                         </div>
                       ) : null}
                       <CartItemFooter>
-                        <CartItemFooterItem>
+                        <span>
                           <strong>Qty:</strong> {bundleProduct.quantity}
-                        </CartItemFooterItem>
+                        </span>
                         {bundleProduct.variant ? (
-                          <CartItemFooterItem>
+                          <span>
                             <strong>{variantLabel(bundleProduct.native_type)}:</strong> {bundleProduct.variant}
-                          </CartItemFooterItem>
+                          </span>
                         ) : null}
                       </CartItemFooter>
                     </CartItemMain>

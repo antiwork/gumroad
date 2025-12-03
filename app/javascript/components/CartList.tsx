@@ -29,9 +29,7 @@ export const CartItem = ({
   return (
     <Comp role="listitem" className={classNames("border-border not-first:border-t", className)} {...props}>
       <>
-        <section className="col-span-3 flex flex-row gap-4 rounded-sm p-4 not-first:rounded-none sm:p-0 sm:pr-4">
-          {children}
-        </section>
+        <section className="flex flex-row gap-4 p-4 sm:p-0 sm:pr-4">{children}</section>
         {extra ? <section className="flex flex-col gap-4 border-border p-4 not-first:border-t">{extra}</section> : null}
       </>
     </Comp>
@@ -71,15 +69,12 @@ export const CartItemTitle = ({
 };
 
 export const CartItemFooter = ({ className, children, ...props }: BaseProps) => (
-  <footer className={classNames("mt-auto items-end", className)} {...props}>
-    <ul className="flex list-none flex-col gap-x-4 gap-y-1 pl-0 sm:flex-row sm:flex-wrap">{children}</ul>
-  </footer>
-);
-
-export const CartItemFooterItem = ({ className, children, ...props }: BaseProps) => (
-  <li className={className} {...props}>
+  <footer
+    className={classNames("mt-auto flex flex-col gap-x-4 gap-y-1 sm:flex-row sm:flex-wrap", className)}
+    {...props}
+  >
     {children}
-  </li>
+  </footer>
 );
 
 export const CartItemEnd = ({ className, children, ...props }: BaseProps) => (

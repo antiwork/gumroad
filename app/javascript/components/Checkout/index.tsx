@@ -22,7 +22,6 @@ import {
   CartItemTitle,
   CartItemList,
   CartItemEnd,
-  CartItemFooterItem,
 } from "$app/components/CartList";
 import { PaymentForm } from "$app/components/Checkout/PaymentForm";
 import { Popover } from "$app/components/Popover";
@@ -474,13 +473,13 @@ const CartItemComponent = ({
                   <CartItemMain>
                     <CartItemTitle>{bundleProduct.name}</CartItemTitle>
                     <CartItemFooter>
-                      <CartItemFooterItem>
+                      <span>
                         <strong>Qty:</strong> {bundleProduct.quantity}
-                      </CartItemFooterItem>
+                      </span>
                       {bundleProduct.variant ? (
-                        <CartItemFooterItem>
+                        <span>
                           <strong>{variantLabel(bundleProduct.native_type)}:</strong> {bundleProduct.variant.name}
-                        </CartItemFooterItem>
+                        </span>
                       ) : null}
                     </CartItemFooter>
                   </CartItemMain>
@@ -502,27 +501,27 @@ const CartItemComponent = ({
             <h4 className="font-bold">{item.product.name}</h4>
           </a>
         </CartItemTitle>
-        <CartItemTitle className="font-normal" asChild>
-          <a href={item.product.creator.profile_url}>{item.product.creator.name}</a>
-        </CartItemTitle>
+        <a href={item.product.creator.profile_url} className="line-clamp-2">
+          {item.product.creator.name}
+        </a>
         <CartItemFooter>
-          <li>
+          <span>
             <strong>{item.product.is_multiseat_license ? "Seats:" : "Qty:"}</strong> {item.quantity}
-          </li>
+          </span>
           {option?.name ? (
-            <li>
+            <span>
               <strong>{variantLabel(item.product.native_type)}:</strong> {option.name}
-            </li>
+            </span>
           ) : null}
           {item.recurrence ? (
-            <li>
+            <span>
               <strong>Membership:</strong> {recurrenceNames[item.recurrence]}
-            </li>
+            </span>
           ) : null}
           {item.call_start_time ? (
-            <li>
+            <span>
               <strong>Time:</strong> {formatCallDate(new Date(item.call_start_time), { date: { hideYear: true } })}
-            </li>
+            </span>
           ) : null}
         </CartItemFooter>
       </CartItemMain>
@@ -567,7 +566,7 @@ const CartItemComponent = ({
                   open={editPopoverOpen}
                   onToggle={setEditPopoverOpen}
                 >
-                  <div className="paragraphs" style={{ width: "24rem" }}>
+                  <div className="flex w-96 flex-col gap-4">
                     <ConfigurationSelector
                       selection={selection}
                       setSelection={(selection) => {
