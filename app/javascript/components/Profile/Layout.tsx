@@ -23,28 +23,25 @@ export const Layout = ({ creatorProfile, hideFollowForm, children }: LayoutProps
   const loggedInUser = useLoggedInUser();
   const isDesktop = useIsAboveBreakpoint("lg");
 
-  const canImpersonate =
-    (loggedInUser?.isGumroadAdmin || loggedInUser?.isImpersonating) && creatorProfile.external_id !== loggedInUser.id;
-
-  const showExtras = Boolean(creatorProfile.twitter_handle || cartItemsCount);
-
-  const extras = (
-    <div className="ml-auto flex items-center gap-3">
-      {creatorProfile.twitter_handle ? (
-        <NavigationButton outline href={`https://twitter.com/${creatorProfile.twitter_handle}`} target="_blank">
-          <Icon name="twitter" />
-        </NavigationButton>
-      ) : null}
-      <CartNavigationButton />
-    </div>
-  );
+  const headerButtons =
+    creatorProfile.twitter_handle || cartItemsCount ? (
+      <div className="ml-auto flex items-center gap-3">
+        {creatorProfile.twitter_handle ? (
+          <NavigationButton outline href={`https://twitter.com/${creatorProfile.twitter_handle}`} target="_blank">
+            <Icon name="twitter" />
+          </NavigationButton>
+        ) : null}
+        <CartNavigationButton />
+      </div>
+    ) : null;
 
   return (
     <div className="flex min-h-full flex-col">
       <header className="relative z-20 border-border bg-background text-lg lg:border-b lg:px-4 lg:py-6">
         <div className="mx-auto flex max-w-6xl flex-wrap lg:flex-nowrap lg:items-center lg:gap-6">
           <div className="relative flex grow items-center gap-3 border-b border-border px-4 py-8 lg:flex-1 lg:border-0 lg:p-0">
-            {canImpersonate ? (
+            {(loggedInUser?.isGumroadAdmin || loggedInUser?.isImpersonating) &&
+            creatorProfile.external_id !== loggedInUser.id ? (
               <NavigationButton
                 href={Routes.admin_impersonate_url({
                   user_identifier: creatorProfile.external_id,
@@ -59,14 +56,14 @@ export const Layout = ({ creatorProfile, hideFollowForm, children }: LayoutProps
             <a href={Routes.root_path()} className="no-underline">
               {creatorProfile.name}
             </a>
-            {!isDesktop && showExtras ? extras : null}
+            {!isDesktop ? headerButtons : null}
           </div>
           {!hideFollowForm ? (
             <div className="flex basis-full items-center gap-3 border-b border-border px-4 py-8 lg:basis-auto lg:border-0 lg:p-0">
               <FollowForm creatorProfile={creatorProfile} />
             </div>
           ) : null}
-          {isDesktop && showExtras ? extras : null}
+          {isDesktop ? headerButtons : null}
         </div>
       </header>
       <main className="flex-1">

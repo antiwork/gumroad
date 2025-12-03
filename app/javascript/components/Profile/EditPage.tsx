@@ -196,7 +196,7 @@ export const EditProfile = (props: Props) => {
 
   return (
     <SectionReducerContext.Provider value={reducer}>
-      <header className="relative grid grid-cols-1 gap-4 border-b border-border px-4 py-8">
+      <header className="relative grid gap-4 border-b border-border px-4 py-8">
         {/* Work around position:absolute being affected by header's grid */}
         <SectionToolbar>
           <EditorMenu label="Page settings" onClose={() => void saveTabs(tabs)}>
@@ -226,7 +226,7 @@ export const EditProfile = (props: Props) => {
             </EditorSubmenu>
           </EditorMenu>
         </SectionToolbar>
-        <div className="mx-auto grid w-full max-w-6xl grid-cols-1 gap-4">
+        <div className="mx-auto grid w-full max-w-6xl gap-4">
           {props.bio ? (
             <h1 className="whitespace-pre-line">
               <AutoLink text={props.bio} />

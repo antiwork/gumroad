@@ -264,7 +264,7 @@ export const Wishlist = ({
           </div>
         </header>
       ) : (
-        <PageHeader className="lg:px-16" title={name} actions={headerActions}>
+        <PageHeader title={name} actions={headerActions}>
           {user ? (
             <a className="flex items-center gap-2" href={user.profile_url}>
               <img className="user-avatar w-6" src={user.avatar_url} />
