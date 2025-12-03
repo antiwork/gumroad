@@ -64,7 +64,7 @@ describe Admin::LinksController, type: :controller, inertia: true do
       end
 
       it "returns affiliate purchases" do
-        get :legacy_purchases, params: { external_id: product.external_id, is_affiliate_user: "true", user_id: @affiliate_user.id, format: :json }
+        get :legacy_purchases, params: { external_id: product.external_id, is_affiliate_user: "true", user_external_id: @affiliate_user.external_id, format: :json }
 
         expect(response).to be_successful
         expect(response.parsed_body["purchases"]).to eq purchase_admin_review_json(@purchases.reverse)
@@ -124,7 +124,7 @@ describe Admin::LinksController, type: :controller, inertia: true do
 
   describe "DELETE destroy" do
     it "deletes the product" do
-      delete :destroy, params: { id: product.external_id }
+      delete :destroy, params: { external_id: product.external_id }
 
       expect(response).to be_successful
       expect(product.reload.deleted_at).to be_present
@@ -132,7 +132,7 @@ describe Admin::LinksController, type: :controller, inertia: true do
 
     it "raises a 404 if the product is not found" do
       expect do
-        delete :destroy, params: { id: "invalid-id" }
+        delete :destroy, params: { external_id: "invalid-id" }
       end.to raise_error(ActionController::RoutingError, "Not Found")
     end
   end
@@ -141,7 +141,7 @@ describe Admin::LinksController, type: :controller, inertia: true do
     let(:product) { create(:product, deleted_at: 1.day.ago) }
 
     it "restores the product" do
-      post :restore, params: { id: product.external_id }
+      post :restore, params: { external_id: product.external_id }
 
       expect(response).to be_successful
       expect(product.reload.deleted_at).to be_nil
@@ -149,7 +149,7 @@ describe Admin::LinksController, type: :controller, inertia: true do
 
     it "raises a 404 if the product is not found" do
       expect do
-        post :restore, params: { id: "invalid-id" }
+        post :restore, params: { external_id: "invalid-id" }
       end.to raise_error(ActionController::RoutingError, "Not Found")
     end
   end
@@ -158,7 +158,7 @@ describe Admin::LinksController, type: :controller, inertia: true do
     let(:product) { create(:product, purchase_disabled_at: Time.current) }
 
     it "publishes the product" do
-      post :publish, params: { id: product.external_id }
+      post :publish, params: { external_id: product.external_id }
 
       expect(response).to be_successful
       expect(product.reload.purchase_disabled_at).to be_nil
@@ -166,7 +166,7 @@ describe Admin::LinksController, type: :controller, inertia: true do
 
     it "raises a 404 if the product is not found" do
       expect do
-        post :publish, params: { id: "invalid-id" }
+        post :publish, params: { external_id: "invalid-id" }
       end.to raise_error(ActionController::RoutingError, "Not Found")
     end
   end
@@ -175,7 +175,7 @@ describe Admin::LinksController, type: :controller, inertia: true do
     let(:product) { create(:product, purchase_disabled_at: nil) }
 
     it "unpublishes the product" do
-      delete :unpublish, params: { id: product.external_id }
+      delete :unpublish, params: { external_id: product.external_id }
 
       expect(response).to be_successful
       expect(product.reload.purchase_disabled_at).to be_present
@@ -183,19 +183,19 @@ describe Admin::LinksController, type: :controller, inertia: true do
 
     it "raises a 404 if the product is not found" do
       expect do
-        delete :unpublish, params: { id: "invalid-id" }
+        delete :unpublish, params: { external_id: "invalid-id" }
       end.to raise_error(ActionController::RoutingError, "Not Found")
     end
   end
 
   describe "POST is_adult" do
     it "marks the product as adult" do
-      post :is_adult, params: { id: product.external_id, is_adult: true }
+      post :is_adult, params: { external_id: product.external_id, is_adult: true }
 
       expect(response).to be_successful
       expect(product.reload.is_adult).to be(true)
 
-      post :is_adult, params: { id: product.external_id, is_adult: false }
+      post :is_adult, params: { external_id: product.external_id, is_adult: false }
 
       expect(response).to be_successful
       expect(product.reload.is_adult).to be(false)
@@ -203,7 +203,7 @@ describe Admin::LinksController, type: :controller, inertia: true do
 
     it "raises a 404 if the product is not found" do
       expect do
-        post :is_adult, params: { id: "invalid-id", is_adult: true }
+        post :is_adult, params: { external_id: "invalid-id", is_adult: true }
       end.to raise_error(ActionController::RoutingError, "Not Found")
     end
   end

@@ -80,7 +80,7 @@ class Admin::LinksController < Admin::BaseController
     product_id = product&.id
 
     if parse_boolean(params[:is_affiliate_user])
-      affiliate_user = User.find(params[:user_id])
+      affiliate_user = User.find_by_external_id(params[:user_external_id])
       sales = Purchase.where(link_id: product_id, affiliate_id: affiliate_user.direct_affiliate_accounts.select(:id))
     else
       sales = product.sales

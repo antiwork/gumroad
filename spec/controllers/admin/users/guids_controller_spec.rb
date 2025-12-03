@@ -29,7 +29,7 @@ describe Admin::Users::GuidsController do
 
   describe "GET index" do
     it "returns unique browser GUIDs with unique user IDs for the supplied user ID" do
-      get :index, params: { user_id: user1.external_id }
+      get :index, params: { user_external_id: user1.external_id }
 
       expect(response).to be_successful
 
@@ -45,7 +45,7 @@ describe Admin::Users::GuidsController do
     it "returns an empty array when no GUIDs are found for the user" do
       user_without_events = create(:user)
 
-      get :index, params: { user_id: user_without_events.external_id }
+      get :index, params: { user_external_id: user_without_events.external_id }
 
       expect(response).to be_successful
       expect(response.parsed_body).to be_empty
@@ -56,7 +56,7 @@ describe Admin::Users::GuidsController do
       other_guid = SecureRandom.uuid
       create(:event, user_id: other_user.id, browser_guid: other_guid)
 
-      get :index, params: { user_id: user2.external_id }
+      get :index, params: { user_external_id: user2.external_id }
 
       expect(response).to be_successful
 

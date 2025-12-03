@@ -9,8 +9,8 @@ namespace :admin do
   get :impersonate, to: "base#impersonate"
   delete :unimpersonate, to: "base#unimpersonate"
   get :redirect_to_stripe_dashboard, to: "base#redirect_to_stripe_dashboard", as: :redirect_to_stripe_dashboard
-  get "helper_actions/impersonate/:user_id", to: "helper_actions#impersonate", as: :impersonate_helper_action
-  get "helper_actions/stripe_dashboard/:user_id", to: "helper_actions#stripe_dashboard", as: :stripe_dashboard_helper_action
+  get "helper_actions/impersonate/:user_external_id", to: "helper_actions#impersonate", as: :impersonate_helper_action
+  get "helper_actions/stripe_dashboard/:user_external_id", to: "helper_actions#stripe_dashboard", as: :stripe_dashboard_helper_action
 
   get "action_call_dashboard", to: "action_call_dashboard#index"
 
@@ -30,7 +30,7 @@ namespace :admin do
       resource :payout_info, only: :show
       resources :latest_posts, only: :index
       resources :stats, only: :index
-      resources :products, only: :index do
+      resources :products, only: :index, param: :external_id do
         scope module: :products do
           resources :tos_violation_flags, only: [:index, :create]
           resources :purchases, only: :index
@@ -66,7 +66,7 @@ namespace :admin do
   end
 
   resources :affiliates, only: [], param: :external_id do
-    resources :products, only: [:index], module: :affiliates do
+    resources :products, only: [:index], module: :affiliates, param: :external_id do
       resources :purchases, only: :index, module: :products
     end
   end
