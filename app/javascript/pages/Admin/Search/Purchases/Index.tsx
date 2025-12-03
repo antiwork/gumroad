@@ -30,7 +30,7 @@ type Purchase = {
   chargedback: boolean;
   chargeback_reversed: boolean;
   error_code: string | null;
-  last_chargebacked_purchase: number | null;
+  last_chargebacked_purchase: string | null;
 };
 
 export default function Purchases() {
