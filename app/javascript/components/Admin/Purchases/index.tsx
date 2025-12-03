@@ -73,7 +73,7 @@ export type Purchase = PurchaseStatesInfo & {
   card: {
     type: string;
     visual: string;
-    country: string;
+    country: string | null;
     fingerprint_search_url: string | null;
   } | null;
   ip_address: string | null;
