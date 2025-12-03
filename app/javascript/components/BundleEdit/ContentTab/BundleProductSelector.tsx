@@ -28,10 +28,8 @@ export const BundleProductSelector = ({
       <CartItemTitle>{bundleProduct.name}</CartItemTitle>
       {bundleProduct.variants ? (
         <CartItemFooter>
-          <span>
-            {bundleProduct.variants.list.length} {bundleProduct.variants.list.length === 1 ? "version" : "versions"}{" "}
-            available
-          </span>
+          {bundleProduct.variants.list.length} {bundleProduct.variants.list.length === 1 ? "version" : "versions"}{" "}
+          available
         </CartItemFooter>
       ) : null}
     </CartItemMain>
