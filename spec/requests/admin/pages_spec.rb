@@ -21,7 +21,7 @@ describe "Admin Pages Scenario", type: :system, js: true do
 
       it "uses logged_in_user for navigation" do
         purchase = create(:purchase)
-        visit admin_purchase_path(purchase)
+        visit admin_purchase_path(purchase.external_id)
 
         wait_for_ajax
         expect(page).to have_content user_with_role_for_seller.name
@@ -34,7 +34,7 @@ describe "Admin Pages Scenario", type: :system, js: true do
       product = create(:product, price_cents: 649, price_currency_type: "aud", name: "Tim Tam")
       purchase = create(:purchase, link: product, displayed_price_currency_type: :aud)
 
-      visit admin_purchase_path(purchase)
+      visit admin_purchase_path(purchase.external_id)
 
       expect(page).to have_text("A$6.49 for Tim Tam")
     end
@@ -44,7 +44,7 @@ describe "Admin Pages Scenario", type: :system, js: true do
     let(:purchase) { create(:purchase) }
 
     before do
-      visit admin_purchase_path(purchase)
+      visit admin_purchase_path(purchase.external_id)
       select_disclosure "Toggle Search"
     end
 
@@ -81,7 +81,7 @@ describe "Admin Pages Scenario", type: :system, js: true do
                         rate_converted_to_usd: "0.86")
       offer_code.purchases << purchase
 
-      visit admin_purchase_path(purchase)
+      visit admin_purchase_path(purchase.external_id)
       select_disclosure "Toggle Search"
 
       fill_in "Search purchases (email, IP, card, external ID)", with: "#{email}\n"
@@ -93,7 +93,7 @@ describe "Admin Pages Scenario", type: :system, js: true do
       purchase = create(:purchase, email: "foo@example.com", stripe_fingerprint: "FINGERPRINT_ONE")
       create(:purchase, email: "bar@example.com", stripe_fingerprint: "FINGERPRINT_ONE")
       create(:purchase, email: "baz@example.com", stripe_fingerprint: "FINGERPRINT_TWO")
-      visit admin_purchase_path(purchase)
+      visit admin_purchase_path(purchase.external_id)
       click_link "VISA"
       expect(page).to have_content "foo@example.com"
       expect(page).to have_content "bar@example.com"
@@ -102,11 +102,11 @@ describe "Admin Pages Scenario", type: :system, js: true do
 
     it "shows external fingerprint link only for Stripe" do
       purchase = create(:purchase, stripe_fingerprint: "MY_FINGERPRINT")
-      visit admin_purchase_path(purchase)
+      visit admin_purchase_path(purchase.external_id)
       expect(page).to have_content "MY_FINGERPRINT"
 
       purchase = create(:purchase, stripe_fingerprint: "MY_FINGERPRINT", charge_processor_id: BraintreeChargeProcessor.charge_processor_id)
-      visit admin_purchase_path(purchase)
+      visit admin_purchase_path(purchase.external_id)
       expect(page).to have_no_content "MY_FINGERPRINT"
     end
 
@@ -118,7 +118,7 @@ describe "Admin Pages Scenario", type: :system, js: true do
         create(:purchase, link:, email:, created_at: Time.current + i.hours)
       end
 
-      visit admin_purchase_path(purchase)
+      visit admin_purchase_path(purchase.external_id)
       select_disclosure "Toggle Search"
 
       fill_in "Search purchases (email, IP, card, external ID)", with: "#{email}\n"
@@ -145,7 +145,7 @@ describe "Admin Pages Scenario", type: :system, js: true do
         create(:purchase_event, purchase:)
       end
 
-      visit admin_user_path(creator)
+      visit admin_user_path(creator.external_id)
       click_on "Products"
 
       expect(page).to have_text(product.name)

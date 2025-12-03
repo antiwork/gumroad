@@ -182,7 +182,7 @@ describe Admin::PurchasesController, :vcr, inertia: true do
         recurring_purchase = create(:purchase, email: "old@example.com", purchaser: buyer, subscription: subscription)
 
         post :resend_receipt, params: {
-          id: recurring_purchase.external_id,
+          external_id: recurring_purchase.external_id,
           resend_receipt: { email_address: new_email }
         }
 

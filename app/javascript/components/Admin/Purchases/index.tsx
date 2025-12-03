@@ -535,7 +535,7 @@ const ActionButtons = ({ purchase }: { purchase: Purchase }) => (
     {purchase.can_force_update || purchase.failed ? (
       <AdminActionButton
         label="Sync with Stripe/PayPal"
-        url={Routes.sync_status_with_charge_processor_admin_purchase_path(purchase)}
+        url={Routes.sync_status_with_charge_processor_admin_purchase_path(purchase.external_id)}
         loading="syncing..."
         done="synced!"
         confirm_message="Are you sure you want to sync this purchase's state with Stripe/PayPal?"
@@ -546,7 +546,7 @@ const ActionButtons = ({ purchase }: { purchase: Purchase }) => (
       <>
         <AdminActionButton
           label="Refund"
-          url={Routes.refund_admin_purchase_path(purchase)}
+          url={Routes.refund_admin_purchase_path(purchase.external_id)}
           loading="Refunding..."
           done="Refunded!"
           confirm_message="Are you sure you want to refund this purchase?"
@@ -554,7 +554,7 @@ const ActionButtons = ({ purchase }: { purchase: Purchase }) => (
         />
         <AdminActionButton
           label="Refund for Fraud"
-          url={Routes.refund_for_fraud_admin_purchase_path(purchase)}
+          url={Routes.refund_for_fraud_admin_purchase_path(purchase.external_id)}
           loading="Refunding..."
           done="Refunded!"
           confirm_message="Are you sure you want to refund this purchase for fraud?"
@@ -562,7 +562,7 @@ const ActionButtons = ({ purchase }: { purchase: Purchase }) => (
         />
         <AdminActionButton
           label="Refund taxes only"
-          url={Routes.refund_taxes_only_admin_purchase_path(purchase)}
+          url={Routes.refund_taxes_only_admin_purchase_path(purchase.external_id)}
           loading="Refunding taxes..."
           done="Taxes refunded!"
           confirm_message="Are you sure you want to refund only the taxes for this purchase?"
@@ -585,7 +585,7 @@ const ActionButtons = ({ purchase }: { purchase: Purchase }) => (
       <>
         <AdminActionButton
           label="Cancel subscription for buyer"
-          url={Routes.cancel_subscription_admin_purchase_path(purchase, { by_seller: false })}
+          url={Routes.cancel_subscription_admin_purchase_path(purchase.external_id, { by_seller: false })}
           loading="Canceling..."
           done="Canceled!"
           confirm_message="Are you sure you want to cancel this subscription on behalf of the buyer?"
@@ -593,7 +593,7 @@ const ActionButtons = ({ purchase }: { purchase: Purchase }) => (
         />
         <AdminActionButton
           label="Cancel subscription for seller"
-          url={Routes.cancel_subscription_admin_purchase_path(purchase, { by_seller: true })}
+          url={Routes.cancel_subscription_admin_purchase_path(purchase.external_id, { by_seller: true })}
           loading="Canceling..."
           done="Canceled!"
           confirm_message="Are you sure you want to cancel this subscription on behalf of the seller?"
@@ -604,7 +604,7 @@ const ActionButtons = ({ purchase }: { purchase: Purchase }) => (
     {purchase.buyer_blocked ? (
       <AdminActionButton
         label="Unblock buyer"
-        url={Routes.unblock_buyer_admin_purchase_path(purchase)}
+        url={Routes.unblock_buyer_admin_purchase_path(purchase.external_id)}
         loading="Unblocking buyer..."
         done="Buyer unblocked!"
         success_message="Buyer unblocked!"
@@ -612,7 +612,7 @@ const ActionButtons = ({ purchase }: { purchase: Purchase }) => (
     ) : (
       <AdminActionButton
         label="Block buyer"
-        url={Routes.block_buyer_admin_purchase_path(purchase)}
+        url={Routes.block_buyer_admin_purchase_path(purchase.external_id)}
         loading="Blocking buyer..."
         done="Buyer blocked!"
         confirm_message="This will fully block this buyer's emails, GUID, and IP addresses. Proceed?"

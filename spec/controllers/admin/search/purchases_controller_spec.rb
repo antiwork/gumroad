@@ -54,10 +54,10 @@ describe Admin::Search::PurchasesController, type: :controller, inertia: true do
       purchase_by_ip = create(:purchase, ip_address: ip_v4)
 
       get :index, params: { query: email }
-      expect(response).to redirect_to admin_purchase_path(purchase_by_email)
+      expect(response).to redirect_to admin_purchase_path(purchase_by_email.external_id)
 
       get :index, params: { query: ip_v4 }
-      expect(response).to redirect_to admin_purchase_path(purchase_by_ip)
+      expect(response).to redirect_to admin_purchase_path(purchase_by_ip.external_id)
     end
 
     it "returns purchases from AdminSearchService" do

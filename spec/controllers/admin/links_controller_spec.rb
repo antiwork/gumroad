@@ -90,7 +90,7 @@ describe Admin::LinksController, type: :controller, inertia: true do
           product_2 = create(:product, unique_permalink: "b", custom_permalink: "match")
           create(:product, unique_permalink: "c", custom_permalink: "should-not-match")
 
-          get :show, params: { id: product_1.custom_permalink }
+          get :show, params: { external_id: product_1.custom_permalink }
 
           expect(response).to be_successful
           expect(inertia.component).to eq("Admin/Products/MultipleMatches")
@@ -102,7 +102,7 @@ describe Admin::LinksController, type: :controller, inertia: true do
         it "renders the product page" do
           product = create(:product, unique_permalink: "a", custom_permalink: "match")
 
-          get :show, params: { id: product.custom_permalink }
+          get :show, params: { external_id: product.custom_permalink }
 
           expect(response).to be_successful
           expect(inertia.component).to eq("Admin/Products/Show")
@@ -115,7 +115,7 @@ describe Admin::LinksController, type: :controller, inertia: true do
       context "when no products matched by permalink" do
         it "raises a 404" do
           expect do
-            get :show, params: { id: "match" }
+            get :show, params: { external_id: "match" }
           end.to raise_error(ActionController::RoutingError, "Not Found")
         end
       end

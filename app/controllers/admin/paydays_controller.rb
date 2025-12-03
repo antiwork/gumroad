@@ -23,7 +23,7 @@ class Admin::PaydaysController < Admin::BaseController
         head :no_content
       end
     else
-      redirect_to admin_user_url(user), notice: payments.first.present? && !payments.first.first.failed? ? "Payment was sent." : "Payment was not sent."
+      redirect_to admin_user_url(user.external_id), notice: payments.first.present? && !payments.first.first.failed? ? "Payment was sent." : "Payment was not sent."
     end
   end
 

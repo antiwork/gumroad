@@ -143,7 +143,7 @@ class Admin::PurchasesController < Admin::BaseController
         giftee_purchase.update!(email: new_giftee_email)
 
         giftee_purchase.resend_receipt
-        redirect_to [:admin, @purchase]
+        redirect_to admin_purchase_path(@purchase.external_id)
       else
         render json: {
           success: false,
