@@ -414,7 +414,7 @@ class Credit < ApplicationRecord
   end
 
   def notify_user
-    ContactingCreatorMailer.credit_notification(user.external_id, amount_cents).deliver_later(queue: "critical")
+    ContactingCreatorMailer.credit_notification(user.id, amount_cents).deliver_later(queue: "critical")
   end
 
   def add_comment

@@ -145,7 +145,7 @@ describe Admin::UsersController, type: :controller, inertia: true do
                   } }
       mail_double = double
       allow(mail_double).to receive(:deliver_later)
-      expect(ContactingCreatorMailer).to receive(:credit_notification).with(@user.external_id, 4).and_return(mail_double)
+      expect(ContactingCreatorMailer).to receive(:credit_notification).with(@user.id, 4).and_return(mail_double)
       post :add_credit, params: @params
     end
   end
