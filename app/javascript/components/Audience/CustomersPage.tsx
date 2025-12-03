@@ -724,19 +724,47 @@ const CustomerDrawer = ({
     setIsResendingAll(true);
     try {
       await resendAllPosts(customer.id);
-      missedPosts.forEach(post => sentEmailIds.current.add(post.id));
       showAlert("Sending all missed posts", "success");
 
-      setTimeout(() => {
-        getCustomerEmails(customer.id).then(setEmails, (e: unknown) => {
-          assertResponseError(e);
-        });
-      }, 2000);
+      const pollForEmails = (attempts = 0) => {
+        if (attempts >= 10) {
+          setIsResendingAll(false);
+          return;
+        }
+
+        setTimeout(() => {
+          getCustomerEmails(customer.id).then(
+            (emails) => {
+              setEmails(emails);
+              const sentPostIds = new Set(emails.filter(e => e.type === "post").map(e => e.id));
+              const allSent = missedPosts.every(post => sentPostIds.has(post.id));
+              if (allSent) {
+                missedPosts.forEach(post => sentEmailIds.current.add(post.id));
+                setIsResendingAll(false);
+              } else if (attempts < 9) {
+                pollForEmails(attempts + 1);
+              } else {
+                setIsResendingAll(false);
+              }
+            },
+            (e: unknown) => {
+              assertResponseError(e);
+              if (attempts >= 9) {
+                setIsResendingAll(false);
+              } else {
+                pollForEmails(attempts + 1);
+              }
+            }
+          );
+        }, 2000);
+      };
+
+      pollForEmails();
     } catch (e) {
       assertResponseError(e);
       showAlert(e.message, "error");
+      setIsResendingAll(false);
     }
-    setIsResendingAll(false);
   };
 
   const [productPurchases, setProductPurchases] = React.useState<Customer[]>([]);
