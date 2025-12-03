@@ -63,6 +63,7 @@ class SubscriptionsController < ApplicationController
       return if cookie.present? && ActiveSupport::SecurityUtils.secure_compare(cookie, @subscription.external_id)
       return if user_signed_in? && logged_in_user.is_team_member?
       return if user_signed_in? && logged_in_user == @subscription.user
+      return if user_signed_in? && gifter_user.present? && logged_in_user == gifter_user
       token = params[:token]
       if token.present?
         return if @subscription.token.present? && ActiveSupport::SecurityUtils.secure_compare(token, @subscription.token) && @subscription.token_expires_at > Time.current
@@ -73,6 +74,11 @@ class SubscriptionsController < ApplicationController
         format.html { redirect_to magic_link_subscription_path(params[:id]) }
         format.json { render json: { success: false, redirect_to: magic_link_subscription_path(params[:id]) } }
       end
+    end
+
+    def gifter_user
+      return unless @subscription.gift?
+      @subscription.true_original_purchase.gift_given&.gifter_purchase&.purchaser
     end
 
     def set_subscription_confirmed_redirect_cookie
