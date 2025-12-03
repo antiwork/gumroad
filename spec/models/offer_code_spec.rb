@@ -697,4 +697,57 @@ describe OfferCode do
       end
     end
   end
+
+  describe "reindexing products" do
+    let(:creator) { create(:user) }
+    let(:product1) { create(:product, user: creator) }
+    let(:product2) { create(:product, user: creator) }
+    let!(:offer_code) { create(:offer_code, user: creator, code: "BLACKFRIDAY2025", products: [product1, product2]) }
+
+    describe "after_save callback" do
+      it "reindexes associated products when offer code is updated" do
+        expect(product1).to receive(:enqueue_index_update_for).with(["offer_codes"])
+        expect(product2).to receive(:enqueue_index_update_for).with(["offer_codes"])
+
+        offer_code.update(amount_cents: 500)
+      end
+
+      it "reindexes associated products when offer code code is changed" do
+        expect(product1).to receive(:enqueue_index_update_for).with(["offer_codes"])
+        expect(product2).to receive(:enqueue_index_update_for).with(["offer_codes"])
+
+        offer_code.update(code: "NEWYEAR2025")
+      end
+    end
+
+    describe "after_destroy callback" do
+      let(:products_to_reindex) { [product1, product2] }
+
+      before do
+        allow(Link).to receive(:where).with(id: products_to_reindex.map(&:id)).and_return(products_to_reindex)
+      end
+
+      it "reindexes associated products when offer code is destroyed" do
+        expect(product1).to receive(:enqueue_index_update_for).with(["offer_codes"])
+        expect(product2).to receive(:enqueue_index_update_for).with(["offer_codes"])
+
+        offer_code.destroy
+      end
+    end
+
+    describe "#reindex_associated_products" do
+      it "handles offer codes with no products" do
+        offer_code_without_products = create(:offer_code, user: creator, code: "EMPTY")
+
+        expect { offer_code_without_products.update(amount_cents: 1000) }.not_to raise_error
+      end
+
+      it "only reindexes products that exist" do
+        expect(product1).to receive(:enqueue_index_update_for).with(["offer_codes"])
+        expect(product2).to receive(:enqueue_index_update_for).with(["offer_codes"])
+
+        offer_code.send(:reindex_associated_products)
+      end
+    end
+  end
 end

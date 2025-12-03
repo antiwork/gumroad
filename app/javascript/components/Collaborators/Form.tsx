@@ -19,6 +19,7 @@ import { Icon } from "$app/components/Icons";
 import { Modal } from "$app/components/Modal";
 import { NumberInput } from "$app/components/NumberInput";
 import { showAlert } from "$app/components/server-components/Alert";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "$app/components/ui/Table";
 import { WithTooltip } from "$app/components/WithTooltip";
 
 const DEFAULT_PERCENT_COMMISSION = 50;
@@ -242,18 +243,18 @@ const CollaboratorForm = () => {
             </fieldset>
           ) : null}
           <fieldset>
-            <table>
-              <thead>
-                <tr>
-                  <th>Enable</th>
-                  <th>Product</th>
-                  <th>Cut</th>
-                  <th />
-                </tr>
-              </thead>
-              <tbody>
-                <tr>
-                  <td data-label="All products">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Enable</TableHead>
+                  <TableHead>Product</TableHead>
+                  <TableHead>Cut</TableHead>
+                  <TableHead />
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                <TableRow>
+                  <TableCell>
                     <input
                       id="all-products-cut"
                       type="checkbox"
@@ -268,11 +269,11 @@ const CollaboratorForm = () => {
                       }}
                       aria-label="All products"
                     />
-                  </td>
-                  <td data-label="Product">
+                  </TableCell>
+                  <TableCell>
                     <label htmlFor="all-products-cut">All products</label>
-                  </td>
-                  <td data-label="Cut">
+                  </TableCell>
+                  <TableCell>
                     <fieldset className={cx({ danger: defaultPercentCommission.hasError })}>
                       <NumberInput value={defaultPercentCommission.value} onChange={handleDefaultCommissionChange}>
                         {(inputProps) => (
@@ -289,8 +290,8 @@ const CollaboratorForm = () => {
                         )}
                       </NumberInput>
                     </fieldset>
-                  </td>
-                  <td>
+                  </TableCell>
+                  <TableCell>
                     <label>
                       <input
                         type="checkbox"
@@ -306,14 +307,14 @@ const CollaboratorForm = () => {
                       />
                       Show as co-creator
                     </label>
-                  </td>
-                </tr>
+                  </TableCell>
+                </TableRow>
                 {products.map((product) => {
                   const disabled = applyToAllProducts || !product.enabled;
 
                   return shouldShowProduct(product) ? (
-                    <tr key={product.id}>
-                      <td data-label="Enable for product">
+                    <TableRow key={product.id}>
+                      <TableCell>
                         <input
                           id={`enable-product-${product.id}`}
                           type="checkbox"
@@ -323,8 +324,8 @@ const CollaboratorForm = () => {
                           onChange={(evt) => handleProductChange(product.id, { enabled: evt.target.checked })}
                           aria-label="Enable all products"
                         />
-                      </td>
-                      <td data-label="Enable for product">
+                      </TableCell>
+                      <TableCell>
                         <label htmlFor={`enable-product-${product.id}`}>{product.name}</label>
                         {product.has_another_collaborator || product.has_affiliates ? (
                           <small>
@@ -333,8 +334,8 @@ const CollaboratorForm = () => {
                               : "Selecting this product will remove all its affiliates."}
                           </small>
                         ) : null}
-                      </td>
-                      <td data-label="Cut">
+                      </TableCell>
+                      <TableCell>
                         <fieldset className={cx({ danger: product.has_error })}>
                           <NumberInput
                             value={product.percent_commission}
@@ -354,8 +355,8 @@ const CollaboratorForm = () => {
                             )}
                           </NumberInput>
                         </fieldset>
-                      </td>
-                      <td>
+                      </TableCell>
+                      <TableCell>
                         <label>
                           <input
                             type="checkbox"
@@ -367,12 +368,12 @@ const CollaboratorForm = () => {
                           />
                           Show as co-creator
                         </label>
-                      </td>
-                    </tr>
+                      </TableCell>
+                    </TableRow>
                   ) : null;
                 })}
-              </tbody>
-            </table>
+              </TableBody>
+            </Table>
           </fieldset>
           <label>
             <input

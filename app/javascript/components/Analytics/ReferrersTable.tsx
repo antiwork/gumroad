@@ -4,6 +4,7 @@ import { formatPriceCentsWithCurrencySymbol } from "$app/utils/currency";
 
 import { type AnalyticsReferrerTotals } from "$app/components/Analytics";
 import { Button } from "$app/components/Button";
+import { Table, TableBody, TableCaption, TableCell, TableHead, TableHeader, TableRow } from "$app/components/ui/Table";
 import { useClientSortingTableDriver } from "$app/components/useSortingTableDriver";
 
 const ROWS_PER_PAGE = 10;
@@ -34,35 +35,35 @@ export const ReferrersTable = ({ data }: { data: AnalyticsReferrerTotals }) => {
 
   return (
     <section className="flex flex-col gap-4">
-      <table>
-        <caption>
+      <Table>
+        <TableCaption>
           <a href="/help/article/74-the-analytics-dashboard" target="_blank" rel="noreferrer">
             Referrer
           </a>
-        </caption>
-        <thead>
-          <tr>
-            <th>Source</th>
-            <th {...thProps("views")}>Views</th>
-            <th {...thProps("sales")}>Sales</th>
-            <th {...thProps("conversion")}>Conversion</th>
-            <th {...thProps("totals")}>Total</th>
-          </tr>
-        </thead>
-        <tbody>
+        </TableCaption>
+        <TableHeader>
+          <TableRow>
+            <TableHead>Source</TableHead>
+            <TableHead {...thProps("views")}>Views</TableHead>
+            <TableHead {...thProps("sales")}>Sales</TableHead>
+            <TableHead {...thProps("conversion")}>Conversion</TableHead>
+            <TableHead {...thProps("totals")}>Total</TableHead>
+          </TableRow>
+        </TableHeader>
+        <TableBody>
           {items.slice(0, maxRowsShown).map(({ referrer, sales, views, totals, conversion }) => (
-            <tr key={referrer} data-total={totals}>
-              <td data-label="Source">{referrer === "direct" ? "Direct, email, IM" : referrer}</td>
-              <td data-label="Views">{views}</td>
-              <td data-label="Sales">{sales}</td>
-              <td data-label="Conversion">{`${(conversion * 100).toFixed(1).replace(".0", "")}%`}</td>
-              <td data-label="Total">
+            <TableRow key={referrer}>
+              <TableCell>{referrer === "direct" ? "Direct, email, IM" : referrer}</TableCell>
+              <TableCell>{views}</TableCell>
+              <TableCell>{sales}</TableCell>
+              <TableCell>{`${(conversion * 100).toFixed(1).replace(".0", "")}%`}</TableCell>
+              <TableCell>
                 {formatPriceCentsWithCurrencySymbol("usd", totals, { symbolFormat: "short", noCentsIfWhole: true })}
-              </td>
-            </tr>
+              </TableCell>
+            </TableRow>
           ))}
-        </tbody>
-      </table>
+        </TableBody>
+      </Table>
       {items.length > maxRowsShown && (
         <Button onClick={() => setMaxRowsShown(maxRowsShown + ROWS_PER_PAGE)} className="flex">
           Show more
