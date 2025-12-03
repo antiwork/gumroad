@@ -25,21 +25,21 @@ describe Admin::GuidsController, type: :controller, inertia: true do
 
   describe "GET show" do
     it "returns successful response with Inertia page data" do
-      get :show, params: { external_id: browser_guid }
+      get :show, params: { id: browser_guid }
 
       expect(response).to be_successful
       expect(inertia.component).to eq("Admin/Compliance/Guids/Show")
     end
 
     it "returns unique users for the supplied browser GUID" do
-      get :show, params: { external_id: browser_guid }
+      get :show, params: { id: browser_guid }
 
       expect(response).to be_successful
       expect(assigns(:users).to_a).to match_array [user1, user2, user3]
     end
 
     it "returns JSON response when requested" do
-      get :show, params: { external_id: browser_guid }, format: :json
+      get :show, params: { id: browser_guid }, format: :json
 
       expect(response).to be_successful
       expect(response.content_type).to match(%r{application/json})
@@ -51,7 +51,7 @@ describe Admin::GuidsController, type: :controller, inertia: true do
     it "returns an empty array when no users are found for the GUID" do
       non_existent_guid = SecureRandom.uuid
 
-      get :show, params: { external_id: non_existent_guid }
+      get :show, params: { id: non_existent_guid }
 
       expect(response).to be_successful
       expect(assigns(:users).to_a).to be_empty
@@ -62,7 +62,7 @@ describe Admin::GuidsController, type: :controller, inertia: true do
       other_guid = SecureRandom.uuid
       create(:event, user_id: other_user.id, browser_guid: other_guid)
 
-      get :show, params: { external_id: browser_guid }
+      get :show, params: { id: browser_guid }
 
       expect(response).to be_successful
       expect(assigns(:users).to_a).to match_array [user1, user2, user3]
@@ -70,7 +70,7 @@ describe Admin::GuidsController, type: :controller, inertia: true do
     end
 
     it "paginates results" do
-      get :show, params: { external_id: browser_guid, page: 1 }, format: :json
+      get :show, params: { id: browser_guid, page: 1 }, format: :json
 
       expect(response).to be_successful
       expect(response.content_type).to match(%r{application/json})

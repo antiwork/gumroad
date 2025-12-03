@@ -23,6 +23,7 @@ type UrlRedirect = {
 
 type Gift = {
   is_sender_purchase: boolean;
+  other_purchase_id: number;
   other_purchase_external_id: string;
   other_email: string;
   note: string | null;
@@ -36,6 +37,7 @@ export type Purchase = PurchaseStatesInfo & {
     email: string;
   };
   merchant_account: {
+    id: number;
     external_id: string;
     charge_processor_id: string;
     holder_of_funds: string;
@@ -66,7 +68,7 @@ export type Purchase = PurchaseStatesInfo & {
   external_id_numeric: number;
   quantity: number;
   refunds: {
-    user: { external_id: string; name: string | null } | null;
+    user: { id: number; external_id: string; name: string | null } | null;
     status: string;
     created_at: string;
   }[];
@@ -173,7 +175,7 @@ const Info = ({ purchase }: { purchase: Purchase }) => (
           <dt>Merchant account</dt>
           <dd>
             <Link href={Routes.admin_merchant_account_path(purchase.merchant_account.external_id)}>
-              {purchase.merchant_account.external_id} – {purchase.merchant_account.charge_processor_id}
+              {purchase.merchant_account.id} – {purchase.merchant_account.charge_processor_id}
             </Link>
           </dd>
           <dt>Funds held by</dt>
@@ -273,7 +275,7 @@ const Info = ({ purchase }: { purchase: Purchase }) => (
                     Refunder:
                     {refund.user ? (
                       <Link href={Routes.admin_user_path(refund.user.external_id)}>
-                        {refund.user.name || `User ${refund.user.external_id}`}
+                        {refund.user.name || `User ${refund.user.id}`}
                       </Link>
                     ) : (
                       "(unknown)"
@@ -478,11 +480,9 @@ const GiftInfo = ({ purchaseExternalId, gift }: { purchaseExternalId: string; gi
           <dt>Note</dt>
           <dd>{gift.note}</dd>
 
-          <dt>Receiver purchase external id</dt>
+          <dt>Receiver purchase id</dt>
           <dd>
-            <Link href={Routes.admin_purchase_path(gift.other_purchase_external_id)}>
-              {gift.other_purchase_external_id}
-            </Link>
+            <Link href={Routes.admin_purchase_path(gift.other_purchase_external_id)}>{gift.other_purchase_id}</Link>
           </dd>
         </dl>
       </details>
@@ -520,11 +520,9 @@ const GiftInfo = ({ purchaseExternalId, gift }: { purchaseExternalId: string; gi
         <dt>Note</dt>
         <dd>{gift.note}</dd>
 
-        <dt>Sender purchase external id</dt>
+        <dt>Sender purchase id</dt>
         <dd>
-          <Link href={Routes.admin_purchase_path(gift.other_purchase_external_id)}>
-            {gift.other_purchase_external_id}
-          </Link>
+          <Link href={Routes.admin_purchase_path(gift.other_purchase_external_id)}>{gift.other_purchase_id}</Link>
         </dd>
       </dl>
     </details>

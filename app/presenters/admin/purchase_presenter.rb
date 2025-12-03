@@ -49,6 +49,7 @@ class Admin::PurchasePresenter
                        deleted_at: purchase.deleted_at,
                        external_id: purchase.external_id,
                        merchant_account: purchase.merchant_account.present? ? {
+                         id: purchase.merchant_account.id,
                          external_id: purchase.merchant_account.external_id,
                          charge_processor_id: purchase.merchant_account.charge_processor_id&.capitalize,
                          holder_of_funds: purchase.merchant_account.holder_of_funds.capitalize,
@@ -69,7 +70,7 @@ class Admin::PurchasePresenter
                        quantity: purchase.quantity,
                        refunds: purchase.refunds.map do |refund|
                          {
-                           user: refund.user ? { external_id: refund.user.external_id, name: refund.user.name } : nil,
+                           user: refund.user ? { id: refund.user.id, external_id: refund.user.external_id, name: refund.user.name } : nil,
                            status: refund.status.capitalize,
                            created_at: refund.created_at,
                          }
@@ -115,9 +116,9 @@ class Admin::PurchasePresenter
                        affiliate_email: purchase.affiliate.present? ? purchase.affiliate.affiliate_user.form_email : nil,
                        can_contact: purchase.can_contact?,
                        gift: purchase.is_gift_sender_purchase ?
-                               { is_sender_purchase: true, other_purchase_external_id: purchase.gift.giftee_purchase&.external_id, other_email: purchase.giftee_email, note: purchase.gift_note } :
+                               { is_sender_purchase: true, other_purchase_id: purchase.gift.giftee_purchase&.id, other_purchase_external_id: purchase.gift.giftee_purchase&.external_id, other_email: purchase.giftee_email, note: purchase.gift_note } :
                                purchase.is_gift_receiver_purchase ?
-                                 { is_sender_purchase: false, other_purchase_external_id: purchase.gift.gifter_purchase&.external_id, other_email: purchase.gifter_email, note: purchase.gift_note } :
+                                 { is_sender_purchase: false, other_purchase_id: purchase.gift.gifter_purchase&.id, other_purchase_external_id: purchase.gift.gifter_purchase&.external_id, other_email: purchase.gifter_email, note: purchase.gift_note } :
                                  nil,
                        successful: purchase.successful?,
                        can_force_update: purchase.can_force_update?,

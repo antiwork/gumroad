@@ -154,7 +154,7 @@ namespace :admin do
   get "/search_purchases", to: "search#purchases"
 
   # Compliance
-  resources :guids, only: [:show], param: :external_id
+  resources :guids, only: [:show]
   scope module: "compliance" do
     resources :cards, only: [] do
       collection do
