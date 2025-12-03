@@ -4,7 +4,7 @@ import React from "react";
 import { formatPriceCentsWithCurrencySymbol } from "$app/utils/currency";
 
 import AdminActionButton from "$app/components/Admin/ActionButton";
-import Comments from "$app/components/Admin/Commentable";
+import AdminCommentableComments from "$app/components/Admin/Commentable";
 import DateTimeWithRelativeTooltip from "$app/components/Admin/DateTimeWithRelativeTooltip";
 import { Form } from "$app/components/Admin/Form";
 import { NoIcon, BooleanIcon } from "$app/components/Admin/Icons";
@@ -25,7 +25,7 @@ type Gift = {
   is_sender_purchase: boolean;
   other_purchase_id: number;
   other_email: string;
-  note: string;
+  note: string | null;
 };
 
 export type Purchase = PurchaseStatesInfo & {
@@ -73,7 +73,7 @@ export type Purchase = PurchaseStatesInfo & {
   card: {
     type: string;
     visual: string;
-    country: string;
+    country: string | null;
     fingerprint_search_url: string | null;
   } | null;
   ip_address: string | null;
@@ -101,7 +101,7 @@ export type Purchase = PurchaseStatesInfo & {
   state: string | null;
   zip_code: string | null;
   country: string | null;
-  custom_fields: { name: string; value: string }[];
+  custom_fields: { name: string; value: string | boolean }[];
   license: { serial: string } | null;
   affiliate_email: string | null;
   refund_policy:
@@ -127,7 +127,7 @@ const Header = ({ purchase }: { purchase: Purchase }) => (
     <h2>
       <Link href={Routes.admin_purchase_path(purchase.id)}>{purchase.formatted_display_price}</Link>
       {purchase.gumroad_responsible_for_tax ? ` + ${purchase.formatted_gumroad_tax_amount} VAT` : null} for{" "}
-      <Link href={Routes.admin_link_path(purchase.product.id)} title={purchase.product.id.toString()}>
+      <Link href={Routes.admin_product_path(purchase.product.id)} title={purchase.product.id.toString()}>
         {purchase.product.name}
       </Link>{" "}
       {purchase.variants_list}{" "}
@@ -147,7 +147,7 @@ const Header = ({ purchase }: { purchase: Purchase }) => (
 );
 
 const Info = ({ purchase }: { purchase: Purchase }) => (
-  <div className="paragraphs">
+  <div className="flex flex-col gap-4">
     <h3>Info</h3>
     <dl>
       {purchase.seller.support_email ? (
@@ -374,11 +374,11 @@ const Info = ({ purchase }: { purchase: Purchase }) => (
         </>
       ) : null}
 
-      {purchase.custom_fields.map((field) => (
-        <>
+      {purchase.custom_fields.map((field, index) => (
+        <React.Fragment key={index}>
           <dt>{field.name}</dt>
-          <dd>{field.value} (custom field)</dd>
-        </>
+          <dd>{field.value.toString()} (custom field)</dd>
+        </React.Fragment>
       ))}
 
       {purchase.purchase_state === "preorder_authorization_successful" ? (
@@ -497,8 +497,8 @@ const GiftInfo = ({ purchaseId, gift }: { purchaseId: number; gift: Gift }) =>
           onSuccess={() => showAlert("Successfully updated the giftee email.", "success")}
         >
           {(isLoading) => (
-            <div className="input-with-button">
-              <input type="text" name="giftee_email" placeholder="Enter new giftee email" required />
+            <div className="flex gap-2">
+              <input type="text" className="flex-1" name="giftee_email" placeholder="Enter new giftee email" required />
               <button type="submit" className="button" disabled={isLoading}>
                 {isLoading ? "Updating..." : "Update"}
               </button>
@@ -528,7 +528,7 @@ const GiftInfo = ({ purchaseId, gift }: { purchaseId: number; gift: Gift }) =>
   );
 
 const ActionButtons = ({ purchase }: { purchase: Purchase }) => (
-  <div className="button-group">
+  <div className="flex flex-wrap gap-2">
     {purchase.can_force_update || purchase.failed ? (
       <AdminActionButton
         label="Sync with Stripe/PayPal"
@@ -678,7 +678,7 @@ const AdminPurchase = ({ purchase }: { purchase: Purchase }) => (
     ) : null}
     <hr />
     <ActionButtons purchase={purchase} />
-    <Comments
+    <AdminCommentableComments
       count={purchase.comments_count}
       endpoint={Routes.admin_purchase_comments_path(purchase.id)}
       commentableType="purchase"

@@ -143,7 +143,7 @@ const EmailConfirmation = ({ confirmation_info, authenticity_token }: EmailConfi
     {confirmation_info ? (
       <form
         action={Routes.confirm_redirect_path()}
-        className="paragraphs"
+        className="flex flex-col gap-4"
         style={{ width: "calc(min(428px, 100%))" }}
         method="post"
       >

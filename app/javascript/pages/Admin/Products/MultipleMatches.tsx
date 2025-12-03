@@ -3,6 +3,7 @@ import React from "react";
 
 import DateTimeWithRelativeTooltip from "$app/components/Admin/DateTimeWithRelativeTooltip";
 import { Icon } from "$app/components/Icons";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "$app/components/ui/Table";
 
 type ProductMatchProps = {
   id: number;
@@ -17,8 +18,8 @@ const ProductMatch = ({ product }: { product: ProductMatchProps }) => {
   const userName = product.user.name && product.user.name.length > 0 ? product.user.name : `User ${product.user.id}`;
 
   return (
-    <tr>
-      <td data-label="Product" className="space-x-1">
+    <TableRow>
+      <TableCell className="space-x-1">
         <span>{product.price_formatted}</span>
         <span>&bull;</span>
         <Link href={Routes.admin_product_url(product.id)} title={product.id.toString()}>
@@ -27,17 +28,17 @@ const ProductMatch = ({ product }: { product: ProductMatchProps }) => {
         <a href={product.long_url} target="_blank" rel="noreferrer noopener">
           <Icon name="arrow-up-right-square" />
         </a>
-      </td>
+      </TableCell>
 
-      <td data-label="By">
+      <TableCell>
         <Link href={Routes.admin_user_path(product.user.id)} title={product.user.id.toString()}>
           {userName}
         </Link>
         <small>
           <DateTimeWithRelativeTooltip date={product.created_at} />
         </small>
-      </td>
-    </tr>
+      </TableCell>
+    </TableRow>
   );
 };
 
@@ -45,19 +46,19 @@ const AdminProductsMultipleMatches = () => {
   const { product_matches } = usePage<{ product_matches: ProductMatchProps[] }>().props;
 
   return (
-    <table>
-      <thead>
-        <tr>
-          <th>Product</th>
-          <th>By</th>
-        </tr>
-      </thead>
-      <tbody>
+    <Table>
+      <TableHeader>
+        <TableRow>
+          <TableHead>Product</TableHead>
+          <TableHead>By</TableHead>
+        </TableRow>
+      </TableHeader>
+      <TableBody>
         {product_matches.map((product) => (
           <ProductMatch key={product.id} product={product} />
         ))}
-      </tbody>
-    </table>
+      </TableBody>
+    </Table>
   );
 };
 

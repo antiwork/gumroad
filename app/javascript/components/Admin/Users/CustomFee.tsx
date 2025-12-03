@@ -27,7 +27,7 @@ const AdminUserCustomFee = ({ user }: AdminUserCustomFeeProps) => {
         >
           {(isLoading) => (
             <fieldset>
-              <div className="input-with-button" style={{ alignItems: "start" }}>
+              <div className="flex items-start gap-2">
                 <input
                   name="custom_fee_percent"
                   type="number"
@@ -36,6 +36,7 @@ const AdminUserCustomFee = ({ user }: AdminUserCustomFeeProps) => {
                   max="100"
                   step="0.1"
                   value={customFee}
+                  className="flex-1"
                   onChange={(e) => setCustomFee(e.target.value)}
                   placeholder="Enter a custom fee percentage between 0 and 100. Submit blank to clear existing custom fee."
                 />

@@ -172,3 +172,17 @@ article.product-card {
     }
   }
 }
+
+// There is erb files yet to be migrated that use this.
+[role="navigation"] {
+  menu {
+    display: grid;
+    gap: spacer(3);
+
+    menu {
+      @include font-size(1);
+      padding-left: spacer(4);
+      margin-top: spacer(3);
+    }
+  }
+}

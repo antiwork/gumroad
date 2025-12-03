@@ -21,19 +21,17 @@ const AdminResumePayoutsForm = ({
   >
     {(isLoading) => (
       <fieldset>
-        <div className="input-with-button !items-end">
+        <div className="flex items-end justify-between gap-2">
           {payouts_paused_by === "admin" ? (
             <p>Payouts are currently paused by Gumroad admin. Reason: {reason}</p>
           ) : payouts_paused_by === "system" ? (
             <p>Payouts are currently automatically paused by the system. See comments below for details.</p>
           ) : payouts_paused_by === "stripe" ? (
             <p>Payouts are currently paused by Stripe because of pending verification requirements.</p>
-          ) : (
-            <div className="grid gap-2">
-              {payouts_paused_by === "user" && <p>Payouts are currently paused by the creator.</p>}
-            </div>
-          )}
-          <button type="submit" className="button" disabled={isLoading}>
+          ) : payouts_paused_by === "user" ? (
+            <p>Payouts are currently paused by the creator.</p>
+          ) : null}
+          <button type="submit" className="button shrink-0" disabled={isLoading}>
             {isLoading ? "Resuming Payouts" : "Resume Payouts"}
           </button>
         </div>

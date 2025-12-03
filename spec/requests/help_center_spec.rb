@@ -38,6 +38,7 @@ describe "Help Center", type: :system, js: true do
       visit "/help"
 
       expect(page).to have_button("Contact support")
+      expect(page).to have_link("Report a bug", href: "https://github.com/antiwork/gumroad/issues/new")
 
       click_on "Contact support"
 
@@ -59,6 +60,19 @@ describe "Help Center", type: :system, js: true do
       click_on "Send message"
       expect(page).to have_content("Your support ticket has been created successfully!")
       expect(page).not_to have_content("How can we help you today?")
+    end
+  end
+
+  describe "the user is authenticated with Helper session" do
+    before do
+      sign_in seller
+    end
+
+    it "shows the new ticket button and report a bug link" do
+      visit "/help"
+
+      expect(page).to have_button("New ticket")
+      expect(page).to have_link("Report a bug", href: "https://github.com/antiwork/gumroad/issues/new")
     end
   end
 end

@@ -1,6 +1,9 @@
 # frozen_string_literal: true
 
 class Api::Internal::Helper::UsersController < Api::Internal::Helper::BaseController
+  skip_before_action :authorize_helper_token!, only: [:user_info]
+  before_action :authorize_hmac_signature!, only: [:user_info]
+
   def user_info
     render json: { success: false, error: "'email' parameter is required" }, status: :bad_request if params[:email].blank?
 
