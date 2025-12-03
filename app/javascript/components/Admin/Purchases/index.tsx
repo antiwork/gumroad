@@ -94,7 +94,7 @@ export type Purchase = PurchaseStatesInfo & {
     url_redirect: UrlRedirect | null;
   }[];
   url_redirect: UrlRedirect | null;
-  offer_code: { code: string; displayed_amount_off: string } | null;
+  offer_code: { code: string | null; displayed_amount_off: string } | null;
   street_address: string | null;
   full_name: string | null;
   city: string | null;
@@ -357,9 +357,11 @@ const Info = ({ purchase }: { purchase: Purchase }) => (
 
       {purchase.offer_code && !purchase.gift?.is_sender_purchase ? (
         <>
-          <dt>Discount code</dt>
+          <dt>{purchase.offer_code.code ? "Discount code" : "Discount"}</dt>
           <dd>
-            {purchase.offer_code.code} for {purchase.offer_code.displayed_amount_off} off
+            {purchase.offer_code.code
+              ? `${purchase.offer_code.code} for ${purchase.offer_code.displayed_amount_off} off`
+              : `${purchase.offer_code.displayed_amount_off} off`}
           </dd>
         </>
       ) : null}
