@@ -156,8 +156,7 @@ class Admin::PurchasesController < Admin::BaseController
   private
     def fetch_purchase
       if purchase = Purchase.find_by(id: params[:external_id])
-        new_path = request.fullpath.sub("/#{params[:external_id]}", "/#{purchase.external_id}")
-        return redirect_to new_path
+        return redirect_to admin_purchase_path(purchase.external_id)
       end
 
       @purchase = Purchase.find_by_external_id(params[:external_id])
