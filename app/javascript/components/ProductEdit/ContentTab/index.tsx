@@ -618,7 +618,7 @@ const ContentTabContent = ({ selectedVariantId }: { selectedVariantId: string | 
                           }}
                         />
                         <Icon name="upload-fill" />
-                          <h4>Upload</h4>
+                        <h4>Upload</h4>
                       </label>
                     </Tab>
                   </Tabs>
