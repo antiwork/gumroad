@@ -52,9 +52,11 @@ import { NumberInput } from "$app/components/NumberInput";
 import { Pagination } from "$app/components/Pagination";
 import { Popover } from "$app/components/Popover";
 import { showAlert } from "$app/components/server-components/Alert";
+import { Skeleton } from "$app/components/Skeleton";
 import { PageHeader } from "$app/components/ui/PageHeader";
 import Placeholder from "$app/components/ui/Placeholder";
 import { Sheet, SheetHeader } from "$app/components/ui/Sheet";
+import { Table, TableBody, TableCaption, TableCell, TableHead, TableHeader, TableRow } from "$app/components/ui/Table";
 import { Tabs, Tab } from "$app/components/ui/Tabs";
 import { useDebouncedCallback } from "$app/components/useDebouncedCallback";
 import { useLocalPagination } from "$app/components/useLocalPagination";
@@ -247,36 +249,36 @@ const AffiliateRequestsTable = ({
   return (
     <>
       {visibleItems.length > 0 ? (
-        <table>
-          <caption>
+        <Table>
+          <TableCaption>
             <div style={{ display: "flex", justifyContent: "space-between" }}>
               Requests
               {allowApproveAll ? <ApproveAllButton isLoading={isLoading} setIsLoading={setIsLoading} /> : null}
             </div>
-          </caption>
-          <thead>
-            <tr>
-              <th {...thProps("name")}>Name</th>
-              <th {...thProps("promotion")}>Promotion</th>
-              <th {...thProps("date")}>Date</th>
-              <th />
-            </tr>
-          </thead>
+          </TableCaption>
+          <TableHeader>
+            <TableRow>
+              <TableHead {...thProps("name")}>Name</TableHead>
+              <TableHead {...thProps("promotion")}>Promotion</TableHead>
+              <TableHead {...thProps("date")}>Date</TableHead>
+              <TableHead />
+            </TableRow>
+          </TableHeader>
 
-          <tbody>
+          <TableBody>
             {visibleItems.map((affiliateRequest) => (
-              <tr key={affiliateRequest.id}>
-                <td>
+              <TableRow key={affiliateRequest.id}>
+                <TableCell>
                   {affiliateRequest.name}
                   <small>{affiliateRequest.email}</small>
-                </td>
+                </TableCell>
 
-                <td data-label="Promotion">{affiliateRequest.promotion}</td>
+                <TableCell>{affiliateRequest.promotion}</TableCell>
 
-                <td data-label="Date">{parseISO(affiliateRequest.date).toLocaleDateString(userAgentInfo.locale)}</td>
+                <TableCell>{parseISO(affiliateRequest.date).toLocaleDateString(userAgentInfo.locale)}</TableCell>
 
-                <td>
-                  <div className="actions">
+                <TableCell>
+                  <div className="flex flex-wrap gap-3 lg:justify-end">
                     <Button
                       disabled={
                         !loggedInUser?.policies.direct_affiliate.update ||
@@ -314,11 +316,11 @@ const AffiliateRequestsTable = ({
                       </Button>
                     </WithTooltip>
                   </div>
-                </td>
-              </tr>
+                </TableCell>
+              </TableRow>
             ))}
-          </tbody>
-        </table>
+          </TableBody>
+        </Table>
       ) : (
         <Placeholder>No requests yet</Placeholder>
       )}
@@ -475,8 +477,11 @@ const AffiliatesTab = () => {
             {affiliates.length > 0 ? (
               <>
                 <section className="flex flex-col gap-4">
-                  <table aria-busy={navigation.state !== "idle"}>
-                    <caption>
+                  <Table
+                    aria-live="polite"
+                    className={cx(navigation.state !== "idle" && "pointer-events-none opacity-50")}
+                  >
+                    <TableCaption>
                       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
                         Affiliates
                         <div className="text-base">
@@ -487,30 +492,30 @@ const AffiliatesTab = () => {
                           </WithTooltip>
                         </div>
                       </div>
-                    </caption>
-                    <thead>
-                      <tr>
-                        <th {...thProps("affiliate_user_name")}>Name</th>
-                        <th {...thProps("products")}>Products</th>
-                        <th {...thProps("fee_percent")}>Commission</th>
-                        <th {...thProps("volume_cents")}>Sales</th>
-                        <th />
-                      </tr>
-                    </thead>
+                    </TableCaption>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead {...thProps("affiliate_user_name")}>Name</TableHead>
+                        <TableHead {...thProps("products")}>Products</TableHead>
+                        <TableHead {...thProps("fee_percent")}>Commission</TableHead>
+                        <TableHead {...thProps("volume_cents")}>Sales</TableHead>
+                        <TableHead />
+                      </TableRow>
+                    </TableHeader>
 
-                    <tbody>
+                    <TableBody>
                       {affiliates.map((affiliate) => {
                         const enabledProducts = affiliate.products;
                         const statistics = affiliateStatistics[affiliate.id];
 
                         return (
-                          <tr
+                          <TableRow
                             key={affiliate.id}
-                            aria-selected={affiliate.id === selectedAffiliate?.id}
+                            selected={affiliate.id === selectedAffiliate?.id}
                             onClick={() => setSelectedAffiliate(affiliate)}
                           >
-                            <td data-label="Name">{affiliate.affiliate_user_name}</td>
-                            <td data-label="Products">
+                            <TableCell>{affiliate.affiliate_user_name}</TableCell>
+                            <TableCell>
                               <WithTooltip
                                 tip={enabledProducts.length <= 1 ? null : productTooltipLabel(enabledProducts)}
                               >
@@ -518,15 +523,17 @@ const AffiliatesTab = () => {
                                   {productName(enabledProducts)}
                                 </a>
                               </WithTooltip>
-                            </td>
-                            <td data-label="Commission">{formattedFeePercentLabel(affiliate)}</td>
-                            {statistics ? (
-                              <td data-label="Sales">{formattedSalesVolumeAmount(statistics.total_volume_cents)}</td>
-                            ) : (
-                              <td aria-busy data-label="Sales" />
-                            )}
-                            <td>
-                              <div className="actions" onClick={(e) => e.stopPropagation()}>
+                            </TableCell>
+                            <TableCell>{formattedFeePercentLabel(affiliate)}</TableCell>
+                            <TableCell aria-busy={!statistics}>
+                              {statistics ? (
+                                formattedSalesVolumeAmount(statistics.total_volume_cents)
+                              ) : (
+                                <Skeleton className="w-16" />
+                              )}
+                            </TableCell>
+                            <TableCell onClick={(e) => e.stopPropagation()}>
+                              <div className="flex flex-wrap gap-3 lg:justify-end">
                                 <CopyToClipboard
                                   tooltipPosition="bottom"
                                   copyTooltip="Copy link"
@@ -556,12 +563,12 @@ const AffiliatesTab = () => {
                                   <Icon name="trash2" />
                                 </Button>
                               </div>
-                            </td>
-                          </tr>
+                            </TableCell>
+                          </TableRow>
                         );
                       })}
-                    </tbody>
-                  </table>
+                    </TableBody>
+                  </Table>
                   {pagination.pages > 1 ? <Pagination onChangePage={onChangePage} pagination={pagination} /> : null}
                 </section>
                 {selectedAffiliate ? (
@@ -820,22 +827,22 @@ const Form = ({ title, headerLabel, submitLabel }: FormProps) => {
               autoFocus={!affiliateId}
             />
           </fieldset>
-          <table>
-            <thead>
-              <tr>
-                <th>Enable</th>
-                <th>Product</th>
-                <th>Commission</th>
-                <th>
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Enable</TableHead>
+                <TableHead>Product</TableHead>
+                <TableHead>Commission</TableHead>
+                <TableHead>
                   <a href="/help/article/333-affiliates-on-gumroad" target="_blank" rel="noreferrer">
                     Destination URL (optional)
                   </a>
-                </th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr>
-                <td data-label="Enable">
+                </TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              <TableRow>
+                <TableCell>
                   <input
                     id={`${uid}enableAllProducts`}
                     type="checkbox"
@@ -844,11 +851,11 @@ const Form = ({ title, headerLabel, submitLabel }: FormProps) => {
                     onChange={(evt) => toggleAllProducts(evt.target.checked)}
                     aria-label="Enable all products"
                   />
-                </td>
-                <td data-label="Product">
+                </TableCell>
+                <TableCell>
                   <label htmlFor={`${uid}enableAllProducts`}>All products</label>
-                </td>
-                <td data-label="Commission">
+                </TableCell>
+                <TableCell>
                   <fieldset className={cx({ danger: errors.has("feePercent") })}>
                     <NumberInput
                       onChange={(value) =>
@@ -881,8 +888,8 @@ const Form = ({ title, headerLabel, submitLabel }: FormProps) => {
                       )}
                     </NumberInput>
                   </fieldset>
-                </td>
-                <td>
+                </TableCell>
+                <TableCell>
                   <fieldset className={cx({ danger: errors.has("destinationUrl") })}>
                     <input
                       type="url"
@@ -892,8 +899,8 @@ const Form = ({ title, headerLabel, submitLabel }: FormProps) => {
                       disabled={navigation.state !== "idle" || !affiliateState.apply_to_all_products}
                     />
                   </fieldset>
-                </td>
-              </tr>
+                </TableCell>
+              </TableRow>
               {affiliateState.products.map((product) => (
                 <ProductRow
                   key={product.id}
@@ -909,8 +916,8 @@ const Form = ({ title, headerLabel, submitLabel }: FormProps) => {
                   }
                 />
               ))}
-            </tbody>
-          </table>
+            </TableBody>
+          </Table>
         </section>
       </form>
     </Layout>

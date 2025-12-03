@@ -910,4 +910,69 @@ describe("Checkout discounts page", type: :system, js: true) do
       expect(page).to have_current_path(checkout_discounts_path({ column: "revenue", page: 1, query: "Discount 4", sort: "asc" }))
     end
   end
+
+  describe "Black Friday banner" do
+    before do
+      Feature.activate(:black_friday_seller_banner)
+    end
+
+    after do
+      Feature.deactivate(:black_friday_seller_banner)
+    end
+
+    it "shows the Black Friday banner when feature is enabled and seller has no BLACKFRIDAY2025 code" do
+      visit checkout_discounts_path
+
+      expect(page).to have_text("Black Friday is here!")
+      expect(page).to have_text("Be part of it on Discover. Join Black Friday Deals to create your discount and get featured.")
+      expect(page).to have_button("Join Black Friday Deals")
+    end
+
+    it "hides the Black Friday banner when seller already has a BLACKFRIDAY2025 code" do
+      create(:offer_code, user: seller, code: "BLACKFRIDAY2025", name: "Black Friday", universal: true, amount_percentage: 25)
+
+      visit checkout_discounts_path
+
+      expect(page).not_to have_text("Black Friday is here!")
+      expect(page).not_to have_button("Join Black Friday Deals")
+    end
+
+    it "hides the Black Friday banner when feature is disabled" do
+      Feature.deactivate(:black_friday_seller_banner)
+
+      visit checkout_discounts_path
+
+      expect(page).not_to have_text("Black Friday is here!")
+      expect(page).not_to have_button("Join Black Friday Deals")
+    end
+
+    it "creates a Black Friday discount with BLACKFRIDAY2025 code when clicking the banner button" do
+      visit checkout_discounts_path
+
+      click_on "Join Black Friday Deals"
+
+      expect(page).to have_section("Create discount")
+      expect(page).to have_field("Discount code", with: "BLACKFRIDAY2025", readonly: true)
+      expect(page).to have_text("By using this discount, your product will be featured in Black Friday Deals on Discover.")
+
+      check "All products"
+      fill_in "Percentage", with: "25"
+
+      click_on "Add discount"
+
+      expect(page).to have_alert(text: "Successfully created discount!")
+      within find(:table_row, { "Discount" => "Black Friday 2025" }) do
+        expect(page).to have_text("25% off of all products")
+        expect(page).to have_selector("[aria-label='Offer code']", text: "BLACKFRIDAY2025")
+      end
+
+      expect(page).not_to have_text("Black Friday is here!")
+
+      offer_code = OfferCode.last
+      expect(offer_code.name).to eq("Black Friday 2025")
+      expect(offer_code.code).to eq("BLACKFRIDAY2025")
+      expect(offer_code.amount_percentage).to eq(25)
+      expect(offer_code.universal).to eq(true)
+    end
+  end
 end

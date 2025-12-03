@@ -51,6 +51,7 @@ export type Product = {
   admins_can_mark_as_staff_picked: boolean;
   admins_can_unmark_as_staff_picked: boolean;
   is_tiered_membership: boolean;
+  comments_count: number;
   updated_at: string;
   deleted_at: string | null;
 };
@@ -63,13 +64,10 @@ type AdminUsersProductsProductProps = {
 const AdminUsersProductsProduct = ({ product, isAffiliateUser = false }: AdminUsersProductsProductProps) => {
   const { url, props } = usePage();
   const compliance: Compliance = cast<Compliance>(props.compliance);
-  const isCurrentUrl = url === Routes.admin_product_path(product.unique_permalink);
+  const isCurrentUrl = url === Routes.admin_product_path(product.id);
 
   return (
-    <article
-      className="grid gap-4 rounded border border-border bg-background p-4"
-      data-product-id={product.unique_permalink}
-    >
+    <article className="grid gap-4 rounded border border-border bg-background p-4" data-product-id={product.id}>
       <AdminProductHeader product={product} isCurrentUrl={isCurrentUrl} />
       <AdminProductDescription product={product} />
       <AdminProductDetails product={product} />

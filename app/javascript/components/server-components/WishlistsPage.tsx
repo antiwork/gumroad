@@ -12,6 +12,7 @@ import { Modal } from "$app/components/Modal";
 import { showAlert } from "$app/components/server-components/Alert";
 import { Toggle } from "$app/components/Toggle";
 import Placeholder from "$app/components/ui/Placeholder";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "$app/components/ui/Table";
 import { WithTooltip } from "$app/components/WithTooltip";
 
 import placeholder from "$assets/images/placeholders/wishlists.png";
@@ -74,12 +75,12 @@ const WishlistsPage = ({
     >
       <section className="space-y-4 p-4 md:p-8">
         {wishlists.length > 0 ? (
-          <table>
-            <thead>
-              <tr>
-                <th>Wishlist</th>
-                <th>Products</th>
-                <th>
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Wishlist</TableHead>
+                <TableHead>Products</TableHead>
+                <TableHead>
                   Discoverable&nbsp;
                   <WithTooltip
                     tip={
@@ -91,31 +92,31 @@ const WishlistsPage = ({
                   >
                     <Icon name="info-circle" />
                   </WithTooltip>
-                </th>
-                <th />
-              </tr>
-            </thead>
-            <tbody>
+                </TableHead>
+                <TableHead />
+              </TableRow>
+            </TableHeader>
+            <TableBody>
               {wishlists.map((wishlist) => (
-                <tr key={wishlist.id}>
-                  <td>
+                <TableRow key={wishlist.id}>
+                  <TableCell>
                     <a href={wishlist.url} target="_blank" rel="noreferrer" style={{ textDecoration: "none" }}>
                       <h4>{wishlist.name}</h4>
                     </a>
                     <a href={wishlist.url} target="_blank" rel="noreferrer">
                       <small>{wishlist.url}</small>
                     </a>
-                  </td>
-                  <td data-label="Products">{wishlist.product_count}</td>
-                  <td data-label="Discoverable">
+                  </TableCell>
+                  <TableCell>{wishlist.product_count}</TableCell>
+                  <TableCell>
                     <Toggle
                       value={!wishlist.discover_opted_out}
                       onChange={(checked) => void updateDiscoverOptOut(wishlist.id, !checked)}
                       ariaLabel="Discoverable"
                     />
-                  </td>
-                  <td>
-                    <div className="actions">
+                  </TableCell>
+                  <TableCell>
+                    <div className="flex flex-wrap gap-3 lg:justify-end">
                       <Button
                         color="danger"
                         outline
@@ -125,11 +126,11 @@ const WishlistsPage = ({
                         <Icon name="trash2" />
                       </Button>
                     </div>
-                  </td>
-                </tr>
+                  </TableCell>
+                </TableRow>
               ))}
-            </tbody>
-          </table>
+            </TableBody>
+          </Table>
         ) : (
           <Placeholder>
             <figure>

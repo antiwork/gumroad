@@ -147,6 +147,20 @@ RSpec.configure do |config|
     ].each(&:join)
   end
 
+  # Stub SsrfFilter globally to allow localhost/minio in tests
+  # Use `skip_ssrf_stub: true` metadata to opt-out (e.g., for SSRF protection tests)
+  config.before(:each) do |example|
+    unless example.metadata[:skip_ssrf_stub]
+      allow(SsrfFilter).to receive(:get) do |url, **_args|
+        HTTParty.get(url)
+      end
+    end
+  end
+
+  config.after(:each) do |example|
+    RSpec::Mocks.space.proxy_for(SsrfFilter).reset if example.metadata[:skip_ssrf_stub]
+  end
+
   config.before(:suite) do
     examples = RSpec.world.filtered_examples.values.flatten
 
