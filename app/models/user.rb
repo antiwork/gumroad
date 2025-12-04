@@ -1089,13 +1089,6 @@ class User < ApplicationRecord
     alive_user_compliance_info.birthday > 18.years.ago.to_date
   end
 
-  def is_legal_guardian_information_required?
-    return false unless under_18?
-
-    guardian_status = guardian_verification_status
-    guardian_status != "verified"
-  end
-
   def eligible_for_ai_product_generation?
     return false unless Feature.active?(:ai_product_generation, self)
     return true if Rails.env.development?
@@ -1301,6 +1294,4 @@ class User < ApplicationRecord
     def to_email_domain(value)
       value.presence && Mail::Address.new(value).domain
     end
-
-  private
 end
