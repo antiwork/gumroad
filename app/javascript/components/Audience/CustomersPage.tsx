@@ -788,7 +788,11 @@ const CustomerDrawer = ({
           <h2>{customer.product.name}</h2>
         </div>
       </SheetHeader>
-      {commission ? <CommissionStatusPill commission={commission} /> : null}
+      {commission ? (
+        <div>
+          <CommissionStatusPill commission={commission} />
+        </div>
+      ) : null}
       {customer.is_additional_contribution ? (
         <div role="status" className="info">
           <div>
