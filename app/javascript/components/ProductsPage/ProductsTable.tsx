@@ -192,7 +192,7 @@ export const ProductsPageProductsTable = (props: {
         <TableFooter>
           <TableRow>
             <TableCell colSpan={2}>Totals</TableCell>
-            <TableCell className="whitespace-nowrap">
+            <TableCell label="Sales" className="whitespace-nowrap">
               {products.reduce((sum, product) => sum + product.successful_sales_count, 0).toLocaleString(locale)}
             </TableCell>
 

@@ -5953,6 +5953,17 @@ describe("Payments Settings Scenario", type: :system, js: true) do
           expect(page).to have_text("Please enter your exact name.")
           expect(@creator.backtax_agreements.count).to eq(0)
         end
+
+        it "allows the creator to open the opt-in modal even if their legal entity name is missing" do
+          @creator.fetch_or_build_user_compliance_info
+          allow_any_instance_of(UserComplianceInfo).to receive(:legal_entity_name).and_return(nil)
+
+          visit settings_payments_path
+
+          click_on "Opt-in to backtaxes collection"
+
+          expect(page).to have_field("Type your full name to opt-in", placeholder: "Full name")
+        end
       end
     end
   end
