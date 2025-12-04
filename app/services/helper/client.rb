@@ -17,7 +17,7 @@ class Helper::Client
     end
 
     serialized_params = json ? json.to_json : params.to_query
-    OpenSSL::HMAC.digest(OpenSSL::Digest.new("sha256"), GlobalConfig.get("HELPER_SECRET_KEY"), serialized_params)
+    OpenSSL::HMAC.digest(OpenSSL::Digest.new("sha256"), GlobalConfig.get("HELPER_WIDGET_SECRET"), serialized_params)
   end
 
   def add_note(conversation_id:, message:)
