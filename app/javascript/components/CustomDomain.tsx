@@ -6,6 +6,7 @@ import { asyncVoid } from "$app/utils/promise";
 import { assertResponseError, request, ResponseError } from "$app/utils/request";
 
 import { Button } from "$app/components/Button";
+import { Pill } from "$app/components/ui/Pill";
 
 type VerificationState = "initial" | "verifying" | "success" | "failure";
 
@@ -92,18 +93,24 @@ const CustomDomain = ({
           }}
         />
         {customDomain.trim() !== "" ? (
-          <Button className="inline-block align-middle !px-3 !py-2 bg-background text-foreground border border-border !rounded-[10rem] truncate shrink-0 -mr-2" onClick={verifyCustomDomain} disabled={verificationInfo.buttonState === "verifying"}>
-            <div>
-              {
+          <Pill asChild>
+            <Button
+              className="rounded-full! px-3! py-2!"
+              onClick={verifyCustomDomain}
+              disabled={verificationInfo.buttonState === "verifying"}
+            >
+              <div>
                 {
-                  initial: "Verify",
-                  verifying: "Verifying...",
-                  success: "Verified!",
-                  failure: "Verify",
-                }[verificationInfo.buttonState]
-              }
-            </div>
-          </Button>
+                  {
+                    initial: "Verify",
+                    verifying: "Verifying...",
+                    success: "Verified!",
+                    failure: "Verify",
+                  }[verificationInfo.buttonState]
+                }
+              </div>
+            </Button>
+          </Pill>
         ) : null}
       </div>
       <small>{verificationInfo.message}</small>

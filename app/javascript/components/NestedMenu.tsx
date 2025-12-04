@@ -240,7 +240,7 @@ const MenubarItem = ({
         href={menuItem.href ?? "#"}
         className={classNames(
           "button",
-          "!inline-block !rounded-[10rem] !px-3 !py-2 align-middle aria-[current]:bg-background aria-[current]:text-foreground aria-[expanded=true]:!shadow",
+          "rounded-full! px-3! py-2! align-middle aria-[current]:bg-background aria-[current]:text-foreground aria-[expanded=true]:shadow!",
           showExpandableIcon ? "relative cursor-pointer" : "",
         )}
         role="menuitem"
@@ -254,7 +254,7 @@ const MenubarItem = ({
         }}
       >
         {menuItem.label}
-        {showExpandableIcon ? <Icon name="outline-cheveron-down" className="float-right ml-2" /> : null}
+        {showExpandableIcon ? <Icon name="outline-cheveron-down" className="float-right" /> : null}
       </a>
       <div className="dropdown" hidden={!menuOpen} style={dropdownPosition}>
         <ItemsList
@@ -275,7 +275,7 @@ const MenubarItem = ({
         href={menuItem.href ?? "#"}
         className={classNames(
           "button",
-          "!inline-block !rounded-[10rem] !px-3 !py-2 align-middle hover:!shadow aria-[current]:bg-background aria-[current]:text-foreground",
+          "rounded-full! px-3! py-2! align-middle hover:shadow! aria-[current]:bg-background aria-[current]:text-foreground",
           showExpandableIcon ? "relative cursor-pointer" : "",
         )}
         role="menuitem"
@@ -287,7 +287,7 @@ const MenubarItem = ({
         }}
       >
         {menuItem.label}
-        {showExpandableIcon ? <Icon name="outline-cheveron-down" className="float-right ml-2" /> : null}
+        {showExpandableIcon ? <Icon name="outline-cheveron-down" className="float-right" /> : null}
       </a>
     </div>
   );
