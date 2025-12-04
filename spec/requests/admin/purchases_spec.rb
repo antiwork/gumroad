@@ -113,4 +113,40 @@ describe "Admin::PurchasesController Scenario", type: :system, js: true do
       expect(giftee_purchase.reload.email).to eq(new_giftee_email)
     end
   end
+
+  describe "discount display" do
+    it "displays discount code when offer_code has a code" do
+      product = create(:product, price_cents: 1000)
+      offer_code = create(:percentage_offer_code, products: [product], amount_percentage: 20, code: "SAVE20")
+      purchase = create(:purchase, link: product)
+      offer_code.purchases << purchase
+
+      visit admin_purchase_path(purchase)
+
+      expect(page).to have_text("Discount code")
+      expect(page).to have_text("SAVE20 for 20% off")
+    end
+
+    it "displays discount without code when offer_code.code is nil" do
+      seller = create(:user)
+      product = create(:product, user: seller, price_cents: 1000)
+      upsell_offer_code = OfferCode.new(
+        user: seller,
+        code: nil,
+        amount_percentage: 15,
+        universal: false
+      )
+      upsell_offer_code.products << product
+      upsell_offer_code.save!(validate: false)
+      create(:upsell, seller: seller, product: product, cross_sell: true, offer_code: upsell_offer_code)
+      purchase = create(:purchase, link: product)
+      upsell_offer_code.purchases << purchase
+
+      visit admin_purchase_path(purchase)
+
+      expect(page).not_to have_text("Discount code")
+      expect(page).to have_text("Discount")
+      expect(page).to have_text("15% off")
+    end
+  end
 end

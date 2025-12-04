@@ -600,7 +600,7 @@ const CustomerDetails = () => {
       {state.products.length === 1 && state.products[0]?.canGift && !state.products[0]?.payInInstallments ? (
         <GiftForm isMembership={state.products[0]?.nativeType === "membership"} />
       ) : null}
-      {state.paymentMethod !== "paypal" ? (
+      {state.paymentMethod !== "paypal" && state.paymentMethod !== "stripePaymentRequest" ? (
         <div>
           <Button color="primary" onClick={() => dispatch({ type: "offer" })} disabled={isSubmitDisabled(state)}>
             {payLabel}
