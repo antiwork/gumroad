@@ -76,6 +76,7 @@ import { Select } from "$app/components/Select";
 import { showAlert } from "$app/components/server-components/Alert";
 import { Toggle } from "$app/components/Toggle";
 import { PageHeader } from "$app/components/ui/PageHeader";
+import { Pill } from "$app/components/ui/Pill";
 import Placeholder from "$app/components/ui/Placeholder";
 import { Sheet, SheetHeader } from "$app/components/ui/Sheet";
 import { Table, TableBody, TableCaption, TableCell, TableHead, TableHeader, TableRow } from "$app/components/ui/Table";
@@ -87,7 +88,6 @@ import { useSortingTableDriver } from "$app/components/useSortingTableDriver";
 import { WithTooltip } from "$app/components/WithTooltip";
 
 import placeholder from "$assets/images/placeholders/customers.png";
-import { Pill } from "$app/components/ui/Pill";
 
 type Product = { id: string; name: string; variants: { id: string; name: string }[] };
 
@@ -480,48 +480,36 @@ const CustomersPage = ({
                       <TableCell>
                         {customer.product.name}
                         {customer.subscription?.is_installment_plan ? (
-                          <Pill asChild size="small" style={{ marginLeft: "var(--spacer-2)" }}>
-                            <span>
-                              Installments
-                            </span>
+                          <Pill size="small" style={{ marginLeft: "var(--spacer-2)" }}>
+                            Installments
                           </Pill>
                         ) : null}
                         {customer.is_bundle_purchase ? (
-                          <Pill asChild size="small" style={{ marginLeft: "var(--spacer-2)" }}>
-                            <span>
-                              Bundle
-                            </span>
+                          <Pill size="small" style={{ marginLeft: "var(--spacer-2)" }}>
+                            Bundle
                           </Pill>
                         ) : null}
                         {customer.subscription ? (
                           !customer.subscription.is_installment_plan && customer.subscription.status !== "alive" ? (
-                            <Pill asChild size="small" style={{ marginLeft: "var(--spacer-2)" }}>
-                              <span>
-                                Inactive
-                              </span>
+                            <Pill size="small" style={{ marginLeft: "var(--spacer-2)" }}>
+                              Inactive
                             </Pill>
                           ) : null
                         ) : (
                           <>
                             {customer.partially_refunded ? (
-                              <Pill asChild size="small" style={{ marginLeft: "var(--spacer-2)" }}>
-                                <span>
-                                  Partially refunded
-                                </span>
+                              <Pill size="small" style={{ marginLeft: "var(--spacer-2)" }}>
+                                Partially refunded
                               </Pill>
                             ) : null}
                             {customer.refunded ? (
-                              <Pill asChild size="small" style={{ marginLeft: "var(--spacer-2)" }}>
-                                <span>
-                                  Refunded
-                                </span>
+                              <Pill size="small" style={{ marginLeft: "var(--spacer-2)" }}>
+                                Refunded
                               </Pill>
                             ) : null}
                             {customer.chargedback ? (
                               <Pill asChild size="small" style={{ marginLeft: "var(--spacer-2)" }}>
-                                <span>
-                                  Chargedback
-                                </span>
+                                Chargedback
                               </Pill>
                             ) : null}
                           </>
@@ -531,10 +519,8 @@ const CustomersPage = ({
                             tooltipProps={{ className: "w-80 p-0" }}
                             tip={<UtmLinkStack link={customer.utm_link} showHeader={false} />}
                           >
-                            <Pill asChild size="small" style={{ marginLeft: "var(--spacer-2)" }}>
-                              <span>
-                                UTM
-                              </span>
+                            <Pill size="small" style={{ marginLeft: "var(--spacer-2)" }}>
+                              UTM
                             </Pill>
                           </WithTooltip>
                         ) : null}
@@ -1327,7 +1313,11 @@ const CustomerDrawer = ({
 };
 
 const CommissionStatusPill = ({ commission }: { commission: Commission }) => (
-  <Pill asChild size="small" color= {commission.status==="completed"? "primary" : (commission.status=== "cancelled" ? "danger" : undefined)}>
+  <Pill
+    asChild
+    size="small"
+    color={commission.status === "completed" ? "primary" : commission.status === "cancelled" ? "danger" : undefined}
+  >
     <span style={{ width: "fit-content" }}>
       {commission.status === "in_progress"
         ? "In progress"
@@ -2296,33 +2286,16 @@ const ChargeRow = ({
             <Icon name="arrow-up-right-square" />
           </a>
           {purchase.partially_refunded ? (
-            <Pill asChild size="small">
-              <span>
-                Partial refund
-              </span>
-            </Pill>
+            <Pill size="small">Partial refund</Pill>
           ) : purchase.refunded ? (
-            <Pill asChild size="small">
-              <span>
-                Refunded
-              </span>
-            </Pill>
+            <Pill size="small">Refunded</Pill>
           ) : null}
           {purchase.is_upgrade_purchase ? (
             <WithTooltip tip="This is an upgrade charge, generated when the subscriber upgraded to a more expensive plan.">
-              <Pill asChild size="small">
-                <span>
-                  Upgrade
-                </span>
-              </Pill>
+              <Pill size="small">Upgrade</Pill>
             </WithTooltip>
           ) : null}
-          {purchase.chargedback ?
-            <Pill asChild size="small">
-              <span>
-                Chargedback
-              </span>
-            </Pill> : null}
+          {purchase.chargedback ? <Pill size="small">Chargedback</Pill> : null}
         </section>
         {!purchase.refunded && !purchase.chargedback && purchase.amount_refundable > 0 ? (
           <button className="underline" onClick={() => setIsRefunding((prev) => !prev)}>

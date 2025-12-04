@@ -213,10 +213,10 @@ const MenuList = <IsMulti extends boolean>(props: MenuListProps<Option, IsMulti>
 
 const MultiValue = <IsMulti extends boolean>(props: MultiValueProps<Option, IsMulti>) => (
   <div {...props.removeProps}>
-    <Pill asChild color="primary" kind="dismissable">
+    <Pill asChild color="primary" className="cursor-pointer">
       <button>
         {props.data.label}
-        <Icon name="x" className="ml-2 float-right pointer-events-none" />
+        <Icon name="x" className="pointer-events-none ml-2" />
       </button>
     </Pill>
   </div>

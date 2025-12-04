@@ -8,9 +8,9 @@ import {
   parseCurrencyUnitStringToCents,
 } from "$app/utils/currency";
 
+import { Icon } from "$app/components/Icons";
 import { TypeSafeOptionSelect } from "$app/components/TypeSafeOptionSelect";
 import { Pill } from "$app/components/ui/Pill";
-import { Icon } from "$app/components/Icons";
 
 export const PriceInput = React.forwardRef<
   HTMLInputElement,
@@ -63,7 +63,7 @@ export const PriceInput = React.forwardRef<
     return (
       <div className={cx("input", { disabled })}>
         {currencyCodeSelector ? (
-          <Pill kind="selectable" className="shrink-0 -ml-2">
+          <Pill className="relative -ml-2 shrink-0 cursor-pointer">
             {getLongCurrencySymbol(currencyCode)}
             <TypeSafeOptionSelect
               name="Currency"
@@ -73,13 +73,12 @@ export const PriceInput = React.forwardRef<
                 id: currencyCode,
                 label: getLongCurrencySymbol(currencyCode),
               }))}
-              className="absolute top-0 left-0 h-full w-full opacity-0 cursor-pointer text-foreground bg-background"
-
+              className="absolute inset-0 cursor-pointer bg-background text-foreground opacity-0"
             />
-            <Icon name="outline-cheveron-down" className="ml-2 float-right pointer-events-none" />
+            <Icon name="outline-cheveron-down" className="pointer-events-none ml-auto" />
           </Pill>
         ) : (
-          <Pill className="shrink-0 -ml-2">{getLongCurrencySymbol(currencyCode)}</Pill>
+          <Pill className="-ml-2 shrink-0">{getLongCurrencySymbol(currencyCode)}</Pill>
         )}
         <input
           type="text"

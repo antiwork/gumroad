@@ -15,13 +15,14 @@ import {
   recurrenceIds,
 } from "$app/utils/recurringPricing";
 import { assertResponseError, request } from "$app/utils/request";
-import { Pill } from "$app/components/ui/Pill";
+
 import { Button } from "$app/components/Button";
 import { Icon } from "$app/components/Icons";
 import { Popover } from "$app/components/Popover";
 import { showAlert } from "$app/components/server-components/Alert";
 import { TypeSafeOptionSelect } from "$app/components/TypeSafeOptionSelect";
 import { PageHeader } from "$app/components/ui/PageHeader";
+import { Pill } from "$app/components/ui/Pill";
 import { WithTooltip } from "$app/components/WithTooltip";
 
 const nativeTypeIcons = require.context("$assets/images/native_types/");
@@ -358,7 +359,7 @@ const NewProductPage = ({
                 </legend>
 
                 <div className="input">
-                  <Pill asChild kind="selectable" className="shrink-0 -ml-2 ">
+                  <Pill asChild className="relative -ml-2 shrink-0 cursor-pointer">
                     <label>
                       <span>{selectedCurrency.longSymbol}</span>
                       <TypeSafeOptionSelect
@@ -374,9 +375,9 @@ const NewProductPage = ({
                             label: displayFormat,
                           };
                         })}
-                        className="absolute top-0 left-0 h-full w-full opacity-0 cursor-pointer text-foreground bg-background"
+                        className="absolute inset-0 cursor-pointer bg-background text-foreground opacity-0"
                       />
-                      <Icon name="outline-cheveron-down" className="ml-2 float-right pointer-events-none" />
+                      <Icon name="outline-cheveron-down" className="pointer-events-none ml-auto" />
                     </label>
                   </Pill>
 
@@ -400,7 +401,7 @@ const NewProductPage = ({
                   />
 
                   {isRecurringBilling ? (
-                    <Pill asChild kind= "selectable" className="shrink-0 -mr-2">
+                    <Pill asChild className="relative -mr-2 shrink-0 cursor-pointer">
                       <label>
                         <span>{recurrenceLabels[subscriptionDuration || defaultRecurrence]}</span>
                         <TypeSafeOptionSelect
@@ -413,9 +414,9 @@ const NewProductPage = ({
                             id: recurrence,
                             label: recurrenceLabels[recurrence],
                           }))}
-                          className="absolute top-0 left-0 h-full w-full opacity-0 cursor-pointer text-foreground bg-background"
+                          className="absolute inset-0 cursor-pointer bg-background text-foreground opacity-0"
                         />
-                        <Icon name="outline-cheveron-down" className="ml-2 float-right pointer-events-none" />
+                        <Icon name="outline-cheveron-down" className="pointer-events-none ml-auto" />
                       </label>
                     </Pill>
                   ) : null}

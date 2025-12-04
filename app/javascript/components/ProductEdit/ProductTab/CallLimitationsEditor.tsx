@@ -1,12 +1,12 @@
 import * as React from "react";
 
+import { Icon } from "$app/components/Icons";
 import { NumberInput } from "$app/components/NumberInput";
 import { CallLimitationInfo } from "$app/components/ProductEdit/state";
 import { TypeSafeOptionSelect } from "$app/components/TypeSafeOptionSelect";
+import { Pill } from "$app/components/ui/Pill";
 import { useOnChange } from "$app/components/useOnChange";
 import { useOnOutsideClick } from "$app/components/useOnOutsideClick";
-import { Pill } from "$app/components/ui/Pill";
-import { Icon } from "$app/components/Icons";
 
 const UNITS = ["minutes", "hours", "days"] as const;
 type Unit = (typeof UNITS)[number];
@@ -63,7 +63,7 @@ export const CallLimitationsEditor = ({
           {(props) => (
             <div className="input" ref={inputRef}>
               <input id={`${uid}-notice-period`} placeholder="15" {...props} />
-              <Pill asChild kind="selectable" className="shrink-0 -mr-2">
+              <Pill asChild className="relative -mr-2 shrink-0 cursor-pointer">
                 <label>
                   <span>{minimumNotice.unit}</span>
                   <TypeSafeOptionSelect
@@ -71,9 +71,9 @@ export const CallLimitationsEditor = ({
                     onChange={(unit) => setMinimumNotice({ ...minimumNotice, unit })}
                     value={minimumNotice.unit}
                     options={UNITS.map((unit) => ({ id: unit, label: unit }))}
-                    className="absolute top-0 left-0 h-full w-full opacity-0 cursor-pointer text-foreground bg-background"
+                    className="absolute inset-0 cursor-pointer bg-background text-foreground opacity-0"
                   />
-                  <Icon name="outline-cheveron-down" className="ml-2 float-right pointer-events-none" />
+                  <Icon name="outline-cheveron-down" className="pointer-events-none ml-auto" />
                 </label>
               </Pill>
             </div>
