@@ -26,9 +26,7 @@ const AdminUserAddCredit = ({ user }: AdminUserAddCreditProps) => (
           <fieldset>
             <div className="flex gap-2">
               <div className="input flex-1">
-                <Pill asChild className="-ml-2 shrink-0">
-                  <div>$</div>
-                </Pill>
+                <Pill className="-ml-2 shrink-0">$</Pill>
                 <input type="text" name="credit[credit_amount]" placeholder="10.25" inputMode="decimal" required />
               </div>
 

@@ -4,6 +4,7 @@ import { CSSProperties } from "react";
 
 import { isOpenTuple } from "$app/utils/array";
 import { assert } from "$app/utils/assert";
+import { classNames } from "$app/utils/classNames";
 
 import { Button } from "$app/components/Button";
 import { useCurrentSeller } from "$app/components/CurrentSeller";
@@ -12,7 +13,6 @@ import { useDropdownPosition } from "$app/components/Popover";
 import { useIsOnTouchDevice } from "$app/components/useIsOnTouchDevice";
 import { useOnOutsideClick } from "$app/components/useOnOutsideClick";
 import { useWindowDimensions } from "$app/components/useWindowDimensions";
-import { classNames } from "$app/utils/classNames";
 
 type MenuItemKey = string;
 export type MenuItem = {
@@ -238,7 +238,11 @@ const MenubarItem = ({
     >
       <a
         href={menuItem.href ?? "#"}
-        className={classNames("button","!inline-block  align-middle !px-3 !py-2 !rounded-[10rem] aria-[current]:bg-background aria-[current]:text-foreground aria-[expanded=true]:!shadow",showExpandableIcon?"relative cursor-pointer":"")}
+        className={classNames(
+          "button",
+          "!inline-block !rounded-[10rem] !px-3 !py-2 align-middle aria-[current]:bg-background aria-[current]:text-foreground aria-[expanded=true]:!shadow",
+          showExpandableIcon ? "relative cursor-pointer" : "",
+        )}
         role="menuitem"
         aria-current={isHighlighted}
         aria-haspopup="menu"
@@ -250,9 +254,7 @@ const MenubarItem = ({
         }}
       >
         {menuItem.label}
-        {showExpandableIcon?(
-          <Icon name="outline-cheveron-down" className="ml-2 float-right pointer-events-none" />
-        ):null}
+        {showExpandableIcon ? <Icon name="outline-cheveron-down" className="float-right ml-2" /> : null}
       </a>
       <div className="dropdown" hidden={!menuOpen} style={dropdownPosition}>
         <ItemsList
@@ -271,7 +273,11 @@ const MenubarItem = ({
     <div onMouseEnter={() => handleToggleMenu(true)} onMouseLeave={() => handleToggleMenu(false)}>
       <a
         href={menuItem.href ?? "#"}
-        className={classNames("button","!inline-block align-middle !px-3 !py-2 !rounded-[10rem] aria-[current]:bg-background aria-[current]:text-foreground hover:!shadow",showExpandableIcon?"relative cursor-pointer":"")}
+        className={classNames(
+          "button",
+          "!inline-block !rounded-[10rem] !px-3 !py-2 align-middle hover:!shadow aria-[current]:bg-background aria-[current]:text-foreground",
+          showExpandableIcon ? "relative cursor-pointer" : "",
+        )}
         role="menuitem"
         aria-current={isHighlighted}
         {...extraAriaAttrs}
@@ -281,9 +287,7 @@ const MenubarItem = ({
         }}
       >
         {menuItem.label}
-        {showExpandableIcon?(
-          <Icon name="outline-cheveron-down" className="ml-2 float-right pointer-events-none"/>
-        ):null}
+        {showExpandableIcon ? <Icon name="outline-cheveron-down" className="float-right ml-2" /> : null}
       </a>
     </div>
   );

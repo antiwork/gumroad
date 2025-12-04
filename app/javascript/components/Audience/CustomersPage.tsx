@@ -480,35 +480,35 @@ const CustomersPage = ({
                       <TableCell>
                         {customer.product.name}
                         {customer.subscription?.is_installment_plan ? (
-                          <Pill size="small" style={{ marginLeft: "var(--spacer-2)" }}>
+                          <Pill size="small" className="ml-2">
                             Installments
                           </Pill>
                         ) : null}
                         {customer.is_bundle_purchase ? (
-                          <Pill size="small" style={{ marginLeft: "var(--spacer-2)" }}>
+                          <Pill size="small" className="ml-2">
                             Bundle
                           </Pill>
                         ) : null}
                         {customer.subscription ? (
                           !customer.subscription.is_installment_plan && customer.subscription.status !== "alive" ? (
-                            <Pill size="small" style={{ marginLeft: "var(--spacer-2)" }}>
+                            <Pill size="small" className="ml-2">
                               Inactive
                             </Pill>
                           ) : null
                         ) : (
                           <>
                             {customer.partially_refunded ? (
-                              <Pill size="small" style={{ marginLeft: "var(--spacer-2)" }}>
+                              <Pill size="small" className="ml-2">
                                 Partially refunded
                               </Pill>
                             ) : null}
                             {customer.refunded ? (
-                              <Pill size="small" style={{ marginLeft: "var(--spacer-2)" }}>
+                              <Pill size="small" className="ml-2">
                                 Refunded
                               </Pill>
                             ) : null}
                             {customer.chargedback ? (
-                              <Pill asChild size="small" style={{ marginLeft: "var(--spacer-2)" }}>
+                              <Pill size="small" className="ml-2">
                                 Chargedback
                               </Pill>
                             ) : null}
@@ -519,7 +519,7 @@ const CustomersPage = ({
                             tooltipProps={{ className: "w-80 p-0" }}
                             tip={<UtmLinkStack link={customer.utm_link} showHeader={false} />}
                           >
-                            <Pill size="small" style={{ marginLeft: "var(--spacer-2)" }}>
+                            <Pill size="small" className="ml-2">
                               UTM
                             </Pill>
                           </WithTooltip>
@@ -789,7 +789,11 @@ const CustomerDrawer = ({
           <h2>{customer.product.name}</h2>
         </div>
       </SheetHeader>
-      {commission ? <CommissionStatusPill commission={commission} /> : null}
+      {commission ? (
+        <div>
+          <CommissionStatusPill commission={commission} />
+        </div>
+      ) : null}
       {customer.is_additional_contribution ? (
         <div role="status" className="info">
           <div>
@@ -1314,17 +1318,14 @@ const CustomerDrawer = ({
 
 const CommissionStatusPill = ({ commission }: { commission: Commission }) => (
   <Pill
-    asChild
     size="small"
     color={commission.status === "completed" ? "primary" : commission.status === "cancelled" ? "danger" : undefined}
   >
-    <span style={{ width: "fit-content" }}>
-      {commission.status === "in_progress"
-        ? "In progress"
-        : commission.status === "completed"
-          ? "Completed"
-          : "Cancelled"}
-    </span>
+    {commission.status === "in_progress"
+      ? "In progress"
+      : commission.status === "completed"
+        ? "Completed"
+        : "Cancelled"}
   </Pill>
 );
 

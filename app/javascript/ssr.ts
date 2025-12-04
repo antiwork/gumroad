@@ -91,7 +91,7 @@ import WishlistPage from "$app/components/server-components/WishlistPage";
 import WishlistsFollowingPage from "$app/components/server-components/WishlistsFollowingPage";
 import WishlistsPage from "$app/components/server-components/WishlistsPage";
 import CodeSnippet from "$app/components/ui/CodeSnippet";
-import Pill from "$app/components/ui/Pill";
+import { Pill } from "$app/components/ui/Pill";
 
 ReactOnRails.register({
   AdminActionButton,

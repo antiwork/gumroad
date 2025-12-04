@@ -216,7 +216,7 @@ const MultiValue = <IsMulti extends boolean>(props: MultiValueProps<Option, IsMu
     <Pill asChild color="primary" className="cursor-pointer">
       <button>
         {props.data.label}
-        <Icon name="x" className="pointer-events-none ml-2" />
+        <Icon name="x" className="ml-2" />
       </button>
     </Pill>
   </div>

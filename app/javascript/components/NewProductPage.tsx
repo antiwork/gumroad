@@ -375,9 +375,9 @@ const NewProductPage = ({
                             label: displayFormat,
                           };
                         })}
-                        className="absolute inset-0 cursor-pointer bg-background text-foreground opacity-0"
+                        className="absolute inset-0 z-1 m-0! cursor-pointer opacity-0"
                       />
-                      <Icon name="outline-cheveron-down" className="pointer-events-none ml-auto" />
+                      <Icon name="outline-cheveron-down" className="ml-auto" />
                     </label>
                   </Pill>
 
@@ -414,9 +414,9 @@ const NewProductPage = ({
                             id: recurrence,
                             label: recurrenceLabels[recurrence],
                           }))}
-                          className="absolute inset-0 cursor-pointer bg-background text-foreground opacity-0"
+                          className="absolute inset-0 z-1 m-0! cursor-pointer opacity-0"
                         />
-                        <Icon name="outline-cheveron-down" className="pointer-events-none ml-auto" />
+                        <Icon name="outline-cheveron-down" className="ml-auto" />
                       </label>
                     </Pill>
                   ) : null}
