@@ -60,15 +60,17 @@ const ProductsCarousel = ({ products, title }: { products: CardProduct[]; title:
     <section className="grid gap-4">
       <header className="flex items-center justify-between">
         <h2>{title}</h2>
-        <div className="flex items-center gap-2">
-          <button onClick={() => setActive((active + products.length - 1) % products.length)}>
-            <Icon name="arrow-left" className="text-xl" />
-          </button>
-          {active + 1} / {products.length}
-          <button onClick={() => setActive((active + products.length + 1) % products.length)}>
-            <Icon name="arrow-right" className="text-xl" />
-          </button>
-        </div>
+        {products.length > 1 && (
+          <div className="flex items-center gap-2">
+            <button onClick={() => setActive((active + products.length - 1) % products.length)}>
+              <Icon name="arrow-left" className="text-xl" />
+            </button>
+            {active + 1} / {products.length}
+            <button onClick={() => setActive((active + products.length + 1) % products.length)}>
+              <Icon name="arrow-right" className="text-xl" />
+            </button>
+          </div>
+        )}
       </header>
       <div className="relative">
         <div
