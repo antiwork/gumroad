@@ -5955,7 +5955,7 @@ describe("Payments Settings Scenario", type: :system, js: true) do
         end
 
         it "allows the creator to open the opt-in modal even if their legal entity name is missing" do
-          user_compliance_info = @creator.fetch_or_build_user_compliance_info
+          @creator.fetch_or_build_user_compliance_info
           allow_any_instance_of(UserComplianceInfo).to receive(:legal_entity_name).and_return(nil)
 
           visit settings_payments_path
