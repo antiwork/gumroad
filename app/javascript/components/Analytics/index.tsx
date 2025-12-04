@@ -11,6 +11,7 @@ import {
 import { assertDefined } from "$app/utils/assert";
 import { AbortError } from "$app/utils/request";
 
+import { AggregateByPopover } from "$app/components/Analytics/AggregateByPopover";
 import { AnalyticsLayout } from "$app/components/Analytics/AnalyticsLayout";
 import { LocationsTable } from "$app/components/Analytics/LocationsTable";
 import { ProductsPopover } from "$app/components/Analytics/ProductsPopover";
@@ -150,14 +151,7 @@ const Analytics = ({ products: initialProducts, country_codes, state_names }: An
       actions={
         hasContent ? (
           <>
-            <select
-              aria-label="Aggregate by"
-              onChange={(e) => setAggregateBy(e.target.value === "daily" ? "daily" : "monthly")}
-              className="w-auto"
-            >
-              <option value="daily">Daily</option>
-              <option value="monthly">Monthly</option>
-            </select>
+            <AggregateByPopover aggregateBy={aggregateBy} setAggregateBy={setAggregateBy} />
             <ProductsPopover products={products} setProducts={setProducts} />
             <DateRangePicker {...dateRange} />
           </>
