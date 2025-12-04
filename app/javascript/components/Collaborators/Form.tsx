@@ -19,9 +19,9 @@ import { Icon } from "$app/components/Icons";
 import { Modal } from "$app/components/Modal";
 import { NumberInput } from "$app/components/NumberInput";
 import { showAlert } from "$app/components/server-components/Alert";
+import { Pill } from "$app/components/ui/Pill";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "$app/components/ui/Table";
 import { WithTooltip } from "$app/components/WithTooltip";
-import { Pill } from "$app/components/ui/Pill";
 
 const DEFAULT_PERCENT_COMMISSION = 50;
 const MIN_PERCENT_COMMISSION = 1;
@@ -286,7 +286,7 @@ const CollaboratorForm = () => {
                               aria-label="Percentage"
                               {...inputProps}
                             />
-                            <Pill className="shrink-0 -mr-2">%</Pill>
+                            <Pill className="-mr-2 shrink-0">%</Pill>
                           </div>
                         )}
                       </NumberInput>
@@ -351,7 +351,7 @@ const CollaboratorForm = () => {
                                   aria-label="Percentage"
                                   {...inputProps}
                                 />
-                                <Pill className="shrink-0 -mr-2">%</Pill>
+                                <Pill className="-mr-2 shrink-0">%</Pill>
                               </div>
                             )}
                           </NumberInput>

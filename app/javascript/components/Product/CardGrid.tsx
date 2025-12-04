@@ -10,13 +10,13 @@ import { AbortError, assertResponseError } from "$app/utils/request";
 import { Icon } from "$app/components/Icons";
 import { NumberInput } from "$app/components/NumberInput";
 import { showAlert } from "$app/components/server-components/Alert";
+import { Pill } from "$app/components/ui/Pill";
 import Placeholder from "$app/components/ui/Placeholder";
 import { ProductCardGrid } from "$app/components/ui/ProductCardGrid";
 import { useDebouncedCallback } from "$app/components/useDebouncedCallback";
 import { useOnChange } from "$app/components/useOnChange";
 
 import { Card } from "./Card";
-import { Pill } from "$app/components/ui/Pill";
 
 export const SORT_BY_LABELS = {
   default: "Default",
@@ -318,7 +318,7 @@ export const CardGrid = ({
                   <label htmlFor={minPriceUid}>Minimum price</label>
                 </legend>
                 <div className="input">
-                  <Pill className="shrink-0 -ml-2">{currencySymbol}</Pill>
+                  <Pill className="-ml-2 shrink-0">{currencySymbol}</Pill>
                   <NumberInput
                     onChange={(value) => {
                       setEnteredMinPrice(value);
@@ -335,7 +335,7 @@ export const CardGrid = ({
                   <label htmlFor={maxPriceUid}>Maximum price</label>
                 </legend>
                 <div className="input">
-                  <Pill className="shrink-0 -ml-2">{currencySymbol}</Pill>
+                  <Pill className="-ml-2 shrink-0">{currencySymbol}</Pill>
                   <NumberInput
                     onChange={(value) => {
                       setEnteredMaxPrice(value);

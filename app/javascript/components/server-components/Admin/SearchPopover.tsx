@@ -7,9 +7,9 @@ import { Button } from "$app/components/Button";
 import { Icon } from "$app/components/Icons";
 import { Popover } from "$app/components/Popover";
 import { Separator } from "$app/components/Separator";
+import { Pill } from "$app/components/ui/Pill";
 import { useOriginalLocation } from "$app/components/useOriginalLocation";
 import { WithTooltip } from "$app/components/WithTooltip";
-import { Pill } from "$app/components/ui/Pill";
 
 type Props = { card_types: { id: string; name: string }[] };
 export const SearchPopover = ({ card_types }: Props) => {
@@ -115,7 +115,7 @@ export const SearchPopover = ({ card_types }: Props) => {
             />
           </div>
           <div className="input">
-            <Pill className="shrink-0 -ml-2">$</Pill>
+            <Pill className="-ml-2 shrink-0">$</Pill>
             <input
               name="price"
               placeholder="Price (9.99)"

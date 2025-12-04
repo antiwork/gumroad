@@ -702,17 +702,17 @@ $accent-color: map-get($colors, "pink"); // [1]
 }
 
 .pill {
-    display: inline-block;
-    vertical-align: middle;
-    padding: spacer(2) spacer(3);
-    @include bg-color(filled);
-    border: $border;
-    border-radius: border-radius(3);
-    @include text-singleline;
+  display: inline-block;
+  vertical-align: middle;
+  padding: spacer(2) spacer(3);
+  @include bg-color(filled);
+  border: $border;
+  border-radius: border-radius(3);
+  @include text-singleline;
 
-    &.small {
-        border-radius: border-radius(1);
-        padding: spacer(1);
-        @include font-size(1);
-    }
+  &.small {
+    border-radius: border-radius(1);
+    padding: spacer(1);
+    @include font-size(1);
+  }
 }

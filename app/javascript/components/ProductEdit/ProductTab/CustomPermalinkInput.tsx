@@ -31,7 +31,7 @@ export const CustomPermalinkInput = ({
         </CopyToClipboard>
       </legend>
       <div className="input">
-        <Pill className="shrink-0 -ml-2">{`${currentSeller.subdomain}/l/`}</Pill>
+        <Pill className="-ml-2 shrink-0">{`${currentSeller.subdomain}/l/`}</Pill>
         <input
           id={uid}
           type="text"

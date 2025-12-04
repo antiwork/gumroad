@@ -16,6 +16,7 @@ import { Button } from "$app/components/Button";
 import { Icon } from "$app/components/Icons";
 import { NumberInput } from "$app/components/NumberInput";
 import { TagInput } from "$app/components/TagInput";
+import { Pill } from "$app/components/ui/Pill";
 import { WithTooltip } from "$app/components/WithTooltip";
 import {
   Layout,
@@ -30,7 +31,6 @@ import memberCancelsTriggerImage from "$assets/images/workflows/triggers/member_
 import newAffiliateTriggerImage from "$assets/images/workflows/triggers/new_affiliate.svg";
 import newSubscriberTriggerImage from "$assets/images/workflows/triggers/new_subscriber.svg";
 import purchaseTriggerImage from "$assets/images/workflows/triggers/purchase.svg";
-import { Pill } from "$app/components/ui/Pill";
 
 // "legacy_audience" is for backwards compatibility and is only shown while editing an existing workflow of that type
 export type WorkflowTrigger =
@@ -526,7 +526,7 @@ const WorkflowForm = ({ context, workflow }: WorkflowFormProps) => {
                 >
                   {(inputProps) => (
                     <div className={cx("input", { disabled: wasPublishedPreviously })}>
-                      <Pill className="shrink-0 -ml-2">{context.currency_symbol}</Pill>
+                      <Pill className="-ml-2 shrink-0">{context.currency_symbol}</Pill>
                       <input
                         id="paid_more_than"
                         type="text"
@@ -550,7 +550,7 @@ const WorkflowForm = ({ context, workflow }: WorkflowFormProps) => {
                 >
                   {(inputProps) => (
                     <div className={cx("input", { disabled: wasPublishedPreviously })}>
-                      <Pill className="shrink-0 -ml-2">{context.currency_symbol}</Pill>
+                      <Pill className="-ml-2 shrink-0">{context.currency_symbol}</Pill>
                       <input
                         id="paid_less_than"
                         type="text"

@@ -7,9 +7,9 @@ import { NumberInput } from "$app/components/NumberInput";
 import { PriceInput } from "$app/components/PriceInput";
 import { Duration, useProductEditContext } from "$app/components/ProductEdit/state";
 import { Drawer, ReorderingHandle, SortableList } from "$app/components/SortableList";
+import { Pill } from "$app/components/ui/Pill";
 import Placeholder from "$app/components/ui/Placeholder";
 import { WithTooltip } from "$app/components/WithTooltip";
-import { Pill } from "$app/components/ui/Pill";
 
 let newDurationId = 0;
 
@@ -160,7 +160,7 @@ const DurationEditor = ({
               >
                 {(props) => <input id={`${uid}-duration`} {...props} />}
               </NumberInput>
-              <Pill className="shrink-0 -mr-2">minutes</Pill>
+              <Pill className="-mr-2 shrink-0">minutes</Pill>
             </div>
           </fieldset>
           <fieldset>

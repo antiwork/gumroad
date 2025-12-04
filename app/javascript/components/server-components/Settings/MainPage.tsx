@@ -472,7 +472,7 @@ const MainPage = (props: Props) => {
                           />
                         )}
                       </NumberInput>
-                      <Pill className="shrink-0 -mr-2">%</Pill>
+                      <Pill className="-mr-2 shrink-0">%</Pill>
                     </div>
                   </fieldset>
                   <Toggle
