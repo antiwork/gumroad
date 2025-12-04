@@ -8,10 +8,11 @@ class TwoFactorAuthenticationMailer < ApplicationMailer
   # TODO(ershad): Remove this once the issue with Resend is resolved
   default delivery_method_options: -> { MailerInfo.default_delivery_method_options(domain: :gumroad) }
 
-  def authentication_token(user_id)
+  def authentication_token(user_id, use_resend: false)
     @user = User.find(user_id)
     @authentication_token = @user.otp_code
     @subject = "Your authentication token is #{@authentication_token}"
+    @use_resend = use_resend
   end
 
   private
@@ -21,6 +22,14 @@ class TwoFactorAuthenticationMailer < ApplicationMailer
 
       mailer_args = { to: email, subject: @subject }
       mailer_args[:from] = @from if @from.present?
+
+      if @use_resend
+        mailer_args[:delivery_method_options] = MailerInfo::DeliveryMethod.options(
+          domain: :gumroad,
+          email_provider: MailerInfo::EMAIL_PROVIDER_RESEND
+        )
+      end
+
       mail(mailer_args)
     end
 end

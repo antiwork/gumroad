@@ -39,7 +39,45 @@ module User::AsyncDeviseNotification
     end
 
     def render_and_send_devise_message(notification, *args)
+      use_resend = should_use_resend_for_notification?(notification)
+      track_notification_sent(notification) if trackable_notification?(notification)
+
       message = devise_mailer.send(notification, self, *args)
+
+      if use_resend
+        message.delivery_method_options = MailerInfo::DeliveryMethod.options(
+          domain: :gumroad,
+          email_provider: MailerInfo::EMAIL_PROVIDER_RESEND
+        )
+      end
+
       message.deliver_later(queue: "critical", wait: 3.seconds)
+    end
+
+    def should_use_resend_for_notification?(notification)
+      return false unless trackable_notification?(notification)
+
+      ResendFallbackTracker.should_use_resend_fallback?(
+        email_type: notification_to_email_type(notification),
+        user_id: id
+      )
+    end
+
+    def track_notification_sent(notification)
+      ResendFallbackTracker.record_email_sent(
+        email_type: notification_to_email_type(notification),
+        user_id: id
+      )
+    end
+
+    def trackable_notification?(notification)
+      notification == :reset_password_instructions
+    end
+
+    def notification_to_email_type(notification)
+      case notification
+      when :reset_password_instructions then :password_reset
+      else notification
+      end
     end
 end
