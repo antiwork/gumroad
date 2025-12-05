@@ -44,6 +44,8 @@ import React from "react";
 export function useScrollToElement<T extends HTMLElement = HTMLElement>(
   shouldScroll: boolean,
   options: ScrollIntoViewOptions = { behavior: "smooth", block: "start" },
+  dependencies: readonly unknown[] = [],
+  delay = 200,
 ): React.RefObject<T> {
   const elementRef = React.useRef<T>(null);
 
@@ -56,7 +58,9 @@ export function useScrollToElement<T extends HTMLElement = HTMLElement>(
 
       const rafId1 = requestAnimationFrame(() => {
         rafId2 = requestAnimationFrame(() => {
-          elementRef.current?.scrollIntoView(options);
+          setTimeout(() => {
+            elementRef.current?.scrollIntoView(options);
+          }, delay);
         });
       });
 
@@ -67,7 +71,7 @@ export function useScrollToElement<T extends HTMLElement = HTMLElement>(
         cancelAnimationFrame(rafId2);
       };
     }
-  }, [shouldScroll, options.behavior, options.block, options.inline]);
+  }, [shouldScroll, options.behavior, options.block, options.inline, ...dependencies]);
 
   return elementRef;
 }

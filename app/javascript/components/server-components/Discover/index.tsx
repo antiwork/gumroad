@@ -7,6 +7,7 @@ import { SearchResults, SearchRequest } from "$app/data/search";
 import { useScrollToElement } from "$app/hooks/useScrollToElement";
 import { CardProduct } from "$app/parsers/product";
 import { last } from "$app/utils/array";
+import { classNames } from "$app/utils/classNames";
 import { CurrencyCode, formatPriceCentsWithCurrencySymbol } from "$app/utils/currency";
 import { discoverTitleGenerator, Taxonomy } from "$app/utils/discover";
 import { asyncVoid } from "$app/utils/promise";
@@ -35,7 +36,7 @@ type Props = {
   curated_product_ids: string[];
   show_black_friday_hero: boolean;
   is_black_friday_page: boolean;
-  black_friday_button_html: string;
+  black_friday_offer_code: string;
   black_friday_stats: {
     active_deals_count: number;
     revenue_cents: number;
@@ -104,21 +105,21 @@ const BlackFridayBanner = ({
   currencyCode: CurrencyCode;
 }) => (
   <div className="flex h-full shrink-0 items-center gap-x-4 [&>*]:flex-shrink-0">
-    <span className="mx-2 inline-block text-lg">✦</span>
+    <span className="mx-2 inline-block text-lg text-black">✦</span>
     <span className="flex items-center text-xl font-medium text-black">BLACK FRIDAY IS LIVE</span>
     {stats.active_deals_count > 0 && (
       <>
-        <span className="mx-2 inline-block text-lg">✦</span>
+        <span className="mx-2 inline-block text-lg text-black">✦</span>
         <span className="flex items-center text-xl font-medium text-black">
           <span className="mr-1.5 font-bold">{stats.active_deals_count.toLocaleString()}</span>ACTIVE DEALS
         </span>
       </>
     )}
-    <span className="mx-2 inline-block text-lg">✦</span>
+    <span className="mx-2 inline-block text-lg text-black">✦</span>
     <span className="flex items-center text-xl font-medium text-black">CREATOR-MADE PRODUCTS</span>
     {stats.revenue_cents > 0 && (
       <>
-        <span className="mx-2 inline-block text-lg">✦</span>
+        <span className="mx-2 inline-block text-lg text-black">✦</span>
         <span className="flex items-center text-xl font-medium text-black">
           <span className="mr-1.5 font-bold">
             {formatPriceCentsWithCurrencySymbol(currencyCode, stats.revenue_cents, { symbolFormat: "short" })}
@@ -127,11 +128,11 @@ const BlackFridayBanner = ({
         </span>
       </>
     )}
-    <span className="mx-2 inline-block text-lg">✦</span>
+    <span className="mx-2 inline-block text-lg text-black">✦</span>
     <span className="flex items-center text-xl font-medium text-black">BIG SAVINGS</span>
     {stats.average_discount_percentage > 0 && (
       <>
-        <span className="mx-2 inline-block text-lg">✦</span>
+        <span className="mx-2 inline-block text-lg text-black">✦</span>
         <span className="flex items-center text-xl font-medium text-black">
           <span className="mr-1.5 font-bold">{stats.average_discount_percentage}%</span>AVERAGE DISCOUNT
         </span>
@@ -148,9 +149,51 @@ const addInitialOffset = (params: SearchRequest) =>
     ? { ...params, from: recommendedProductsCount + 1 }
     : params;
 
+const BlackFridayButton = ({
+  variant = "pink",
+  size = "default",
+  offerCode,
+  taxonomy = undefined,
+}: {
+  variant?: "light" | "dark" | "pink";
+  size?: "small" | "default";
+  offerCode: string;
+  taxonomy: string | undefined;
+}) => {
+  const variantClasses = {
+    light: "bg-black text-white",
+    dark: "bg-white text-black",
+    pink: "bg-pink text-black",
+  };
+
+  const sizeClasses = {
+    small: "h-12 px-3 text-base lg:h-12 lg:px-6 lg:text-base",
+    default: "h-14 px-8 text-xl lg:h-16 lg:px-10 lg:text-xl",
+  };
+
+  const buttonClasses = classNames(
+    "relative inline-flex rounded-sm no-underline items-center justify-center border border-black transition-all duration-150 group-hover:-translate-x-2 group-hover:-translate-y-2 z-3 w-full lg:w-auto",
+    variantClasses[variant],
+    sizeClasses[size],
+  );
+
+  const url = taxonomy
+    ? Routes.discover_taxonomy_path(taxonomy, { offer_code: offerCode })
+    : Routes.discover_path({ offer_code: offerCode });
+
+  return (
+    <div className="group relative inline-block">
+      <div className="absolute inset-0 z-2 rounded-sm border border-black bg-yellow transition-transform duration-150"></div>
+      <div className="absolute inset-0 z-1 rounded-sm border border-black bg-red transition-transform duration-150 group-hover:translate-x-2 group-hover:translate-y-2"></div>
+      <a href={url} className={buttonClasses}>
+        Get Black Friday deals
+      </a>
+    </div>
+  );
+};
+
 const Discover = (props: Props) => {
   const location = useOriginalLocation();
-  const resultsRef = useScrollToElement(props.is_black_friday_page && props.show_black_friday_hero);
 
   const defaultSortOrder = props.curated_product_ids.length > 0 ? "curated" : undefined;
   const parseUrlParams = (href: string) => {
@@ -179,6 +222,10 @@ const Discover = (props: Props) => {
     params: addInitialOffset(parseUrlParams(location)),
     results: props.search_results,
   });
+
+  const isBlackFridayPage = state.params.offer_code === "BLACKFRIDAY2025";
+
+  const resultsRef = useScrollToElement(isBlackFridayPage && props.show_black_friday_hero, undefined, [state.params]);
 
   const fromUrl = React.useRef(false);
   React.useEffect(() => {
@@ -253,12 +300,19 @@ const Discover = (props: Props) => {
       taxonomyPath={taxonomyPath}
       taxonomiesForNav={props.taxonomies_for_nav}
       showTaxonomy
-      onTaxonomyChange={(newTaxonomyPath) =>
+      onTaxonomyChange={(newTaxonomyPath) => {
+        // Read from URL to avoid stale state when user clicks Clear then immediately navigates
+        const currentUrl = new URL(window.location.href);
+        const currentOfferCode = currentUrl.searchParams.get("offer_code") || undefined;
         dispatch({
           type: "set-params",
-          params: addInitialOffset({ taxonomy: newTaxonomyPath, sort: defaultSortOrder }),
-        })
-      }
+          params: addInitialOffset({
+            taxonomy: newTaxonomyPath,
+            sort: defaultSortOrder,
+            offer_code: newTaxonomyPath ? currentOfferCode : undefined,
+          }),
+        });
+      }}
       query={state.params.query}
       setQuery={(query) => dispatch({ type: "set-params", params: { query, taxonomy: taxonomyPath } })}
     >
@@ -289,16 +343,23 @@ const Discover = (props: Props) => {
             <div className="font-regular mx-12 text-center text-xl text-white">
               Snag creator-made deals <br className="block sm:hidden" /> before they're gone.
             </div>
-            {!props.is_black_friday_page && (
-              <div className="mt-8 text-base" dangerouslySetInnerHTML={{ __html: props.black_friday_button_html }} />
+            {!isBlackFridayPage && (
+              <div className="mt-8 text-base">
+                <BlackFridayButton offerCode={props.black_friday_offer_code} taxonomy={taxonomyPath} />
+              </div>
             )}
           </div>
           <div className="h-14 w-full overflow-hidden border-b border-black bg-yellow-400">
-            <div className="flex h-14 min-w-fit items-center gap-x-4 whitespace-nowrap hover:[animation-play-state:paused] motion-safe:animate-[marquee-scroll_42s_linear_infinite] motion-reduce:animate-none">
+            <div className="flex h-14 min-w-fit items-center gap-x-4 whitespace-nowrap hover:[animation-play-state:paused] motion-safe:animate-[marquee-scroll_80s_linear_infinite] motion-reduce:animate-none">
               {props.black_friday_stats ? (
                 <>
-                  <BlackFridayBanner stats={props.black_friday_stats} currencyCode={props.currency_code} />
-                  <BlackFridayBanner stats={props.black_friday_stats} currencyCode={props.currency_code} />
+                  {/* Duplicate enough times to ensure seamless infinite scroll */}
+                  {(() => {
+                    const stats = props.black_friday_stats;
+                    return Array.from({ length: 5 }, (_, i) => (
+                      <BlackFridayBanner key={i} stats={stats} currencyCode={props.currency_code} />
+                    ));
+                  })()}
                 </>
               ) : null}
             </div>
@@ -370,29 +431,46 @@ const Discover = (props: Props) => {
               sort: state.params.query || hasOfferCode ? "default" : state.params.sort,
             }}
             appendFilters={
-              <details>
-                <summary>Rating</summary>
-                <fieldset role="group">
-                  {range(4, 0).map((number) => (
-                    <label key={number}>
-                      <span className="flex shrink-0 items-center gap-1">
-                        <RatingStars rating={number} />
-                        and up
-                      </span>
-                      <input
-                        type="radio"
-                        value={number}
-                        aria-label={`${number} ${number === 1 ? "star" : "stars"} and up`}
-                        checked={number === state.params.rating}
-                        readOnly
-                        onClick={() =>
-                          updateParams(state.params.rating === number ? { rating: undefined } : { rating: number })
-                        }
-                      />
-                    </label>
-                  ))}
-                </fieldset>
-              </details>
+              <>
+                <details>
+                  <summary>Rating</summary>
+                  <fieldset role="group">
+                    {range(4, 0).map((number) => (
+                      <label key={number}>
+                        <span className="flex shrink-0 items-center gap-1">
+                          <RatingStars rating={number} />
+                          and up
+                        </span>
+                        <input
+                          type="radio"
+                          value={number}
+                          aria-label={`${number} ${number === 1 ? "star" : "stars"} and up`}
+                          checked={number === state.params.rating}
+                          readOnly
+                          onClick={() =>
+                            updateParams(state.params.rating === number ? { rating: undefined } : { rating: number })
+                          }
+                        />
+                      </label>
+                    ))}
+                  </fieldset>
+                </details>
+                {hasOfferCode ? (
+                  <details open>
+                    <summary>Offer code</summary>
+                    <div className="flex items-center justify-between gap-2 py-1">
+                      <span>BLACKFRIDAY2025</span>
+                      <button
+                        onClick={() => updateParams({ offer_code: undefined })}
+                        className="flex items-center justify-center"
+                        aria-label="Remove offer code filter"
+                      >
+                        <Icon name="x" />
+                      </button>
+                    </div>
+                  </details>
+                ) : null}
+              </>
             }
             pagination="button"
           />
