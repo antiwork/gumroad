@@ -9,7 +9,6 @@ import { AdminActionButton } from "$app/components/Admin/ActionButton";
 import DateTimeWithRelativeTooltip from "$app/components/Admin/DateTimeWithRelativeTooltip";
 
 export type Payout = {
-  id: number;
   external_id: string;
   displayed_amount: string;
   user: { external_id: string; name: string };
@@ -62,10 +61,10 @@ const Payout = ({ payout }: Props) => (
     <hr />
 
     <dl>
-      <dt>ID</dt>
+      <dt>External ID</dt>
       <dd>
         <Link href={Routes.admin_payout_path(payout.external_id)} title={payout.external_id}>
-          {payout.id}
+          {payout.external_id}
         </Link>
       </dd>
 
