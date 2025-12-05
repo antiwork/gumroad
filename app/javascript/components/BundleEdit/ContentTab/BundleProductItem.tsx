@@ -11,7 +11,7 @@ import {
   CartItemMedia,
   CartItemTitle,
   CartItem,
-} from "$app/components/CartList";
+} from "$app/components/CartItemList";
 import { Popover } from "$app/components/Popover";
 import { ConfigurationSelector, PriceSelection } from "$app/components/Product/ConfigurationSelector";
 import { Thumbnail } from "$app/components/Product/Thumbnail";
@@ -59,11 +59,7 @@ export const BundleProductItem = ({
       </CartItemMain>
       <CartItemEnd className="mt-auto flex-row gap-4">
         {bundleProduct.is_quantity_enabled || bundleProduct.variants ? (
-          <Popover
-            trigger={<div className="link">Configure</div>}
-            open={editPopoverOpen}
-            onToggle={setEditPopoverOpen}
-          >
+          <Popover trigger={<div className="link">Configure</div>} open={editPopoverOpen} onToggle={setEditPopoverOpen}>
             <div className="flex w-96 flex-col gap-4">
               <ConfigurationSelector
                 selection={selection}

@@ -853,7 +853,7 @@ const Payouts = ({
                     <PayoutLineItem
                       title="You'll receive"
                       price={`$${formatPriceCentsWithoutCurrencySymbol("usd", instantPayoutAmountCents - instantPayoutFee)}`}
-                      className="*:text-lg"
+                      className="text-lg"
                     />
                   </footer>
                 </div>
@@ -970,7 +970,7 @@ export function PayoutLineItem({
 }) {
   return (
     <div className={classNames("grid grid-flow-col justify-between gap-4", className)}>
-      <h4 className="inline-flex flex-wrap gap-2">{title}</h4>
+      <h4 className="inline-flex flex-wrap gap-2 text-[length:inherit] leading-[inherit]">{title}</h4>
       <div>{price}</div>
     </div>
   );

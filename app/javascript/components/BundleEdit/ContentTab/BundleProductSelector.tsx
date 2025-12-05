@@ -8,7 +8,7 @@ import {
   CartItemMedia,
   CartItemTitle,
   CartItemFooter,
-} from "$app/components/CartList";
+} from "$app/components/CartItemList";
 import { Thumbnail } from "$app/components/Product/Thumbnail";
 
 export const BundleProductSelector = ({

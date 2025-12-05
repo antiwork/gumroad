@@ -5,7 +5,7 @@ import { ProductNativeType } from "$app/parsers/product";
 import { register } from "$app/utils/serverComponentUtil";
 
 import { Button, NavigationButton } from "$app/components/Button";
-import { CartItem, CartItemMain, CartItemMedia, CartItemTitle, CartItemList } from "$app/components/CartList";
+import { CartItem, CartItemMain, CartItemMedia, CartItemTitle, CartItemList } from "$app/components/CartItemList";
 import { useDiscoverUrl } from "$app/components/DomainSettings";
 import { Icon } from "$app/components/Icons";
 import { Layout } from "$app/components/Library/Layout";

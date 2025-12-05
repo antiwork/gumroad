@@ -9,11 +9,7 @@ type BaseProps = {
 } & React.HTMLAttributes<HTMLElement>;
 
 export const CartItemList = ({ children, className, ...props }: BaseProps) => (
-  <div
-    role="list"
-    className={classNames("overflow-hidden rounded-sm border border-border bg-background", className)}
-    {...props}
-  >
+  <div role="list" className={classNames("rounded-sm border border-border bg-background", className)} {...props}>
     {children}
   </div>
 );
@@ -39,7 +35,7 @@ export const CartItem = ({
 export const CartItemMedia = ({ className, children, ...props }: BaseProps) => (
   <figure
     className={classNames(
-      "h-fit w-14 rounded-sm border border-foreground sm:h-full sm:w-36 sm:rounded-none sm:border-y-0 sm:border-l-0",
+      "tailwind-override h-fit w-14 overflow-hidden rounded-sm border border-border sm:h-full sm:w-36 sm:rounded-none sm:border-y-0 sm:border-l-0 [[role=list]_>_:first-child_&]:rounded-tl-sm [[role=list]_>_:last-child_&]:rounded-bl-sm",
       className,
     )}
     {...props}

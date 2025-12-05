@@ -9,7 +9,7 @@ import { BundleProductSelector } from "$app/components/BundleEdit/ContentTab/Bun
 import { Layout } from "$app/components/BundleEdit/Layout";
 import { BundleProduct, useBundleEditContext } from "$app/components/BundleEdit/state";
 import { Button } from "$app/components/Button";
-import { CartItemList } from "$app/components/CartList";
+import { CartItemList } from "$app/components/CartItemList";
 import { Icon } from "$app/components/Icons";
 import { LoadingSpinner } from "$app/components/LoadingSpinner";
 import { Card } from "$app/components/Product/Card";

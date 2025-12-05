@@ -34,7 +34,7 @@ import {
   CartItemMedia,
   CartItemTitle,
   CartItemList,
-} from "$app/components/CartList";
+} from "$app/components/CartItemList";
 import { Icon } from "$app/components/Icons";
 import { useLoggedInUser } from "$app/components/LoggedInUser";
 import { Modal } from "$app/components/Modal";

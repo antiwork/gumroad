@@ -23,7 +23,7 @@ import GuidGenerator from "$app/utils/guid_generator";
 import { assertResponseError, request } from "$app/utils/request";
 
 import { Button, NavigationButton } from "$app/components/Button";
-import { CartItem, CartItemMain, CartItemMedia, CartItemTitle, CartItemList } from "$app/components/CartList";
+import { CartItem, CartItemMain, CartItemMedia, CartItemTitle, CartItemList } from "$app/components/CartItemList";
 import { useCurrentSeller } from "$app/components/CurrentSeller";
 import { useAppDomain, useDomains } from "$app/components/DomainSettings";
 import {

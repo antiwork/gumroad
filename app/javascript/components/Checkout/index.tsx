@@ -22,7 +22,7 @@ import {
   CartItemTitle,
   CartItemList,
   CartItemEnd,
-} from "$app/components/CartList";
+} from "$app/components/CartItemList";
 import { PaymentForm } from "$app/components/Checkout/PaymentForm";
 import { Popover } from "$app/components/Popover";
 import { Card } from "$app/components/Product/Card";
