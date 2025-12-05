@@ -33,6 +33,7 @@ import { RichTextEditorToolbar, useImageUploadSettings, useRichTextEditor } from
 import { Select } from "$app/components/Select";
 import { showAlert } from "$app/components/server-components/Alert";
 import { TypeSafeOptionSelect } from "$app/components/TypeSafeOptionSelect";
+import { Row, RowActions, RowContent, RowDragHandle, Rows } from "$app/components/ui/Rows";
 import { useOnChange } from "$app/components/useOnChange";
 import { useRefToLatest } from "$app/components/useRefToLatest";
 
@@ -310,9 +311,9 @@ export const SectionLayout = ({
 };
 
 export const ProductList = React.forwardRef<HTMLDivElement, React.HTMLProps<HTMLDivElement>>(({ children }, ref) => (
-  <div className="rows" role="list" ref={ref} aria-label="Products">
+  <Rows role="list" ref={ref} aria-label="Products">
     {children}
-  </div>
+  </Rows>
 ));
 ProductList.displayName = "ProductList";
 
@@ -376,28 +377,37 @@ const ProductsSettings = ({ section }: { section: ProductsSection }) => {
           {products.map((product) => {
             const productVisibilityUID = `${uid}-productVisibility-${product.id}`;
             return (
-              <label role="listitem" key={product.id} style={{ border: product.chosen ? "var(--border)" : undefined }}>
-                <div className="content">
-                  {section.default_product_sort === "page_layout" ? <div aria-grabbed={product.chosen} /> : null}
-                  <span className="text-singleline">{product.name}</span>
-                </div>
-                <div className="actions">
-                  <input
-                    id={productVisibilityUID}
-                    type="checkbox"
-                    checked={section.shown_products.includes(product.id)}
-                    onChange={() => {
-                      updateSection({
-                        shown_products: section.shown_products.includes(product.id)
-                          ? section.shown_products.filter((id) => id !== product.id)
-                          : products.flatMap(({ id }) =>
-                              product.id === id || section.shown_products.includes(id) ? id : [],
-                            ),
-                      });
-                    }}
-                  />
-                </div>
-              </label>
+              <Row
+                role="listitem"
+                key={product.id}
+                className={classNames(product.chosen && "border border-border")}
+                asChild
+              >
+                <label>
+                  <RowContent>
+                    {section.default_product_sort === "page_layout" ? (
+                      <RowDragHandle aria-grabbed={product.chosen} />
+                    ) : null}
+                    <span className="text-singleline">{product.name}</span>
+                  </RowContent>
+                  <RowActions>
+                    <input
+                      id={productVisibilityUID}
+                      type="checkbox"
+                      checked={section.shown_products.includes(product.id)}
+                      onChange={() => {
+                        updateSection({
+                          shown_products: section.shown_products.includes(product.id)
+                            ? section.shown_products.filter((id) => id !== product.id)
+                            : products.flatMap(({ id }) =>
+                                product.id === id || section.shown_products.includes(id) ? id : [],
+                              ),
+                        });
+                      }}
+                    />
+                  </RowActions>
+                </label>
+              </Row>
             );
           })}
         </Sortable>
