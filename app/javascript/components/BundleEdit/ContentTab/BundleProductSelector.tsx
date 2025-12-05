@@ -34,7 +34,7 @@ export const BundleProductSelector = ({
       ) : null}
     </CartItemMain>
     <CartItemEnd className="justify-center">
-      <input type="checkbox" checked={!!selected} onChange={onToggle} />
+      <input type="checkbox" aria-label={bundleProduct.name} checked={!!selected} onChange={onToggle} />
     </CartItemEnd>
   </CartItem>
 );

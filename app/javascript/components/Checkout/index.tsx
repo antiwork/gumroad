@@ -496,10 +496,8 @@ const CartItemComponent = ({
         </a>
       </CartItemMedia>
       <CartItemMain>
-        <CartItemTitle asChild>
-          <a href={item.product.url}>
-            <h4 className="font-bold">{item.product.name}</h4>
-          </a>
+        <CartItemTitle>
+          <a href={item.product.url}>{item.product.name}</a>
         </CartItemTitle>
         <a href={item.product.creator.profile_url} className="line-clamp-2">
           {item.product.creator.name}
