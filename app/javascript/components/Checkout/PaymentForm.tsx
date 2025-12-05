@@ -1218,7 +1218,14 @@ export const PaymentForm = ({
             <div className="flex flex-col gap-4">
               <h4>Pay with</h4>
               {state.availablePaymentMethods.length > 1 ? (
-                <Tabs variant="buttons" className="auto-cols-max grid-flow-col">
+                <Tabs
+                  variant="buttons"
+                  className={
+                    state.availablePaymentMethods.length > 2
+                      ? "sm:auto-cols-max sm:grid-flow-col"
+                      : "auto-cols-max grid-flow-col"
+                  }
+                >
                   {state.availablePaymentMethods.map((method) => (
                     <React.Fragment key={method.type}>{method.button}</React.Fragment>
                   ))}
