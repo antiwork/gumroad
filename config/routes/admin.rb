@@ -153,7 +153,6 @@ namespace :admin do
   end
   get "/search_purchases", to: "search/purchases#index", as: :legacy_search_purchases # old URL for backward compatibility
 
-
   # Compliance
   resources :guids, only: [:show]
   scope module: "compliance" do
