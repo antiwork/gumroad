@@ -632,8 +632,10 @@ const CreditCard = () => {
           type: "card",
           button: (
             <PaymentMethodRadio paymentMethod="card">
-              <Icon name="outline-credit-card" />
-              <h4>Card</h4>
+              <div className="flex w-full flex-col items-center justify-center gap-2">
+                <Icon name="outline-credit-card" />
+                <h4>Card</h4>
+              </div>
             </PaymentMethodRadio>
           ),
         },
@@ -987,8 +989,10 @@ const PayPal = () => {
         type: "paypal",
         button: (
           <PaymentMethodRadio paymentMethod="paypal">
-            <span className="brand-icon brand-icon-paypal" />
-            <h4>PayPal</h4>
+            <div className="flex w-full flex-col items-center justify-center gap-2">
+              <span className="brand-icon brand-icon-paypal" />
+              <h4>PayPal</h4>
+            </div>
           </PaymentMethodRadio>
         ),
       },
@@ -1139,13 +1143,15 @@ const StripePaymentRequest = () => {
         type: "stripePaymentRequest",
         button: (
           <PaymentMethodRadio paymentMethod="stripePaymentRequest">
-            <span
-              className={cx("brand-icon", {
-                "brand-icon-google": paymentMethods.googlePay,
-                "brand-icon-apple": paymentMethods.applePay,
-              })}
-            />
-            <h4>{paymentMethods.googlePay ? "Google Pay" : "Apple Pay"}</h4>
+            <div className="flex w-full flex-col items-center justify-center gap-2">
+              <span
+                className={cx("brand-icon", {
+                  "brand-icon-google": paymentMethods.googlePay,
+                  "brand-icon-apple": paymentMethods.applePay,
+                })}
+              />
+              <h4>{paymentMethods.googlePay ? "Google Pay" : "Apple Pay"}</h4>
+            </div>
           </PaymentMethodRadio>
         ),
       },
@@ -1218,14 +1224,7 @@ export const PaymentForm = ({
             <div className="flex flex-col gap-4">
               <h4>Pay with</h4>
               {state.availablePaymentMethods.length > 1 ? (
-                <Tabs
-                  variant="buttons"
-                  className={
-                    state.availablePaymentMethods.length > 2
-                      ? "sm:auto-cols-max sm:grid-flow-col"
-                      : "auto-cols-max grid-flow-col"
-                  }
-                >
+                <Tabs variant="buttons" className="grid-flow-col">
                   {state.availablePaymentMethods.map((method) => (
                     <React.Fragment key={method.type}>{method.button}</React.Fragment>
                   ))}
