@@ -4,7 +4,7 @@ import React from "react";
 import { formatPriceCentsWithCurrencySymbol } from "$app/utils/currency";
 
 import AdminActionButton from "$app/components/Admin/ActionButton";
-import Comments from "$app/components/Admin/Commentable";
+import AdminCommentableComments from "$app/components/Admin/Commentable";
 import DateTimeWithRelativeTooltip from "$app/components/Admin/DateTimeWithRelativeTooltip";
 import { Form } from "$app/components/Admin/Form";
 import { NoIcon, BooleanIcon } from "$app/components/Admin/Icons";
@@ -73,7 +73,7 @@ export type Purchase = PurchaseStatesInfo & {
   card: {
     type: string;
     visual: string;
-    country: string;
+    country: string | null;
     fingerprint_search_url: string | null;
   } | null;
   ip_address: string | null;
@@ -94,7 +94,7 @@ export type Purchase = PurchaseStatesInfo & {
     url_redirect: UrlRedirect | null;
   }[];
   url_redirect: UrlRedirect | null;
-  offer_code: { code: string; displayed_amount_off: string } | null;
+  offer_code: { code: string | null; displayed_amount_off: string } | null;
   street_address: string | null;
   full_name: string | null;
   city: string | null;
@@ -127,7 +127,7 @@ const Header = ({ purchase }: { purchase: Purchase }) => (
     <h2>
       <Link href={Routes.admin_purchase_path(purchase.id)}>{purchase.formatted_display_price}</Link>
       {purchase.gumroad_responsible_for_tax ? ` + ${purchase.formatted_gumroad_tax_amount} VAT` : null} for{" "}
-      <Link href={Routes.admin_link_path(purchase.product.id)} title={purchase.product.id.toString()}>
+      <Link href={Routes.admin_product_path(purchase.product.id)} title={purchase.product.id.toString()}>
         {purchase.product.name}
       </Link>{" "}
       {purchase.variants_list}{" "}
@@ -357,9 +357,11 @@ const Info = ({ purchase }: { purchase: Purchase }) => (
 
       {purchase.offer_code && !purchase.gift?.is_sender_purchase ? (
         <>
-          <dt>Discount code</dt>
+          <dt>{purchase.offer_code.code ? "Discount code" : "Discount"}</dt>
           <dd>
-            {purchase.offer_code.code} for {purchase.offer_code.displayed_amount_off} off
+            {purchase.offer_code.code
+              ? `${purchase.offer_code.code} for ${purchase.offer_code.displayed_amount_off} off`
+              : `${purchase.offer_code.displayed_amount_off} off`}
           </dd>
         </>
       ) : null}
@@ -678,7 +680,7 @@ const AdminPurchase = ({ purchase }: { purchase: Purchase }) => (
     ) : null}
     <hr />
     <ActionButtons purchase={purchase} />
-    <Comments
+    <AdminCommentableComments
       count={purchase.comments_count}
       endpoint={Routes.admin_purchase_comments_path(purchase.id)}
       commentableType="purchase"

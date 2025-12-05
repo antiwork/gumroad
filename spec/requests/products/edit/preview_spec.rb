@@ -160,7 +160,9 @@ describe("Product Edit Previews", type: :system, js: true) do
       end
 
       fill_in("Amount", with: "0")
-      check "Allow customers to pay what they want"
+
+      pwyw_toggle = find_field("Allow customers to pay what they want", disabled: true)
+      expect(pwyw_toggle).to be_checked
 
       in_preview do
         expect(page).to have_content "$0+"
@@ -185,7 +187,8 @@ describe("Product Edit Previews", type: :system, js: true) do
         expect(page).to have_content "$0+"
       end
 
-      check "Allow customers to pay what they want"
+      pwyw_toggle = find_field("Allow customers to pay what they want", disabled: true)
+      expect(pwyw_toggle).to be_checked
 
       in_preview do
         expect(page).to have_content "$0+"

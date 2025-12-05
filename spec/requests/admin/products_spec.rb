@@ -4,89 +4,129 @@ require "spec_helper"
 
 describe "Admin::LinksController Scenario", type: :system, js: true do
   let(:product) { create(:product) }
+
   before do
     login_as(create(:admin_user))
   end
 
-  xdescribe "views and sales async" do
-    before do
-      recreate_model_index(ProductPageView)
-      2.times { add_page_view(product) }
-      4.times { create(:purchase_event, purchase: create(:purchase, link: product)) }
-    end
+  it "renders the product page", :sidekiq_inline, :elasticsearch_wait_for_refresh do
+    # It renders stats
+    purchases = Purchase.where(link: product)
+    Event.destroy_by(purchase: purchases)
+    purchases.destroy_all
+    recreate_model_index(ProductPageView)
+    2.times { add_page_view(product) }
+    25.times { create(:purchase_event, purchase: create(:purchase, link: product, price_cents: 200)) }
+    visit admin_link_path(product.unique_permalink)
+    expect(page).to have_text(product.name)
+    expect(page).to have_text("2 views")
+    expect(page).to have_text("25 sales")
+    expect(page).to have_text("$50 total")
 
-    it "renders stats", :sidekiq_inline, :elasticsearch_wait_for_refresh do
-      visit admin_link_path(product.unique_permalink)
+    # With purchases, it renders purchases list
+    toggle_disclosure("Purchases")
+    wait_for_ajax
+    click_on("Load more")
+    wait_for_ajax
+    expect(page).to_not have_text("Load more")
+    expect(page).to have_text("$2", count: 25)
 
-      expect(page).to have_text(product.name)
-      expect(page).to have_text("2 views")
-      expect(page).to have_text("4 sales")
-      expect(page).to have_text("$4 total")
-    end
-  end
+    # Product files display
+    regular_file = create(:product_file, link: product, position: 1)
+    external_link_file = create(:product_file, link: product, position: 2, filetype: "link", url: "https://example.com/external-resource")
+    page.refresh
+    expect(page).to have_link(regular_file.s3_filename)
+    expect(page).to have_link(external_link_file.external_id)
 
-  describe "purchases async" do
-    context "with no purchases" do
-      it "renders info message" do
-        visit admin_link_path(product.unique_permalink)
-
-        toggle_disclosure("Purchases")
-        wait_for_ajax
-        expect(page).to have_text("No purchases have been made")
+    # It marks the product as staff-picked
+    product = create(:product, :recommendable)
+    visit admin_link_path(product.unique_permalink)
+    within_section(product.name, section_element: :article) do
+      accept_confirm do
+        click_on("Mark as staff-picked")
       end
     end
+    wait_for_ajax
+    expect(page).to have_alert(text: "Marked as staff-picked!")
+    expect(product.reload.staff_picked?).to eq(true)
 
-    context "with purchases" do
-      let(:purchase_count) { 25 }
-
-      before do
-        purchase_count.times.map do |n|
-          create(:purchase, price_cents: 299, link: product)
-        end
-      end
-
-      it "renders purchases" do
-        visit admin_link_path(product.unique_permalink)
-
-        toggle_disclosure("Purchases")
-        wait_for_ajax
-        click_on("Load more")
-        wait_for_ajax
-        expect(page).to_not have_text("Load more")
-        expect(page).to have_text("$2.99", count: purchase_count)
+    # It deletes the product
+    within_section(product.name, section_element: :article) do
+      accept_confirm do
+        click_on("Delete")
       end
     end
-  end
+    wait_for_ajax
+    expect(page).to have_alert(text: "Deleted!")
+    expect(product.reload.deleted_at?).to eq(true)
 
-  describe "Staff pick" do
-    let(:product) { create(:product, :recommendable) }
-
-    it "marks product as staff-picked" do
-      visit admin_link_path(product.unique_permalink)
-
-      within_section(product.name, section_element: :article) do
-        accept_confirm do
-          click_on("Mark as staff-picked")
-        end
+    # It restores the product
+    page.refresh
+    within_section(product.name, section_element: :article) do
+      accept_confirm do
+        click_on("Undelete")
       end
+    end
+    wait_for_ajax
+    expect(page).to have_alert(text: "Undeleted!")
+    expect(product.reload.deleted_at?).to eq(false)
 
+    # It publishes the product
+    product.update!(purchase_disabled_at: Time.current)
+    page.refresh
+    within_section(product.name, section_element: :article) do
+      accept_confirm do
+        click_on("Publish")
+      end
+    end
+    wait_for_ajax
+    expect(page).to have_alert(text: "Published!")
+    expect(product.reload.purchase_disabled_at?).to eq(false)
+
+    # It unpublishes the product
+    page.refresh
+    within_section(product.name, section_element: :article) do
+      accept_confirm do
+        click_on("Unpublish")
+      end
+    end
+    wait_for_ajax
+    expect(page).to have_alert(text: "Unpublished!")
+    expect(product.reload.purchase_disabled_at?).to eq(true)
+
+    # It marks the product as adult
+    within_section(product.name, section_element: :article) do
+      accept_confirm do
+        click_on("Make adult")
+      end
+    end
+    wait_for_ajax
+    expect(page).to have_alert(text: "It's adult!")
+    expect(product.reload.is_adult?).to eq(true)
+
+    # It marks the product as non-adult
+    page.refresh
+    within_section(product.name, section_element: :article) do
+      accept_confirm do
+        click_on("Make non-adult")
+      end
+    end
+    wait_for_ajax
+    expect(page).to have_alert(text: "It's not adult!")
+    expect(product.reload.is_adult?).to eq(false)
+
+    # it shows and post comments
+    within_section(product.name, section_element: :article) do
+      toggle_disclosure("0 comments")
+      expect(page).to have_text("No comments created")
+      fill_in("comment[content]", with: "Good article!")
+      accept_confirm do
+        click_on("Add comment")
+      end
       wait_for_ajax
-      expect(page).to have_alert(text: "Marked as staff-picked!")
-      expect(product.reload.staff_picked?).to eq(true)
+      expect(page).to have_text("1 comment")
+      expect(page).to have_text("Good article!")
     end
-  end
-
-  describe "Product files display" do
-    context "when product has files with and without s3_filename" do
-      let!(:regular_file) { create(:product_file, link: product, position: 1) }
-      let!(:external_link_file) { create(:product_file, link: product, position: 2, filetype: "link", url: "https://example.com/external-resource") }
-
-      it "renders product card with all files showing correct fallback text" do
-        visit admin_link_path(product.unique_permalink)
-
-        expect(page).to have_link(regular_file.s3_filename)
-        expect(page).to have_link(external_link_file.external_id)
-      end
-    end
+    expect(page).to have_alert(text: "Successfully added comment.")
   end
 end
