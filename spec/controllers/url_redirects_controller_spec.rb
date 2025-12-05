@@ -803,7 +803,7 @@ describe UrlRedirectsController do
       loc = response.location
       expect(loc.include?(FILE_DOWNLOAD_DISTRIBUTION_URL)).to be(true)
       expect(loc.include?(s3_path)).to be(true)
-      expect(loc.include?("verify=")).to be(true)
+      expect(loc.include?("X-Amz-Signature=")).to be(true)
     end
 
     it "marks the url_redirect as seen" do
@@ -1474,8 +1474,8 @@ describe UrlRedirectsController do
           get :read, params: { id: @token, product_file_id: @product.product_files.first.external_id }
           expect(response).to be_successful
           expect(assigns(:hide_layouts)).to eq(true)
-          expect(assigns(:read_url)).to include("cache_group=read")
-          expect(assigns(:read_url)).to include("staging-files.gumroad.com")
+          expect(assigns(:read_url)).to include("X-Amz-Signature=")
+          expect(assigns(:read_url)).to include(S3_BUCKET)
           expect(response.body).to have_selector("h1", text: "The Works of Edgar Gumstein")
         end
 

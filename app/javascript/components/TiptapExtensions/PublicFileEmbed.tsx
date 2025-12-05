@@ -13,6 +13,7 @@ import { Icon } from "$app/components/Icons";
 import { usePublicFilesSettings } from "$app/components/ProductEdit/ProductTab/DescriptionEditor";
 import { MenuItem } from "$app/components/RichTextEditor";
 import { NodeActionsMenu } from "$app/components/TiptapExtensions/NodeActionsMenu";
+import { Row, RowActions, RowContent, RowDetails } from "$app/components/ui/Rows";
 
 const NodeView = ({ editor, node }: NodeViewProps) => {
   const uid = React.useId();
@@ -32,9 +33,9 @@ const NodeView = ({ editor, node }: NodeViewProps) => {
 
   return (
     <NodeViewWrapper contentEditable={false}>
-      <div className={cx("embed", { selected })}>
+      <Row className={cx("embed", { selected })}>
         {editor.isEditable ? <NodeActionsMenu editor={editor} /> : null}
-        <div className="content">
+        <RowContent className="content">
           <FileRowContent
             extension={file.extension}
             name={file.name.trim() || "Untitled"}
@@ -55,8 +56,8 @@ const NodeView = ({ editor, node }: NodeViewProps) => {
               </>
             }
           />
-        </div>
-        <div className="actions">
+        </RowContent>
+        <RowActions>
           {isUploading ? (
             <Button color="danger" onClick={() => cancelUpload?.(id)}>
               Cancel
@@ -72,12 +73,14 @@ const NodeView = ({ editor, node }: NodeViewProps) => {
               {showAudioPlayer ? "Close" : "Play"}
             </Button>
           ) : null}
-        </div>
+        </RowActions>
         {FileUtils.isAudioExtension(file.extension) && showAudioPlayer && file.url ? (
-          <AudioPlayer src={file.url} />
+          <RowDetails>
+            <AudioPlayer src={file.url} />
+          </RowDetails>
         ) : null}
         {expanded ? (
-          <div className="drawer flex flex-col gap-4">
+          <RowDetails className="drawer flex flex-col gap-4">
             <fieldset>
               <legend>
                 <label htmlFor={`${uid}-name`}>Name</label>
@@ -90,9 +93,9 @@ const NodeView = ({ editor, node }: NodeViewProps) => {
                 placeholder="Enter file name"
               />
             </fieldset>
-          </div>
+          </RowDetails>
         ) : null}
-      </div>
+      </Row>
     </NodeViewWrapper>
   );
 };

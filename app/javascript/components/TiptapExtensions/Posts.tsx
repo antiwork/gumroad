@@ -15,6 +15,7 @@ import { newEmailPath } from "$app/components/server-components/EmailsPage";
 import { Drawer } from "$app/components/SortableList";
 import { NodeActionsMenu } from "$app/components/TiptapExtensions/NodeActionsMenu";
 import { createInsertCommand } from "$app/components/TiptapExtensions/utils";
+import { Row, RowActions, RowContent, RowDetails } from "$app/components/ui/Rows";
 import { useUserAgentInfo } from "$app/components/UserAgent";
 import { useRunOnce } from "$app/components/useRunOnce";
 
@@ -59,39 +60,46 @@ const PostsNodeView = ({ editor, selected }: NodeViewProps) => {
 
   return (
     <NodeViewWrapper>
-      <div className={cx("embed", { selected })}>
+      <Row className={cx("embed", { selected })}>
         {editor.isEditable ? <NodeActionsMenu editor={editor} /> : null}
-        <button
-          className="content"
-          onClick={(e) => {
-            if (e.target instanceof HTMLAnchorElement) return;
-            setExpanded(!expanded);
-          }}
-          aria-controls={uid}
-          aria-expanded={expanded}
-          contentEditable={false}
-        >
-          {total > 0 ? expanded ? <Icon name="outline-cheveron-down" /> : <Icon name="outline-cheveron-right" /> : null}
-          <Icon name="file-earmark-medical-fill" className={cx("type-icon", { "text-muted": total === 0 })} />
-          <div>
-            {isLoading || total > 0 ? (
-              <>
-                <h4>Posts</h4>
-                {isLoading ? <LoadingSpinner /> : <span>{`${total} ${total === 1 ? "post" : "posts"}`}</span>}
-              </>
-            ) : (
-              <>
-                <h4 className="text-muted">Posts (emails) sent to customers of this product will appear here</h4>
-                <a href={`${newEmailPath}?product=${productPermalink}`} target="_blank" rel="noreferrer">
-                  Create an email
-                </a>
-              </>
-            )}
-          </div>
-        </button>
+        <RowContent className="content" asChild>
+          <button
+            onClick={(e) => {
+              if (e.target instanceof HTMLAnchorElement) return;
+              setExpanded(!expanded);
+            }}
+            aria-controls={uid}
+            aria-expanded={expanded}
+            contentEditable={false}
+          >
+            {total > 0 ? (
+              expanded ? (
+                <Icon name="outline-cheveron-down" />
+              ) : (
+                <Icon name="outline-cheveron-right" />
+              )
+            ) : null}
+            <Icon name="file-earmark-medical-fill" className={cx("type-icon", { "text-muted": total === 0 })} />
+            <div>
+              {isLoading || total > 0 ? (
+                <>
+                  <h4>Posts</h4>
+                  {isLoading ? <LoadingSpinner /> : <span>{`${total} ${total === 1 ? "post" : "posts"}`}</span>}
+                </>
+              ) : (
+                <>
+                  <h4 className="text-muted">Posts (emails) sent to customers of this product will appear here</h4>
+                  <a href={`${newEmailPath}?product=${productPermalink}`} target="_blank" rel="noreferrer">
+                    Create an email
+                  </a>
+                </>
+              )}
+            </div>
+          </button>
+        </RowContent>
 
         {editor.isEditable ? (
-          <div className="actions">
+          <RowActions>
             <Button
               outline
               color="primary"
@@ -101,57 +109,59 @@ const PostsNodeView = ({ editor, selected }: NodeViewProps) => {
             >
               <Icon name="outline-refresh" />
             </Button>
-          </div>
+          </RowActions>
         ) : null}
 
         {expanded && total > 0 ? (
-          <Drawer id={uid}>
-            {posts.map((post) => (
-              <div className="content" key={post.id}>
-                <Icon name="file-earmark-medical-fill" className="type-icon" />
-                <div>
-                  {editor.isEditable ? (
-                    <a href={post.url} target="_blank" rel="noreferrer">
-                      <strong>{post.name}</strong>
-                    </a>
-                  ) : (
-                    <TrackClick eventName="post_click" resourceId={post.id}>
+          <RowDetails asChild>
+            <Drawer id={uid}>
+              {posts.map((post) => (
+                <RowContent key={post.id}>
+                  <Icon name="file-earmark-medical-fill" className="type-icon" />
+                  <div>
+                    {editor.isEditable ? (
                       <a href={post.url} target="_blank" rel="noreferrer">
                         <strong>{post.name}</strong>
                       </a>
-                    </TrackClick>
-                  )}
-                  <div>
-                    {post.date.type === "date" ? (
-                      <ul className="inline">
-                        <li>
-                          {parseISO(post.date.value).toLocaleDateString(userAgentInfo.locale, {
-                            month: "long",
-                            day: "numeric",
-                            year: "numeric",
-                          })}
-                        </li>
-                        <li>{formatDistanceToNow(parseISO(post.date.value))} ago</li>
-                      </ul>
-                    ) : post.date.time_duration === 0 ? (
-                      "Available immediately after purchase"
                     ) : (
-                      `Available ${post.date.time_duration} ${post.date.time_period}${post.date.time_duration === 1 ? "" : "s"} after purchase`
+                      <TrackClick eventName="post_click" resourceId={post.id}>
+                        <a href={post.url} target="_blank" rel="noreferrer">
+                          <strong>{post.name}</strong>
+                        </a>
+                      </TrackClick>
                     )}
+                    <div>
+                      {post.date.type === "date" ? (
+                        <ul className="inline">
+                          <li>
+                            {parseISO(post.date.value).toLocaleDateString(userAgentInfo.locale, {
+                              month: "long",
+                              day: "numeric",
+                              year: "numeric",
+                            })}
+                          </li>
+                          <li>{formatDistanceToNow(parseISO(post.date.value))} ago</li>
+                        </ul>
+                      ) : post.date.time_duration === 0 ? (
+                        "Available immediately after purchase"
+                      ) : (
+                        `Available ${post.date.time_duration} ${post.date.time_period}${post.date.time_duration === 1 ? "" : "s"} after purchase`
+                      )}
+                    </div>
                   </div>
+                </RowContent>
+              ))}
+              {hasMorePosts && fetchMorePosts ? (
+                <div>
+                  <Button small outline color="primary" disabled={isLoading} onClick={() => void fetchMorePosts()}>
+                    Load more
+                  </Button>
                 </div>
-              </div>
-            ))}
-            {hasMorePosts && fetchMorePosts ? (
-              <div>
-                <Button small outline color="primary" disabled={isLoading} onClick={() => void fetchMorePosts()}>
-                  Load more
-                </Button>
-              </div>
-            ) : null}
-          </Drawer>
+              ) : null}
+            </Drawer>
+          </RowDetails>
         ) : null}
-      </div>
+      </Row>
     </NodeViewWrapper>
   );
 };

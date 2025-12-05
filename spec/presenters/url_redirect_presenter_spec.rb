@@ -4,9 +4,10 @@ require "spec_helper"
 
 describe UrlRedirectPresenter do
   include Rails.application.routes.url_helpers
+
   describe "#download_attributes" do
     it "returns all necessary attributes for the download page" do
-      allow(Aws::S3::Resource).to receive(:new).and_return(double(bucket: double(object: double(content_length: 1, public_url: "#{AWS_S3_ENDPOINT}/#{S3_BUCKET}/attachments/4768692737035/bb69798a4a694e19a0976390a7e40e6b/original/chapter1.srt"))))
+      allow_any_instance_of(SignedUrlHelper).to receive(:signed_download_url_for_s3_key_and_filename).and_return("#{AWS_S3_ENDPOINT}/#{S3_BUCKET}/attachments/4768692737035/bb69798a4a694e19a0976390a7e40e6b/original/chapter1.srt?X-Amz-Signature=test")
 
       product = create(:product)
       folder = create(:product_folder, link: product, name: "Folder")

@@ -9,6 +9,7 @@ import { assertResponseError } from "$app/utils/request";
 import { useReducer, EditorSubmenu, SectionLayout, ProductList } from "$app/components/Profile/EditSections";
 import { WishlistsView } from "$app/components/Profile/Sections";
 import { showAlert } from "$app/components/server-components/Alert";
+import { Row, RowActions, RowContent, RowDragHandle } from "$app/components/ui/Rows";
 import { CardWishlist, DummyCardGrid } from "$app/components/Wishlist/Card";
 
 export const WishlistsSectionView = ({ section }: { section: WishlistsSection }) => {
@@ -63,32 +64,30 @@ export const WishlistsSectionView = ({ section }: { section: WishlistsSection })
             {wishlists.length > 0 ? (
               <Sortable list={wishlists} setList={setWishlists} tag={ProductList} handle="[aria-grabbed]">
                 {wishlists.map((wishlist) => (
-                  <label
-                    role="listitem"
-                    key={wishlist.id}
-                    style={{ border: wishlist.chosen ? "var(--border)" : undefined }}
-                  >
-                    <div className="content">
-                      <div aria-grabbed={wishlist.chosen} />
-                      <span className="text-singleline">{wishlist.name}</span>
-                    </div>
-                    <div className="actions">
-                      <input
-                        id={`${uid}-productVisibility-${wishlist.id}`}
-                        type="checkbox"
-                        checked={section.shown_wishlists.includes(wishlist.id)}
-                        onChange={() => {
-                          updateSection({
-                            shown_wishlists: section.shown_wishlists.includes(wishlist.id)
-                              ? section.shown_wishlists.filter((id) => id !== wishlist.id)
-                              : wishlists.flatMap(({ id }) =>
-                                  wishlist.id === id || section.shown_wishlists.includes(id) ? id : [],
-                                ),
-                          });
-                        }}
-                      />
-                    </div>
-                  </label>
+                  <Row asChild key={wishlist.id}>
+                    <label role="listitem">
+                      <RowContent>
+                        <RowDragHandle aria-grabbed={wishlist.chosen} />
+                        <span className="text-singleline">{wishlist.name}</span>
+                      </RowContent>
+                      <RowActions>
+                        <input
+                          id={`${uid}-productVisibility-${wishlist.id}`}
+                          type="checkbox"
+                          checked={section.shown_wishlists.includes(wishlist.id)}
+                          onChange={() => {
+                            updateSection({
+                              shown_wishlists: section.shown_wishlists.includes(wishlist.id)
+                                ? section.shown_wishlists.filter((id) => id !== wishlist.id)
+                                : wishlists.flatMap(({ id }) =>
+                                    wishlist.id === id || section.shown_wishlists.includes(id) ? id : [],
+                                  ),
+                            });
+                          }}
+                        />
+                      </RowActions>
+                    </label>
+                  </Row>
                 ))}
               </Sortable>
             ) : null}
