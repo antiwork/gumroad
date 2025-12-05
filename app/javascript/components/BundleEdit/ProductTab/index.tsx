@@ -80,7 +80,12 @@ export const ProductTab = () => {
             priceCents={bundle.price_cents}
             suggestedPriceCents={bundle.suggested_price_cents}
             isPWYW={bundle.customizable_price}
-            setPriceCents={(priceCents) => updateBundle({ price_cents: priceCents })}
+            setPriceCents={(priceCents) =>
+              updateBundle({
+                price_cents: priceCents,
+                ...(priceCents === 0 && { customizable_price: true }),
+              })
+            }
             setSuggestedPriceCents={(suggestedPriceCents) =>
               updateBundle({ suggested_price_cents: suggestedPriceCents })
             }

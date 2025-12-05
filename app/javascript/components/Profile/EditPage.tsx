@@ -18,6 +18,7 @@ import { ImageUploadSettingsContext } from "$app/components/RichTextEditor";
 import { showAlert } from "$app/components/server-components/Alert";
 import { ProfileProps, TabWithId, useTabs } from "$app/components/server-components/Profile";
 import PlainTextStarterKit from "$app/components/TiptapExtensions/PlainTextStarterKit";
+import { Row, RowActions, RowContent, RowDragHandle, Rows } from "$app/components/ui/Rows";
 import { Tabs, Tab } from "$app/components/ui/Tabs";
 import { useIsAboveBreakpoint } from "$app/components/useIsAboveBreakpoint";
 import { useRefToLatest } from "$app/components/useRefToLatest";
@@ -66,18 +67,18 @@ const EditTab = ({
     if (focus) editor?.commands.focus("end");
   }, [editor]);
   return (
-    <div role="listitem" className="row">
-      <div className="content">
-        <div aria-grabbed={dragging} />
+    <Row role="listitem">
+      <RowContent>
+        <RowDragHandle aria-grabbed={dragging} />
         <h4 style={{ flex: 1 }}>
           <EditorContent editor={editor} />
         </h4>
-      </div>
-      <div className="actions">
+      </RowContent>
+      <RowActions>
         <Button small color="danger" outline aria-label="Remove page" onClick={() => setConfirmingDelete(true)}>
           <Icon name="trash2" />
         </Button>
-      </div>
+      </RowActions>
       {confirmingDelete ? (
         <Modal
           open
@@ -95,15 +96,15 @@ const EditTab = ({
           Are you sure you want to delete the page "{tab.name}"? <strong>This action cannot be undone.</strong>
         </Modal>
       ) : null}
-    </div>
+    </Row>
   );
 };
 
 // TODO: Use a better library than react-sortablejs that can solve this more cleanly
 const TabList = React.forwardRef<HTMLDivElement, React.HTMLProps<HTMLDivElement>>(({ children }, ref) => (
-  <div className="rows" role="list" ref={ref} aria-label="Pages">
+  <Rows role="list" ref={ref} aria-label="Pages">
     {children}
-  </div>
+  </Rows>
 ));
 TabList.displayName = "TabList";
 

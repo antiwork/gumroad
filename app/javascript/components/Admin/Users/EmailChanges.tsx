@@ -6,6 +6,7 @@ import { request } from "$app/utils/request";
 import DateTimeWithRelativeTooltip from "$app/components/Admin/DateTimeWithRelativeTooltip";
 import type { User } from "$app/components/Admin/Users/User";
 import { LoadingSpinner } from "$app/components/LoadingSpinner";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "$app/components/ui/Table";
 
 type AdminUserEmailChangesProps = {
   user: User;
@@ -33,16 +34,16 @@ const EmailChanges = ({ fields, emailChanges, isLoading }: EmailChangesComponent
   if (emailChanges.length === 0) return <div>No email changes found.</div>;
 
   return (
-    <table>
-      <thead>
-        <tr>
-          <th>Field</th>
-          <th>Old</th>
-          <th>New</th>
-          <th>Changed</th>
-        </tr>
-      </thead>
-      <tbody>
+    <Table>
+      <TableHeader>
+        <TableRow>
+          <TableHead>Field</TableHead>
+          <TableHead>Old</TableHead>
+          <TableHead>New</TableHead>
+          <TableHead>Changed</TableHead>
+        </TableRow>
+      </TableHeader>
+      <TableBody>
         {fields.map((field) => (
           <React.Fragment key={field}>
             {Object.values(emailChanges).map(({ created_at, changes }) => {
@@ -52,20 +53,20 @@ const EmailChanges = ({ fields, emailChanges, isLoading }: EmailChangesComponent
               const [oldValue, newValue] = fieldChanges;
 
               return (
-                <tr key={created_at}>
-                  <td data-label="Field">{field}</td>
-                  <td data-label="Old">{oldValue || "(Not set)"}</td>
-                  <td data-label="New">{newValue || "(Not set)"}</td>
-                  <td data-label="Changed">
+                <TableRow key={created_at}>
+                  <TableCell>{field}</TableCell>
+                  <TableCell>{oldValue || "(Not set)"}</TableCell>
+                  <TableCell>{newValue || "(Not set)"}</TableCell>
+                  <TableCell>
                     <DateTimeWithRelativeTooltip date={created_at} />
-                  </td>
-                </tr>
+                  </TableCell>
+                </TableRow>
               );
             })}
           </React.Fragment>
         ))}
-      </tbody>
-    </table>
+      </TableBody>
+    </Table>
   );
 };
 

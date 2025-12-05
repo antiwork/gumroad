@@ -240,7 +240,7 @@ describe UrlRedirect do
 
     it "creates the right signed url for a file" do
       signed_s3_url = @url_redirect.signed_location_for_file(@product.product_files.first)
-      expect(signed_s3_url).to match(/verify=/)
+      expect(signed_s3_url).to match(/X-Amz-Signature=/)
       expect(signed_s3_url).to match(/episode1/)
       expect(signed_s3_url).to_not match(/episode2/)
       expect(signed_s3_url).to_not match(/manual/)
@@ -252,7 +252,7 @@ describe UrlRedirect do
       url = "#{AWS_S3_ENDPOINT}/#{S3_BUCKET}/attachments/43a5363194e74e9ee75b6203eaea6705/original/stamped_manual.pdf"
       @url_redirect.stamped_pdfs.create!(product_file: pdf_product_file, url:)
       signed_s3_url = @url_redirect.signed_location_for_file(pdf_product_file)
-      expect(signed_s3_url).to match(/verify=/)
+      expect(signed_s3_url).to match(/X-Amz-Signature=/)
       expect(signed_s3_url).to match(/stamped_manual/)
     end
   end
