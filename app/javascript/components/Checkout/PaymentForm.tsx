@@ -632,9 +632,9 @@ const CreditCard = () => {
           type: "card",
           button: (
             <PaymentMethodRadio paymentMethod="card">
-              <div className="flex w-full flex-col items-center justify-center gap-2">
+              <div className="flex w-full flex-col items-center justify-center gap-2 self-center">
                 <Icon name="outline-credit-card" />
-                <h4>Card</h4>
+                <h4 className="text-center">Card</h4>
               </div>
             </PaymentMethodRadio>
           ),
@@ -989,9 +989,9 @@ const PayPal = () => {
         type: "paypal",
         button: (
           <PaymentMethodRadio paymentMethod="paypal">
-            <div className="flex w-full flex-col items-center justify-center gap-2">
+            <div className="flex w-full flex-col items-center justify-center gap-2 self-center">
               <span className="brand-icon brand-icon-paypal" />
-              <h4>PayPal</h4>
+              <h4 className="text-center">PayPal</h4>
             </div>
           </PaymentMethodRadio>
         ),
@@ -1143,14 +1143,14 @@ const StripePaymentRequest = () => {
         type: "stripePaymentRequest",
         button: (
           <PaymentMethodRadio paymentMethod="stripePaymentRequest">
-            <div className="flex w-full flex-col items-center justify-center gap-2">
+            <div className="flex w-full flex-col items-center justify-center gap-2 self-center">
               <span
                 className={cx("brand-icon", {
                   "brand-icon-google": paymentMethods.googlePay,
                   "brand-icon-apple": paymentMethods.applePay,
                 })}
               />
-              <h4>{paymentMethods.googlePay ? "Google Pay" : "Apple Pay"}</h4>
+              <h4 className="text-center">{paymentMethods.googlePay ? "Google Pay" : "Apple Pay"}</h4>
             </div>
           </PaymentMethodRadio>
         ),
