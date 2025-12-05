@@ -422,6 +422,7 @@ const PaymentMethodRadio = ({
         if (paymentMethod !== state.paymentMethod) dispatch({ type: "set-value", paymentMethod });
       }}
       disabled={!selected && isProcessing(state)}
+      className="px-1"
     >
       {children}
     </Tab>
@@ -1224,7 +1225,7 @@ export const PaymentForm = ({
             <div className="flex flex-col gap-4">
               <h4>Pay with</h4>
               {state.availablePaymentMethods.length > 1 ? (
-                <Tabs variant="buttons" className="grid-flow-col">
+                <Tabs variant="buttons" className="auto-cols-fr grid-flow-col">
                   {state.availablePaymentMethods.map((method) => (
                     <React.Fragment key={method.type}>{method.button}</React.Fragment>
                   ))}
