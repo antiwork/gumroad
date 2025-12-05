@@ -146,7 +146,7 @@ const DisputeEvidencePage = ({ dispute_evidence, disputable, products }: Props) 
   const disputeReason = disputeReasons[dispute_evidence.dispute_reason];
 
   return (
-    <div className="stack">
+    <div className="stack mx-auto my-8 max-w-2xl">
       <header>
         Dispute evidence
         <h2>Submit additional information</h2>
