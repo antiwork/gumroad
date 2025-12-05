@@ -393,7 +393,10 @@ const LibraryPage = ({ results, creators, bundles, reviews_page_enabled, followi
           )}
         >
           {shouldShowFilter ? (
-            <div className="stack">
+            <div
+              className="stack overflow-y-auto lg:sticky lg:inset-y-4 lg:max-h-[calc(100vh-2rem)]"
+              aria-label="Filters"
+            >
               <header>
                 <div>
                   {filteredResults.length
