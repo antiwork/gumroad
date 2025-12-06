@@ -163,32 +163,67 @@ npm install
 
 App can be booted without any custom credentials. But if you would like to use services that require custom credentials (e.g. S3, Stripe, Resend, etc.), you can copy the `.env.example` file to `.env` and fill in the values.
 
-#### S3 Bucket Setup
+#### /etc/hosts Configuration
 
-After configuring your AWS credentials, you need to create the specific S3 buckets required for development. The application uses hardcoded bucket names as defined in `config/initializers/aws.rb`:
-
-**Required S3 Buckets:**
-
-- `gumroad_dev` - Main storage bucket for development
-- `gumroad-dev-public-storage` - Public storage bucket for development
-
-**Create the buckets using AWS CLI:**
+Add these entries to your `/etc/hosts` file:
 
 ```bash
-aws s3 mb s3://gumroad_dev
-aws s3 mb s3://gumroad-dev-public-storage
+127.0.0.1 gumroad.dev
+127.0.0.1 minio.gumroad.dev
 ```
 
-**Or create them via AWS Console:**
+On macOS/Linux:
 
-1. Go to the [S3 Console](https://console.aws.amazon.com/s3/)
-2. Click "Create bucket"
-3. Enter bucket name: `gumroad_dev`
-4. Choose your preferred region (should match `AWS_DEFAULT_REGION`)
-5. Keep default settings and create the bucket
-6. Repeat steps 2-5 for `gumroad-dev-public-storage`
+```shell
+sudo nano /etc/hosts
+```
 
-> **Note:** These exact bucket names are required because they are hardcoded in the application configuration. Using different names will result in `AccessDenied` errors during file uploads.
+On Windows (WSL), use the same `/etc/hosts` path.
+
+These entries allow your browser to connect to `https://gumroad.dev` and MinIO at `https://minio.gumroad.dev` during local development.
+
+#### File Storage Setup
+
+Gumroad uses MinIO for local development, an S3-compatible object storage server that runs in Docker. This eliminates the need for AWS credentials during local development.
+
+MinIO is automatically configured when you run `make local`. The following happens automatically:
+
+1. MinIO server starts on ports 9000 (API) and 9001 (web console)
+2. Four S3 buckets are created:
+   - `gumroad-dev` - Main development storage
+   - `gumroad-dev-public-storage` - Public file storage
+   - `gumroad-specs` - Test fixtures
+   - `gumroad-invoices` - Invoice storage
+3. Test fixture files are uploaded for specs
+4. Nginx reverse proxy provides HTTPS access at `https://minio.gumroad.dev`
+
+**Accessing MinIO Console:**
+
+- URL: `http://localhost:9001`
+- Username: `minioadmin`
+- Password: `minioadmin`
+
+**Verifying MinIO is Working:**
+
+```bash
+docker ps | grep minio
+docker exec -it web_minio_1 mc ls myminio
+```
+
+**Using Real AWS S3 (Optional):**
+
+If you need to test with real AWS S3:
+
+1. Remove `AWS_S3_ENDPOINT` from `.env.development`
+2. Set real AWS credentials in `.env.development`:
+   ```bash
+   AWS_ACCESS_KEY_ID=your_key_here
+   AWS_SECRET_ACCESS_KEY=your_secret_here
+   AWS_DEFAULT_REGION=us-east-1
+   ```
+3. Create buckets: `gumroad-dev` and `gumroad-dev-public-storage`
+
+Most development work does not require real AWS credentials thanks to MinIO.
 
 #### Local SSL Certificates
 
