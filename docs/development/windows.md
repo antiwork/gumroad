@@ -238,15 +238,20 @@ git config --local core.hooksPath .githooks
 
 ## 🧭 /etc/hosts Setup
 
-Make sure this line is in your `/etc/hosts`:
+Add these entries to your `/etc/hosts`:
 
 ```bash
 127.0.0.1 gumroad.dev
+127.0.0.1 minio.gumroad.dev
 ```
+
+Edit the file:
 
 ```bash
 sudo nano /etc/hosts
 ```
+
+**Note:** `minio.gumroad.dev` is required for MinIO S3-compatible storage in development.
 
 ---
 
