@@ -245,7 +245,7 @@ const MenubarItem = ({
         "button",
         "rounded-full! px-3! py-2! align-middle aria-[current]:bg-background aria-[current]:text-foreground",
         showExpandableIcon ? "relative cursor-pointer" : "",
-        hasChildren ? "aria-[expanded=true]:shadow!" : "hover:shadow!",
+        hasChildren ? "aria-[current=true]:hover:shadow!" : "hover:shadow!",
         { "border-transparent! bg-transparent! text-inherit!": !isHighlighted },
         { expandable: showExpandableIcon },
       )}
