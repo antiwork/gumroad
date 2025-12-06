@@ -68,10 +68,10 @@ const StripeConnectSection = ({
               <legend>
                 <label>Stripe account</label>
               </legend>
-              <div className="input input-wrapper">
-                <div className="fake-input">{stripeConnect.stripe_connect_account_id}</div>
-                <Icon name="solid-check-circle" style={{ color: "rgb(var(--success))" }} />
-              </div>
+            <div className="input input-wrapper">
+              <div className="fake-input">{stripeConnect.stripe_connect_account_id}</div>
+              <Icon name="solid-check-circle" className="text-success" />
+            </div>
             </fieldset>
             <p>
               <Button
