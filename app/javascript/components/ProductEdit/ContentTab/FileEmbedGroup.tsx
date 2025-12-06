@@ -8,6 +8,7 @@ import { cast } from "ts-safe-cast";
 
 import { getFolderArchiveDownloadUrl, getProductFileDownloadInfos } from "$app/data/products";
 import { isTuple } from "$app/utils/array";
+import { classNames } from "$app/utils/classNames";
 import GuidGenerator from "$app/utils/guid_generator";
 import { assertResponseError } from "$app/utils/request";
 
@@ -17,6 +18,7 @@ import { LoadingSpinner } from "$app/components/LoadingSpinner";
 import { Popover } from "$app/components/Popover";
 import { showAlert } from "$app/components/server-components/Alert";
 import { NodeActionsMenu } from "$app/components/TiptapExtensions/NodeActionsMenu";
+import { Row, RowActions, RowContent, RowDetails, Rows } from "$app/components/ui/Rows";
 import { useRunOnce } from "$app/components/useRunOnce";
 
 type FileEntry = {
@@ -135,7 +137,7 @@ const FileEmbedGroupNodeView = ({
 
   return (
     <NodeViewWrapper contentEditable={false}>
-      <div
+      <Rows
         role="tree"
         onDragOver={() => {
           if (!expanded && editor.view.dragging?.slice.content.firstChild?.type.name === "fileEmbed") {
@@ -143,9 +145,10 @@ const FileEmbedGroupNodeView = ({
           }
         }}
       >
-        <div role="treeitem" aria-expanded={expanded} className={cx({ selected })}>
+        <Row role="treeitem" aria-expanded={expanded} className={cx({ selected })}>
           {editor.isEditable ? <NodeActionsMenu editor={editor} /> : null}
-          <div className="content" onClick={() => setExpanded(!expanded)} contentEditable={false}>
+          <RowContent onClick={() => setExpanded(!expanded)} contentEditable={false}>
+            <Icon name={expanded ? "outline-cheveron-down" : "outline-cheveron-right"} />
             <Icon name="solid-folder-open" className="type-icon" />
             {editing ? (
               <input
@@ -167,9 +170,9 @@ const FileEmbedGroupNodeView = ({
                 <h4>{folderTitle}</h4>
               </div>
             )}
-          </div>
+          </RowContent>
           {showDownloadButton || editor.isEditable ? (
-            <div className="actions">
+            <RowActions>
               {showDownloadButton ? (
                 <Popover
                   trigger={
@@ -222,17 +225,19 @@ const FileEmbedGroupNodeView = ({
                   <Icon name={editing ? "outline-check" : "pencil"} />
                 </Button>
               ) : null}
-            </div>
+            </RowActions>
           ) : null}
-          {hasStreamable ? (
-            <NodeViewContent id={uid} role="group" />
-          ) : (
-            <div role="group">
-              <NodeViewContent id={uid} className="rows" />
-            </div>
-          )}
-        </div>
-      </div>
+          <RowDetails role="group" className={classNames({ hidden: !expanded })}>
+            {hasStreamable ? (
+              <NodeViewContent id={uid} />
+            ) : (
+              <Rows>
+                <NodeViewContent id={uid} />
+              </Rows>
+            )}
+          </RowDetails>
+        </Row>
+      </Rows>
     </NodeViewWrapper>
   );
 };

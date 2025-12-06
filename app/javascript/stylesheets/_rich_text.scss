@@ -182,8 +182,6 @@
   }
 
   .embed {
-    @extend %row-item;
-
     border: $border;
     border-radius: border-radius(1);
     @include bg-color(filled);
