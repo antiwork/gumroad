@@ -5,7 +5,7 @@
 module ProductFileListHelpers
   def have_file_row(name:, count: nil)
     options = { text: name, exact_text: true, count: }.compact
-    have_selector("[aria-label=Files] [role=treeitem] .content h4", **options)
+    have_selector("[aria-label=Files] [role=treeitem] h4", **options)
   end
 
   def find_file_row!(name:)
@@ -15,7 +15,7 @@ module ProductFileListHelpers
 
   def have_embed(name:, count: nil)
     options = { text: name, exact_text: true, count: }.compact
-    have_selector(".embed .content h4", **options)
+    have_selector(".embed h4", **options)
   end
 
   def find_embed(name:)
@@ -45,7 +45,7 @@ module ProductFileListHelpers
   end
 
   def have_subtitle_row(name:)
-    have_selector("[role=\"treeitem\"] .content h4", text: name, exact_text: true)
+    have_selector("[role=\"listitem\"] h4", text: name, exact_text: true)
   end
 
   def attach_product_file(file)

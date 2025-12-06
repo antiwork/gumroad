@@ -10,6 +10,7 @@ import { Version, useProductEditContext } from "$app/components/ProductEdit/stat
 import { Drawer, ReorderingHandle, SortableList } from "$app/components/SortableList";
 import { Toggle } from "$app/components/Toggle";
 import Placeholder from "$app/components/ui/Placeholder";
+import { Row, RowActions, RowContent, RowDetails, Rows } from "$app/components/ui/Rows";
 import { WithTooltip } from "$app/components/WithTooltip";
 
 let newVersionId = 0;
@@ -128,13 +129,13 @@ const VersionEditor = ({
     .map(([name]) => name);
 
   return (
-    <div role="listitem">
-      <div className="content">
+    <Row role="listitem">
+      <RowContent>
         <ReorderingHandle />
         <Icon name="stack-fill" />
         <h3>{version.name || "Untitled"}</h3>
-      </div>
-      <div className="actions">
+      </RowContent>
+      <RowActions>
         <WithTooltip tip={isOpen ? "Close drawer" : "Open drawer"}>
           <Button onClick={() => setIsOpen((prevIsOpen) => !prevIsOpen)}>
             <Icon name={isOpen ? "outline-cheveron-up" : "outline-cheveron-down"} />
@@ -145,82 +146,84 @@ const VersionEditor = ({
             <Icon name="trash2" />
           </Button>
         </WithTooltip>
-      </div>
+      </RowActions>
       {isOpen ? (
-        <Drawer className="grid gap-6">
-          <fieldset>
-            <label htmlFor={`${uid}-name`}>Name</label>
-            <div className="input">
-              <input
-                id={`${uid}-name`}
-                type="text"
-                value={version.name}
-                placeholder="Version name"
-                onChange={(evt) => updateVersion({ name: evt.target.value })}
-              />
-              <a href={url} target="_blank" rel="noreferrer">
-                Share
-              </a>
-            </div>
-          </fieldset>
-          <fieldset>
-            <label htmlFor={`${uid}-description`}>Description</label>
-            <textarea
-              id={`${uid}-description`}
-              value={version.description}
-              onChange={(evt) => updateVersion({ description: evt.target.value })}
-            />
-          </fieldset>
-          <section style={{ display: "grid", gap: "var(--spacer-5)", gridAutoFlow: "column", alignItems: "flex-end" }}>
+        <RowDetails asChild>
+          <Drawer className="grid gap-6">
             <fieldset>
-              <label htmlFor={`${uid}-price`}>Additional amount</label>
-              <PriceInput
-                id={`${uid}-price`}
-                currencyCode={currencyType}
-                cents={version.price_difference_cents}
-                onChange={(price_difference_cents) => updateVersion({ price_difference_cents })}
-                placeholder="0"
-              />
+              <label htmlFor={`${uid}-name`}>Name</label>
+              <div className="input">
+                <input
+                  id={`${uid}-name`}
+                  type="text"
+                  value={version.name}
+                  placeholder="Version name"
+                  onChange={(evt) => updateVersion({ name: evt.target.value })}
+                />
+                <a href={url} target="_blank" rel="noreferrer">
+                  Share
+                </a>
+              </div>
             </fieldset>
             <fieldset>
-              <label htmlFor={`${uid}-max-purchase-count`}>Maximum number of purchases</label>
-              <NumberInput
-                onChange={(value) => updateVersion({ max_purchase_count: value })}
-                value={version.max_purchase_count}
-              >
-                {(inputProps) => (
-                  <input id={`${uid}-max-purchase-count`} type="number" placeholder="∞" {...inputProps} />
-                )}
-              </NumberInput>
+              <label htmlFor={`${uid}-description`}>Description</label>
+              <textarea
+                id={`${uid}-description`}
+                value={version.description}
+                onChange={(evt) => updateVersion({ description: evt.target.value })}
+              />
             </fieldset>
-          </section>
-          {integrations.length > 0 ? (
-            <fieldset>
-              <legend>Integrations</legend>
-              {integrations.map((integration) => (
-                <Toggle
-                  value={version.integrations[integration]}
-                  onChange={(enabled) =>
-                    updateVersion({ integrations: { ...version.integrations, [integration]: enabled } })
-                  }
-                  key={integration}
+            <section className="grid grid-flow-col items-end gap-6">
+              <fieldset>
+                <label htmlFor={`${uid}-price`}>Additional amount</label>
+                <PriceInput
+                  id={`${uid}-price`}
+                  currencyCode={currencyType}
+                  cents={version.price_difference_cents}
+                  onChange={(price_difference_cents) => updateVersion({ price_difference_cents })}
+                  placeholder="0"
+                />
+              </fieldset>
+              <fieldset>
+                <label htmlFor={`${uid}-max-purchase-count`}>Maximum number of purchases</label>
+                <NumberInput
+                  onChange={(value) => updateVersion({ max_purchase_count: value })}
+                  value={version.max_purchase_count}
                 >
-                  {integration === "circle" ? "Enable access to Circle community" : "Enable access to Discord server"}
-                </Toggle>
-              ))}
-            </fieldset>
-          ) : null}
-        </Drawer>
+                  {(inputProps) => (
+                    <input id={`${uid}-max-purchase-count`} type="number" placeholder="∞" {...inputProps} />
+                  )}
+                </NumberInput>
+              </fieldset>
+            </section>
+            {integrations.length > 0 ? (
+              <fieldset>
+                <legend>Integrations</legend>
+                {integrations.map((integration) => (
+                  <Toggle
+                    value={version.integrations[integration]}
+                    onChange={(enabled) =>
+                      updateVersion({ integrations: { ...version.integrations, [integration]: enabled } })
+                    }
+                    key={integration}
+                  >
+                    {integration === "circle" ? "Enable access to Circle community" : "Enable access to Discord server"}
+                  </Toggle>
+                ))}
+              </fieldset>
+            ) : null}
+          </Drawer>
+        </RowDetails>
       ) : null}
-    </div>
+    </Row>
   );
 };
 
 export const SortableVersionEditors = React.forwardRef<HTMLDivElement, React.HTMLProps<HTMLDivElement>>(
   ({ children }, ref) => (
-    <div ref={ref} className="rows" role="list" aria-label="Version editor">
+    <Rows ref={ref} role="list" aria-label="Version editor">
       {children}
-    </div>
+    </Rows>
   ),
 );
 SortableVersionEditors.displayName = "SortableVersionEditors";
