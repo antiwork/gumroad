@@ -135,6 +135,7 @@ describe CreateIndiaSalesReportJob do
                                         "ID",
                                         "Date",
                                         "Place of Supply (State)",
+                                        "Buyer GSTIN",
                                         "Zip Tax Rate (%) (Rate from Database)",
                                         "Taxable Value (cents)",
                                         "Integrated Tax Amount (cents)",
@@ -145,26 +146,27 @@ describe CreateIndiaSalesReportJob do
                                         "Tax Difference (floored)"
                                       ])
 
-      expect(actual_payload.length).to eq(2)
+      expect(actual_payload.length).to eq(3)
 
       data_row = actual_payload[1]
 
-      expect(data_row[0]).to eq(@india_purchase.external_id)  # ID
-      expect(data_row[1]).to eq("2023-06-15")                 # Date
-      expect(data_row[2]).to eq("MH")                         # Place of Supply (State)
-      expect(data_row[3]).to eq("18")                         # Zip Tax Rate (%) (Rate from Database)
-      expect(data_row[4]).to eq("1000")                       # Taxable Value (cents)
-      expect(data_row[5]).to eq("180")                        # Integrated Tax Amount (cents) - gumroad_tax_cents is 180
-      expect(data_row[6]).to eq("18.0")                       # Tax Rate (%) (Calculated From Tax Collected) - (180/1000 * 100) = 18.0
-      expect(data_row[7]).to eq("180")                        # Expected Tax (cents, rounded) - (1000 * 0.18).round = 180
-      expect(data_row[8]).to eq("180")                        # Expected Tax (cents, floored) - (1000 * 0.18).floor = 180
-      expect(data_row[9]).to eq("0")                          # Tax Difference (rounded) - 180 - 180 = 0
-      expect(data_row[10]).to eq("0")                         # Tax Difference (floored) - 180 - 180 = 0
+      expect(data_row[0]).to eq(@india_purchase.external_id)
+      expect(data_row[1]).to eq("2023-06-15")
+      expect(data_row[2]).to eq("MH")
+      expect(data_row[3]).to eq("")
+      expect(data_row[4]).to eq("18")
+      expect(data_row[5]).to eq("1000")
+      expect(data_row[6]).to eq("180")
+      expect(data_row[7]).to eq("18.0")
+      expect(data_row[8]).to eq("180")
+      expect(data_row[9]).to eq("180")
+      expect(data_row[10]).to eq("0")
+      expect(data_row[11]).to eq("0")
 
       temp_file.close(true)
     end
 
-    it "excludes purchases with business VAT ID" do
+    it "includes purchases with business VAT ID and displays GSTIN" do
       expect(s3_bucket_double).to receive(:object).and_return(@s3_object)
 
       described_class.new.perform(6, 2023)
@@ -174,7 +176,12 @@ describe CreateIndiaSalesReportJob do
       temp_file.rewind
       actual_payload = CSV.read(temp_file)
 
-      expect(actual_payload.length).to eq(2)
+      expect(actual_payload.length).to eq(3)
+
+      b2b_row = actual_payload.find { |row| row[3] == "GST123456789" }
+      expect(b2b_row).to be_present
+      expect(b2b_row[3]).to eq("GST123456789")
+
       temp_file.close(true)
     end
 
@@ -209,18 +216,52 @@ describe CreateIndiaSalesReportJob do
       invalid_state_row = actual_payload.find { |row| row[0] == invalid_state_purchase.external_id }
       expect(invalid_state_row).to be_present
 
-      # Check all column values for invalid state purchase
-      expect(invalid_state_row[0]).to eq(invalid_state_purchase.external_id)  # ID
-      expect(invalid_state_row[1]).to eq("2023-06-15")                        # Date
-      expect(invalid_state_row[2]).to eq("")                                  # Place of Supply (State) - empty for invalid state
-      expect(invalid_state_row[3]).to eq("18")                                # Zip Tax Rate (%) (Rate from Database)
-      expect(invalid_state_row[4]).to eq("500")                               # Taxable Value (cents)
-      expect(invalid_state_row[5]).to eq("0")                                 # Integrated Tax Amount (cents) - gumroad_tax_cents is 0 for test purchase
-      expect(invalid_state_row[6]).to eq("0")                                 # Tax Rate (%) (Calculated From Tax Collected) - 0 since no tax collected
-      expect(invalid_state_row[7]).to eq("90")                                # Expected Tax (cents, rounded) - (500 * 0.18).round = 90
-      expect(invalid_state_row[8]).to eq("90")                                # Expected Tax (cents, floored) - (500 * 0.18).floor = 90
-      expect(invalid_state_row[9]).to eq("90")                                # Tax Difference (rounded) - 90 - 0 = 90
-      expect(invalid_state_row[10]).to eq("90")                               # Tax Difference (floored) - 90 - 0 = 90
+      expect(invalid_state_row[0]).to eq(invalid_state_purchase.external_id)
+      expect(invalid_state_row[1]).to eq("2023-06-15")
+      expect(invalid_state_row[2]).to eq("")
+      expect(invalid_state_row[3]).to eq("")
+      expect(invalid_state_row[4]).to eq("18")
+      expect(invalid_state_row[5]).to eq("500")
+      expect(invalid_state_row[6]).to eq("0")
+      expect(invalid_state_row[7]).to eq("0")
+      expect(invalid_state_row[8]).to eq("90")
+      expect(invalid_state_row[9]).to eq("90")
+      expect(invalid_state_row[10]).to eq("90")
+      expect(invalid_state_row[11]).to eq("90")
+
+      temp_file.close(true)
+    end
+
+    it "handles purchases without purchase_sales_tax_info record" do
+      no_tax_info_product = create(:product, price_cents: 750)
+      no_tax_info_purchase = create(:purchase,
+                                    link: no_tax_info_product,
+                                    purchaser: no_tax_info_product.user,
+                                    purchase_state: "in_progress",
+                                    quantity: 1,
+                                    perceived_price_cents: 750,
+                                    country: "India",
+                                    ip_country: "India",
+                                    ip_state: "DL",
+                                    stripe_transaction_id: "txn_no_tax_info",
+                                    created_at: Time.zone.local(2023, 6, 15)
+      )
+      no_tax_info_purchase.mark_test_successful!
+      no_tax_info_purchase.update!(gumroad_tax_cents: 135)
+
+      s3_object_no_tax = Aws::S3::Resource.new.bucket("gumroad-specs").object("specs/india-sales-report-no-tax-#{SecureRandom.hex(18)}.csv")
+      expect(s3_bucket_double).to receive(:object).and_return(s3_object_no_tax)
+
+      described_class.new.perform(6, 2023)
+
+      temp_file = Tempfile.new("actual-file", encoding: "ascii-8bit")
+      s3_object_no_tax.get(response_target: temp_file)
+      temp_file.rewind
+      actual_payload = CSV.read(temp_file)
+
+      no_tax_info_row = actual_payload.find { |row| row[0] == no_tax_info_purchase.external_id }
+      expect(no_tax_info_row).to be_present
+      expect(no_tax_info_row[3]).to eq("")
 
       temp_file.close(true)
     end
