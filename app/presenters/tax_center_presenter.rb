@@ -4,14 +4,14 @@ class TaxCenterPresenter
   include CurrencyHelper
 
 
-MOCK_DATA = {
-  2024 => { gross: 49_818_655, fees: 6_302_346, taxes: 469_972, affiliate_credit: 271_814 },
-  2023 => { gross: 45_855_670, fees: 5_385_803, taxes: 573_267, affiliate_credit: 496_857 },
-  2022 => { gross: 49_312_600, fees: 1_610_255, taxes: 726_480, affiliate_credit: 468_370 },
-  2021 => { gross: 20_854_233, fees: 849_633, taxes: 544_707, affiliate_credit: 448_750 },
-  2020 => { gross: 28_249_367, fees: 1_342_051, taxes: 953_429, affiliate_credit: 1_117_605 },
-  2019 => { gross: 2_854_000, fees: 131_260, taxes: 90_240, affiliate_credit: 0 }
-}
+  MOCK_DATA = {
+    2024 => { gross: 49_818_655, fees: 6_302_346, taxes: 469_972, affiliate_credit: 271_814 },
+    2023 => { gross: 45_855_670, fees: 5_385_803, taxes: 573_267, affiliate_credit: 496_857 },
+    2022 => { gross: 49_312_600, fees: 1_610_255, taxes: 726_480, affiliate_credit: 468_370 },
+    2021 => { gross: 20_854_233, fees: 849_633, taxes: 544_707, affiliate_credit: 448_750 },
+    2020 => { gross: 28_249_367, fees: 1_342_051, taxes: 953_429, affiliate_credit: 1_117_605 },
+    2019 => { gross: 2_854_000, fees: 131_260, taxes: 90_240, affiliate_credit: 0 }
+  }
 
   def initialize(seller:, year:)
     @seller = seller
@@ -52,7 +52,6 @@ MOCK_DATA = {
         net: format_cents_as_dollars(net)
       }]
     end
-
 
     def fetch_documents
       documents = []
