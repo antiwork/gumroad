@@ -44,7 +44,9 @@ const AdminMerchantAccountsShow = () => {
           <dt>User</dt>
           <dd>
             {merchant_account.user_external_id ? (
-              <Link href={Routes.admin_user_path(merchant_account.user_external_id)}>{merchant_account.user_external_id}</Link>
+              <Link href={Routes.admin_user_path(merchant_account.user_external_id)}>
+                {merchant_account.user_external_id}
+              </Link>
             ) : (
               "none"
             )}
