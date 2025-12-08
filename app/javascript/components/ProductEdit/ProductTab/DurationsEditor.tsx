@@ -8,6 +8,7 @@ import { PriceInput } from "$app/components/PriceInput";
 import { Duration, useProductEditContext } from "$app/components/ProductEdit/state";
 import { Drawer, ReorderingHandle, SortableList } from "$app/components/SortableList";
 import Placeholder from "$app/components/ui/Placeholder";
+import { Row, RowActions, RowContent, RowDetails, Rows } from "$app/components/ui/Rows";
 import { WithTooltip } from "$app/components/WithTooltip";
 
 let newDurationId = 0;
@@ -121,13 +122,13 @@ const DurationEditor = ({
   const [isOpen, setIsOpen] = React.useState(true);
 
   return (
-    <div role="listitem">
-      <div className="content">
+    <Row role="listitem">
+      <RowContent>
         <ReorderingHandle />
         <Icon name="outline-clock" />
         <h3>{duration.name}</h3>
-      </div>
-      <div className="actions">
+      </RowContent>
+      <RowActions>
         <WithTooltip tip={isOpen ? "Close drawer" : "Open drawer"}>
           <Button onClick={() => setIsOpen((prevIsOpen) => !prevIsOpen)}>
             <Icon name={isOpen ? "outline-cheveron-up" : "outline-cheveron-down"} />
@@ -138,72 +139,76 @@ const DurationEditor = ({
             <Icon name="trash2" />
           </Button>
         </WithTooltip>
-      </div>
+      </RowActions>
       {isOpen ? (
-        <Drawer className="grid gap-6">
-          <fieldset>
-            <legend>
-              <label htmlFor={`${uid}-duration`}>Duration</label>
-            </legend>
-            <div className="input">
-              <NumberInput
-                value={duration.duration_in_minutes}
-                onChange={(duration_in_minutes) =>
-                  updateDuration({
-                    duration_in_minutes,
-                    name: duration_in_minutes
-                      ? `${duration_in_minutes} ${duration_in_minutes === 1 ? "minute" : "minutes"}`
-                      : "Untitled",
-                  })
-                }
-              >
-                {(props) => <input id={`${uid}-duration`} {...props} />}
-              </NumberInput>
-              <div className="pill">minutes</div>
-            </div>
-          </fieldset>
-          <fieldset>
-            <label htmlFor={`${uid}-description`}>Description</label>
-            <textarea
-              id={`${uid}-description`}
-              value={duration.description}
-              onChange={(evt) => updateDuration({ description: evt.target.value })}
-            />
-          </fieldset>
-          <section style={{ display: "grid", gap: "var(--spacer-5)", gridAutoFlow: "column", alignItems: "flex-end" }}>
+        <RowDetails asChild>
+          <Drawer className="grid gap-6">
             <fieldset>
-              <label htmlFor={`${uid}-price`}>Additional amount</label>
-              <PriceInput
-                id={`${uid}-price`}
-                currencyCode={currencyType}
-                cents={duration.price_difference_cents}
-                onChange={(price_difference_cents) => updateDuration({ price_difference_cents })}
-                placeholder="0"
+              <legend>
+                <label htmlFor={`${uid}-duration`}>Duration</label>
+              </legend>
+              <div className="input">
+                <NumberInput
+                  value={duration.duration_in_minutes}
+                  onChange={(duration_in_minutes) =>
+                    updateDuration({
+                      duration_in_minutes,
+                      name: duration_in_minutes
+                        ? `${duration_in_minutes} ${duration_in_minutes === 1 ? "minute" : "minutes"}`
+                        : "Untitled",
+                    })
+                  }
+                >
+                  {(props) => <input id={`${uid}-duration`} {...props} />}
+                </NumberInput>
+                <div className="pill">minutes</div>
+              </div>
+            </fieldset>
+            <fieldset>
+              <label htmlFor={`${uid}-description`}>Description</label>
+              <textarea
+                id={`${uid}-description`}
+                value={duration.description}
+                onChange={(evt) => updateDuration({ description: evt.target.value })}
               />
             </fieldset>
-            <fieldset>
-              <label htmlFor={`${uid}-max-purchase-count`}>Maximum number of purchases</label>
-              <NumberInput
-                onChange={(value) => updateDuration({ max_purchase_count: value })}
-                value={duration.max_purchase_count}
-              >
-                {(inputProps) => (
-                  <input id={`${uid}-max-purchase-count`} type="number" placeholder="∞" {...inputProps} />
-                )}
-              </NumberInput>
-            </fieldset>
-          </section>
-        </Drawer>
+            <section
+              style={{ display: "grid", gap: "var(--spacer-5)", gridAutoFlow: "column", alignItems: "flex-end" }}
+            >
+              <fieldset>
+                <label htmlFor={`${uid}-price`}>Additional amount</label>
+                <PriceInput
+                  id={`${uid}-price`}
+                  currencyCode={currencyType}
+                  cents={duration.price_difference_cents}
+                  onChange={(price_difference_cents) => updateDuration({ price_difference_cents })}
+                  placeholder="0"
+                />
+              </fieldset>
+              <fieldset>
+                <label htmlFor={`${uid}-max-purchase-count`}>Maximum number of purchases</label>
+                <NumberInput
+                  onChange={(value) => updateDuration({ max_purchase_count: value })}
+                  value={duration.max_purchase_count}
+                >
+                  {(inputProps) => (
+                    <input id={`${uid}-max-purchase-count`} type="number" placeholder="∞" {...inputProps} />
+                  )}
+                </NumberInput>
+              </fieldset>
+            </section>
+          </Drawer>
+        </RowDetails>
       ) : null}
-    </div>
+    </Row>
   );
 };
 
 export const SortableDurationEditors = React.forwardRef<HTMLDivElement, React.HTMLProps<HTMLDivElement>>(
   ({ children }, ref) => (
-    <div ref={ref} className="rows" role="list" aria-label="Duration editor">
+    <Rows ref={ref} role="list" aria-label="Duration editor">
       {children}
-    </div>
+    </Rows>
   ),
 );
 SortableDurationEditors.displayName = "SortableDurationEditors";

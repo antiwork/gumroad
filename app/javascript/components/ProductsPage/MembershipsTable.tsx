@@ -200,13 +200,13 @@ export const ProductsPageMembershipsTable = (props: {
           <TableRow>
             <TableCell colSpan={2}>Totals</TableCell>
 
-            <TableCell className="whitespace-nowrap">
+            <TableCell label="Members" className="whitespace-nowrap">
               {memberships
                 .reduce((sum, membership) => sum + membership.successful_sales_count, 0)
                 .toLocaleString(userAgentInfo.locale)}
             </TableCell>
 
-            <TableCell colSpan={4} className="whitespace-nowrap">
+            <TableCell colSpan={4} label="Revenue" className="whitespace-nowrap">
               {formatPriceCentsWithCurrencySymbol(
                 "usd",
                 memberships.reduce((sum, membership) => sum + membership.revenue, 0),

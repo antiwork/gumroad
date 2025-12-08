@@ -39,7 +39,7 @@ Rails.application.configure do
   config.asset_host = "#{PROTOCOL}://#{ASSET_DOMAIN}"
 
   # Where to store uploaded files (see config/storage.yml for options)
-  config.active_storage.service = :amazon
+  config.active_storage.service = :development
 
   # Don't care if the mailer can't send.
   config.action_mailer.raise_delivery_errors = false

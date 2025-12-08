@@ -23,6 +23,7 @@ export const FollowForm = ({
   const isOwnProfile = loggedInUser?.id === creatorProfile.external_id;
   const [email, setEmail] = React.useState(isOwnProfile ? "" : (loggedInUser?.email ?? ""));
   const [formStatus, setFormStatus] = React.useState<"initial" | "submitting" | "success" | "invalid">("initial");
+  const emailInputRef = React.useRef<HTMLInputElement>(null);
 
   React.useEffect(() => setFormStatus("initial"), [email]);
 
@@ -30,7 +31,12 @@ export const FollowForm = ({
     e.preventDefault();
 
     if (!isValidEmail(email)) {
+      emailInputRef.current?.focus();
       setFormStatus("invalid");
+      showAlert(
+        email.trim() === "" ? "Please enter your email address." : "Please enter a valid email address.",
+        "error",
+      );
       return;
     }
 
@@ -55,6 +61,7 @@ export const FollowForm = ({
       <fieldset className={cx({ danger: formStatus === "invalid" })}>
         <div className="flex gap-2">
           <input
+            ref={emailInputRef}
             type="email"
             value={email}
             className="flex-1"

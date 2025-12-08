@@ -92,7 +92,7 @@ type Props = {
   us_states: string[];
   ca_provinces: string[];
   used_card: SavedCreditCard | null;
-  recaptcha_key: string;
+  recaptcha_key: string | null;
   paypal_client_id: string;
 };
 
