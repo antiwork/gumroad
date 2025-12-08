@@ -4,6 +4,7 @@ import AdminSalesReportsForm from "$app/components/Admin/SalesReports/Form";
 import { Button } from "$app/components/Button";
 import { Icon } from "$app/components/Icons";
 import Placeholder from "$app/components/ui/Placeholder";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "$app/components/ui/Table";
 
 export type JobHistoryItem = {
   job_id: string;
@@ -61,26 +62,26 @@ const AdminSalesReportsJobHistory = ({ countries, sales_types, jobHistory, authe
 
   return (
     <section>
-      <table>
-        <thead>
-          <tr>
-            <th>Country</th>
-            <th>Date range</th>
-            <th>Type of sales</th>
-            <th>Generated at</th>
-            <th>Download</th>
-          </tr>
-        </thead>
-        <tbody>
+      <Table>
+        <TableHeader>
+          <TableRow>
+            <TableHead>Country</TableHead>
+            <TableHead>Date range</TableHead>
+            <TableHead>Type of sales</TableHead>
+            <TableHead>Enqueued at</TableHead>
+            <TableHead>Download</TableHead>
+          </TableRow>
+        </TableHeader>
+        <TableBody>
           {jobHistory.map((job, index) => (
-            <tr key={index}>
-              <td>{countryCodeToName[job.country_code] || job.country_code}</td>
-              <td>
-                {job.start_date} - {job.end_date}
-              </td>
-              <td>{job.sales_type ? salesTypeCodeToName[job.sales_type] : sales_types[0]?.[1]}</td>
-              <td>{new Date(job.enqueued_at).toLocaleString()}</td>
-              <td>
+            <TableRow key={index}>
+              <TableCell>{countryCodeToName[job.country_code] || job.country_code}</TableCell>
+              <TableCell>
+                {job.start_date} to {job.end_date}
+              </TableCell>
+              <TableCell>{job.sales_type ? salesTypeCodeToName[job.sales_type] : sales_types[0]?.[1]}</TableCell>
+              <TableCell>{new Date(job.enqueued_at).toLocaleString()}</TableCell>
+              <TableCell>
                 {job.status === "completed" && job.download_url ? (
                   <a href={job.download_url} target="_blank" rel="noopener noreferrer">
                     <div className="grid grid-cols-[auto_1fr] gap-2">
@@ -94,11 +95,11 @@ const AdminSalesReportsJobHistory = ({ countries, sales_types, jobHistory, authe
                     <span>Processing</span>
                   </div>
                 )}
-              </td>
-            </tr>
+              </TableCell>
+            </TableRow>
           ))}
-        </tbody>
-      </table>
+        </TableBody>
+      </Table>
     </section>
   );
 };

@@ -4,7 +4,7 @@ require "spec_helper"
 require "shared_examples/authorize_called"
 
 describe ProductFilesUtilityController, :vcr do
-  describe "GET external_link_title" do
+  describe "GET external_link_title", :skip_ssrf_stub do
     before do
       @user = create(:user)
       sign_in @user

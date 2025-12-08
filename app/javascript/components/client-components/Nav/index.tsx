@@ -6,7 +6,7 @@
   and the client-side version for Inertia-powered views. Once the migration is complete, the server-side navbar will be phased out.
 */
 
-import { Link, router } from "@inertiajs/react";
+import { Link } from "@inertiajs/react";
 import * as React from "react";
 
 import { escapeRegExp } from "$app/utils";
@@ -14,11 +14,12 @@ import { classNames } from "$app/utils/classNames";
 import { initTeamMemberReadOnlyAccess } from "$app/utils/team_member_read_only";
 
 import NavbarFooter from "$app/components/client-components/Nav/footer";
+import { CloseOnNavigate } from "$app/components/CloseOnNavigate";
 import { useCurrentSeller } from "$app/components/CurrentSeller";
 import { useAppDomain, useDiscoverUrl } from "$app/components/DomainSettings";
 import { Icon } from "$app/components/Icons";
 import { useLoggedInUser } from "$app/components/LoggedInUser";
-import { Nav as NavFramework, NavLink, NavSection, useNav } from "$app/components/Nav";
+import { Nav as NavFramework, NavLink, NavSection } from "$app/components/Nav";
 import { useRunOnce } from "$app/components/useRunOnce";
 
 type Props = {
@@ -74,18 +75,6 @@ export const ClientNavLink = ({
       ) : null}
     </Link>
   );
-};
-
-const CloseOnNavigate = () => {
-  const nav = useNav();
-  const close = nav?.close;
-
-  React.useEffect(() => {
-    if (!close) return;
-    return router.on("before", close);
-  }, [close]);
-
-  return null;
 };
 
 export const Nav = (props: Props) => {

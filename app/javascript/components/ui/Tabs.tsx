@@ -55,9 +55,11 @@ interface TabsProps extends React.HTMLProps<HTMLDivElement>, VariantProps<typeof
 }
 
 export const Tabs = React.forwardRef<HTMLDivElement, TabsProps>(({ children, className, variant, ...props }, ref) => (
-  <div role="tablist" className={classNames(tabsVariants({ variant }), className)} {...props} ref={ref}>
-    <TabVariantContext.Provider value={variant ?? "pills"}> {children} </TabVariantContext.Provider>
-  </div>
+  <TabVariantContext.Provider value={variant ?? "pills"}>
+    <div role="tablist" className={classNames(tabsVariants({ variant }), className)} {...props} ref={ref}>
+      {children}
+    </div>
+  </TabVariantContext.Provider>
 ));
 Tabs.displayName = "Tabs";
 
