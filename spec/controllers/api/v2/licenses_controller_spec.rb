@@ -25,7 +25,11 @@ describe Api::V2::LicensesController do
       end
 
       it "returns the correct JSON when it modifies the license state" do
+        old_serial = @purchase.license.serial
         put action, params: { access_token: @token.token, license_key: @purchase.license.serial }.merge(@product_identifier)
+
+        @purchase.reload
+        expected_license_key = action == :rotate ? @purchase.license.serial : old_serial
 
         expect(response.parsed_body).to eq({
           success: true,
@@ -50,7 +54,7 @@ describe Api::V2::LicensesController do
             order_number: @purchase.external_id_numeric,
             sale_id: ObfuscateIds.encrypt(@purchase.id),
             sale_timestamp: @purchase.created_at,
-            license_key: @purchase.license.serial,
+            license_key: expected_license_key,
             is_gift_receiver_purchase: false,
             disputed: false,
             dispute_won: false,
