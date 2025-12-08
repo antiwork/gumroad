@@ -3,6 +3,7 @@ import React from "react";
 import ReactMarkdown from "react-markdown";
 
 import DateTimeWithRelativeTooltip from "$app/components/Admin/DateTimeWithRelativeTooltip";
+import { Row, RowContent } from "$app/components/ui/Rows";
 
 type AuthorProps = {
   external_id: string;
@@ -20,8 +21,8 @@ export type CommentProps = {
 };
 
 const AdminCommentableComment = ({ comment }: { comment: CommentProps }) => (
-  <div role="listitem">
-    <div className="content">
+  <Row role="listitem">
+    <RowContent>
       <div>
         <ul className="mb-2 inline">
           <li>
@@ -42,8 +43,8 @@ const AdminCommentableComment = ({ comment }: { comment: CommentProps }) => (
         </ul>
         <ReactMarkdown>{comment.content}</ReactMarkdown>
       </div>
-    </div>
-  </div>
+    </RowContent>
+  </Row>
 );
 
 export default AdminCommentableComment;

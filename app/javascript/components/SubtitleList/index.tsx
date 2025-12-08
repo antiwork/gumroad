@@ -1,6 +1,8 @@
 import * as React from "react";
 
-import { Row, SubtitleFile } from "./Row";
+import { Rows } from "$app/components/ui/Rows";
+
+import { SubtitleRow, SubtitleFile } from "./Row";
 
 type Props = {
   subtitleFiles: SubtitleFile[];
@@ -17,9 +19,9 @@ export const SubtitleList = ({
   if (subtitleFiles.length === 0) return null;
 
   return (
-    <div className="subtitle-list" role="tree">
+    <Rows role="list">
       {subtitleFiles.map((subtitleFile) => (
-        <Row
+        <SubtitleRow
           key={subtitleFile.url}
           subtitleFile={subtitleFile}
           onRemove={() => onRemoveSubtitle(subtitleFile.url)}
@@ -27,6 +29,6 @@ export const SubtitleList = ({
           onChangeLanguage={(language) => onChangeSubtitleLanguage(subtitleFile.url, language)}
         />
       ))}
-    </div>
+    </Rows>
   );
 };

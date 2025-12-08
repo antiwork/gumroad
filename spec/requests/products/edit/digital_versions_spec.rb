@@ -81,7 +81,7 @@ describe("Product Edit Digital Versions", type: :system, js: true) do
         end
 
         # Fix flaky spec when the banner component is present.
-        page.scroll_to version_option_rows[0].find(".content"), align: :center
+        page.scroll_to version_option_rows[0].find("[aria-grabbed='false']"), align: :center
 
         version_option_rows[0].find("[aria-grabbed='false']").drag_to version_option_rows[1]
       end

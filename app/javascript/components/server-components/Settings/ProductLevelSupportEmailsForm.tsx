@@ -4,6 +4,7 @@ import { Button } from "$app/components/Button";
 import { Icon } from "$app/components/Icons";
 import { TagInput } from "$app/components/TagInput";
 import Placeholder from "$app/components/ui/Placeholder";
+import { Row, RowActions, RowContent, RowDetails, Rows } from "$app/components/ui/Rows";
 
 type ProductLevelSupportEmail = {
   email: string;
@@ -55,8 +56,8 @@ const ProductLevelSupportEmailRow = React.memo(
     const handleRemove = () => onRemove(index);
 
     return (
-      <div role="listitem">
-        <div className="content">
+      <Row role="listitem">
+        <RowContent>
           <Icon name="envelope-fill" className="type-icon" />
           <div className="ml-1">
             <h4>{supportEmail.email || "No email set"}</h4>
@@ -64,17 +65,17 @@ const ProductLevelSupportEmailRow = React.memo(
               {supportEmail.product_ids.length} {supportEmail.product_ids.length === 1 ? "product" : "products"}
             </span>
           </div>
-        </div>
-        <div className="actions">
+        </RowContent>
+        <RowActions>
           <Button onClick={handleToggleExpandedState} aria-label="Edit email">
             {expanded ? <Icon name="outline-cheveron-up" /> : <Icon name="outline-cheveron-down" />}
           </Button>
           <Button onClick={handleRemove} aria-label="Delete email">
             <Icon name="trash2" />
           </Button>
-        </div>
+        </RowActions>
         {expanded ? (
-          <div className="flex flex-col gap-4">
+          <RowDetails className="flex flex-col gap-4">
             <fieldset>
               <label htmlFor={`${uid}email`}>Email</label>
               <input
@@ -99,9 +100,9 @@ const ProductLevelSupportEmailRow = React.memo(
                 onChangeTagIds={handleProductIdsChange}
               />
             </fieldset>
-          </div>
+          </RowDetails>
         ) : null}
-      </div>
+      </Row>
     );
   },
 );
@@ -158,7 +159,7 @@ export const ProductLevelSupportEmailsForm = React.memo(
 
     return (
       <>
-        <div className="rows" role="list">
+        <Rows role="list">
           {productLevelSupportEmails.map((supportEmail, index) => (
             <ProductLevelSupportEmailRow
               key={index}
@@ -170,7 +171,7 @@ export const ProductLevelSupportEmailsForm = React.memo(
               onRemove={handleRemoveEmail}
             />
           ))}
-        </div>
+        </Rows>
         <AddProductLevelSupportEmailButton onClick={handleAddEmail} />
       </>
     );

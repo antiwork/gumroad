@@ -1249,17 +1249,17 @@ describe "Sales page", type: :system, js: true do
 
         within_modal "Commission" do
           within_section "Files", section_element: :section do
-            within "[role='tree']" do
-              expect(page).to have_selector("[role='treeitem']", count: 2)
+            within "[role='list']" do
+              expect(page).to have_selector("[role='listitem']", count: 2)
 
-              within(find("[role='treeitem']", text: "smilie")) do
+              within(find("[role='listitem']", text: "smilie")) do
                 expect(page).to have_text("PNG")
                 expect(page).to have_text("98.1 KB")
                 expect(page).to have_button("Delete")
                 expect(page).to have_link("Download", href: s3_utility_cdn_url_for_blob_path(key: commission.files.first.key), target: "_blank")
               end
 
-              within(find("[role='treeitem']", text: "test")) do
+              within(find("[role='listitem']", text: "test")) do
                 expect(page).to have_text("PDF")
                 expect(page).to have_text("8.1 KB")
                 expect(page).to have_button("Delete")
@@ -1267,7 +1267,7 @@ describe "Sales page", type: :system, js: true do
               end
             end
 
-            within(find("[role='treeitem']", text: "smilie")) do
+            within(find("[role='listitem']", text: "smilie")) do
               click_button "Delete"
             end
           end
@@ -1278,10 +1278,10 @@ describe "Sales page", type: :system, js: true do
 
         within_modal "Commission" do
           within_section "Files", section_element: :section do
-            within "[role='tree']" do
-              expect(page).to have_selector("[role='treeitem']", count: 1)
-              expect(page).to have_selector("[role='treeitem']", text: "test")
-              expect(page).not_to have_selector("[role='treeitem']", text: "smilie")
+            within "[role='list']" do
+              expect(page).to have_selector("[role='listitem']", count: 1)
+              expect(page).to have_selector("[role='listitem']", text: "test")
+              expect(page).not_to have_selector("[role='listitem']", text: "smilie")
             end
           end
         end
@@ -1381,17 +1381,17 @@ describe "Sales page", type: :system, js: true do
               end
 
               within_section "File upload", section_element: :section do
-                within "[role='tree']" do
-                  expect(page).to have_selector("[role='treeitem']", count: 2)
+                within "[role='list']" do
+                  expect(page).to have_selector("[role='listitem']", count: 2)
 
-                  within(find("[role='treeitem']", text: "test")) do
+                  within(find("[role='listitem']", text: "test")) do
                     expect(page).to have_text("PDF")
                     expect(page).to have_text("8.1 KB")
                     expect(page).to_not have_button("Delete")
                     expect(page).to have_link("Download", href: s3_utility_cdn_url_for_blob_path(key: purchase_custom_field_file.files.first.key), target: "_blank")
                   end
 
-                  within(find("[role='treeitem']", text: "smilie")) do
+                  within(find("[role='listitem']", text: "smilie")) do
                     expect(page).to have_text("PNG")
                     expect(page).to have_text("98.1 KB")
                     expect(page).to_not have_button("Delete")
