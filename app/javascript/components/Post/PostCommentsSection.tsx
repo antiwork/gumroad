@@ -128,64 +128,66 @@ export const PostCommentsSection = ({ paginated_comments }: Props) => {
   const nestedComments = React.useMemo(() => nestComments(data.comments), [data.comments]);
 
   return (
-    <section className="comments comments-section grid gap-8 border-b border-border p-4 lg:py-12">
-      <h2>
-        {data.count} {data.count === 1 ? "comment" : "comments"}
-      </h2>
-      <CommentTextarea value={draft || ""} onChange={(event) => setDraft(event.target.value)} disabled={posting}>
-        <Button
-          color="primary"
-          disabled={!(loggedInUser || purchase_id) || !draft || posting}
-          onClick={() => void addComment()}
-        >
-          {posting ? "Posting..." : "Post"}
-        </Button>
-      </CommentTextarea>
-      {nestedComments.length > 0 ? <hr /> : null}
-      <div className="grid gap-6">
-        {nestedComments.map((comment) => (
-          <CommentContainer
-            key={comment.id}
-            comment={comment}
-            upsertComment={upsertComment}
-            confirmCommentDeletion={confirmCommentDeletion}
-          />
-        ))}
-      </div>
-      {data.pagination.next !== null ? (
-        <div className="mt-6 flex justify-center">
-          <Button disabled={loadingMore} onClick={() => void loadMoreComments()}>
-            {loadingMore ? "Loading more comments..." : "Load more comments"}
+    <section className="border-b border-border">
+      <div className="mx-auto grid max-w-6xl gap-8 p-4 lg:px-0 lg:py-12">
+        <h2>
+          {data.count} {data.count === 1 ? "comment" : "comments"}
+        </h2>
+        <CommentTextarea value={draft || ""} onChange={(event) => setDraft(event.target.value)} disabled={posting}>
+          <Button
+            color="primary"
+            disabled={!(loggedInUser || purchase_id) || !draft || posting}
+            onClick={() => void addComment()}
+          >
+            {posting ? "Posting..." : "Post"}
           </Button>
+        </CommentTextarea>
+        {nestedComments.length > 0 ? <hr /> : null}
+        <div className="grid gap-6">
+          {nestedComments.map((comment) => (
+            <CommentContainer
+              key={comment.id}
+              comment={comment}
+              upsertComment={upsertComment}
+              confirmCommentDeletion={confirmCommentDeletion}
+            />
+          ))}
         </div>
-      ) : null}
+        {data.pagination.next !== null ? (
+          <div className="mt-6 flex justify-center">
+            <Button disabled={loadingMore} onClick={() => void loadMoreComments()}>
+              {loadingMore ? "Loading more comments..." : "Load more comments"}
+            </Button>
+          </div>
+        ) : null}
 
-      {commentToDelete ? (
-        <Modal
-          open
-          allowClose={commentToDelete.deleting}
-          onClose={() => setCommentToDelete(null)}
-          title="Delete comment"
-          footer={
-            <>
-              <Button disabled={commentToDelete.deleting} onClick={() => setCommentToDelete(null)}>
-                Cancel
-              </Button>
-              {commentToDelete.deleting ? (
-                <Button color="danger" disabled>
-                  Deleting...
+        {commentToDelete ? (
+          <Modal
+            open
+            allowClose={commentToDelete.deleting}
+            onClose={() => setCommentToDelete(null)}
+            title="Delete comment"
+            footer={
+              <>
+                <Button disabled={commentToDelete.deleting} onClick={() => setCommentToDelete(null)}>
+                  Cancel
                 </Button>
-              ) : (
-                <Button color="danger" onClick={() => void deleteComment()}>
-                  Confirm
-                </Button>
-              )}
-            </>
-          }
-        >
-          <h4>Are you sure?</h4>
-        </Modal>
-      ) : null}
+                {commentToDelete.deleting ? (
+                  <Button color="danger" disabled>
+                    Deleting...
+                  </Button>
+                ) : (
+                  <Button color="danger" onClick={() => void deleteComment()}>
+                    Confirm
+                  </Button>
+                )}
+              </>
+            }
+          >
+            <h4>Are you sure?</h4>
+          </Modal>
+        ) : null}
+      </div>
     </section>
   );
 };

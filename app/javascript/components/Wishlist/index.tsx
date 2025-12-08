@@ -51,7 +51,7 @@ export type WishlistProps = {
   discover_opted_out: boolean | null;
   checkout_enabled: boolean;
   items: WishlistItem[];
-  isDiscover?: boolean;
+  layout?: "discover" | "profile";
   pagination: {
     count: number;
     items: number;
@@ -185,7 +185,7 @@ export const Wishlist = ({
   discover_opted_out,
   checkout_enabled,
   items: initialItems,
-  isDiscover,
+  layout,
   pagination: initialPagination,
 }: WishlistProps) => {
   const [name, setName] = React.useState(initialName);
@@ -224,85 +224,95 @@ export const Wishlist = ({
     return () => observer.disconnect();
   }, [pagination, items]);
 
+  const headerActions = (
+    <>
+      <CopyToClipboard tooltipPosition="bottom" copyTooltip="Copy link" text={url}>
+        <Button aria-label="Copy link">
+          <Icon name="link" />
+        </Button>
+      </CopyToClipboard>
+      {can_edit ? (
+        <Button onClick={() => setIsEditing(true)}>
+          <Icon name="pencil" />
+          Edit
+        </Button>
+      ) : null}
+      {can_follow ? <FollowButton wishlistId={id} wishlistName={name} initialValue={following} /> : null}
+      <WithTooltip tip={checkout_enabled ? null : "None of the products on this wishlist are available for purchase"}>
+        <NavigationButton
+          color="accent"
+          href={Routes.checkout_index_url({ params: { wishlist: id } })}
+          disabled={!checkout_enabled}
+        >
+          <Icon name="cart3-fill" />
+          Buy this wishlist
+        </NavigationButton>
+      </WithTooltip>
+    </>
+  );
+
   return (
     <>
-      <PageHeader
-        className={isDiscover ? "lg:px-16" : ""}
-        title={name}
-        actions={
-          <>
-            <CopyToClipboard tooltipPosition="bottom" copyTooltip="Copy link" text={url}>
-              <Button aria-label="Copy link">
-                <Icon name="link" />
-              </Button>
-            </CopyToClipboard>
-            {can_edit ? (
-              <Button onClick={() => setIsEditing(true)}>
-                <Icon name="pencil" />
-                Edit
-              </Button>
-            ) : null}
-            {can_follow ? <FollowButton wishlistId={id} wishlistName={name} initialValue={following} /> : null}
-            <WithTooltip
-              tip={checkout_enabled ? null : "None of the products on this wishlist are available for purchase"}
-            >
-              <NavigationButton
-                color="accent"
-                href={Routes.checkout_index_url({ params: { wishlist: id } })}
-                disabled={!checkout_enabled}
-              >
-                <Icon name="cart3-fill" />
-                Buy this wishlist
-              </NavigationButton>
-            </WithTooltip>
-          </>
-        }
-      >
-        {user ? (
-          <a style={{ display: "flex", alignItems: "center", gap: "var(--spacer-2)" }} href={user.profile_url}>
-            <img className="user-avatar" src={user.avatar_url} style={{ width: "var(--spacer-5)" }} />
-            <h4>{user.name}</h4>
-          </a>
-        ) : null}
-        {description ? <h4>{description}</h4> : null}
-      </PageHeader>
-      <section className={classNames("p-4 md:p-8", isDiscover && "lg:px-16")}>
-        <ProductCardGrid ref={gridRef}>
-          {items.map((item) => (
-            <WishlistItemCard
-              key={item.id}
-              wishlistId={id}
-              item={item}
-              canEdit={can_edit}
-              onDelete={() => {
-                setItems((prev) => prev.filter((i) => i.id !== item.id));
-                // Go back to first page to avoid empty last page
-                setPagination(initialPagination);
-              }}
+      {layout === "profile" ? (
+        <header className="border-b border-border p-4 md:p-8">
+          <div className="mx-auto flex w-full max-w-6xl flex-col gap-4">
+            <div className="flex items-center justify-between gap-2">
+              <h1 className="line-clamp-2 text-2xl">{name}</h1>
+              <div className="flex gap-2">{headerActions}</div>
+            </div>
+            {description ? <p>{description}</p> : null}
+          </div>
+        </header>
+      ) : (
+        <PageHeader title={name} actions={headerActions}>
+          {user ? (
+            <a className="flex items-center gap-2" href={user.profile_url}>
+              <img className="user-avatar w-6" src={user.avatar_url} />
+              <h4>{user.name}</h4>
+            </a>
+          ) : null}
+          {description ? <h4>{description}</h4> : null}
+        </PageHeader>
+      )}
+      <section className={classNames("p-4 md:p-8", { "lg:px-16": layout === "discover" })}>
+        <div className={classNames({ "mx-auto w-full max-w-6xl": layout === "profile" })}>
+          <ProductCardGrid ref={gridRef}>
+            {items.map((item) => (
+              <WishlistItemCard
+                key={item.id}
+                wishlistId={id}
+                item={item}
+                canEdit={can_edit}
+                onDelete={() => {
+                  setItems((prev) => prev.filter((i) => i.id !== item.id));
+                  // Go back to first page to avoid empty last page
+                  setPagination(initialPagination);
+                }}
+              />
+            ))}
+          </ProductCardGrid>
+
+          {items.length === 0 ? (
+            <Placeholder>
+              <figure>
+                <Icon name="gift-fill" />
+              </figure>
+              {can_edit ? "Products from your wishlist will be displayed here" : "This wishlist is currently empty"}
+            </Placeholder>
+          ) : null}
+
+          {isEditing ? (
+            <WishlistEditor
+              id={id}
+              name={name}
+              setName={setName}
+              description={description}
+              setDescription={setDescription}
+              isDiscoverable={!discover_opted_out}
+              onClose={() => setIsEditing(false)}
             />
-          ))}
-        </ProductCardGrid>
-
-        {items.length === 0 ? (
-          <Placeholder>
-            <figure>
-              <Icon name="gift-fill" />
-            </figure>
-            {can_edit ? "Products from your wishlist will be displayed here" : "This wishlist is currently empty"}
-          </Placeholder>
-        ) : null}
-
-        {isEditing ? (
-          <WishlistEditor
-            id={id}
-            name={name}
-            setName={setName}
-            description={description}
-            setDescription={setDescription}
-            isDiscoverable={!discover_opted_out}
-            onClose={() => setIsEditing(false)}
-          />
-        ) : null}
+          ) : null}
+        </div>
       </section>
     </>
   );

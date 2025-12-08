@@ -53,9 +53,12 @@ const AffiliateRequestPage = ({ creator_profile }: Props) => {
 
   return (
     <Layout creatorProfile={creator_profile}>
-      <PageHeader title={`Become an affiliate for ${creator_profile.name}`} />
-      <form className="border-b border-border pt-8 max-lg:px-4">
-        <section>
+      <PageHeader
+        title={`Become an affiliate for ${creator_profile.name}`}
+        className="mx-auto w-full max-w-6xl border-0 lg:px-0"
+      />
+      <form className="border-y border-border px-4 pt-8 lg:px-0">
+        <section className="mx-auto w-full max-w-6xl">
           <header>
             <div className="flex flex-col gap-4">
               <p>

@@ -3,6 +3,7 @@ import * as React from "react";
 
 import { followSeller } from "$app/data/follow_seller";
 import { CreatorProfile } from "$app/parsers/profile";
+import { classNames } from "$app/utils/classNames";
 import { isValidEmail } from "$app/utils/email";
 
 import { Button } from "$app/components/Button";
@@ -83,11 +84,19 @@ export const FollowForm = ({
   );
 };
 
-export const FollowFormBlock = ({ creatorProfile }: { creatorProfile: CreatorProfile }) => (
-  <div className="flex grow flex-col justify-center gap-16 px-4 lg:px-0">
-    <h1>Subscribe to receive email updates from {creatorProfile.name}.</h1>
-    <div className="max-w-lg">
-      <FollowForm creatorProfile={creatorProfile} buttonColor="primary" />
+export const FollowFormBlock = ({
+  creatorProfile,
+  className,
+}: {
+  creatorProfile: CreatorProfile;
+  className?: string;
+}) => (
+  <div className={classNames("flex grow flex-col justify-center", className)}>
+    <div className="mx-auto flex w-full max-w-6xl flex-col gap-16">
+      <h1>Subscribe to receive email updates from {creatorProfile.name}.</h1>
+      <div className="max-w-lg">
+        <FollowForm creatorProfile={creatorProfile} buttonColor="primary" />
+      </div>
     </div>
   </div>
 );
