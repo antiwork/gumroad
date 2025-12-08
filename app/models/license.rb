@@ -1,6 +1,8 @@
 # frozen_string_literal: true
 
 class License < ApplicationRecord
+  has_paper_trail only: %i[disabled_at serial]
+
   include FlagShihTzu
   include ExternalId
 
