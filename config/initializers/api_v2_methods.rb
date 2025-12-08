@@ -419,7 +419,7 @@ GUMROAD_API_V2_METHODS = [
       {
         type: :put,
         path: "/licenses/rotate",
-        description: "Rotate (regenerate) a license key. The old license key will no longer be valid.",
+        description: "Rotate a license key. The old license key will no longer be valid.",
         response_layout: :license,
         curl_layout: :rotate_license,
         parameters_layout: :enable_disable_license

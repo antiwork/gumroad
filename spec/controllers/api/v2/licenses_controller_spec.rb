@@ -27,7 +27,7 @@ describe Api::V2::LicensesController do
       it "returns the correct JSON when it modifies the license state" do
         put action, params: { access_token: @token.token, license_key: @purchase.license.serial }.merge(@product_identifier)
 
-        @purchase.license.reload
+        @purchase.reload
 
         expect(response.parsed_body).to eq({
           success: true,
