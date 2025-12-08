@@ -68,4 +68,15 @@ describe License do
       expect { license.enable! }.to raise_error(ActiveRecord::RecordInvalid)
     end
   end
+
+  describe "#rotate!" do
+    let(:license) { create(:license) }
+
+    it "generates a new serial key" do
+      old_serial = license.serial
+      expect(license.rotate!).to be(true)
+      expect(license.reload.serial).not_to eq old_serial
+      expect(license.serial).to match(/\A.{8}-.{8}-.{8}-.{8}\z/)
+    end
+  end
 end

@@ -37,4 +37,10 @@ class License < ApplicationRecord
     self.disabled_at = nil
     save!
   end
+
+  def rotate!
+    self.serial = nil
+    generate_serial
+    save!
+  end
 end
