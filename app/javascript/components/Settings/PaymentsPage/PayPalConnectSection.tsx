@@ -97,10 +97,10 @@ const PayPalConnectSection = ({
                 <legend>
                   <label>PayPal account</label>
                 </legend>
-              <div className="input input-wrapper">
-                <div className="fake-input">{paypalConnect.charge_processor_merchant_id}</div>
-                <Icon name="solid-check-circle" className="text-success" />
-              </div>
+                <div className="input input-wrapper">
+                  <div className="fake-input">{paypalConnect.charge_processor_merchant_id}</div>
+                  <Icon name="solid-check-circle" className="text-success" />
+                </div>
               </fieldset>
               {paypalConnect.show_paypal_connect ? (
                 <>
