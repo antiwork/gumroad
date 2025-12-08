@@ -28,7 +28,7 @@ describe Api::V2::LicensesController do
         old_serial = @purchase.license.serial
         put action, params: { access_token: @token.token, license_key: @purchase.license.serial }.merge(@product_identifier)
 
-        @purchase.reload
+        @purchase.license.reload
         expected_license_key = action == :rotate ? @purchase.license.serial : old_serial
 
         expect(response.parsed_body).to eq({
