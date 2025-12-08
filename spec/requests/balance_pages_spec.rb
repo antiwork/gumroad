@@ -471,6 +471,7 @@ describe "Balance Pages Scenario", js: true, type: :system do
         describe "payout-skipped notes" do
           context "when the payout was skipped because the account was under review" do
             before do
+              seller.update!(user_risk_state: "not_reviewed")
               Payouts.is_user_payable(seller, Date.yesterday, add_comment: true, from_admin: false)
               seller.mark_compliant!(author_name: "iffy")
             end
