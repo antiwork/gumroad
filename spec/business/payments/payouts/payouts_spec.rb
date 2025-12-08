@@ -454,7 +454,7 @@ describe Payouts do
       end
 
       it "adds a comment if payout is skipped because the account is under review" do
-        seller = create(:user, user_risk_state: "not_reviewed", payment_address: "seller@gr.co")
+        seller = create(:user, payment_address: "seller@example.com")
         create(:user_compliance_info, user: seller)
         create(:balance, user: seller, date: Date.today - 3, amount_cents: 1000)
 
@@ -469,7 +469,7 @@ describe Payouts do
       end
 
       it "adds a comment if payout is skipped because the account is suspended" do
-        seller = create(:user, user_risk_state: "suspended_for_fraud", payment_address: "seller@gr.co")
+        seller = create(:user, user_risk_state: "suspended_for_fraud", payment_address: "seller@example.com")
         create(:user_compliance_info, user: seller)
         create(:balance, user: seller, date: Date.today - 3, amount_cents: 1000)
 
