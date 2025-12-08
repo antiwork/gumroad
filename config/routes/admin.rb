@@ -151,7 +151,7 @@ namespace :admin do
     resources :users, only: :index
     resources :purchases, only: :index
   end
-  get "/search_purchases", to: "search#purchases"
+  get "/search_purchases", to: "search/purchases#index", as: :legacy_search_purchases # old URL for backward compatibility
 
   # Compliance
   resources :guids, only: [:show]
