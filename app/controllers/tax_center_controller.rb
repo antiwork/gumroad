@@ -8,7 +8,7 @@ class TaxCenterController < Sellers::BaseController
     authorize :balance
 
     @title = "Payouts"
-    year = params[:year]&.to_i || Time.current.year
+    year = params[:year]&.to_i || Time.current.year - 1
 
     tax_center_presenter = TaxCenterPresenter.new(seller: current_seller, year:)
 

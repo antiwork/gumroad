@@ -3,6 +3,7 @@ import taxesPlaceholder from "images/placeholders/taxes.png";
 import * as React from "react";
 
 import { getTaxDocuments, TaxDocument } from "$app/data/tax_center";
+import { classNames } from "$app/utils/classNames";
 import { AbortError, assertResponseError } from "$app/utils/request";
 
 import { Button, NavigationButton } from "$app/components/Button";
@@ -11,6 +12,7 @@ import { useLoggedInUser } from "$app/components/LoggedInUser";
 import { showAlert } from "$app/components/server-components/Alert";
 import { PageHeader } from "$app/components/ui/PageHeader";
 import Placeholder from "$app/components/ui/Placeholder";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "$app/components/ui/Table";
 import { Tab, Tabs } from "$app/components/ui/Tabs";
 
 const TAX_SAVING_SUGGESTIONS: {
@@ -192,34 +194,38 @@ const TaxCenterPage = ({
 
         {documents.length > 0 ? (
           <div className="paragraphs">
-            <table aria-label="Tax documents" aria-live="polite" aria-busy={isLoading}>
-              <thead>
-                <tr>
-                  <th>Document</th>
-                  <th>Type</th>
-                  <th>Gross</th>
-                  <th>Fees</th>
-                  <th>Taxes</th>
-                  <th>Affiliate commission</th>
-                  <th>Net</th>
-                  <th></th>
-                </tr>
-              </thead>
-              <tbody>
+            <Table
+              aria-label="Tax documents"
+              aria-live="polite"
+              className={classNames(isLoading && "pointer-events-none opacity-50")}
+            >
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Document</TableHead>
+                  <TableHead>Type</TableHead>
+                  <TableHead>Gross</TableHead>
+                  <TableHead>Fees</TableHead>
+                  <TableHead>Taxes</TableHead>
+                  <TableHead>Affiliate commission</TableHead>
+                  <TableHead>Net</TableHead>
+                  <TableHead />
+                </TableRow>
+              </TableHeader>
+              <TableBody>
                 {documents.map((doc) => (
-                  <tr key={doc.form_type}>
-                    <td data-label="Document">
+                  <TableRow key={doc.form_type}>
+                    <TableCell data-label="Document">
                       <div className="flex items-center gap-2">
                         <span>{doc.document}</span>
                       </div>
-                    </td>
-                    <td data-label="Type">{doc.type}</td>
-                    <td data-label="Gross">{doc.gross}</td>
-                    <td data-label="Fees">-{doc.fees}</td>
-                    <td data-label="Taxes">-{doc.taxes}</td>
-                    <td data-label="Affiliate commission">-{doc.affiliate_credit}</td>
-                    <td data-label="Net">{doc.net}</td>
-                    <td data-label="" className="text-right">
+                    </TableCell>
+                    <TableCell data-label="Type">{doc.type}</TableCell>
+                    <TableCell data-label="Gross">{doc.gross}</TableCell>
+                    <TableCell data-label="Fees">-{doc.fees}</TableCell>
+                    <TableCell data-label="Taxes">-{doc.taxes}</TableCell>
+                    <TableCell data-label="Affiliate commission">-{doc.affiliate_credit}</TableCell>
+                    <TableCell data-label="Net">{doc.net}</TableCell>
+                    <TableCell data-label="" className="text-right">
                       <div className="flex justify-end">
                         <NavigationButton
                           small
@@ -231,11 +237,11 @@ const TaxCenterPage = ({
                           {downloadingFormType === doc.form_type ? "Downloading..." : "Download"}
                         </NavigationButton>
                       </div>
-                    </td>
-                  </tr>
+                    </TableCell>
+                  </TableRow>
                 ))}
-              </tbody>
-            </table>
+              </TableBody>
+            </Table>
           </div>
         ) : (
           <Placeholder>

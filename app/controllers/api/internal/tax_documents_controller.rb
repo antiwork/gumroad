@@ -8,7 +8,7 @@ class Api::Internal::TaxDocumentsController < Api::Internal::BaseController
   def index
     authorize :balance
 
-    year = params[:year]&.to_i || Time.current.year
+    year = params[:year]&.to_i || Time.current.year - 1
 
     tax_center_presenter = TaxCenterPresenter.new(seller: current_seller, year:)
 

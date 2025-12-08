@@ -34,7 +34,7 @@ class StripeTaxFormsApi
 
     Rails.cache.fetch("stripe_tax_forms_#{form_type}_#{stripe_account_id}", expires_in: 1.day) do
       params = { type: form_type, "payee[account]": stripe_account_id }
-      opts = { stripe_version: "2023-10-16; retrieve_tax_forms_beta=v1;" }
+      opts = { stripe_version: Stripe.api_version }
 
       tax_forms = {}
       response = Stripe.raw_request(:get, "/v1/tax/forms", params, opts)

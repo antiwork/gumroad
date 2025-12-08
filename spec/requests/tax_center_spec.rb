@@ -13,8 +13,8 @@ describe "Tax Center", js: true, type: :system do
   end
 
   it "renders with correct data" do
-    year_1 = seller_created_at.year + 2
-    year_2 = seller_created_at.year + 3
+    year_1 = seller_created_at.year + 1
+    year_2 = seller_created_at.year + 2
 
     create(:user_tax_form, user: seller, tax_year: year_1, tax_form_type: "us_1099_k")
     create(:user_tax_form, user: seller, tax_year: year_2, tax_form_type: "us_1099_k")
@@ -24,7 +24,7 @@ describe "Tax Center", js: true, type: :system do
     create(:purchase, :with_custom_fee, link: product, created_at: Date.new(year_2, 6, 10), fee_cents: 50)
 
     visit tax_center_path
-    expect(page).to have_select("Tax year", selected: Time.current.year.to_s)
+    expect(page).to have_select("Tax year", selected: (Time.current.year - 1).to_s)
     expect(page).to have_text("Let's get your tax info ready")
     expect(page).to have_text("Your 1099-K will appear here once it's available")
     expect(page).not_to have_table("Tax documents")
