@@ -1,4 +1,3 @@
-import stonksLogo from "images/brands/stonks.svg";
 import taxesPlaceholder from "images/placeholders/taxes.png";
 import * as React from "react";
 
@@ -6,7 +5,7 @@ import { getTaxDocuments, TaxDocument } from "$app/data/tax_center";
 import { classNames } from "$app/utils/classNames";
 import { AbortError, assertResponseError } from "$app/utils/request";
 
-import { Button, NavigationButton } from "$app/components/Button";
+import { NavigationButton } from "$app/components/Button";
 import { Icon } from "$app/components/Icons";
 import { useLoggedInUser } from "$app/components/LoggedInUser";
 import { showAlert } from "$app/components/server-components/Alert";
@@ -14,24 +13,6 @@ import { PageHeader } from "$app/components/ui/PageHeader";
 import Placeholder from "$app/components/ui/Placeholder";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "$app/components/ui/Table";
 import { Tab, Tabs } from "$app/components/ui/Tabs";
-
-const TAX_SAVING_SUGGESTIONS: {
-  id: string;
-  title: string;
-  description: string;
-  avgRefund?: string;
-  link: string;
-  logoUrl: string;
-}[] = [
-  {
-    id: "1",
-    title: "stonks.com",
-    description: "Helps creators register as a business and unlock major tax deductions. Avg refund: $8,200.",
-    avgRefund: "$8,200",
-    link: "https://stonks.com?utm_source=gumroad",
-    logoUrl: stonksLogo,
-  },
-];
 
 const FAQ_ITEMS: {
   id: string;
@@ -252,38 +233,6 @@ const TaxCenterPage = ({
             <p>Your 1099-K will appear here once it's available.</p>
           </Placeholder>
         )}
-      </section>
-
-      <section className="p-4 md:p-8">
-        <h2 className="mb-4">Save on your taxes</h2>
-        <div className="radio-buttons grid-cols-1" role="radiogroup">
-          {TAX_SAVING_SUGGESTIONS.map((suggestion) => (
-            <Button
-              key={suggestion.id}
-              className="vertical !justify-start"
-              color="filled"
-              data-suggestion={suggestion.id}
-              onClick={() => {
-                window.open(suggestion.link, "_blank", "noopener,noreferrer");
-              }}
-            >
-              <div className="flex w-full items-center gap-4">
-                <div
-                  className="flex h-16 w-16 flex-shrink-0 items-center justify-center rounded"
-                  style={{
-                    backgroundColor: "#101241",
-                  }}
-                >
-                  <img src={suggestion.logoUrl} alt={suggestion.title} className="h-6 w-6" />
-                </div>
-                <div className="min-w-0 flex-1 space-y-1 text-left">
-                  <h4 className="text-lg leading-tight font-semibold">{suggestion.title}</h4>
-                  <p className="text-sm opacity-80">{suggestion.description}</p>
-                </div>
-              </div>
-            </Button>
-          ))}
-        </div>
       </section>
 
       <section className="p-4 md:p-8">
