@@ -26,6 +26,15 @@ import { assertResponseError } from "$app/utils/request";
 import { startTrackingForSeller, trackProductEvent } from "$app/utils/user_analytics";
 
 import { NavigationButton } from "$app/components/Button";
+import {
+  CartItem,
+  CartItemEnd,
+  CartItemFooter,
+  CartItemMain,
+  CartItemMedia,
+  CartItemTitle,
+  CartItemList,
+} from "$app/components/CartItemList";
 import { Icon } from "$app/components/Icons";
 import { useLoggedInUser } from "$app/components/LoggedInUser";
 import { Modal } from "$app/components/Modal";
@@ -372,50 +381,48 @@ export const Product = ({
         {isBundle ? (
           <section>
             <h2>This bundle contains...</h2>
-            <div className="cart" role="list">
+            <CartItemList>
               {product.bundle_products.map((bundleProduct) => {
                 const price = formatPriceCentsWithCurrencySymbol(bundleProduct.currency_code, bundleProduct.price, {
                   symbolFormat: "long",
                 });
                 return (
-                  <div role="listitem" key={bundleProduct.id}>
-                    <section>
-                      <figure>
-                        <Thumbnail url={bundleProduct.thumbnail_url} nativeType={bundleProduct.native_type} />
-                      </figure>
-                      <section>
+                  <CartItem key={bundleProduct.id}>
+                    <CartItemMedia>
+                      <Thumbnail url={bundleProduct.thumbnail_url} nativeType={bundleProduct.native_type} />
+                    </CartItemMedia>
+                    <CartItemMain>
+                      <CartItemTitle asChild>
                         <a href={bundleProduct.url}>
-                          <h4>{bundleProduct.name}</h4>
+                          <h4 className="font-bold">{bundleProduct.name}</h4>
                         </a>
-                        {bundleProduct.ratings ? (
-                          <section className="flex shrink-0 items-center gap-1" aria-label="Rating">
-                            <Icon name="solid-star" />
-                            {`${bundleProduct.ratings.average.toFixed(1)} (${bundleProduct.ratings.count})`}
-                          </section>
-                        ) : null}
-                        <footer>
-                          <ul>
-                            <li>
-                              <strong>Qty:</strong> {bundleProduct.quantity}
-                            </li>
-                            {bundleProduct.variant ? (
-                              <li>
-                                <strong>{variantLabel(bundleProduct.native_type)}:</strong> {bundleProduct.variant}
-                              </li>
-                            ) : null}
-                          </ul>
-                        </footer>
-                      </section>
-                      <section>
-                        <span className="current-price" aria-label="Price">
-                          {discountedPriceCents < basePriceCents ? <s>{price}</s> : price}
+                      </CartItemTitle>
+                      {bundleProduct.ratings ? (
+                        <div className="flex shrink-0 items-center gap-1" aria-label="Rating">
+                          <Icon name="solid-star" />
+                          {`${bundleProduct.ratings.average.toFixed(1)} (${bundleProduct.ratings.count})`}
+                        </div>
+                      ) : null}
+                      <CartItemFooter>
+                        <span>
+                          <strong>Qty:</strong> {bundleProduct.quantity}
                         </span>
-                      </section>
-                    </section>
-                  </div>
+                        {bundleProduct.variant ? (
+                          <span>
+                            <strong>{variantLabel(bundleProduct.native_type)}:</strong> {bundleProduct.variant}
+                          </span>
+                        ) : null}
+                      </CartItemFooter>
+                    </CartItemMain>
+                    <CartItemEnd>
+                      <span className="current-price" aria-label="Price">
+                        {discountedPriceCents < basePriceCents ? <s>{price}</s> : price}
+                      </span>
+                    </CartItemEnd>
+                  </CartItem>
                 );
               })}
-            </div>
+            </CartItemList>
           </section>
         ) : null}
         <section>

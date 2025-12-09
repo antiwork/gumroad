@@ -4,6 +4,7 @@ import { computeOfferDiscount } from "$app/data/offer_code";
 import { getRecommendedProducts } from "$app/data/recommended_products";
 import { CardProduct, COMMISSION_DEPOSIT_PROPORTION } from "$app/parsers/product";
 import { isOpenTuple } from "$app/utils/array";
+import { classNames } from "$app/utils/classNames";
 import { formatUSDCentsWithExpandedCurrencySymbol } from "$app/utils/currency";
 import { formatCallDate } from "$app/utils/date";
 import { variantLabel } from "$app/utils/labels";
@@ -13,6 +14,15 @@ import { formatAmountPerRecurrence, recurrenceNames, recurrenceDurationLabels } 
 import { assertResponseError } from "$app/utils/request";
 
 import { Button, NavigationButton } from "$app/components/Button";
+import {
+  CartItem,
+  CartItemFooter,
+  CartItemMain,
+  CartItemMedia,
+  CartItemTitle,
+  CartItemList,
+  CartItemEnd,
+} from "$app/components/CartItemList";
 import { PaymentForm } from "$app/components/Checkout/PaymentForm";
 import { Popover } from "$app/components/Popover";
 import { Card } from "$app/components/Product/Card";
@@ -32,7 +42,14 @@ import { useOriginalLocation } from "$app/components/useOriginalLocation";
 import { useRunOnce } from "$app/components/useRunOnce";
 import { WithTooltip } from "$app/components/WithTooltip";
 
-import { CartState, convertToUSD, hasFreeTrial, getDiscountedPrice, CartItem, findCartItem } from "./cartState";
+import {
+  CartState,
+  convertToUSD,
+  hasFreeTrial,
+  getDiscountedPrice,
+  CartItem as CartItemProps,
+  findCartItem,
+} from "./cartState";
 import { computeTip, computeTipForPrice, getTotalPrice, isProcessing, useState } from "./payment";
 
 import placeholder from "$assets/images/placeholders/checkout.png";
@@ -217,7 +234,7 @@ export const Checkout = ({
         <div className="grid gap-8 p-4 md:p-8">
           <div className="grid grid-cols-1 items-start gap-x-16 gap-y-8 lg:grid-cols-[2fr_minmax(26rem,1fr)]">
             <div className="grid gap-6">
-              <div className="cart" role="list">
+              <CartItemList>
                 {cart.items.map((item) => (
                   <CartItemComponent
                     key={`${item.product.permalink}${item.option_id ? `_${item.option_id}` : ""}`}
@@ -227,42 +244,35 @@ export const Checkout = ({
                     updateCart={updateCart}
                   />
                 ))}
-                <div className="cart-summary">
+
+                <div className="grid gap-4 border-t border-border p-4">
                   {state.surcharges.type === "loaded" ? (
                     <>
-                      <div>
-                        <h4>Subtotal</h4>
-                        <div>{formatPrice(subtotal)}</div>
-                      </div>
-                      {tip ? (
-                        <div>
-                          <h4>Tip</h4>
-                          <div>{formatPrice(tip)}</div>
-                        </div>
-                      ) : null}
+                      <CartPriceItem title="Subtotal" price={formatPrice(subtotal)} />
+                      {tip ? <CartPriceItem title="Tip" price={formatPrice(tip)} /> : null}
                       {state.surcharges.result.tax_included_cents ? (
-                        <div>
-                          <h4>{nameOfSalesTaxForCountry(state.country)} (included)</h4>
-                          <div>{formatPrice(state.surcharges.result.tax_included_cents)}</div>
-                        </div>
+                        <CartPriceItem
+                          title={`${nameOfSalesTaxForCountry(state.country)} (included)`}
+                          price={formatPrice(state.surcharges.result.tax_included_cents)}
+                        />
                       ) : null}
                       {state.surcharges.result.tax_cents ? (
-                        <div>
-                          <h4>{nameOfSalesTaxForCountry(state.country)}</h4>
-                          <div>{formatPrice(state.surcharges.result.tax_cents)}</div>
-                        </div>
+                        <CartPriceItem
+                          title={nameOfSalesTaxForCountry(state.country)}
+                          price={formatPrice(state.surcharges.result.tax_cents)}
+                        />
                       ) : null}
                       {state.surcharges.result.shipping_rate_cents ? (
-                        <div>
-                          <h4>Shipping rate</h4>
-                          <div>{formatPrice(state.surcharges.result.shipping_rate_cents)}</div>
-                        </div>
+                        <CartPriceItem
+                          title="Shipping rate"
+                          price={formatPrice(state.surcharges.result.shipping_rate_cents)}
+                        />
                       ) : null}
                     </>
                   ) : null}
                   {visibleDiscounts.length || discount > 0 ? (
-                    <div>
-                      <h4>
+                    <div className="grid grid-flow-col justify-between gap-4">
+                      <h4 className="inline-flex flex-wrap gap-2">
                         Discounts
                         {cart.items.some((item) => !!item.product.ppp_details && item.price !== 0) &&
                         !cart.rejectPppDiscount ? (
@@ -318,35 +328,32 @@ export const Checkout = ({
                 </div>
                 {total != null ? (
                   <>
-                    <footer>
-                      <h4>Total</h4>
-                      <div>{formatPrice(total)}</div>
+                    <footer className="grid gap-4 border-t border-border p-4">
+                      <CartPriceItem title="Total" price={formatPrice(total)} className="*:text-lg" />
                     </footer>
                     {commissionCompletionTotal > 0 || futureInstallmentsWithoutTipsTotal > 0 ? (
-                      <div className="cart-summary">
-                        <div>
-                          <h4>Payment today</h4>
-                          <div>
-                            {formatPrice(total - commissionCompletionTotal - futureInstallmentsWithoutTipsTotal)}
-                          </div>
-                        </div>
+                      <div className="grid gap-4 border-t border-border p-4">
+                        <CartPriceItem
+                          title="Payment today"
+                          price={formatPrice(total - commissionCompletionTotal - futureInstallmentsWithoutTipsTotal)}
+                        />
                         {commissionCompletionTotal > 0 ? (
-                          <div>
-                            <h4>Payment after completion</h4>
-                            <div>{formatPrice(commissionCompletionTotal)}</div>
-                          </div>
+                          <CartPriceItem
+                            title="Payment after completion"
+                            price={formatPrice(commissionCompletionTotal)}
+                          />
                         ) : null}
                         {futureInstallmentsWithoutTipsTotal > 0 ? (
-                          <div>
-                            <h4>Future installments</h4>
-                            <div>{formatPrice(futureInstallmentsWithoutTipsTotal)}</div>
-                          </div>
+                          <CartPriceItem
+                            title="Future installments"
+                            price={formatPrice(futureInstallmentsWithoutTipsTotal)}
+                          />
                         ) : null}
                       </div>
                     ) : null}
                   </>
                 ) : null}
-              </div>
+              </CartItemList>
               {recommendedProducts && recommendedProducts.length > 0 ? (
                 <section className="flex flex-col gap-4">
                   <h2>Customers who bought {cart.items.length === 1 ? "this item" : "these items"} also bought</h2>
@@ -381,13 +388,28 @@ export const Checkout = ({
   );
 };
 
+const CartPriceItem = ({
+  title,
+  price,
+  className,
+}: {
+  title: React.ReactNode;
+  price: string | number | null;
+  className?: string;
+}) => (
+  <div className={classNames("grid grid-flow-col justify-between gap-4", className)}>
+    <h4 className="inline-flex flex-wrap gap-2">{title}</h4>
+    <div>{price}</div>
+  </div>
+);
+
 const CartItemComponent = ({
   item,
   cart,
   updateCart,
   isGift,
 }: {
-  item: CartItem;
+  item: CartItemProps;
   cart: CartState;
   updateCart: (update: Partial<CartState>) => void;
   isGift: boolean;
@@ -437,166 +459,159 @@ const CartItemComponent = ({
   const price = hasFreeTrial(item, isGift) ? 0 : item.price * item.quantity;
 
   return (
-    <div role="listitem">
-      <section>
-        <figure>
-          <a href={item.product.url}>
-            <Thumbnail url={item.product.thumbnail_url} nativeType={item.product.native_type} />
-          </a>
-        </figure>
-        <section>
-          <a href={item.product.url}>
-            <h4>{item.product.name}</h4>
-          </a>
-          <a href={item.product.creator.profile_url}>{item.product.creator.name}</a>
-          <footer>
-            <ul>
-              <li>
-                <strong>{item.product.is_multiseat_license ? "Seats:" : "Qty:"}</strong> {item.quantity}
-              </li>
-              {option?.name ? (
-                <li>
-                  <strong>{variantLabel(item.product.native_type)}:</strong> {option.name}
-                </li>
-              ) : null}
-              {item.recurrence ? (
-                <li>
-                  <strong>Membership:</strong> {recurrenceNames[item.recurrence]}
-                </li>
-              ) : null}
-              {item.call_start_time ? (
-                <li>
-                  <strong>Time:</strong> {formatCallDate(new Date(item.call_start_time), { date: { hideYear: true } })}
-                </li>
-              ) : null}
-            </ul>
-          </footer>
-        </section>
-        <section>
-          <span className="current-price" aria-label="Price">
-            {formatPrice(convertToUSD(item, price))}
-          </span>
-          {hasFreeTrial(item, isGift) && item.product.free_trial ? (
-            <>
-              <span>
-                {item.product.free_trial.duration.amount === 1
-                  ? `one ${item.product.free_trial.duration.unit}`
-                  : `item.product.free_trial.duration.amount ${item.product.free_trial.duration.unit}s`}{" "}
-                free
-              </span>
-              {item.recurrence ? (
-                <span>
-                  {formatAmountPerRecurrence(item.recurrence, formatPrice(convertToUSD(item, discount.price)))} after
-                </span>
-              ) : null}
-            </>
-          ) : item.pay_in_installments && item.product.installment_plan ? (
-            <span>in {item.product.installment_plan.number_of_installments} installments</span>
-          ) : item.recurrence ? (
-            isGift ? (
-              recurrenceDurationLabels[item.recurrence]
-            ) : (
-              recurrenceNames[item.recurrence]
-            )
-          ) : null}
-          <footer>
-            <ul>
-              {(item.product.rental && !item.product.rental.rent_only) ||
-              item.product.is_quantity_enabled ||
-              item.product.recurrences ||
-              item.product.options.length > 0 ||
-              item.product.installment_plan ||
-              isPWYW ? (
-                <li>
-                  <Popover
-                    trigger={<span className="link">Configure</span>}
-                    open={editPopoverOpen}
-                    onToggle={setEditPopoverOpen}
-                  >
-                    <div className="flex w-96 flex-col gap-4">
-                      <ConfigurationSelector
-                        selection={selection}
-                        setSelection={(selection) => {
-                          setError(null);
-                          setSelection(selection);
-                        }}
-                        product={item.product}
-                        discount={
-                          discount.discount && discount.discount.type !== "ppp" ? discount.discount.value : null
-                        }
-                        showInstallmentPlan
-                      />
-                      {error ? (
-                        <div role="alert" className="danger">
-                          {error}
-                        </div>
-                      ) : null}
-                      <Button color="accent" onClick={saveChanges}>
-                        Save changes
-                      </Button>
-                    </div>
-                  </Popover>
-                </li>
-              ) : null}
-              <li>
-                <button
-                  className="underline"
-                  onClick={() => {
-                    const newItems = cart.items.filter((i) => i !== item);
-
-                    updateCart({
-                      discountCodes: cart.discountCodes.filter(({ products }) =>
-                        Object.keys(products).some((permalink) =>
-                          newItems.some((item) => item.product.permalink === permalink),
-                        ),
-                      ),
-                      items: newItems.map(({ accepted_offer, ...rest }) => ({
-                        ...rest,
-                        accepted_offer:
-                          accepted_offer?.original_product_id === item.product.id ? null : (accepted_offer ?? null),
-                      })),
-                    });
-                  }}
-                >
-                  Remove
-                </button>
-              </li>
-            </ul>
-          </footer>
-        </section>
-      </section>
-      {item.product.bundle_products.length > 0 ? (
-        <section className="footer">
-          <h4>This bundle contains...</h4>
-          <div role="list" className="cart">
-            {item.product.bundle_products.map((bundleProduct) => (
-              <div role="listitem" key={bundleProduct.product_id}>
-                <section>
-                  <figure>
+    <CartItem
+      extra={
+        item.product.bundle_products.length > 0 ? (
+          <>
+            <h4>This bundle contains...</h4>
+            <CartItemList>
+              {item.product.bundle_products.map((bundleProduct) => (
+                <CartItem key={bundleProduct.product_id}>
+                  <CartItemMedia>
                     <Thumbnail url={bundleProduct.thumbnail_url} nativeType={bundleProduct.native_type} />
-                  </figure>
-                  <section>
-                    <h4>{bundleProduct.name}</h4>
-                    <footer>
-                      <ul>
-                        <li>
-                          <strong>Qty:</strong> {bundleProduct.quantity}
-                        </li>
-                        {bundleProduct.variant ? (
-                          <li>
-                            <strong>{variantLabel(bundleProduct.native_type)}:</strong> {bundleProduct.variant.name}
-                          </li>
-                        ) : null}
-                      </ul>
-                    </footer>
-                  </section>
-                  <section></section>
-                </section>
-              </div>
-            ))}
-          </div>
-        </section>
-      ) : null}
-    </div>
+                  </CartItemMedia>
+                  <CartItemMain>
+                    <CartItemTitle>{bundleProduct.name}</CartItemTitle>
+                    <CartItemFooter>
+                      <span>
+                        <strong>Qty:</strong> {bundleProduct.quantity}
+                      </span>
+                      {bundleProduct.variant ? (
+                        <span>
+                          <strong>{variantLabel(bundleProduct.native_type)}:</strong> {bundleProduct.variant.name}
+                        </span>
+                      ) : null}
+                    </CartItemFooter>
+                  </CartItemMain>
+                </CartItem>
+              ))}
+            </CartItemList>
+          </>
+        ) : null
+      }
+    >
+      <CartItemMedia>
+        <a href={item.product.url}>
+          <Thumbnail url={item.product.thumbnail_url} nativeType={item.product.native_type} />
+        </a>
+      </CartItemMedia>
+      <CartItemMain>
+        <CartItemTitle>
+          <a href={item.product.url}>{item.product.name}</a>
+        </CartItemTitle>
+        <a href={item.product.creator.profile_url} className="line-clamp-2">
+          {item.product.creator.name}
+        </a>
+        <CartItemFooter>
+          <span>
+            <strong>{item.product.is_multiseat_license ? "Seats:" : "Qty:"}</strong> {item.quantity}
+          </span>
+          {option?.name ? (
+            <span>
+              <strong>{variantLabel(item.product.native_type)}:</strong> {option.name}
+            </span>
+          ) : null}
+          {item.recurrence ? (
+            <span>
+              <strong>Membership:</strong> {recurrenceNames[item.recurrence]}
+            </span>
+          ) : null}
+          {item.call_start_time ? (
+            <span>
+              <strong>Time:</strong> {formatCallDate(new Date(item.call_start_time), { date: { hideYear: true } })}
+            </span>
+          ) : null}
+        </CartItemFooter>
+      </CartItemMain>
+      <CartItemEnd>
+        <span className="current-price" aria-label="Price">
+          {formatPrice(convertToUSD(item, price))}
+        </span>
+        {hasFreeTrial(item, isGift) && item.product.free_trial ? (
+          <>
+            <span>
+              {item.product.free_trial.duration.amount === 1
+                ? `one ${item.product.free_trial.duration.unit}`
+                : `${item.product.free_trial.duration.amount} ${item.product.free_trial.duration.unit}s`}{" "}
+              free
+            </span>
+            {item.recurrence ? (
+              <span>
+                {formatAmountPerRecurrence(item.recurrence, formatPrice(convertToUSD(item, discount.price)))} after
+              </span>
+            ) : null}
+          </>
+        ) : item.pay_in_installments && item.product.installment_plan ? (
+          <span>in {item.product.installment_plan.number_of_installments} installments</span>
+        ) : item.recurrence ? (
+          isGift ? (
+            recurrenceDurationLabels[item.recurrence]
+          ) : (
+            recurrenceNames[item.recurrence]
+          )
+        ) : null}
+        <footer className="mt-auto">
+          <ul className="grid list-none gap-x-4 gap-y-1 md:flex md:flex-wrap">
+            {(item.product.rental && !item.product.rental.rent_only) ||
+            item.product.is_quantity_enabled ||
+            item.product.recurrences ||
+            item.product.options.length > 0 ||
+            item.product.installment_plan ||
+            isPWYW ? (
+              <li>
+                <Popover
+                  trigger={<span className="link">Configure</span>}
+                  open={editPopoverOpen}
+                  onToggle={setEditPopoverOpen}
+                >
+                  <div className="flex w-96 flex-col gap-4">
+                    <ConfigurationSelector
+                      selection={selection}
+                      setSelection={(selection) => {
+                        setError(null);
+                        setSelection(selection);
+                      }}
+                      product={item.product}
+                      discount={discount.discount && discount.discount.type !== "ppp" ? discount.discount.value : null}
+                      showInstallmentPlan
+                    />
+                    {error ? (
+                      <div role="alert" className="danger">
+                        {error}
+                      </div>
+                    ) : null}
+                    <Button color="accent" onClick={saveChanges}>
+                      Save changes
+                    </Button>
+                  </div>
+                </Popover>
+              </li>
+            ) : null}
+            <li>
+              <button
+                className="underline"
+                onClick={() => {
+                  const newItems = cart.items.filter((i) => i !== item);
+                  updateCart({
+                    discountCodes: cart.discountCodes.filter(({ products }) =>
+                      Object.keys(products).some((permalink) =>
+                        newItems.some((item) => item.product.permalink === permalink),
+                      ),
+                    ),
+                    items: newItems.map(({ accepted_offer, ...rest }) => ({
+                      ...rest,
+                      accepted_offer:
+                        accepted_offer?.original_product_id === item.product.id ? null : (accepted_offer ?? null),
+                    })),
+                  });
+                }}
+              >
+                Remove
+              </button>
+            </li>
+          </ul>
+        </footer>
+      </CartItemEnd>
+    </CartItem>
   );
 };

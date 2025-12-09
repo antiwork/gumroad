@@ -15,6 +15,8 @@ import { Icon } from "$app/components/Icons";
 import { showAlert } from "$app/components/server-components/Alert";
 import { Row, RowActions, RowContent, RowDetails, Rows } from "$app/components/ui/Rows";
 
+export const ALLOWED_ATTACHMENT_MIMETYPES = "image/png,image/jpeg,image/gif,image/webp,application/pdf";
+
 function MessageListItem({ message, isLastMessage }: { message: Message; isLastMessage: boolean }) {
   const [isExpanded, setIsExpanded] = React.useState(isLastMessage);
   const currentSeller = useCurrentSeller();
@@ -59,13 +61,15 @@ function MessageListItem({ message, isLastMessage }: { message: Message; isLastM
                   {attachment.contentType?.startsWith("image/") ? (
                     <img src={attachment.url} alt={attachment.name ?? "Attachment"} className="w-full rounded-xs" />
                   ) : (
-                    <FileRowContent
-                      name={FileUtils.getFileNameWithoutExtension(attachment.name ?? "Attachment")}
-                      extension={FileUtils.getFileExtension(attachment.name ?? "Attachment").toUpperCase()}
-                      externalLinkUrl={null}
-                      isUploading={false}
-                      details={<li>{attachment.contentType?.split("/")[1]}</li>}
-                    />
+                    <a href={attachment.url} download className="content no-underline">
+                      <FileRowContent
+                        name={FileUtils.getFileNameWithoutExtension(attachment.name ?? "Attachment")}
+                        extension={FileUtils.getFileExtension(attachment.name ?? "Attachment").toUpperCase()}
+                        externalLinkUrl={attachment.url}
+                        isUploading={false}
+                        details={<li>{attachment.contentType?.split("/")[1]}</li>}
+                      />
+                    </a>
                   )}
                 </Row>
               ))}
@@ -80,11 +84,7 @@ function MessageListItem({ message, isLastMessage }: { message: Message; isLastM
 export function ConversationDetail({ conversationSlug, onBack }: { conversationSlug: string; onBack: () => void }) {
   const { apiDomain } = useDomains();
   const { data: conversation, isLoading, error, refetch } = useConversation(conversationSlug);
-  const { mutateAsync: createMessage, isPending: isSubmitting } = useCreateMessage({
-    onError: (error) => {
-      showAlert(error.message, "error");
-    },
-  });
+  const { mutateAsync: createMessage, isPending: isSubmitting } = useCreateMessage();
 
   useRealtimeEvents(conversation?.slug ?? "", { enabled: Boolean(conversation?.slug) });
 
@@ -96,15 +96,19 @@ export function ConversationDetail({ conversationSlug, onBack }: { conversationS
     e.preventDefault();
     const trimmed = input.trim();
     if (!trimmed) return;
-    await createMessage({
-      conversationSlug,
-      content: trimmed,
-      attachments,
-      customerInfoUrl: Routes.user_info_api_internal_helper_users_url({ host: apiDomain }),
-    });
-    setInput("");
-    setAttachments([]);
-    void refetch();
+    try {
+      await createMessage({
+        conversationSlug,
+        content: trimmed,
+        attachments,
+        customerInfoUrl: Routes.user_info_api_internal_helper_users_url({ host: apiDomain }),
+      });
+      setInput("");
+      setAttachments([]);
+      void refetch();
+    } catch (error) {
+      showAlert(error instanceof Error ? error.message : "Something went wrong.", "error");
+    }
   };
 
   if (isLoading) return null;
@@ -144,6 +148,7 @@ export function ConversationDetail({ conversationSlug, onBack }: { conversationS
             ref={fileInputRef}
             type="file"
             multiple
+            accept={ALLOWED_ATTACHMENT_MIMETYPES}
             onChange={(e) => {
               const files = Array.from(e.target.files ?? []);
               if (files.length === 0) return;

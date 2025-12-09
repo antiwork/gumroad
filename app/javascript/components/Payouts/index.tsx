@@ -1,3 +1,4 @@
+import classNames from "classnames";
 import * as React from "react";
 import { cast } from "ts-safe-cast";
 
@@ -815,10 +816,10 @@ const Payouts = ({
               </fieldset>
               <fieldset>
                 <legend>Payout details</legend>
-                <div className="cart">
-                  <div className="cart-summary">
-                    <div>
-                      <p>Sent to</p>
+                <div className="rounded-sm border border-border bg-background not-first:border-t">
+                  <div className="grid gap-4 p-4">
+                    <div className="grid grid-flow-col justify-between gap-4">
+                      <h4 className="inline-flex flex-wrap gap-2">Sent to</h4>
                       <div>
                         {instant_payout.bank_account_type === "CARD" ? (
                           <p>
@@ -839,25 +840,21 @@ const Payouts = ({
                         )}
                       </div>
                     </div>
-                    <div>
-                      <p>Amount</p>
-                      <div>${formatPriceCentsWithoutCurrencySymbol("usd", instantPayoutAmountCents)}</div>
-                    </div>
-                    <div>
-                      <p>Instant payout fee ({INSTANT_PAYOUT_FEE_PERCENTAGE * 100}%)</p>
-                      <div>
-                        -$
-                        {formatPriceCentsWithoutCurrencySymbol("usd", instantPayoutFee)}
-                      </div>
-                    </div>
+                    <PayoutLineItem
+                      title="Amount"
+                      price={`$${formatPriceCentsWithoutCurrencySymbol("usd", instantPayoutAmountCents)}`}
+                    />
+                    <PayoutLineItem
+                      title={`Instant payout fee (${INSTANT_PAYOUT_FEE_PERCENTAGE * 100}%)`}
+                      price={`-$${formatPriceCentsWithoutCurrencySymbol("usd", instantPayoutFee)}`}
+                    />
                   </div>
-                  <footer>
-                    <p>
-                      <strong>You'll receive</strong>
-                    </p>
-                    <div>
-                      ${formatPriceCentsWithoutCurrencySymbol("usd", instantPayoutAmountCents - instantPayoutFee)}
-                    </div>
+                  <footer className="grid gap-4 border-t border-border p-4">
+                    <PayoutLineItem
+                      title="You'll receive"
+                      price={`$${formatPriceCentsWithoutCurrencySymbol("usd", instantPayoutAmountCents - instantPayoutFee)}`}
+                      className="text-lg"
+                    />
                   </footer>
                 </div>
                 {instantPayoutAmountCents > MAXIMUM_INSTANT_PAYOUT_AMOUNT_CENTS ? (
@@ -961,5 +958,22 @@ const Payouts = ({
     </div>
   );
 };
+
+export function PayoutLineItem({
+  title,
+  price,
+  className,
+}: {
+  title: React.ReactNode;
+  price: React.ReactNode;
+  className?: string;
+}) {
+  return (
+    <div className={classNames("grid grid-flow-col justify-between gap-4", className)}>
+      <h4 className="inline-flex flex-wrap gap-2 text-[length:inherit] leading-[inherit]">{title}</h4>
+      <div>{price}</div>
+    </div>
+  );
+}
 
 export default Payouts;

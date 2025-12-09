@@ -51,7 +51,7 @@ export function ConversationList({
         </TableHeader>
         <TableBody>
           {conversations.map((c) => (
-            <TableRow key={c.slug} aria-selected={false} onClick={() => onSelect(c.slug)}>
+            <TableRow key={c.slug} selected={false} onClick={() => onSelect(c.slug)}>
               <TableCell className={c.isUnread ? "w-full font-bold" : "w-full"}>{c.subject}</TableCell>
               <TableCell className="whitespace-nowrap">
                 {c.latestMessageAt
