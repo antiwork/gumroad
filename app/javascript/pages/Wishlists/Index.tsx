@@ -1,9 +1,6 @@
-import { usePage } from "@inertiajs/react";
+import { router, usePage } from "@inertiajs/react";
 import React from "react";
 import { cast } from "ts-safe-cast";
-
-import { deleteWishlist, updateWishlist } from "$app/data/wishlists";
-import { assertResponseError } from "$app/utils/request";
 
 import { Button } from "$app/components/Button";
 import { Icon } from "$app/components/Icons";
@@ -39,30 +36,38 @@ const WishlistsPage = ({ wishlists: preloadedWishlists, reviews_page_enabled, fo
   const destroy = async (id: string) => {
     setIsDeleting(true);
 
-    try {
-      await deleteWishlist({ wishlistId: id });
-      setWishlists(wishlists.filter((wishlist) => wishlist.id !== id));
-      setConfirmingDeleteWishlist(null);
-      showAlert("Wishlist deleted!", "success");
-    } catch (e) {
-      assertResponseError(e);
-      showAlert("Sorry, something went wrong. Please try again.", "error");
-    } finally {
-      setIsDeleting(false);
-    }
+    router.delete(Routes.wishlist_path(id), {
+      preserveScroll: true,
+      onSuccess: () => {
+        setWishlists(wishlists.filter((wishlist) => wishlist.id !== id));
+        setConfirmingDeleteWishlist(null);
+        showAlert("Wishlist deleted!", "success");
+      },
+      onError: () => showAlert("Sorry, something went wrong. Please try again.", "error"),
+      onFinish: () => setIsDeleting(false),
+    });
   };
 
   const updateDiscoverOptOut = async (id: string, optOut: boolean) => {
-    try {
-      setWishlists(
-        wishlists.map((wishlist) => (wishlist.id === id ? { ...wishlist, discover_opted_out: optOut } : wishlist)),
-      );
-      await updateWishlist({ id, discover_opted_out: optOut });
-      showAlert(optOut ? "Opted out of Gumroad Discover." : "Wishlist is now discoverable!", "success");
-    } catch (e) {
-      assertResponseError(e);
-      showAlert("Sorry, something went wrong. Please try again.", "error");
-    }
+    setWishlists(
+      wishlists.map((wishlist) => (wishlist.id === id ? { ...wishlist, discover_opted_out: optOut } : wishlist)),
+    );
+
+    router.put(
+      Routes.wishlist_path(id),
+      { wishlist: { discover_opted_out: optOut } },
+      {
+        preserveScroll: true,
+        onSuccess: () =>
+          showAlert(optOut ? "Opted out of Gumroad Discover." : "Wishlist is now discoverable!", "success"),
+        onError: () => showAlert("Sorry, something went wrong. Please try again.", "error"),
+        onCancel: () =>
+          setWishlists(
+            wishlists.map((wishlist) => (wishlist.id === id ? { ...wishlist, discover_opted_out: !optOut } : wishlist)),
+          ),
+        onFinish: () => {},
+      },
+    );
   };
 
   return (

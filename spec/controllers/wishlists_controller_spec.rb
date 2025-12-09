@@ -55,20 +55,10 @@ describe WishlistsController, type: :controller, inertia: true do
       let(:record) { Wishlist }
     end
 
-    it "creates a wishlist with a default name" do
+    it "creates a wishlist and redirects with notice" do
       expect { post :create }.to change(Wishlist, :count).by(1)
-
-      expect(Wishlist.last).to have_attributes(name: "Wishlist 1", user:)
-      expect(response.parsed_body).to eq(
-        "wishlist" => {
-          "id" => Wishlist.last.external_id,
-          "name" => "Wishlist 1"
-        }
-      )
-
-      expect { post :create }.to change(Wishlist, :count).by(1)
-
-      expect(Wishlist.last).to have_attributes(name: "Wishlist 2", user:)
+      expect(response).to redirect_to(wishlists_path)
+      expect(flash[:notice]).to eq("Wishlist created!")
     end
   end
 
@@ -131,7 +121,8 @@ describe WishlistsController, type: :controller, inertia: true do
     it "updates the wishlist name and description" do
       put :update, params: { id: wishlist.external_id, wishlist: { name: "New Name", description: "New Description" } }
 
-      expect(response).to be_successful
+      expect(response).to redirect_to(wishlists_path)
+      expect(flash[:notice]).to eq("Wishlist updated!")
       expect(wishlist.reload.name).to eq "New Name"
       expect(wishlist.description).to eq "New Description"
     end
@@ -141,8 +132,8 @@ describe WishlistsController, type: :controller, inertia: true do
         put :update, params: { id: wishlist.external_id, wishlist: { name: "" } }
       end.not_to change { wishlist.reload.name }
 
-      expect(response).to have_http_status(:unprocessable_content)
-      expect(response.parsed_body).to eq("error" => "Name can't be blank")
+      expect(response).to redirect_to(wishlists_path)
+      expect(response).to have_http_status(:see_other)
     end
   end
 
@@ -161,7 +152,8 @@ describe WishlistsController, type: :controller, inertia: true do
 
       delete :destroy, params: { id: wishlist.external_id }
 
-      expect(response).to be_successful
+      expect(response).to redirect_to(wishlists_path)
+      expect(flash[:notice]).to eq("Wishlist deleted!")
       expect(wishlist.reload).to be_deleted
       expect(wishlist_follower.reload).to be_deleted
     end

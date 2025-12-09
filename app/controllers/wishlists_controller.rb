@@ -34,7 +34,7 @@ class WishlistsController < ApplicationController
 
     wishlist = current_seller.wishlists.create!
 
-    render json: { wishlist: WishlistPresenter.new(wishlist:).listing_props }, status: :created
+    redirect_to wishlists_path, notice: "Wishlist created!", status: :see_other
   end
 
   def show
@@ -63,9 +63,11 @@ class WishlistsController < ApplicationController
     authorize wishlist
 
     if wishlist.update(params.require(:wishlist).permit(:name, :description, :discover_opted_out))
-      head :no_content
+      redirect_to wishlists_path, notice: "Wishlist updated!", status: :see_other
     else
-      render json: { error: wishlist.errors.full_messages.first }, status: :unprocessable_entity
+      redirect_to wishlists_path,
+                  inertia: { errors: { base: [wishlist.errors.full_messages.first] } },
+                  status: :see_other
     end
   end
 
@@ -78,6 +80,6 @@ class WishlistsController < ApplicationController
       wishlist.wishlist_followers.alive.update_all(deleted_at: Time.current)
     end
 
-    head :no_content
+    redirect_to wishlists_path, notice: "Wishlist deleted!", status: :see_other
   end
 end
