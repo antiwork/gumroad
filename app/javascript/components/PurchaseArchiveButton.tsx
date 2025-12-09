@@ -1,4 +1,4 @@
-import { router } from "@inertiajs/react";
+import { useForm } from "@inertiajs/react";
 import * as React from "react";
 
 import { Button } from "$app/components/Button";
@@ -8,29 +8,21 @@ type Props = { purchase_id: string; initial_is_archived: boolean };
 
 export const PurchaseArchiveButton = ({ purchase_id, initial_is_archived }: Props) => {
   const [isArchived, setIsArchived] = React.useState<boolean>(initial_is_archived);
-  const [processing, setProcessing] = React.useState<boolean>(false);
+  const { processing, patch } = useForm({});
 
   const toggleArchive = () => {
     const shouldBeArchived = !isArchived;
 
-    setProcessing(true);
-
-    router.patch(
-      shouldBeArchived ? Routes.library_archive_path(purchase_id) : Routes.library_unarchive_path(purchase_id),
-      {},
-      {
-        only: ["results", "creators", "bundles", "flash"],
-        preserveScroll: true,
-        onSuccess: () => {
-          setIsArchived(shouldBeArchived);
-          setProcessing(false);
-        },
-        onError: () => {
-          setProcessing(false);
-          showAlert("Sorry, something went wrong. Please try again.", "error");
-        },
+    patch(shouldBeArchived ? Routes.library_archive_path(purchase_id) : Routes.library_unarchive_path(purchase_id), {
+      only: ["results", "creators", "bundles", "flash"],
+      preserveScroll: true,
+      onSuccess: () => {
+        setIsArchived(shouldBeArchived);
       },
-    );
+      onError: () => {
+        showAlert("Sorry, something went wrong. Please try again.", "error");
+      },
+    });
   };
 
   return (
