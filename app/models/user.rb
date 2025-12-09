@@ -1034,55 +1034,6 @@ class User < ApplicationRecord
       .exists?
   end
 
-  def stripe_requires_legal_guardian_compliance_info?
-    return false unless stripe_account.present?
-
-    begin
-      stripe_persons = Stripe::Account.list_persons(stripe_account.charge_processor_merchant_id)["data"]
-      guardian_person = stripe_persons.find do |person|
-        person["relationship"]&.[]("legal_guardian") == true
-      end
-
-      return false unless guardian_person
-
-      stripe_account_data = Stripe::Account.retrieve(stripe_account.charge_processor_merchant_id)
-      requirements = stripe_account_data["requirements"] || {}
-      future_requirements = stripe_account_data["future_requirements"] || {}
-
-      all_required_fields = [
-        requirements["currently_due"],
-        requirements["eventually_due"],
-        requirements["past_due"],
-        future_requirements["currently_due"],
-        future_requirements["past_due"]
-      ].compact.flatten.uniq
-
-      guardian_person_id = guardian_person["id"]
-      guardian_fields_needed = all_required_fields.select { |field| field.start_with?("person_#{guardian_person_id}.") }
-
-      return false if guardian_fields_needed.empty?
-
-      # Create guardian compliance info requests if they don't exist
-      guardian_fields_needed.each do |stripe_field|
-        mapped_field = map_stripe_guardian_field_to_internal_field(stripe_field, guardian_person_id)
-        next unless mapped_field
-
-        unless guardian_compliance_info_requests.requested.where(field_needed: mapped_field).exists?
-          guardian_compliance_info_requests.create!(
-            field_needed: mapped_field,
-            guardian_person_id: guardian_person_id,
-            stripe_event_id: "guardian_verification_check"
-          )
-        end
-      end
-
-      true
-    rescue => e
-      Rails.logger.warn("User#stripe_requires_legal_guardian_compliance_info? error (#{id}): #{e.class} => #{e.message}")
-      false
-    end
-  end
-
   def under_18?
     return false unless alive_user_compliance_info&.birthday
 
