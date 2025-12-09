@@ -20,6 +20,8 @@ module ApplicationHelper
   end
 
   def current_user_props(current_user, impersonated_user)
+    return nil if current_user.blank?
+
     {
       name: current_user.display_name,
       avatar_url: current_user.avatar_url,

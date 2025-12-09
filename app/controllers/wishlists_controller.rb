@@ -5,9 +5,8 @@ class WishlistsController < ApplicationController
 
   before_action :authenticate_user!, except: :show
   after_action :verify_authorized, except: :show
-  before_action :hide_layouts, only: :show
 
-  layout "inertia", only: :index
+  layout "inertia", only: [:index, :show]
 
   def index
     authorize Wishlist
@@ -45,8 +44,18 @@ class WishlistsController < ApplicationController
     @user = wishlist.user
     @title = wishlist.name
     @show_user_favicon = true
-    @wishlist_presenter = WishlistPresenter.new(wishlist:)
-    @discover_props = { taxonomies_for_nav: } if params[:layout] == Product::Layout::DISCOVER
+
+    wishlist_presenter = WishlistPresenter.new(wishlist:)
+    props = wishlist_presenter.public_props(request:, pundit_user:, recommended_by: params[:recommended_by])
+
+    layout_param = params[:layout]
+    if layout_param == Product::Layout::PROFILE
+      props[:creator_profile] = ProfilePresenter.new(pundit_user:, seller: wishlist.user).creator_profile
+    elsif layout_param == Product::Layout::DISCOVER
+      props[:taxonomies_for_nav] = taxonomies_for_nav
+    end
+
+    render inertia: "Wishlists/Show", props: props.merge(layout: layout_param)
   end
 
   def update

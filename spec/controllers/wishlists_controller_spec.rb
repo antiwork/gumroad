@@ -73,13 +73,39 @@ describe WishlistsController, type: :controller, inertia: true do
   end
 
   describe "GET show" do
-    it "finds the wishlist from the URL suffix" do
+    it "renders Wishlists/Show with Inertia and public props" do
       request.host = URI.parse(user.subdomain_with_protocol).host
       get :show, params: { id: wishlist.url_slug }
 
       expect(response).to be_successful
-      expect(assigns(:wishlist_presenter)).to be_a(WishlistPresenter)
-      expect(assigns(:wishlist_presenter).wishlist).to eq wishlist
+      expect(inertia.component).to eq("Wishlists/Show")
+      expect(inertia.props[:id]).to eq(wishlist.external_id)
+      expect(inertia.props[:name]).to eq(wishlist.name)
+      expect(inertia.props[:layout]).to be_nil
+    end
+
+    context "when layout is profile" do
+      it "includes creator_profile in props" do
+        request.host = URI.parse(user.subdomain_with_protocol).host
+        get :show, params: { id: wishlist.url_slug, layout: "profile" }
+
+        expect(response).to be_successful
+        expect(inertia.component).to eq("Wishlists/Show")
+        expect(inertia.props[:layout]).to eq("profile")
+        expect(inertia.props[:creator_profile]).to be_present
+      end
+    end
+
+    context "when layout is discover" do
+      it "includes taxonomies_for_nav in props" do
+        request.host = URI.parse(user.subdomain_with_protocol).host
+        get :show, params: { id: wishlist.url_slug, layout: "discover" }
+
+        expect(response).to be_successful
+        expect(inertia.component).to eq("Wishlists/Show")
+        expect(inertia.props[:layout]).to eq("discover")
+        expect(inertia.props).to have_key(:taxonomies_for_nav)
+      end
     end
 
     context "when the wishlist is deleted" do
