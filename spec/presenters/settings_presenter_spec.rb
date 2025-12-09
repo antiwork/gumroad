@@ -241,7 +241,8 @@ describe SettingsPresenter do
 
     context "when user has unpaid balances" do
       before do
-        @balance = create(:balance, user: seller, state: :unpaid, amount_cents: 25_00)
+        merchant_account = create(:merchant_account, user: seller)
+        @balance = create(:balance, user: seller, merchant_account: merchant_account, state: :unpaid, amount_cents: 25_00)
         Feature.activate_user(:delete_account_forfeit_balance, seller)
       end
 
@@ -505,6 +506,7 @@ describe SettingsPresenter do
                                                Compliance::Countries::PAK.alpha2],
           individual_tax_id_entered: false,
           business_tax_id_entered: false,
+          guardian_individual_tax_id_entered: false,
           requires_credit_card: false,
           can_connect_stripe: false,
           is_charged_paypal_payout_fee: true,
@@ -545,6 +547,20 @@ describe SettingsPresenter do
           dob_month: 0,
           dob_day: 0,
           dob_year: 0,
+          guardian_first_name: nil,
+          guardian_last_name: nil,
+          guardian_email: nil,
+          guardian_phone: nil,
+          guardian_street_address: nil,
+          guardian_city: nil,
+          guardian_state: nil,
+          guardian_country: nil,
+          guardian_zip_code: nil,
+          guardian_dob_month: 0,
+          guardian_dob_day: 0,
+          guardian_dob_year: 0,
+          guardian_stripe_tos_accepted: nil,
+          guardian_stripe_processing_tos_accepted: nil,
         },
         min_dob_year: Date.today.year - UserComplianceInfo::MINIMUM_DATE_OF_BIRTH_AGE,
         uae_business_types: UserComplianceInfo::BusinessTypes::BUSINESS_TYPES_UAE.map { |code, name| { code:, name: } },
@@ -570,6 +586,8 @@ describe SettingsPresenter do
         minimum_payout_threshold_cents: 1000,
         payout_frequency: User::PayoutSchedule::WEEKLY,
         payout_frequency_daily_supported: false,
+        user_under_18: false,
+        guardian_verification_state: "not_required",
       }
     end
 
@@ -647,7 +665,8 @@ describe SettingsPresenter do
                                                                          nationality: @user_compliance_info.nationality,
                                                                          dob_day: @user_compliance_info.birthday.day,
                                                                          dob_month: @user_compliance_info.birthday.month,
-                                                                         dob_year: @user_compliance_info.birthday.year
+                                                                         dob_year: @user_compliance_info.birthday.year,
+                                                                         guardian_country: @user_compliance_info.country_code,
                                                                        })
 
         @base_us_props = @base_props.merge({

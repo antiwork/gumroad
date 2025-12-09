@@ -251,11 +251,13 @@ class SettingsPresenter
   end
 
   def guardian_verification_state
-    return "not_required" unless seller.stripe_account.present? && Pundit.policy!(pundit_user, [:settings, :payments, seller]).update?
+    return "not_required" unless Pundit.policy!(pundit_user, [:settings, :payments, seller]).update?
+
+    return "not_required" unless seller.under_18?
 
     user_compliance_info = seller.alive_user_compliance_info
 
-    return "not_required" unless seller.under_18?
+    return "requires_input" unless seller.stripe_account.present?
 
     guardian_requests = seller.user_compliance_info_requests.where("field_needed LIKE 'guardian_%'")
 
