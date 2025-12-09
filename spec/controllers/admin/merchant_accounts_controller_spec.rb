@@ -16,7 +16,11 @@ describe Admin::MerchantAccountsController, type: :controller, inertia: true do
   end
 
   describe "GET show" do
-    let(:merchant_account) { MerchantAccount.gumroad(StripeChargeProcessor.charge_processor_id) }
+    let(:merchant_account) { create(:merchant_account) }
+
+    before do
+      allow(Stripe::Account).to receive(:retrieve).and_return(double(:account, charges_enabled: true, payouts_enabled: true, requirements: double(:requirements, disabled_reason: nil, as_json: {})))
+    end
 
     it "redirects numeric ID to external_id" do
       get :show, params: { external_id: merchant_account.id }
