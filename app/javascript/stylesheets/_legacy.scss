@@ -26,10 +26,6 @@ select[multiple].chosen-fallback {
   }
 }
 
-.profile > header h1 p {
-  margin: 0;
-}
-
 [role="tab"][aria-selected="true"][draggable="true"]::after {
   transform: translate(-50%);
   visibility: hidden;
@@ -39,13 +35,6 @@ select[multiple].chosen-fallback {
   position: absolute !important;
   width: 100% !important;
   height: 100% !important;
-}
-
-@include breakpoint-up(lg) {
-  .profile main > * {
-    padding-left: $body-padding-desktop-center;
-    padding-right: $body-padding-desktop-center;
-  }
 }
 
 [role="tree"] [role="treeitem"].sortable-ghost {

@@ -469,6 +469,20 @@ describe "Balance Pages Scenario", js: true, type: :system do
         end
 
         describe "payout-skipped notes" do
+          context "when the payout was skipped because the account was under review" do
+            before do
+              seller.update!(user_risk_state: "not_reviewed")
+              Payouts.is_user_payable(seller, Date.yesterday, add_comment: true, from_admin: false)
+              seller.mark_compliant!(author_name: "iffy")
+            end
+
+            it "shows the payout-skipped notice" do
+              visit balance_path
+
+              expect(page).to have_text("Payout on #{Time.current.to_fs(:formatted_date_full_month)} was skipped because the account was under review.")
+            end
+          end
+
           context "when the payout was skipped because the account was not compliant" do
             before do
               seller.flag_for_tos_violation!(author_name: "iffy", bulk: true)

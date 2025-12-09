@@ -12,7 +12,7 @@ const DiscoverWishlistPage: React.FC<Omit<WishlistProps, "isDiscover"> & { taxon
   ...props
 }) => (
   <Layout taxonomiesForNav={taxonomies_for_nav}>
-    <Wishlist isDiscover {...props} />
+    <Wishlist layout="discover" {...props} />
   </Layout>
 );
 
