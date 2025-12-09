@@ -262,16 +262,8 @@ RSpec.describe Settings::PaymentsController, type: :controller do
       create(:user_compliance_info, user: user, birthday: under_18_birthday)
     end
 
-    context "when Stripe requires guardian information" do
-      before do
-        allow(user).to receive(:stripe_requires_legal_guardian_compliance_info?).and_return(true)
-      end
-
-      it "creates guardian compliance info requests automatically" do
-        expect(user).to respond_to(:stripe_requires_legal_guardian_compliance_info?)
-      end
-
-      it "handles guardian person ID from Stripe webhook" do
+    context "when guardian compliance info requests exist" do
+      it "stores guardian person ID from Stripe webhook" do
         guardian_request = create(:user_compliance_info_request,
                                   user: user,
                                   field_needed: "guardian_first_name",
@@ -280,6 +272,22 @@ RSpec.describe Settings::PaymentsController, type: :controller do
 
         expect(guardian_request.guardian_person_id).to eq("person_123456789")
         expect(guardian_request.field_needed).to eq("guardian_first_name")
+      end
+
+      it "can query guardian-related compliance requests" do
+        guardian_request = create(:user_compliance_info_request,
+                                  user: user,
+                                  field_needed: "guardian_first_name"
+        )
+        non_guardian_request = create(:user_compliance_info_request,
+                                      user: user,
+                                      field_needed: "individual_tax_id"
+        )
+
+        guardian_requests = user.user_compliance_info_requests.where("field_needed LIKE 'guardian_%'")
+
+        expect(guardian_requests).to include(guardian_request)
+        expect(guardian_requests).not_to include(non_guardian_request)
       end
     end
 
