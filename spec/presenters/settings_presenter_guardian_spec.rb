@@ -13,16 +13,6 @@ RSpec.describe SettingsPresenter, type: :presenter do
   end
 
   describe "#guardian_verification_state" do
-    context "when user has no Stripe account" do
-      before do
-        allow(user).to receive(:stripe_account).and_return(nil)
-      end
-
-      it "returns not_required" do
-        expect(presenter.guardian_verification_state).to eq("not_required")
-      end
-    end
-
     context "when user cannot update payments settings" do
       before do
         allow(Pundit).to receive(:policy!).and_return(double(update?: false))
@@ -30,6 +20,36 @@ RSpec.describe SettingsPresenter, type: :presenter do
 
       it "returns not_required" do
         expect(presenter.guardian_verification_state).to eq("not_required")
+      end
+    end
+
+    context "when user is over 18" do
+      before do
+        allow(Pundit).to receive(:policy!).and_return(double(update?: true))
+        _, _ = user_compliance_info.dup_and_save { |new_info| new_info.birthday = 25.years.ago.to_date }
+        user.reload
+      end
+
+      it "returns not_required regardless of Stripe account status" do
+        expect(presenter.guardian_verification_state).to eq("not_required")
+      end
+
+      it "returns not_required even without Stripe account" do
+        allow(user).to receive(:stripe_account).and_return(nil)
+        expect(presenter.guardian_verification_state).to eq("not_required")
+      end
+    end
+
+    context "when user is under 18 without Stripe account" do
+      before do
+        allow(Pundit).to receive(:policy!).and_return(double(update?: true))
+        allow(user).to receive(:stripe_account).and_return(nil)
+        _, _ = user_compliance_info.dup_and_save { |new_info| new_info.birthday = 16.years.ago.to_date }
+        user.reload
+      end
+
+      it "returns requires_input so the guardian form is displayed" do
+        expect(presenter.guardian_verification_state).to eq("requires_input")
       end
     end
 
