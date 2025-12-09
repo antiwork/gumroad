@@ -74,6 +74,7 @@ class User < ApplicationRecord
   has_many :offer_codes
   has_many :user_compliance_infos
   has_many :user_compliance_info_requests
+  has_many :user_tax_forms
   has_many :workflows, foreign_key: :seller_id
   has_many :merchant_accounts
   has_many :shipping_destinations

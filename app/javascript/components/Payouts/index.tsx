@@ -17,6 +17,7 @@ import { ExportPayoutsPopover } from "$app/components/Payouts/ExportPayoutsPopov
 import { showAlert } from "$app/components/server-components/Alert";
 import { PageHeader } from "$app/components/ui/PageHeader";
 import Placeholder from "$app/components/ui/Placeholder";
+import { Tabs, Tab } from "$app/components/ui/Tabs";
 import { useUserAgentInfo } from "$app/components/UserAgent";
 import { WithTooltip } from "$app/components/WithTooltip";
 
@@ -268,6 +269,7 @@ export type PayoutsProps = {
   } | null;
   show_instant_payouts_notice: boolean;
   pagination: PaginationProps;
+  tax_center_enabled: boolean;
 };
 
 // TODO: move BankAccount|PaypalAccount out of CurrentPayoutsDataAndPaymentMethodWithUserPayable
@@ -649,6 +651,7 @@ const Payouts = ({
   instant_payout,
   show_instant_payouts_notice,
   pagination: initialPagination,
+  tax_center_enabled,
 }: PayoutsProps) => {
   const loggedInUser = useLoggedInUser();
   const userAgentInfo = useUserAgentInfo();
@@ -730,7 +733,18 @@ const Payouts = ({
             </div>
           ) : undefined
         }
-      />
+      >
+        {tax_center_enabled ? (
+          <Tabs>
+            <Tab href={Routes.balance_path()} isSelected>
+              Payouts
+            </Tab>
+            <Tab href={Routes.tax_center_path()} isSelected={false}>
+              Taxes
+            </Tab>
+          </Tabs>
+        ) : null}
+      </PageHeader>
       <div className="space-y-8 p-4 md:p-8">
         {!instant_payout ? (
           show_instant_payouts_notice ? (
