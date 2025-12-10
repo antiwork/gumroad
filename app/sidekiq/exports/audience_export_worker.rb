@@ -8,10 +8,15 @@ class Exports::AudienceExportWorker
     seller, recipient = User.find(seller_id, recipient_id)
     recipient ||= seller
 
-    result = Exports::AudienceExportService.new(seller, audience_options).perform
+    result = Exports::AudienceExportService.export(
+      user: seller,
+      recipient: recipient,
+      audience_options: audience_options
+    )
+    return unless result
 
     ContactingCreatorMailer.subscribers_data(
-      recipient:,
+      recipient: recipient,
       tempfile: result.tempfile,
       filename: result.filename,
     ).deliver_now

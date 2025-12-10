@@ -4,6 +4,9 @@ require "csv"
 
 class Exports::AudienceExportService
   FIELDS = ["Subscriber Email", "Subscribed Time"].freeze
+  # Threshold for switching to chunked processing
+  # Exports with more members than this will be processed asynchronously in chunks
+  SYNCHRONOUS_EXPORT_THRESHOLD = 2_000
 
   def initialize(user, options = {})
     @user = user
@@ -37,6 +40,29 @@ class Exports::AudienceExportService
     @tempfile.rewind
 
     self
+  end
+
+  def self.export(user:, recipient:, audience_options: {})
+    query = user.audience_members
+
+    conditions = []
+    conditions << "follower = true" if audience_options[:followers]
+    conditions << "customer = true" if audience_options[:customers]
+    conditions << "affiliate = true" if audience_options[:affiliates]
+
+    query = query.where(conditions.join(" OR ")) if conditions.any?
+    count = query.count
+
+    if count <= SYNCHRONOUS_EXPORT_THRESHOLD
+      new(user, audience_options).perform
+    else
+      export = AudienceExport.create!(
+        recipient: recipient,
+        audience_options: audience_options
+      )
+      Exports::Audience::CreateAndEnqueueChunksWorker.perform_async(export.id)
+      false
+    end
   end
 
   private

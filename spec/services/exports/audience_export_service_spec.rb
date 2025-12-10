@@ -104,4 +104,73 @@ describe Exports::AudienceExportService do
       end
     end
   end
+
+  describe ".export" do
+    let!(:user) { create(:user) }
+    let(:recipient) { user }
+
+    context "when audience size is below threshold" do
+      let!(:followers) { create_list(:active_follower, 10, user: user) }
+      let(:options) { { followers: true } }
+
+      it "processes synchronously and returns result" do
+        result = described_class.export(
+          user: user,
+          recipient: recipient,
+          audience_options: options
+        )
+
+        expect(result).not_to eq(false)
+        expect(result).to respond_to(:tempfile)
+        expect(result).to respond_to(:filename)
+      end
+
+      it "does not create AudienceExport record" do
+        expect {
+          described_class.export(
+            user: user,
+            recipient: recipient,
+            audience_options: options
+          )
+        }.not_to change(AudienceExport, :count)
+      end
+    end
+
+    context "when audience size is above threshold" do
+      let!(:followers) { create_list(:active_follower, 2001, user: user) }
+      let(:options) { { followers: true } }
+
+      it "creates AudienceExport record" do
+        expect {
+          described_class.export(
+            user: user,
+            recipient: recipient,
+            audience_options: options
+          )
+        }.to change(AudienceExport, :count).by(1)
+      end
+
+      it "enqueues CreateAndEnqueueChunksWorker" do
+        expect(Exports::Audience::CreateAndEnqueueChunksWorker).to receive(:perform_async)
+
+        described_class.export(
+          user: user,
+          recipient: recipient,
+          audience_options: options
+        )
+      end
+
+      it "returns false to indicate async processing" do
+        allow(Exports::Audience::CreateAndEnqueueChunksWorker).to receive(:perform_async)
+
+        result = described_class.export(
+          user: user,
+          recipient: recipient,
+          audience_options: options
+        )
+
+        expect(result).to eq(false)
+      end
+    end
+  end
 end
