@@ -397,7 +397,7 @@ jobs:
     name: Unblock deployment from Buildkite
     runs-on: ubicloud-standard-4
     needs: [test_fast, test_slow]
-    if: success() && github.ref == 'refs/heads/main'
+    if: success() && github.ref == 'refs/heads/main' && secrets.UNBLOCK_DEPLOYMENT_FROM_BUILDKITE == 'true'
     steps:
       - name: Unblock corresponding Buildkite build
         uses: nick-fields/retry@v3
