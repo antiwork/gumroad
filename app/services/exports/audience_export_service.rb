@@ -4,6 +4,7 @@ require "csv"
 
 class Exports::AudienceExportService
   FIELDS = ["Subscriber Email", "Subscribed Time"].freeze
+  BATCH_SIZE = 5_000
 
   def initialize(user, options = {})
     @user = user
@@ -20,16 +21,7 @@ class Exports::AudienceExportService
     @tempfile = Tempfile.new(["Subscribers", ".csv"], encoding: "UTF-8")
 
     CSV.open(@tempfile, "wb", headers: FIELDS, write_headers: true) do |csv|
-      query = @user.audience_members.select(:id, :email, :min_created_at)
-
-      conditions = []
-      conditions << "follower = true" if @options[:followers]
-      conditions << "customer = true" if @options[:customers]
-      conditions << "affiliate = true" if @options[:affiliates]
-
-      query = query.where(conditions.join(" OR "))
-
-      query.order(:min_created_at).find_each do |member|
+      build_query.find_each(batch_size: BATCH_SIZE) do |member|
         csv << [member.email, member.min_created_at]
       end
     end
@@ -44,5 +36,16 @@ class Exports::AudienceExportService
       unless @options[:followers] || @options[:customers] || @options[:affiliates]
         raise ArgumentError, "At least one audience type (followers, customers, or affiliates) must be selected"
       end
+    end
+
+    def build_query
+      conditions = []
+      conditions << "follower = TRUE" if @options[:followers]
+      conditions << "customer = TRUE" if @options[:customers]
+      conditions << "affiliate = TRUE" if @options[:affiliates]
+
+      @user.audience_members
+        .select(:id, :email, :min_created_at)
+        .where(conditions.join(" OR "))
     end
 end

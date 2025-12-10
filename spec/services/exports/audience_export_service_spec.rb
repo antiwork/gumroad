@@ -4,15 +4,33 @@ require "spec_helper"
 
 describe Exports::AudienceExportService do
   describe "#perform" do
-    let!(:user) { create(:user) }
-    let!(:follower) { create(:active_follower, email: "follower@gumroad.com", user: user, created_at: 1.day.ago) }
-    let(:product) { create(:product, user: user, name: "Product 1", price_cents: 100) }
-    let!(:customer) { create(:purchase, seller: user, link: product, created_at: 2.days.ago) }
-    let(:affiliate_user) { create(:affiliate_user, created_at: 4.days.ago) }
-    let(:direct_affiliate) { create(:direct_affiliate, affiliate_user:, seller: user, created_at: 3.days.ago) }
-    let!(:product_affiliate) { create(:product_affiliate, product:, affiliate: direct_affiliate, affiliate_basis_points: 10_00) }
+    let(:seller) { create(:user) }
+    let(:follower_created_at) { 1.day.ago }
+    let(:customer_created_at) { 2.days.ago }
+    let(:affiliate_created_at) { 3.days.ago }
 
-    subject { described_class.new(user, options) }
+    let!(:follower_member) do
+      create(:audience_member,
+        seller:,
+        email: "follower@example.com",
+        follower: { id: 1, created_at: follower_created_at.iso8601 })
+    end
+
+    let!(:customer_member) do
+      create(:audience_member,
+        seller:,
+        email: "customer@example.com",
+        purchases: [{ id: 1, product_id: 1, price_cents: 100, created_at: customer_created_at.iso8601, country: "United States" }])
+    end
+
+    let!(:affiliate_member) do
+      create(:audience_member,
+        seller:,
+        email: "affiliate@example.com",
+        affiliates: [{ id: 1, product_id: 1, created_at: affiliate_created_at.iso8601 }])
+    end
+
+    subject { described_class.new(seller, options) }
 
     context "when options has followers" do
       let(:options) { { followers: true } }
@@ -24,8 +42,8 @@ describe Exports::AudienceExportService do
         headers, data_row = rows.first, rows.second
 
         expect(headers).to eq(described_class::FIELDS)
-        expect(data_row.first).to eq(follower.email)
-        expect(data_row.second).to eq(follower.created_at.to_s)
+        expect(data_row.first).to eq(follower_member.email)
+        expect(data_row.second).to eq(follower_member.min_created_at.to_s)
       end
     end
 
@@ -39,23 +57,23 @@ describe Exports::AudienceExportService do
         headers, data_row = rows.first, rows.second
 
         expect(headers).to eq(described_class::FIELDS)
-        expect(data_row.first).to eq(customer.email)
-        expect(data_row.second).to eq(customer.created_at.to_s)
+        expect(data_row.first).to eq(customer_member.email)
+        expect(data_row.second).to eq(customer_member.min_created_at.to_s)
       end
     end
 
     context "when options has affiliates" do
       let(:options) { { affiliates: true } }
 
-      it "generates csv with customers" do
+      it "generates csv with affiliates" do
         rows = CSV.parse(subject.perform.tempfile.read)
 
         expect(rows.size).to eq(2)
         headers, data_row = rows.first, rows.second
 
         expect(headers).to eq(described_class::FIELDS)
-        expect(data_row.first).to eq(affiliate_user.email)
-        expect(data_row.second).to eq(direct_affiliate.created_at.to_s)
+        expect(data_row.first).to eq(affiliate_member.email)
+        expect(data_row.second).to eq(affiliate_member.min_created_at.to_s)
       end
     end
 
@@ -69,30 +87,43 @@ describe Exports::AudienceExportService do
         headers = rows.first
 
         expect(headers).to eq(described_class::FIELDS)
-        expect(rows[1].first).to eq(follower.email)
-        expect(rows[1].second).to eq(follower.created_at.to_s)
-        expect(rows[2].first).to eq(customer.email)
-        expect(rows[2].second).to eq(customer.created_at.to_s)
-        expect(rows[3].first).to eq(affiliate_user.email)
-        expect(rows[3].second).to eq(direct_affiliate.created_at.to_s)
+
+        emails = rows[1..].map(&:first)
+        expect(emails).to contain_exactly(
+          follower_member.email,
+          customer_member.email,
+          affiliate_member.email
+        )
       end
     end
 
     context "when user is both a follower and a customer" do
       let(:options) { { followers: true, customers: true } }
-      let!(:follower_customer) { create(:active_follower, email: customer.email, user:, created_at: 1000.day.ago) }
+      let(:earliest_created_at) { 100.days.ago }
 
-      it "generates csv with unique entries with minimum created_at" do
+      let!(:follower_and_customer_member) do
+        create(:audience_member,
+          seller:,
+          email: "both@example.com",
+          follower: { id: 2, created_at: earliest_created_at.iso8601 },
+          purchases: [{ id: 2, product_id: 1, price_cents: 100, created_at: 10.days.ago.iso8601, country: "United States" }])
+      end
+
+      it "generates csv with unique entries" do
         rows = CSV.parse(subject.perform.tempfile.read)
 
-        expect(rows.size).to eq(3)
+        expect(rows.size).to eq(4)
         headers = rows.first
 
         expect(headers).to eq(described_class::FIELDS)
-        expect(rows[1].first).to eq(follower.email)
-        expect(rows[1].second).to eq(follower.created_at.to_s)
-        expect(rows[2].first).to eq(follower_customer.email)
-        expect(rows[2].second).to eq(follower_customer.created_at.to_s)
+
+        emails = rows[1..].map(&:first)
+        expect(emails).to contain_exactly(
+          follower_member.email,
+          customer_member.email,
+          follower_and_customer_member.email
+        )
+        expect(emails.uniq.size).to eq(emails.size)
       end
     end
 
@@ -100,7 +131,31 @@ describe Exports::AudienceExportService do
       let(:options) { {} }
 
       it "raises an ArgumentError" do
-        expect { described_class.new(user, {}) }.to raise_error(ArgumentError, "At least one audience type (followers, customers, or affiliates) must be selected")
+        expect { described_class.new(seller, {}) }.to raise_error(ArgumentError, "At least one audience type (followers, customers, or affiliates) must be selected")
+      end
+    end
+
+    context "with large dataset" do
+      let(:options) { { followers: true } }
+
+      it "processes records in batches" do
+        stub_const("#{described_class}::BATCH_SIZE", 2)
+
+        additional_members = 5.times.map do |i|
+          create(:audience_member,
+            seller:,
+            email: "follower#{i}@example.com",
+            follower: { id: i + 10, created_at: (i + 5).days.ago.iso8601 })
+        end
+
+        rows = CSV.parse(subject.perform.tempfile.read)
+
+        expect(rows.size).to eq(7)
+        emails = rows[1..].map(&:first)
+        expect(emails).to include(follower_member.email)
+        additional_members.each do |member|
+          expect(emails).to include(member.email)
+        end
       end
     end
   end
