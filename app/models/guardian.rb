@@ -3,6 +3,47 @@
 class Guardian < ApplicationRecord
   include Strongbox
 
+  # Direct field mappings from guardian_* params to Guardian attributes
+  PARAM_TO_ATTRIBUTE_MAPPING = {
+    guardian_first_name: :first_name,
+    guardian_last_name: :last_name,
+    guardian_email: :email,
+    guardian_phone: :phone,
+    guardian_street_address: :street_address,
+    guardian_city: :city,
+    guardian_state: :state,
+    guardian_zip_code: :zip_code,
+    guardian_job_title: :job_title,
+    guardian_nationality: :nationality,
+    guardian_first_name_kanji: :first_name_kanji,
+    guardian_last_name_kanji: :last_name_kanji,
+    guardian_first_name_kana: :first_name_kana,
+    guardian_last_name_kana: :last_name_kana,
+    guardian_building_number: :building_number,
+    guardian_street_address_kanji: :street_address_kanji,
+    guardian_street_address_kana: :street_address_kana
+  }.freeze
+
+  # All guardian param fields used for detection
+  PARAM_FIELDS = %i[
+    guardian_first_name guardian_last_name guardian_email guardian_phone
+    guardian_street_address guardian_city guardian_state guardian_zip_code
+    guardian_country guardian_dob_year guardian_dob_month guardian_dob_day
+    guardian_individual_tax_id guardian_ssn_last_four
+    guardian_stripe_tos_accepted guardian_stripe_processing_tos_accepted
+    guardian_job_title guardian_nationality
+    guardian_first_name_kanji guardian_last_name_kanji
+    guardian_first_name_kana guardian_last_name_kana
+    guardian_building_number guardian_street_address_kanji guardian_street_address_kana
+  ].freeze
+
+  # Required fields for guardian validation
+  REQUIRED_PARAM_FIELDS = %w[
+    guardian_first_name guardian_last_name guardian_email guardian_phone
+    guardian_street_address guardian_city guardian_state guardian_zip_code
+    guardian_country guardian_dob_year guardian_dob_month guardian_dob_day
+  ].freeze
+
   belongs_to :user
 
   encrypt_with_public_key :individual_tax_id,
