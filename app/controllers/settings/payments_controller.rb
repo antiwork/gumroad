@@ -240,46 +240,23 @@ class Settings::PaymentsController < Sellers::BaseController
     end
 
     def has_guardian_params?(params_hash)
-      guardian_fields = %w[
-        guardian_first_name guardian_last_name guardian_email guardian_phone
-        guardian_street_address guardian_city guardian_state guardian_zip_code
-        guardian_country guardian_dob_year guardian_dob_month guardian_dob_day
-        guardian_individual_tax_id guardian_stripe_tos_accepted guardian_stripe_processing_tos_accepted
-      ]
-      guardian_fields.any? { |field| params_hash[field].present? }
+      Guardian::PARAM_FIELDS.any? { |field| params_hash[field.to_s].present? || params_hash[field].present? }
     end
 
     def validate_guardian_params(params_hash)
-      required_fields = %w[
-        guardian_first_name guardian_last_name guardian_email guardian_phone
-        guardian_street_address guardian_city guardian_state guardian_zip_code
-        guardian_country guardian_dob_year guardian_dob_month guardian_dob_day
-      ]
-
-      missing_fields = required_fields.select { |field| params_hash[field].blank? }
+      missing_fields = Guardian::REQUIRED_PARAM_FIELDS.select { |field| params_hash[field].blank? }
       return "Missing required guardian fields: #{missing_fields.join(', ')}" if missing_fields.any?
 
-      # Validate email format
       email = params_hash[:guardian_email]
-      unless URI::MailTo::EMAIL_REGEXP.match?(email)
-        return "Guardian email must be a valid email address"
-      end
+      return "Guardian email must be a valid email address" if !URI::MailTo::EMAIL_REGEXP.match?(email)
 
-      # Validate date of birth is realistic (guardian should be at least 18 years old)
       year = params_hash[:guardian_dob_year].to_i
-      params_hash[:guardian_dob_month].to_i
-      params_hash[:guardian_dob_day].to_i
+      return "Guardian must be at least 18 years old" if year < 1900 || year > Date.current.year - 18
 
-      if year < 1900 || year > Date.current.year - 18
-        return "Guardian must be at least 18 years old"
-      end
+      tos_accepted = params_hash[:guardian_stripe_tos_accepted]
+      return "Guardian must accept the terms of service" if tos_accepted != true && tos_accepted != "true"
 
-      # Validate TOS acceptance
-      unless params_hash[:guardian_stripe_tos_accepted] == true || params_hash[:guardian_stripe_tos_accepted] == "true"
-        return "Guardian must accept the terms of service"
-      end
-
-      nil # No validation errors
+      nil
     end
 
     def user_requires_guardian_verification?
@@ -299,15 +276,8 @@ class Settings::PaymentsController < Sellers::BaseController
     end
 
     def filter_out_guardian_params(params_hash)
-      return params_hash unless params_hash.respond_to?(:except)
+      return params_hash if !params_hash.respond_to?(:except)
 
-      guardian_fields = %w[
-        guardian_first_name guardian_last_name guardian_email guardian_phone
-        guardian_street_address guardian_city guardian_state guardian_zip_code
-        guardian_country guardian_dob_year guardian_dob_month guardian_dob_day
-        guardian_individual_tax_id guardian_stripe_tos_accepted guardian_stripe_processing_tos_accepted
-      ]
-
-      params_hash.except(*guardian_fields)
+      params_hash.except(*Guardian::PARAM_FIELDS.map(&:to_s))
     end
 end
