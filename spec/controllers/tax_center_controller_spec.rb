@@ -27,7 +27,7 @@ describe TaxCenterController, type: :controller, inertia: true do
 
         expect(response).to be_successful
         expect(inertia.component).to eq("TaxCenter/Index")
-        expect(inertia.props[:tax_center_presenter]).to match(TaxCenterPresenter.new(seller:, year: 2024).props)
+        expect(inertia.props).to include(TaxCenterPresenter.new(seller:, year: 2024).props)
         expect(assigns(:title)).to eq("Payouts")
       end
     end
@@ -38,7 +38,7 @@ describe TaxCenterController, type: :controller, inertia: true do
       get :index, params: { year: 2023 }
 
       expect(response).to be_successful
-      expect(inertia.props[:tax_center_presenter]).to match(TaxCenterPresenter.new(seller:, year: 2023).props)
+      expect(inertia.props).to include(TaxCenterPresenter.new(seller:, year: 2023).props)
     end
 
     context "when tax_center feature is disabled" do

@@ -1,7 +1,6 @@
 import { Link, router } from "@inertiajs/react";
 import taxesPlaceholder from "images/placeholders/taxes.png";
 import * as React from "react";
-import { cast } from "ts-safe-cast";
 
 import { classNames } from "$app/utils/classNames";
 
@@ -90,35 +89,17 @@ export type TaxCenterPageProps = {
   selected_year: number;
 };
 
-const TaxCenterPage = ({
-  documents: initialDocuments,
-  available_years: initialAvailableYears,
-  selected_year: initialSelectedYear,
-}: TaxCenterPageProps) => {
+const TaxCenterPage = ({ documents, available_years, selected_year }: TaxCenterPageProps) => {
   const loggedInUser = useLoggedInUser();
   const [isLoading, setIsLoading] = React.useState(false);
-  const [documents, setDocuments] = React.useState<TaxDocument[]>(initialDocuments);
-  const [availableYears, setAvailableYears] = React.useState<number[]>(initialAvailableYears);
-  const [selectedYear, setSelectedYear] = React.useState<number>(initialSelectedYear);
   const [downloadingFormType, setDownloadingFormType] = React.useState<string | null>(null);
 
   const handleYearChange = (year: number) => {
-    router.visit(Routes.tax_center_path(), {
+    router.reload({
       data: { year },
-      only: ["tax_center_presenter"],
-      showProgress: true,
       onStart: () => setIsLoading(true),
-      onSuccess: (page) => {
-        const props = cast<TaxCenterPageProps>(page.props.tax_center_presenter);
-        setDocuments(props.documents);
-        setAvailableYears(props.available_years);
-        setSelectedYear(props.selected_year);
-        setIsLoading(false);
-      },
-      onError: () => {
-        showAlert("Something went wrong. Please try again.", "error");
-        setIsLoading(false);
-      },
+      onFinish: () => setIsLoading(false),
+      onError: () => showAlert("Something went wrong. Please try again.", "error"),
     });
   };
 
@@ -160,15 +141,15 @@ const TaxCenterPage = ({
       <section className="p-4 md:p-8">
         <div className="mb-4 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
           <h2>Tax documents</h2>
-          {availableYears.length > 0 && (
+          {available_years.length > 0 && (
             <div className="flex items-center gap-3">
               <select
                 aria-label="Tax year"
                 disabled={isLoading}
-                value={selectedYear}
+                value={selected_year}
                 onChange={(e) => handleYearChange(parseInt(e.target.value, 10))}
               >
-                {availableYears.map((year) => (
+                {available_years.map((year) => (
                   <option key={year} value={year}>
                     {year}
                   </option>

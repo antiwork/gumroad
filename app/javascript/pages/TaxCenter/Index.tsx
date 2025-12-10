@@ -4,9 +4,9 @@ import React from "react";
 import TaxCenterPage, { type TaxCenterPageProps } from "$app/components/TaxCenter";
 
 function index() {
-  const { tax_center_presenter } = usePage<{ tax_center_presenter: TaxCenterPageProps }>().props;
+  const props = usePage<TaxCenterPageProps>().props;
 
-  return <TaxCenterPage {...tax_center_presenter} />;
+  return <TaxCenterPage {...props} />;
 }
 
 export default index;
