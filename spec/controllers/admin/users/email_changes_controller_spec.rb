@@ -22,7 +22,7 @@ describe Admin::Users::EmailChangesController do
       end
 
       it "returns email changes and fields" do
-        get :index, params: { user_id: user.id }, format: :json
+        get :index, params: { user_external_id: user.external_id }, format: :json
 
         expect(response).to have_http_status(:success)
 
@@ -48,7 +48,7 @@ describe Admin::Users::EmailChangesController do
 
     context "when user has no changes" do
       it "returns empty email changes" do
-        get :index, params: { user_id: user.id }, format: :json
+        get :index, params: { user_external_id: user.external_id }, format: :json
 
         expect(response).to have_http_status(:success)
         expect(response.parsed_body).to eq(

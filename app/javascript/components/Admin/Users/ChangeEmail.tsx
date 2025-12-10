@@ -16,7 +16,7 @@ const AdminUserChangeEmail = ({ user }: AdminUserChangeEmailProps) => (
         <h3>Change email</h3>
       </summary>
       <Form
-        url={Routes.update_email_admin_user_path(user.id)}
+        url={Routes.update_email_admin_user_path(user.external_id)}
         method="POST"
         confirmMessage="Are you sure you want to update this user's email address?"
         onSuccess={() => showAlert("Successfully updated email address.", "success")}

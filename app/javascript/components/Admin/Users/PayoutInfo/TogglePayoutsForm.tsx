@@ -5,11 +5,11 @@ import AdminResumePayoutsForm from "$app/components/Admin/Users/PayoutInfo/Resum
 import { showAlert } from "$app/components/server-components/Alert";
 
 const AdminTogglePayoutsForm = ({
-  user_id,
+  user_external_id,
   payouts_paused_by,
   reason: currentReason,
 }: {
-  user_id: number;
+  user_external_id: string;
   payouts_paused_by: "stripe" | "admin" | "system" | "user" | null;
   reason: string | null;
 }) => {
@@ -32,10 +32,15 @@ const AdminTogglePayoutsForm = ({
 
   if (paused) {
     return (
-      <AdminResumePayoutsForm user_id={user_id} payouts_paused_by={pausedBy} reason={reason} onSuccess={onResumed} />
+      <AdminResumePayoutsForm
+        user_external_id={user_external_id}
+        payouts_paused_by={pausedBy}
+        reason={reason}
+        onSuccess={onResumed}
+      />
     );
   }
-  return <AdminPausePayoutsForm user_id={user_id} onSuccess={onPaused} />;
+  return <AdminPausePayoutsForm user_external_id={user_external_id} onSuccess={onPaused} />;
 };
 
 export default AdminTogglePayoutsForm;

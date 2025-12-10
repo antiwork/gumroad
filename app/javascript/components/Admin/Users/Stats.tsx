@@ -21,7 +21,7 @@ type ResponseData = {
   chargeback_count: string;
 };
 
-const AdminUserStats = ({ user_id }: { user_id: number }) => {
+const AdminUserStats = ({ user_external_id }: { user_external_id: string }) => {
   const [userStats, setUserStats] = React.useState<UserStatsProps | null>(null);
 
   const elementRef = useIsIntersecting<HTMLUListElement>((isIntersecting) => {
@@ -31,7 +31,7 @@ const AdminUserStats = ({ user_id }: { user_id: number }) => {
       try {
         const response = await request({
           method: "GET",
-          url: Routes.admin_user_stats_path(user_id),
+          url: Routes.admin_user_stats_path(user_external_id),
           accept: "json",
         });
         if (!response.ok) assertResponseError(response);

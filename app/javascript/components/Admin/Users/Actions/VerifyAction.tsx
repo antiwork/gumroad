@@ -7,20 +7,20 @@ type VerifyActionProps = {
   user: User;
 };
 
-const VerifyAction = ({ user: { id, verified } }: VerifyActionProps) =>
+const VerifyAction = ({ user: { external_id, verified } }: VerifyActionProps) =>
   verified ? (
     <AdminAction
       label="Unverify"
-      url={Routes.verify_admin_user_path(id)}
-      confirm_message={`Are you sure you want to unverify user ${id}?`}
+      url={Routes.verify_admin_user_path(external_id)}
+      confirm_message={`Are you sure you want to unverify user ${external_id}?`}
       done="Verify"
       success_message="Unverified."
     />
   ) : (
     <AdminAction
       label="Verify"
-      url={Routes.verify_admin_user_path(id)}
-      confirm_message={`Are you sure you want to verify user ${id}?`}
+      url={Routes.verify_admin_user_path(external_id)}
+      confirm_message={`Are you sure you want to verify user ${external_id}?`}
       done="Unverify"
       success_message="Verified."
     />

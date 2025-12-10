@@ -21,7 +21,7 @@ const AdminProductDetails = ({ product }: Props) => {
     fetchData: fetchDetails,
   } = useLazyFetch<DetailsProps | null>(null, {
     fetchUnlessLoaded: open,
-    url: Routes.admin_product_details_path(product.id, { format: "json" }),
+    url: Routes.admin_product_details_path(product.external_id, { format: "json" }),
     responseParser: (data) => {
       const parsed = cast<{ details: DetailsProps }>(data);
       return parsed.details;

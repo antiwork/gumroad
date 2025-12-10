@@ -17,7 +17,7 @@ describe Admin::Products::PurchasesController do
     let!(:purchase) { create(:purchase, link: product) }
 
     it "returns purchases and pagination" do
-      get :index, params: { product_id: product.id }, format: :json
+      get :index, params: { product_external_id: product.external_id }, format: :json
 
       expect(response).to have_http_status(:ok)
 
@@ -33,7 +33,7 @@ describe Admin::Products::PurchasesController do
       other_product = create(:product)
       other_purchase = create(:purchase, link: other_product)
 
-      get :index, params: { product_id: product.id }, format: :json
+      get :index, params: { product_external_id: product.external_id }, format: :json
 
       expect(response).to have_http_status(:ok)
 
@@ -50,7 +50,7 @@ describe Admin::Products::PurchasesController do
       end
 
       it "accepts per_page and page parameters" do
-        get :index, params: { product_id: product.id, per_page: 5, page: 1 }, format: :json
+        get :index, params: { product_external_id: product.external_id, per_page: 5, page: 1 }, format: :json
 
         expect(response).to have_http_status(:ok)
 
@@ -63,7 +63,7 @@ describe Admin::Products::PurchasesController do
       end
 
       it "returns the correct page of results" do
-        get :index, params: { product_id: product.id, per_page: 5, page: 2 }, format: :json
+        get :index, params: { product_external_id: product.external_id, per_page: 5, page: 2 }, format: :json
 
         expect(response).to have_http_status(:ok)
 
@@ -73,7 +73,7 @@ describe Admin::Products::PurchasesController do
       end
 
       it "respects per_page limit" do
-        get :index, params: { product_id: product.id, per_page: 3, page: 1 }, format: :json
+        get :index, params: { product_external_id: product.external_id, per_page: 3, page: 1 }, format: :json
 
         expect(response).to have_http_status(:ok)
 
