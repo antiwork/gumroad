@@ -688,6 +688,10 @@ class Subscription < ApplicationRecord
     end
   end
 
+  def update_business_vat_id!(vat_id)
+    update!(business_vat_id: vat_id) if vat_id.present? && business_vat_id.blank?
+  end
+
   def last_resubscribed_at
     if defined?(@_last_resubscribed_at)
       @_last_resubscribed_at
@@ -928,11 +932,31 @@ class Subscription < ApplicationRecord
     end
 
     def get_vat_id_from_original_purchase(purchase)
-      if original_purchase.purchase_sales_tax_info&.business_vat_id
-        purchase.business_vat_id = original_purchase.purchase_sales_tax_info.business_vat_id
-      elsif original_purchase.refunds.where("gumroad_tax_cents > 0").where("amount_cents = 0").exists?
-        purchase.business_vat_id = original_purchase.refunds.where("gumroad_tax_cents > 0").where("amount_cents = 0").first.business_vat_id
-      end
+      vat_id = business_vat_id.presence ||
+               original_purchase.purchase_sales_tax_info&.business_vat_id.presence ||
+               vat_id_from_original_purchase_refund ||
+               vat_id_from_any_subscription_purchase_refund
+
+      purchase.business_vat_id = vat_id if vat_id.present?
+    end
+
+    def vat_id_from_original_purchase_refund
+      original_purchase.refunds
+                       .where("gumroad_tax_cents > 0")
+                       .where("amount_cents = 0")
+                       .order(created_at: :desc)
+                       .find { |refund| refund.business_vat_id.present? }
+                       &.business_vat_id
+    end
+
+    def vat_id_from_any_subscription_purchase_refund
+      Refund.joins(:purchase)
+            .where(purchases: { subscription_id: id })
+            .where("refunds.gumroad_tax_cents > 0")
+            .where("refunds.amount_cents = 0")
+            .order("refunds.created_at DESC")
+            .find { |refund| refund.business_vat_id.present? }
+            &.business_vat_id
     end
 
     def schedule_member_cancellation_workflow_jobs
