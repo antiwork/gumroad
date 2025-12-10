@@ -302,6 +302,20 @@ const PaymentsPage = (props: Props) => {
     setErrorFieldNames(new Set());
   };
 
+  // Calculate if user is under 18 based on current form DOB values (client-side)
+  const isUserUnder18 = React.useMemo(() => {
+    const { dob_year, dob_month, dob_day } = complianceInfo;
+    if (!dob_year || !dob_month || !dob_day) {
+      return props.user_under_18;
+    }
+    const cutoff = new Date();
+    cutoff.setFullYear(cutoff.getFullYear() - 18);
+    return new Date(dob_year, dob_month - 1, dob_day) > cutoff;
+  }, [complianceInfo.dob_year, complianceInfo.dob_month, complianceInfo.dob_day, props.user_under_18]);
+
+  // Show guardian section if user is under 18 (either from server or from form input)
+  const showGuardianSection = isUserUnder18;
+
   const [bankAccount, setBankAccount] = React.useState(props.bank_account_details.bank_account);
   const updateBankAccount = (newBankAccount: Partial<BankAccount>) => {
     setBankAccount((prevBankAccount) => ({ ...prevBankAccount, ...newBankAccount }));
@@ -921,8 +935,14 @@ const PaymentsPage = (props: Props) => {
           </div>
         ) : null}
         <section className="p-4! md:p-8!">
-          {props.user_under_18 && props.guardian_verification_state !== "not_required" ? (
-            <LegalGuardianInformationRequiredBanner status={props.guardian_verification_state} />
+          {showGuardianSection ? (
+            <LegalGuardianInformationRequiredBanner
+              status={
+                props.guardian_verification_state === "not_required"
+                  ? "requires_input"
+                  : props.guardian_verification_state
+              }
+            />
           ) : null}
           <header>
             <h2>Verification</h2>
@@ -1178,9 +1198,7 @@ const PaymentsPage = (props: Props) => {
                 canadaBusinessTypes={props.canada_business_types}
                 states={props.states}
                 errorFieldNames={errorFieldNames}
-                isLegalGuardianInformationRequired={
-                  props.user_under_18 && props.guardian_verification_state !== "not_required"
-                }
+                isLegalGuardianInformationRequired={showGuardianSection}
               />
             ) : (
               <StripeConnectSection
@@ -1191,10 +1209,10 @@ const PaymentsPage = (props: Props) => {
             )}
           </section>
         </section>
-        {props.user_under_18 && props.guardian_verification_state !== "not_required" ? (
+        {showGuardianSection ? (
           <section className="p-4! md:p-8!">
             <header>
-              <h2>Legal guardian’s details</h2>
+              <h2>Legal guardian's details</h2>
               <div>
                 <a className="no-underline">
                   Because you're under 18, we need to verify your legal guardian's details to enable payments.

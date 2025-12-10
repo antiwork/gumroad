@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[7.1].define(version: 2025_11_24_133549) do
+ActiveRecord::Schema[7.1].define(version: 2025_12_09_201732) do
   create_table "active_storage_attachments", charset: "utf8mb4", collation: "utf8mb4_unicode_ci", force: :cascade do |t|
     t.string "name", limit: 191, null: false
     t.string "record_type", limit: 191, null: false
@@ -916,6 +916,41 @@ ActiveRecord::Schema[7.1].define(version: 2025_11_24_133549) do
     t.index ["giftee_purchase_id"], name: "index_gifts_on_giftee_purchase_id"
     t.index ["gifter_email"], name: "index_gifts_on_gifter_email"
     t.index ["gifter_purchase_id"], name: "index_gifts_on_gifter_purchase_id"
+  end
+
+  create_table "guardians", charset: "utf8mb4", collation: "utf8mb4_unicode_ci", force: :cascade do |t|
+    t.bigint "user_id", null: false
+    t.string "first_name"
+    t.string "last_name"
+    t.string "email"
+    t.string "phone"
+    t.date "date_of_birth"
+    t.string "street_address"
+    t.string "city"
+    t.string "state"
+    t.string "zip_code"
+    t.string "country"
+    t.string "country_code"
+    t.binary "individual_tax_id"
+    t.string "stripe_person_id"
+    t.boolean "stripe_tos_accepted", default: false
+    t.string "stripe_tos_ip"
+    t.boolean "stripe_processing_tos_accepted", default: false
+    t.string "stripe_identity_document_id"
+    t.string "stripe_additional_document_id"
+    t.string "job_title"
+    t.string "nationality"
+    t.string "first_name_kanji"
+    t.string "last_name_kanji"
+    t.string "first_name_kana"
+    t.string "last_name_kana"
+    t.string "building_number"
+    t.string "street_address_kanji"
+    t.string "street_address_kana"
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.index ["stripe_person_id"], name: "index_guardians_on_stripe_person_id", unique: true
+    t.index ["user_id"], name: "index_guardians_on_user_id", unique: true
   end
 
   create_table "gumroad_daily_analytics", charset: "utf8mb4", collation: "utf8mb4_unicode_ci", force: :cascade do |t|
@@ -2756,4 +2791,5 @@ ActiveRecord::Schema[7.1].define(version: 2025_11_24_133549) do
 
   add_foreign_key "active_storage_attachments", "active_storage_blobs", column: "blob_id"
   add_foreign_key "active_storage_variant_records", "active_storage_blobs", column: "blob_id"
+  add_foreign_key "guardians", "users", name: "_fk_rails_91de816a2a"
 end
