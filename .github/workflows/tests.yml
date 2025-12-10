@@ -397,7 +397,7 @@ jobs:
     name: Unblock deployment from Buildkite
     runs-on: ubicloud-standard-4
     needs: [test_fast, test_slow]
-    if: success() && github.ref == 'refs/heads/main' && secrets.UNBLOCK_DEPLOYMENT_FROM_BUILDKITE == 'true'
+    if: success() && github.ref == 'refs/heads/main'
     steps:
       - name: Unblock corresponding Buildkite build
         uses: nick-fields/retry@v3
@@ -406,6 +406,11 @@ jobs:
           retry_wait_seconds: 300
           max_attempts: 3
           command: |
+            if [ "$UNBLOCK_DEPLOYMENT" != "true" ]; then
+              echo "UNBLOCK_DEPLOYMENT_FROM_BUILDKITE is not set to 'true'. Skipping unblock."
+              exit 0
+            fi
+
             echo "Looking for Buildkite build for commit $COMMIT_SHA on pipeline $ORG_SLUG/$PIPELINE_SLUG..."
             # Fetch builds for the specific commit, including jobs
             BUILD_DATA=$(curl -s -H "Authorization: Bearer $BUILDKITE_API_TOKEN" \
@@ -452,6 +457,7 @@ jobs:
               exit 1 # Exit with error if the API call failed
             fi
         env:
+          UNBLOCK_DEPLOYMENT: ${{ secrets.UNBLOCK_DEPLOYMENT_FROM_BUILDKITE }}
           BUILDKITE_API_TOKEN: ${{ secrets.BUILDKITE_API_TOKEN }}
           COMMIT_SHA: ${{ github.sha }}
           ORG_SLUG: gumroad-inc
