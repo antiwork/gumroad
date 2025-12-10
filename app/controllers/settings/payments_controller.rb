@@ -256,6 +256,9 @@ class Settings::PaymentsController < Sellers::BaseController
       tos_accepted = params_hash[:guardian_stripe_tos_accepted]
       return "Guardian must accept the terms of service" if tos_accepted != true && tos_accepted != "true"
 
+      processing_tos_accepted = params_hash[:guardian_stripe_processing_tos_accepted]
+      return "Guardian must acknowledge consent for information processing" if processing_tos_accepted != true && processing_tos_accepted != "true"
+
       nil
     end
 
