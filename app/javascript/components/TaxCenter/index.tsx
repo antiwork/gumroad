@@ -1,9 +1,9 @@
+import { Link, router } from "@inertiajs/react";
 import taxesPlaceholder from "images/placeholders/taxes.png";
 import * as React from "react";
+import { cast } from "ts-safe-cast";
 
-import { getTaxDocuments, TaxDocument } from "$app/data/tax_center";
 import { classNames } from "$app/utils/classNames";
-import { AbortError, assertResponseError } from "$app/utils/request";
 
 import { NavigationButton } from "$app/components/Button";
 import { Icon } from "$app/components/Icons";
@@ -13,6 +13,18 @@ import { PageHeader } from "$app/components/ui/PageHeader";
 import Placeholder from "$app/components/ui/Placeholder";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "$app/components/ui/Table";
 import { Tab, Tabs } from "$app/components/ui/Tabs";
+
+export type TaxDocument = {
+  document: string;
+  type: string;
+  year: number;
+  form_type: string;
+  gross: string;
+  fees: string;
+  taxes: string;
+  affiliate_credit?: string;
+  net: string;
+};
 
 const FAQ_ITEMS: {
   id: string;
@@ -89,32 +101,25 @@ const TaxCenterPage = ({
   const [availableYears, setAvailableYears] = React.useState<number[]>(initialAvailableYears);
   const [selectedYear, setSelectedYear] = React.useState<number>(initialSelectedYear);
   const [downloadingFormType, setDownloadingFormType] = React.useState<string | null>(null);
-  const activeRequest = React.useRef<{ cancel: () => void } | null>(null);
-
-  const loadTaxDocuments = async (year: number) => {
-    try {
-      activeRequest.current?.cancel();
-      setIsLoading(true);
-      const request = getTaxDocuments(year);
-      activeRequest.current = request;
-
-      const data = await request.response;
-      setDocuments(data.documents);
-      setAvailableYears(data.available_years);
-      setSelectedYear(data.selected_year);
-      setIsLoading(false);
-      activeRequest.current = null;
-    } catch (e) {
-      if (e instanceof AbortError) return;
-      assertResponseError(e);
-      showAlert("Something went wrong. Please try again.", "error");
-      setIsLoading(false);
-    }
-  };
 
   const handleYearChange = (year: number) => {
-    void loadTaxDocuments(year);
-    window.history.replaceState(null, "", `${Routes.tax_center_path()}?year=${year}`);
+    router.visit(Routes.tax_center_path(), {
+      data: { year },
+      only: ["tax_center_presenter"],
+      showProgress: true,
+      onStart: () => setIsLoading(true),
+      onSuccess: (page) => {
+        const props = cast<TaxCenterPageProps>(page.props.tax_center_presenter);
+        setDocuments(props.documents);
+        setAvailableYears(props.available_years);
+        setSelectedYear(props.selected_year);
+        setIsLoading(false);
+      },
+      onError: () => {
+        showAlert("Something went wrong. Please try again.", "error");
+        setIsLoading(false);
+      },
+    });
   };
 
   const handleDownload = (_e: React.MouseEvent<HTMLAnchorElement>, formType: string) => {
@@ -144,11 +149,11 @@ const TaxCenterPage = ({
         actions={settingsAction ? <div className="flex gap-2">{settingsAction}</div> : undefined}
       >
         <Tabs>
-          <Tab href={Routes.balance_path()} isSelected={false}>
-            Payouts
+          <Tab isSelected={false} asChild>
+            <Link href={Routes.balance_path()}>Payouts</Link>
           </Tab>
-          <Tab href={Routes.tax_center_path()} isSelected>
-            Taxes
+          <Tab isSelected asChild>
+            <Link href={Routes.tax_center_path()}>Taxes</Link>
           </Tab>
         </Tabs>
       </PageHeader>
