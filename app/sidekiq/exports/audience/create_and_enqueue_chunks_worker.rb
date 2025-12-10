@@ -4,7 +4,7 @@ class Exports::Audience::CreateAndEnqueueChunksWorker
   include Sidekiq::Job
   sidekiq_options retry: 5, queue: :low, lock: :until_executed
 
-  MAX_MEMBERS_PER_CHUNK = 10_000
+  MAX_MEMBERS_PER_CHUNK = 5_000
 
   def perform(export_id)
     @export = AudienceExport.find(export_id)
@@ -19,13 +19,15 @@ class Exports::Audience::CreateAndEnqueueChunksWorker
 
   private
     def create_chunks
-      @export.chunks.in_batches(of: 1).delete_all
+      @export.chunks.in_batches(of: 100).delete_all
 
       options = @export.options.with_indifferent_access
       conditions = []
       conditions << "follower = TRUE" if options[:followers]
       conditions << "customer = TRUE" if options[:customers]
       conditions << "affiliate = TRUE" if options[:affiliates]
+
+      return if conditions.empty?
 
       @export.seller.audience_members
         .where(conditions.join(" OR "))

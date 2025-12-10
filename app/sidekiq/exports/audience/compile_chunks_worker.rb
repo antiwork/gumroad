@@ -20,7 +20,7 @@ class Exports::Audience::CompileChunksWorker
       filename:
     ).deliver_now
 
-    @export.chunks.in_batches(of: 1).delete_all
+    @export.chunks.in_batches(of: 100).delete_all
     @export.destroy!
   end
 
@@ -29,10 +29,8 @@ class Exports::Audience::CompileChunksWorker
       tempfile = Tempfile.new(["Subscribers", ".csv"], encoding: "UTF-8")
 
       CSV.open(tempfile, "wb", headers: FIELDS, write_headers: true) do |csv|
-        @export.chunks.select(:id, :csv_data).find_each(batch_size: 1) do |chunk|
-          chunk.csv_data.each do |row|
-            csv << row
-          end
+        @export.chunks.select(:id, :csv_data).find_each do |chunk|
+          chunk.csv_data.each { |row| csv << row }
         end
       end
 

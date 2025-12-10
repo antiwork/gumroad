@@ -25,6 +25,6 @@ class Exports::Audience::ProcessChunkWorker
     end
 
     def chunks_left_to_process?
-      @export.chunks.where(processed: false).exists?
+      @export.chunks.pending.exists?
     end
 end

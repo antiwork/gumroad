@@ -5,4 +5,7 @@ class AudienceExportChunk < ApplicationRecord
 
   serialize :member_ids, type: Array, coder: YAML
   serialize :csv_data, type: Array, coder: YAML
+
+  scope :processed, -> { where(processed: true) }
+  scope :pending, -> { where(processed: false) }
 end
