@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 class FollowersController < ApplicationController
+  layout "inertia"
   include CustomDomainConfig
 
   PUBLIC_ACTIONS = %i[new create from_embed_form confirm cancel].freeze
@@ -9,7 +10,6 @@ class FollowersController < ApplicationController
 
   before_action :fetch_follower, only: %i[confirm cancel destroy]
   before_action :set_user_and_custom_domain_config, only: :new
-  before_action :set_body_id_as_app, only: :index
 
   FOLLOWERS_PER_PAGE = 20
 
@@ -26,9 +26,9 @@ class FollowersController < ApplicationController
       .limit(FOLLOWERS_PER_PAGE)
       .as_json(pundit_user:)
 
-    @react_component_props = {
+    render inertia: "Followers/Index", props: {
       followers: paginated_followers,
-      per_page: FollowersController::FOLLOWERS_PER_PAGE,
+      per_page: FOLLOWERS_PER_PAGE,
       total: followers.count,
     }
   end

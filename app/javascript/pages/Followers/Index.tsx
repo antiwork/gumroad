@@ -1,19 +1,19 @@
+import { usePage } from "@inertiajs/react";
 import debounce from "lodash/debounce";
 import * as React from "react";
-import { createCast } from "ts-safe-cast";
+import { cast } from "ts-safe-cast";
 
 import { deleteFollower, fetchFollowers, Follower } from "$app/data/followers";
-import { register } from "$app/utils/serverComponentUtil";
 
 import { Button } from "$app/components/Button";
 import { CopyToClipboard } from "$app/components/CopyToClipboard";
 import { useCurrentSeller } from "$app/components/CurrentSeller";
+import { ExportSubscribersPopover } from "$app/components/Followers/ExportSubscribersPopover";
 import { Icon } from "$app/components/Icons";
 import { LoadingSpinner } from "$app/components/LoadingSpinner";
 import { useLoggedInUser } from "$app/components/LoggedInUser";
 import { Popover } from "$app/components/Popover";
 import { showAlert } from "$app/components/server-components/Alert";
-import { ExportSubscribersPopover } from "$app/components/server-components/FollowersPage/ExportSubscribersPopover";
 import { PageHeader } from "$app/components/ui/PageHeader";
 import Placeholder from "$app/components/ui/Placeholder";
 import { Sheet, SheetHeader } from "$app/components/ui/Sheet";
@@ -64,7 +64,8 @@ const Layout = ({
 
 type Props = { followers: Follower[]; per_page: number; total: number };
 
-export const FollowersPage = ({ followers: initialFollowers, per_page, total }: Props) => {
+export default function FollowersPage() {
+  const { followers: initialFollowers, per_page, total } = cast<Props>(usePage().props);
   const userAgentInfo = useUserAgentInfo();
 
   const [loading, setLoading] = React.useState(false);
@@ -264,6 +265,4 @@ export const FollowersPage = ({ followers: initialFollowers, per_page, total }: 
       </div>
     </Layout>
   );
-};
-
-export default register({ component: FollowersPage, propParser: createCast() });
+}
