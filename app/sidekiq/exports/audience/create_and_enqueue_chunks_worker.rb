@@ -2,14 +2,19 @@
 
 class Exports::Audience::CreateAndEnqueueChunksWorker
   include Sidekiq::Job
-  sidekiq_options retry: 5, queue: :low
+  sidekiq_options retry: 5, queue: :low, lock: :until_executed
 
   MAX_MEMBERS_PER_CHUNK = 10_000
 
   def perform(export_id)
     @export = AudienceExport.find(export_id)
     create_chunks
-    enqueue_chunks
+
+    if @export.chunks.exists?
+      enqueue_chunks
+    else
+      Exports::Audience::CompileChunksWorker.perform_async(@export.id)
+    end
   end
 
   private

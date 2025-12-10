@@ -1,5 +1,7 @@
 # frozen_string_literal: true
 
+require "csv"
+
 class Exports::Audience::CompileChunksWorker
   include Sidekiq::Job
   sidekiq_options retry: 5, queue: :low, lock: :until_executed

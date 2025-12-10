@@ -58,4 +58,16 @@ describe Exports::Audience::CreateAndEnqueueChunksWorker do
     expect(export.chunks.pluck(:id)).not_to include(stale_chunk.id)
     expect(export.chunks.count).to eq(2)
   end
+
+  it "handles empty audience by triggering compile directly" do
+    empty_seller = create(:user)
+    empty_export = create(:audience_export, seller: empty_seller, recipient:, options: { followers: true })
+
+    described_class.new.perform(empty_export.id)
+    empty_export.reload
+
+    expect(empty_export.chunks.count).to eq(0)
+    expect(Exports::Audience::ProcessChunkWorker.jobs.size).to eq(0)
+    expect(Exports::Audience::CompileChunksWorker).to have_enqueued_sidekiq_job(empty_export.id)
+  end
 end
