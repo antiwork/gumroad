@@ -455,4 +455,4 @@ jobs:
           BUILDKITE_API_TOKEN: ${{ secrets.BUILDKITE_API_TOKEN }}
           COMMIT_SHA: ${{ github.sha }}
           ORG_SLUG: gumroad-inc
-          PIPELINE_SLUG: gumroad
+          PIPELINE_SLUG: ${{ secrets.BUILDKITE_PIPELINE_SLUG }}
