@@ -110,21 +110,20 @@ RSpec.describe Settings::PaymentsController, type: :controller do
           expect(response).to have_http_status(:ok)
           expect(JSON.parse(response.body)["success"]).to eq(true)
 
-          updated_info = user.alive_user_compliance_info
-          expect(updated_info.guardian_first_name).to eq("John")
-          expect(updated_info.guardian_last_name).to eq("Guardian")
-          expect(updated_info.guardian_email).to eq("guardian@example.com")
-          expect(updated_info.guardian_phone).to eq("+1234567890")
-          expect(updated_info.guardian_street_address).to eq("123 Guardian St")
-          expect(updated_info.guardian_city).to eq("Guardian City")
-          expect(updated_info.guardian_state).to eq("CA")
-          expect(updated_info.guardian_zip_code).to eq("90210")
-          expect(updated_info.guardian_country).to eq("United States")
-          expect(updated_info.guardian_dob_day).to eq("15")
-          expect(updated_info.guardian_dob_month).to eq("6")
-          expect(updated_info.guardian_dob_year).to eq("1980")
-          expect(updated_info.guardian_stripe_tos_accepted).to eq(true)
-          expect(updated_info.guardian_stripe_processing_tos_accepted).to eq(true)
+          guardian = user.reload.guardian
+          expect(guardian).to be_present
+          expect(guardian.first_name).to eq("John")
+          expect(guardian.last_name).to eq("Guardian")
+          expect(guardian.email).to eq("guardian@example.com")
+          expect(guardian.phone).to eq("+1234567890")
+          expect(guardian.street_address).to eq("123 Guardian St")
+          expect(guardian.city).to eq("Guardian City")
+          expect(guardian.state).to eq("CA")
+          expect(guardian.zip_code).to eq("90210")
+          expect(guardian.country).to eq("United States")
+          expect(guardian.date_of_birth).to eq(Date.new(1980, 6, 15))
+          expect(guardian.stripe_tos_accepted).to eq(true)
+          expect(guardian.stripe_processing_tos_accepted).to eq(true)
         end
 
         it "validates required guardian fields" do
@@ -190,9 +189,10 @@ RSpec.describe Settings::PaymentsController, type: :controller do
             expect(response).to have_http_status(:ok)
             expect(JSON.parse(response.body)["success"]).to eq(true)
 
-            updated_info = user.alive_user_compliance_info
-            expect(updated_info.guardian_country).to eq("Canada")
-            expect(updated_info.guardian_state).to eq("ON")
+            guardian = user.reload.guardian
+            expect(guardian).to be_present
+            expect(guardian.country).to eq("Canada")
+            expect(guardian.state).to eq("ON")
           end
 
           it "handles UK guardian information without tax ID requirement" do
@@ -211,8 +211,9 @@ RSpec.describe Settings::PaymentsController, type: :controller do
             expect(response).to have_http_status(:ok)
             expect(JSON.parse(response.body)["success"]).to eq(true)
 
-            updated_info = user.alive_user_compliance_info
-            expect(updated_info.guardian_country).to eq("United Kingdom")
+            guardian = user.reload.guardian
+            expect(guardian).to be_present
+            expect(guardian.country).to eq("United Kingdom")
           end
         end
       end

@@ -283,6 +283,15 @@ class Settings::PaymentsController < Sellers::BaseController
     end
 
     def user_requires_guardian_verification?
+      if params.dig(:user, :dob_year).present? && params.dig(:user, :dob_month).present? && params.dig(:user, :dob_day).present?
+        birthday = Date.new(
+          params.dig(:user, :dob_year).to_i,
+          params.dig(:user, :dob_month).to_i,
+          params.dig(:user, :dob_day).to_i
+        )
+        return birthday > 18.years.ago.to_date
+      end
+
       user_compliance_info = current_seller.alive_user_compliance_info
       return false unless user_compliance_info&.birthday
 

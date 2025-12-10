@@ -44,24 +44,6 @@ class UpdateUserComplianceInfo
         new_compliance_info.individual_tax_id =       compliance_params[:ssn_last_four]           if compliance_params[:ssn_last_four].present?
         new_compliance_info.individual_tax_id =       compliance_params[:individual_tax_id]       if compliance_params[:individual_tax_id].present?
         new_compliance_info.business_tax_id =         compliance_params[:business_tax_id]         if compliance_params[:business_tax_id].present?
-        new_compliance_info.guardian_first_name =         compliance_params[:guardian_first_name]         if compliance_params[:guardian_first_name].present?
-        new_compliance_info.guardian_last_name =          compliance_params[:guardian_last_name]          if compliance_params[:guardian_last_name].present?
-        new_compliance_info.guardian_email =              compliance_params[:guardian_email]              if compliance_params[:guardian_email].present?
-        new_compliance_info.guardian_phone =              compliance_params[:guardian_phone]              if compliance_params[:guardian_phone].present?
-        new_compliance_info.guardian_street_address =     compliance_params[:guardian_street_address]     if compliance_params[:guardian_street_address].present?
-        new_compliance_info.guardian_city =               compliance_params[:guardian_city]               if compliance_params[:guardian_city].present?
-        new_compliance_info.guardian_state =              compliance_params[:guardian_state]              if compliance_params[:guardian_state].present?
-        new_compliance_info.guardian_country =            Compliance::Countries.mapping[compliance_params[:guardian_country]] if compliance_params[:guardian_country].present?
-        new_compliance_info.guardian_zip_code =           compliance_params[:guardian_zip_code]           if compliance_params[:guardian_zip_code].present?
-        new_compliance_info.guardian_dob_year =           compliance_params[:guardian_dob_year]           if compliance_params[:guardian_dob_year].present?
-        new_compliance_info.guardian_dob_month =          compliance_params[:guardian_dob_month]          if compliance_params[:guardian_dob_month].present?
-        new_compliance_info.guardian_dob_day =            compliance_params[:guardian_dob_day]            if compliance_params[:guardian_dob_day].present?
-        new_compliance_info.guardian_country_code =       compliance_params[:guardian_country_code]       if compliance_params[:guardian_country_code].present?
-        new_compliance_info.guardian_individual_tax_id =  compliance_params[:guardian_ssn_last_four]         if compliance_params[:guardian_ssn_last_four].present?
-        new_compliance_info.guardian_individual_tax_id =  compliance_params[:guardian_individual_tax_id]  if compliance_params[:guardian_individual_tax_id].present?
-        new_compliance_info.guardian_stripe_tos_accepted = ActiveModel::Type::Boolean.new.cast(compliance_params[:guardian_stripe_tos_accepted]) if compliance_params[:guardian_stripe_tos_accepted].present?
-        new_compliance_info.guardian_stripe_tos_ip = remote_ip if compliance_params[:guardian_stripe_tos_accepted].present? && remote_ip.present?
-        new_compliance_info.guardian_stripe_processing_tos_accepted = ActiveModel::Type::Boolean.new.cast(compliance_params[:guardian_stripe_processing_tos_accepted]) if compliance_params[:guardian_stripe_processing_tos_accepted].present?
         new_compliance_info.birthday = Date.new(compliance_params[:dob_year].to_i, compliance_params[:dob_month].to_i, compliance_params[:dob_day].to_i) if compliance_params[:dob_year].present? && compliance_params[:dob_year].to_i > 0
         new_compliance_info.skip_stripe_job_on_create = true
         new_compliance_info.phone =                   compliance_params[:phone]                   if compliance_params[:phone].present?
@@ -72,6 +54,15 @@ class UpdateUserComplianceInfo
       end
 
       return { success: false, error_message: new_compliance_info.errors.full_messages.to_sentence } unless saved
+
+      # Save guardian data to Guardian model if guardian params are present
+      if has_guardian_params?
+        guardian = user.guardian || user.build_guardian
+        update_guardian(guardian)
+        unless guardian.save
+          return { success: false, error_message: guardian.errors.full_messages.to_sentence }
+        end
+      end
 
       begin
         StripeMerchantAccountManager.handle_new_user_compliance_info(new_compliance_info)
@@ -87,6 +78,59 @@ class UpdateUserComplianceInfo
   end
 
   private
+    def has_guardian_params?
+      guardian_fields = %i[
+        guardian_first_name guardian_last_name guardian_email guardian_phone
+        guardian_street_address guardian_city guardian_state guardian_zip_code
+        guardian_country guardian_dob_year guardian_dob_month guardian_dob_day
+        guardian_individual_tax_id guardian_ssn_last_four
+      ]
+      guardian_fields.any? { |field| compliance_params[field].present? }
+    end
+
+    def update_guardian(guardian)
+      guardian.first_name = compliance_params[:guardian_first_name] if compliance_params[:guardian_first_name].present?
+      guardian.last_name = compliance_params[:guardian_last_name] if compliance_params[:guardian_last_name].present?
+      guardian.email = compliance_params[:guardian_email] if compliance_params[:guardian_email].present?
+      guardian.phone = compliance_params[:guardian_phone] if compliance_params[:guardian_phone].present?
+      guardian.street_address = compliance_params[:guardian_street_address] if compliance_params[:guardian_street_address].present?
+      guardian.city = compliance_params[:guardian_city] if compliance_params[:guardian_city].present?
+      guardian.state = compliance_params[:guardian_state] if compliance_params[:guardian_state].present?
+      guardian.zip_code = compliance_params[:guardian_zip_code] if compliance_params[:guardian_zip_code].present?
+      guardian.country = Compliance::Countries.mapping[compliance_params[:guardian_country]] if compliance_params[:guardian_country].present?
+
+      if compliance_params[:guardian_dob_year].present? && compliance_params[:guardian_dob_month].present? && compliance_params[:guardian_dob_day].present?
+        guardian.date_of_birth = Date.new(
+          compliance_params[:guardian_dob_year].to_i,
+          compliance_params[:guardian_dob_month].to_i,
+          compliance_params[:guardian_dob_day].to_i
+        )
+      end
+
+      guardian.individual_tax_id = compliance_params[:guardian_ssn_last_four] if compliance_params[:guardian_ssn_last_four].present?
+      guardian.individual_tax_id = compliance_params[:guardian_individual_tax_id] if compliance_params[:guardian_individual_tax_id].present?
+
+      if compliance_params[:guardian_stripe_tos_accepted].present?
+        guardian.stripe_tos_accepted = ActiveModel::Type::Boolean.new.cast(compliance_params[:guardian_stripe_tos_accepted])
+        guardian.stripe_tos_ip = remote_ip if remote_ip.present?
+      end
+
+      if compliance_params[:guardian_stripe_processing_tos_accepted].present?
+        guardian.stripe_processing_tos_accepted = ActiveModel::Type::Boolean.new.cast(compliance_params[:guardian_stripe_processing_tos_accepted])
+      end
+
+      # Country-specific fields
+      guardian.job_title = compliance_params[:guardian_job_title] if compliance_params[:guardian_job_title].present?
+      guardian.nationality = compliance_params[:guardian_nationality] if compliance_params[:guardian_nationality].present?
+      guardian.first_name_kanji = compliance_params[:guardian_first_name_kanji] if compliance_params[:guardian_first_name_kanji].present?
+      guardian.last_name_kanji = compliance_params[:guardian_last_name_kanji] if compliance_params[:guardian_last_name_kanji].present?
+      guardian.first_name_kana = compliance_params[:guardian_first_name_kana] if compliance_params[:guardian_first_name_kana].present?
+      guardian.last_name_kana = compliance_params[:guardian_last_name_kana] if compliance_params[:guardian_last_name_kana].present?
+      guardian.building_number = compliance_params[:guardian_building_number] if compliance_params[:guardian_building_number].present?
+      guardian.street_address_kanji = compliance_params[:guardian_street_address_kanji] if compliance_params[:guardian_street_address_kanji].present?
+      guardian.street_address_kana = compliance_params[:guardian_street_address_kana] if compliance_params[:guardian_street_address_kana].present?
+    end
+
     def filter_sensitive_params(params)
       filtered = params.dup
       sensitive_keys = [:individual_tax_id, :business_tax_id, :guardian_individual_tax_id, :ssn_last_four, :guardian_ssn_last_four]

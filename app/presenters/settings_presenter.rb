@@ -255,24 +255,25 @@ class SettingsPresenter
 
     return "not_required" unless seller.under_18?
 
-    user_compliance_info = seller.alive_user_compliance_info
+    seller.alive_user_compliance_info
 
     return "requires_input" unless seller.stripe_account.present?
 
     guardian_requests = seller.user_compliance_info_requests.where("field_needed LIKE 'guardian_%'")
 
-    has_submitted_guardian_info = user_compliance_info.present? && (
-      user_compliance_info.guardian_first_name.present? &&
-      user_compliance_info.guardian_last_name.present? &&
-      user_compliance_info.guardian_email.present? &&
-      user_compliance_info.guardian_phone.present? &&
-      user_compliance_info.guardian_street_address.present? &&
-      user_compliance_info.guardian_city.present? &&
-      user_compliance_info.guardian_state.present? &&
-      user_compliance_info.guardian_zip_code.present? &&
-      user_compliance_info.guardian_country.present? &&
-      guardian_date_complete?(user_compliance_info) &&
-      user_compliance_info.guardian_individual_tax_id.present?
+    guardian = seller.guardian
+    has_submitted_guardian_info = guardian.present? && (
+      guardian.first_name.present? &&
+      guardian.last_name.present? &&
+      guardian.email.present? &&
+      guardian.phone.present? &&
+      guardian.street_address.present? &&
+      guardian.city.present? &&
+      guardian.state.present? &&
+      guardian.zip_code.present? &&
+      guardian.country.present? &&
+      guardian_date_complete?(guardian) &&
+      guardian.has_individual_tax_id?
     )
 
     if guardian_requests.empty? || !has_submitted_guardian_info
@@ -319,7 +320,7 @@ class SettingsPresenter
                                              Compliance::Countries::PAK.alpha2],
         individual_tax_id_entered: user_compliance_info.individual_tax_id.present?,
         business_tax_id_entered: user_compliance_info.business_tax_id.present?,
-        guardian_individual_tax_id_entered: user_compliance_info.guardian_individual_tax_id.present?,
+        guardian_individual_tax_id_entered: seller.guardian&.has_individual_tax_id? || false,
         requires_credit_card: seller.requires_credit_card?,
         can_connect_stripe: seller.can_connect_stripe?,
         is_charged_paypal_payout_fee: seller.charge_paypal_payout_fee?,
@@ -363,20 +364,20 @@ class SettingsPresenter
         dob_month: user_compliance_info.birthday.try(:month).to_i,
         dob_day: user_compliance_info.birthday.try(:day).to_i,
         dob_year: user_compliance_info.birthday.try(:year).to_i,
-        guardian_first_name: user_compliance_info.guardian_first_name,
-        guardian_last_name: user_compliance_info.guardian_last_name,
-        guardian_email: user_compliance_info.guardian_email,
-        guardian_phone: user_compliance_info.guardian_phone,
-        guardian_street_address: user_compliance_info.guardian_street_address,
-        guardian_city: user_compliance_info.guardian_city,
-        guardian_state: user_compliance_info.guardian_state,
-        guardian_country: user_compliance_info.guardian_country_code || user_compliance_info.country_code,
-        guardian_zip_code: user_compliance_info.guardian_zip_code,
-        guardian_dob_month: user_compliance_info.guardian_birthday.try(:month).to_i,
-        guardian_dob_day: user_compliance_info.guardian_birthday.try(:day).to_i,
-        guardian_dob_year: user_compliance_info.guardian_birthday.try(:year).to_i,
-        guardian_stripe_tos_accepted: user_compliance_info.guardian_stripe_tos_accepted,
-        guardian_stripe_processing_tos_accepted: user_compliance_info.guardian_stripe_processing_tos_accepted,
+        guardian_first_name: seller.guardian&.first_name,
+        guardian_last_name: seller.guardian&.last_name,
+        guardian_email: seller.guardian&.email,
+        guardian_phone: seller.guardian&.phone,
+        guardian_street_address: seller.guardian&.street_address,
+        guardian_city: seller.guardian&.city,
+        guardian_state: seller.guardian&.state,
+        guardian_country: seller.guardian&.country_code || user_compliance_info.country_code,
+        guardian_zip_code: seller.guardian&.zip_code,
+        guardian_dob_month: seller.guardian&.date_of_birth.try(:month).to_i,
+        guardian_dob_day: seller.guardian&.date_of_birth.try(:day).to_i,
+        guardian_dob_year: seller.guardian&.date_of_birth.try(:year).to_i,
+        guardian_stripe_tos_accepted: seller.guardian&.stripe_tos_accepted,
+        guardian_stripe_processing_tos_accepted: seller.guardian&.stripe_processing_tos_accepted,
       }
     end
 
@@ -486,16 +487,8 @@ class SettingsPresenter
       end
     end
 
-    def guardian_date_complete?(user_compliance_info)
-      return false unless user_compliance_info
-
-      day = user_compliance_info.guardian_dob_day
-      month = user_compliance_info.guardian_dob_month
-      year = user_compliance_info.guardian_dob_year
-
-      # All components must be present and greater than 0
-      day.present? && day.to_i > 0 &&
-      month.present? && month.to_i > 0 &&
-      year.present? && year.to_i > 0
+    def guardian_date_complete?(guardian)
+      return false unless guardian
+      guardian.date_of_birth.present?
     end
 end
