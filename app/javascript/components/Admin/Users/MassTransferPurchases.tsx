@@ -16,7 +16,7 @@ const AdminUserMassTransferPurchases = ({ user }: AdminUserMassTransferPurchases
         <h3>Mass-transfer purchases</h3>
       </summary>
       <Form
-        url={Routes.mass_transfer_purchases_admin_user_path(user.id)}
+        url={Routes.mass_transfer_purchases_admin_user_path(user.external_id)}
         method="POST"
         confirmMessage="Are you sure you want to Mass Transfer purchases for this user?"
         onSuccess={() => showAlert("Successfully transferred purchases.", "success")}

@@ -35,9 +35,9 @@ describe Admin::RefundQueuesController, type: :controller, inertia: true do
       props = inertia.props
       expect(props[:title]).to eq("Refund queue")
       expect(props[:users]).to match_array([
-                                             hash_including(id: user_1.id),
-                                             hash_including(id: user_2.id),
-                                             hash_including(id: user_3.id)
+                                             hash_including(external_id: user_1.external_id),
+                                             hash_including(external_id: user_2.external_id),
+                                             hash_including(external_id: user_3.external_id)
                                            ])
     end
 
@@ -49,7 +49,7 @@ describe Admin::RefundQueuesController, type: :controller, inertia: true do
 
       props = inertia.props
       expect(props[:pagination]).to be_present
-      expect(props[:users]).to contain_exactly(hash_including(id: user_3.id))
+      expect(props[:users]).to contain_exactly(hash_including(external_id: user_3.external_id))
     end
   end
 end

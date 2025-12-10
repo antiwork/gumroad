@@ -33,12 +33,12 @@ class HelperUserInfoService
         actions: {
           "Admin (user)" => admin_user_url(user, host: UrlService.domain_with_protocol),
           "Admin (purchases)" => admin_search_purchases_url(query: user.email, host: UrlService.domain_with_protocol),
-          "Impersonate" => admin_impersonate_helper_action_url(user_id: user.external_id, host: UrlService.domain_with_protocol)
+          "Impersonate" => admin_impersonate_helper_action_url(user_external_id: user.external_id, host: UrlService.domain_with_protocol)
         }
       }
 
       if user.merchant_accounts.alive.stripe.first&.charge_processor_merchant_id
-        details[:actions]["View Stripe account"] = admin_stripe_dashboard_helper_action_url(user_id: user.external_id, host: UrlService.domain_with_protocol)
+        details[:actions]["View Stripe account"] = admin_stripe_dashboard_helper_action_url(user_external_id: user.external_id, host: UrlService.domain_with_protocol)
       end
 
       details

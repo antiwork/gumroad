@@ -7,11 +7,11 @@ type InvalidateActiveSessionsProps = {
   user: User;
 };
 
-const InvalidateActiveSessions = ({ user: { id } }: InvalidateActiveSessionsProps) => (
+const InvalidateActiveSessions = ({ user: { external_id } }: InvalidateActiveSessionsProps) => (
   <AdminAction
     label="Sign out from all active sessions"
-    url={Routes.invalidate_active_sessions_admin_user_path(id)}
-    confirm_message={`Are you sure you want to sign out user ${id} from all active sessions?`}
+    url={Routes.invalidate_active_sessions_admin_user_path(external_id)}
+    confirm_message={`Are you sure you want to sign out user ${external_id} from all active sessions?`}
     loading="Signing out from all active sessions..."
     success_message="Signed out from all active sessions."
     done="Signed out from all active sessions."
