@@ -17,7 +17,7 @@ const AdminUserAddCredit = ({ user }: AdminUserAddCreditProps) => (
         <h3>Add credits</h3>
       </summary>
       <Form
-        url={Routes.add_credit_admin_user_path(user.id)}
+        url={Routes.add_credit_admin_user_path(user.external_id)}
         method="POST"
         confirmMessage="Are you sure you want to add credits?"
         onSuccess={() => showAlert("Successfully added credits.", "success")}

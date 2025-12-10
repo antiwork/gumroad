@@ -5,7 +5,8 @@ class Admin::Users::Products::TosViolationFlagsController < Admin::Users::Produc
     if @user.flagged_for_tos_violation?
       render json: {
         tos_violation_flags: @product.comments.with_type_flagged.as_json(
-          only: %i[id content]
+          only: %i[content],
+          methods: %i[external_id]
         )
       }
     else

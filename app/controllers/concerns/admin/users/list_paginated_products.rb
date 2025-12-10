@@ -16,7 +16,7 @@ module Admin::Users::ListPaginatedProducts
 
       render inertia: inertia_template,
              props: {
-               user: -> { { id: user.id } },
+               user: -> { { external_id: user.external_id } },
                products: products.includes(:ordered_alive_product_files, :active_integrations, :staff_picked_product, :taxonomy).map do |product|
                            Admin::ProductPresenter::Card.new(product:, pundit_user:).props
                          end,

@@ -11,7 +11,7 @@ type Props = { creator_profile: CreatorProfile };
 
 const SubscribePage = ({ creator_profile }: Props) => (
   <Layout hideFollowForm creatorProfile={creator_profile}>
-    <FollowFormBlock creatorProfile={creator_profile} />
+    <FollowFormBlock creatorProfile={creator_profile} className="px-4" />
   </Layout>
 );
 

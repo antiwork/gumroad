@@ -807,6 +807,7 @@ class Purchase < ApplicationRecord
       "email" => email,
       "created" => "#{time_ago_in_words(created_at)} ago",
       "id" => id,
+      "external_id" => external_id,
       "amount" => price_cents,
       "displayed_price" => formatted_total_price,
       "formatted_gumroad_tax_amount" => formatted_gumroad_tax_amount,
@@ -814,7 +815,7 @@ class Purchase < ApplicationRecord
       "stripe_refunded" => stripe_refunded,
       "is_chargedback" => chargedback?,
       "is_chargeback_reversed" => chargeback_reversed,
-      "refunded_by" => refunding_users.map { |u| { id: u.id, email: u.email } },
+      "refunded_by" => refunding_users.map { |u| { external_id: u.external_id, email: u.email } },
       "error_code" => error_code,
       "purchase_state" => purchase_state,
       "gumroad_responsible_for_tax" => gumroad_responsible_for_tax?

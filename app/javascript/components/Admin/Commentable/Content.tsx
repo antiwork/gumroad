@@ -45,7 +45,7 @@ const AdminCommentableContent = ({
 
       <Rows role="list">
         {comments.map((comment) => (
-          <Comment key={comment.id} comment={comment} />
+          <Comment key={comment.external_id} comment={comment} />
         ))}
       </Rows>
 

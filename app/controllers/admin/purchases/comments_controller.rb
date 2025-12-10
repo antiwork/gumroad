@@ -5,6 +5,6 @@ class Admin::Purchases::CommentsController < Admin::BaseController
 
   private
     def commentable
-      Purchase.find(params[:purchase_id])
+      Purchase.find_by_external_id!(params[:purchase_external_id])
     end
 end

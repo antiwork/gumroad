@@ -15,7 +15,7 @@ describe Admin::Users::PayoutInfosController do
 
   describe "GET 'show'" do
     it "returns the user's payout info as JSON" do
-      get :show, params: { user_id: user.id }, format: :json
+      get :show, params: { user_external_id: user.external_id }, format: :json
 
       expect(response).to have_http_status(:success)
       expect(response.parsed_body).to include("active_bank_account" => nil)

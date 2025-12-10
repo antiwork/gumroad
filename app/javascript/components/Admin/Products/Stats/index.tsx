@@ -7,7 +7,7 @@ import AdminProductStatsSales, { type AdminProductStatsSalesProps } from "$app/c
 import AdminProductStatsViewCount from "$app/components/Admin/Products/Stats/ViewCount";
 import { useIsIntersecting } from "$app/components/useIsIntersecting";
 
-const AdminProductStats = ({ product_id }: { product_id: number }) => {
+const AdminProductStats = ({ product_external_id }: { product_external_id: string }) => {
   const {
     data: { views_count: viewsCount },
     isLoading: isViewsCountLoading,
@@ -17,7 +17,7 @@ const AdminProductStats = ({ product_id }: { product_id: number }) => {
     { views_count: 0 },
     {
       fetchUnlessLoaded: true,
-      url: Routes.views_count_admin_product_path(product_id),
+      url: Routes.views_count_admin_product_path(product_external_id),
       responseParser: (data) => cast<{ views_count: number }>(data),
     },
   );
@@ -38,7 +38,7 @@ const AdminProductStats = ({ product_id }: { product_id: number }) => {
     },
     {
       fetchUnlessLoaded: true,
-      url: Routes.sales_stats_admin_product_path(product_id),
+      url: Routes.sales_stats_admin_product_path(product_external_id),
       responseParser: (data) => cast<{ sales_stats: AdminProductStatsSalesProps }>(data),
     },
   );
