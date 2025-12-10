@@ -14,7 +14,7 @@ import Placeholder from "$app/components/ui/Placeholder";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "$app/components/ui/Table";
 import { Tab, Tabs } from "$app/components/ui/Tabs";
 
-export type TaxDocument = {
+type TaxDocument = {
   document: string;
   type: string;
   year: number;
