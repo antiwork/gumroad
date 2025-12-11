@@ -14,7 +14,7 @@ class Admin::SearchController < Admin::BaseController
                           @raw_query, @query, @query).order("created_at DESC").limit(RECORDS_PER_PAGE)
     @users = @users.with_blocked_attributes_for(:form_email, :form_email_domain)
 
-    redirect_to admin_user_path(@users.first.external_id) if @users.length == 1
+    redirect_to admin_user_path(@users.first) if @users.length == 1
   end
 
   def purchases
@@ -27,7 +27,7 @@ class Admin::SearchController < Admin::BaseController
     )
     @purchases = @purchases.page_with_kaminari(params[:page]).per(RECORDS_PER_PAGE) if @purchases.present?
 
-    redirect_to admin_purchase_path(@purchases.first.external_id) if @purchases.one? && params[:page].blank?
+    redirect_to admin_purchase_path(@purchases.first) if @purchases.one? && params[:page].blank?
   end
 
   private

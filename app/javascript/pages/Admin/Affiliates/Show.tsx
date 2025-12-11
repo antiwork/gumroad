@@ -14,7 +14,7 @@ const AdminAffiliatesShow = () => {
 
   return (
     <div className="flex flex-col gap-4">
-      <AdminUserAndProductsTabs selectedTab="profile" userExternalId={user.external_id} isAffiliateUser />
+      <AdminUserAndProductsTabs selectedTab="profile" userId={user.id} isAffiliateUser />
       <UserCard user={user} isAffiliateUser />
     </div>
   );
