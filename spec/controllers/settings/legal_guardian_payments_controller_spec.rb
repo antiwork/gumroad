@@ -302,12 +302,12 @@ RSpec.describe Settings::PaymentsController, type: :controller do
       end
 
       it "marks request as provided when guardian info is submitted" do
-        # Update compliance info with guardian first name
-        _, new_info = user_compliance_info.dup_and_save do |info|
-          info.guardian_first_name = "John"
-        end
+        # Create guardian with first name
+        guardian = user.guardian || user.create_guardian!
+        guardian.update!(first_name: "John")
 
-        UserComplianceInfoRequest.handle_new_user_compliance_info(new_info)
+        # Trigger the compliance info request handling
+        UserComplianceInfoRequest.handle_guardian_compliance_info(user)
 
         guardian_request.reload
         expect(guardian_request.state).to eq("provided")

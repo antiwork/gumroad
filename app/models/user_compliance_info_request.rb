@@ -59,6 +59,9 @@ class UserComplianceInfoRequest < ApplicationRecord
   end
 
   def self.handle_new_user_compliance_info(user_compliance_info)
+    user = user_compliance_info.user
+
+    # Handle UserComplianceInfo fields
     UserComplianceInfoFields.all_fields_on_user_compliance_info.each do |field|
       field_value = user_compliance_info.send(field)
       field_value = field_value.decrypt(GlobalConfig.get("STRONGBOX_GENERAL_PASSWORD")) if field_value.is_a?(Strongbox::Lock)
@@ -80,9 +83,28 @@ class UserComplianceInfoRequest < ApplicationRecord
 
       field_provided_in_part = field_value.length < field_expected_length if field_expected_length.present?
 
-      requests = user_compliance_info.user.user_compliance_info_requests.requested.where(field_needed: field)
+      requests = user.user_compliance_info_requests.requested.where(field_needed: field)
       requests = requests.only_needs_field_to_be_partially_provided if field_provided_in_part
       requests.find_each(&:mark_provided!)
+    end
+
+    # Handle Guardian fields from the Guardian model
+    handle_guardian_compliance_info(user)
+  end
+
+  def self.handle_guardian_compliance_info(user)
+    guardian = user.guardian
+    return if guardian.blank?
+
+    UserComplianceInfoFields.all_guardian_fields.each do |field|
+      attribute = UserComplianceInfoFields.guardian_field_to_attribute[field]
+      next if attribute.blank?
+
+      field_value = guardian.send(attribute)
+      field_value = field_value.decrypt(GlobalConfig.get("STRONGBOX_GENERAL_PASSWORD")) if field_value.is_a?(Strongbox::Lock)
+      next if field_value.blank?
+
+      user.user_compliance_info_requests.requested.where(field_needed: field).find_each(&:mark_provided!)
     end
   end
 

@@ -1065,21 +1065,21 @@ module StripeMerchantAccountManager
 
     # Map common Stripe fields to internal fields
     field_mapping = {
-      "guardian_first_name" => UserComplianceInfoFields::Guardian::FIRST_NAME,
-      "guardian_last_name" => UserComplianceInfoFields::Guardian::LAST_NAME,
-      "guardian_email" => UserComplianceInfoFields::Guardian::EMAIL,
-      "guardian_phone" => UserComplianceInfoFields::Guardian::PHONE,
-      "guardian_dob.day" => UserComplianceInfoFields::Guardian::DATE_OF_BIRTH,
-      "guardian_dob.month" => UserComplianceInfoFields::Guardian::DATE_OF_BIRTH,
-      "guardian_dob.year" => UserComplianceInfoFields::Guardian::DATE_OF_BIRTH,
-      "guardian_id_number" => UserComplianceInfoFields::Guardian::TAX_ID,
-      "guardian_address.line1" => UserComplianceInfoFields::Guardian::Address::STREET,
-      "guardian_address.city" => UserComplianceInfoFields::Guardian::Address::CITY,
-      "guardian_address.state" => UserComplianceInfoFields::Guardian::Address::STATE,
-      "guardian_address.postal_code" => UserComplianceInfoFields::Guardian::Address::ZIP_CODE,
-      "guardian_address.country" => UserComplianceInfoFields::Guardian::Address::COUNTRY,
-      "guardian_verification.document" => UserComplianceInfoFields::Guardian::STRIPE_IDENTITY_DOCUMENT_ID,
-      "guardian_verification.additional_document" => UserComplianceInfoFields::Guardian::STRIPE_ADDITIONAL_DOCUMENT_ID
+      "guardian_first_name" => Guardian::RequestFields::FIRST_NAME,
+      "guardian_last_name" => Guardian::RequestFields::LAST_NAME,
+      "guardian_email" => Guardian::RequestFields::EMAIL,
+      "guardian_phone" => Guardian::RequestFields::PHONE,
+      "guardian_dob.day" => Guardian::RequestFields::DATE_OF_BIRTH,
+      "guardian_dob.month" => Guardian::RequestFields::DATE_OF_BIRTH,
+      "guardian_dob.year" => Guardian::RequestFields::DATE_OF_BIRTH,
+      "guardian_id_number" => Guardian::RequestFields::TAX_ID,
+      "guardian_address.line1" => Guardian::RequestFields::Address::STREET,
+      "guardian_address.city" => Guardian::RequestFields::Address::CITY,
+      "guardian_address.state" => Guardian::RequestFields::Address::STATE,
+      "guardian_address.postal_code" => Guardian::RequestFields::Address::ZIP_CODE,
+      "guardian_address.country" => Guardian::RequestFields::Address::COUNTRY,
+      "guardian_verification.document" => Guardian::RequestFields::STRIPE_IDENTITY_DOCUMENT_ID,
+      "guardian_verification.additional_document" => Guardian::RequestFields::STRIPE_ADDITIONAL_DOCUMENT_ID
     }
 
     field_mapping[internal_field]
