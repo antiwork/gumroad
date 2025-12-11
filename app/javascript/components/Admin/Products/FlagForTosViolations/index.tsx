@@ -29,9 +29,7 @@ const FlagForTosViolations = ({ product, compliance }: FlagForTosViolationsProps
     fetchData: fetchTosViolationFlags,
   } = useLazyFetch<TosViolationFlags[]>([], {
     fetchUnlessLoaded: open,
-    url: Routes.admin_user_product_tos_violation_flags_path(product.user.external_id, product.external_id, {
-      format: "json",
-    }),
+    url: Routes.admin_user_product_tos_violation_flags_path(product.user.id, product.id, { format: "json" }),
     responseParser: (data) => {
       const parsed = cast<{ tos_violation_flags: TosViolationFlags[] }>(data);
       return parsed.tos_violation_flags;
@@ -69,8 +67,8 @@ const FlagForTosViolations = ({ product, compliance }: FlagForTosViolationsProps
         </summary>
         {shouldShowForm ? (
           <AdminFlagForTosViolationsForm
-            user_external_id={product.user.external_id}
-            product_external_id={product.external_id}
+            user_id={product.user.id}
+            product_id={product.id}
             success_message={suspendTosSuccessMessage}
             confirm_message={suspendTosConfirmMessage}
             reasons={compliance.reasons}

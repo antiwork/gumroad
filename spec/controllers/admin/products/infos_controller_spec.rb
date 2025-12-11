@@ -16,7 +16,7 @@ describe Admin::Products::InfosController do
     let(:product) { create(:product) }
 
     it "returns product info" do
-      get :show, params: { product_external_id: product.external_id }, format: :json
+      get :show, params: { product_id: product.id }, format: :json
 
       expect(response).to have_http_status(:ok)
       expect(response.parsed_body["info"]).to be_present

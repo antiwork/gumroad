@@ -9,11 +9,12 @@ class Admin::MerchantAccountPresenter
 
   def props
     {
+      id: merchant_account.id,
       charge_processor_id: merchant_account.charge_processor_id,
       charge_processor_merchant_id: merchant_account.charge_processor_merchant_id,
       created_at: merchant_account.created_at,
       external_id: merchant_account.external_id,
-      user_external_id: merchant_account.user&.external_id,
+      user_id: merchant_account.user_id,
       country: merchant_account.country,
       country_name:,
       currency: merchant_account.currency,

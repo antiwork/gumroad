@@ -9,12 +9,12 @@ namespace :admin do
   get :impersonate, to: "base#impersonate"
   delete :unimpersonate, to: "base#unimpersonate"
   get :redirect_to_stripe_dashboard, to: "base#redirect_to_stripe_dashboard", as: :redirect_to_stripe_dashboard
-  get "helper_actions/impersonate/:user_external_id", to: "helper_actions#impersonate", as: :impersonate_helper_action
-  get "helper_actions/stripe_dashboard/:user_external_id", to: "helper_actions#stripe_dashboard", as: :stripe_dashboard_helper_action
+  get "helper_actions/impersonate/:user_id", to: "helper_actions#impersonate", as: :impersonate_helper_action
+  get "helper_actions/stripe_dashboard/:user_id", to: "helper_actions#stripe_dashboard", as: :stripe_dashboard_helper_action
 
   get "action_call_dashboard", to: "action_call_dashboard#index"
 
-  resources :users, only: [:show, :destroy], defaults: { format: "html" }, param: :external_id do
+  resources :users, only: [:show, :destroy], defaults: { format: "html" } do
     scope module: :users do
       concerns :commentable
 
@@ -30,7 +30,7 @@ namespace :admin do
       resource :payout_info, only: :show
       resources :latest_posts, only: :index
       resources :stats, only: :index
-      resources :products, only: :index, param: :external_id do
+      resources :products, only: :index do
         scope module: :products do
           resources :tos_violation_flags, only: [:index, :create]
           resources :purchases, only: :index
@@ -65,8 +65,8 @@ namespace :admin do
     end
   end
 
-  resources :affiliates, only: [], param: :external_id do
-    resources :products, only: [:index], module: :affiliates, param: :external_id do
+  resources :affiliates, only: [] do
+    resources :products, only: [:index], module: :affiliates do
       resources :purchases, only: :index, module: :products
     end
   end
@@ -76,11 +76,11 @@ namespace :admin do
   resource :suspend_users, only: [:show, :update]
   resource :refund_queue, only: [:show]
 
-  resources :affiliates, only: [:index, :show], defaults: { format: "html" }, param: :external_id
+  resources :affiliates, only: [:index, :show], defaults: { format: "html" }
 
   get "links/:id", to: redirect("/admin/products/%{id}"), as: :link
 
-  resources :products, controller: "links", only: [:show, :destroy], param: :external_id do
+  resources :products, controller: "links", only: [:show, :destroy] do
     member do
       post :restore
       post :publish
@@ -108,7 +108,7 @@ namespace :admin do
 
   resources :comments, only: :create
 
-  resources :purchases, only: [:show], param: :external_id do
+  resources :purchases, only: [:show] do
     scope module: :purchases do
       concerns :commentable
     end
@@ -129,15 +129,15 @@ namespace :admin do
 
   resources :sales_reports, only: [:index, :create]
 
-  resources :merchant_accounts, only: [:show], param: :external_id do
+  resources :merchant_accounts, only: [:show] do
     member do
       get :live_attributes
     end
   end
 
   # Payouts
-  post "/paydays/pay_user/:external_id", to: "paydays#pay_user", as: :pay_user
-  resources :payouts, only: [:show], param: :external_id do
+  post "/paydays/pay_user/:id", to: "paydays#pay_user", as: :pay_user
+  resources :payouts, only: [:show] do
     member do
       post :retry
       post :cancel

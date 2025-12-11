@@ -12,14 +12,14 @@ describe "Admin::PurchasesController Scenario", type: :system, js: true do
 
   describe "undelete functionality" do
     it "shows undelete button for deleted purchases" do
-      visit admin_purchase_path(purchase.external_id)
+      visit admin_purchase_path(purchase.id)
 
       expect(page).to have_button("Undelete")
     end
 
     it "does not show undelete button for non-deleted purchases" do
       purchase.update!(is_deleted_by_buyer: false)
-      visit admin_purchase_path(purchase.external_id)
+      visit admin_purchase_path(purchase.id)
 
       expect(page).not_to have_button("Undelete")
     end
@@ -27,7 +27,7 @@ describe "Admin::PurchasesController Scenario", type: :system, js: true do
     it "allows undeleting purchase" do
       expect(purchase.reload.is_deleted_by_buyer).to be(true)
 
-      visit admin_purchase_path(purchase.external_id)
+      visit admin_purchase_path(purchase.id)
       click_on "Undelete"
       accept_browser_dialog
       wait_for_ajax
@@ -52,7 +52,7 @@ describe "Admin::PurchasesController Scenario", type: :system, js: true do
     end
 
     it "successfully resends receipt with a valid email" do
-      visit admin_purchase_path(purchase.external_id)
+      visit admin_purchase_path(purchase.id)
       find("summary", text: "Resend receipt").click
 
       # With the original email
@@ -80,7 +80,7 @@ describe "Admin::PurchasesController Scenario", type: :system, js: true do
     it "shows tip amount correctly when purchase has a tip" do
       create(:tip, purchase: purchase, value_usd_cents: 500)
 
-      visit admin_purchase_path(purchase.external_id)
+      visit admin_purchase_path(purchase.id)
 
       expect(page).to have_content("Tip $5", normalize_ws: true)
     end
@@ -115,7 +115,7 @@ describe "Admin::PurchasesController Scenario", type: :system, js: true do
     create(:purchase_custom_field, purchase:)
     create(:purchase_custom_field, purchase:, name: "Boolean field", field_type: CustomField::TYPE_CHECKBOX, value: true)
 
-    visit admin_purchase_path(purchase.external_id)
+    visit admin_purchase_path(purchase.id)
 
     expect(page).to have_content("Custom field custom field value (custom field) Boolean field true (custom field)", normalize_ws: true)
   end
@@ -128,7 +128,7 @@ describe "Admin::PurchasesController Scenario", type: :system, js: true do
     let!(:gift) { create(:gift, gifter_email: gifter_purchase.email, giftee_email: giftee_email, gifter_purchase: gifter_purchase, giftee_purchase: giftee_purchase) }
 
     it "allows updating giftee email for a gift purchase" do
-      visit admin_purchase_path(gifter_purchase.external_id)
+      visit admin_purchase_path(gifter_purchase.id)
       select_disclosure "Edit giftee email" do
         fill_in "giftee_email", with: new_giftee_email
         click_on "Update"
