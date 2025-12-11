@@ -255,11 +255,11 @@ const UtmLinkList = ({
                   <TableCell>
                     <UtmLinkActions link={link}>
                       <div role="menu">
-                        <Link href={editLinkPath(link)} role="menuitem">
+                        <Link href={editLinkPath(link)} role="menuitem" style={{ textDecoration: "none" }}>
                           <Icon name="pencil" />
                           &ensp;Edit
                         </Link>
-                        <Link href={duplicateLinkPath(link)} role="menuitem">
+                        <Link href={duplicateLinkPath(link)} role="menuitem" style={{ textDecoration: "none" }}>
                           <Icon name="outline-duplicate" />
                           &ensp;Duplicate
                         </Link>
