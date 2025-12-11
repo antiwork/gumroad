@@ -88,7 +88,6 @@ import TwoFactorAuthenticationPage from "$app/components/server-components/TwoFa
 import UtmLinksPage from "$app/components/server-components/UtmLinksPage";
 import VideoStreamPlayer from "$app/components/server-components/VideoStreamPlayer";
 import WishlistPage from "$app/components/server-components/WishlistPage";
-import WishlistsFollowingPage from "$app/components/server-components/WishlistsFollowingPage";
 import WishlistsPage from "$app/components/server-components/WishlistsPage";
 import CodeSnippet from "$app/components/ui/CodeSnippet";
 
@@ -178,7 +177,6 @@ ReactOnRails.register({
   TwoFactorAuthenticationPage,
   VideoStreamPlayer,
   WishlistPage,
-  WishlistsFollowingPage,
   WishlistsPage,
   UtmLinksPage,
 });
