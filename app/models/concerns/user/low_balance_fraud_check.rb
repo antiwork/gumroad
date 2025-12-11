@@ -26,6 +26,8 @@ module User::LowBalanceFraudCheck
     return if unpaid_balance_cents > LOW_BALANCE_THRESHOLD
 
     AdminMailer.low_balance_notify(id, refunded_or_disputed_purchase_id).deliver_later
+    return if suspended? # Don't change risk state for already suspended users
+
     disable_refunds_and_put_on_probation! unless recently_probated_for_low_balance?
   end
 

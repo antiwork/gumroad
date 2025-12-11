@@ -57,6 +57,22 @@ describe User::LowBalanceFraudCheck do
         allow(@creator).to receive(:unpaid_balance_cents).and_return(-200_00)
       end
 
+      context "when the creator is suspended for fraud" do
+        before do
+          @creator.flag_for_fraud!(author_name: "test_admin")
+          @creator.suspend_for_fraud!(author_name: "test_admin")
+        end
+
+        it "notifies admins but keeps the creator suspended and off probation" do
+          expect do
+            @creator.check_for_low_balance_and_probate(@purchase.id)
+          end.to have_enqueued_mail(AdminMailer, :low_balance_notify).with(@creator.id, @purchase.id)
+
+          expect(@creator.reload.suspended_for_fraud?).to eq(true)
+          expect(@creator.reload.on_probation?).to eq(false)
+        end
+      end
+
       context "when the creator is not on probation" do
         context "when the creator is not recently probated for low balance" do
           it "probates the creator" do
