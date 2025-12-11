@@ -20,13 +20,13 @@ describe Admin::Users::ProductsController, inertia: true do
 
   describe "GET index" do
     before do
-      get :index, params: { user_external_id: user.external_id }
+      get :index, params: { user_id: user.id }
     end
 
     it "returns successful response with Inertia page data" do
       expect(response).to be_successful
       expect(inertia.component).to eq("Admin/Users/Products/Index")
-      expect(inertia.props[:products]).to contain_exactly(hash_including(external_id: product1.external_id), hash_including(external_id: product2.external_id))
+      expect(inertia.props[:products]).to contain_exactly(hash_including(id: product1.id), hash_including(id: product2.id))
       expect(inertia.props[:pagination]).to eq({ pages: 1, page: 1 })
     end
 
@@ -34,7 +34,7 @@ describe Admin::Users::ProductsController, inertia: true do
       let(:product2) { create(:product, user:, deleted_at: Time.current) }
 
       it "includes deleted products in list" do
-        expect(inertia.props[:products]).to contain_exactly(hash_including(external_id: product1.external_id), hash_including(external_id: product2.external_id))
+        expect(inertia.props[:products]).to contain_exactly(hash_including(id: product1.id), hash_including(id: product2.id))
       end
     end
 
@@ -42,7 +42,7 @@ describe Admin::Users::ProductsController, inertia: true do
       let(:product2) { create(:product, user:, banned_at: Time.current) }
 
       it "includes banned products in list" do
-        expect(inertia.props[:products]).to contain_exactly(hash_including(external_id: product1.external_id), hash_including(external_id: product2.external_id))
+        expect(inertia.props[:products]).to contain_exactly(hash_including(id: product1.id), hash_including(id: product2.id))
       end
     end
   end

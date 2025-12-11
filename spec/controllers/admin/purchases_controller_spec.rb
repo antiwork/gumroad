@@ -17,36 +17,39 @@ describe Admin::PurchasesController, :vcr, inertia: true do
       @purchase = create(:purchase)
     end
 
-    it "redirects numeric ID to external_id" do
-      get :show, params: { external_id: @purchase.id }
-      expect(response).to redirect_to(admin_purchase_path(@purchase.external_id))
-    end
-
-    it "returns successful response with Inertia page data when using external_id" do
+    it "returns successful response with Inertia page data" do
       expect(Admin::PurchasePresenter).to receive(:new).with(@purchase).and_call_original
-      get :show, params: { external_id: @purchase.external_id }
+      get :show, params: { id: @purchase.id }
 
       expect(response).to be_successful
       expect(inertia.component).to eq("Admin/Purchases/Show")
     end
 
     it "raises ActionController::RoutingError when purchase is not found" do
-      expect { get :show, params: { external_id: "invalid-id" } }.to raise_error(ActionController::RoutingError)
+      expect { get :show, params: { id: "invalid-id" } }.to raise_error(ActionController::RoutingError)
     end
 
     it "finds the purchase correctly when loaded via external id" do
       expect(Purchase).not_to receive(:find_by_stripe_transaction_id)
       expect(Purchase).to receive(:find_by_external_id).and_call_original
-      get :show, params: { external_id: @purchase.external_id }
+      get :show, params: { id: @purchase.external_id }
 
       expect(assigns(:purchase)).to eq(@purchase)
       assert_response :success
     end
 
+    it "finds the purchase correctly when loaded via id" do
+      expect(Purchase).not_to receive(:find_by_stripe_transaction_id)
+      expect(Purchase).not_to receive(:find_by_external_id)
+      get :show, params: { id: @purchase.id }
+
+      expect(assigns(:purchase)).to eq(@purchase)
+      assert_response :success
+    end
 
     it "finds the purchase correctly when loaded via numeric external id" do
       expect(Purchase).to receive(:find_by_external_id_numeric).and_call_original
-      get :show, params: { external_id: @purchase.external_id_numeric }
+      get :show, params: { id: @purchase.external_id_numeric }
 
       expect(assigns(:purchase)).to eq(@purchase)
       assert_response :success
@@ -54,7 +57,7 @@ describe Admin::PurchasesController, :vcr, inertia: true do
 
     it "finds the purchase correctly when loaded via stripe_transaction_id" do
       expect(Purchase).to receive(:find_by_stripe_transaction_id).and_call_original
-      get :show, params: { external_id: @purchase.stripe_transaction_id }
+      get :show, params: { id: @purchase.stripe_transaction_id }
 
       expect(assigns(:purchase)).to eq(@purchase)
       assert_response :success
@@ -71,7 +74,7 @@ describe Admin::PurchasesController, :vcr, inertia: true do
     it "refunds the purchase and blocks the buyer" do
       comment_content = "Buyer blocked by Admin (#{@admin_user.email})"
       expect do
-        post :refund_for_fraud, params: { external_id: @purchase.external_id }
+        post :refund_for_fraud, params: { id: @purchase.id }
 
         expect(@purchase.reload.stripe_refunded).to be(true)
         expect(@purchase.buyer_blocked?).to eq(true)
@@ -92,7 +95,7 @@ describe Admin::PurchasesController, :vcr, inertia: true do
     it "successfully refunds taxes when refundable taxes are available" do
       allow_any_instance_of(Purchase).to receive(:refund_gumroad_taxes!).with(refunding_user_id: @admin_user.id, note: nil, business_vat_id: nil).and_return(true)
 
-      post :refund_taxes_only, params: { external_id: @purchase.external_id }
+      post :refund_taxes_only, params: { id: @purchase.id }
 
       expect(response).to be_successful
       expect(response.parsed_body["success"]).to be(true)
@@ -102,7 +105,7 @@ describe Admin::PurchasesController, :vcr, inertia: true do
       allow_any_instance_of(Purchase).to receive(:refund_gumroad_taxes!).with(refunding_user_id: @admin_user.id, note: "Tax exemption request", business_vat_id: "VAT123456").and_return(true)
 
       post :refund_taxes_only, params: {
-        external_id: @purchase.external_id,
+        id: @purchase.id,
         note: "Tax exemption request",
         business_vat_id: "VAT123456"
       }
@@ -117,7 +120,7 @@ describe Admin::PurchasesController, :vcr, inertia: true do
         double(full_messages: double(to_sentence: "Tax already refunded and Invalid tax amount"))
       )
 
-      post :refund_taxes_only, params: { external_id: @purchase.external_id }
+      post :refund_taxes_only, params: { id: @purchase.id }
 
       expect(response).to be_successful
       expect(response.parsed_body["success"]).to be(false)
@@ -125,7 +128,7 @@ describe Admin::PurchasesController, :vcr, inertia: true do
     end
 
     it "raises error when purchase is not found" do
-      expect { post :refund_taxes_only, params: { external_id: "invalid-id" } }.to raise_error(ActionController::RoutingError)
+      expect { post :refund_taxes_only, params: { id: "invalid-id" } }.to raise_error(ActionController::RoutingError)
     end
   end
 
@@ -137,7 +140,7 @@ describe Admin::PurchasesController, :vcr, inertia: true do
     it "undeletes the purchase and creates comments" do
       comment_content = "Purchase undeleted by Admin (#{@admin_user.email})"
       expect do
-        post :undelete, params: { external_id: @purchase.external_id }
+        post :undelete, params: { id: @purchase.id }
 
         expect(@purchase.reload.is_deleted_by_buyer).to be(false)
         expect(response).to be_successful
@@ -150,7 +153,7 @@ describe Admin::PurchasesController, :vcr, inertia: true do
       @purchase.update!(is_deleted_by_buyer: false)
 
       expect do
-        post :undelete, params: { external_id: @purchase.external_id }
+        post :undelete, params: { id: @purchase.id }
 
         expect(@purchase.reload.is_deleted_by_buyer).to be(false)
         expect(response).to be_successful
@@ -163,7 +166,7 @@ describe Admin::PurchasesController, :vcr, inertia: true do
       comment_content = "Purchase undeleted by Admin (#{@admin_user.email})"
 
       expect do
-        post :undelete, params: { external_id: @purchase.external_id }
+        post :undelete, params: { id: @purchase.id }
 
         expect(@purchase.reload.is_deleted_by_buyer).to be(false)
         expect(response).to be_successful
@@ -172,7 +175,7 @@ describe Admin::PurchasesController, :vcr, inertia: true do
     end
 
     it "raises error when purchase is not found" do
-      expect { post :undelete, params: { external_id: "invalid-id" } }.to raise_error(ActionController::RoutingError)
+      expect { post :undelete, params: { id: "invalid-id" } }.to raise_error(ActionController::RoutingError)
     end
   end
 
@@ -187,7 +190,7 @@ describe Admin::PurchasesController, :vcr, inertia: true do
         recurring_purchase = create(:purchase, email: "old@example.com", purchaser: buyer, subscription: subscription)
 
         post :resend_receipt, params: {
-          external_id: recurring_purchase.external_id,
+          id: recurring_purchase.id,
           resend_receipt: { email_address: new_email }
         }
 

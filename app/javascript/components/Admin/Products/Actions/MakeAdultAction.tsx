@@ -10,7 +10,7 @@ type MakeAdultActionProps = {
 const MakeAdultAction = ({ product }: MakeAdultActionProps) =>
   product.is_adult ? (
     <AdminActionButton
-      url={Routes.is_adult_admin_product_path(product.external_id, { is_adult: "0" })}
+      url={Routes.is_adult_admin_product_path(product.id, { is_adult: "0" })}
       label="Make non-adult"
       loading="Making non-adult..."
       done="It's not adult!"
@@ -18,7 +18,7 @@ const MakeAdultAction = ({ product }: MakeAdultActionProps) =>
     />
   ) : (
     <AdminActionButton
-      url={Routes.is_adult_admin_product_path(product.external_id, { is_adult: "1" })}
+      url={Routes.is_adult_admin_product_path(product.id, { is_adult: "1" })}
       label="Make adult"
       loading="Making adult..."
       done="It's adult!"

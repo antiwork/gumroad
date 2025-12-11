@@ -9,13 +9,13 @@ class Admin::ProductPresenter::MultipleMatches
 
   def props
     {
-      external_id: product.external_id,
+      id: product.id,
       name: product.name,
       created_at: product.created_at,
       long_url: product.long_url,
       price_formatted: product.price_formatted,
       user: {
-        external_id: product.user.external_id,
+        id: product.user.id,
         name: product.user.name
       }
     }

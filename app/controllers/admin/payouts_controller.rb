@@ -67,10 +67,6 @@ class Admin::PayoutsController < Admin::BaseController
 
   private
     def fetch_payment
-      if payment = Payment.find_by(id: params[:external_id])
-        return redirect_to admin_payout_path(payment.external_id)
-      end
-
-      @payment = Payment.find_by_external_id(params[:external_id]) || e404
+      @payment = Payment.find_by(id: params[:id]) || e404
     end
 end
