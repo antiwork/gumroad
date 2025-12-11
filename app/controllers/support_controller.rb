@@ -4,13 +4,14 @@ class SupportController < ApplicationController
   include ValidateRecaptcha
   include HelperWidget
 
+  layout "inertia"
+
   def index
     return redirect_to help_center_root_path(params.permit(:new_ticket)) unless user_signed_in?
 
     e404 if helper_widget_host.blank?
 
-    @title = "Support"
-    @props = {
+    render inertia: "Support/Index", props: {
       host: helper_widget_host,
       session: helper_session,
     }
@@ -33,6 +34,10 @@ class SupportController < ApplicationController
   end
 
   private
+    def set_title
+      @title = "Support"
+    end
+
     def validate_request_params
       missing_params = []
       missing_params << "email" if params[:email].blank?
