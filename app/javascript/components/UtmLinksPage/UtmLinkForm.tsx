@@ -1,16 +1,10 @@
+import { Link, router } from "@inertiajs/react";
 import cx from "classnames";
 import * as React from "react";
-import { Link, useLoaderData, useNavigate } from "react-router-dom";
 import { cast, is } from "ts-safe-cast";
 
-import {
-  createUtmLink,
-  getUniquePermalink,
-  UtmLinkFormContext,
-  UtmLinkDestinationOption,
-  UtmLink,
-  updateUtmLink,
-} from "$app/data/utm_links";
+import { createUtmLink, getUniquePermalink, updateUtmLink } from "$app/data/utm_links";
+import type { UtmLinkFormContext, UtmLinkDestinationOption, UtmLink, SavedUtmLink } from "$app/types/utm_link";
 import { assertDefined } from "$app/utils/assert";
 import { asyncVoid } from "$app/utils/promise";
 import { ResponseError } from "$app/utils/request";
@@ -20,7 +14,7 @@ import { CopyToClipboard } from "$app/components/CopyToClipboard";
 import { Icon } from "$app/components/Icons";
 import { Select } from "$app/components/Select";
 import { showAlert } from "$app/components/server-components/Alert";
-import { UtmLinkLayout } from "$app/components/server-components/UtmLinksPage";
+import { Layout } from "$app/components/UtmLinksPage/Layout";
 import { WithTooltip } from "$app/components/WithTooltip";
 
 const MAX_UTM_PARAM_LENGTH = 200;
@@ -40,11 +34,14 @@ type ErrorInfo = { attrName: FieldAttrName; message: string };
 
 const duplicatedTitle = (title?: string) => (title ? `${title} (copy)` : "");
 
-export const UtmLinkForm = () => {
-  const { context, utm_link } = cast<{ context: UtmLinkFormContext; utm_link: UtmLink | null }>(useLoaderData());
+type UtmLinkFormProps = {
+  context: UtmLinkFormContext;
+  utm_link: UtmLink | SavedUtmLink | null;
+};
+
+export const UtmLinkForm = ({ context, utm_link }: UtmLinkFormProps) => {
   const isEditing = utm_link?.id !== undefined;
   const isDuplicating = utm_link !== null && utm_link.id === undefined;
-  const navigate = useNavigate();
   const uid = React.useId();
   const [title, setTitle] = React.useState(isDuplicating ? duplicatedTitle(utm_link.title) : (utm_link?.title ?? ""));
   const [destination, setDestination] = React.useState<UtmLinkDestinationOption | null>(
@@ -54,12 +51,12 @@ export const UtmLinkForm = () => {
   );
   const [{ shortUrlProtocol, shortUrlPrefix, permalink }, setShortUrl] = React.useState(() => {
     const { protocol: shortUrlProtocol, host, pathname } = new URL(utm_link?.short_url ?? context.short_url);
-    const permalink = pathname.split("/").pop() ?? "";
-    const shortUrlPrefix = host + pathname.slice(0, -permalink.length);
+    const permalinkValue = pathname.split("/").pop() ?? "";
+    const shortUrlPrefixValue = host + pathname.slice(0, -permalinkValue.length);
     return {
       shortUrlProtocol,
-      shortUrlPrefix,
-      permalink,
+      shortUrlPrefix: shortUrlPrefixValue,
+      permalink: permalinkValue,
     };
   });
   const [isLoadingNewPermalink, setIsLoadingNewPermalink] = React.useState(false);
@@ -118,8 +115,8 @@ export const UtmLinkForm = () => {
   const generateNewPermalink = asyncVoid(async () => {
     setIsLoadingNewPermalink(true);
     try {
-      const { permalink } = await getUniquePermalink();
-      setShortUrl((shortUrl) => ({ ...shortUrl, permalink }));
+      const { permalink: newPermalink } = await getUniquePermalink();
+      setShortUrl((shortUrl) => ({ ...shortUrl, permalink: newPermalink }));
     } catch {
       showAlert("Sorry, something went wrong. Please try again.", "error");
     } finally {
@@ -204,7 +201,7 @@ export const UtmLinkForm = () => {
       }
 
       showAlert(isEditing ? "Link updated!" : "Link created!", "success");
-      navigate("/dashboard/utm_links");
+      router.visit(Routes.utm_links_dashboard_path());
     } catch (error) {
       const genericMessage = "Sorry, something went wrong. Please try again.";
       if (error instanceof ResponseError) {
@@ -230,11 +227,12 @@ export const UtmLinkForm = () => {
   });
 
   return (
-    <UtmLinkLayout
+    <Layout
       title={isEditing ? "Edit link" : "Create link"}
+      selectedTab="utm_links"
       actions={
         <>
-          <Link to="/dashboard/utm_links" className="button">
+          <Link href={Routes.utm_links_dashboard_path()} className="button">
             <Icon name="x-square" />
             Cancel
           </Link>
@@ -452,7 +450,7 @@ export const UtmLinkForm = () => {
           ) : null}
         </section>
       </form>
-    </UtmLinkLayout>
+    </Layout>
   );
 };
 
@@ -486,10 +484,9 @@ const UtmFieldSelect = ({
       value={value ? (options.find((o) => o.id === value) ?? null) : null}
       onChange={(option) => onChange(option ? option.id : null)}
       inputValue={inputValue ?? ""}
-      // Lowercase the value, replace non-alphanumeric characters with dashes, and restrict to 64 characters
-      onInputChange={(value) =>
+      onInputChange={(inputVal) =>
         setInputValue(
-          value
+          inputVal
             .toLocaleLowerCase()
             .replace(/[^a-z0-9-_]/gu, "-")
             .slice(0, MAX_UTM_PARAM_LENGTH),

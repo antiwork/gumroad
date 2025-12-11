@@ -398,7 +398,6 @@ Rails.application.routes.draw do
 
     get "/affiliates/*other", to: "affiliates#index" # route handled by react-router
     get "/emails/*other", to: "emails#index" # route handled by react-router
-    get "/dashboard/utm_links/*other", to: "utm_links#index" # route handled by react-router
     get "/communities/*other", to: "communities#index" # route handled by react-router
 
     get "/a/:affiliate_id", to: "affiliate_redirect#set_cookie_and_redirect", as: :affiliate_redirect
@@ -816,6 +815,11 @@ Rails.application.routes.draw do
     # utm links
     get "/utm_links" => redirect("/dashboard/utm_links")
     get "/dashboard/utm_links", to: "utm_links#index", as: :utm_links_dashboard
+    get "/dashboard/utm_links/new", to: "utm_links#new", as: :new_utm_link_dashboard
+    post "/dashboard/utm_links", to: "utm_links#create", as: :create_utm_link_dashboard
+    get "/dashboard/utm_links/:id/edit", to: "utm_links#edit", as: :edit_utm_link_dashboard
+    patch "/dashboard/utm_links/:id", to: "utm_links#update", as: :update_utm_link_dashboard
+    delete "/dashboard/utm_links/:id", to: "utm_links#destroy", as: :destroy_utm_link_dashboard
 
     # shipments
     post "/shipments/verify_shipping_address", to: "shipments#verify_shipping_address", as: :verify_shipping_address
