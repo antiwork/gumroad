@@ -1,12 +1,3 @@
-import { usePage } from "@inertiajs/react";
-import React from "react";
+import TaxCenterPage from "$app/components/TaxCenter";
 
-import TaxCenterPage, { type TaxCenterPageProps } from "$app/components/TaxCenter";
-
-function index() {
-  const props = usePage<TaxCenterPageProps>().props;
-
-  return <TaxCenterPage {...props} />;
-}
-
-export default index;
+export default TaxCenterPage;
