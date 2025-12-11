@@ -77,7 +77,7 @@ const AdminSalesReportsJobHistory = ({ countries, sales_types, jobHistory, authe
             <TableRow key={index}>
               <TableCell>{countryCodeToName[job.country_code] || job.country_code}</TableCell>
               <TableCell>
-                {job.start_date} to {job.end_date}
+                {job.start_date} - {job.end_date}
               </TableCell>
               <TableCell>{job.sales_type ? salesTypeCodeToName[job.sales_type] : sales_types[0]?.[1]}</TableCell>
               <TableCell>{new Date(job.enqueued_at).toLocaleString()}</TableCell>
