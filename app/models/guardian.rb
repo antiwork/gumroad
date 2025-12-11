@@ -106,7 +106,6 @@ class Guardian < ApplicationRecord
     guardian_first_name guardian_last_name guardian_email guardian_phone
     guardian_street_address guardian_city guardian_state guardian_zip_code
     guardian_country guardian_dob_year guardian_dob_month guardian_dob_day
-    guardian_individual_tax_id
   ].freeze
 
   # Human-readable labels for required fields
@@ -122,8 +121,7 @@ class Guardian < ApplicationRecord
     "guardian_country" => "country",
     "guardian_dob_year" => "year of birth",
     "guardian_dob_month" => "month of birth",
-    "guardian_dob_day" => "day of birth",
-    "guardian_individual_tax_id" => "last four digits of SSN"
+    "guardian_dob_day" => "day of birth"
   }.freeze
 
   belongs_to :user

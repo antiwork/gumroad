@@ -126,7 +126,7 @@ RSpec.describe Settings::PaymentsController, type: :controller do
           expect(guardian.stripe_processing_tos_accepted).to eq(true)
         end
 
-        it "validates required guardian fields" do
+        it "validates required guardian fields with human-readable labels" do
           create(:user_compliance_info, user: user, birthday: under_18_birthday)
 
           post :update, params: {
@@ -139,7 +139,11 @@ RSpec.describe Settings::PaymentsController, type: :controller do
 
           expect(response).to have_http_status(:ok)
           expect(JSON.parse(response.body)["success"]).to eq(false)
-          expect(JSON.parse(response.body)["error_message"]).to be_present
+          error_message = JSON.parse(response.body)["error_message"]
+          expect(error_message).to include("first name")
+          expect(error_message).to include("last name")
+          expect(error_message).not_to include("guardian_first_name")
+          expect(error_message).not_to include("guardian_last_name")
         end
 
         it "validates guardian date of birth is realistic" do

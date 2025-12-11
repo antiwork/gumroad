@@ -246,11 +246,6 @@ class Settings::PaymentsController < Sellers::BaseController
     def validate_guardian_params(params_hash)
       missing_fields = Guardian::REQUIRED_PARAM_FIELDS.select { |field| params_hash[field].blank? }
 
-      # Don't require tax ID if guardian already has one saved
-      if missing_fields.include?("guardian_individual_tax_id") && current_seller.guardian&.has_individual_tax_id?
-        missing_fields.delete("guardian_individual_tax_id")
-      end
-
       if missing_fields.any?
         human_readable = missing_fields.map { |f| Guardian::REQUIRED_FIELD_LABELS[f] || f }.uniq
         return "Missing required guardian fields: #{human_readable.to_sentence}"
