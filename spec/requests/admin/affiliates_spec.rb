@@ -16,7 +16,7 @@ describe "Admin::AffiliatesController Scenario", type: :system, js: true do
     end
 
     it "shows no products alert" do
-      visit admin_affiliate_path(affiliate_user.external_id)
+      visit admin_affiliate_path(affiliate_user)
 
       click_on "Products"
 
@@ -34,7 +34,7 @@ describe "Admin::AffiliatesController Scenario", type: :system, js: true do
     end
 
     it "shows products" do
-      visit admin_affiliate_path(affiliate_user.external_id)
+      visit admin_affiliate_path(affiliate_user)
 
       click_on "Products"
 

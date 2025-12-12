@@ -29,7 +29,7 @@ const AdminProductPurchasesContent = ({
     <div className="flex flex-col gap-4">
       <div className="stack">
         {purchases.map((purchase) => (
-          <AdminProductPurchase key={purchase.external_id} purchase={purchase} />
+          <AdminProductPurchase key={purchase.id} purchase={purchase} />
         ))}
       </div>
 

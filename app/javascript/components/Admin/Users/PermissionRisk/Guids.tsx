@@ -6,19 +6,19 @@ import { request } from "$app/utils/request";
 
 import { LoadingSpinner } from "$app/components/LoadingSpinner";
 
-type UserGuids = { guid: string; user_external_ids: string[] }[];
+type UserGuids = { guid: string; user_ids: number[] }[];
 
 type GuidProps = {
   guid: string;
-  user_external_ids: string[];
+  user_ids: number[];
 };
 
-const Guid = ({ guid, user_external_ids }: GuidProps) => (
+const Guid = ({ guid, user_ids }: GuidProps) => (
   <div>
     <h5>
       <Link href={Routes.admin_guid_path(guid)}>{guid}</Link>
     </h5>
-    <span>{user_external_ids.length} users</span>
+    <span>{user_ids.length} users</span>
   </div>
 );
 
@@ -27,8 +27,8 @@ const UserGuidsContent = ({ userGuids, isLoading }: { userGuids: UserGuids; isLo
   if (userGuids.length > 0)
     return (
       <div className="stack">
-        {userGuids.map(({ guid, user_external_ids }) => (
-          <Guid key={guid} guid={guid} user_external_ids={user_external_ids} />
+        {userGuids.map(({ guid, user_ids }) => (
+          <Guid key={guid} guid={guid} user_ids={user_ids} />
         ))}
       </div>
     );
@@ -39,7 +39,7 @@ const UserGuidsContent = ({ userGuids, isLoading }: { userGuids: UserGuids; isLo
   );
 };
 
-const AdminUserGuids = ({ user_external_id }: { user_external_id: string }) => {
+const AdminUserGuids = ({ user_id }: { user_id: number }) => {
   const [open, setOpen] = React.useState(false);
   const [isLoading, setIsLoading] = React.useState(false);
   const [userGuids, setUserGuids] = React.useState<UserGuids>([]);
@@ -48,7 +48,7 @@ const AdminUserGuids = ({ user_external_id }: { user_external_id: string }) => {
     setIsLoading(true);
     const response = await request({
       method: "GET",
-      url: Routes.admin_user_guids_path(user_external_id, { format: "json" }),
+      url: Routes.admin_user_guids_path(user_id, { format: "json" }),
       accept: "json",
     });
     setUserGuids(cast<UserGuids>(await response.json()));
