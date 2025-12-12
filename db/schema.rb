@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[7.1].define(version: 2025_12_09_201732) do
+ActiveRecord::Schema[7.1].define(version: 2025_12_12_132219) do
   create_table "active_storage_attachments", charset: "utf8mb4", collation: "utf8mb4_unicode_ci", force: :cascade do |t|
     t.string "name", limit: 191, null: false
     t.string "record_type", limit: 191, null: false
@@ -919,17 +919,16 @@ ActiveRecord::Schema[7.1].define(version: 2025_12_09_201732) do
   end
 
   create_table "guardians", charset: "utf8mb4", collation: "utf8mb4_unicode_ci", force: :cascade do |t|
-    t.bigint "user_id", null: false
-    t.string "first_name"
-    t.string "last_name"
-    t.string "email"
-    t.string "phone"
-    t.date "date_of_birth"
-    t.string "street_address"
-    t.string "city"
-    t.string "state"
-    t.string "zip_code"
-    t.string "country"
+    t.string "first_name", null: false
+    t.string "last_name", null: false
+    t.string "email", null: false
+    t.string "phone", null: false
+    t.date "date_of_birth", null: false
+    t.string "street_address", null: false
+    t.string "city", null: false
+    t.string "state", null: false
+    t.string "zip_code", null: false
+    t.string "country", null: false
     t.string "country_code"
     t.binary "individual_tax_id"
     t.string "stripe_person_id"
@@ -950,7 +949,6 @@ ActiveRecord::Schema[7.1].define(version: 2025_12_09_201732) do
     t.datetime "created_at", null: false
     t.datetime "updated_at", null: false
     t.index ["stripe_person_id"], name: "index_guardians_on_stripe_person_id", unique: true
-    t.index ["user_id"], name: "index_guardians_on_user_id", unique: true
   end
 
   create_table "gumroad_daily_analytics", charset: "utf8mb4", collation: "utf8mb4_unicode_ci", force: :cascade do |t|
@@ -2473,19 +2471,8 @@ ActiveRecord::Schema[7.1].define(version: 2025_12_09_201732) do
     t.string "first_name"
     t.string "last_name"
     t.string "stripe_identity_document_id"
-    t.integer "guardian_dob_day"
-    t.integer "guardian_dob_month"
-    t.integer "guardian_dob_year"
-    t.binary "guardian_individual_tax_id"
-    t.string "guardian_first_name"
-    t.string "guardian_last_name"
-    t.string "guardian_email"
-    t.string "guardian_phone"
-    t.string "guardian_street_address"
-    t.string "guardian_city"
-    t.string "guardian_state"
-    t.string "guardian_zip_code"
-    t.string "guardian_country"
+    t.bigint "guardian_id"
+    t.index ["guardian_id"], name: "index_user_compliance_info_on_guardian_id"
     t.index ["user_id"], name: "index_user_compliance_info_on_user_id"
   end
 
@@ -2791,5 +2778,5 @@ ActiveRecord::Schema[7.1].define(version: 2025_12_09_201732) do
 
   add_foreign_key "active_storage_attachments", "active_storage_blobs", column: "blob_id"
   add_foreign_key "active_storage_variant_records", "active_storage_blobs", column: "blob_id"
-  add_foreign_key "guardians", "users", name: "_fk_rails_91de816a2a"
+  add_foreign_key "user_compliance_info", "guardians", name: "_fk_rails_8e6b14230f"
 end

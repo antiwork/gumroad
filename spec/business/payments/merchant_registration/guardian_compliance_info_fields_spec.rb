@@ -105,8 +105,7 @@ RSpec.describe Guardian::RequestFields, type: :module do
   end
 
   describe "integration with Guardian model" do
-    let(:user) { create(:user) }
-    let(:guardian) { create(:guardian, user: user) }
+    let(:guardian) { create(:guardian) }
 
     it "all guardian fields map to Guardian model attributes" do
       guardian_attributes = [

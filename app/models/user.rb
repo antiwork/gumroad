@@ -54,7 +54,17 @@ class User < ApplicationRecord
   # Associate with CustomDomain.alive objects
   has_one :custom_domain, -> { alive }
 
-  has_one :guardian, dependent: :destroy
+  def guardian
+    alive_user_compliance_info&.guardian
+  end
+
+  def build_guardian(attributes = {})
+    Guardian.new(attributes)
+  end
+
+  def create_guardian!(attributes = {})
+    Guardian.create!(attributes)
+  end
 
   has_many :orders, foreign_key: :purchaser_id
   has_many :purchases, foreign_key: :purchaser_id

@@ -25,12 +25,13 @@ class UpdateUserComplianceInfo
       end
 
       if has_guardian_params?
-        guardian = user.guardian || user.build_guardian
+        guardian = new_compliance_info.guardian || Guardian.new
         update_guardian(guardian)
-        if !guardian.save
+        if !guardian.save(context: :submission)
           @guardian_errors = guardian.errors.full_messages.to_sentence
           raise ActiveRecord::Rollback
         end
+        new_compliance_info.update!(guardian: guardian)
       end
     end
 

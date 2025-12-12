@@ -6,6 +6,8 @@ class UserComplianceInfo < ApplicationRecord
   include ExternalId
   include Immutable
   include UserComplianceInfo::BusinessTypes
+
+  attr_mutable :guardian_id
   include JsonData
 
   stripped_fields :first_name, :last_name, :street_address, :city, :zip_code, :business_name, :business_street_address, :business_city, :business_zip_code, on: :create
@@ -13,6 +15,8 @@ class UserComplianceInfo < ApplicationRecord
   MINIMUM_DATE_OF_BIRTH_AGE = 13
 
   belongs_to :user, optional: true
+  belongs_to :guardian, optional: true
+
   validates_presence_of :user
 
   encrypt_with_public_key :individual_tax_id,
@@ -62,8 +66,9 @@ class UserComplianceInfo < ApplicationRecord
   # Public: Returns if the UserComplianceInfo record has all it's critical compliance related fields completed, these are:
   # Individual: First Name, Last Name, Address, DOB
   # Business: First Name, Last Name, Address, DOB, Business Name, Business Type, Business Address
+  # Under 18: All of the above + Guardian with completed info
   def has_completed_compliance_info?
-    first_name.present? &&
+    base_info_complete = first_name.present? &&
       last_name.present? &&
       birthday.present? &&
       street_address.present? &&
@@ -71,19 +76,22 @@ class UserComplianceInfo < ApplicationRecord
       state.present? &&
       zip_code.present? &&
       country.present? &&
-      individual_tax_id.present? &&
+      individual_tax_id.present?
+
+    business_info_complete = !is_business ||
       (
-        !is_business ||
-        (
-          business_tax_id.present? &&
-          business_name.present? &&
-          business_type.present? &&
-          business_street_address.present? &&
-          business_city.present? &&
-          business_state.present? &&
-          business_zip_code.present?
-        )
+        business_tax_id.present? &&
+        business_name.present? &&
+        business_type.present? &&
+        business_street_address.present? &&
+        business_city.present? &&
+        business_state.present? &&
+        business_zip_code.present?
       )
+
+    guardian_info_complete = !under_18? || (guardian.present? && guardian.has_completed_info?)
+
+    base_info_complete && business_info_complete && guardian_info_complete
   end
 
   # Public: Returns the ISO_3166-1 Alpha-2 country code for the country stored in this compliance info.
@@ -171,6 +179,10 @@ class UserComplianceInfo < ApplicationRecord
     business_tax_id.present?
   end
   alias_method :has_business_tax_id, :has_business_tax_id?
+
+  def under_18?
+    birthday.present? && birthday > 18.years.ago.to_date
+  end
 
   private
     def handle_stripe_compliance_info

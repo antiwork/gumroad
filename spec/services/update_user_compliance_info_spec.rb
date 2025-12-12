@@ -54,7 +54,8 @@ RSpec.describe UpdateUserComplianceInfo do
       end
 
       it "updates an existing guardian record" do
-        existing_guardian = create(:guardian, user: user, first_name: "Old", last_name: "Name")
+        existing_guardian = create(:guardian, first_name: "Old", last_name: "Name")
+        user.alive_user_compliance_info.update!(guardian: existing_guardian)
         service = described_class.new(compliance_params: guardian_params, user: user, remote_ip: remote_ip)
 
         expect { service.process }.not_to change { Guardian.count }
@@ -106,7 +107,7 @@ RSpec.describe UpdateUserComplianceInfo do
         result = service.process
 
         expect(result[:success]).to eq(false)
-        expect(Guardian.where(user: user).count).to eq(0)
+        expect(user.guardian).to be_nil
       end
     end
 
@@ -121,18 +122,32 @@ RSpec.describe UpdateUserComplianceInfo do
     end
 
     context "with country-specific guardian fields" do
-      it "saves Japanese name fields" do
-        params = {
+      let(:base_guardian_params) do
+        {
           guardian_first_name: "John",
           guardian_last_name: "Guardian",
+          guardian_email: "guardian@example.com",
+          guardian_phone: "+14155551234",
+          guardian_street_address: "123 Main St",
+          guardian_city: "San Francisco",
+          guardian_state: "CA",
+          guardian_zip_code: "94107",
+          guardian_country: "US",
+          guardian_dob_year: "1980",
+          guardian_dob_month: "6",
+          guardian_dob_day: "15",
+          guardian_stripe_tos_accepted: true,
+          guardian_stripe_processing_tos_accepted: true
+        }
+      end
+
+      it "saves Japanese name fields" do
+        params = base_guardian_params.merge(
           guardian_first_name_kanji: "山田",
           guardian_last_name_kanji: "太郎",
           guardian_first_name_kana: "ヤマダ",
-          guardian_last_name_kana: "タロウ",
-          guardian_dob_year: "1980",
-          guardian_dob_month: "6",
-          guardian_dob_day: "15"
-        }
+          guardian_last_name_kana: "タロウ"
+        )
 
         service = described_class.new(compliance_params: params, user: user, remote_ip: remote_ip)
         service.process
@@ -145,15 +160,10 @@ RSpec.describe UpdateUserComplianceInfo do
       end
 
       it "saves job title and nationality" do
-        params = {
-          guardian_first_name: "John",
-          guardian_last_name: "Guardian",
+        params = base_guardian_params.merge(
           guardian_job_title: "Software Engineer",
-          guardian_nationality: "US",
-          guardian_dob_year: "1980",
-          guardian_dob_month: "6",
-          guardian_dob_day: "15"
-        }
+          guardian_nationality: "US"
+        )
 
         service = described_class.new(compliance_params: params, user: user, remote_ip: remote_ip)
         service.process

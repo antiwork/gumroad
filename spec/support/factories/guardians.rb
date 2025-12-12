@@ -2,10 +2,6 @@
 
 FactoryBot.define do
   factory :guardian_empty, class: Guardian do
-    user
-  end
-
-  factory :guardian, parent: :guardian_empty do
     first_name { "John" }
     last_name { "Guardian" }
     email { "guardian@example.com" }
@@ -16,6 +12,10 @@ FactoryBot.define do
     state { "California" }
     zip_code { "94107" }
     country { "United States" }
+  end
+
+  factory :guardian, parent: :guardian_empty do
+    sequence(:stripe_person_id) { |n| "person_guardian_#{n}" }
     individual_tax_id { "123456789" }
     stripe_tos_accepted { true }
     stripe_tos_ip { "127.0.0.1" }

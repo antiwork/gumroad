@@ -77,58 +77,40 @@ RSpec.describe SettingsPresenter, type: :presenter do
         end
 
         it "returns requires_input when guardian email is missing" do
-          _, _ = user_compliance_info.dup_and_save do |new_info|
-            new_info.guardian_first_name = "John"
-            new_info.guardian_last_name = "Guardian"
-          end
+          # Create guardian with missing email
+          guardian = create(:guardian_empty, email: "temp@example.com")
+          guardian.update_column(:email, nil) # bypass validation to test incomplete state
+          user.alive_user_compliance_info.update!(guardian: guardian)
+          user.reload
 
           expect(presenter.guardian_verification_state).to eq("requires_input")
         end
 
         it "returns requires_input when guardian address is incomplete" do
-          _, _ = user_compliance_info.dup_and_save do |new_info|
-            new_info.guardian_first_name = "John"
-            new_info.guardian_last_name = "Guardian"
-            new_info.guardian_email = "guardian@example.com"
-            new_info.guardian_phone = "+1234567890"
-          end
+          # Create guardian with missing address
+          guardian = create(:guardian_empty)
+          guardian.update_column(:street_address, nil) # bypass validation
+          user.alive_user_compliance_info.update!(guardian: guardian)
+          user.reload
 
           expect(presenter.guardian_verification_state).to eq("requires_input")
         end
 
         it "returns requires_input when guardian date of birth is incomplete" do
-          _, _ = user_compliance_info.dup_and_save do |new_info|
-            new_info.guardian_first_name = "John"
-            new_info.guardian_last_name = "Guardian"
-            new_info.guardian_email = "guardian@example.com"
-            new_info.guardian_phone = "+1234567890"
-            new_info.guardian_street_address = "123 Guardian St"
-            new_info.guardian_city = "Guardian City"
-            new_info.guardian_state = "CA"
-            new_info.guardian_zip_code = "90210"
-            new_info.guardian_country = "United States"
-            new_info.guardian_dob_day = 15
-            new_info.guardian_dob_month = 6
-          end
+          # Create guardian with missing date_of_birth
+          guardian = create(:guardian_empty)
+          guardian.update_column(:date_of_birth, nil) # bypass validation
+          user.alive_user_compliance_info.update!(guardian: guardian)
+          user.reload
 
           expect(presenter.guardian_verification_state).to eq("requires_input")
         end
 
         it "returns requires_input when guardian tax ID is missing" do
-          _, _ = user_compliance_info.dup_and_save do |new_info|
-            new_info.guardian_first_name = "John"
-            new_info.guardian_last_name = "Guardian"
-            new_info.guardian_email = "guardian@example.com"
-            new_info.guardian_phone = "+1234567890"
-            new_info.guardian_street_address = "123 Guardian St"
-            new_info.guardian_city = "Guardian City"
-            new_info.guardian_state = "CA"
-            new_info.guardian_zip_code = "90210"
-            new_info.guardian_country = "United States"
-            new_info.guardian_dob_day = 15
-            new_info.guardian_dob_month = 6
-            new_info.guardian_dob_year = 1980
-          end
+          # Create guardian without tax ID (guardian_empty has no tax ID)
+          guardian = create(:guardian_empty)
+          user.alive_user_compliance_info.update!(guardian: guardian)
+          user.reload
 
           expect(presenter.guardian_verification_state).to eq("requires_input")
         end
@@ -186,81 +168,38 @@ RSpec.describe SettingsPresenter, type: :presenter do
       end
 
       it "treats empty strings as incomplete" do
-        _, _ = user_compliance_info.dup_and_save do |new_info|
-          new_info.guardian_first_name = ""
-          new_info.guardian_last_name = "Guardian"
-          new_info.guardian_email = "guardian@example.com"
-          new_info.guardian_phone = "+1234567890"
-          new_info.guardian_street_address = "123 Guardian St"
-          new_info.guardian_city = "Guardian City"
-          new_info.guardian_state = "CA"
-          new_info.guardian_zip_code = "90210"
-          new_info.guardian_country = "United States"
-          new_info.guardian_dob_day = 15
-          new_info.guardian_dob_month = 6
-          new_info.guardian_dob_year = 1980
-          new_info.guardian_individual_tax_id = "123456789"
-        end
+        guardian = create(:guardian_empty)
+        guardian.update_column(:first_name, "") # bypass validation to set empty string
+        user.alive_user_compliance_info.update!(guardian: guardian)
+        user.reload
 
         expect(presenter.guardian_verification_state).to eq("requires_input")
       end
 
       it "treats whitespace-only strings as incomplete" do
-        _, _ = user_compliance_info.dup_and_save do |new_info|
-          new_info.guardian_first_name = "   "
-          new_info.guardian_last_name = "Guardian"
-          new_info.guardian_email = "guardian@example.com"
-          new_info.guardian_phone = "+1234567890"
-          new_info.guardian_street_address = "123 Guardian St"
-          new_info.guardian_city = "Guardian City"
-          new_info.guardian_state = "CA"
-          new_info.guardian_zip_code = "90210"
-          new_info.guardian_country = "United States"
-          new_info.guardian_dob_day = 15
-          new_info.guardian_dob_month = 6
-          new_info.guardian_dob_year = 1980
-          new_info.guardian_individual_tax_id = "123456789"
-        end
+        guardian = create(:guardian_empty)
+        guardian.update_column(:first_name, "   ") # bypass validation to set whitespace
+        user.alive_user_compliance_info.update!(guardian: guardian)
+        user.reload
 
         expect(presenter.guardian_verification_state).to eq("requires_input")
       end
 
       it "handles missing date of birth components" do
-        _, _ = user_compliance_info.dup_and_save do |new_info|
-          new_info.guardian_first_name = "John"
-          new_info.guardian_last_name = "Guardian"
-          new_info.guardian_email = "guardian@example.com"
-          new_info.guardian_phone = "+1234567890"
-          new_info.guardian_street_address = "123 Guardian St"
-          new_info.guardian_city = "Guardian City"
-          new_info.guardian_state = "CA"
-          new_info.guardian_zip_code = "90210"
-          new_info.guardian_country = "United States"
-          new_info.guardian_dob_day = nil
-          new_info.guardian_dob_month = 6
-          new_info.guardian_dob_year = 1980
-          new_info.guardian_individual_tax_id = "123456789"
-        end
+        guardian = create(:guardian_empty)
+        guardian.update_column(:date_of_birth, nil) # bypass validation
+        user.alive_user_compliance_info.update!(guardian: guardian)
+        user.reload
 
         expect(presenter.guardian_verification_state).to eq("requires_input")
       end
 
       it "handles zero values for date components" do
-        _, _ = user_compliance_info.dup_and_save do |new_info|
-          new_info.guardian_first_name = "John"
-          new_info.guardian_last_name = "Guardian"
-          new_info.guardian_email = "guardian@example.com"
-          new_info.guardian_phone = "+1234567890"
-          new_info.guardian_street_address = "123 Guardian St"
-          new_info.guardian_city = "Guardian City"
-          new_info.guardian_state = "CA"
-          new_info.guardian_zip_code = "90210"
-          new_info.guardian_country = "United States"
-          new_info.guardian_dob_day = 0
-          new_info.guardian_dob_month = 6
-          new_info.guardian_dob_year = 1980
-          new_info.guardian_individual_tax_id = "123456789"
-        end
+        # A date with zero components would be invalid, test incomplete guardian
+        guardian = create(:guardian_empty)
+        guardian.update_column(:date_of_birth, nil) # bypass validation
+        user.alive_user_compliance_info.update!(guardian: guardian)
+        user.reload
 
         expect(presenter.guardian_verification_state).to eq("requires_input")
       end

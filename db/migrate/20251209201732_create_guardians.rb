@@ -3,27 +3,25 @@
 class CreateGuardians < ActiveRecord::Migration[7.1]
   def change
     create_table :guardians do |t|
-      t.references :user, null: false, foreign_key: true, index: { unique: true }
+      # Personal Info (required fields with NOT NULL constraints)
+      t.string :first_name, null: false
+      t.string :last_name, null: false
+      t.string :email, null: false
+      t.string :phone, null: false
+      t.date :date_of_birth, null: false
 
-      # Personal Info
-      t.string :first_name
-      t.string :last_name
-      t.string :email
-      t.string :phone
-      t.date :date_of_birth
-
-      # Address
-      t.string :street_address
-      t.string :city
-      t.string :state
-      t.string :zip_code
-      t.string :country
+      # Address (required fields with NOT NULL constraints)
+      t.string :street_address, null: false
+      t.string :city, null: false
+      t.string :state, null: false
+      t.string :zip_code, null: false
+      t.string :country, null: false
       t.string :country_code
 
       # Tax ID (encrypted - binary column like UserComplianceInfo)
       t.binary :individual_tax_id
 
-      # Stripe Integration
+      # Stripe Integration (stripe_person_id populated after Stripe creates the person)
       t.string :stripe_person_id
       t.boolean :stripe_tos_accepted, default: false
       t.string :stripe_tos_ip
@@ -49,6 +47,6 @@ class CreateGuardians < ActiveRecord::Migration[7.1]
       t.timestamps
     end
 
-    add_index :guardians, :stripe_person_id, unique: true, where: "stripe_person_id IS NOT NULL"
+    add_index :guardians, :stripe_person_id, unique: true
   end
 end

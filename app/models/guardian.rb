@@ -124,7 +124,8 @@ class Guardian < ApplicationRecord
     "guardian_dob_day" => "day of birth"
   }.freeze
 
-  belongs_to :user
+  has_one :user_compliance_info, dependent: :nullify
+  has_one :minor, through: :user_compliance_info, source: :user
 
   encrypt_with_public_key :individual_tax_id,
                           symmetric: :never,
@@ -132,22 +133,28 @@ class Guardian < ApplicationRecord
                                                          GlobalConfig.get("STRONGBOX_GENERAL_PASSWORD")).public_key,
                           private_key: GlobalConfig.get("STRONGBOX_GENERAL")
 
-  validates :user_id, presence: true, uniqueness: true
-  validates :first_name, presence: true, on: :submission
-  validates :last_name, presence: true, on: :submission
-  validates :email, presence: true, format: { with: URI::MailTo::EMAIL_REGEXP }, on: :submission
-  validates :phone, presence: true, on: :submission
-  validates :street_address, presence: true, on: :submission
-  validates :city, presence: true, on: :submission
-  validates :state, presence: true, on: :submission
-  validates :zip_code, presence: true, on: :submission
-  validates :country, presence: true, on: :submission
-  validates :date_of_birth, presence: true, on: :submission
-  validates :stripe_tos_accepted, acceptance: { accept: true }, on: :submission
-  validates :stripe_processing_tos_accepted, acceptance: { accept: true }, on: :submission
+  # Base validations - always enforced (match DB NOT NULL constraints)
+  validates :first_name, presence: true
+  validates :last_name, presence: true
+  validates :email, presence: true
+  validates :phone, presence: true
+  validates :street_address, presence: true
+  validates :city, presence: true
+  validates :state, presence: true
+  validates :zip_code, presence: true
+  validates :country, presence: true
+  validates :date_of_birth, presence: true
   validate :guardian_must_be_at_least_18, if: -> { date_of_birth.present? }
 
+  validates :email, format: { with: URI::MailTo::EMAIL_REGEXP }, on: :submission
+  validates :stripe_tos_accepted, acceptance: { accept: true }, on: :submission
+  validates :stripe_processing_tos_accepted, acceptance: { accept: true }, on: :submission
+
   before_save :set_country_code, if: -> { country.present? && country_changed? }
+
+  def user
+    minor
+  end
 
   def birthday
     date_of_birth
@@ -165,7 +172,8 @@ class Guardian < ApplicationRecord
       city.present? &&
       state.present? &&
       zip_code.present? &&
-      country.present?
+      country.present? &&
+      stripe_person_id.present?
   end
 
   def has_individual_tax_id?

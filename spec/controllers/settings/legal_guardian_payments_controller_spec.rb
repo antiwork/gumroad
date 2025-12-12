@@ -39,11 +39,10 @@ RSpec.describe Settings::PaymentsController, type: :controller do
         context "when guardian info is partially provided" do
           it "still shows requires_input state for incomplete info" do
             allow_any_instance_of(SettingsPresenter).to receive(:guardian_verification_state).and_return("requires_input")
-            create(:user_compliance_info, user: user, birthday: under_18_birthday,
-                                          guardian_first_name: "John",
-                                          guardian_last_name: "Guardian",
-                                          guardian_email: "guardian@example.com"
-            )
+            compliance_info = create(:user_compliance_info, user: user, birthday: under_18_birthday)
+
+            guardian = create(:guardian, first_name: "John", last_name: "Guardian", email: "guardian@example.com")
+            compliance_info.update!(guardian: guardian)
 
             get :show
 
@@ -242,7 +241,7 @@ RSpec.describe Settings::PaymentsController, type: :controller do
       end
 
       describe "POST #update" do
-        it "ignores guardian information if provided" do
+        it "ignores guardian information if provided for over-18 user" do
           post :update, params: {
             user_compliance_info: {
               guardian_first_name: "John",
@@ -251,10 +250,8 @@ RSpec.describe Settings::PaymentsController, type: :controller do
             }
           }
 
-          updated_info = user.alive_user_compliance_info
-          expect(updated_info.guardian_first_name).to be_blank
-          expect(updated_info.guardian_last_name).to be_blank
-          expect(updated_info.guardian_email).to be_blank
+          # Guardian should not be created for over-18 users
+          expect(user.guardian).to be_nil
         end
       end
     end
@@ -306,9 +303,9 @@ RSpec.describe Settings::PaymentsController, type: :controller do
       end
 
       it "marks request as provided when guardian info is submitted" do
-        # Create guardian with first name
-        guardian = user.guardian || user.create_guardian!
-        guardian.update!(first_name: "John")
+        # Create guardian and link to compliance info
+        guardian = create(:guardian, first_name: "John")
+        user.alive_user_compliance_info.update!(guardian: guardian)
 
         # Trigger the compliance info request handling
         UserComplianceInfoRequest.handle_guardian_compliance_info(user)

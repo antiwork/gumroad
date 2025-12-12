@@ -82,7 +82,8 @@ module StripeMerchantAccountManager
     if user.under_18?
       guardian_params = guardian_person_hash(user, passphrase, user_compliance_info: user_compliance_info)
       if guardian_params
-        Stripe::Account.create_person(stripe_account.id, guardian_params)
+        guardian_stripe_person = Stripe::Account.create_person(stripe_account.id, guardian_params)
+        user.guardian&.update!(stripe_person_id: guardian_stripe_person.id)
       end
     end
 

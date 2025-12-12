@@ -4,37 +4,71 @@ require "spec_helper"
 
 describe Guardian do
   describe "associations" do
-    it "belongs to user" do
+    it "has_one user_compliance_info" do
       guardian = create(:guardian)
-      expect(guardian.user).to be_a(User)
+      compliance_info = create(:user_compliance_info, guardian: guardian)
+
+      expect(guardian.reload.user_compliance_info).to eq(compliance_info)
     end
 
-    it "enforces uniqueness per user" do
-      user = create(:user)
-      create(:guardian, user: user)
+    it "has_one minor through user_compliance_info" do
+      guardian = create(:guardian)
+      compliance_info = create(:user_compliance_info, guardian: guardian)
 
-      expect { create(:guardian, user: user) }.to raise_error(ActiveRecord::RecordInvalid)
+      expect(guardian.minor).to eq(compliance_info.user)
+    end
+
+    it "provides user accessor for minor" do
+      guardian = create(:guardian)
+      compliance_info = create(:user_compliance_info, guardian: guardian)
+
+      expect(guardian.user).to eq(compliance_info.user)
     end
   end
 
   describe "validations" do
-    let(:user) { create(:user) }
-
     describe "guardian_must_be_at_least_18" do
       it "is valid when guardian is 18 or older" do
-        guardian = build(:guardian, user: user, date_of_birth: 18.years.ago.to_date)
+        guardian = build(:guardian, date_of_birth: 18.years.ago.to_date)
         expect(guardian).to be_valid
       end
 
       it "is invalid when guardian is under 18" do
-        guardian = build(:guardian, user: user, date_of_birth: 17.years.ago.to_date)
+        guardian = build(:guardian, date_of_birth: 17.years.ago.to_date)
         expect(guardian).not_to be_valid
         expect(guardian.errors[:base]).to include("Guardian must be at least 18 years old")
       end
+    end
 
-      it "allows nil date_of_birth" do
-        guardian = build(:guardian, user: user, date_of_birth: nil)
-        expect(guardian).to be_valid
+    describe "base validations (always enforced)" do
+      it "validates required fields are present" do
+        guardian = Guardian.new
+        expect(guardian).not_to be_valid
+        expect(guardian.errors[:first_name]).to include("can't be blank")
+        expect(guardian.errors[:last_name]).to include("can't be blank")
+        expect(guardian.errors[:email]).to include("can't be blank")
+        expect(guardian.errors[:phone]).to include("can't be blank")
+        expect(guardian.errors[:street_address]).to include("can't be blank")
+        expect(guardian.errors[:city]).to include("can't be blank")
+        expect(guardian.errors[:state]).to include("can't be blank")
+        expect(guardian.errors[:zip_code]).to include("can't be blank")
+        expect(guardian.errors[:country]).to include("can't be blank")
+        expect(guardian.errors[:date_of_birth]).to include("can't be blank")
+      end
+    end
+
+    describe ":submission context validations" do
+      it "validates email format on submission context" do
+        guardian = build(:guardian, email: "invalid-email")
+        expect(guardian.valid?(:submission)).to be(false)
+        expect(guardian.errors[:email]).to include("is invalid")
+      end
+
+      it "validates tos acceptance on submission context" do
+        guardian = build(:guardian, stripe_tos_accepted: false, stripe_processing_tos_accepted: false)
+        expect(guardian.valid?(:submission)).to be(false)
+        expect(guardian.errors[:stripe_tos_accepted]).to be_present
+        expect(guardian.errors[:stripe_processing_tos_accepted]).to be_present
       end
     end
   end
@@ -66,56 +100,54 @@ describe Guardian do
     end
 
     it "handles nil values" do
-      guardian = create(:guardian, first_name: nil, last_name: "Doe")
+      guardian = build(:guardian, first_name: nil, last_name: "Doe")
       expect(guardian.full_name).to eq("Doe")
     end
   end
 
   describe "#has_completed_info?" do
-    let(:user) { create(:user) }
-
     it "returns true when all required fields are present" do
       guardian = create(:guardian)
       expect(guardian.has_completed_info?).to be(true)
     end
 
     it "returns false when first_name is missing" do
-      guardian = build(:guardian, user: user, first_name: nil)
+      guardian = build(:guardian, first_name: nil)
       expect(guardian.has_completed_info?).to be(false)
     end
 
     it "returns false when last_name is missing" do
-      guardian = build(:guardian, user: user, last_name: nil)
+      guardian = build(:guardian, last_name: nil)
       expect(guardian.has_completed_info?).to be(false)
     end
 
     it "returns false when date_of_birth is missing" do
-      guardian = build(:guardian, user: user, date_of_birth: nil)
+      guardian = build(:guardian, date_of_birth: nil)
       expect(guardian.has_completed_info?).to be(false)
     end
 
     it "returns false when street_address is missing" do
-      guardian = build(:guardian, user: user, street_address: nil)
+      guardian = build(:guardian, street_address: nil)
       expect(guardian.has_completed_info?).to be(false)
     end
 
     it "returns false when city is missing" do
-      guardian = build(:guardian, user: user, city: nil)
+      guardian = build(:guardian, city: nil)
       expect(guardian.has_completed_info?).to be(false)
     end
 
     it "returns false when state is missing" do
-      guardian = build(:guardian, user: user, state: nil)
+      guardian = build(:guardian, state: nil)
       expect(guardian.has_completed_info?).to be(false)
     end
 
     it "returns false when zip_code is missing" do
-      guardian = build(:guardian, user: user, zip_code: nil)
+      guardian = build(:guardian, zip_code: nil)
       expect(guardian.has_completed_info?).to be(false)
     end
 
     it "returns false when country is missing" do
-      guardian = build(:guardian, user: user, country: nil)
+      guardian = build(:guardian, country: nil)
       expect(guardian.has_completed_info?).to be(false)
     end
   end
@@ -207,22 +239,21 @@ describe Guardian do
     end
   end
 
-  describe "User association" do
-    it "can access guardian through user" do
-      user = create(:user)
-      guardian = create(:guardian, user: user)
+  describe "User association through compliance info" do
+    it "can access guardian through user's compliance info" do
+      guardian = create(:guardian)
+      compliance_info = create(:user_compliance_info, guardian: guardian, birthday: 16.years.ago.to_date)
 
-      expect(user.guardian).to eq(guardian)
+      expect(compliance_info.user.guardian).to eq(guardian)
     end
 
-    it "destroys guardian when user is destroyed" do
-      user = create(:user)
-      guardian = create(:guardian, user: user)
-      guardian_id = guardian.id
+    it "nullifies guardian_id when guardian is destroyed" do
+      guardian = create(:guardian)
+      compliance_info = create(:user_compliance_info, guardian: guardian)
 
-      user.destroy
+      guardian.destroy
 
-      expect(Guardian.find_by(id: guardian_id)).to be_nil
+      expect(compliance_info.reload.guardian_id).to be_nil
     end
   end
 end
