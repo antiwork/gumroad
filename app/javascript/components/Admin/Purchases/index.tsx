@@ -154,6 +154,7 @@ const Info = ({ purchase }: { purchase: Purchase }) => (
         <>
           <dt>Seller support email</dt>
           <dd>
+            {purchase.seller.support_email}{" "}
             <CopyToClipboard text={purchase.seller.support_email}>
               <Icon name="outline-duplicate" />
             </CopyToClipboard>

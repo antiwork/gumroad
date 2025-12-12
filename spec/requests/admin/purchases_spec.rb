@@ -86,6 +86,31 @@ describe "Admin::PurchasesController Scenario", type: :system, js: true do
     end
   end
 
+  describe "seller support email display" do
+    it "shows seller support email when present" do
+      support_email = "support@seller.com"
+      purchase.seller.update!(support_email: support_email)
+
+      visit admin_purchase_path(purchase.id)
+
+      within_section("Info", section_element: :div, exact: true, match: :first) do
+        expect(page).to have_content("Seller support email")
+        expect(page).to have_content(support_email)
+      end
+    end
+
+    it "does not show seller support email when not present" do
+      purchase.seller.update!(support_email: nil)
+
+      visit admin_purchase_path(purchase.id)
+
+      within_section("Info", section_element: :div, exact: true, match: :first) do
+        expect(page).not_to have_content("Seller support email")
+        expect(page).to have_content("Seller email")
+      end
+    end
+  end
+
   it "shows custom fields" do
     create(:purchase_custom_field, purchase:)
     create(:purchase_custom_field, purchase:, name: "Boolean field", field_type: CustomField::TYPE_CHECKBOX, value: true)

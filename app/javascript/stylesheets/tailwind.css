@@ -1,6 +1,7 @@
 @layer theme, base, components, utilities;
 @import "tailwindcss/theme.css" layer(theme);
-@import "tailwindcss/utilities.css" source(none); /* Should be layer(utilties) but that conflicts with the legacy non-layer CSS */
+@import "tailwindcss/utilities.css" source(none);
+/* Should be layer(utilities) but that conflicts with the legacy non-layer CSS */
 @plugin "@tailwindcss/typography";
 /*
  * By default Tailwind checks all files in the project for classes, but in Gumroad that causes performance issues.
@@ -89,9 +90,11 @@
   0% {
     transform: translateX(0);
   }
+
   50% {
     transform: translateX(-50%);
   }
+
   100% {
     transform: translateX(0);
   }
@@ -101,6 +104,7 @@
   0% {
     transform: translateX(0);
   }
+
   100% {
     transform: translateX(-50%);
   }
