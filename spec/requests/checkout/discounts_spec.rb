@@ -787,37 +787,37 @@ describe("Checkout discounts page", type: :system, js: true) do
     it "sorts the offer codes" do
       visit checkout_discounts_path
       find(:columnheader, "Discount").click
-      expect(page).to have_nth_table_row_record(1, "CODE1Discount 1 50% off of Product 1, Product 2, and 1 other")
-      expect(page).to have_nth_table_row_record(2, "CODE2Discount 2 $2 off of Product 2")
+      expect(page).to have_nth_table_row_record(1, "CODE1 Discount 1 50% off of Product 1, Product 2, and 1 other")
+      expect(page).to have_nth_table_row_record(2, "CODE2 Discount 2 $2 off of Product 2")
       expect(page).to have_current_path(checkout_discounts_path({ column: "name", page: 1, sort: "asc" }))
       find(:columnheader, "Discount").click
-      expect(page).to have_nth_table_row_record(1, "DISCOUNT5Discount 5 $1 off of all products")
-      expect(page).to have_nth_table_row_record(2, "DISCOUNT4Discount 4 $1 off of all products")
+      expect(page).to have_nth_table_row_record(1, "DISCOUNT5 Discount 5 $1 off of all products")
+      expect(page).to have_nth_table_row_record(2, "DISCOUNT4 Discount 4 $1 off of all products")
       expect(page).to have_current_path(checkout_discounts_path({ column: "name", page: 1, sort: "desc" }))
       find(:columnheader, "Revenue").click
-      expect(page).to have_nth_table_row_record(1, "DISCOUNT3Discount 3 $1 off of all products")
-      expect(page).to have_nth_table_row_record(2, "DISCOUNT4Discount 4 $1 off of all products")
+      expect(page).to have_nth_table_row_record(1, "DISCOUNT3 Discount 3 $1 off of all products")
+      expect(page).to have_nth_table_row_record(2, "DISCOUNT4 Discount 4 $1 off of all products")
       expect(page).to have_current_path(checkout_discounts_path({ column: "revenue", page: 1, sort: "asc" }))
       find(:columnheader, "Revenue").click
-      expect(page).to have_nth_table_row_record(1, "CODE1Discount 1 50% off of Product 1, Product 2, and 1 other")
-      expect(page).to have_nth_table_row_record(2, "CODE2Discount 2 $2 off of Product 2")
+      expect(page).to have_nth_table_row_record(1, "CODE1 Discount 1 50% off of Product 1, Product 2, and 1 other")
+      expect(page).to have_nth_table_row_record(2, "CODE2 Discount 2 $2 off of Product 2")
       expect(page).to have_current_path(checkout_discounts_path({ column: "revenue", page: 1, sort: "desc" }))
 
       find(:columnheader, "Uses").click
-      expect(page).to have_nth_table_row_record(1, "DISCOUNT3Discount 3 $1 off of all products")
-      expect(page).to have_nth_table_row_record(2, "DISCOUNT4Discount 4 $1 off of all products")
+      expect(page).to have_nth_table_row_record(1, "DISCOUNT3 Discount 3 $1 off of all products")
+      expect(page).to have_nth_table_row_record(2, "DISCOUNT4 Discount 4 $1 off of all products")
       expect(page).to have_current_path(checkout_discounts_path({ column: "uses", page: 1, sort: "asc" }))
       find(:columnheader, "Uses").click
-      expect(page).to have_nth_table_row_record(1, "CODE1Discount 1 50% off of Product 1, Product 2, and 1 other")
-      expect(page).to have_nth_table_row_record(2, "CODE2Discount 2 $2 off of Product 2")
+      expect(page).to have_nth_table_row_record(1, "CODE1 Discount 1 50% off of Product 1, Product 2, and 1 other")
+      expect(page).to have_nth_table_row_record(2, "CODE2 Discount 2 $2 off of Product 2")
       expect(page).to have_current_path(checkout_discounts_path({ column: "uses", page: 1, sort: "desc" }))
       find(:columnheader, "Term").click
-      expect(page).to have_nth_table_row_record(1, "CODE3Discount 3 50% off of all products")
-      expect(page).to have_nth_table_row_record(2, "CODE1Discount 1 50% off of Product 1, Product 2, and 1 other")
+      expect(page).to have_nth_table_row_record(1, "CODE3 Discount 3 50% off of all products")
+      expect(page).to have_nth_table_row_record(2, "CODE1 Discount 1 50% off of Product 1, Product 2, and 1 other")
       expect(page).to have_current_path(checkout_discounts_path({ column: "term", page: 1, sort: "asc" }))
       find(:columnheader, "Term").click
-      expect(page).to have_nth_table_row_record(1, "CODE2Discount 2 $2 off of Product 2")
-      expect(page).to have_nth_table_row_record(2, "DISCOUNT3Discount 3 $1 off of all products")
+      expect(page).to have_nth_table_row_record(1, "CODE2 Discount 2 $2 off of Product 2")
+      expect(page).to have_nth_table_row_record(2, "DISCOUNT3 Discount 3 $1 off of all products")
       expect(page).to have_current_path(checkout_discounts_path({ column: "term", page: 1, sort: "desc" }))
     end
 
@@ -843,8 +843,8 @@ describe("Checkout discounts page", type: :system, js: true) do
 
     it "sorts based on query parameters on initial page load" do
       visit checkout_discounts_path({ column: "revenue", sort: "desc", page: 1, query: "Discount 3" })
-      expect(page).to have_nth_table_row_record(1, "CODE3Discount 3 50% off of all products")
-      expect(page).to have_nth_table_row_record(2, "DISCOUNT3Discount 3 $1 off of all products")
+      expect(page).to have_nth_table_row_record(1, "CODE3 Discount 3 50% off of all products")
+      expect(page).to have_nth_table_row_record(2, "DISCOUNT3 Discount 3 $1 off of all products")
     end
 
     it "handles browser events for going to the previous/next page" do
@@ -854,11 +854,11 @@ describe("Checkout discounts page", type: :system, js: true) do
       page.go_back
       wait_for_ajax
       expect(page).to have_current_path(checkout_discounts_path)
-      expect(page).to have_nth_table_row_record(1, "DISCOUNT3Discount 3 $1 off of all products")
+      expect(page).to have_nth_table_row_record(1, "DISCOUNT3 Discount 3 $1 off of all products")
       page.go_forward
       wait_for_ajax
       expect(page).to have_current_path(checkout_discounts_path({ column: "name", sort: "asc", page: 1 }))
-      expect(page).to have_nth_table_row_record(1, "CODE1Discount 1 50% off of Product 1, Product 2, and 1 other")
+      expect(page).to have_nth_table_row_record(1, "CODE1 Discount 1 50% off of Product 1, Product 2, and 1 other")
 
       within find("[aria-label='Pagination']") do
         expect(find_button("1")["aria-current"]).to eq("page")
@@ -893,20 +893,20 @@ describe("Checkout discounts page", type: :system, js: true) do
         fill_in "Search", with: "code"
       end
       wait_for_ajax
-      expect(page).to have_nth_table_row_record(1, "CODE1Discount 1 50% off of Product 1, Product 2, and 1 other")
-      expect(page).to have_nth_table_row_record(2, "CODE2Discount 2 $2 off of Product 2")
+      expect(page).to have_nth_table_row_record(1, "CODE1 Discount 1 50% off of Product 1, Product 2, and 1 other")
+      expect(page).to have_nth_table_row_record(2, "CODE2 Discount 2 $2 off of Product 2")
       expect(page).to have_current_path(checkout_discounts_path({ page: 1, query: "code" }))
 
       find(:columnheader, "Revenue").click
-      expect(page).to have_nth_table_row_record(1, "CODE3Discount 3 50% off of all products")
-      expect(page).to have_nth_table_row_record(2, "CODE2Discount 2 $2 off of Product 2")
+      expect(page).to have_nth_table_row_record(1, "CODE3 Discount 3 50% off of all products")
+      expect(page).to have_nth_table_row_record(2, "CODE2 Discount 2 $2 off of Product 2")
       expect(page).to have_current_path(checkout_discounts_path({ column: "revenue", page: 1, query: "code", sort: "asc" }))
 
       select_disclosure "Search" do
         fill_in "Search", with: "Discount 4"
       end
       wait_for_ajax
-      expect(page).to have_nth_table_row_record(1, "DISCOUNT4Discount 4 $1 off of all products")
+      expect(page).to have_nth_table_row_record(1, "DISCOUNT4 Discount 4 $1 off of all products")
       expect(page).to have_current_path(checkout_discounts_path({ column: "revenue", page: 1, query: "Discount 4", sort: "asc" }))
     end
   end
