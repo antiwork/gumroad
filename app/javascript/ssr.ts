@@ -24,7 +24,7 @@ import AdminSuspendForTosForm from "$app/components/server-components/Admin/Susp
 import AdminUserGuids from "$app/components/server-components/Admin/UserGuids";
 import AdminUserStats from "$app/components/server-components/Admin/UserStats";
 import AffiliateRequestPage from "$app/components/server-components/AffiliateRequestPage";
-import AffiliatesPage from "$app/components/server-components/AffiliatesPage";
+
 import Alert from "$app/components/server-components/Alert";
 import AudiencePage from "$app/components/server-components/AudiencePage";
 import BundleEditPage from "$app/components/server-components/BundleEditPage";
@@ -114,7 +114,7 @@ ReactOnRails.register({
   AdminUserStats,
   AdvancedSettingsPage,
   AffiliateRequestPage,
-  AffiliatesPage,
+
   Alert,
   AdminAddCreditForm,
   ApplicationEditPage,

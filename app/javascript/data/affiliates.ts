@@ -4,7 +4,14 @@ import { assertDefined } from "$app/utils/assert";
 import { request, ResponseError } from "$app/utils/request";
 
 import { PaginationProps } from "$app/components/Pagination";
-import { Params } from "$app/components/server-components/AffiliatesPage";
+import { Sort } from "$app/components/useSortingTableDriver";
+
+export type SortKey = "affiliate_user_name" | "products" | "fee_percent" | "volume_cents";
+export type Params = {
+  page: number | null;
+  query: string | null;
+  sort: Sort<SortKey> | null;
+};
 
 export type SelfServeAffiliateProduct = {
   id: number;
