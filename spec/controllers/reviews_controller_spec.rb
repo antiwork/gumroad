@@ -2,10 +2,9 @@
 
 require "spec_helper"
 require "shared_examples/authorize_called"
+require "inertia_rails/rspec"
 
-describe ReviewsController do
-  render_views
-
+describe ReviewsController, type: :controller, inertia: true do
   let(:user) { create(:user) }
 
   describe "GET index" do
@@ -18,11 +17,16 @@ describe ReviewsController do
       let(:record) { ProductReview }
     end
 
-    it "initializes the presenter with the correct arguments and renders Inertia page" do
+    it "renders the Inertia component with correct props" do
       expect(ReviewsPresenter).to receive(:new).with(user).and_call_original
+
       get :index
+
       expect(response).to be_successful
-      expect(response).to render_template(layout: "inertia")
+      expect(inertia.component).to eq("Reviews/Index")
+      expect(inertia.props[:reviews]).to be_an(Array)
+      expect(inertia.props[:purchases]).to be_an(Array)
+      expect(inertia.props[:following_wishlists_enabled]).to be_in([true, false])
     end
   end
 end
