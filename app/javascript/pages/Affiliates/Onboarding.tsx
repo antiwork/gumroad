@@ -103,7 +103,7 @@ export default function AffiliatesOnboarding() {
           <>
             <WithTooltip position="bottom" tip={props.affiliates_disabled_reason}>
               <NavigationButtonInertia
-                href="/affiliates/new"
+                href={Routes.new_affiliate_path()}
                 disabled={!loggedInUser?.policies.direct_affiliate.create || props.affiliates_disabled_reason !== null}
               >
                 Add affiliate

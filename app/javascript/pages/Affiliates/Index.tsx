@@ -372,7 +372,7 @@ export default function AffiliatesIndex() {
             <SearchBoxPopover onSearch={onSearch} initialQuery={searchQuery} />
             <WithTooltip position="bottom" tip={affiliates_disabled_reason}>
               <NavigationButtonInertia
-                href="/affiliates/new"
+                href={Routes.new_affiliate_path()}
                 className="button accent"
                 disabled={!loggedInUser?.policies.direct_affiliate.create || affiliates_disabled_reason !== null}
               >
@@ -463,7 +463,7 @@ export default function AffiliatesIndex() {
                                 </CopyToClipboard>
 
                                 <NavigationButtonInertia
-                                  href={`/affiliates/${affiliate.id}/edit`}
+                                  href={Routes.edit_affiliate_path(affiliate.id)}
                                   aria-label="Edit"
                                   disabled={!loggedInUser?.policies.direct_affiliate.update || isNavigating}
                                 >
@@ -565,7 +565,7 @@ const AffiliateDetails = ({
       })}
       <section style={{ display: "grid", gap: "var(--spacer-4)", gridAutoFlow: "column", gridAutoColumns: "1fr" }}>
         <NavigationButtonInertia
-          href={`/affiliates/${selectedAffiliate.id}/edit`}
+          href={Routes.edit_affiliate_path(selectedAffiliate.id)}
           aria-label="Edit"
           disabled={!loggedInUser?.policies.direct_affiliate.update || isNavigating}
         >

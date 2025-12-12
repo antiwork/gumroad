@@ -11,7 +11,7 @@ class AffiliatesController < Sellers::BaseController
   before_action :set_meta
   before_action :hide_layouts, only: PUBLIC_ACTIONS
 
-  layout "inertia", only: [:index, :onboarding]
+  layout "inertia", only: [:index, :onboarding, :new, :edit]
 
   def index
     authorize DirectAffiliate
@@ -41,6 +41,35 @@ class AffiliatesController < Sellers::BaseController
 
     presenter = AffiliatesPresenter.new(pundit_user)
     render inertia: "Affiliates/Onboarding", props: presenter.onboarding_props
+  end
+
+  def new
+    authorize DirectAffiliate, :create?
+
+    presenter = AffiliatesPresenter.new(pundit_user)
+    products = presenter.onboarding_props[:products].map do |product|
+      product.merge(enabled: false, fee_percent: nil, referral_url: "", destination_url: nil)
+    end
+
+    render inertia: "Affiliates/New", props: {
+      products:,
+      affiliates_disabled_reason: presenter.onboarding_props[:affiliates_disabled_reason]
+    }
+  end
+
+  def edit
+    @affiliate = current_seller.direct_affiliates.find_by_external_id(params[:id])
+    return e404 if @affiliate.nil?
+
+    authorize @affiliate, :update?
+
+    presenter = AffiliatesPresenter.new(pundit_user)
+    affiliate_data = @affiliate.affiliate_info.merge(products: @affiliate.products_data)
+
+    render inertia: "Affiliates/Edit", props: {
+      affiliate: affiliate_data,
+      affiliates_disabled_reason: presenter.onboarding_props[:affiliates_disabled_reason]
+    }
   end
 
   def subscribe_posts
