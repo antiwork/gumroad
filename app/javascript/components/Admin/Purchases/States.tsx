@@ -8,7 +8,7 @@ export type PurchaseStatesInfo = {
   chargedback: boolean;
   chargeback_reversed: boolean;
   error_code: string | null;
-  last_chargebacked_purchase: string | null;
+  last_chargebacked_purchase: number | null;
 };
 
 export const PurchaseStates = ({ purchase }: { purchase: PurchaseStatesInfo }) => (

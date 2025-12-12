@@ -34,7 +34,7 @@ describe Admin::LinksController, type: :controller, inertia: true do
       end
 
       it "returns the purchases of the specified page" do
-        get :legacy_purchases, params: { external_id: product.external_id, is_affiliate_user: "false", page: 2, per_page: 2, format: :json }
+        get :legacy_purchases, params: { id: product.id, is_affiliate_user: "false", page: 2, per_page: 2, format: :json }
 
         expect(response).to be_successful
         expect(response.parsed_body["purchases"]).to eq purchase_admin_review_json(@purchases.reverse[2..3])
@@ -48,7 +48,7 @@ describe Admin::LinksController, type: :controller, inertia: true do
       end
 
       it "returns user purchases" do
-        get :legacy_purchases, params: { external_id: product.external_id, is_affiliate_user: "false", format: :json }
+        get :legacy_purchases, params: { id: product.id, is_affiliate_user: "false", format: :json }
 
         expect(response).to be_successful
         expect(response.parsed_body["purchases"]).to eq purchase_admin_review_json(@purchases.reverse)
@@ -64,7 +64,7 @@ describe Admin::LinksController, type: :controller, inertia: true do
       end
 
       it "returns affiliate purchases" do
-        get :legacy_purchases, params: { external_id: product.external_id, is_affiliate_user: "true", user_external_id: @affiliate_user.external_id, format: :json }
+        get :legacy_purchases, params: { id: product.id, is_affiliate_user: "true", user_id: @affiliate_user.id, format: :json }
 
         expect(response).to be_successful
         expect(response.parsed_body["purchases"]).to eq purchase_admin_review_json(@purchases.reverse)
@@ -73,14 +73,8 @@ describe Admin::LinksController, type: :controller, inertia: true do
   end
 
   describe "GET show" do
-    it "redirects numeric ID to external_id" do
-      get :show, params: { external_id: product.id }
-
-      expect(response).to redirect_to(admin_product_path(product.external_id))
-    end
-
-    it "renders the product page if looked up via external_id" do
-      get :show, params: { external_id: product.external_id }
+    it "renders the product page if looked up via ID" do
+      get :show, params: { id: product.id }
 
       expect(response).to be_successful
       expect(inertia.component).to eq("Admin/Products/Show")
@@ -96,11 +90,11 @@ describe Admin::LinksController, type: :controller, inertia: true do
           product_2 = create(:product, unique_permalink: "b", custom_permalink: "match")
           create(:product, unique_permalink: "c", custom_permalink: "should-not-match")
 
-          get :show, params: { external_id: product_1.custom_permalink }
+          get :show, params: { id: product_1.custom_permalink }
 
           expect(response).to be_successful
           expect(inertia.component).to eq("Admin/Products/MultipleMatches")
-          expect(inertia.props[:product_matches]).to contain_exactly(hash_including(external_id: product_1.external_id), hash_including(external_id: product_2.external_id))
+          expect(inertia.props[:product_matches]).to contain_exactly(hash_including(id: product_1.id), hash_including(id: product_2.id))
         end
       end
 
@@ -108,7 +102,7 @@ describe Admin::LinksController, type: :controller, inertia: true do
         it "renders the product page" do
           product = create(:product, unique_permalink: "a", custom_permalink: "match")
 
-          get :show, params: { external_id: product.custom_permalink }
+          get :show, params: { id: product.custom_permalink }
 
           expect(response).to be_successful
           expect(inertia.component).to eq("Admin/Products/Show")
@@ -121,7 +115,7 @@ describe Admin::LinksController, type: :controller, inertia: true do
       context "when no products matched by permalink" do
         it "raises a 404" do
           expect do
-            get :show, params: { external_id: "match" }
+            get :show, params: { id: "match" }
           end.to raise_error(ActionController::RoutingError, "Not Found")
         end
       end
@@ -130,7 +124,7 @@ describe Admin::LinksController, type: :controller, inertia: true do
 
   describe "DELETE destroy" do
     it "deletes the product" do
-      delete :destroy, params: { external_id: product.external_id }
+      delete :destroy, params: { id: product.id }
 
       expect(response).to be_successful
       expect(product.reload.deleted_at).to be_present
@@ -138,7 +132,7 @@ describe Admin::LinksController, type: :controller, inertia: true do
 
     it "raises a 404 if the product is not found" do
       expect do
-        delete :destroy, params: { external_id: "invalid-id" }
+        delete :destroy, params: { id: "invalid-id" }
       end.to raise_error(ActionController::RoutingError, "Not Found")
     end
   end
@@ -147,7 +141,7 @@ describe Admin::LinksController, type: :controller, inertia: true do
     let(:product) { create(:product, deleted_at: 1.day.ago) }
 
     it "restores the product" do
-      post :restore, params: { external_id: product.external_id }
+      post :restore, params: { id: product.id }
 
       expect(response).to be_successful
       expect(product.reload.deleted_at).to be_nil
@@ -155,7 +149,7 @@ describe Admin::LinksController, type: :controller, inertia: true do
 
     it "raises a 404 if the product is not found" do
       expect do
-        post :restore, params: { external_id: "invalid-id" }
+        post :restore, params: { id: "invalid-id" }
       end.to raise_error(ActionController::RoutingError, "Not Found")
     end
   end
@@ -164,7 +158,7 @@ describe Admin::LinksController, type: :controller, inertia: true do
     let(:product) { create(:product, purchase_disabled_at: Time.current) }
 
     it "publishes the product" do
-      post :publish, params: { external_id: product.external_id }
+      post :publish, params: { id: product.id }
 
       expect(response).to be_successful
       expect(product.reload.purchase_disabled_at).to be_nil
@@ -172,7 +166,7 @@ describe Admin::LinksController, type: :controller, inertia: true do
 
     it "raises a 404 if the product is not found" do
       expect do
-        post :publish, params: { external_id: "invalid-id" }
+        post :publish, params: { id: "invalid-id" }
       end.to raise_error(ActionController::RoutingError, "Not Found")
     end
   end
@@ -181,7 +175,7 @@ describe Admin::LinksController, type: :controller, inertia: true do
     let(:product) { create(:product, purchase_disabled_at: nil) }
 
     it "unpublishes the product" do
-      delete :unpublish, params: { external_id: product.external_id }
+      delete :unpublish, params: { id: product.id }
 
       expect(response).to be_successful
       expect(product.reload.purchase_disabled_at).to be_present
@@ -189,19 +183,19 @@ describe Admin::LinksController, type: :controller, inertia: true do
 
     it "raises a 404 if the product is not found" do
       expect do
-        delete :unpublish, params: { external_id: "invalid-id" }
+        delete :unpublish, params: { id: "invalid-id" }
       end.to raise_error(ActionController::RoutingError, "Not Found")
     end
   end
 
   describe "POST is_adult" do
     it "marks the product as adult" do
-      post :is_adult, params: { external_id: product.external_id, is_adult: true }
+      post :is_adult, params: { id: product.id, is_adult: true }
 
       expect(response).to be_successful
       expect(product.reload.is_adult).to be(true)
 
-      post :is_adult, params: { external_id: product.external_id, is_adult: false }
+      post :is_adult, params: { id: product.id, is_adult: false }
 
       expect(response).to be_successful
       expect(product.reload.is_adult).to be(false)
@@ -209,7 +203,7 @@ describe Admin::LinksController, type: :controller, inertia: true do
 
     it "raises a 404 if the product is not found" do
       expect do
-        post :is_adult, params: { external_id: "invalid-id", is_adult: true }
+        post :is_adult, params: { id: "invalid-id", is_adult: true }
       end.to raise_error(ActionController::RoutingError, "Not Found")
     end
   end

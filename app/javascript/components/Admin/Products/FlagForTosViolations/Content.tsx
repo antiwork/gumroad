@@ -3,7 +3,7 @@ import React from "react";
 import { LoadingSpinner } from "$app/components/LoadingSpinner";
 
 export type TosViolationFlags = {
-  external_id: string;
+  id: number;
   content: string;
 };
 
@@ -23,8 +23,8 @@ const FlagForTosViolationsContent = ({ isLoading, tosViolationFlags }: FlagForTo
 
   return (
     <ul>
-      {tosViolationFlags.map(({ external_id, content }) => (
-        <li key={external_id}>{content}</li>
+      {tosViolationFlags.map(({ id, content }) => (
+        <li key={id}>{content}</li>
       ))}
     </ul>
   );

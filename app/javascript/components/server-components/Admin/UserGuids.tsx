@@ -7,9 +7,9 @@ import { register } from "$app/utils/serverComponentUtil";
 import { LoadingSpinner } from "$app/components/LoadingSpinner";
 import { showAlert } from "$app/components/server-components/Alert";
 
-type UserGuids = { guid: string; user_external_ids: string[] }[];
+type UserGuids = { guid: string; user_ids: number[] }[];
 
-const AdminUserGuids = ({ user_external_id }: { user_external_id: string }) => {
+const AdminUserGuids = ({ user_id }: { user_id: number }) => {
   const [userGuids, setUserGuids] = React.useState<UserGuids | null>(null);
 
   const fetchUserGuids = async () => {
@@ -18,7 +18,7 @@ const AdminUserGuids = ({ user_external_id }: { user_external_id: string }) => {
       const response = await request({
         method: "GET",
         accept: "json",
-        url: Routes.admin_user_guids_path(user_external_id, { format: "json" }),
+        url: Routes.admin_user_guids_path(user_id, { format: "json" }),
       });
       setUserGuids(cast<UserGuids>(await response.json()));
     } catch (e) {
@@ -40,7 +40,7 @@ const AdminUserGuids = ({ user_external_id }: { user_external_id: string }) => {
                 <h5>
                   <a href={`/admin/guids/${guidData.guid}`}>{guidData.guid}</a>
                 </h5>
-                <span>{guidData.user_external_ids.length} users</span>
+                <span>{guidData.user_ids.length} users</span>
               </div>
             ))}
           </div>
