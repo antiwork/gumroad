@@ -4,7 +4,6 @@ class Wishlists::FollowingController < ApplicationController
   before_action :authenticate_user!
   after_action :verify_authorized
   before_action { e404 if Feature.inactive?(:follow_wishlists, current_seller) }
-  before_action :set_title
 
   layout "inertia"
 
