@@ -815,11 +815,7 @@ Rails.application.routes.draw do
     # utm links
     get "/utm_links" => redirect("/dashboard/utm_links")
     get "/dashboard/utm_links", to: "utm_links#index", as: :utm_links_dashboard
-    get "/dashboard/utm_links/new", to: "utm_links#new", as: :new_utm_link_dashboard
-    post "/dashboard/utm_links", to: "utm_links#create", as: :create_utm_link_dashboard
-    get "/dashboard/utm_links/:id/edit", to: "utm_links#edit", as: :edit_utm_link_dashboard
-    patch "/dashboard/utm_links/:id", to: "utm_links#update", as: :update_utm_link_dashboard
-    delete "/dashboard/utm_links/:id", to: "utm_links#destroy", as: :destroy_utm_link_dashboard
+    resources :utm_links, only: [:new, :create, :edit, :update, :destroy], path: "dashboard/utm_links", as: :utm_link_dashboard
 
     # shipments
     post "/shipments/verify_shipping_address", to: "shipments#verify_shipping_address", as: :verify_shipping_address

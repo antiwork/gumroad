@@ -6,10 +6,6 @@ class UtmLinksController < Sellers::BaseController
 
   layout "inertia"
 
-  FLASH_LINK_CREATED = "Link created!"
-  FLASH_LINK_UPDATED = "Link updated!"
-  FLASH_LINK_DELETED = "Link deleted!"
-
   def index
     authorize UtmLink
 
@@ -37,7 +33,7 @@ class UtmLinksController < Sellers::BaseController
     authorize UtmLink
 
     SaveUtmLinkService.new(seller: current_seller, params: permitted_params, utm_link: nil).perform
-    redirect_to utm_links_dashboard_path, notice: FLASH_LINK_CREATED, status: :see_other
+    redirect_to utm_links_dashboard_path, notice: "Link created!", status: :see_other
   rescue ActiveRecord::RecordInvalid => e
     error = e.record.errors.first
     redirect_to new_utm_link_dashboard_path, inertia: { errors: { error.attribute => [error.message] } }, alert: error.message
@@ -52,7 +48,7 @@ class UtmLinksController < Sellers::BaseController
     return e404 if @utm_link.deleted?
 
     SaveUtmLinkService.new(seller: current_seller, params: permitted_params, utm_link: @utm_link).perform
-    redirect_to utm_links_dashboard_path, notice: FLASH_LINK_UPDATED, status: :see_other
+    redirect_to utm_links_dashboard_path, notice: "Link updated!", status: :see_other
   rescue ActiveRecord::RecordInvalid => e
     error = e.record.errors.first
     redirect_to edit_utm_link_dashboard_path(@utm_link.external_id), inertia: { errors: { error.attribute => [error.message] } }, alert: error.message
@@ -60,7 +56,7 @@ class UtmLinksController < Sellers::BaseController
 
   def destroy
     @utm_link.mark_deleted!
-    redirect_to utm_links_dashboard_path, notice: FLASH_LINK_DELETED, status: :see_other
+    redirect_to utm_links_dashboard_path, notice: "Link deleted!", status: :see_other
   end
 
   private
