@@ -6,7 +6,7 @@ import { unfollowWishlist } from "$app/data/wishlists";
 import { assertResponseError } from "$app/utils/request";
 
 import { Icon } from "$app/components/Icons";
-import { Layout } from "$app/components/Library/Layout";
+import { InertiaLayout } from "$app/components/Library/InertiaLayout";
 import { Popover } from "$app/components/Popover";
 import { showAlert } from "$app/components/server-components/Alert";
 import Placeholder from "$app/components/ui/Placeholder";
@@ -47,7 +47,7 @@ export default function WishlistsFollowing() {
   };
 
   return (
-    <Layout selectedTab="following_wishlists" reviewsPageEnabled={reviews_page_enabled} followingWishlistsEnabled>
+    <InertiaLayout selectedTab="following_wishlists" reviewsPageEnabled={reviews_page_enabled} followingWishlistsEnabled>
       <section className="p-4 md:p-8">
         {wishlists.length > 0 ? (
           <Table>
@@ -108,6 +108,6 @@ export default function WishlistsFollowing() {
           </Placeholder>
         )}
       </section>
-    </Layout>
+    </InertiaLayout>
   );
 }
