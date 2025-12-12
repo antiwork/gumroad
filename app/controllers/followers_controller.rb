@@ -16,7 +16,6 @@ class FollowersController < ApplicationController
   def index
     authorize [:audience, Follower]
 
-    @user_presenter = UserPresenter.new(user: current_seller)
     create_user_event("followers_view")
     @on_posts_page = true
     @title = "Subscribers"
