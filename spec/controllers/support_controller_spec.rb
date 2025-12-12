@@ -7,7 +7,6 @@ require "inertia_rails/rspec"
 describe SupportController, inertia: true do
   let(:seller) { create(:named_seller) }
 
-
   describe "GET index" do
     context "when user is signed in" do
       before { sign_in seller }
@@ -33,7 +32,6 @@ describe SupportController, inertia: true do
       end
     end
   end
-
 
   describe "POST create_unauthenticated_ticket" do
     let(:valid_params) do
