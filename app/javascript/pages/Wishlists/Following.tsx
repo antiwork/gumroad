@@ -31,8 +31,18 @@ type Props = {
   reviews_page_enabled: boolean;
 };
 
-export default function WishlistsFollowing() {
-  const { wishlists: preloadedWishlists, reviews_page_enabled } = cast<Props>(usePage().props);
+// Wrapper component to access props for layout
+const LayoutWrapper = ({ children }: { children: React.ReactNode }) => {
+  const { reviews_page_enabled } = cast<Props>(usePage().props);
+  return (
+    <InertiaLayout selectedTab="following_wishlists" reviewsPageEnabled={reviews_page_enabled} followingWishlistsEnabled>
+      {children}
+    </InertiaLayout>
+  );
+};
+
+const WishlistsFollowing = () => {
+  const { wishlists: preloadedWishlists } = cast<Props>(usePage().props);
   const [wishlists, setWishlists] = React.useState<Wishlist[]>(preloadedWishlists);
 
   const destroy = async (wishlist: Wishlist) => {
@@ -47,67 +57,69 @@ export default function WishlistsFollowing() {
   };
 
   return (
-    <InertiaLayout selectedTab="following_wishlists" reviewsPageEnabled={reviews_page_enabled} followingWishlistsEnabled>
-      <section className="p-4 md:p-8">
-        {wishlists.length > 0 ? (
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Wishlist</TableHead>
-                <TableHead>Products</TableHead>
-                <TableHead>Creator</TableHead>
-                <TableHead />
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {wishlists.map((wishlist) => (
-                <TableRow key={wishlist.id}>
-                  <TableCell>
-                    <a href={wishlist.url} target="_blank" rel="noreferrer" style={{ textDecoration: "none" }}>
-                      <h4>{wishlist.name}</h4>
-                    </a>
-                    <a href={wishlist.url} target="_blank" rel="noreferrer">
-                      <small>{wishlist.url}</small>
-                    </a>
-                  </TableCell>
-                  <TableCell>{wishlist.product_count}</TableCell>
-                  <TableCell>
-                    <a
-                      href={wishlist.creator.profile_url}
-                      style={{ display: "flex", alignItems: "center", gap: "var(--spacer-2)" }}
-                    >
-                      <img className="user-avatar" src={wishlist.creator.avatar_url} />
-                      <span>{wishlist.creator.name}</span>
-                    </a>
-                  </TableCell>
-                  <TableCell>
-                    <div className="flex flex-wrap gap-3 lg:justify-end">
-                      <Popover aria-label="Actions" trigger={<Icon name="three-dots" />}>
-                        <div role="menu">
-                          <div role="menuitem" className="danger" onClick={() => void destroy(wishlist)}>
-                            <Icon name="bookmark-x" /> Unfollow
-                          </div>
+    <section className="p-4 md:p-8">
+      {wishlists.length > 0 ? (
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead>Wishlist</TableHead>
+              <TableHead>Products</TableHead>
+              <TableHead>Creator</TableHead>
+              <TableHead />
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {wishlists.map((wishlist) => (
+              <TableRow key={wishlist.id}>
+                <TableCell>
+                  <a href={wishlist.url} target="_blank" rel="noreferrer" style={{ textDecoration: "none" }}>
+                    <h4>{wishlist.name}</h4>
+                  </a>
+                  <a href={wishlist.url} target="_blank" rel="noreferrer">
+                    <small>{wishlist.url}</small>
+                  </a>
+                </TableCell>
+                <TableCell>{wishlist.product_count}</TableCell>
+                <TableCell>
+                  <a
+                    href={wishlist.creator.profile_url}
+                    style={{ display: "flex", alignItems: "center", gap: "var(--spacer-2)" }}
+                  >
+                    <img className="user-avatar" src={wishlist.creator.avatar_url} />
+                    <span>{wishlist.creator.name}</span>
+                  </a>
+                </TableCell>
+                <TableCell>
+                  <div className="flex flex-wrap gap-3 lg:justify-end">
+                    <Popover aria-label="Actions" trigger={<Icon name="three-dots" />}>
+                      <div role="menu">
+                        <div role="menuitem" className="danger" onClick={() => void destroy(wishlist)}>
+                          <Icon name="bookmark-x" /> Unfollow
                         </div>
-                      </Popover>
-                    </div>
-                  </TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-        ) : (
-          <Placeholder>
-            <figure>
-              <img src={placeholder} />
-            </figure>
-            <h2>Follow wishlists that inspire you</h2>
-            Bookmark and organize your desired products with ease
-            <a href="/help/article/343-wishlists" target="_blank" rel="noreferrer">
-              Learn more about wishlists
-            </a>
-          </Placeholder>
-        )}
-      </section>
-    </InertiaLayout>
+                      </div>
+                    </Popover>
+                  </div>
+                </TableCell>
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
+      ) : (
+        <Placeholder>
+          <figure>
+            <img src={placeholder} />
+          </figure>
+          <h2>Follow wishlists that inspire you</h2>
+          Bookmark and organize your desired products with ease
+          <a href="/help/article/343-wishlists" target="_blank" rel="noreferrer">
+            Learn more about wishlists
+          </a>
+        </Placeholder>
+      )}
+    </section>
   );
-}
+};
+
+WishlistsFollowing.layout = (page: React.ReactNode) => <LayoutWrapper>{page}</LayoutWrapper>;
+
+export default WishlistsFollowing;
