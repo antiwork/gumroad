@@ -221,17 +221,19 @@ export const PdfReaderPage = ({
               {pageNumber} of {pageCount}
             </div>
             <button
-              className="icon icon-arrow-left previous"
               aria-label="Previous"
               onClick={() => updatePage("previous")}
               disabled={pageNumber === 1 || pageCount === 1}
-            />
+            >
+              <Icon name="arrow-left" />
+            </button>
             <button
-              className="icon icon-arrow-right next"
               aria-label="Next"
               onClick={() => updatePage("next")}
               disabled={pageNumber === pageCount || pageCount === 1}
-            />
+            >
+              <Icon name="arrow-right" />
+            </button>
           </div>
         </div>
 

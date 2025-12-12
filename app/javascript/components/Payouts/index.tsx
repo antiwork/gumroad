@@ -1,3 +1,4 @@
+import classNames from "classnames";
 import * as React from "react";
 import { cast } from "ts-safe-cast";
 
@@ -16,6 +17,7 @@ import { ExportPayoutsPopover } from "$app/components/Payouts/ExportPayoutsPopov
 import { showAlert } from "$app/components/server-components/Alert";
 import { PageHeader } from "$app/components/ui/PageHeader";
 import Placeholder from "$app/components/ui/Placeholder";
+import { Tabs, Tab } from "$app/components/ui/Tabs";
 import { useUserAgentInfo } from "$app/components/UserAgent";
 import { WithTooltip } from "$app/components/WithTooltip";
 
@@ -267,6 +269,7 @@ export type PayoutsProps = {
   } | null;
   show_instant_payouts_notice: boolean;
   pagination: PaginationProps;
+  tax_center_enabled: boolean;
 };
 
 // TODO: move BankAccount|PaypalAccount out of CurrentPayoutsDataAndPaymentMethodWithUserPayable
@@ -648,6 +651,7 @@ const Payouts = ({
   instant_payout,
   show_instant_payouts_notice,
   pagination: initialPagination,
+  tax_center_enabled,
 }: PayoutsProps) => {
   const loggedInUser = useLoggedInUser();
   const userAgentInfo = useUserAgentInfo();
@@ -729,7 +733,18 @@ const Payouts = ({
             </div>
           ) : undefined
         }
-      />
+      >
+        {tax_center_enabled ? (
+          <Tabs>
+            <Tab href={Routes.balance_path()} isSelected>
+              Payouts
+            </Tab>
+            <Tab href={Routes.tax_center_path()} isSelected={false}>
+              Taxes
+            </Tab>
+          </Tabs>
+        ) : null}
+      </PageHeader>
       <div className="space-y-8 p-4 md:p-8">
         {!instant_payout ? (
           show_instant_payouts_notice ? (
@@ -815,10 +830,10 @@ const Payouts = ({
               </fieldset>
               <fieldset>
                 <legend>Payout details</legend>
-                <div className="cart">
-                  <div className="cart-summary">
-                    <div>
-                      <p>Sent to</p>
+                <div className="rounded-sm border border-border bg-background not-first:border-t">
+                  <div className="grid gap-4 p-4">
+                    <div className="grid grid-flow-col justify-between gap-4">
+                      <h4 className="inline-flex flex-wrap gap-2">Sent to</h4>
                       <div>
                         {instant_payout.bank_account_type === "CARD" ? (
                           <p>
@@ -839,25 +854,21 @@ const Payouts = ({
                         )}
                       </div>
                     </div>
-                    <div>
-                      <p>Amount</p>
-                      <div>${formatPriceCentsWithoutCurrencySymbol("usd", instantPayoutAmountCents)}</div>
-                    </div>
-                    <div>
-                      <p>Instant payout fee ({INSTANT_PAYOUT_FEE_PERCENTAGE * 100}%)</p>
-                      <div>
-                        -$
-                        {formatPriceCentsWithoutCurrencySymbol("usd", instantPayoutFee)}
-                      </div>
-                    </div>
+                    <PayoutLineItem
+                      title="Amount"
+                      price={`$${formatPriceCentsWithoutCurrencySymbol("usd", instantPayoutAmountCents)}`}
+                    />
+                    <PayoutLineItem
+                      title={`Instant payout fee (${INSTANT_PAYOUT_FEE_PERCENTAGE * 100}%)`}
+                      price={`-$${formatPriceCentsWithoutCurrencySymbol("usd", instantPayoutFee)}`}
+                    />
                   </div>
-                  <footer>
-                    <p>
-                      <strong>You'll receive</strong>
-                    </p>
-                    <div>
-                      ${formatPriceCentsWithoutCurrencySymbol("usd", instantPayoutAmountCents - instantPayoutFee)}
-                    </div>
+                  <footer className="grid gap-4 border-t border-border p-4">
+                    <PayoutLineItem
+                      title="You'll receive"
+                      price={`$${formatPriceCentsWithoutCurrencySymbol("usd", instantPayoutAmountCents - instantPayoutFee)}`}
+                      className="text-lg"
+                    />
                   </footer>
                 </div>
                 {instantPayoutAmountCents > MAXIMUM_INSTANT_PAYOUT_AMOUNT_CENTS ? (
@@ -961,5 +972,22 @@ const Payouts = ({
     </div>
   );
 };
+
+export function PayoutLineItem({
+  title,
+  price,
+  className,
+}: {
+  title: React.ReactNode;
+  price: React.ReactNode;
+  className?: string;
+}) {
+  return (
+    <div className={classNames("grid grid-flow-col justify-between gap-4", className)}>
+      <h4 className="inline-flex flex-wrap gap-2 text-[length:inherit] leading-[inherit]">{title}</h4>
+      <div>{price}</div>
+    </div>
+  );
+}
 
 export default Payouts;

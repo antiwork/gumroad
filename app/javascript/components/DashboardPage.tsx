@@ -64,6 +64,7 @@ export type DashboardPageProps = {
   stripe_verification_message?: string | null;
   tax_forms: Record<number, string>;
   show_1099_download_notice: boolean;
+  tax_center_enabled: boolean;
 };
 type TableProps = { sales: ProductRow[] };
 
@@ -290,6 +291,7 @@ export const DashboardPage = ({
   stripe_verification_message,
   tax_forms,
   show_1099_download_notice,
+  tax_center_enabled,
 }: DashboardPageProps) => {
   const loggedInUser = useLoggedInUser();
   const [gettingStartedMinimized, setGettingStartedMinimized] = React.useState<boolean>(false);
@@ -308,7 +310,11 @@ export const DashboardPage = ({
     <div>
       <PageHeader
         title="Dashboard"
-        actions={Object.keys(tax_forms).length > 0 && <DownloadTaxFormsPopover taxForms={tax_forms} />}
+        actions={
+          tax_center_enabled
+            ? null
+            : Object.keys(tax_forms).length > 0 && <DownloadTaxFormsPopover taxForms={tax_forms} />
+        }
         className="border-b-0 sm:border-b"
       />
       {stripe_verification_message ? (
@@ -322,7 +328,16 @@ export const DashboardPage = ({
         <div role="alert" className="info">
           <div>
             Your 1099 tax form for {new Date().getFullYear() - 1} is ready!{" "}
-            <a href={Routes.dashboard_download_tax_form_path()}>Click here to download</a>.
+            <a
+              href={
+                tax_center_enabled
+                  ? Routes.tax_center_path({ year: new Date().getFullYear() - 1 })
+                  : Routes.dashboard_download_tax_form_path()
+              }
+            >
+              Click here to download
+            </a>
+            .
           </div>
         </div>
       ) : null}

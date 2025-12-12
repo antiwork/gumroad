@@ -5,6 +5,7 @@ import { ProductNativeType } from "$app/parsers/product";
 import { register } from "$app/utils/serverComponentUtil";
 
 import { Button, NavigationButton } from "$app/components/Button";
+import { CartItem, CartItemMain, CartItemMedia, CartItemTitle, CartItemList } from "$app/components/CartItemList";
 import { useDiscoverUrl } from "$app/components/DomainSettings";
 import { Icon } from "$app/components/Icons";
 import { Layout } from "$app/components/Library/Layout";
@@ -76,21 +77,9 @@ const ReviewsPage = ({
           <h2>{`${purchases.length} ${purchases.length === 1 ? "product" : "products"} awaiting review`}</h2>
           <div className="grid gap-4 @xl:grid-cols-2 @4xl:grid-cols-3">
             {purchases.map((purchase) => (
-              <div className="cart h-min" role="list" key={purchase.id}>
-                <div key={purchase.id} role="listitem">
-                  <section>
-                    <figure>
-                      <Thumbnail url={purchase.product.thumbnail_url} nativeType={purchase.product.native_type} />
-                    </figure>
-                    <section>
-                      <a href={purchase.product.url}>
-                        <h4>{purchase.product.name}</h4>
-                      </a>
-                      <a href={purchase.product.seller.url}>{purchase.product.seller.name}</a>
-                    </section>
-                    <section />
-                  </section>
-                  <section className="footer">
+              <CartItemList className="h-min" key={purchase.id}>
+                <CartItem
+                  extra={
                     <ReviewForm
                       permalink={purchase.product.permalink}
                       purchaseId={purchase.id}
@@ -115,9 +104,24 @@ const ReviewsPage = ({
                       style={{ display: "grid", gap: "var(--spacer-4)" }}
                       ref={(el) => (inputRefs.current[purchase.id] = el)}
                     />
-                  </section>
-                </div>
-              </div>
+                  }
+                  key={purchase.id}
+                >
+                  <CartItemMedia>
+                    <Thumbnail url={purchase.product.thumbnail_url} nativeType={purchase.product.native_type} />
+                  </CartItemMedia>
+                  <CartItemMain>
+                    <CartItemTitle asChild>
+                      <a href={purchase.product.url}>
+                        <h4 className="font-bold">{purchase.product.name}</h4>
+                      </a>
+                    </CartItemTitle>
+                    <CartItemTitle className="font-normal" asChild>
+                      <a href={purchase.product.seller.url}>{purchase.product.seller.name}</a>
+                    </CartItemTitle>
+                  </CartItemMain>
+                </CartItem>
+              </CartItemList>
             ))}
           </div>
         </section>

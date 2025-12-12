@@ -2881,6 +2881,8 @@ describe("Payments Settings Scenario", type: :system, js: true) do
       it "allows to enter bank account details" do
         visit settings_payments_path
 
+        choose "Bank Account"
+
         fill_in("First name", with: "barnabas")
         fill_in("Last name", with: "barnabastein")
         fill_in("Address", with: "address_full_match")
@@ -2913,6 +2915,41 @@ describe("Payments Settings Scenario", type: :system, js: true) do
         expect(compliance_info.phone).to eq("+209876543210")
         expect(compliance_info.birthday).to eq(Date.new(1980, 1, 1))
         expect(@user.reload.active_bank_account.send(:account_number_decrypted)).to eq("EG800002000156789012345180002")
+      end
+
+      it "allows to enter PayPal details" do
+        visit settings_payments_path
+
+        choose "PayPal"
+
+        fill_in("First name", with: "barnabas")
+        fill_in("Last name", with: "barnabastein")
+        fill_in("Address", with: "address_full_match")
+        fill_in("City", with: "barnabasville")
+        fill_in("Phone number", with: "9876543210")
+        fill_in("Postal code", with: "10110")
+
+        select("1", from: "Day")
+        select("January", from: "Month")
+        select("1980", from: "Year")
+
+        expect(page).to have_status(text: "PayPal payouts are subject to a 2% processing fee.")
+        fill_in("PayPal Email", with: "egycr@example.com")
+
+        click_on("Update settings")
+
+        expect(page).to have_content("Thanks! You're all set.")
+        compliance_info = @user.alive_user_compliance_info
+        expect(compliance_info.first_name).to eq("barnabas")
+        expect(compliance_info.last_name).to eq("barnabastein")
+        expect(compliance_info.street_address).to eq("address_full_match")
+        expect(compliance_info.city).to eq("barnabasville")
+        expect(compliance_info.zip_code).to eq("10110")
+        expect(compliance_info.country).to eq("Egypt")
+        expect(compliance_info.phone).to eq("+209876543210")
+        expect(compliance_info.birthday).to eq(Date.new(1980, 1, 1))
+        expect(@user.reload.payment_address).to eq("egycr@example.com")
+        expect(@user.active_bank_account).to be nil
       end
     end
 

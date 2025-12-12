@@ -31,6 +31,7 @@ describe Admin::SalesReportsController, type: :controller, inertia: true do
       props = inertia.props
       expect(props[:title]).to eq("Sales reports")
       expect(props[:countries]).to eq Compliance::Countries.for_select.map { |alpha2, name| [name, alpha2] }
+      expect(props[:sales_types]).to eq GenerateSalesReportJob::SALES_TYPES.map { [_1, _1.humanize] }
       expect(props[:job_history]).to eq([JSON.parse(job_history).symbolize_keys])
       expect(props[:authenticity_token]).to be_present
     end
@@ -40,12 +41,14 @@ describe Admin::SalesReportsController, type: :controller, inertia: true do
     let(:country_code) { "GB" }
     let(:start_date) { "2023-01-01" }
     let(:end_date) { "2023-03-31" }
+    let(:sales_type) { GenerateSalesReportJob::ALL_SALES }
     let(:params) do
       {
         sales_report: {
           country_code: country_code,
           start_date: start_date,
-          end_date: end_date
+          end_date: end_date,
+          sales_type:,
         }
       }
     end
@@ -62,6 +65,7 @@ describe Admin::SalesReportsController, type: :controller, inertia: true do
         country_code,
         start_date,
         end_date,
+        GenerateSalesReportJob::ALL_SALES,
         true,
         nil
       )
@@ -91,6 +95,7 @@ describe Admin::SalesReportsController, type: :controller, inertia: true do
         country_code,
         start_date,
         end_date,
+        GenerateSalesReportJob::ALL_SALES,
         true,
         nil
       )
@@ -118,7 +123,8 @@ describe Admin::SalesReportsController, type: :controller, inertia: true do
                                                  sales_report: {
                                                    country_code: ["Please select a country"],
                                                    start_date: ["Invalid date format. Please use YYYY-MM-DD format"],
-                                                   end_date: ["Invalid date format. Please use YYYY-MM-DD format"]
+                                                   end_date: ["Invalid date format. Please use YYYY-MM-DD format"],
+                                                   sales_type: ["Invalid sales type, should be all_sales or discover_sales."]
                                                  }
                                                })
       end

@@ -830,6 +830,10 @@ Rails.application.routes.draw do
       resources :exports, only: [:create]
     end
 
+    # tax center
+    get "/payouts/taxes", to: "tax_center#index", as: :tax_center
+    get "/payouts/taxes/:year/:form_type/download", to: "tax_center#download", as: :download_tax_form
+
     # wishlists
     namespace :wishlists do
       resources :following, only: [:index]
@@ -897,6 +901,8 @@ Rails.application.routes.draw do
     # React Router routes
     scope module: :api, defaults: { format: :json } do
       namespace :internal do
+        resources :tax_documents, only: [:index]
+
         resources :affiliates, only: [:index, :show, :create, :update, :destroy] do
           collection do
             get :onboarding
