@@ -58,7 +58,6 @@ import Profile from "$app/components/server-components/Profile";
 import ProfileCoffeePage from "$app/components/server-components/Profile/CoffeePage";
 import ProfilePostPage from "$app/components/server-components/Profile/PostPage";
 import ProfileProductPage from "$app/components/server-components/Profile/ProductPage";
-import ProfileSettingsPage from "$app/components/server-components/Profile/SettingsPage";
 import ProfileWishlistPage from "$app/components/server-components/Profile/WishlistPage";
 import PublicChargePage from "$app/components/server-components/Public/ChargePage";
 import PublicLicenseKeyPage from "$app/components/server-components/Public/LicenseKeyPage";
@@ -157,7 +156,6 @@ ReactOnRails.register({
   ProfileCoffeePage,
   ProfilePostPage,
   ProfileProductPage,
-  ProfileSettingsPage,
   ProfileWishlistPage,
   PublicChargePage,
   PublicLicenseKeyPage,

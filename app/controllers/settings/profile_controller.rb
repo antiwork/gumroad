@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 class Settings::ProfileController < Sellers::BaseController
+  layout "inertia"
   before_action :authorize
 
   def show
@@ -8,7 +9,7 @@ class Settings::ProfileController < Sellers::BaseController
     @profile_presenter = ProfilePresenter.new(pundit_user:, seller: current_seller)
     @settings_presenter = SettingsPresenter.new(pundit_user:)
 
-    @react_component_props = @settings_presenter.profile_props.merge(
+    render inertia: "Settings/Profile/Index", props: @settings_presenter.profile_props.merge(
       @profile_presenter.profile_settings_props(request:)
     )
   end
