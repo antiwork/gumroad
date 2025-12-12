@@ -4,13 +4,13 @@ import { Form } from "$app/components/Admin/Form";
 import { showAlert } from "$app/components/server-components/Alert";
 
 type AdminResendReceiptFormProps = {
-  purchase_external_id: string;
+  purchase_id: number;
   email: string;
 };
 
-export const AdminResendReceiptForm = ({ purchase_external_id, email }: AdminResendReceiptFormProps) => (
+export const AdminResendReceiptForm = ({ purchase_id, email }: AdminResendReceiptFormProps) => (
   <Form
-    url={Routes.resend_receipt_admin_purchase_path(purchase_external_id)}
+    url={Routes.resend_receipt_admin_purchase_path(purchase_id)}
     method="POST"
     confirmMessage="Are you sure you want to resend the receipt?"
     onSuccess={() => showAlert("Receipt sent successfully.", "success")}

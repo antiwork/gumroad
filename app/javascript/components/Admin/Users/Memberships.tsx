@@ -18,9 +18,7 @@ const Membership = ({ membership }: MembershipProps) => (
       <img src={membership.seller.avatar_url} className="user-avatar" alt={membership.seller.display_name_or_email} />
       <div className="grid">
         <h5>
-          <Link href={Routes.admin_user_url(membership.seller.external_id)}>
-            {membership.seller.display_name_or_email}
-          </Link>
+          <Link href={Routes.admin_user_url(membership.seller.id)}>{membership.seller.display_name_or_email}</Link>
         </h5>
         <div>{membership.role}</div>
       </div>
@@ -50,7 +48,7 @@ const Memberships = ({ user: { admin_manageable_user_memberships } }: Membership
         </summary>
         <div className="stack">
           {admin_manageable_user_memberships.map((membership) => (
-            <Membership key={membership.external_id} membership={membership} />
+            <Membership key={membership.id} membership={membership} />
           ))}
         </div>
       </details>

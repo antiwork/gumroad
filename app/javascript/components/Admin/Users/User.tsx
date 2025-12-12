@@ -17,13 +17,13 @@ import AdminUserPayoutInfo from "$app/components/Admin/Users/PayoutInfo";
 import AdminUserPermissionRisk from "$app/components/Admin/Users/PermissionRisk";
 
 export type Seller = {
-  external_id: string;
+  id: number;
   display_name_or_email: string;
   avatar_url: string;
 };
 
 export type UserMembership = {
-  external_id: string;
+  id: number;
   seller: Seller;
   role: string;
   last_accessed_at: string | null;
@@ -36,7 +36,7 @@ type BlockedObject = {
 };
 
 export type User = {
-  external_id: string;
+  id: number;
   email: string;
   support_email?: string | null;
   name: string | null;
@@ -79,7 +79,7 @@ const UserCard = ({ user, isAffiliateUser = false }: Props) => {
   const { url } = page;
 
   return (
-    <div className="grid gap-4 rounded border border-border bg-background p-4" data-user-id={user.external_id}>
+    <div className="grid gap-4 rounded border border-border bg-background p-4" data-user-id={user.id}>
       <Header user={user} isAffiliateUser={isAffiliateUser} url={url} />
 
       <hr />

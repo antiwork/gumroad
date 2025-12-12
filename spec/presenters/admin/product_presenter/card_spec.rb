@@ -15,7 +15,7 @@ describe Admin::ProductPresenter::Card do
     describe "fields" do
       it "returns the correct values" do
         expect(props.except(:cover_placeholder_url)).to eq(
-          external_id: product.external_id,
+          id: product.id,
           name: product.name,
           long_url: product.long_url,
           price_cents: product.price_cents,
@@ -25,7 +25,7 @@ describe Admin::ProductPresenter::Card do
           price_formatted: product.price_formatted,
           created_at: product.created_at,
           user: {
-            external_id: product.user.external_id,
+            id: product.user_id,
             name: product.user.name,
             suspended: false,
             flagged_for_tos_violation: false
@@ -55,17 +55,19 @@ describe Admin::ProductPresenter::Card do
       it "returns formatted product files" do
         expect(props[:alive_product_files].size).to eq(2)
         expect(props[:alive_product_files].first).to include(
+          id: product_file1.id,
           external_id: product_file1.external_id,
           s3_filename: product_file1.s3_filename
         )
         expect(props[:alive_product_files].second).to include(
+          id: product_file2.id,
           external_id: product_file2.external_id,
           s3_filename: product_file2.s3_filename
         )
       end
 
       it "returns files in the correct order" do
-        expect(props[:alive_product_files].map { |f| f[:external_id] }).to eq([product_file1.external_id, product_file2.external_id])
+        expect(props[:alive_product_files].map { |f| f[:id] }).to eq([product_file1.id, product_file2.id])
       end
 
       context "when product has deleted files" do
@@ -73,7 +75,7 @@ describe Admin::ProductPresenter::Card do
 
         it "excludes deleted files" do
           expect(props[:alive_product_files].size).to eq(2)
-          expect(props[:alive_product_files].map { |f| f[:external_id] }).not_to include(deleted_file.external_id)
+          expect(props[:alive_product_files].map { |f| f[:id] }).not_to include(deleted_file.id)
         end
       end
     end
@@ -173,7 +175,7 @@ describe Admin::ProductPresenter::Card do
     describe "user object" do
       it "includes all required user fields" do
         expect(props[:user]).to include(
-          :external_id,
+          :id,
           :name,
           :suspended,
           :flagged_for_tos_violation
@@ -181,7 +183,7 @@ describe Admin::ProductPresenter::Card do
       end
 
       it "returns correct user values" do
-        expect(props[:user][:external_id]).to eq(product.user.external_id)
+        expect(props[:user][:id]).to eq(product.user_id)
         expect(props[:user][:name]).to eq(product.user.name)
         expect(props[:user][:suspended]).to eq(false)
         expect(props[:user][:flagged_for_tos_violation]).to eq(false)

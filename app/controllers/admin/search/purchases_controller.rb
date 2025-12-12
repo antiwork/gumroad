@@ -31,7 +31,7 @@ class Admin::Search::PurchasesController < Admin::BaseController
       countless_minimal: true
     )
 
-    return redirect_to admin_purchase_path(purchases.first.external_id) if purchases.one? && pagination.page == 1
+    return redirect_to admin_purchase_path(purchases.first) if purchases.one? && pagination.page == 1
     purchases = purchases.map do |purchase|
       Admin::PurchasePresenter.new(purchase).list_props
     end

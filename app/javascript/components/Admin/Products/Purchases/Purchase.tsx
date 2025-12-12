@@ -3,7 +3,7 @@ import React from "react";
 export type ProductPurchase = {
   email: string;
   created: string;
-  external_id: string;
+  id: number;
   amount: number;
   displayed_price: string;
   formatted_gumroad_tax_amount: string;
@@ -11,7 +11,7 @@ export type ProductPurchase = {
   stripe_refunded: boolean | null;
   is_chargedback: boolean;
   is_chargeback_reversed: boolean;
-  refunded_by: { external_id: string; email: string }[];
+  refunded_by: { id: number; email: string }[];
   error_code: string | null;
   purchase_state: string;
   gumroad_responsible_for_tax: boolean;
@@ -19,7 +19,7 @@ export type ProductPurchase = {
 
 const AdminProductPurchase = ({
   purchase: {
-    external_id,
+    id,
     displayed_price,
     gumroad_responsible_for_tax,
     formatted_gumroad_tax_amount,
@@ -39,7 +39,7 @@ const AdminProductPurchase = ({
   <div>
     <div>
       <h5>
-        <a href={Routes.admin_purchase_path(external_id)}>{displayed_price}</a>
+        <a href={Routes.admin_purchase_path(id)}>{displayed_price}</a>
         {gumroad_responsible_for_tax ? ` + ${formatted_gumroad_tax_amount} VAT` : null}
       </h5>
       <small>
@@ -51,9 +51,9 @@ const AdminProductPurchase = ({
             <li>
               (refunded
               {refunded_by.map((refunder) => (
-                <React.Fragment key={refunder.external_id}>
+                <React.Fragment key={refunder.id}>
                   {" "}
-                  by <a href={Routes.admin_user_path(refunder.external_id)}>{refunder.email}</a>
+                  by <a href={Routes.admin_user_path(refunder.id)}>{refunder.email}</a>
                 </React.Fragment>
               ))}
               )

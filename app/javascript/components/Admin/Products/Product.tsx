@@ -14,6 +14,7 @@ import AdminProductInfo from "$app/components/Admin/Products/Info";
 import AdminProductPurchases from "$app/components/Admin/Products/Purchases";
 
 type ProductFile = {
+  id: number;
   external_id: string;
   s3_filename: string | null;
 };
@@ -23,14 +24,14 @@ export type ActiveIntegration = {
 };
 
 export type ProductUser = {
-  external_id: string;
+  id: number;
   name: string | null;
   suspended: boolean;
   flagged_for_tos_violation: boolean;
 };
 
 export type Product = {
-  external_id: string;
+  id: number;
   name: string;
   long_url: string;
   price_cents: number;
@@ -63,24 +64,17 @@ type AdminUsersProductsProductProps = {
 const AdminUsersProductsProduct = ({ product, isAffiliateUser = false }: AdminUsersProductsProductProps) => {
   const { url, props } = usePage();
   const compliance: Compliance = cast<Compliance>(props.compliance);
-  const isCurrentUrl = url === Routes.admin_product_path(product.external_id);
+  const isCurrentUrl = url === Routes.admin_product_path(product.id);
 
   return (
-    <article
-      className="grid gap-4 rounded border border-border bg-background p-4"
-      data-product-id={product.external_id}
-    >
+    <article className="grid gap-4 rounded border border-border bg-background p-4" data-product-id={product.id}>
       <AdminProductHeader product={product} isCurrentUrl={isCurrentUrl} />
       <AdminProductDescription product={product} />
       <AdminProductDetails product={product} />
       <AdminProductInfo product={product} />
       <AdminProductActions product={product} />
       <AdminFlagForTosViolations product={product} compliance={compliance} />
-      <AdminProductPurchases
-        productExternalId={product.external_id}
-        isAffiliateUser={isAffiliateUser}
-        userExternalId={product.user.external_id}
-      />
+      <AdminProductPurchases productId={product.id} isAffiliateUser={isAffiliateUser} userId={product.user.id} />
       <AdminProductComments product={product} />
       <AdminProductFooter product={product} />
     </article>

@@ -23,19 +23,20 @@ type UrlRedirect = {
 
 type Gift = {
   is_sender_purchase: boolean;
-  other_purchase_external_id: string;
+  other_purchase_id: number;
   other_email: string;
   note: string | null;
 };
 
 export type Purchase = PurchaseStatesInfo & {
+  id: number;
   external_id: string;
   seller: {
     support_email: string | null;
     email: string;
   };
   merchant_account: {
-    external_id: string;
+    id: number;
     charge_processor_id: string;
     holder_of_funds: string;
   } | null;
@@ -49,7 +50,7 @@ export type Purchase = PurchaseStatesInfo & {
   formatted_affiliate_credit_amount: string | null;
   gumroad_responsible_for_tax: boolean;
   product: {
-    external_id: string;
+    id: number;
     name: string;
     long_url: string;
   };
@@ -65,7 +66,7 @@ export type Purchase = PurchaseStatesInfo & {
   external_id_numeric: number;
   quantity: number;
   refunds: {
-    user: { external_id: string; name: string | null } | null;
+    user: { id: number; name: string | null } | null;
     status: string;
     created_at: string;
   }[];
@@ -79,6 +80,7 @@ export type Purchase = PurchaseStatesInfo & {
   ip_country: string | null;
   is_preorder_authorization: boolean;
   subscription: {
+    id: number;
     external_id: string;
     cancelled_at: string | null;
     cancelled_by_buyer: boolean | null;
@@ -123,9 +125,9 @@ export type Purchase = PurchaseStatesInfo & {
 const Header = ({ purchase }: { purchase: Purchase }) => (
   <div className="grid gap-2">
     <h2>
-      <Link href={Routes.admin_purchase_path(purchase.external_id)}>{purchase.formatted_display_price}</Link>
+      <Link href={Routes.admin_purchase_path(purchase.id)}>{purchase.formatted_display_price}</Link>
       {purchase.gumroad_responsible_for_tax ? ` + ${purchase.formatted_gumroad_tax_amount} VAT` : null} for{" "}
-      <Link href={Routes.admin_product_path(purchase.product.external_id)} title={purchase.product.external_id}>
+      <Link href={Routes.admin_product_path(purchase.product.id)} title={purchase.product.id.toString()}>
         {purchase.product.name}
       </Link>{" "}
       {purchase.variants_list}{" "}
@@ -172,8 +174,8 @@ const Info = ({ purchase }: { purchase: Purchase }) => (
         <>
           <dt>Merchant account</dt>
           <dd>
-            <Link href={Routes.admin_merchant_account_path(purchase.merchant_account.external_id)}>
-              {purchase.merchant_account.external_id} – {purchase.merchant_account.charge_processor_id}
+            <Link href={Routes.admin_merchant_account_path(purchase.merchant_account.id)}>
+              {purchase.merchant_account.id} – {purchase.merchant_account.charge_processor_id}
             </Link>
           </dd>
           <dt>Funds held by</dt>
@@ -244,7 +246,7 @@ const Info = ({ purchase }: { purchase: Purchase }) => (
           )
         ) : null}
         {" | "}
-        <Link href={Routes.admin_purchase_path(purchase.external_id)}>{purchase.external_id}</Link>
+        <Link href={Routes.admin_purchase_path(purchase.id)}>{purchase.id}</Link>
       </dd>
 
       <dt>Order number</dt>
@@ -272,8 +274,8 @@ const Info = ({ purchase }: { purchase: Purchase }) => (
                   <li>
                     Refunder:
                     {refund.user ? (
-                      <Link href={Routes.admin_user_path(refund.user.external_id)}>
-                        {refund.user.name || `User ${refund.user.external_id}`}
+                      <Link href={Routes.admin_user_path(refund.user.id)}>
+                        {refund.user.name || `User ${refund.user.id}`}
                       </Link>
                     ) : (
                       "(unknown)"
@@ -466,7 +468,7 @@ const Info = ({ purchase }: { purchase: Purchase }) => (
   </div>
 );
 
-const GiftInfo = ({ purchaseExternalId, gift }: { purchaseExternalId: string; gift: Gift }) =>
+const GiftInfo = ({ purchaseId, gift }: { purchaseId: number; gift: Gift }) =>
   gift.is_sender_purchase ? (
     <>
       <details>
@@ -480,11 +482,9 @@ const GiftInfo = ({ purchaseExternalId, gift }: { purchaseExternalId: string; gi
           <dt>Note</dt>
           <dd>{gift.note}</dd>
 
-          <dt>Receiver purchase extrenal id</dt>
+          <dt>Receiver purchase id</dt>
           <dd>
-            <Link href={Routes.admin_purchase_path(gift.other_purchase_external_id)}>
-              {gift.other_purchase_external_id}
-            </Link>
+            <Link href={Routes.admin_purchase_path(gift.other_purchase_id)}>{gift.other_purchase_id}</Link>
           </dd>
         </dl>
       </details>
@@ -495,7 +495,7 @@ const GiftInfo = ({ purchaseExternalId, gift }: { purchaseExternalId: string; gi
           <h3>Edit giftee email</h3>
         </summary>
         <Form
-          url={Routes.update_giftee_email_admin_purchase_path(purchaseExternalId)}
+          url={Routes.update_giftee_email_admin_purchase_path(purchaseId)}
           method="POST"
           onSuccess={() => showAlert("Successfully updated the giftee email.", "success")}
         >
@@ -522,11 +522,9 @@ const GiftInfo = ({ purchaseExternalId, gift }: { purchaseExternalId: string; gi
         <dt>Note</dt>
         <dd>{gift.note}</dd>
 
-        <dt>Sender purchase external id</dt>
+        <dt>Sender purchase id</dt>
         <dd>
-          <Link href={Routes.admin_purchase_path(gift.other_purchase_external_id)}>
-            {gift.other_purchase_external_id}
-          </Link>
+          <Link href={Routes.admin_purchase_path(gift.other_purchase_id)}>{gift.other_purchase_id}</Link>
         </dd>
       </dl>
     </details>
@@ -537,7 +535,7 @@ const ActionButtons = ({ purchase }: { purchase: Purchase }) => (
     {purchase.can_force_update || purchase.failed ? (
       <AdminActionButton
         label="Sync with Stripe/PayPal"
-        url={Routes.sync_status_with_charge_processor_admin_purchase_path(purchase.external_id)}
+        url={Routes.sync_status_with_charge_processor_admin_purchase_path(purchase)}
         loading="syncing..."
         done="synced!"
         confirm_message="Are you sure you want to sync this purchase's state with Stripe/PayPal?"
@@ -548,7 +546,7 @@ const ActionButtons = ({ purchase }: { purchase: Purchase }) => (
       <>
         <AdminActionButton
           label="Refund"
-          url={Routes.refund_admin_purchase_path(purchase.external_id)}
+          url={Routes.refund_admin_purchase_path(purchase)}
           loading="Refunding..."
           done="Refunded!"
           confirm_message="Are you sure you want to refund this purchase?"
@@ -556,7 +554,7 @@ const ActionButtons = ({ purchase }: { purchase: Purchase }) => (
         />
         <AdminActionButton
           label="Refund for Fraud"
-          url={Routes.refund_for_fraud_admin_purchase_path(purchase.external_id)}
+          url={Routes.refund_for_fraud_admin_purchase_path(purchase)}
           loading="Refunding..."
           done="Refunded!"
           confirm_message="Are you sure you want to refund this purchase for fraud?"
@@ -564,7 +562,7 @@ const ActionButtons = ({ purchase }: { purchase: Purchase }) => (
         />
         <AdminActionButton
           label="Refund taxes only"
-          url={Routes.refund_taxes_only_admin_purchase_path(purchase.external_id)}
+          url={Routes.refund_taxes_only_admin_purchase_path(purchase)}
           loading="Refunding taxes..."
           done="Taxes refunded!"
           confirm_message="Are you sure you want to refund only the taxes for this purchase?"
@@ -587,7 +585,7 @@ const ActionButtons = ({ purchase }: { purchase: Purchase }) => (
       <>
         <AdminActionButton
           label="Cancel subscription for buyer"
-          url={Routes.cancel_subscription_admin_purchase_path(purchase.external_id, { by_seller: false })}
+          url={Routes.cancel_subscription_admin_purchase_path(purchase, { by_seller: false })}
           loading="Canceling..."
           done="Canceled!"
           confirm_message="Are you sure you want to cancel this subscription on behalf of the buyer?"
@@ -595,7 +593,7 @@ const ActionButtons = ({ purchase }: { purchase: Purchase }) => (
         />
         <AdminActionButton
           label="Cancel subscription for seller"
-          url={Routes.cancel_subscription_admin_purchase_path(purchase.external_id, { by_seller: true })}
+          url={Routes.cancel_subscription_admin_purchase_path(purchase, { by_seller: true })}
           loading="Canceling..."
           done="Canceled!"
           confirm_message="Are you sure you want to cancel this subscription on behalf of the seller?"
@@ -606,7 +604,7 @@ const ActionButtons = ({ purchase }: { purchase: Purchase }) => (
     {purchase.buyer_blocked ? (
       <AdminActionButton
         label="Unblock buyer"
-        url={Routes.unblock_buyer_admin_purchase_path(purchase.external_id)}
+        url={Routes.unblock_buyer_admin_purchase_path(purchase)}
         loading="Unblocking buyer..."
         done="Buyer unblocked!"
         success_message="Buyer unblocked!"
@@ -614,7 +612,7 @@ const ActionButtons = ({ purchase }: { purchase: Purchase }) => (
     ) : (
       <AdminActionButton
         label="Block buyer"
-        url={Routes.block_buyer_admin_purchase_path(purchase.external_id)}
+        url={Routes.block_buyer_admin_purchase_path(purchase)}
         loading="Blocking buyer..."
         done="Buyer blocked!"
         confirm_message="This will fully block this buyer's emails, GUID, and IP addresses. Proceed?"
@@ -624,7 +622,7 @@ const ActionButtons = ({ purchase }: { purchase: Purchase }) => (
     {purchase.is_deleted_by_buyer ? (
       <AdminActionButton
         label="Undelete"
-        url={Routes.undelete_admin_purchase_path(purchase.external_id)}
+        url={Routes.undelete_admin_purchase_path(purchase)}
         loading="Undeleting..."
         done="Undeleted!"
         confirm_message="Are you sure you want to undelete this purchase?"
@@ -665,7 +663,7 @@ const AdminPurchase = ({ purchase }: { purchase: Purchase }) => (
     {purchase.gift ? (
       <>
         <hr />
-        <GiftInfo purchaseExternalId={purchase.external_id} gift={purchase.gift} />
+        <GiftInfo purchaseId={purchase.id} gift={purchase.gift} />
       </>
     ) : null}
     {purchase.successful ||
@@ -677,7 +675,7 @@ const AdminPurchase = ({ purchase }: { purchase: Purchase }) => (
           <summary>
             <h3>Resend receipt</h3>
           </summary>
-          <AdminResendReceiptForm purchase_external_id={purchase.external_id} email={purchase.email} />
+          <AdminResendReceiptForm purchase_id={purchase.id} email={purchase.email} />
         </details>
       </>
     ) : null}
@@ -685,7 +683,7 @@ const AdminPurchase = ({ purchase }: { purchase: Purchase }) => (
     <ActionButtons purchase={purchase} />
     <AdminCommentableComments
       count={purchase.comments_count}
-      endpoint={Routes.admin_purchase_comments_path(purchase.external_id)}
+      endpoint={Routes.admin_purchase_comments_path(purchase.id)}
       commentableType="purchase"
     />
     <hr />

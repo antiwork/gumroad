@@ -6,13 +6,13 @@ import DateTimeWithRelativeTooltip from "$app/components/Admin/DateTimeWithRelat
 import { Row, RowContent } from "$app/components/ui/Rows";
 
 type AuthorProps = {
-  external_id: string;
+  id: number;
   email: string;
   name: string | null;
 };
 
 export type CommentProps = {
-  external_id: string;
+  id: number;
   author_name: string | null;
   comment_type: string;
   updated_at: string;
@@ -30,9 +30,7 @@ const AdminCommentableComment = ({ comment }: { comment: CommentProps }) => (
           </li>
           <li>
             {comment.author ? (
-              <Link href={Routes.admin_user_url(comment.author.external_id)}>
-                {comment.author.name || comment.author.email}
-              </Link>
+              <Link href={Routes.admin_user_url(comment.author.id)}>{comment.author.name || comment.author.email}</Link>
             ) : (
               comment.author_name
             )}

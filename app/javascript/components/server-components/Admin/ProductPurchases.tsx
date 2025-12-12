@@ -58,10 +58,10 @@ const AdminProductPurchases = ({
         {purchases && purchases.length > 0 ? (
           <div className="stack">
             {purchases.map((purchase) => (
-              <div key={purchase.external_id}>
+              <div key={purchase.id}>
                 <div>
                   <h5>
-                    <a href={Routes.admin_purchase_path(purchase.external_id)}>{purchase.displayed_price}</a>
+                    <a href={Routes.admin_purchase_path(purchase.id)}>{purchase.displayed_price}</a>
                     {purchase.gumroad_responsible_for_tax ? ` + ${purchase.formatted_gumroad_tax_amount} VAT` : null}
                   </h5>
                   <small>
@@ -73,9 +73,9 @@ const AdminProductPurchases = ({
                         <li>
                           (refunded
                           {purchase.refunded_by.map((refunder) => (
-                            <React.Fragment key={refunder.external_id}>
+                            <React.Fragment key={refunder.id}>
                               {" "}
-                              by <a href={Routes.admin_user_path(refunder.external_id)}>{refunder.email}</a>
+                              by <a href={Routes.admin_user_path(refunder.id)}>{refunder.email}</a>
                             </React.Fragment>
                           ))}
                           )

@@ -7,11 +7,12 @@ import DateTimeWithRelativeTooltip from "$app/components/Admin/DateTimeWithRelat
 import { BooleanIcon, NoIcon } from "$app/components/Admin/Icons";
 
 export type AdminMerchantAccountProps = {
+  id: number;
   charge_processor_id: string;
   charge_processor_merchant_id: string | null;
   created_at: string;
   external_id: string;
-  user_external_id: string | null;
+  user_id: number | null;
   country: string;
   country_name: string | null;
   currency: string;
@@ -31,22 +32,23 @@ const AdminMerchantAccountsShow = () => {
   return (
     <div className="override grid gap-4 rounded border border-border bg-background p-4">
       <div>
-        <h2>Merchant Account {merchant_account.external_id}</h2>
+        <h2>Merchant Account {merchant_account.id}</h2>
         <DateTimeWithRelativeTooltip date={merchant_account.created_at} utc />
       </div>
 
       <hr />
       <div>
         <dl>
+          <dt>ID</dt>
+          <dd>{merchant_account.id}</dd>
+
           <dt>External ID</dt>
           <dd>{merchant_account.external_id}</dd>
 
           <dt>User</dt>
           <dd>
-            {merchant_account.user_external_id ? (
-              <Link href={Routes.admin_user_path(merchant_account.user_external_id)}>
-                {merchant_account.user_external_id}
-              </Link>
+            {merchant_account.user_id ? (
+              <Link href={Routes.admin_user_path(merchant_account.user_id)}>{merchant_account.user_id}</Link>
             ) : (
               "none"
             )}
