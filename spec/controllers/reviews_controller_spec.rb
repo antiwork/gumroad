@@ -18,11 +18,11 @@ describe ReviewsController do
       let(:record) { ProductReview }
     end
 
-    it "initializes the presenter with the correct arguments and sets the title" do
+    it "initializes the presenter with the correct arguments and renders Inertia page" do
       expect(ReviewsPresenter).to receive(:new).with(user).and_call_original
       get :index
       expect(response).to be_successful
-      expect(response.body).to have_selector("title:contains('Reviews')", visible: false)
+      expect(response).to render_template(layout: "inertia")
     end
   end
 end
