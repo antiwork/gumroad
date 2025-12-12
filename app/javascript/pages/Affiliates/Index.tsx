@@ -373,7 +373,7 @@ export default function AffiliatesIndex() {
             <WithTooltip position="bottom" tip={affiliates_disabled_reason}>
               <NavigationButtonInertia
                 href={Routes.new_affiliate_path()}
-                className="accent"
+                color="accent"
                 disabled={!loggedInUser?.policies.direct_affiliate.create || affiliates_disabled_reason !== null}
               >
                 Add affiliate
