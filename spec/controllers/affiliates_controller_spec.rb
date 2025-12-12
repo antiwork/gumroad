@@ -3,8 +3,9 @@
 require "spec_helper"
 require "shared_examples/authorize_called"
 require "shared_examples/authentication_required"
+require "inertia_rails/rspec"
 
-describe AffiliatesController do
+describe AffiliatesController, type: :controller, inertia: true do
   let(:seller) { create(:named_seller) }
   let!(:product) { create(:product, user: seller) }
   let(:affiliate_user) { create(:affiliate_user) }
@@ -20,20 +21,30 @@ describe AffiliatesController do
       end
 
       it "renders the affiliates page" do
+        create(:direct_affiliate, seller:, affiliate_user:)
         get :index
 
         expect(response).to be_successful
-        expect(response).to render_template(:index)
+        expect(inertia.component).to eq("Affiliates/Index")
+        expect(inertia.props[:affiliates]).to be_present
       end
 
       context "when creator does not have any affiliates" do
-        render_views
-
         it "switches to the onboarding signup form tab" do
           get :index
 
           expect(response).to redirect_to "/affiliates/onboarding"
         end
+      end
+    end
+
+    describe "GET onboarding" do
+      it "renders the onboarding page" do
+        get :onboarding
+
+        expect(response).to be_successful
+        expect(inertia.component).to eq("Affiliates/Onboarding")
+        expect(inertia.props[:products]).to be_an(Array)
       end
     end
 
