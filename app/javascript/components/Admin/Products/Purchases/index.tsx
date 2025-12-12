@@ -7,22 +7,18 @@ import AdminProductPurchasesContent from "./Content";
 import { type ProductPurchase } from "./Purchase";
 
 type AdminProductPurchasesProps = {
-  productExternalId: string;
+  productId: number;
   isAffiliateUser?: boolean;
-  userExternalId: string | null;
+  userId: number | null;
 };
 
-const AdminProductPurchases = ({
-  productExternalId,
-  isAffiliateUser = false,
-  userExternalId,
-}: AdminProductPurchasesProps) => {
+const AdminProductPurchases = ({ productId, isAffiliateUser = false, userId }: AdminProductPurchasesProps) => {
   const [open, setOpen] = React.useState(false);
 
   const url =
-    userExternalId && isAffiliateUser
-      ? Routes.admin_affiliate_product_purchases_path(userExternalId, productExternalId, { format: "json" })
-      : Routes.admin_product_purchases_path(productExternalId, { format: "json" });
+    userId && isAffiliateUser
+      ? Routes.admin_affiliate_product_purchases_path(userId, productId, { format: "json" })
+      : Routes.admin_product_purchases_path(productId, { format: "json" });
 
   const {
     data: purchases,

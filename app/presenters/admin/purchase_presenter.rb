@@ -9,11 +9,11 @@ class Admin::PurchasePresenter
 
   def list_props
     {
-      external_id: purchase.external_id,
+      id: purchase.id,
       formatted_display_price: purchase.formatted_display_price,
       formatted_gumroad_tax_amount: purchase.gumroad_tax_cents > 0 ? purchase.formatted_gumroad_tax_amount : nil,
       gumroad_responsible_for_tax: purchase.gumroad_responsible_for_tax?,
-      product: { external_id: purchase.link.external_id, name: purchase.link.name, long_url: purchase.link.long_url },
+      product: { id: purchase.link.id, name: purchase.link.name, long_url: purchase.link.long_url },
       variants_list: purchase.variants_list,
       refund_policy: purchase.purchase_refund_policy.present? ? {
         title: purchase.purchase_refund_policy.title,
@@ -29,7 +29,7 @@ class Admin::PurchasePresenter
       chargedback: purchase.chargedback?,
       chargeback_reversed: purchase.chargeback_reversed?,
       error_code: purchase.failed? ? purchase.formatted_error_code : nil,
-      last_chargebacked_purchase: purchase.find_past_chargebacked_purchases.first&.external_id,
+      last_chargebacked_purchase: purchase.find_past_chargebacked_purchases.first&.id,
     }
   end
 
@@ -48,7 +48,7 @@ class Admin::PurchasePresenter
                        deleted_at: purchase.deleted_at,
                        external_id: purchase.external_id,
                        merchant_account: purchase.merchant_account.present? ? {
-                         external_id: purchase.merchant_account.external_id,
+                         id: purchase.merchant_account.id,
                          charge_processor_id: purchase.merchant_account.charge_processor_id&.capitalize,
                          holder_of_funds: purchase.merchant_account.holder_of_funds.capitalize,
                        } : nil,
@@ -68,7 +68,7 @@ class Admin::PurchasePresenter
                        quantity: purchase.quantity,
                        refunds: purchase.refunds.map do |refund|
                          {
-                           user: refund.user ? { external_id: refund.user.external_id, name: refund.user.name } : nil,
+                           user: refund.user ? { id: refund.user.id, name: refund.user.name } : nil,
                            status: refund.status.capitalize,
                            created_at: refund.created_at,
                          }
@@ -83,6 +83,7 @@ class Admin::PurchasePresenter
                        ip_country: purchase.ip_country,
                        is_preorder_authorization: purchase.is_preorder_authorization,
                        subscription: purchase.subscription ? {
+                         id: purchase.subscription.id,
                          external_id: purchase.subscription.external_id,
                          cancelled_at: purchase.subscription.cancelled_at,
                          cancelled_by_buyer: purchase.subscription.cancelled_by_buyer,
@@ -114,9 +115,9 @@ class Admin::PurchasePresenter
                        affiliate_email: purchase.affiliate.present? ? purchase.affiliate.affiliate_user.form_email : nil,
                        can_contact: purchase.can_contact?,
                        gift: purchase.is_gift_sender_purchase ?
-                               { is_sender_purchase: true, other_purchase_external_id: purchase.gift.giftee_purchase&.external_id, other_email: purchase.giftee_email, note: purchase.gift_note } :
+                               { is_sender_purchase: true, other_purchase_id: purchase.gift.giftee_purchase_id, other_email: purchase.giftee_email, note: purchase.gift_note } :
                                purchase.is_gift_receiver_purchase ?
-                                 { is_sender_purchase: false, other_purchase_external_id: purchase.gift.gifter_purchase&.external_id, other_email: purchase.gifter_email, note: purchase.gift_note } :
+                                 { is_sender_purchase: false, other_purchase_id: purchase.gift.gifter_purchase_id, other_email: purchase.gifter_email, note: purchase.gift_note } :
                                  nil,
                        successful: purchase.successful?,
                        can_force_update: purchase.can_force_update?,

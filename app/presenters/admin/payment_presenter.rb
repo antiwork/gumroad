@@ -9,12 +9,12 @@ class Admin::PaymentPresenter
 
   def props
     {
-      external_id: payment.external_id,
+      id: payment.id,
       displayed_amount: payment.displayed_amount,
       payout_period_end_date: payment.payout_period_end_date,
       created_at: payment.created_at,
       user: payment.user ? {
-        external_id: payment.user.external_id,
+        id: payment.user.id,
         name: payment.user.name,
       } : nil,
 

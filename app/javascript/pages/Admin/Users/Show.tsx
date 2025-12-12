@@ -14,7 +14,7 @@ const AdminUsersShow = () => {
 
   return (
     <div className="flex flex-col gap-4">
-      <AdminUserAndProductsTabs selectedTab="profile" userExternalId={user.external_id} />
+      <AdminUserAndProductsTabs selectedTab="profile" userId={user.id} />
       <UserCard user={user} />
     </div>
   );

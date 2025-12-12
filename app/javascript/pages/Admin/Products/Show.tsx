@@ -14,7 +14,7 @@ const AdminProductsShow = () => {
 
   return (
     <div className="flex flex-col gap-4">
-      <Product key={product.external_id} product={product} />
+      <Product key={product.id} product={product} />
       <User user={user} />
     </div>
   );

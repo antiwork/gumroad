@@ -40,11 +40,10 @@ module Admin::Commentable
 
     def json_payload(comment)
       comment.as_json(
-        only: %i[author_name comment_type content updated_at],
-        methods: %i[external_id],
+        only: %i[id author_name comment_type content updated_at],
         include: {
           author: {
-            only: %i[external_id name email],
+            only: %i[id name email],
           }
         },
       ).reverse_merge(author: nil)

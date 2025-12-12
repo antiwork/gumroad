@@ -3,20 +3,20 @@ import * as React from "react";
 import { Form } from "$app/components/Admin/Form";
 
 const AdminResumePayoutsForm = ({
-  user_external_id,
+  user_id,
   payouts_paused_by,
   reason,
   onSuccess,
 }: {
-  user_external_id: string;
+  user_id: number;
   payouts_paused_by: "stripe" | "admin" | "system" | "user" | null;
   reason: string | null;
   onSuccess: () => void;
 }) => (
   <Form
-    url={Routes.resume_admin_user_payouts_path(user_external_id)}
+    url={Routes.resume_admin_user_payouts_path(user_id)}
     method="POST"
-    confirmMessage={`Are you sure you want to resume payouts for user ${user_external_id}?`}
+    confirmMessage={`Are you sure you want to resume payouts for user ${user_id}?`}
     onSuccess={onSuccess}
   >
     {(isLoading) => (

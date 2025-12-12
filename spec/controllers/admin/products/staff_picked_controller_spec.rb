@@ -19,13 +19,13 @@ describe Admin::Products::StaffPickedController do
     it_behaves_like "authorize called for action", :post, :create do
       let(:policy_klass) { Admin::Products::StaffPicked::LinkPolicy }
       let(:record) { product }
-      let(:request_params) { { product_external_id: product.external_id } }
+      let(:request_params) { { product_id: product.id } }
     end
 
     context "when product doesn't have an associated staff_picked_product" do
       it "creates a record" do
         expect do
-          post :create, params: { product_external_id: product.external_id }, format: :json
+          post :create, params: { product_id: product.id }, format: :json
         end.to change { StaffPickedProduct.all.count }.by(1)
 
         expect(product.reload.staff_picked?).to eq(true)
@@ -38,7 +38,7 @@ describe Admin::Products::StaffPickedController do
       end
 
       it "updates the record as not deleted" do
-        post :create, params: { product_external_id: product.external_id }, format: :json
+        post :create, params: { product_id: product.id }, format: :json
 
         expect(product.reload.staff_picked?).to eq(true)
       end
