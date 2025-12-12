@@ -1,3 +1,4 @@
+import { Link } from "@inertiajs/react";
 import cx from "classnames";
 import * as React from "react";
 
@@ -328,15 +329,11 @@ export const DashboardPage = ({
         <div role="alert" className="info">
           <div>
             Your 1099 tax form for {new Date().getFullYear() - 1} is ready!{" "}
-            <a
-              href={
-                tax_center_enabled
-                  ? Routes.tax_center_path({ year: new Date().getFullYear() - 1 })
-                  : Routes.dashboard_download_tax_form_path()
-              }
-            >
-              Click here to download
-            </a>
+            {tax_center_enabled ? (
+              <Link href={Routes.tax_center_path({ year: new Date().getFullYear() - 1 })}>Click here to download</Link>
+            ) : (
+              <a href={Routes.dashboard_download_tax_form_path()}>Click here to download</a>
+            )}
             .
           </div>
         </div>

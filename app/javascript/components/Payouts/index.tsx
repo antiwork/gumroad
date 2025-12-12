@@ -1,3 +1,4 @@
+import { Link } from "@inertiajs/react";
 import classNames from "classnames";
 import * as React from "react";
 import { cast } from "ts-safe-cast";
@@ -736,11 +737,11 @@ const Payouts = ({
       >
         {tax_center_enabled ? (
           <Tabs>
-            <Tab href={Routes.balance_path()} isSelected>
-              Payouts
+            <Tab isSelected asChild>
+              <Link href={Routes.balance_path()}>Payouts</Link>
             </Tab>
-            <Tab href={Routes.tax_center_path()} isSelected={false}>
-              Taxes
+            <Tab isSelected={false} asChild>
+              <Link href={Routes.tax_center_path()}>Taxes</Link>
             </Tab>
           </Tabs>
         ) : null}
