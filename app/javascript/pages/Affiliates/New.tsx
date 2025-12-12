@@ -1,7 +1,6 @@
 import { router, usePage } from "@inertiajs/react";
 import cx from "classnames";
 import * as React from "react";
-import { cast } from "ts-safe-cast";
 
 import { addAffiliate, SelfServeAffiliateProduct } from "$app/data/affiliates";
 import { asyncVoid } from "$app/utils/promise";
@@ -26,7 +25,7 @@ type Props = {
 };
 
 export default function AffiliatesNew() {
-  const props = cast<Props>(usePage().props);
+  const props = usePage<{ props: Props }>().props as unknown as Props;
   const loggedInUser = useLoggedInUser();
   const [isSubmitting, setIsSubmitting] = React.useState(false);
   const [email, setEmail] = React.useState("");

@@ -1,7 +1,6 @@
 import { router, usePage } from "@inertiajs/react";
 import cx from "classnames";
 import * as React from "react";
-import { cast } from "ts-safe-cast";
 
 import { updateAffiliate } from "$app/data/affiliates";
 import { asyncVoid } from "$app/utils/promise";
@@ -41,7 +40,7 @@ type Props = {
 };
 
 export default function AffiliatesEdit() {
-  const props = cast<Props>(usePage().props);
+  const props = usePage<{ props: Props }>().props as unknown as Props;
   const loggedInUser = useLoggedInUser();
   const [isSubmitting, setIsSubmitting] = React.useState(false);
   const [products, setProducts] = React.useState<AffiliateProduct[]>(props.affiliate.products);
