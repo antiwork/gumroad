@@ -28,7 +28,7 @@ export type IncomingCollaborator = {
 export const getIncomingCollaborators = async () => {
   const response = await request({
     method: "GET",
-    url: Routes.internal_collaborators_incomings_path(),
+    url: Routes.collaborators_incomings_path(),
     accept: "json",
   });
 
