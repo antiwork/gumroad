@@ -115,6 +115,7 @@ export function UnauthenticatedNewTicketModal({
           />
         </div>
         {recaptchaContainer}
+        {/* We hide the reCAPTCHA badge to avoid it overlapping the modal content and show this standard disclaimer instead (see https://developers.google.com/recaptcha/docs/faq#id-like-to-hide-the-recaptcha-badge.-what-is-allowed) */}
         <p className="text-sm text-muted">
           This site is protected by reCAPTCHA and the Google{" "}
           <a href="https://policies.google.com/privacy" target="_blank" rel="noopener noreferrer">
