@@ -16,12 +16,12 @@ type PillProps = React.PropsWithChildren<{
   React.HTMLAttributes<HTMLElement>;
 
 const pillVariants = cva(
-  "inline-flex align-middle px-3 py-2 bg-background text-foreground border border-border rounded-full truncate",
+  "inline-flex align-middle px-3 py-2 bg-background text-foreground border border-border truncate",
   {
     variants: {
       size: {
         default: "rounded-full",
-        small: "rounded-full",
+        small: "rounded p-1 text-sm/4",
       },
       color: {
         primary: "bg-primary text-primary-foreground border-primary",
