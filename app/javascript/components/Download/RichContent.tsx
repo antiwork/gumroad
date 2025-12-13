@@ -7,6 +7,7 @@ import { cast } from "ts-safe-cast";
 
 import { RichContent } from "$app/parsers/richContent";
 import { assertDefined } from "$app/utils/assert";
+import { classNames } from "$app/utils/classNames";
 import { asyncVoid } from "$app/utils/promise";
 import { assertResponseError } from "$app/utils/request";
 
@@ -26,6 +27,7 @@ import { ExternalMediaFileEmbed } from "$app/components/TiptapExtensions/MediaEm
 import { MoreLikeThis } from "$app/components/TiptapExtensions/MoreLikeThis";
 import { Posts } from "$app/components/TiptapExtensions/Posts";
 import { ShortAnswer } from "$app/components/TiptapExtensions/ShortAnswer";
+import { Row, RowActions, RowContent, RowDetails, Rows } from "$app/components/ui/Rows";
 import { useRunOnce } from "$app/components/useRunOnce";
 
 type SaleInfo = { sale_id: string; product_id: string | null; product_permalink: string | null };
@@ -186,9 +188,9 @@ const FileEmbedNodeView = ({ node, getPos, editor }: NodeViewProps) => {
   return file ? (
     <NodeViewWrapper>
       {shouldShowSubtitlesForFile(file) ? (
-        <div role="tree" style={{ border: 0 }}>
+        <Rows role="tree" style={{ border: 0 }}>
           {fileRow}
-        </div>
+        </Rows>
       ) : (
         fileRow
       )}
@@ -277,28 +279,31 @@ const FileEmbedGroupNodeView = ({ node }: NodeViewProps) => {
 
   return (
     <NodeViewWrapper>
-      <div role="tree" ref={ref}>
-        <div role="treeitem" aria-expanded={expanded}>
-          <div className="content" onClick={() => setExpanded(!expanded)} contentEditable={false}>
+      <Rows role="tree" ref={ref}>
+        <Row role="treeitem" aria-expanded={expanded}>
+          <RowContent onClick={() => setExpanded(!expanded)} contentEditable={false}>
+            <Icon name={expanded ? "outline-cheveron-down" : "outline-cheveron-right"} />
             <Icon name="solid-folder-open" className="type-icon" />
             <div>
               <h4>{folderTitle}</h4>
             </div>
-          </div>
+          </RowContent>
           {downloadAllButtonIsVisible ? (
-            <div className="actions">
+            <RowActions>
               <FileGroupDownloadAllButton folderId={folderId} files={downloadableFilesInFolder} />
-            </div>
+            </RowActions>
           ) : null}
-          {hasStreamable ? (
-            <NodeViewContent id={uid} role="group" />
-          ) : (
-            <div role="group">
-              <NodeViewContent id={uid} className="rows" />
-            </div>
-          )}
-        </div>
-      </div>
+          <RowDetails role="group" className={classNames({ hidden: !expanded })}>
+            {hasStreamable ? (
+              <NodeViewContent id={uid} />
+            ) : (
+              <Rows>
+                <NodeViewContent id={uid} />
+              </Rows>
+            )}
+          </RowDetails>
+        </Row>
+      </Rows>
     </NodeViewWrapper>
   );
 };

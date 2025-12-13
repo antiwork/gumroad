@@ -14,8 +14,8 @@
   "dependencies": {
     "@ai-sdk/react": "^2.0.8",
     "@anycable/web": "^1.1.0",
-    "@helperai/client": "^0.4.4",
-    "@helperai/react": "^0.9.4",
+    "@helperai/client": "^0.4.5",
+    "@helperai/react": "^0.9.5",
     "@inertiajs/progress": "^0.2.7",
     "@inertiajs/react": "^2.1.2",
     "@paypal/paypal-js": "^8.0.0",

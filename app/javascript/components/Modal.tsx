@@ -29,7 +29,7 @@ export const Modal = ({
       <Dialog.Content
         aria-modal={modal}
         className={classNames(
-          "bg-filled fixed top-[50%] left-[50%] z-31 flex max-h-[90vh] max-w-175 min-w-80 translate-[-50%] flex-col gap-4 overflow-y-auto rounded border border-border p-8 shadow-lg dark:shadow-none",
+          "bg-filled fixed top-[50%] left-[50%] z-51 flex max-h-[90vh] max-w-175 min-w-80 translate-[-50%] flex-col gap-4 overflow-y-auto rounded border border-border p-8 shadow-lg dark:shadow-none",
           className,
         )}
         onOpenAutoFocus={(e) => {
@@ -49,7 +49,7 @@ export const Modal = ({
         {children}
         {footer ? <footer className="grid gap-4 sm:flex sm:justify-end">{footer}</footer> : null}
       </Dialog.Content>
-      <Dialog.Overlay className="fixed inset-0 z-30 bg-backdrop" />
+      <Dialog.Overlay className="fixed inset-0 z-50 bg-backdrop" />
     </>
   );
 

@@ -92,7 +92,7 @@ type Props = {
   us_states: string[];
   ca_provinces: string[];
   used_card: SavedCreditCard | null;
-  recaptcha_key: string;
+  recaptcha_key: string | null;
   paypal_client_id: string;
 };
 
@@ -358,7 +358,7 @@ const SubscriptionManager = ({
 
       <StateContext.Provider value={reducer}>
         <div>
-          <PaymentForm className="borderless" notice={paymentNotice} />
+          <PaymentForm className="borderless" notice={paymentNotice} showCustomFields={false} />
           {totalPrice > 0 ? (
             <div>
               <div className="text-center">

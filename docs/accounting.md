@@ -91,3 +91,19 @@ end
 subdivision_codes = Compliance::Countries::TAXABLE_US_STATE_CODES
 CreateUsStatesSalesSummaryReportJob.perform_async(subdivision_codes, 3, 2024)
 ```
+
+### Generate a sales report for specific customer country and custom date range
+
+> Note: Runs via an async job, does not require a long-running task. Sends a notification to Slack on completion with download url for the report.
+
+E.g. Generate a report for all sales made to customers in Japan in the month of January 2025:
+
+```rb
+GenerateSalesReportJob.perform_async("JP", "2025-1-1", "2025-1-31", "all_sales")
+```
+
+- Pass `discover_sales` instead of `all_sales` to only include discover sales. E.g. to generate a report for discover sales made to customers in Singapore between 1 January 2024 and 30 June 2025:
+
+```rb
+GenerateSalesReportJob.perform_async("SG", "2024-1-1", "2025-6-30", "discover_sales")
+```

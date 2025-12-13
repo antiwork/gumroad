@@ -68,17 +68,21 @@ const PostPage = ({
   const publishedAtFormatted = formatPostDate(published_at, userAgentInfo.locale);
 
   return (
-    <Layout className="reader" creatorProfile={creator_profile}>
-      <header className="grid gap-2 border-b border-border px-4 py-8">
-        <h1>{subject}</h1>
-        <time>{publishedAtFormatted}</time>
+    <Layout creatorProfile={creator_profile}>
+      <header className="border-b border-border">
+        <div className="mx-auto grid max-w-6xl gap-2 px-4 py-8 lg:px-0">
+          <h1 className="text-4xl">{subject}</h1>
+          <time>{publishedAtFormatted}</time>
+        </div>
       </header>
-      <article className="grid gap-8 border-b border-border p-4 pt-8 lg:pt-12 lg:pb-8">
-        {pageLoaded ? null : <LoadingSpinner className="size-8" />}
-        <EditorContent className="rich-text" editor={editor} />
+      <article className="border-b border-border">
+        <div className="mx-auto grid max-w-6xl gap-8 p-4 pt-8 text-lg lg:px-0 lg:pt-12 lg:pb-8">
+          {pageLoaded ? null : <LoadingSpinner className="size-8" />}
+          <EditorContent className="rich-text" editor={editor} />
+        </div>
 
         {call_to_action || download_url ? (
-          <div className="mb-4 grid">
+          <div className="mx-auto mb-4 grid max-w-6xl px-4 lg:px-0">
             {call_to_action ? (
               <p>
                 <a

@@ -54,6 +54,7 @@ import { Popover } from "$app/components/Popover";
 import { showAlert } from "$app/components/server-components/Alert";
 import { Skeleton } from "$app/components/Skeleton";
 import { PageHeader } from "$app/components/ui/PageHeader";
+import { Pill } from "$app/components/ui/Pill";
 import Placeholder from "$app/components/ui/Placeholder";
 import { Sheet, SheetHeader } from "$app/components/ui/Sheet";
 import { Table, TableBody, TableCaption, TableCell, TableHead, TableHeader, TableRow } from "$app/components/ui/Table";
@@ -883,7 +884,7 @@ const Form = ({ title, headerLabel, submitLabel }: FormProps) => {
                             disabled={navigation.state === "submitting" || !affiliateState.apply_to_all_products}
                             {...inputProps}
                           />
-                          <div className="pill">%</div>
+                          <Pill className="-mr-2 shrink-0">%</Pill>
                         </div>
                       )}
                     </NumberInput>

@@ -18,6 +18,7 @@ import { ImageUploadSettingsContext } from "$app/components/RichTextEditor";
 import { showAlert } from "$app/components/server-components/Alert";
 import { ProfileProps, TabWithId, useTabs } from "$app/components/server-components/Profile";
 import PlainTextStarterKit from "$app/components/TiptapExtensions/PlainTextStarterKit";
+import { Row, RowActions, RowContent, RowDragHandle, Rows } from "$app/components/ui/Rows";
 import { Tabs, Tab } from "$app/components/ui/Tabs";
 import { useIsAboveBreakpoint } from "$app/components/useIsAboveBreakpoint";
 import { useRefToLatest } from "$app/components/useRefToLatest";
@@ -66,18 +67,18 @@ const EditTab = ({
     if (focus) editor?.commands.focus("end");
   }, [editor]);
   return (
-    <div role="listitem" className="row">
-      <div className="content">
-        <div aria-grabbed={dragging} />
+    <Row role="listitem">
+      <RowContent>
+        <RowDragHandle aria-grabbed={dragging} />
         <h4 style={{ flex: 1 }}>
           <EditorContent editor={editor} />
         </h4>
-      </div>
-      <div className="actions">
+      </RowContent>
+      <RowActions>
         <Button small color="danger" outline aria-label="Remove page" onClick={() => setConfirmingDelete(true)}>
           <Icon name="trash2" />
         </Button>
-      </div>
+      </RowActions>
       {confirmingDelete ? (
         <Modal
           open
@@ -95,15 +96,15 @@ const EditTab = ({
           Are you sure you want to delete the page "{tab.name}"? <strong>This action cannot be undone.</strong>
         </Modal>
       ) : null}
-    </div>
+    </Row>
   );
 };
 
 // TODO: Use a better library than react-sortablejs that can solve this more cleanly
 const TabList = React.forwardRef<HTMLDivElement, React.HTMLProps<HTMLDivElement>>(({ children }, ref) => (
-  <div className="rows" role="list" ref={ref} aria-label="Pages">
+  <Rows role="list" ref={ref} aria-label="Pages">
     {children}
-  </div>
+  </Rows>
 ));
 TabList.displayName = "TabList";
 
@@ -196,7 +197,7 @@ export const EditProfile = (props: Props) => {
 
   return (
     <SectionReducerContext.Provider value={reducer}>
-      <header className="relative grid grid-cols-1 gap-4 border-b border-border px-4 py-8">
+      <header className="relative grid gap-4 border-b border-border px-4 py-8">
         {/* Work around position:absolute being affected by header's grid */}
         <SectionToolbar>
           <EditorMenu label="Page settings" onClose={() => void saveTabs(tabs)}>
@@ -226,28 +227,30 @@ export const EditProfile = (props: Props) => {
             </EditorSubmenu>
           </EditorMenu>
         </SectionToolbar>
-        {props.bio ? (
-          <h1 style={{ whiteSpace: "pre-line" }}>
-            <AutoLink text={props.bio} />
-          </h1>
-        ) : null}
-        <Tabs aria-label="Profile Tabs">
-          {tabs.map((tab) => (
-            <Tab
-              key={tab.id}
-              isSelected={tab === selectedTab}
-              onClick={() => {
-                if (imageUploadSettings.isUploading) {
-                  showAlert("Please wait for all images to finish uploading before switching tabs.", "warning");
-                  return;
-                }
-                setSelectedTab(tab);
-              }}
-            >
-              {tab.name}
-            </Tab>
-          ))}
-        </Tabs>
+        <div className="mx-auto grid w-full max-w-6xl gap-4">
+          {props.bio ? (
+            <h1 className="whitespace-pre-line">
+              <AutoLink text={props.bio} />
+            </h1>
+          ) : null}
+          <Tabs aria-label="Profile Tabs">
+            {tabs.map((tab) => (
+              <Tab
+                key={tab.id}
+                isSelected={tab === selectedTab}
+                onClick={() => {
+                  if (imageUploadSettings.isUploading) {
+                    showAlert("Please wait for all images to finish uploading before switching tabs.", "warning");
+                    return;
+                  }
+                  setSelectedTab(tab);
+                }}
+              >
+                {tab.name}
+              </Tab>
+            ))}
+          </Tabs>
+        </div>
       </header>
       <div className="fixed! top-5 right-3 z-30 p-0! lg:top-3 lg:right-auto lg:left-3">
         <WithTooltip tip="Edit profile" position={isDesktop ? "right" : "left"}>

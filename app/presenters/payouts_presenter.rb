@@ -42,6 +42,7 @@ class PayoutsPresenter
       } : nil,
       show_instant_payouts_notice: seller.eligible_for_instant_payouts? && !seller.active_bank_account&.supports_instant_payouts?,
       pagination:,
+      tax_center_enabled: Feature.active?(:tax_center, seller)
     }
   end
 end

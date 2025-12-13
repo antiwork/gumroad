@@ -17,11 +17,13 @@ import {
   AbandonedCartProduct,
 } from "$app/types/workflow";
 import { assert, assertDefined } from "$app/utils/assert";
+import { classNames } from "$app/utils/classNames";
 import { ALLOWED_EXTENSIONS } from "$app/utils/file";
 import GuidGenerator from "$app/utils/guid_generator";
 import { assertResponseError, request } from "$app/utils/request";
 
 import { Button, NavigationButton } from "$app/components/Button";
+import { CartItem, CartItemMain, CartItemMedia, CartItemTitle, CartItemList } from "$app/components/CartItemList";
 import { useCurrentSeller } from "$app/components/CurrentSeller";
 import { useAppDomain, useDomains } from "$app/components/DomainSettings";
 import {
@@ -42,6 +44,7 @@ import { S3UploadConfigProvider } from "$app/components/S3UploadConfig";
 import { Separator } from "$app/components/Separator";
 import { InvalidNameForEmailDeliveryWarning } from "$app/components/server-components/InvalidNameForEmailDeliveryWarning";
 import Placeholder from "$app/components/ui/Placeholder";
+import { Row, RowActions, RowContent, RowDetails, Rows } from "$app/components/ui/Rows";
 import { useConfigureEvaporate } from "$app/components/useConfigureEvaporate";
 import { useDebouncedCallback } from "$app/components/useDebouncedCallback";
 import { WithTooltip } from "$app/components/WithTooltip";
@@ -321,7 +324,7 @@ const WorkflowEmails = ({ context, workflow }: WorkflowEmailsProps) => {
                       </Placeholder>
                     ) : (
                       <>
-                        <div className="rows">
+                        <Rows role="list">
                           {sortedEmails.map((email) => (
                             <EmailRow
                               key={email.id}
@@ -352,7 +355,7 @@ const WorkflowEmails = ({ context, workflow }: WorkflowEmailsProps) => {
                               hasUploadingImages={imagesUploading.size > 0 && email.message.includes('src="blob:')}
                             />
                           ))}
-                        </div>
+                        </Rows>
                         {isAbandonedCartWorkflow ? null : (
                           <div>
                             <Button color="primary" onClick={handleAddEmail}>
@@ -446,12 +449,12 @@ const EmailRow = ({
     );
 
   return (
-    <div ref={selfRef} aria-label="Email">
-      <div className="content">
+    <Row role="listitem" ref={selfRef} aria-label="Email">
+      <RowContent>
         <Icon name="envelope-fill" className="type-icon" />
         <h3>{email.name.trim() === "" ? "Untitled" : email.name}</h3>
-      </div>
-      <div className="actions">
+      </RowContent>
+      <RowActions>
         {isAbandonedCartWorkflow ? null : (
           <Button
             outline
@@ -474,77 +477,79 @@ const EmailRow = ({
             </Button>
           </WithTooltip>
         )}
-      </div>
+      </RowActions>
       {expanded ? (
-        <form className="flex flex-col gap-4">
-          {isAbandonedCartWorkflow ? null : (
-            <div
-              style={{
-                display: "grid",
-                gap: "var(--spacer-3)",
-                gridTemplateColumns: "repeat(auto-fit, minmax(var(--dynamic-grid), 1fr))",
-              }}
-            >
-              <NumberInput
-                onChange={(value) => onChange({ delayed_delivery_time_duration: value ?? 0 })}
-                value={email.delayed_delivery_time_duration}
+        <RowDetails asChild>
+          <form className="flex flex-col gap-4">
+            {isAbandonedCartWorkflow ? null : (
+              <div
+                style={{
+                  display: "grid",
+                  gap: "var(--spacer-3)",
+                  gridTemplateColumns: "repeat(auto-fit, minmax(var(--dynamic-grid), 1fr))",
+                }}
               >
-                {(inputProps) => (
-                  <input
-                    type="text"
-                    autoComplete="off"
-                    placeholder="0"
-                    aria-label="Duration"
-                    onFocus={() => onFocus("delayed_delivery_time_duration")}
-                    {...inputProps}
-                  />
-                )}
-              </NumberInput>
-              <select
-                value={email.delayed_delivery_time_period}
-                aria-label="Period"
-                onChange={(e) => onChange({ delayed_delivery_time_period: cast(e.target.value) })}
-                onFocus={() => onFocus("delayed_delivery_time_period")}
-              >
-                {INSTALLMENT_DELIVERY_TIME_PERIODS.map((period) => (
-                  <option key={period} value={period}>
-                    {`${period}${email.delayed_delivery_time_duration === 1 ? "" : "s"} after ${WORKFLOW_EMAILS_LABELS[workflowTrigger]}`}
-                  </option>
-                ))}
-              </select>
-            </div>
-          )}
-          <fieldset className={cx({ danger: invalidFieldNames.includes("name") })}>
-            <input
-              ref={nameInputRef}
-              type="text"
-              placeholder="Subject"
-              value={email.name}
-              maxLength={255}
-              onChange={(e) => onChange({ name: e.target.value })}
-              onFocus={() => onFocus("name")}
+                <NumberInput
+                  onChange={(value) => onChange({ delayed_delivery_time_duration: value ?? 0 })}
+                  value={email.delayed_delivery_time_duration}
+                >
+                  {(inputProps) => (
+                    <input
+                      type="text"
+                      autoComplete="off"
+                      placeholder="0"
+                      aria-label="Duration"
+                      onFocus={() => onFocus("delayed_delivery_time_duration")}
+                      {...inputProps}
+                    />
+                  )}
+                </NumberInput>
+                <select
+                  value={email.delayed_delivery_time_period}
+                  aria-label="Period"
+                  onChange={(e) => onChange({ delayed_delivery_time_period: cast(e.target.value) })}
+                  onFocus={() => onFocus("delayed_delivery_time_period")}
+                >
+                  {INSTALLMENT_DELIVERY_TIME_PERIODS.map((period) => (
+                    <option key={period} value={period}>
+                      {`${period}${email.delayed_delivery_time_duration === 1 ? "" : "s"} after ${WORKFLOW_EMAILS_LABELS[workflowTrigger]}`}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            )}
+            <fieldset className={cx({ danger: invalidFieldNames.includes("name") })}>
+              <input
+                ref={nameInputRef}
+                type="text"
+                placeholder="Subject"
+                value={email.name}
+                maxLength={255}
+                onChange={(e) => onChange({ name: e.target.value })}
+                onFocus={() => onFocus("name")}
+              />
+            </fieldset>
+            <RichTextEditor
+              id={email.id}
+              className="textarea"
+              ariaLabel="Email message"
+              placeholder="Write a personalized message..."
+              extensions={[...(isAbandonedCartWorkflow ? [AbandonedCartProductList] : [])]}
+              initialValue={editorContent}
+              onChange={handleMessageChange}
+              onCreate={(editor) => editor.on("focus", () => onFocus("message"))}
             />
-          </fieldset>
-          <RichTextEditor
-            id={email.id}
-            className="textarea"
-            ariaLabel="Email message"
-            placeholder="Write a personalized message..."
-            extensions={[...(isAbandonedCartWorkflow ? [AbandonedCartProductList] : [])]}
-            initialValue={editorContent}
-            onChange={handleMessageChange}
-            onCreate={(editor) => editor.on("focus", () => onFocus("message"))}
-          />
-          {isAbandonedCartWorkflow ? null : (
-            <EmailAttachments
-              emailId={email.id}
-              isStreamOnly={email.stream_only}
-              setIsStreamOnly={(stream_only) => onChange({ stream_only })}
-            />
-          )}
-        </form>
+            {isAbandonedCartWorkflow ? null : (
+              <EmailAttachments
+                emailId={email.id}
+                isStreamOnly={email.stream_only}
+                setIsStreamOnly={(stream_only) => onChange({ stream_only })}
+              />
+            )}
+          </form>
+        </RowDetails>
       ) : null}
-    </div>
+    </Row>
   );
 };
 
@@ -612,37 +617,30 @@ const AbandonedCartProductListNodeView = (props: NodeViewProps) => {
     >
       <WithTooltip position="top" tip={isPreview ? null : "This cannot be deleted"}>
         {abandonedCartProducts.length > 0 ? (
-          <div className="cart" role="list">
+          <CartItemList>
             {abandonedCartProducts.slice(0, shownProductCount).map((product) => (
-              <div role="listitem" key={product.unique_permalink} style={isPreview ? {} : { pointerEvents: "none" }}>
-                <section>
-                  <figure style={{ margin: 0 }}>
-                    {product.thumbnail_url ? (
-                      <img src={product.thumbnail_url} style={{ objectFit: "initial", borderRadius: 0 }} />
-                    ) : null}
-                  </figure>
-                  <section>
-                    <h4>
-                      <a
-                        href={product.url}
-                        target="_blank"
-                        rel="noopener noreferrer nofollow"
-                        tabIndex={isPreview ? undefined : -1}
-                      >
-                        {product.name}
-                      </a>
-                    </h4>
-                    <footer>
-                      <SellerByLine isPreview={isPreview} />
-                    </footer>
-                  </section>
-                  <section>
-                    <footer></footer>
-                  </section>
-                </section>
-              </div>
+              <CartItem className={classNames({ "pointer-events-none": !isPreview })} key={product.unique_permalink}>
+                <CartItemMedia>
+                  {product.thumbnail_url ? (
+                    <img src={product.thumbnail_url} className="rounded-none object-fill" />
+                  ) : null}
+                </CartItemMedia>
+                <CartItemMain>
+                  <CartItemTitle asChild>
+                    <a
+                      href={product.url}
+                      target="_blank"
+                      rel="noopener noreferrer nofollow"
+                      tabIndex={isPreview ? undefined : -1}
+                    >
+                      <h4 className="font-bold">{product.name}</h4>
+                    </a>
+                  </CartItemTitle>
+                  <SellerByLine isPreview={isPreview} />
+                </CartItemMain>
+              </CartItem>
             ))}
-          </div>
+          </CartItemList>
         ) : (
           <Placeholder>
             {showAddProductCTA ? (

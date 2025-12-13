@@ -19,6 +19,7 @@ import { showAlert } from "$app/components/server-components/Alert";
 import { Layout as SettingsLayout } from "$app/components/Settings/Layout";
 import { TypeSafeOptionSelect } from "$app/components/TypeSafeOptionSelect";
 import Placeholder from "$app/components/ui/Placeholder";
+import { Row, RowActions, RowContent, RowDetails, Rows } from "$app/components/ui/Rows";
 
 type Products = { permalink: string; name: string }[];
 type Props = {
@@ -186,7 +187,7 @@ const ThirdPartyAnalyticsPage = ({ settings_pages, third_party_analytics, produc
           </header>
           {thirdPartyAnalytics.snippets.length > 0 ? (
             <>
-              <div className="rows" role="list">
+              <Rows role="list">
                 {thirdPartyAnalytics.snippets.map((snippet) => (
                   <SnippetRow
                     key={snippet.id}
@@ -196,7 +197,7 @@ const ThirdPartyAnalyticsPage = ({ settings_pages, third_party_analytics, produc
                     products={products}
                   />
                 ))}
-              </div>
+              </Rows>
               {addSnippetButton}
             </>
           ) : (
@@ -243,8 +244,8 @@ const SnippetRow = ({
   const uid = React.useId();
 
   return (
-    <div role="listitem">
-      <div className="content">
+    <Row role="listitem">
+      <RowContent>
         <Icon name="code-square" className="type-icon" />
         <div>
           <h4>{snippet.name || "Untitled"}</h4>
@@ -253,8 +254,8 @@ const SnippetRow = ({
             <li>{LOCATION_TITLES[snippet.location]}</li>
           </ul>
         </div>
-      </div>
-      <div className="actions">
+      </RowContent>
+      <RowActions>
         <Button onClick={() => setExpanded((prevExpanded) => !prevExpanded)} aria-label="Edit snippet">
           {expanded ? <Icon name="outline-cheveron-up" /> : <Icon name="outline-cheveron-down" />}
         </Button>
@@ -268,9 +269,9 @@ const SnippetRow = ({
         >
           <Icon name="trash2" />
         </Button>
-      </div>
+      </RowActions>
       {expanded ? (
-        <div className="flex flex-col gap-4">
+        <RowDetails className="flex flex-col gap-4">
           <fieldset>
             <label htmlFor={`${uid}name`}>Name</label>
             <input
@@ -316,9 +317,9 @@ const SnippetRow = ({
               onChange={(evt) => updateSnippet({ code: evt.target.value })}
             />
           </fieldset>
-        </div>
+        </RowDetails>
       ) : null}
-    </div>
+    </Row>
   );
 };
 

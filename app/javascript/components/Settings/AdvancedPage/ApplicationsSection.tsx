@@ -8,6 +8,7 @@ import { Button, NavigationButton } from "$app/components/Button";
 import { showAlert } from "$app/components/server-components/Alert";
 import { Application } from "$app/components/server-components/Settings/AdvancedPage";
 import ApplicationForm from "$app/components/Settings/AdvancedPage/ApplicationForm";
+import { Row, RowActions, RowContent, Rows } from "$app/components/ui/Rows";
 
 const CreateApplication = () => (
   <>
@@ -32,11 +33,11 @@ const ApplicationList = (props: { applications: Application[] }) => {
   return applications.length > 0 ? (
     <>
       <h3>Your applications</h3>
-      <div className="rows" role="list">
+      <Rows role="list">
         {applications.map((app) => (
           <ApplicationRow key={app.id} application={app} onRemove={removeApplication(app.id)} />
         ))}
-      </div>
+      </Rows>
     </>
   ) : null;
 };
@@ -62,18 +63,18 @@ const ApplicationRow = ({ application, onRemove }: { application: Application; o
   });
 
   return (
-    <div role="listitem">
-      <div className="content">
+    <Row role="listitem">
+      <RowContent>
         <img src={application.icon_url || placeholderAppIcon} width={56} height={56} />
         <h4>{application.name}</h4>
-      </div>
-      <div className="actions">
+      </RowContent>
+      <RowActions>
         <NavigationButton href={Routes.oauth_application_path(application.id)}>Edit</NavigationButton>
         <Button color="danger" onClick={deleteApp}>
           Delete
         </Button>
-      </div>
-    </div>
+      </RowActions>
+    </Row>
   );
 };
 

@@ -174,15 +174,24 @@ describe "Product Edit Covers", type: :system, js: true do
       # Fix flaky spec when the banner component is present.
       page.scroll_to preview_mini_node3, align: :center
 
+      # Drag the second cover to the end
       preview_mini_node2.drag_to preview_mini_node3
+
+      # Drag the second cover to the start
+      preview_mini_node2.drag_to preview_mini_node1
+
+      tabs = all(:tab_button)
+      expect(tabs[0].find("img")[:src]).to include(asset2.url)
+      expect(tabs[1].find("img")[:src]).to include(asset1.url)
+      expect(tabs[2].find("img")[:src]).to include(asset3.url)
     end
 
     save_change
 
     expect(product.reload.display_asset_previews.pluck(:id)).to eq [
+      asset2.id,
       asset1.id,
-      asset3.id,
-      asset2.id
+      asset3.id
     ]
   end
 end

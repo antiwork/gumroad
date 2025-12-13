@@ -2,6 +2,7 @@ import * as React from "react";
 
 import { CopyToClipboard } from "$app/components/CopyToClipboard";
 import { useCurrentSeller } from "$app/components/CurrentSeller";
+import { Pill } from "$app/components/ui/Pill";
 
 export const CustomPermalinkInput = ({
   value,
@@ -30,7 +31,7 @@ export const CustomPermalinkInput = ({
         </CopyToClipboard>
       </legend>
       <div className="input">
-        <div className="pill">{`${currentSeller.subdomain}/l/`}</div>
+        <Pill className="-ml-2 shrink-0">{`${currentSeller.subdomain}/l/`}</Pill>
         <input
           id={uid}
           type="text"
