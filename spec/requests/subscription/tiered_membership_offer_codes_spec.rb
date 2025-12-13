@@ -221,7 +221,7 @@ describe "Tiered Membership Offer code Spec", type: :system, js: true do
         visit "/subscriptions/#{@subscription.external_id}/manage?token=#{@subscription.token}"
 
         # shows the correct price on the current plan
-        expect(page).to have_radio_button("First Tier", checked: true, text: "$5.99 $3.99")
+        expect(page).to have_radio_button("First Tier", checked: true, text: "$5.99 $3.99", normalize_ws: true)
 
         # shows the price to be charged today
         expect(page).to have_text "You'll be charged US$3.99"
@@ -371,9 +371,9 @@ describe "Tiered Membership Offer code Spec", type: :system, js: true do
           visit "/subscriptions/#{@subscription.external_id}/manage?token=#{@subscription.token}"
 
           # shows the correct plan prices
-          expect(page).to have_radio_button("First Tier", checked: true, text: "$5.99 $0")
-          expect(page).to have_radio_button("Second Tier", text: "$10.50 $0")
-          expect(page).to have_radio_button("Tier 3", text: "$4 $0")
+          expect(page).to have_radio_button("First Tier", checked: true, text: /\$5\.99\s+\$0/)
+          expect(page).to have_radio_button("Second Tier", text: /\$10\.50\s+\$0/)
+          expect(page).to have_radio_button("Tier 3", text: /\$4\s+\$0/)
 
           choose "Second Tier"
           expect(page).not_to have_text "You'll be charged" # does not show payment blurb since cost is $0 with offer code
@@ -403,8 +403,8 @@ describe "Tiered Membership Offer code Spec", type: :system, js: true do
 
           # shows the correct plan prices
           expect(page).to have_radio_button("First Tier", checked: true, text: "$0")
-          expect(page).to have_radio_button("Second Tier", text: "$10.50 $0")
-          expect(page).to have_radio_button("Tier 3", text: "$4 $0")
+          expect(page).to have_radio_button("Second Tier", text: /\$10\.50\s+\$0/)
+          expect(page).to have_radio_button("Tier 3", text: /\$4\s+\$0/)
 
           choose "Second Tier"
           expect(page).not_to have_text "You'll be charged" # does not show payment blurb since cost is $0 with offer code

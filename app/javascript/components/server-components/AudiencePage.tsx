@@ -12,11 +12,11 @@ import { AudienceChart } from "$app/components/Audience/AudienceChart";
 import { AudienceQuickStats } from "$app/components/Audience/AudienceQuickStats";
 import { Button } from "$app/components/Button";
 import { DateRangePicker } from "$app/components/DateRangePicker";
+import { ExportSubscribersPopover } from "$app/components/Followers/ExportSubscribersPopover";
 import { Icon } from "$app/components/Icons";
 import { LoadingSpinner } from "$app/components/LoadingSpinner";
 import { Popover } from "$app/components/Popover";
 import { showAlert } from "$app/components/server-components/Alert";
-import { ExportSubscribersPopover } from "$app/components/server-components/FollowersPage/ExportSubscribersPopover";
 import Placeholder from "$app/components/ui/Placeholder";
 import { WithTooltip } from "$app/components/WithTooltip";
 

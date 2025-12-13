@@ -30,8 +30,8 @@ describe("Offer-code usage from product page", type: :system, js: true) do
     expect(page).to have_selector("[itemprop='price']", text: "$3.50 $0", visible: false)
 
     expect(page).to have_selector("[role='status']", text: "$3.50 off will be applied at checkout (Code #{offer_code.code.upcase})")
-    expect(page).to have_radio_button("Base", text: "$3.50 $0")
-    expect(page).to have_radio_button("Premium", text: "$4.50 $1")
+    expect(page).to have_radio_button("Base", text: /\$3\.50\s+\$0/)
+    expect(page).to have_radio_button("Premium", text: /\$4\.50\s+\$1/)
 
     add_to_cart(product, offer_code:, option: "Base")
     check_out(product, is_free: true)

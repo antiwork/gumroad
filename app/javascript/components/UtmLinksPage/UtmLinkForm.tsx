@@ -15,6 +15,7 @@ import { Icon } from "$app/components/Icons";
 import { Select } from "$app/components/Select";
 import { showAlert } from "$app/components/server-components/Alert";
 import { Layout } from "$app/components/UtmLinksPage/Layout";
+import { Pill } from "$app/components/ui/Pill";
 import { WithTooltip } from "$app/components/WithTooltip";
 
 const MAX_UTM_PARAM_LENGTH = 200;
@@ -296,7 +297,7 @@ export const UtmLinkForm = ({ context, utm_link }: UtmLinkFormProps) => {
             </legend>
             <div style={{ display: "grid", gridTemplateColumns: "1fr auto", gap: "var(--spacer-2)" }}>
               <div className={cx("input", { disabled: isEditing })}>
-                <div className="pill">{shortUrlPrefix}</div>
+                <Pill className="-ml-2 shrink-0">{shortUrlPrefix}</Pill>
                 <input
                   type="text"
                   id={`${uid}-link-text`}

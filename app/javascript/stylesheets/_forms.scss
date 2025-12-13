@@ -136,18 +136,6 @@ fieldset {
     }
   }
 
-  & > .pill {
-    flex-shrink: 0;
-
-    &:first-child {
-      margin-left: -(math.div($form-element-padding-x, 2));
-    }
-
-    &:last-child {
-      margin-right: -(math.div($form-element-padding-x, 2));
-    }
-  }
-
   & > .icon {
     @include text-muted;
   }
