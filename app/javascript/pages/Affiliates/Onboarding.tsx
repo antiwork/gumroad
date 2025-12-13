@@ -1,7 +1,6 @@
 import { Link, usePage } from "@inertiajs/react";
 import cx from "classnames";
 import * as React from "react";
-import { cast } from "ts-safe-cast";
 
 import {
   submitAffiliateSignupForm,
@@ -63,7 +62,7 @@ const AffiliatesNavigation = () => (
 );
 
 export default function AffiliatesOnboarding() {
-  const props = cast<Props>(usePage().props);
+  const props = usePage<Props>().props;
   const loggedInUser = useLoggedInUser();
   const [isSaving, setIsSaving] = React.useState(false);
   const [products, setProducts] = React.useState<SelfServeAffiliateProduct[]>(props.products);

@@ -2,7 +2,6 @@ import { Link, router, usePage } from "@inertiajs/react";
 import cx from "classnames";
 import { parseISO } from "date-fns";
 import * as React from "react";
-import { cast } from "ts-safe-cast";
 
 import {
   removeAffiliate,
@@ -261,7 +260,7 @@ const formattedSalesVolumeAmount = (amountCents: number) =>
   formatPriceCentsWithCurrencySymbol("usd", amountCents, { symbolFormat: "short" });
 
 export default function AffiliatesIndex() {
-  const props = cast<Props>(usePage().props);
+  const props = usePage<Props>().props;
   const loggedInUser = useLoggedInUser();
   const [isNavigating, setIsNavigating] = React.useState(false);
 
