@@ -238,11 +238,10 @@ git config --local core.hooksPath .githooks
 
 ## 🧭 /etc/hosts Setup
 
-Add these entries to your `/etc/hosts`:
+Add this entry to your `/etc/hosts`:
 
 ```bash
 127.0.0.1 gumroad.dev
-127.0.0.1 minio.gumroad.dev
 ```
 
 Edit the file:
