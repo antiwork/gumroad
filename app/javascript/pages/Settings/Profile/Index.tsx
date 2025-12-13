@@ -41,6 +41,7 @@ export default function SettingsPage() {
   const { rootDomain, scheme } = useDomains();
   const loggedInUser = useLoggedInUser();
   const [creatorProfile, setCreatorProfile] = React.useState(creator_profile);
+  React.useEffect(() => setCreatorProfile(creator_profile), [creator_profile]);
   const updateCreatorProfile = (newProfile: Partial<CreatorProfile>) =>
     setCreatorProfile((prevProfile) => ({ ...prevProfile, ...newProfile }));
 
