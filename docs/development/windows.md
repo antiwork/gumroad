@@ -250,8 +250,6 @@ Edit the file:
 sudo nano /etc/hosts
 ```
 
-**Note:** `minio.gumroad.dev` is required for MinIO S3-compatible storage in development.
-
 ---
 
 ## ✅ Final Tips
