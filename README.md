@@ -163,68 +163,6 @@ npm install
 
 App can be booted without any custom credentials. But if you would like to use services that require custom credentials (e.g. S3, Stripe, Resend, etc.), you can copy the `.env.example` file to `.env` and fill in the values.
 
-#### /etc/hosts Configuration
-
-Add these entries to your `/etc/hosts` file:
-
-```bash
-127.0.0.1 gumroad.dev
-127.0.0.1 minio.gumroad.dev
-```
-
-On macOS/Linux:
-
-```shell
-sudo nano /etc/hosts
-```
-
-On Windows (WSL), use the same `/etc/hosts` path.
-
-These entries allow your browser to connect to `https://gumroad.dev` and MinIO at `https://minio.gumroad.dev` during local development.
-
-#### File Storage Setup
-
-Gumroad uses MinIO for local development, an S3-compatible object storage server that runs in Docker. This eliminates the need for AWS credentials during local development.
-
-MinIO is automatically configured when you run `make local`. The following happens automatically:
-
-1. MinIO server starts on ports 9000 (API) and 9001 (web console)
-2. Four S3 buckets are created:
-   - `gumroad-dev` - Main development storage
-   - `gumroad-dev-public-storage` - Public file storage
-   - `gumroad-specs` - Test fixtures
-   - `gumroad-invoices` - Invoice storage
-3. Test fixture files are uploaded for specs
-4. Nginx reverse proxy provides HTTPS access at `https://minio.gumroad.dev`
-
-**Accessing MinIO Console:**
-
-- URL: `http://localhost:9001`
-- Username: `minioadmin`
-- Password: `minioadmin`
-
-**Verifying MinIO is Working:**
-
-```bash
-docker ps | grep minio
-docker exec -it web_minio_1 mc ls myminio
-```
-
-**Using Real AWS S3 (Optional):**
-
-If you need to test with real AWS S3:
-
-1. Remove `AWS_S3_ENDPOINT` from `.env.development`
-2. Set real AWS credentials in `.env.development`:
-   ```bash
-   AWS_ACCESS_KEY_ID=your_key_here
-   AWS_SECRET_ACCESS_KEY=your_secret_here
-   AWS_DEFAULT_REGION=us-east-1
-   ```
-3. Create buckets: `gumroad-dev` and `gumroad-dev-public-storage`
-
-Most development work does not require real AWS credentials thanks to MinIO.
-
 #### Local SSL Certificates
 
 1. Install mkcert on macOS:
