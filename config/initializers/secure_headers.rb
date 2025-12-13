@@ -45,12 +45,18 @@ SecureHeaders::Configuration.default do |config|
       # direct file uploads to s3/minio
       "#{AWS_S3_ENDPOINT}/#{S3_BUCKET}",
       "#{AWS_S3_ENDPOINT}/#{S3_BUCKET}/",
-      (USING_MINIO ? nil : "#{PUBLIC_STORAGE_S3_BUCKET}.s3.amazonaws.com"),
-      (USING_MINIO ? nil : "#{PUBLIC_STORAGE_S3_BUCKET}.s3.amazonaws.com/"),
-      (USING_MINIO ? nil : "s3.amazonaws.com/#{PUBLIC_STORAGE_S3_BUCKET}"),
-      (USING_MINIO ? nil : "s3.amazonaws.com/#{PUBLIC_STORAGE_S3_BUCKET}/"),
-      (USING_MINIO ? "#{AWS_S3_ENDPOINT}/#{PUBLIC_STORAGE_S3_BUCKET}" : nil),
-      (USING_MINIO ? "#{AWS_S3_ENDPOINT}/#{PUBLIC_STORAGE_S3_BUCKET}/" : nil),
+
+      # direct file uploads to aws s3
+      "#{AWS_S3_ENDPOINT}/#{PUBLIC_STORAGE_S3_BUCKET}",
+      "#{AWS_S3_ENDPOINT}/#{PUBLIC_STORAGE_S3_BUCKET}/",
+
+      # direct file uploads to aws s3
+      "#{PUBLIC_STORAGE_S3_BUCKET}.s3.amazonaws.com",
+      "#{PUBLIC_STORAGE_S3_BUCKET}.s3.amazonaws.com/",
+
+      # direct file uploads to aws s3
+      "s3.amazonaws.com/#{PUBLIC_STORAGE_S3_BUCKET}",
+      "s3.amazonaws.com/#{PUBLIC_STORAGE_S3_BUCKET}/",
 
       # recaptcha
       "www.google.com",
