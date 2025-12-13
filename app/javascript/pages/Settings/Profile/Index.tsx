@@ -1,4 +1,4 @@
-import { Head, usePage } from "@inertiajs/react";
+import { Head, router, usePage } from "@inertiajs/react";
 import * as React from "react";
 import { cast } from "ts-safe-cast";
 
@@ -65,7 +65,7 @@ export default function SettingsPage() {
   const handleUnlinkTwitter = asyncVoid(async () => {
     try {
       await unlinkTwitter();
-      window.location.reload();
+      router.reload();
     } catch (e) {
       assertResponseError(e);
       showAlert(e.message, "error");
