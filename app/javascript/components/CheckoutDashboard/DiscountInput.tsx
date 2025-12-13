@@ -5,6 +5,7 @@ import { CurrencyCode } from "$app/utils/currency";
 
 import { NumberInput } from "$app/components/NumberInput";
 import { PriceInput } from "$app/components/PriceInput";
+import { Pill } from "$app/components/ui/Pill";
 import { WithTooltip } from "$app/components/WithTooltip";
 
 export type InputtedDiscount = { type: "percent" | "cents"; value: null | number; error?: boolean };
@@ -90,7 +91,7 @@ export const DiscountInput = ({
                 />
               )}
             </NumberInput>
-            <div className="pill">%</div>
+            <Pill className="-mr-2 shrink-0">%</Pill>
           </div>
         </div>
       </fieldset>

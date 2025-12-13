@@ -18,6 +18,7 @@ import { NumberInput } from "$app/components/NumberInput";
 import { showAlert } from "$app/components/server-components/Alert";
 import { ToggleSettingRow } from "$app/components/SettingRow";
 import { PageHeader } from "$app/components/ui/PageHeader";
+import { Pill } from "$app/components/ui/Pill";
 import Placeholder from "$app/components/ui/Placeholder";
 import { Table, TableBody, TableCaption, TableCell, TableHead, TableHeader, TableRow } from "$app/components/ui/Table";
 import { Tabs, Tab } from "$app/components/ui/Tabs";
@@ -268,7 +269,7 @@ const ProductRow = ({ product, disabled, onChange }: ProductRowProps) => {
                   disabled={disabled || !product.enabled}
                   {...inputProps}
                 />
-                <div className="pill">%</div>
+                <Pill className="-mr-2 shrink-0">%</Pill>
               </div>
             )}
           </NumberInput>

@@ -901,8 +901,6 @@ Rails.application.routes.draw do
     # React Router routes
     scope module: :api, defaults: { format: :json } do
       namespace :internal do
-        resources :tax_documents, only: [:index]
-
         resources :affiliates, only: [:index, :show, :create, :update, :destroy] do
           collection do
             get :onboarding

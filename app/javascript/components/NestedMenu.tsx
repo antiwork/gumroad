@@ -242,7 +242,10 @@ const MenubarItem = ({
     <a
       href={menuItem.href ?? "#"}
       className={classNames(
-        "pill button",
+        "button",
+        "rounded-full! px-3! py-2! align-middle aria-[current]:bg-background aria-[current]:text-foreground",
+        showExpandableIcon ? "relative cursor-pointer" : "",
+        hasChildren ? "aria-[current=true]:hover:shadow!" : "hover:shadow!",
         { "border-transparent! bg-transparent! text-inherit!": !isHighlighted },
         { expandable: showExpandableIcon },
       )}
@@ -263,6 +266,7 @@ const MenubarItem = ({
       }}
     >
       {menuItem.label}
+      {showExpandableIcon ? <Icon name="outline-cheveron-down" className="float-right" /> : null}
     </a>
   );
 

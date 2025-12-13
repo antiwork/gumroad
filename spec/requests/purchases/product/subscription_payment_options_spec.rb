@@ -52,8 +52,8 @@ describe("Purchasing a multi-recurrence subscription product from product page",
     expect(page).to have_radio_button(text: "$70")
 
     expect(page).to have_selector("[role='status']", text: "50% off will be applied at checkout (Code #{offer_code.code.upcase})")
-    expect(page).to have_radio_button("Untitled 1", text: "$70 $35")
-    expect(page).to have_radio_button("Untitled 2", text: "$70 $35")
+    expect(page).to have_radio_button("Untitled 1", text: /\$70\s+\$35/)
+    expect(page).to have_radio_button("Untitled 2", text: /\$70\s+\$35/)
 
     add_to_cart(@product, option: "Untitled 1", offer_code:)
     check_out(@product)

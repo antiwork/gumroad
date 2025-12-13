@@ -22,6 +22,7 @@ import { Popover } from "$app/components/Popover";
 import { showAlert } from "$app/components/server-components/Alert";
 import { TypeSafeOptionSelect } from "$app/components/TypeSafeOptionSelect";
 import { PageHeader } from "$app/components/ui/PageHeader";
+import { Pill } from "$app/components/ui/Pill";
 import { WithTooltip } from "$app/components/WithTooltip";
 
 const nativeTypeIcons = require.context("$assets/images/native_types/");
@@ -358,23 +359,27 @@ const NewProductPage = ({
                 </legend>
 
                 <div className="input">
-                  <label className="pill select">
-                    <span>{selectedCurrency.longSymbol}</span>
-                    <TypeSafeOptionSelect
-                      onChange={(newCurrencyCode) => {
-                        setCurrencyCode(newCurrencyCode);
-                      }}
-                      value={currencyCode}
-                      aria-label="Currency"
-                      options={currencyCodeList.map((code) => {
-                        const { displayFormat } = findCurrencyByCode(code);
-                        return {
-                          id: code,
-                          label: displayFormat,
-                        };
-                      })}
-                    />
-                  </label>
+                  <Pill asChild className="relative -ml-2 shrink-0 cursor-pointer">
+                    <label>
+                      <span>{selectedCurrency.longSymbol}</span>
+                      <TypeSafeOptionSelect
+                        onChange={(newCurrencyCode) => {
+                          setCurrencyCode(newCurrencyCode);
+                        }}
+                        value={currencyCode}
+                        aria-label="Currency"
+                        options={currencyCodeList.map((code) => {
+                          const { displayFormat } = findCurrencyByCode(code);
+                          return {
+                            id: code,
+                            label: displayFormat,
+                          };
+                        })}
+                        className="absolute inset-0 z-1 m-0! cursor-pointer opacity-0"
+                      />
+                      <Icon name="outline-cheveron-down" className="ml-auto" />
+                    </label>
+                  </Pill>
 
                   <input
                     ref={priceInputRef}
@@ -396,20 +401,24 @@ const NewProductPage = ({
                   />
 
                   {isRecurringBilling ? (
-                    <label className="pill select border-0">
-                      <span>{recurrenceLabels[subscriptionDuration || defaultRecurrence]}</span>
-                      <TypeSafeOptionSelect
-                        onChange={(newSubscriptionDuration) => {
-                          setSubscriptionDuration(newSubscriptionDuration);
-                        }}
-                        value={subscriptionDuration || defaultRecurrence}
-                        aria-label="Default subscription duration"
-                        options={recurrenceIds.map((recurrence) => ({
-                          id: recurrence,
-                          label: recurrenceLabels[recurrence],
-                        }))}
-                      />
-                    </label>
+                    <Pill asChild className="relative -mr-2 shrink-0 cursor-pointer">
+                      <label>
+                        <span>{recurrenceLabels[subscriptionDuration || defaultRecurrence]}</span>
+                        <TypeSafeOptionSelect
+                          onChange={(newSubscriptionDuration) => {
+                            setSubscriptionDuration(newSubscriptionDuration);
+                          }}
+                          value={subscriptionDuration || defaultRecurrence}
+                          aria-label="Default subscription duration"
+                          options={recurrenceIds.map((recurrence) => ({
+                            id: recurrence,
+                            label: recurrenceLabels[recurrence],
+                          }))}
+                          className="absolute inset-0 z-1 m-0! cursor-pointer opacity-0"
+                        />
+                        <Icon name="outline-cheveron-down" className="ml-auto" />
+                      </label>
+                    </Pill>
                   ) : null}
                 </div>
               </fieldset>

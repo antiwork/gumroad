@@ -6,6 +6,7 @@ import { assertResponseError, request, ResponseError } from "$app/utils/request"
 
 import { Button } from "$app/components/Button";
 import { showAlert } from "$app/components/server-components/Alert";
+import { Pill } from "$app/components/ui/Pill";
 import { WithTooltip } from "$app/components/WithTooltip";
 
 const NotificationEndpointSection = ({
@@ -67,9 +68,11 @@ const NotificationEndpointSection = ({
             onChange={(e) => setPingEndpoint(e.target.value)}
           />
           <WithTooltip tip={isSendingPing ? null : "Send your most recent sale's JSON, with 'test' set to 'true'"}>
-            <Button className="pill" onClick={sendTestPing} disabled={isSendingPing}>
-              {isSendingPing ? "Sending test ping..." : "Send test ping to URL"}
-            </Button>
+            <Pill asChild>
+              <Button className="rounded-full! px-3! py-2!" onClick={sendTestPing} disabled={isSendingPing}>
+                {isSendingPing ? "Sending test ping..." : "Send test ping to URL"}
+              </Button>
+            </Pill>
           </WithTooltip>
         </div>
         <small>For external services, your `seller_id` is {userId}</small>
