@@ -12,7 +12,7 @@
         ], params[:purchase_status])
     %>
   <button type="submit" class="button primary">
-    <span class="icon icon-solid-search"></span>
+    <%= icon("solid-search") %>
   </button>
   <% if params[:product_title_query].present? || params[:purchase_status].present? %>
     <%= link_to "Clear", admin_search_purchases_path(query: params[:query]), class: "button secondary" %>

@@ -1,0 +1,255 @@
+/* Icon mask-image mappings - Auto-generated from SVG files */
+/* Base icon styles are defined in tailwind.css as @utility directives */
+
+/* Base icon placeholder for SCSS @extend */
+%icon {
+  content: "\00a0";
+  display: inline-block;
+  background: currentColor;
+  min-height: max(1lh, 1em);
+  width: 1em;
+  mask-position: 50% 50%;
+  mask-size: 120%;
+  mask-repeat: no-repeat;
+  flex-shrink: 0;
+
+  &::after {
+    content: "\00a0";
+  }
+}
+
+/* Base icon class that extends the icon placeholder */
+.icon {
+  @extend %icon;
+}
+
+.brand-icon {
+  @extend %icon;
+  mask-size: 100%;
+}
+
+/* Standard icons */
+.icon-archive { mask-image: url("~images/icons/archive.svg"); }
+.icon-archive-fill { mask-image: url("~images/icons/archive-fill.svg"); }
+.icon-arrow-counterclockwise { mask-image: url("~images/icons/arrow-counterclockwise.svg"); }
+.icon-arrow-diagonal-up-right { mask-image: url("~images/icons/arrow-diagonal-up-right.svg"); }
+.icon-arrow-down { mask-image: url("~images/icons/arrow-down.svg"); }
+.icon-arrow-left { mask-image: url("~images/icons/arrow-left.svg"); }
+.icon-arrow-right { mask-image: url("~images/icons/arrow-right.svg"); }
+.icon-arrow-right-circle { mask-image: url("~images/icons/arrow-right-circle.svg"); }
+.icon-arrow-right-reply { mask-image: url("~images/icons/arrow-right-reply.svg"); }
+.icon-arrows-collapse { mask-image: url("~images/icons/arrows-collapse.svg"); }
+.icon-arrows-expand { mask-image: url("~images/icons/arrows-expand.svg"); }
+.icon-arrow-up { mask-image: url("~images/icons/arrow-up.svg"); }
+.icon-arrow-up-right-square { mask-image: url("~images/icons/arrow-up-right-square.svg"); }
+.icon-bank { mask-image: url("~images/icons/bank.svg"); }
+.icon-bar-chart-fill { mask-image: url("~images/icons/bar-chart-fill.svg"); }
+.icon-bold { mask-image: url("~images/icons/bold.svg"); }
+.icon-book { mask-image: url("~images/icons/book.svg"); }
+.icon-book-half { mask-image: url("~images/icons/book-half.svg"); }
+.icon-bookmark-check-fill { mask-image: url("~images/icons/bookmark-check-fill.svg"); }
+.icon-bookmark-fill { mask-image: url("~images/icons/bookmark-fill.svg"); }
+.icon-bookmark-heart-fill { mask-image: url("~images/icons/bookmark-heart-fill.svg"); }
+.icon-bookmark-plus { mask-image: url("~images/icons/bookmark-plus.svg"); }
+.icon-bookmark-x { mask-image: url("~images/icons/bookmark-x.svg"); }
+.icon-box { mask-image: url("~images/icons/box.svg"); }
+.icon-box-arrow-in-right-fill { mask-image: url("~images/icons/box-arrow-in-right-fill.svg"); }
+.icon-brush { mask-image: url("~images/icons/brush.svg"); }
+.icon-bullseye { mask-image: url("~images/icons/bullseye.svg"); }
+.icon-button { mask-image: url("~images/icons/button.svg"); }
+.icon-calendar-all { mask-image: url("~images/icons/calendar-all.svg"); }
+.icon-camera2 { mask-image: url("~images/icons/camera2.svg"); }
+.icon-camera-video { mask-image: url("~images/icons/camera-video.svg"); }
+.icon-camera-video-fill { mask-image: url("~images/icons/camera-video-fill.svg"); }
+.icon-card { mask-image: url("~images/icons/card.svg"); }
+.icon-card-image-fill { mask-image: url("~images/icons/card-image-fill.svg"); }
+.icon-card-text { mask-image: url("~images/icons/card-text.svg"); }
+.icon-cart3-fill { mask-image: url("~images/icons/cart3-fill.svg"); }
+.icon-cart-plus { mask-image: url("~images/icons/cart-plus.svg"); }
+.icon-chat-right-text-fill { mask-image: url("~images/icons/chat-right-text-fill.svg"); }
+.icon-check-square { mask-image: url("~images/icons/check-square.svg"); }
+.icon-circle { mask-image: url("~images/icons/circle.svg"); }
+.icon-circle-fill { mask-image: url("~images/icons/circle-fill.svg"); }
+.icon-circle-pause { mask-image: url("~images/icons/circle-pause.svg"); }
+.icon-circle-play { mask-image: url("~images/icons/circle-play.svg"); }
+.icon-clock-history { mask-image: url("~images/icons/clock-history.svg"); }
+.icon-code { mask-image: url("~images/icons/code.svg"); }
+.icon-code-square { mask-image: url("~images/icons/code-square.svg"); }
+.icon-cup2 { mask-image: url("~images/icons/cup2.svg"); }
+.icon-deal-fill { mask-image: url("~images/icons/deal-fill.svg"); }
+.icon-diagram-2-fill { mask-image: url("~images/icons/diagram-2-fill.svg"); }
+.icon-download { mask-image: url("~images/icons/download.svg"); }
+.icon-download-fill { mask-image: url("~images/icons/download-fill.svg"); }
+.icon-dropbox { mask-image: url("~images/icons/dropbox.svg"); }
+.icon-embed { mask-image: url("~images/icons/embed.svg"); }
+.icon-emoji-smile { mask-image: url("~images/icons/emoji-smile.svg"); }
+.icon-envelope-fill { mask-image: url("~images/icons/envelope-fill.svg"); }
+.icon-envelope-open-fill { mask-image: url("~images/icons/envelope-open-fill.svg"); }
+.icon-eye-fill { mask-image: url("~images/icons/eye-fill.svg"); }
+.icon-file-arrow-down { mask-image: url("~images/icons/file-arrow-down.svg"); }
+.icon-file-earmark-binary-fill { mask-image: url("~images/icons/file-earmark-binary-fill.svg"); }
+.icon-file-earmark-diff { mask-image: url("~images/icons/file-earmark-diff.svg"); }
+.icon-file-earmark-font { mask-image: url("~images/icons/file-earmark-font.svg"); }
+.icon-file-earmark-image-fill { mask-image: url("~images/icons/file-earmark-image-fill.svg"); }
+.icon-file-earmark-medical { mask-image: url("~images/icons/file-earmark-medical.svg"); }
+.icon-file-earmark-medical-fill { mask-image: url("~images/icons/file-earmark-medical-fill.svg"); }
+.icon-file-earmark-music-fill { mask-image: url("~images/icons/file-earmark-music-fill.svg"); }
+.icon-file-earmark-play-fill { mask-image: url("~images/icons/file-earmark-play-fill.svg"); }
+.icon-file-earmark-plus { mask-image: url("~images/icons/file-earmark-plus.svg"); }
+.icon-file-earmark-text { mask-image: url("~images/icons/file-earmark-text.svg"); }
+.icon-file-earmark-text-fill { mask-image: url("~images/icons/file-earmark-text-fill.svg"); }
+.icon-file-earmark-zip-fill { mask-image: url("~images/icons/file-earmark-zip-fill.svg"); }
+.icon-file-music { mask-image: url("~images/icons/file-music.svg"); }
+.icon-file-play { mask-image: url("~images/icons/file-play.svg"); }
+.icon-files-earmark { mask-image: url("~images/icons/files-earmark.svg"); }
+.icon-file-text { mask-image: url("~images/icons/file-text.svg"); }
+.icon-file-text-fill { mask-image: url("~images/icons/file-text-fill.svg"); }
+.icon-filter { mask-image: url("~images/icons/filter.svg"); }
+.icon-folder-plus { mask-image: url("~images/icons/folder-plus.svg"); }
+.icon-fonts { mask-image: url("~images/icons/fonts.svg"); }
+.icon-gear { mask-image: url("~images/icons/gear.svg"); }
+.icon-gear-fill { mask-image: url("~images/icons/gear-fill.svg"); }
+.icon-gift { mask-image: url("~images/icons/gift.svg"); }
+.icon-gift-fill { mask-image: url("~images/icons/gift-fill.svg"); }
+.icon-globe { mask-image: url("~images/icons/globe.svg"); }
+.icon-grid { mask-image: url("~images/icons/grid.svg"); }
+.icon-h1 { mask-image: url("~images/icons/h1.svg"); }
+.icon-h2 { mask-image: url("~images/icons/h2.svg"); }
+.icon-h3 { mask-image: url("~images/icons/h3.svg"); }
+.icon-half-star { mask-image: url("~images/icons/half-star.svg"); }
+.icon-hdd-network-fill { mask-image: url("~images/icons/hdd-network-fill.svg"); }
+.icon-heart-fill { mask-image: url("~images/icons/heart-fill.svg"); }
+.icon-horizontal-rule { mask-image: url("~images/icons/horizontal-rule.svg"); }
+.icon-image { mask-image: url("~images/icons/image.svg"); }
+.icon-info-circle { mask-image: url("~images/icons/info-circle.svg"); }
+.icon-info-circle-fill { mask-image: url("~images/icons/info-circle-fill.svg"); }
+.icon-input-cursor-text { mask-image: url("~images/icons/input-cursor-text.svg"); }
+.icon-italic { mask-image: url("~images/icons/italic.svg"); }
+.icon-key2 { mask-image: url("~images/icons/key2.svg"); }
+.icon-lighting-fill { mask-image: url("~images/icons/lighting-fill.svg"); }
+.icon-link { mask-image: url("~images/icons/link.svg"); }
+.icon-linkedin { mask-image: url("~images/icons/linkedin.svg"); }
+.icon-lock-fill { mask-image: url("~images/icons/lock-fill.svg"); }
+.icon-media { mask-image: url("~images/icons/media.svg"); }
+.icon-mic-fill { mask-image: url("~images/icons/mic-fill.svg"); }
+.icon-music-note-beamed { mask-image: url("~images/icons/music-note-beamed.svg"); }
+.icon-ordered-list { mask-image: url("~images/icons/ordered-list.svg"); }
+.icon-outline-bell { mask-image: url("~images/icons/outline-bell.svg"); }
+.icon-outline-check { mask-image: url("~images/icons/outline-check.svg"); }
+.icon-outline-check-circle { mask-image: url("~images/icons/outline-check-circle.svg"); }
+.icon-outline-check-circle-about { mask-image: url("~images/icons/outline-check-circle-about.svg"); }
+.icon-outline-cheveron-double-left { mask-image: url("~images/icons/outline-cheveron-double-left.svg"); }
+.icon-outline-cheveron-double-right { mask-image: url("~images/icons/outline-cheveron-double-right.svg"); }
+.icon-outline-cheveron-down { mask-image: url("~images/icons/outline-cheveron-down.svg"); }
+.icon-outline-cheveron-left { mask-image: url("~images/icons/outline-cheveron-left.svg"); }
+.icon-outline-cheveron-right { mask-image: url("~images/icons/outline-cheveron-right.svg"); }
+.icon-outline-cheveron-up { mask-image: url("~images/icons/outline-cheveron-up.svg"); }
+.icon-outline-circle-play { mask-image: url("~images/icons/outline-circle-play.svg"); }
+.icon-outline-clock { mask-image: url("~images/icons/outline-clock.svg"); }
+.icon-outline-credit-card { mask-image: url("~images/icons/outline-credit-card.svg"); }
+.icon-outline-currency-dollar { mask-image: url("~images/icons/outline-currency-dollar.svg"); }
+.icon-outline-dots-circle-horizontal { mask-image: url("~images/icons/outline-dots-circle-horizontal.svg"); }
+.icon-outline-drag { mask-image: url("~images/icons/outline-drag.svg"); }
+.icon-outline-drag-vert { mask-image: url("~images/icons/outline-drag-vert.svg"); }
+.icon-outline-duplicate { mask-image: url("~images/icons/outline-duplicate.svg"); }
+.icon-outline-key { mask-image: url("~images/icons/outline-key.svg"); }
+.icon-outline-mail-open { mask-image: url("~images/icons/outline-mail-open.svg"); }
+.icon-outline-menu { mask-image: url("~images/icons/outline-menu.svg"); }
+.icon-outline-refresh { mask-image: url("~images/icons/outline-refresh.svg"); }
+.icon-outline-shopping-bag { mask-image: url("~images/icons/outline-shopping-bag.svg"); }
+.icon-outline-star { mask-image: url("~images/icons/outline-star.svg"); }
+.icon-paperclip { mask-image: url("~images/icons/paperclip.svg"); }
+.icon-pencil { mask-image: url("~images/icons/pencil.svg"); }
+.icon-people-fill { mask-image: url("~images/icons/people-fill.svg"); }
+.icon-person { mask-image: url("~images/icons/person.svg"); }
+.icon-person-circle-fill { mask-image: url("~images/icons/person-circle-fill.svg"); }
+.icon-person-plus-fill { mask-image: url("~images/icons/person-plus-fill.svg"); }
+.icon-person-x-fill { mask-image: url("~images/icons/person-x-fill.svg"); }
+.icon-phone { mask-image: url("~images/icons/phone.svg"); }
+.icon-plus { mask-image: url("~images/icons/plus.svg"); }
+.icon-quote { mask-image: url("~images/icons/quote.svg"); }
+.icon-quote-squared { mask-image: url("~images/icons/quote-squared.svg"); }
+.icon-redo { mask-image: url("~images/icons/redo.svg"); }
+.icon-save { mask-image: url("~images/icons/save.svg"); }
+.icon-scissors { mask-image: url("~images/icons/scissors.svg"); }
+.icon-share { mask-image: url("~images/icons/share.svg"); }
+.icon-shield-exclamation { mask-image: url("~images/icons/shield-exclamation.svg"); }
+.icon-shop-window { mask-image: url("~images/icons/shop-window.svg"); }
+.icon-shop-window-fill { mask-image: url("~images/icons/shop-window-fill.svg"); }
+.icon-skip-back-15 { mask-image: url("~images/icons/skip-back-15.svg"); }
+.icon-skip-forward-30 { mask-image: url("~images/icons/skip-forward-30.svg"); }
+.icon-solid-bell { mask-image: url("~images/icons/solid-bell.svg"); }
+.icon-solid-chat-alt { mask-image: url("~images/icons/solid-chat-alt.svg"); }
+.icon-solid-check-circle { mask-image: url("~images/icons/solid-check-circle.svg"); }
+.icon-solid-cog { mask-image: url("~images/icons/solid-cog.svg"); }
+.icon-solid-currency-dollar { mask-image: url("~images/icons/solid-currency-dollar.svg"); }
+.icon-solid-database { mask-image: url("~images/icons/solid-database.svg"); }
+.icon-solid-document-text { mask-image: url("~images/icons/solid-document-text.svg"); }
+.icon-solid-flag { mask-image: url("~images/icons/solid-flag.svg"); }
+.icon-solid-folder-open { mask-image: url("~images/icons/solid-folder-open.svg"); }
+.icon-solid-hand { mask-image: url("~images/icons/solid-hand.svg"); }
+.icon-solid-key { mask-image: url("~images/icons/solid-key.svg"); }
+.icon-solid-search { mask-image: url("~images/icons/solid-search.svg"); }
+.icon-solid-send { mask-image: url("~images/icons/solid-send.svg"); }
+.icon-solid-shield-exclamation { mask-image: url("~images/icons/solid-shield-exclamation.svg"); }
+.icon-solid-star { mask-image: url("~images/icons/solid-star.svg"); }
+.icon-solid-user { mask-image: url("~images/icons/solid-user.svg"); }
+.icon-soundwave { mask-image: url("~images/icons/soundwave.svg"); }
+.icon-sparkle { mask-image: url("~images/icons/sparkle.svg"); }
+.icon-stack-fill { mask-image: url("~images/icons/stack-fill.svg"); }
+.icon-stickies { mask-image: url("~images/icons/stickies.svg"); }
+.icon-strikethrough { mask-image: url("~images/icons/strikethrough.svg"); }
+.icon-stripe { mask-image: url("~images/icons/stripe.svg"); }
+.icon-three-dots { mask-image: url("~images/icons/three-dots.svg"); }
+.icon-trash2 { mask-image: url("~images/icons/trash2.svg"); }
+.icon-truck { mask-image: url("~images/icons/truck.svg"); }
+.icon-twitter { mask-image: url("~images/icons/twitter.svg"); }
+.icon-underline { mask-image: url("~images/icons/underline.svg"); }
+.icon-undo { mask-image: url("~images/icons/undo.svg"); }
+.icon-unordered-list { mask-image: url("~images/icons/unordered-list.svg"); }
+.icon-upload-fill { mask-image: url("~images/icons/upload-fill.svg"); }
+.icon-volume-down { mask-image: url("~images/icons/volume-down.svg"); }
+.icon-x { mask-image: url("~images/icons/x.svg"); }
+.icon-x-circle { mask-image: url("~images/icons/x-circle.svg"); }
+.icon-x-circle-fill { mask-image: url("~images/icons/x-circle-fill.svg"); }
+.icon-x-square { mask-image: url("~images/icons/x-square.svg"); }
+.icon-zoom-in { mask-image: url("~images/icons/zoom-in.svg"); }
+.icon-zoom-out { mask-image: url("~images/icons/zoom-out.svg"); }
+
+/* Brand icons */
+.brand-icon-android { mask-image: url("~images/brands/android.svg"); }
+.brand-icon-apple { mask-image: url("~images/brands/apple.svg"); }
+.brand-icon-discord { mask-image: url("~images/brands/discord.svg"); }
+.brand-icon-facebook { mask-image: url("~images/brands/facebook.svg"); }
+.brand-icon-google { mask-image: url("~images/brands/google.svg"); }
+.brand-icon-kindle { mask-image: url("~images/brands/kindle.svg"); }
+.brand-icon-paypal { mask-image: url("~images/brands/paypal.svg"); }
+.brand-icon-stripe { mask-image: url("~images/brands/stripe.svg"); }
+.brand-icon-twitter { mask-image: url("~images/brands/twitter.svg"); }
+.brand-icon-zoom { mask-image: url("~images/brands/zoom.svg"); }
+
+/* Logo classes */
+.logo-full {
+  content: "\00a0";
+  display: inline-block;
+  background: currentColor;
+  min-height: max(1lh, 1em);
+  width: calc(1em / 0.3333333333);
+  mask-position: 50% 50%;
+  mask-size: contain;
+  mask-repeat: no-repeat;
+  flex-shrink: 0;
+  mask-image: url("~images/logo.svg");
+}
+
+.logo-full::after {
+  content: "\00a0";
+}
+
+.logo-g {
+  display: block;
+  background-image: url("~images/logo-g.svg");
+  background-size: contain;
+  width: 3rem;
+  height: 3rem;
+}

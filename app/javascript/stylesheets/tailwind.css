@@ -114,3 +114,37 @@
     transform: translateX(-50%);
   }
 }
+
+/* Icon base utility that all icon classes extend */
+@utility icon-base {
+  content: "\00a0";
+  display: inline-block;
+  background: currentColor;
+  min-height: max(1lh, 1em);
+  width: 1em;
+  mask-position: 50% 50%;
+  mask-size: 120%;
+  mask-repeat: no-repeat;
+  flex-shrink: 0;
+
+  &::after {
+    content: "\00a0";
+  }
+}
+
+/* Brand icon utility with 100% mask size */
+@utility brand-icon {
+  content: "\00a0";
+  display: inline-block;
+  background: currentColor;
+  min-height: max(1lh, 1em);
+  width: 1em;
+  mask-position: 50% 50%;
+  mask-size: 100%;
+  mask-repeat: no-repeat;
+  flex-shrink: 0;
+
+  &::after {
+    content: "\00a0";
+  }
+}

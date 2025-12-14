@@ -9,12 +9,12 @@
 
 <% if current_page.first? %>
   <button class="button small" disabled>
-    <span class="icon icon-outline-cheveron-left"></span>
+    <%= icon("outline-cheveron-left") %>
     Previous
   </button>
 <% else %>
   <%= link_to url, rel: "prev", remote: remote, class: "button small" do %>
-    <span class="icon icon-outline-cheveron-left"></span>
+    <%= icon("outline-cheveron-left") %>
     Previous
   <% end %>
 <% end %>

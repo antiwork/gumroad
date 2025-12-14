@@ -10,11 +10,11 @@
 <% if current_page.last? %>
   <button class="button small" disabled="true">
     Next
-    <span class="icon icon-outline-cheveron-right"></span>
+    <%= icon("outline-cheveron-right") %>
   </button>
 <% else %>
   <%= link_to url, rel: "next", remote: remote, class: "button small" do %>
     Next
-    <span class="icon icon-outline-cheveron-right"></span>
+    <%= icon("outline-cheveron-right") %>
   <% end %>
 <% end %>

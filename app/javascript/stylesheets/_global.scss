@@ -131,7 +131,7 @@ details {
     }
 
     &::before {
-      @extend %icon, .icon-outline-cheveron-right;
+      @extend .icon, .icon-outline-cheveron-right;
       margin-right: spacer(1);
     }
   }

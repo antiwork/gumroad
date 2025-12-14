@@ -9,10 +9,10 @@ module IconHelper
   end
 
   def icon_yes
-    icon("solid-check-circle", aria: { label: "Yes" }, style: "color: rgb(var(--success))")
+    icon("solid-check-circle", aria: { label: "Yes" }, class: "text-success")
   end
 
   def icon_no
-    icon("x-circle-fill", aria: { label: "No" }, style: "color: rgb(var(--danger))")
+    icon("x-circle-fill", aria: { label: "No" }, class: "text-danger")
   end
 end
