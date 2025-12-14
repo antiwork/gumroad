@@ -1,14 +1,10 @@
+import { createInertiaApp } from "@inertiajs/react";
 import Clipboard from "clipboard";
-import ReactOnRails from "react-on-rails";
+import React, { createElement } from "react";
+import { createRoot } from "react-dom/client";
 
-import BasePage from "$app/utils/base_page";
-
-import AdminNav from "$app/components/server-components/Admin/Nav";
-import AdminSalesReportsPage from "$app/components/server-components/Admin/SalesReportsPage";
-import AdminSearchPopover from "$app/components/server-components/Admin/SearchPopover";
-
-BasePage.initialize();
-ReactOnRails.register({ AdminNav, AdminSearchPopover, AdminSalesReportsPage });
+import AdminAppWrapper, { GlobalProps } from "../inertia/admin_app_wrapper";
+import Layout from "../layouts/Admin";
 
 let clipboard: Clipboard | null = null;
 
@@ -34,3 +30,45 @@ function registerClipboardHandlers() {
 }
 
 document.addEventListener("DOMContentLoaded", registerClipboardHandlers);
+
+const AdminLayout = (page: React.ReactNode) => React.createElement(Layout, { children: page });
+
+type PageComponent = React.ComponentType & { layout?: (page: React.ReactNode) => React.ReactElement };
+
+const isPageComponent = (value: unknown): value is PageComponent => typeof value === "function";
+
+const resolvePageComponent = async (name: string): Promise<PageComponent> => {
+  try {
+    const page: unknown = await import(`../pages/${name}.tsx`);
+    if (page && typeof page === "object" && "default" in page && isPageComponent(page.default)) {
+      const component = page.default;
+      component.layout = AdminLayout;
+      return component;
+    }
+    throw new Error(`Invalid page component: ${name}`);
+  } catch {
+    try {
+      const page: unknown = await import(`../pages/${name}.jsx`);
+      if (page && typeof page === "object" && "default" in page && isPageComponent(page.default)) {
+        const component = page.default;
+        component.layout = AdminLayout;
+        return component;
+      }
+      throw new Error(`Invalid page component: ${name}`);
+    } catch {
+      throw new Error(`Admin page component not found: ${name}`);
+    }
+  }
+};
+
+void createInertiaApp<GlobalProps>({
+  progress: false,
+  resolve: (name: string) => resolvePageComponent(name),
+  setup({ el, App, props }) {
+    const global = props.initialPage.props;
+
+    const root = createRoot(el);
+    root.render(createElement(AdminAppWrapper, { global, children: createElement(App, props) }));
+  },
+  title: (title: string) => (title ? `${title} - Admin` : "Admin"),
+});

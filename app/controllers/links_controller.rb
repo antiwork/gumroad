@@ -616,6 +616,7 @@ class LinksController < ApplicationController
     end
 
     def paged_params
+      return { page: nil, sort: {} } unless params.respond_to?(:permit)
       params.permit(:page, sort: [:key, :direction])
     end
 
