@@ -38,7 +38,6 @@ namespace :admin do
       end
       resources :guids, only: [:index]
     end
-    resources :service_charges, only: :index
     member do
       post :add_credit
       post :mass_transfer_purchases
