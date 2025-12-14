@@ -163,6 +163,7 @@ export const Layout = ({
     setIsPublishing(false);
   };
 
+  const { autosaveState } = useProductEditContext(); // Tri
   const isUploadingFile = (file: FileEntry | SubtitleFile) =>
     file.status.type === "unsaved" && file.status.uploadStatus.type === "uploading";
   const isUploadingFiles =
@@ -189,6 +190,13 @@ export const Layout = ({
     return () => window.removeEventListener("beforeunload", beforeUnload);
   }, [isUploadingFilesOrImages]);
 
+  {autosaveState !== "idle" && ( // Tri
+    <span className="text-sm text-muted">
+      {autosaveState === "saving" && "Saving…"}
+      {autosaveState === "saved" && "Saved"}
+      {autosaveState === "error" && "Save failed"}
+    </span>
+  )}
   const saveButton = (
     <WithTooltip tip={saveButtonTooltip}>
       <Button color="primary" disabled={isBusy} onClick={() => void save()}>

@@ -31,6 +31,7 @@ import {
 } from "$app/components/ProductEdit/state";
 import { ImageUploadSettingsContext } from "$app/components/RichTextEditor";
 import { showAlert } from "$app/components/server-components/Alert";
+import { useAutosaveProduct } from "$app/components/ProductEdit/useAutosaveProduct";
 
 const routes: RouteObject[] = [
   {
@@ -150,37 +151,72 @@ const ProductEditPage = (props: Props) => {
 
   const [saving, setSaving] = React.useState(false);
   const [imagesUploading, setImagesUploading] = React.useState<Set<File>>(new Set());
+
+  // Tri
+  const isBlocked =
+  saving ||
+  imagesUploading.size > 0 ||
+  product.files.some((file) => file.status.type === "unsaved");
+
+  const [autosaveState, setAutosaveState] = React.useState<
+    "idle" | "saving" | "saved" | "error"
+  >("idle");
+
+  // TODO(Tri): Handle autosave
   const save = async () => {
+    if (saving) return;
+
     try {
       setSaving(true);
-      const response = await saveProduct(props.unique_permalink, props.id, product, currencyType);
-      if (response.warning_message) showAlert(response.warning_message, "warning");
-      else {
-        const { contentUpdatedVariantIds, sharedContentUpdated } = findUpdatedContent(
-          product,
-          lastSavedProductRef.current,
-        );
-        const contentUpdated = sharedContentUpdated || contentUpdatedVariantIds.length > 0;
+      setAutosaveState("saving");
+
+      const response = await saveProduct(
+        props.unique_permalink,
+        props.id,
+        product,
+        currencyType,
+      );
+
+      if (response.warning_message) {
+        showAlert(response.warning_message, "warning");
+      } else {
+        const { contentUpdatedVariantIds, sharedContentUpdated } =
+          findUpdatedContent(product, lastSavedProductRef.current);
+
+        const contentUpdated =
+          sharedContentUpdated || contentUpdatedVariantIds.length > 0;
 
         if (props.successful_sales_count > 0 && contentUpdated) {
-          const uniquePermalinkOrVariantIds = product.has_same_rich_content_for_all_variants
-            ? [props.unique_permalink]
-            : contentUpdatedVariantIds;
+          const uniquePermalinkOrVariantIds =
+            product.has_same_rich_content_for_all_variants
+              ? [props.unique_permalink]
+              : contentUpdatedVariantIds;
 
-          setContentUpdates({
-            uniquePermalinkOrVariantIds,
-          });
+          setContentUpdates({ uniquePermalinkOrVariantIds });
         } else {
-          showAlert("Changes saved!", "success");
+          // Manual save feedback only
+          setAutosaveState("saved");
         }
+
         lastSavedProductRef.current = structuredClone(product);
       }
     } catch (e) {
       assertResponseError(e);
+      setAutosaveState("error");
       showAlert(e.message, "error");
+    } finally {
+      setSaving(false);
+      setTimeout(() => setAutosaveState("idle"), 2000);
     }
-    setSaving(false);
   };
+
+  useAutosaveProduct({
+    product,
+    lastSavedProductRef,
+    save,
+    saving,
+    isBlocked,
+  });
 
   const contextValue = React.useMemo(
     () => ({
@@ -193,6 +229,7 @@ const ProductEditPage = (props: Props) => {
       updateProduct,
       save,
       saving,
+      autosaveState, // Tri
       contentUpdates,
       setContentUpdates,
     }),
@@ -250,6 +287,19 @@ const ProductEditRouter = async (global: GlobalProps) => {
       value={{
         ...createContextValue(props),
         setCurrencyType: (_currency) => {}, // no-op
+
+        /*
+        !!!: Tri
+        SSR never triggers autosave
+        SSR never mutates product state
+        These values are only read by layout/UI components
+        */
+        saving: false,
+        save: async () => {},
+        autosaveState: "idle",
+
+        contentUpdates: null,
+        setContentUpdates: () => {},
       }}
     >
       <StaticRouterProvider router={router} context={context} nonce={global.csp_nonce} />
