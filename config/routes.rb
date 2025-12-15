@@ -295,6 +295,8 @@ Rails.application.routes.draw do
     namespace :help_center, path: "help" do
       root to: "articles#index"
 
+      # Custom singular `path` name for backwards compatibility with old routes
+      # for SEO.
       resources :articles, only: [:show], param: :slug, path: "article"
       resources :categories, only: [:show], param: :slug, path: "category"
 
