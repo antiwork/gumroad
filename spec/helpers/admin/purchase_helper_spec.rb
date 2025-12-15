@@ -85,7 +85,7 @@ describe Admin::PurchaseHelper, type: :helper do
           it "returns linked error code" do
             result = helper.purchase_error_code(purchase)
             expect(result).to include("card_declined")
-            expect(result).to include(admin_purchase_path(chargebacked_purchase))
+            expect(result).to include(admin_purchase_path(chargebacked_purchase.external_id))
           end
         end
 
