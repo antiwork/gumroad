@@ -17,11 +17,8 @@ class Wishlists::FollowingController < ApplicationController
   end
 
   private
-    def set_title
-      @title = "Following"
-    end
 
-    def wishlists_props
-      WishlistPresenter.library_props(wishlists: current_seller.alive_following_wishlists, is_wishlist_creator: false)
-    end
+  def wishlists_props
+    WishlistPresenter.library_props(wishlists: current_seller.alive_following_wishlists, is_wishlist_creator: false)
+  end
 end
