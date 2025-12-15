@@ -107,7 +107,7 @@ namespace :admin do
 
   resources :comments, only: :create
 
-  resources :purchases, only: [:show] do
+  resources :purchases, only: [:show], param: :external_id do
     scope module: :purchases do
       concerns :commentable
     end
