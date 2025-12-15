@@ -33,7 +33,7 @@ describe UserBalanceStatsService do
 
       context "when cached value exists" do
         it "returns cached value" do
-          Rails.cache.write(instance.send(:cache_key), example_values)
+          $redis.setex(instance.send(:cache_key), 48.hours.to_i, example_values.to_json)
           expect(instance).not_to receive(:generate)
           expect(fetched).to eq(example_values)
         end
