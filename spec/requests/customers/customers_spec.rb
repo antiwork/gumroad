@@ -348,7 +348,7 @@ describe "Sales page", type: :system, js: true do
 
         row = find(:table_row, { "Email" => installment_plan_purchase.email })
         within row do
-          expect(page).to have_text("Awesome ProductInstallments")
+          expect(page).to have_text("Awesome Product Installments", normalize_ws: true)
           expect(page).to have_text("$10 a month")
         end
         row.click

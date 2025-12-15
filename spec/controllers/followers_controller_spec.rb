@@ -2,14 +2,34 @@
 
 require "spec_helper"
 require "shared_examples/authorize_called"
+require "inertia_rails/rspec"
 
-describe FollowersController do
+describe FollowersController, inertia: true do
   render_views
 
   let(:seller) { create(:named_seller) }
+  let(:pundit_user) { SellerContext.new(user: seller, seller:) }
 
   context "within seller area" do
     include_context "with user signed in as admin for seller"
+
+    describe "GET index" do
+      it "returns successful response with Inertia page data" do
+        followers = create_list(:follower, 20, user: seller) do |follower, index|
+          follower.update!(confirmed_at: Time.current - index.days)
+        end
+        create(:follower, user: seller, confirmed_at: Time.current - 30.days)
+        create(:follower, user: seller)
+        get :index
+        expect(response).to be_successful
+        expect(inertia.component).to eq("Followers/Index")
+        expect(inertia.props).to match(hash_including(
+          followers: followers.map { _1.as_json(pundit_user:) },
+          per_page: FollowersController::FOLLOWERS_PER_PAGE,
+          total: 21,
+        ))
+      end
+    end
 
     describe "GET search" do
       context "logged in" do

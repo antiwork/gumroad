@@ -40,7 +40,6 @@ import DiscoverWishlistPage from "$app/components/server-components/Discover/Wis
 import DownloadPageWithContent from "$app/components/server-components/DownloadPage/WithContent";
 import DownloadPageWithoutContent from "$app/components/server-components/DownloadPage/WithoutContent";
 import EmailsPage from "$app/components/server-components/EmailsPage";
-import FollowersPage from "$app/components/server-components/FollowersPage";
 import GenerateInvoiceConfirmationPage from "$app/components/server-components/GenerateInvoiceConfirmationPage";
 import GenerateInvoicePage from "$app/components/server-components/GenerateInvoicePage";
 import GumroadBlogIndexPage from "$app/components/server-components/GumroadBlog/IndexPage";
@@ -90,6 +89,7 @@ import WishlistPage from "$app/components/server-components/WishlistPage";
 import WishlistsFollowingPage from "$app/components/server-components/WishlistsFollowingPage";
 import WishlistsPage from "$app/components/server-components/WishlistsPage";
 import CodeSnippet from "$app/components/ui/CodeSnippet";
+import { Pill } from "$app/components/ui/Pill";
 
 ReactOnRails.register({
   AdminActionButton,
@@ -136,7 +136,6 @@ ReactOnRails.register({
   DownloadPageWithContent,
   DownloadPageWithoutContent,
   EmailsPage,
-  FollowersPage,
   GenerateInvoiceConfirmationPage,
   GenerateInvoicePage,
   GumroadBlogIndexPage,
@@ -150,6 +149,7 @@ ReactOnRails.register({
   PaymentsSettingsPage,
   PayoutCreditCard,
   PdfReaderPage,
+  Pill,
   ProductEditPage,
   ProductIframePage,
   PurchaseProductPage,

@@ -45,8 +45,13 @@
   --color-active-bg: rgb(var(--color) / var(--gray-1));
   --color-muted: rgb(var(--color) / var(--gray-3));
   --color-success: rgb(var(--success));
+  --color-success-foreground: rgb(var(--contrast-success));
   --color-danger: rgb(var(--danger));
+  --color-danger-foreground: rgb(var(--contrast-danger));
+  --color-primary: rgb(var(--primary));
+  --color-primary-foreground: rgb(var(--contrast-primary));
   --color-warning: rgb(var(--warning));
+  --color-warning-foreground: rgb(var(--contrast-warning));
 
   --shadow: 0.25rem 0.25rem 0 currentColor;
   --shadow-lg: 0.5rem 0.5rem 0 currentColor;
