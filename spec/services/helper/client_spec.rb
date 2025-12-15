@@ -11,7 +11,7 @@ describe Helper::Client do
     let(:secret_key) { "secret_key" }
 
     before do
-      allow(GlobalConfig).to receive(:get).with("HELPER_SECRET_KEY").and_return(secret_key)
+      allow(GlobalConfig).to receive(:get).with("HELPER_WIDGET_SECRET").and_return(secret_key)
     end
 
     context "when payload is query params" do

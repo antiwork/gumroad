@@ -20,6 +20,22 @@ describe AdminSearchService do
       expect(purchases).to include(purchase_1, purchase_2, purchase_3)
     end
 
+    it "returns purchases when searching by email with empty card parameters" do
+      email = "user@example.com"
+      purchase = create(:purchase, email:)
+      purchase.update_column(:stripe_fingerprint, nil)
+
+      purchases = AdminSearchService.new.search_purchases(
+        query: email,
+        transaction_date: "",
+        last_4: "",
+        card_type: "",
+        price: "",
+        expiry_date: ""
+      )
+      expect(purchases).to include(purchase)
+    end
+
     it "returns purchases for products created by a seller" do
       seller = create(:user, email: "seller@example.com")
       purchase = create(:purchase, link: create(:product, user: seller))

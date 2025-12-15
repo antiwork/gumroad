@@ -87,7 +87,7 @@ class ProductDuplicatorService
     end
 
     def duplicate_asset_previews
-      product.asset_previews.alive.each do |asset_preview|
+      product.asset_previews.alive.in_order.each do |asset_preview|
         new_asset_preview = asset_preview.dup
         new_asset_preview.link = duplicated_product
         new_asset_preview.file.attach duped_blob(asset_preview.file) if asset_preview.file.attached?

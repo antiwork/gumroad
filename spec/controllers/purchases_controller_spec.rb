@@ -1106,6 +1106,51 @@ describe PurchasesController, :vcr do
         end
       end
 
+      context "when params include custom field values" do
+        it "does not change existing purchase custom fields" do
+          color_field = @product.custom_fields.create!(
+            name: "Favorite Color",
+            required: false,
+            field_type: "text",
+            seller_id: @product.user.id
+          )
+          newsletter_field = @product.custom_fields.create!(
+            name: "Subscribe to Newsletter",
+            required: false,
+            field_type: "checkbox",
+            seller_id: @product.user.id
+          )
+
+          @subscription.original_purchase.purchase_custom_fields.create!(
+            custom_field: color_field,
+            name: color_field.name,
+            field_type: color_field.field_type,
+            value: "Blue"
+          )
+          @subscription.original_purchase.purchase_custom_fields.create!(
+            custom_field: newsletter_field,
+            name: newsletter_field.name,
+            field_type: newsletter_field.field_type,
+            value: "true"
+          )
+
+          travel_to(@originally_subscribed_at + 1.month) do
+            put :update_subscription,
+                params: params_existing_card.merge(
+                  custom_fields: {
+                    color_field.id.to_s => { value: "Red" },
+                    newsletter_field.id.to_s => { value: "false" }
+                  }
+                )
+          end
+
+          updated_purchase = @subscription.reload.original_purchase
+
+          expect(updated_purchase.purchase_custom_fields.find_by(custom_field: color_field).value).to eq("Blue")
+          expect(updated_purchase.purchase_custom_fields.find_by(custom_field: newsletter_field).value).to eq(true)
+        end
+      end
+
       context "when encrypted cookie is not present" do
         before do
           cookies.encrypted[@subscription.cookie_key] = nil

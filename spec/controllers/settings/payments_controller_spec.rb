@@ -998,6 +998,8 @@ describe Settings::PaymentsController, :vcr do
       end
 
       it "fails if bank payouts are supported in seller's country" do
+        user.update!(payment_address: "")
+
         put :update, xhr: true, params: { payment_address: "sebastian@example.com" }
 
         expect(response.parsed_body["success"]).to be(false)

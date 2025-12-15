@@ -325,4 +325,59 @@ describe "Tiered Membership Spec", type: :system, js: true do
       end
     end
   end
+
+  context "when product has custom fields" do
+    before :each do
+      @product.custom_fields.create!(
+        name: "Favorite Color",
+        required: false,
+        field_type: "text",
+        seller_id: @product.user.id
+      )
+      @product.custom_fields.create!(
+        name: "Subscribe to Newsletter",
+        required: false,
+        field_type: "checkbox",
+        seller_id: @product.user.id
+      )
+    end
+
+    it "hides custom fields on manage membership page and preserves original custom field values when updating membership" do
+      color_field = @product.custom_fields.find_by(name: "Favorite Color")
+      newsletter_field = @product.custom_fields.find_by(name: "Subscribe to Newsletter")
+
+      @subscription.original_purchase.purchase_custom_fields.create!(
+        custom_field: color_field,
+        name: color_field.name,
+        field_type: color_field.field_type,
+        value: "Blue"
+      )
+      @subscription.original_purchase.purchase_custom_fields.create!(
+        custom_field: newsletter_field,
+        name: newsletter_field.name,
+        field_type: newsletter_field.field_type,
+        value: "true"
+      )
+
+      visit manage_subscription_path(@subscription.external_id, token: @subscription.token)
+
+      expect(page).not_to have_text "Favorite Color"
+      expect(page).not_to have_text "Subscribe to Newsletter"
+
+      expect(page).to have_field("Recurrence", with: "quarterly")
+      expect(page).to have_button("Update membership")
+
+      choose "Second Tier"
+      wait_for_ajax
+      click_on "Update membership"
+      wait_for_ajax
+
+      expect(page).to have_alert(text: "Your membership has been updated.")
+
+      @subscription.reload
+
+      expect(@subscription.original_purchase.purchase_custom_fields.find_by(custom_field: color_field).value).to eq("Blue")
+      expect(@subscription.original_purchase.purchase_custom_fields.find_by(custom_field: newsletter_field).value).to eq(true)
+    end
+  end
 end

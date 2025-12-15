@@ -347,7 +347,7 @@ describe("Library Scenario", type: :system, js: true) do
       Link.import(refresh: true, force: true)
       visit "/library"
 
-      expect(page).to have_text("Showing 1-9 of 12")
+      expect(page).to have_text("Showing 1-12 of 12")
       expect(find("label", text: @creator.name)).to have_text("(10)")
       expect(find("label", text: @another_creator.name)).to have_text("(2)")
 
@@ -356,7 +356,7 @@ describe("Library Scenario", type: :system, js: true) do
       expect(find_field("All Creators", visible: false).checked?).to eq(false)
       expect(find_field(@creator.name, visible: false).checked?).to eq(true)
       expect(find_field(@another_creator.name, visible: false).checked?).to eq(false)
-      expect(page).to have_text("Showing 1-9 of 10")
+      expect(page).to have_text("Showing 1-10 of 10")
       scroll_to find_product_card(@b.link)
       expect(page).to have_product_card(count: 10)
       expect_to_show_purchases_in_order([@j, @i, @h, @g, @f, @e, @d, @c, @b, @a])
@@ -374,7 +374,7 @@ describe("Library Scenario", type: :system, js: true) do
       expect(find_field("All Creators", visible: false).checked?).to eq(true)
       expect(find_field(@creator.name, visible: false).checked?).to eq(false)
       expect(find_field(@another_creator.name, visible: false).checked?).to eq(false)
-      expect(page).to have_text("Showing 1-9 of 12")
+      expect(page).to have_text("Showing 1-12 of 12")
       scroll_to find_product_card(@d.link)
       expect_to_show_purchases_in_order([another_b, another_a, @j, @i, @h, @g, @f, @e, @d, @c, @b, @a])
     end
@@ -466,8 +466,8 @@ describe("Library Scenario", type: :system, js: true) do
 
   it "shows new results upon scrolling to the bottom of the page" do
     products = []
-    18.times do |n|
-      product = create(:product, name: "Product #{n}")
+    30.times do |n|
+      product = create(:product, name: "Product #{n}", price_cents: 0)
       products << product
       create(:purchase, link: product, purchaser: @user)
     end
@@ -475,15 +475,15 @@ describe("Library Scenario", type: :system, js: true) do
     Link.import(refresh: true, force: true)
     visit library_path
 
-    expect(page).to have_text("Showing 1-9 of 18 products")
-    9.times do |n|
-      expect(page).to have_product_card(products[17 - n], exact_text: true)
+    expect(page).to have_text("Showing 1-15 of 30 products")
+    15.times do |n|
+      expect(page).to have_product_card(products[29 - n], exact_text: true)
     end
-    9.times do |n|
+    15.times do |n|
       expect(page).to_not have_product_card(products[n], exact_text: true)
     end
-    scroll_to find(:section, "9", section_element: :article)
-    9.times do |n|
+    scroll_to find(:section, "15", section_element: :article)
+    15.times do |n|
       expect(page).to have_product_card(products[n], exact_text: true)
     end
   end
@@ -492,21 +492,22 @@ describe("Library Scenario", type: :system, js: true) do
     let(:purchase) { create(:purchase, purchaser: @user, link: create(:product, :bundle)) }
     before do
       purchase.create_artifacts_and_send_receipt!
-      create_list(:purchase, 8, purchaser: @user) do |purchase, i|
-        purchase.link.update!(name: "Product #{i}")
+      14.times do |i|
+        product = create(:product, name: "Product #{i}")
+        create(:purchase, link: product, purchaser: @user)
       end
     end
 
     it "filters by bundle" do
       visit library_path
-      (0..7).each do |i|
+      (0..13).each do |i|
         expect(page).to have_section("Product #{i}", exact: true)
       end
       expect(page).to have_section("Bundle Product 2")
       expect(page).to_not have_section("Bundle Product 1")
 
       select_combo_box_option search: "Bundle", from: "Bundles"
-      (0..7).each do |i|
+      (0..13).each do |i|
         expect(page).to_not have_section("Product #{i}", exact: true)
       end
 

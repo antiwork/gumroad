@@ -1,0 +1,220 @@
+---
+http_interactions:
+- request:
+    method: get
+    uri: https://api.stripe.com/v1/tax/forms?payee%5Baccount%5D=acct_1234567890&type=us_1099_k
+    body:
+      encoding: US-ASCII
+      string: ''
+    headers:
+      User-Agent:
+      - Stripe/v1 RubyBindings/12.5.0
+      Authorization:
+      - Bearer <STRIPE_API_KEY>
+      Content-Type:
+      - application/x-www-form-urlencoded
+      Stripe-Version:
+      - 2023-10-16; retrieve_tax_forms_beta=v1;
+      X-Stripe-Client-User-Agent:
+      - '{"bindings_version":"12.5.0","lang":"ruby","lang_version":"3.4.3 p32 (2025-04-14)","platform":"arm64-darwin24","engine":"ruby","publisher":"stripe","uname":"Darwin
+        mac48gb.local 24.6.0 Darwin Kernel Version 24.6.0: Mon Jul 14 11:30:40 PDT
+        2025; root:xnu-11417.140.69~1/RELEASE_ARM64_T6041 arm64","hostname":"mac48gb.local"}'
+      Accept-Encoding:
+      - gzip;q=1.0,deflate;q=0.6,identity;q=0.3
+      Accept:
+      - "*/*"
+  response:
+    status:
+      code: 200
+      message: OK
+    headers:
+      Server:
+      - nginx
+      Date:
+      - Thu, 30 Oct 2025 09:02:27 GMT
+      Content-Type:
+      - application/json
+      Content-Length:
+      - '3254'
+      Connection:
+      - keep-alive
+      Access-Control-Allow-Credentials:
+      - 'true'
+      Access-Control-Allow-Methods:
+      - GET, HEAD, PUT, PATCH, POST, DELETE
+      Access-Control-Allow-Origin:
+      - "*"
+      Access-Control-Expose-Headers:
+      - Request-Id, Stripe-Manage-Version, Stripe-Should-Retry, X-Stripe-External-Auth-Required,
+        X-Stripe-Privileged-Session-Required
+      Access-Control-Max-Age:
+      - '300'
+      Cache-Control:
+      - no-cache, no-store
+      Content-Security-Policy:
+      - base-uri 'none'; default-src 'none'; form-action 'none'; frame-ancestors 'none';
+        img-src 'self'; script-src 'self' 'report-<RPUSH_CONSUMER_FCM_FIREBASE_PROJECT_ID>';
+        style-src 'self'; worker-src 'none'; upgrade-insecure-requests; report-uri
+        https://q.stripe.com/csp-violation?q=xxxxxxxx
+      Request-Id:
+      - req_xxxxxxx
+      Stripe-Version:
+      - 2023-10-16; retrieve_tax_forms_beta=v1;
+      Vary:
+      - Origin
+      X-Stripe-Priority-Routing-Enabled:
+      - 'true'
+      X-Stripe-Routing-Context-Priority-Tier:
+      - livemode
+      X-Wc:
+      - ABGHIJ
+      Strict-Transport-Security:
+      - max-age=63072000; includeSubDomains; preload
+    body:
+      encoding: UTF-8
+      string: |-
+        {
+          "object": "list",
+          "count": 5,
+          "data": [
+            {
+              "id": "taxform_1",
+              "object": "tax.form",
+              "corrected_by": null,
+              "created": 1737614171,
+              "filing_statuses": [
+                {
+                  "effective_at": 1737803273,
+                  "jurisdiction": {
+                    "country": "US",
+                    "level": "country",
+                    "state": null
+                  },
+                  "value": "accepted"
+                }
+              ],
+              "livemode": true,
+              "payee": {
+                "account": "acct_1234567890",
+                "external_reference": null,
+                "type": "account"
+              },
+              "type": "us_1099_k",
+              "us_1099_k": {
+                "reporting_year": 2024
+              }
+            },
+            {
+              "id": "taxform_2",
+              "object": "tax.form",
+              "corrected_by": null,
+              "created": 1706110032,
+              "filing_statuses": [
+                {
+                  "effective_at": 1706272380,
+                  "jurisdiction": {
+                    "country": "US",
+                    "level": "country",
+                    "state": null
+                  },
+                  "value": "accepted"
+                }
+              ],
+              "livemode": true,
+              "payee": {
+                "account": "acct_1234567890",
+                "external_reference": null,
+                "type": "account"
+              },
+              "type": "us_1099_k",
+              "us_1099_k": {
+                "reporting_year": 2023
+              }
+            },
+            {
+              "id": "taxform_3",
+              "object": "tax.form",
+              "corrected_by": null,
+              "created": 1674247191,
+              "filing_statuses": [
+                {
+                  "effective_at": 1674471320,
+                  "jurisdiction": {
+                    "country": "US",
+                    "level": "country",
+                    "state": null
+                  },
+                  "value": "accepted"
+                }
+              ],
+              "livemode": true,
+              "payee": {
+                "account": "acct_1234567890",
+                "external_reference": null,
+                "type": "account"
+              },
+              "type": "us_1099_k",
+              "us_1099_k": {
+                "reporting_year": 2022
+              }
+            },
+            {
+              "id": "taxform_4",
+              "object": "tax.form",
+              "corrected_by": null,
+              "created": 1643040586,
+              "filing_statuses": [
+                {
+                  "effective_at": 1643309381,
+                  "jurisdiction": {
+                    "country": "US",
+                    "level": "country",
+                    "state": null
+                  },
+                  "value": "accepted"
+                }
+              ],
+              "livemode": true,
+              "payee": {
+                "account": "acct_1234567890",
+                "external_reference": null,
+                "type": "account"
+              },
+              "type": "us_1099_k",
+              "us_1099_k": {
+                "reporting_year": 2021
+              }
+            },
+            {
+              "id": "taxform_5",
+              "object": "tax.form",
+              "corrected_by": null,
+              "created": 1611828346,
+              "filing_statuses": [
+                {
+                  "effective_at": 1613015995,
+                  "jurisdiction": {
+                    "country": "US",
+                    "level": "country",
+                    "state": null
+                  },
+                  "value": "accepted"
+                }
+              ],
+              "livemode": true,
+              "payee": {
+                "account": "acct_1234567890",
+                "external_reference": null,
+                "type": "account"
+              },
+              "type": "us_1099_k",
+              "us_1099_k": {
+                "reporting_year": 2020
+              }
+            }
+          ],
+          "has_more": false,
+          "url": "/v1/tax/forms"
+        }
+  recorded_at: Thu, 30 Oct 2025 09:02:27 GMT
+recorded_with: VCR 6.2.0
