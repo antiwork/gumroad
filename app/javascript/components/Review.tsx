@@ -6,6 +6,7 @@ import { Icon } from "$app/components/Icons";
 import { RatingStars } from "$app/components/RatingStars";
 import { ReviewResponseForm } from "$app/components/ReviewResponseForm";
 import { ReviewVideoPlayer } from "$app/components/ReviewVideoPlayer";
+import { Pill } from "$app/components/ui/Pill";
 import { WithTooltip } from "$app/components/WithTooltip";
 
 export type Seller = {
@@ -57,7 +58,11 @@ export const Review = ({
           aria-label={`${review.rating} ${review.rating === 1 ? "star" : "stars"}`}
         >
           <RatingStars rating={review.rating} />
-          {review.is_new ? <span className="pill small primary">New</span> : null}
+          {review.is_new ? (
+            <Pill size="small" color="primary">
+              New
+            </Pill>
+          ) : null}
         </span>
         {review.message ? <p className="m-0">{review.message}</p> : null}
         {review.video ? <ReviewVideoPlayer videoId={review.video.id} thumbnail={review.video.thumbnail_url} /> : null}
@@ -70,7 +75,7 @@ export const Review = ({
           <p className="m-0">{review.response.message}</p>
           <section className="flex flex-wrap items-center gap-1">
             {seller ? <ReviewUserAttribution avatarUrl={seller.avatar_url} name={seller.name} /> : null}
-            <span className="pill small">Creator</span>
+            <Pill size="small">Creator</Pill>
           </section>
         </section>
       ) : null}

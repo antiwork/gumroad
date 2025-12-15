@@ -57,6 +57,41 @@ describe User::LowBalanceFraudCheck do
         allow(@creator).to receive(:unpaid_balance_cents).and_return(-200_00)
       end
 
+      context "when the creator is under enforcement action" do
+        context "when suspended for fraud" do
+          before do
+            @creator.flag_for_fraud!(author_name: "admin", content: "fraud detected")
+            @creator.suspend_for_fraud!(author_name: "admin", content: "confirmed fraud")
+          end
+
+          it "does not probate the creator" do
+            expect do
+              @creator.check_for_low_balance_and_probate(@purchase.id)
+            end.to have_enqueued_mail(AdminMailer, :low_balance_notify).with(@creator.id, @purchase.id)
+
+            expect(@creator.reload.suspended_for_fraud?).to eq(true)
+            expect(@creator.reload.on_probation?).to eq(false)
+          end
+        end
+
+        context "when suspended for TOS violation" do
+          before do
+            product = create(:product, user: @creator)
+            @creator.flag_for_tos_violation!(author_name: "admin", content: "tos violation", product_id: product.id)
+            @creator.suspend_for_tos_violation!(author_name: "admin", content: "confirmed tos violation")
+          end
+
+          it "does not probate the creator" do
+            expect do
+              @creator.check_for_low_balance_and_probate(@purchase.id)
+            end.to have_enqueued_mail(AdminMailer, :low_balance_notify).with(@creator.id, @purchase.id)
+
+            expect(@creator.reload.suspended_for_tos_violation?).to eq(true)
+            expect(@creator.reload.on_probation?).to eq(false)
+          end
+        end
+      end
+
       context "when the creator is not on probation" do
         context "when the creator is not recently probated for low balance" do
           it "probates the creator" do
