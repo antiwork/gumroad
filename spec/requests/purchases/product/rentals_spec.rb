@@ -45,8 +45,8 @@ describe("Rentals from product page", type: :system, js: true) do
       visit URI::DEFAULT_PARSER.escape("/l/#{@product.unique_permalink}/#{offer_code.code}")
       choose "Rent"
       expect(page).to have_selector("[role='status']", text: "$5 off will be applied at checkout (Code #{offer_code.code.upcase})")
-      expect(page).to have_radio_button("Rent", text: "$2 $0")
-      expect(page).to have_radio_button("Buy", text: "$5 $0")
+      expect(page).to have_radio_button("Rent", text: /\$2\s+\$0/)
+      expect(page).to have_radio_button("Buy", text: /\$5\s+\$0/)
 
       add_to_cart(@product, rent: true, offer_code:)
       check_out(@product, is_free: true)
