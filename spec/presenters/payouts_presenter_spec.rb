@@ -37,7 +37,8 @@ describe PayoutsPresenter do
           past_payout_period_data: [],
           instant_payout: nil,
           show_instant_payouts_notice: false,
-          pagination: {}
+          pagination: {},
+          tax_center_enabled: false
         }
       )
     end
@@ -117,7 +118,8 @@ describe PayoutsPresenter do
               account_number: "****1234"
             },
             show_instant_payouts_notice: false,
-            pagination: {}
+            pagination: {},
+            tax_center_enabled: false
           }
         )
       end
@@ -178,7 +180,8 @@ describe PayoutsPresenter do
             past_payout_period_data: [],
             instant_payout: nil,
             show_instant_payouts_notice: false,
-            pagination: {}
+            pagination: {},
+            tax_center_enabled: false
           }
         )
       end

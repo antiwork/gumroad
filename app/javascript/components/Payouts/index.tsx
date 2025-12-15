@@ -1,3 +1,4 @@
+import { Link } from "@inertiajs/react";
 import classNames from "classnames";
 import * as React from "react";
 import { cast } from "ts-safe-cast";
@@ -16,7 +17,9 @@ import { PaginationProps } from "$app/components/Pagination";
 import { ExportPayoutsPopover } from "$app/components/Payouts/ExportPayoutsPopover";
 import { showAlert } from "$app/components/server-components/Alert";
 import { PageHeader } from "$app/components/ui/PageHeader";
+import { Pill } from "$app/components/ui/Pill";
 import Placeholder from "$app/components/ui/Placeholder";
+import { Tabs, Tab } from "$app/components/ui/Tabs";
 import { useUserAgentInfo } from "$app/components/UserAgent";
 import { WithTooltip } from "$app/components/WithTooltip";
 
@@ -268,6 +271,7 @@ export type PayoutsProps = {
   } | null;
   show_instant_payouts_notice: boolean;
   pagination: PaginationProps;
+  tax_center_enabled: boolean;
 };
 
 // TODO: move BankAccount|PaypalAccount out of CurrentPayoutsDataAndPaymentMethodWithUserPayable
@@ -334,9 +338,7 @@ const Period = ({ payoutPeriodData }: { payoutPeriodData: PayoutPeriodData }) =>
         }}
       >
         {payoutPeriodData.status === "completed" ? <span>{heading}</span> : <h2>{heading}</h2>}
-        {"type" in payoutPeriodData && payoutPeriodData.type === "instant" ? (
-          <div className="pill small">Instant</div>
-        ) : null}
+        {"type" in payoutPeriodData && payoutPeriodData.type === "instant" ? <Pill size="small">Instant</Pill> : null}
         <span style={{ marginLeft: "auto" }}>{payoutPeriodData.displayable_payout_period_range}</span>
         {payoutPeriodData.status === "completed" && payoutPeriodData.payment_external_id ? (
           <WithTooltip position="top" tip="Export">
@@ -649,6 +651,7 @@ const Payouts = ({
   instant_payout,
   show_instant_payouts_notice,
   pagination: initialPagination,
+  tax_center_enabled,
 }: PayoutsProps) => {
   const loggedInUser = useLoggedInUser();
   const userAgentInfo = useUserAgentInfo();
@@ -730,7 +733,18 @@ const Payouts = ({
             </div>
           ) : undefined
         }
-      />
+      >
+        {tax_center_enabled ? (
+          <Tabs>
+            <Tab isSelected asChild>
+              <Link href={Routes.balance_path()}>Payouts</Link>
+            </Tab>
+            <Tab isSelected={false} asChild>
+              <Link href={Routes.tax_center_path()}>Taxes</Link>
+            </Tab>
+          </Tabs>
+        ) : null}
+      </PageHeader>
       <div className="space-y-8 p-4 md:p-8">
         {!instant_payout ? (
           show_instant_payouts_notice ? (
