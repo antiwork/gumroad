@@ -40,7 +40,7 @@
     padding-left: spacer(6);
   }
 
-  figure {
+  figure:not(.tailwind-override) {
     margin-bottom: spacer(5);
 
     img {
@@ -182,8 +182,6 @@
   }
 
   .embed {
-    @extend %row-item;
-
     border: $border;
     border-radius: border-radius(1);
     @include bg-color(filled);

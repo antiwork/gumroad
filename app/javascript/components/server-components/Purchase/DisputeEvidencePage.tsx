@@ -21,6 +21,7 @@ import { Button, NavigationButton } from "$app/components/Button";
 import { Icon } from "$app/components/Icons";
 import { LoadingSpinner } from "$app/components/LoadingSpinner";
 import { showAlert } from "$app/components/server-components/Alert";
+import { Row, RowActions, RowContent, Rows } from "$app/components/ui/Rows";
 import { useUserAgentInfo } from "$app/components/UserAgent";
 
 const ALLOWED_EXTENSIONS = ["jpeg", "jpg", "png", "pdf"];
@@ -364,10 +365,10 @@ const Files = ({
   };
 
   return (
-    <div className="rows" role="list">
+    <Rows role="list">
       {eligibleBlobs.map((blob) => (
-        <div role="listitem" key={blob.key}>
-          <div className="content">
+        <Row role="listitem" key={blob.key}>
+          <RowContent>
             <Icon name="solid-document-text" className="type-icon" />
             <div>
               <h4>{blob.title}</h4>
@@ -376,8 +377,8 @@ const Files = ({
                 <li>{FileUtils.getFullFileSizeString(blob.byte_size)}</li>
               </ul>
             </div>
-          </div>
-          <div className="actions">
+          </RowContent>
+          <RowActions>
             <NavigationButton outline href={Routes.s3_utility_cdn_url_for_blob_path({ key: blob.key })} target="_blank">
               View
             </NavigationButton>
@@ -392,10 +393,10 @@ const Files = ({
                 <Icon name="trash2" />
               </Button>
             ) : null}
-          </div>
-        </div>
+          </RowActions>
+        </Row>
       ))}
-    </div>
+    </Rows>
   );
 };
 

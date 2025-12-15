@@ -15,6 +15,7 @@ import { Modal } from "$app/components/Modal";
 import { MenuItem } from "$app/components/RichTextEditor";
 import { showAlert } from "$app/components/server-components/Alert";
 import { createInsertCommand } from "$app/components/TiptapExtensions/utils";
+import { Row, RowActions, RowContent, RowDetails } from "$app/components/ui/Rows";
 
 declare module "@tiptap/core" {
   interface Commands<ReturnType> {
@@ -245,9 +246,9 @@ export const ExternalMediaFileEmbed = TiptapNode.create({
   addNodeView() {
     return ReactNodeViewRenderer(({ editor, node, deleteNode }: NodeViewProps) => (
       <NodeViewWrapper>
-        <div className="embed">
-          <div className="preview" dangerouslySetInnerHTML={{ __html: sanitizeHtml(cast(node.attrs.html)) }}></div>
-          <div className="content">
+        <Row className="embed">
+          <RowDetails className="preview" dangerouslySetInnerHTML={{ __html: sanitizeHtml(cast(node.attrs.html)) }} />
+          <RowContent className="content">
             <Icon name="file-earmark-play-fill" className="type-icon" />
             <div>
               <h4 className="text-singleline">{node.attrs.title}</h4>
@@ -259,15 +260,15 @@ export const ExternalMediaFileEmbed = TiptapNode.create({
                 </div>
               ) : null}
             </div>
-          </div>
+          </RowContent>
           {editor.isEditable ? (
-            <div className="actions">
+            <RowActions>
               <Button color="danger" outline aria-label="Remove" onClick={deleteNode}>
                 <Icon name="trash2" />
               </Button>
-            </div>
+            </RowActions>
           ) : null}
-        </div>
+        </Row>
       </NodeViewWrapper>
     ));
   },

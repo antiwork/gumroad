@@ -5,6 +5,7 @@ import { cast } from "ts-safe-cast";
 
 import { createConsumptionEvent } from "$app/data/consumption_analytics";
 import { trackMediaLocationChanged } from "$app/data/media_location";
+import { classNames } from "$app/utils/classNames";
 import { humanizedDuration } from "$app/utils/duration";
 import FileUtils from "$app/utils/file";
 import { createJWPlayer } from "$app/utils/jwPlayer";
@@ -24,6 +25,7 @@ import {
   useMediaUrls,
   usePurchaseInfo,
 } from "$app/components/server-components/DownloadPage/WithContent";
+import { Row, RowActions, RowContent, RowDetails, Rows } from "$app/components/ui/Rows";
 import { useOnOutsideClick } from "$app/components/useOnOutsideClick";
 import { useRefToLatest } from "$app/components/useRefToLatest";
 import { WithTooltip } from "$app/components/WithTooltip";
@@ -86,7 +88,7 @@ export const FileList = ({ content_items }: Props) => {
   );
 
   return (
-    <div role="tree" aria-label="Files">
+    <Rows role="tree" aria-label="Files">
       {content_items.map((item) =>
         item.type === "folder" ? (
           <FolderRow key={`folder${item.id}`} folder={item}>
@@ -96,7 +98,7 @@ export const FileList = ({ content_items }: Props) => {
           getFileRow(item)
         ),
       )}
-    </div>
+    </Rows>
   );
 };
 
@@ -104,13 +106,16 @@ const FolderRow = ({ folder, children }: { folder: FolderItem; children: React.R
   const [isExpanded, setIsExpanded] = React.useState(false);
 
   return (
-    <div role="treeitem" aria-expanded={isExpanded}>
-      <div className="content" onClick={() => setIsExpanded(!isExpanded)}>
+    <Row role="treeitem" aria-expanded={isExpanded}>
+      <RowContent onClick={() => setIsExpanded(!isExpanded)}>
+        <Icon name={isExpanded ? "outline-cheveron-down" : "outline-cheveron-right"} />
         <Icon name="solid-folder-open" className="type-icon" />
         <h4>{folder.name}</h4>
-      </div>
-      <div role="group">{children}</div>
-    </div>
+      </RowContent>
+      <RowDetails role="group" className={classNames({ hidden: !isExpanded })}>
+        {children}
+      </RowDetails>
+    </Row>
   );
 };
 
@@ -192,22 +197,27 @@ export const FileRow = ({
   const isEmbeddedVideo = isEmbed && !!streamUrl;
 
   return (
-    <div
+    <Row
       className={cx({ embed: isEmbed }, className)}
       role={isTreeItem || shouldShowSubtitlesForFile(file) ? "treeitem" : undefined}
       aria-expanded={shouldShowSubtitlesForFile(file) ? isExpanded : undefined}
     >
       {isEmbeddedVideo && !isCollapsed ? (
-        <VideoEmbedPreview
-          file={file}
-          resumeLocation={resumeLocation}
-          setResumeLocation={setResumeLocation}
-          fetchMediaUrls={fetchMediaUrls}
-          isFetchingMediaUrls={isFetchingMediaUrls}
-          autoPlay={initialCollapsed}
-        />
+        <RowDetails asChild>
+          <VideoEmbedPreview
+            file={file}
+            resumeLocation={resumeLocation}
+            setResumeLocation={setResumeLocation}
+            fetchMediaUrls={fetchMediaUrls}
+            isFetchingMediaUrls={isFetchingMediaUrls}
+            autoPlay={initialCollapsed}
+          />
+        </RowDetails>
       ) : null}
-      <div className="content" onClick={() => setIsExpanded(!isExpanded)}>
+      <RowContent onClick={() => setIsExpanded(!isExpanded)}>
+        {shouldShowSubtitlesForFile(file) ? (
+          <Icon name={isExpanded ? "outline-cheveron-down" : "outline-cheveron-right"} />
+        ) : null}
         {isEmbeddedVideo && file.thumbnail_url && isCollapsed ? (
           <div className="thumbnail">
             <img src={file.thumbnail_url} />
@@ -238,9 +248,9 @@ export const FileRow = ({
             </>
           }
         />
-      </div>
+      </RowContent>
 
-      <div className="actions">
+      <RowActions>
         {file.latest_media_location && file.content_length ? (
           <div>
             <ProgressPie progress={file.latest_media_location.location / file.content_length} />
@@ -323,10 +333,10 @@ export const FileRow = ({
             ) : null}
           </>
         ) : null}
-      </div>
+      </RowActions>
 
       {FileUtils.isAudioExtension(file.extension) && isShowingAudioDrawer ? (
-        <div className="drawer">
+        <RowDetails className="drawer">
           <AudioPlayerContainer
             fileId={file.id}
             playingAudioForId={playingAudioForId}
@@ -335,7 +345,7 @@ export const FileRow = ({
             setResumeLocation={setResumeLocation}
             contentLength={file.content_length}
           />
-        </div>
+        </RowDetails>
       ) : null}
 
       {file.kindle_data != null && isShowingKindleDrawer ? (
@@ -348,15 +358,17 @@ export const FileRow = ({
       ) : null}
 
       {shouldShowSubtitlesForFile(file) ? (
-        <div role="group">
-          {file.subtitle_files?.map((subtitleFile) => (
-            <SubtitleRow key={subtitleFile.url} subtitleFile={subtitleFile} />
-          ))}
-        </div>
+        <RowDetails role="group" className={classNames({ hidden: !isExpanded })}>
+          <Rows role="list">
+            {file.subtitle_files?.map((subtitleFile) => (
+              <SubtitleRow key={subtitleFile.url} subtitleFile={subtitleFile} />
+            ))}
+          </Rows>
+        </RowDetails>
       ) : null}
 
       {file.description?.trim() ? <p style={{ whiteSpace: "pre-wrap" }}>{file.description}</p> : null}
-    </div>
+    </Row>
   );
 };
 
@@ -441,7 +453,7 @@ const MobileAppAudioFileRow = ({ file }: { file: FileItem }) => {
   const isProcessing = file.duration === null;
 
   return (
-    <div ref={selfRef} className="embed" {...touchAndHoldEventListeners}>
+    <Row ref={selfRef} className="embed" {...touchAndHoldEventListeners}>
       <WithTooltip tip={showTooltip ? file.file_name : null} position="top">
         <TrackClick
           eventName="play_click"
@@ -451,39 +463,41 @@ const MobileAppAudioFileRow = ({ file }: { file: FileItem }) => {
           resumeAt={latestMediaLocation || 0}
           contentLength={file.duration || 0}
         >
-          <button
-            className={cx("content", { "text-muted": isProcessing })}
-            style={{
-              gridColumn: "3 span",
-              userSelect: "none",
-              WebkitUserSelect: "none",
-              WebkitTouchCallout: "none",
-              outline: "none",
-            }}
-            disabled={isProcessing}
-          >
-            <FileRowContent
-              hideIcon
-              extension={file.extension}
-              name={file.file_name}
-              externalLinkUrl={file.external_link_url}
-              details={
-                isProcessing ? (
-                  <li>Processing...</li>
-                ) : (
-                  <>
-                    {file.extension ? <li>{file.extension}</li> : null}
-                    {file.file_size ? <li>{FileUtils.getFullFileSizeString(file.file_size)}</li> : null}
-                    {file.duration ? <li>{humanizedDuration(file.duration)}</li> : null}
-                  </>
-                )
-              }
-            />
-          </button>
+          <RowContent asChild>
+            <button
+              className={classNames("content", { "text-muted": isProcessing })}
+              style={{
+                gridColumn: "3 span",
+                userSelect: "none",
+                WebkitUserSelect: "none",
+                WebkitTouchCallout: "none",
+                outline: "none",
+              }}
+              disabled={isProcessing}
+            >
+              <FileRowContent
+                hideIcon
+                extension={file.extension}
+                name={file.file_name}
+                externalLinkUrl={file.external_link_url}
+                details={
+                  isProcessing ? (
+                    <li>Processing...</li>
+                  ) : (
+                    <>
+                      {file.extension ? <li>{file.extension}</li> : null}
+                      {file.file_size ? <li>{FileUtils.getFullFileSizeString(file.file_size)}</li> : null}
+                      {file.duration ? <li>{humanizedDuration(file.duration)}</li> : null}
+                    </>
+                  )
+                }
+              />
+            </button>
+          </RowContent>
         </TrackClick>
       </WithTooltip>
-      <div
-        className={cx("actions", { "text-muted": isProcessing })}
+      <RowActions
+        className={classNames({ "text-muted": isProcessing })}
         style={{ gridColumn: "4", gap: "var(--spacer-4)", flexWrap: "nowrap" }}
       >
         {file.download_url ? (
@@ -527,31 +541,33 @@ const MobileAppAudioFileRow = ({ file }: { file: FileItem }) => {
             </button>
           )}
         </TrackClick>
-      </div>
-      {!isCompleted &&
-      latestMediaLocation !== null &&
-      (isPlaying || latestMediaLocation > 0) &&
-      file.duration &&
-      file.duration > 0 ? (
-        <div style={{ display: "grid", gridColumn: "4 span", gap: "var(--spacer-1)" }}>
-          <meter
-            value={latestMediaLocation / file.duration}
-            className="border-0"
-            style={{
-              ...{
-                background: "var(--active-bg)",
-                height: "var(--spacer-1)",
-              },
-              ...(isPlaying ? {} : { "--optimum-value-background": "currentColor" }),
-            }}
-          />
-          <small>{humanizedDuration(file.duration - latestMediaLocation)} left</small>
-        </div>
-      ) : null}
-      {file.description?.trim() ? (
-        <p style={{ gridColumn: "4 span", whiteSpace: "pre-wrap" }}>{file.description}</p>
-      ) : null}
-    </div>
+      </RowActions>
+      <RowDetails>
+        {!isCompleted &&
+        latestMediaLocation !== null &&
+        (isPlaying || latestMediaLocation > 0) &&
+        file.duration &&
+        file.duration > 0 ? (
+          <div style={{ display: "grid", gridColumn: "4 span", gap: "var(--spacer-1)" }}>
+            <meter
+              value={latestMediaLocation / file.duration}
+              className="border-0"
+              style={{
+                ...{
+                  background: "var(--active-bg)",
+                  height: "var(--spacer-1)",
+                },
+                ...(isPlaying ? {} : { "--optimum-value-background": "currentColor" }),
+              }}
+            />
+            <small>{humanizedDuration(file.duration - latestMediaLocation)} left</small>
+          </div>
+        ) : null}
+        {file.description?.trim() ? (
+          <p style={{ gridColumn: "4 span", whiteSpace: "pre-wrap" }}>{file.description}</p>
+        ) : null}
+      </RowDetails>
+    </Row>
   );
 };
 
@@ -564,6 +580,7 @@ type VideoEmbedPreviewProps = {
   fetchMediaUrls: () => Promise<void>;
   isFetchingMediaUrls: boolean;
   autoPlay?: boolean;
+  className?: string;
 };
 const VideoEmbedPreview = ({
   file,
@@ -572,6 +589,7 @@ const VideoEmbedPreview = ({
   fetchMediaUrls,
   isFetchingMediaUrls,
   autoPlay = false,
+  className,
 }: VideoEmbedPreviewProps) => {
   const [isVideoPlayerShowing, setIsVideoPlayerShowing] = React.useState(false);
   const [duration, setDuration] = React.useState(0);
@@ -652,11 +670,11 @@ const VideoEmbedPreview = ({
   }, [autoPlay]);
 
   return isVideoPlayerShowing ? (
-    <div className="preview">
+    <div className={classNames("preview", className)}>
       <div id={videoPlayerId}></div>
     </div>
   ) : (
-    <figure className="preview">
+    <figure className={classNames("preview", className)}>
       <img
         src={file.thumbnail_url ?? thumbnailPlaceholder}
         style={{
@@ -752,18 +770,18 @@ const SendToKindleContainer = ({
 };
 
 const SubtitleRow = ({ subtitleFile }: { subtitleFile: SubtitleFile }) => (
-  <div role="treeitem">
-    <div className="content">
+  <Row role="listitem">
+    <RowContent>
       <FileRowContent
         extension={subtitleFile.extension}
         name={`${subtitleFile.file_name} (${subtitleFile.language})`}
         externalLinkUrl={null}
         details={subtitleFile.file_size ? <li>{FileUtils.getFullFileSizeString(subtitleFile.file_size)}</li> : null}
       />
-    </div>
+    </RowContent>
 
-    <div className="actions">
+    <RowActions>
       <NavigationButton href={subtitleFile.download_url}>Download</NavigationButton>
-    </div>
-  </div>
+    </RowActions>
+  </Row>
 );

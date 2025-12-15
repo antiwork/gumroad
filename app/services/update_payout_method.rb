@@ -194,7 +194,7 @@ class UpdatePayoutMethod
     end
 
     def paypal_payouts_supported?
-      !user.native_payouts_supported? || switching_to_uae_individual_account?
+      user.can_setup_paypal_payouts? || switching_to_uae_individual_account?
     end
 
     def switching_to_uae_individual_account?

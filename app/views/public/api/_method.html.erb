@@ -1,9 +1,9 @@
 <div id="<%= "#{method[:type]}-#{method[:path]}" %>">
   <div class="flex flex-col gap-4">
-    <p role="heading" aria-level="3">
-      <span class="pill primary"><%= method[:type].upcase %></span>
+    <div role="heading" aria-level="3" class="flex items-center gap-2">
+      <%= react_component "Pill", props: {color: "primary", children: method[:type].upcase }, prerender: true %>
       <span><%= method[:path] %></span>
-    </p>
+    </div>
     <p><%= method[:description].html_safe %></p>
     <%= react_component "CodeSnippet", props: {
           children: method[:is_oauth].present? ? "https://gumroad.com#{method[:path]}" : "https://api.gumroad.com/v2#{method[:path]}"
