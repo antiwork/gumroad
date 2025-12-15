@@ -20,7 +20,7 @@ class AdminSearchService
         unions << Purchase.select("purchases.id as purchase_id").where(id: purchase_id).to_sql
       end
 
-      if query.to_i.to_s == query
+      if !Purchase.external_id?(query)
         unions << Purchase.select("purchases.id as purchase_id").where(id: query.to_i).to_sql
       end
 

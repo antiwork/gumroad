@@ -134,9 +134,8 @@ class Admin::PurchasesController < Admin::BaseController
 
   def update_giftee_email
     new_giftee_email = params[:giftee_email]
-    gift = Gift.find_by(gifter_purchase_id: @purchase.id)
 
-    if gift.present? && new_giftee_email != gift.giftee_email
+    if (gift = @purchase.gift_given).present? && new_giftee_email != gift.giftee_email
       giftee_purchase = Purchase.find_by(id: gift.giftee_purchase_id)
       if giftee_purchase.present?
         gift.update!(giftee_email: new_giftee_email)
@@ -155,7 +154,7 @@ class Admin::PurchasesController < Admin::BaseController
 
   private
     def fetch_purchase
-      if params[:external_id].to_i.to_s == params[:external_id] && purchase = Purchase.find_by(id: params[:external_id])
+      if !Purchase.external_id?(params[:external_id]) && purchase = Purchase.find_by(id: params[:external_id])
         return redirect_to admin_purchase_path(purchase.external_id)
       end
 
