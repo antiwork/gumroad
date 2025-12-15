@@ -206,6 +206,7 @@ class Link < ApplicationRecord
   validate :commission_price_is_valid, if: -> { native_type == Link::NATIVE_TYPE_COMMISSION }
   validate :one_coffee_per_user, on: :create, if: -> { native_type == Link::NATIVE_TYPE_COFFEE }
   validate :quantity_enabled_state_is_allowed
+  validate :default_offer_code_must_be_valid
 
   validates_associated :installment_plan, message: -> (link, _) { link.installment_plan.errors.full_messages.first }
 
@@ -1226,6 +1227,19 @@ class Link < ApplicationRecord
       return if licensed_product_with_duplicate_permalink.empty?
 
       errors.add(:custom_permalink, :taken)
+    end
+
+    def default_offer_code_must_be_valid
+      return unless default_offer_code.present?
+
+      unless user.offer_codes.alive.include?(default_offer_code)
+        errors.add(:default_offer_code, "must belong to your offer codes")
+        return
+      end
+
+      unless offer_codes.include?(default_offer_code) || default_offer_code.universal?
+        errors.add(:default_offer_code, "must be associated with this product or be universal")
+      end
     end
 
     def enforce_user_email_confirmation!

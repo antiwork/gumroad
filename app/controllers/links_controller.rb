@@ -728,14 +728,8 @@ class LinksController < ApplicationController
     def update_default_offer_code
       default_offer_code_id = product_permitted_params[:default_offer_code_id]
 
-      unless default_offer_code_id.present?
-        @product.default_offer_code = nil
-        return
-      end
-
-      offer_code = @product.user.offer_codes.alive.find_by_external_id(default_offer_code_id)
-
-      if offer_code && (@product.offer_codes.include?(offer_code) || offer_code.universal?)
+      if default_offer_code_id.present?
+        offer_code = @product.user.offer_codes.alive.find_by_external_id(default_offer_code_id)
         @product.default_offer_code = offer_code
       else
         @product.default_offer_code = nil
