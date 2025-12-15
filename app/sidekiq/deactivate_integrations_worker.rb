@@ -7,9 +7,7 @@ class DeactivateIntegrationsWorker
   def perform(purchase_id)
     purchase = Purchase.find(purchase_id)
 
-    purchases_to_process(purchase).each do |target_purchase|
-      deactivate_integrations(target_purchase)
-    end
+    purchases_to_process(purchase).each { deactivate_integrations(_1) }
   end
 
   private
