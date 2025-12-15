@@ -68,9 +68,8 @@ class GenerateSalesReportJob
       update_job_status_to_completed(country_code, start_time, end_time, sales_type, s3_signed_url)
 
       if send_slack_notification
-        message = "#{country.common_name} sales report (#{start_time_of_quarter.to_date} to #{end_time_of_quarter.to_date}) is ready - #{s3_signed_url}"
-        NotificationWorker.perform_async("payments", slack_sender(country_code), message, "green")
-        update_job_status_to_completed(country_code, start_time_of_quarter, end_time_of_quarter, s3_signed_url)
+        message = "#{country.common_name} sales report (#{start_time.to_date} to #{end_time.to_date}) is ready - #{s3_signed_url}"
+        NotificationMailer.perform_async("payments", slack_sender(country_code), message, "green")
       end
     ensure
       temp_file.close
