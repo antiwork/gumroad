@@ -16,6 +16,14 @@ class AdminSearchService
         Purchase.select("purchases.id as purchase_id").where(ip_address: query).to_sql,
       ]
 
+      if (purchase_id = Purchase.from_external_id(query))
+        unions << Purchase.select("purchases.id as purchase_id").where(id: purchase_id).to_sql
+      end
+
+      if !Purchase.external_id?(query)
+        unions << Purchase.select("purchases.id as purchase_id").where(id: query.to_i).to_sql
+      end
+
       union_sql = <<~SQL.squish
         SELECT purchase_id FROM (
           #{ unions.map { |u| "(#{u})" }.join(" UNION ") }
@@ -58,7 +66,7 @@ class AdminSearchService
       purchases = purchases.where(id: license.purchase_id)
     end
 
-    if [transaction_date, last_4, card_type, price, expiry_date].any?
+    if [transaction_date, last_4, card_type, price, expiry_date].any?(&:present?)
       purchases = purchases.where.not(stripe_fingerprint: nil)
 
       if transaction_date.present?
@@ -78,43 +86,6 @@ class AdminSearchService
     end
 
     purchases.limit(limit)
-  end
-
-  def search_service_charges(query: nil, creator_email: nil, transaction_date: nil, last_4: nil, card_type: nil, price: nil, expiry_date: nil, limit: nil)
-    service_charges = ServiceCharge.order(created_at: :desc)
-
-    if query.present?
-      service_charges = service_charges.joins(:user).where(users: { email: query })
-    end
-
-    if creator_email.present?
-      user = User.find_by(email: creator_email)
-      return ServiceCharge.none unless user
-      service_charges = service_charges.where(user_id: user.id)
-    end
-
-    if [transaction_date, last_4, card_type, price, expiry_date].any?
-      service_charges = service_charges.where.not(charge_processor_fingerprint: nil)
-
-      if transaction_date.present?
-        formatted_date = parse_date!(transaction_date)
-        start_date = (formatted_date - 1.days).beginning_of_day.to_fs(:db)
-        end_date = (formatted_date + 1.days).end_of_day.to_fs(:db)
-        service_charges = service_charges.where("created_at between ? and ?", start_date, end_date)
-      end
-
-      service_charges = service_charges.where(card_type:) if card_type.present?
-      service_charges = service_charges.where(card_visual_sql_finder(last_4)) if last_4.present?
-      service_charges = service_charges.where("charge_cents between ? and ?", (price.to_d * 75).to_i, (price.to_d * 125).to_i) if price.present?
-
-      if expiry_date.present?
-        expiry_month, expiry_year = CreditCardUtility.extract_month_and_year(expiry_date)
-        service_charges = service_charges.where(card_expiry_year: "20#{expiry_year}") if expiry_year.present?
-        service_charges = service_charges.where(card_expiry_month: expiry_month) if expiry_month.present?
-      end
-    end
-
-    service_charges.limit(limit)
   end
 
   private

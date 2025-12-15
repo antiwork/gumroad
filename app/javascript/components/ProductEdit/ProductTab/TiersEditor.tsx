@@ -35,6 +35,11 @@ import { WithTooltip } from "$app/components/WithTooltip";
 
 let newTierId = 0;
 
+const areAllEnabledPricesZero = (recurrencePriceValues: Record<string, RecurrencePriceValue>): boolean => {
+  const enabledPrices = Object.values(recurrencePriceValues).filter((value) => value.enabled);
+  return enabledPrices.length > 0 && enabledPrices.every((value) => !value.price_cents || value.price_cents === 0);
+};
+
 export const TiersEditor = ({ tiers, onChange }: { tiers: Tier[]; onChange: (tiers: Tier[]) => void }) => {
   const updateVersion = (id: string, update: Partial<Tier>) => {
     onChange(tiers.map((version) => (version.id === id ? { ...version, ...update } : version)));
@@ -141,13 +146,17 @@ const TierEditor = ({
 
   const url = useProductUrl({ option: tier.id });
 
-  const updateRecurrencePriceValue = (recurrence: RecurrenceId, update: Partial<RecurrencePriceValue>) =>
+  const updateRecurrencePriceValue = (recurrence: RecurrenceId, update: Partial<RecurrencePriceValue>) => {
+    const updatedRecurrencePriceValues = {
+      ...tier.recurrence_price_values,
+      [recurrence]: { ...tier.recurrence_price_values[recurrence], ...update },
+    };
+
     updateTier({
-      recurrence_price_values: {
-        ...tier.recurrence_price_values,
-        [recurrence]: { ...tier.recurrence_price_values[recurrence], ...update },
-      },
+      recurrence_price_values: updatedRecurrencePriceValues,
+      ...(areAllEnabledPricesZero(updatedRecurrencePriceValues) && { customizable_price: true }),
     });
+  };
 
   const defaultRecurrencePriceValue = product.subscription_duration
     ? tier.recurrence_price_values[product.subscription_duration]
@@ -175,6 +184,8 @@ const TierEditor = ({
   const integrations = Object.entries(product.integrations)
     .filter(([_, enabled]) => enabled)
     .map(([name]) => name);
+
+  const allEnabledPricesAreZero = areAllEnabledPricesZero(tier.recurrence_price_values);
 
   return (
     <Row role="listitem">
@@ -276,11 +287,17 @@ const TierEditor = ({
                 </div>
               ))}
             </fieldset>
+            {allEnabledPricesAreZero ? (
+              <div role="alert" className="info">
+                Free tiers require a pay what they want price.
+              </div>
+            ) : null}
             <Details
               summary={
                 <Toggle
                   value={tier.customizable_price}
                   onChange={(customizable_price) => updateTier({ customizable_price })}
+                  disabled={allEnabledPricesAreZero}
                 >
                   Allow customers to pay what they want
                 </Toggle>

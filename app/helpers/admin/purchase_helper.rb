@@ -20,7 +20,7 @@ module Admin::PurchaseHelper
     last_chargebacked_purchase = purchase.find_past_chargebacked_purchases.first
 
     if last_chargebacked_purchase.present?
-      "(#{link_to(formatted_error_code, admin_purchase_path(last_chargebacked_purchase))})".html_safe
+      "(#{link_to(formatted_error_code, admin_purchase_path(last_chargebacked_purchase.external_id))})".html_safe
     else
       "(#{formatted_error_code})"
     end

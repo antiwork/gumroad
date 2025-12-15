@@ -16,6 +16,7 @@ import { Button } from "$app/components/Button";
 import { Icon } from "$app/components/Icons";
 import { NumberInput } from "$app/components/NumberInput";
 import { TagInput } from "$app/components/TagInput";
+import { Pill } from "$app/components/ui/Pill";
 import { WithTooltip } from "$app/components/WithTooltip";
 import {
   Layout,
@@ -525,7 +526,7 @@ const WorkflowForm = ({ context, workflow }: WorkflowFormProps) => {
                 >
                   {(inputProps) => (
                     <div className={cx("input", { disabled: wasPublishedPreviously })}>
-                      <div className="pill">{context.currency_symbol}</div>
+                      <Pill className="-ml-2 shrink-0">{context.currency_symbol}</Pill>
                       <input
                         id="paid_more_than"
                         type="text"
@@ -549,7 +550,7 @@ const WorkflowForm = ({ context, workflow }: WorkflowFormProps) => {
                 >
                   {(inputProps) => (
                     <div className={cx("input", { disabled: wasPublishedPreviously })}>
-                      <div className="pill">{context.currency_symbol}</div>
+                      <Pill className="-ml-2 shrink-0">{context.currency_symbol}</Pill>
                       <input
                         id="paid_less_than"
                         type="text"
