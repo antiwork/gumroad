@@ -34,4 +34,3 @@ class AcmeChallengesController < ApplicationController
       token.present? && token.length <= MAX_TOKEN_LENGTH && token.match?(VALID_TOKEN_PATTERN)
     end
 end
-

@@ -49,4 +49,3 @@ describe AcmeChallengesController do
     end
   end
 end
-
