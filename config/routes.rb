@@ -19,6 +19,8 @@ Rails.application.routes.draw do
   get "/healthcheck" => "healthcheck#index"
   get "/healthcheck/sidekiq" => "healthcheck#sidekiq"
 
+  get "/.well-known/acme-challenge/:token", to: "acme_challenges#show", as: :acme_challenge
+
   use_doorkeeper do
     controllers applications: "oauth/applications"
     controllers authorized_applications: "oauth/authorized_applications"
