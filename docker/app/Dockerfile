@@ -58,12 +58,6 @@ RUN apt-get update -y -qq \
     && corepack enable \
     && npm install -g npm@10.8.2 \
     \
-    # Update ImageMagick configuration
-    && sed -r 's/(name="memory" value=")[^"]+"/\11GiB"/' -i /etc/ImageMagick-6/policy.xml \
-    && sed -r 's/(name="disk" value=")[^"]+"/\18GiB"/' -i /etc/ImageMagick-6/policy.xml \
-    && sed -r 's/(name="width" value=")[^"]+"/\150KP"/' -i /etc/ImageMagick-6/policy.xml \
-    && sed -r 's/(name="height" value=")[^"]+"/\150KP"/' -i /etc/ImageMagick-6/policy.xml \
-    \
     # Cleanup
     && apt-get clean autoclean \
     && apt-get autoremove -y \
