@@ -163,7 +163,6 @@ ReactOnRails.register({
   ProfileWishlistPage,
   PublicChargePage,
   PublicLicenseKeyPage,
-
   SecureRedirectPage,
   SignupPage,
   SubscribePage,
