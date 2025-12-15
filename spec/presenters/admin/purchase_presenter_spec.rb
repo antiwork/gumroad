@@ -15,7 +15,6 @@ describe Admin::PurchasePresenter do
       describe "fields" do
         it "returns the correct field values" do
           expect(props).to match(
-            id: purchase.id,
             formatted_display_price: purchase.formatted_display_price,
             formatted_gumroad_tax_amount: nil,
             gumroad_responsible_for_tax: purchase.gumroad_responsible_for_tax?,

@@ -20,6 +20,24 @@ describe AdminSearchService do
       expect(purchases).to include(purchase_1, purchase_2, purchase_3)
     end
 
+    it "returns purchase when searching by external_id" do
+      purchase = create(:purchase)
+      other_purchase = create(:purchase)
+
+      purchases = AdminSearchService.new.search_purchases(query: purchase.external_id)
+      expect(purchases).to eq([purchase])
+      expect(purchases).not_to include(other_purchase)
+    end
+
+    it "returns purchase when searching by internal id" do
+      purchase = create(:purchase)
+      other_purchase = create(:purchase)
+
+      purchases = AdminSearchService.new.search_purchases(query: purchase.id.to_s)
+      expect(purchases).to eq([purchase])
+      expect(purchases).not_to include(other_purchase)
+    end
+
     it "returns purchases when searching by email with empty card parameters" do
       email = "user@example.com"
       purchase = create(:purchase, email:)
