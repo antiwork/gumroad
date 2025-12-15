@@ -1,13 +1,12 @@
-import { Link, router } from "@inertiajs/react";
+import { Link, useForm } from "@inertiajs/react";
 import cx from "classnames";
 import * as React from "react";
-import { cast, is } from "ts-safe-cast";
+import { is } from "ts-safe-cast";
 
-import { createUtmLink, getUniquePermalink, updateUtmLink } from "$app/data/utm_links";
-import type { UtmLinkFormContext, UtmLinkDestinationOption, UtmLink, SavedUtmLink } from "$app/types/utm_link";
+import { getUniquePermalink } from "$app/data/utm_links";
+import type { UtmLinkFormContext, UtmLink, SavedUtmLink } from "$app/types/utm_link";
 import { assertDefined } from "$app/utils/assert";
 import { asyncVoid } from "$app/utils/promise";
-import { ResponseError } from "$app/utils/request";
 
 import { Button } from "$app/components/Button";
 import { CopyToClipboard } from "$app/components/CopyToClipboard";
@@ -40,17 +39,27 @@ type UtmLinkFormProps = {
   utm_link: UtmLink | SavedUtmLink | null;
 };
 
+const getInitialDestinationId = (utmLink: UtmLink | SavedUtmLink | null): string | null => {
+  return utmLink?.destination_option?.id ?? null;
+};
+
+const parseDestinationId = (destinationId: string | null) => {
+  if (!destinationId) return { targetResourceType: null, targetResourceId: null };
+
+  if (["profile_page", "subscribe_page"].includes(destinationId)) {
+    return { targetResourceType: destinationId, targetResourceId: null };
+  }
+
+  const parts = destinationId.split(/-(.*)/u);
+  return { targetResourceType: parts[0], targetResourceId: parts[1] ?? null };
+};
+
 export const UtmLinkForm = ({ context, utm_link }: UtmLinkFormProps) => {
   const isEditing = utm_link?.id !== undefined;
   const isDuplicating = utm_link !== null && utm_link.id === undefined;
   const uid = React.useId();
-  const [title, setTitle] = React.useState(isDuplicating ? duplicatedTitle(utm_link.title) : (utm_link?.title ?? ""));
-  const [destination, setDestination] = React.useState<UtmLinkDestinationOption | null>(
-    utm_link?.destination_option?.id
-      ? (context.destination_options.find((o) => o.id === assertDefined(utm_link.destination_option).id) ?? null)
-      : null,
-  );
-  const [{ shortUrlProtocol, shortUrlPrefix, permalink }, setShortUrl] = React.useState(() => {
+
+  const initialShortUrl = React.useMemo(() => {
     const { protocol: shortUrlProtocol, host, pathname } = new URL(utm_link?.short_url ?? context.short_url);
     const permalinkValue = pathname.split("/").pop() ?? "";
     const shortUrlPrefixValue = host + pathname.slice(0, -permalinkValue.length);
@@ -59,15 +68,26 @@ export const UtmLinkForm = ({ context, utm_link }: UtmLinkFormProps) => {
       shortUrlPrefix: shortUrlPrefixValue,
       permalink: permalinkValue,
     };
+  }, []);
+
+  const form = useForm({
+    title: isDuplicating ? duplicatedTitle(utm_link.title) : (utm_link?.title ?? ""),
+    destination_id: getInitialDestinationId(utm_link),
+    permalink: initialShortUrl.permalink,
+    utm_source: utm_link?.source ?? "",
+    utm_medium: utm_link?.medium ?? "",
+    utm_campaign: utm_link?.campaign ?? "",
+    utm_term: utm_link?.term ?? "",
+    utm_content: utm_link?.content ?? "",
   });
+
+  const { shortUrlProtocol, shortUrlPrefix } = initialShortUrl;
   const [isLoadingNewPermalink, setIsLoadingNewPermalink] = React.useState(false);
-  const [utmSource, setUtmSource] = React.useState<string | null>(utm_link?.source ?? null);
-  const [utmMedium, setUtmMedium] = React.useState<string | null>(utm_link?.medium ?? null);
-  const [utmCampaign, setUtmCampaign] = React.useState<string | null>(utm_link?.campaign ?? null);
-  const [utmTerm, setUtmTerm] = React.useState<string | null>(utm_link?.term ?? null);
-  const [utmContent, setUtmContent] = React.useState<string | null>(utm_link?.content ?? null);
   const [errorInfo, setErrorInfo] = React.useState<ErrorInfo | null>(null);
-  const [isSaving, setIsSaving] = React.useState(false);
+
+  const destination = form.data.destination_id
+    ? (context.destination_options.find((o) => o.id === form.data.destination_id) ?? null)
+    : null;
 
   const titleRef = React.useRef<HTMLInputElement>(null);
   const destinationRef = React.useRef<HTMLFieldSetElement>(null);
@@ -93,31 +113,35 @@ export const UtmLinkForm = ({ context, utm_link }: UtmLinkFormProps) => {
     [],
   );
 
-  React.useEffect(
-    () => setErrorInfo(null),
-    [title, destination, permalink, utmSource, utmMedium, utmCampaign, utmTerm, utmContent],
-  );
+  React.useEffect(() => setErrorInfo(null), [form.data]);
 
   const finalUrl = React.useMemo(() => {
-    if (destination && utmSource && utmMedium && utmCampaign) {
+    if (destination && form.data.utm_source && form.data.utm_medium && form.data.utm_campaign) {
       const params = new URLSearchParams();
-      params.set("utm_source", utmSource);
-      params.set("utm_medium", utmMedium);
-      params.set("utm_campaign", utmCampaign);
-      if (utmTerm) params.set("utm_term", utmTerm);
-      if (utmContent) params.set("utm_content", utmContent);
+      params.set("utm_source", form.data.utm_source);
+      params.set("utm_medium", form.data.utm_medium);
+      params.set("utm_campaign", form.data.utm_campaign);
+      if (form.data.utm_term) params.set("utm_term", form.data.utm_term);
+      if (form.data.utm_content) params.set("utm_content", form.data.utm_content);
 
       return [destination.url, params.toString()].filter(Boolean).join("?");
     }
 
     return null;
-  }, [destination, utmSource, utmMedium, utmCampaign, utmTerm, utmContent]);
+  }, [
+    destination,
+    form.data.utm_source,
+    form.data.utm_medium,
+    form.data.utm_campaign,
+    form.data.utm_term,
+    form.data.utm_content,
+  ]);
 
   const generateNewPermalink = asyncVoid(async () => {
     setIsLoadingNewPermalink(true);
     try {
       const { permalink: newPermalink } = await getUniquePermalink();
-      setShortUrl((shortUrl) => ({ ...shortUrl, permalink: newPermalink }));
+      form.setData("permalink", newPermalink);
     } catch {
       showAlert("Sorry, something went wrong. Please try again.", "error");
     } finally {
@@ -130,7 +154,7 @@ export const UtmLinkForm = ({ context, utm_link }: UtmLinkFormProps) => {
   };
 
   const validate = () => {
-    if (title.trim().length === 0) {
+    if (form.data.title.trim().length === 0) {
       setErrorInfo({ attrName: "title", message: "Must be present" });
       titleRef.current?.focus();
       scrollToAttribute("title");
@@ -143,19 +167,19 @@ export const UtmLinkForm = ({ context, utm_link }: UtmLinkFormProps) => {
       return false;
     }
 
-    if (!utmSource || utmSource.trim().length === 0) {
+    if (!form.data.utm_source || form.data.utm_source.trim().length === 0) {
       setErrorInfo({ attrName: "utm_source", message: "Must be present" });
       scrollToAttribute("utm_source");
       return false;
     }
 
-    if (!utmMedium || utmMedium.trim().length === 0) {
+    if (!form.data.utm_medium || form.data.utm_medium.trim().length === 0) {
       setErrorInfo({ attrName: "utm_medium", message: "Must be present" });
       scrollToAttribute("utm_medium");
       return false;
     }
 
-    if (!utmCampaign || utmCampaign.trim().length === 0) {
+    if (!form.data.utm_campaign || form.data.utm_campaign.trim().length === 0) {
       setErrorInfo({ attrName: "utm_campaign", message: "Must be present" });
       scrollToAttribute("utm_campaign");
       return false;
@@ -165,67 +189,46 @@ export const UtmLinkForm = ({ context, utm_link }: UtmLinkFormProps) => {
     return true;
   };
 
-  const submit = asyncVoid(async () => {
+  const submit = () => {
     const isValid = validate();
     if (!isValid) return;
 
-    const destinationId = assertDefined(destination).id;
-    let targetResourceId = null;
-    let targetResourceType = null;
-    if (["profile_page", "subscribe_page"].includes(destinationId)) {
-      targetResourceType = destinationId;
-    } else {
-      const parts = destinationId.split(/-(.*)/u); // Split by first hyphen
-      targetResourceType = parts[0];
-      targetResourceId = parts[1] ?? null;
-    }
-
-    setIsSaving(true);
+    const { targetResourceType, targetResourceId } = parseDestinationId(form.data.destination_id);
 
     const requestPayload = {
-      title,
-      target_resource_type: targetResourceType,
-      target_resource_id: targetResourceId,
-      permalink,
-      utm_source: assertDefined(utmSource),
-      utm_medium: assertDefined(utmMedium),
-      utm_campaign: assertDefined(utmCampaign),
-      utm_term: utmTerm,
-      utm_content: utmContent,
+      utm_link: {
+        title: form.data.title,
+        target_resource_type: targetResourceType,
+        target_resource_id: targetResourceId,
+        permalink: form.data.permalink,
+        utm_source: form.data.utm_source,
+        utm_medium: form.data.utm_medium,
+        utm_campaign: form.data.utm_campaign,
+        utm_term: form.data.utm_term || null,
+        utm_content: form.data.utm_content || null,
+      },
     };
 
-    try {
-      if (isEditing) {
-        await updateUtmLink(assertDefined(utm_link.id), requestPayload);
-      } else {
-        await createUtmLink(requestPayload);
-      }
+    form.transform(() => requestPayload);
 
-      showAlert(isEditing ? "Link updated!" : "Link created!", "success");
-      router.visit(Routes.utm_links_dashboard_path());
-    } catch (error) {
-      const genericMessage = "Sorry, something went wrong. Please try again.";
-      if (error instanceof ResponseError) {
-        try {
-          const { error: message, attr_name } = cast<{ error: string; attr_name: string | null }>(
-            JSON.parse(error.message),
-          );
-          if (attr_name !== null && is<FieldAttrName>(attr_name)) {
-            setErrorInfo({ attrName: attr_name, message });
-            scrollToAttribute(attr_name);
-          } else {
-            showAlert(message, "error");
-          }
-        } catch {
-          showAlert(genericMessage, "error");
+    const options = {
+      onError: (errors: Record<string, string>) => {
+        const firstErrorKey = Object.keys(errors)[0];
+        if (firstErrorKey && is<FieldAttrName>(firstErrorKey)) {
+          setErrorInfo({ attrName: firstErrorKey, message: errors[firstErrorKey] ?? "Invalid value" });
+          scrollToAttribute(firstErrorKey);
+        } else {
+          showAlert("Sorry, something went wrong. Please try again.", "error");
         }
-      } else {
-        showAlert(genericMessage, "error");
-      }
-    } finally {
-      setIsSaving(false);
+      },
+    };
+
+    if (isEditing) {
+      form.patch(`/dashboard/utm_links/${assertDefined(utm_link.id)}`, options);
+    } else {
+      form.post("/dashboard/utm_links", options);
     }
-  });
+  };
 
   return (
     <Layout
@@ -237,8 +240,8 @@ export const UtmLinkForm = ({ context, utm_link }: UtmLinkFormProps) => {
             <Icon name="x-square" />
             Cancel
           </Link>
-          <Button color="accent" onClick={submit} disabled={isSaving}>
-            {isSaving ? "Saving..." : isEditing ? "Save changes" : "Add link"}
+          <Button color="accent" onClick={submit} disabled={form.processing}>
+            {form.processing ? "Saving..." : isEditing ? "Save changes" : "Add link"}
           </Button>
         </>
       }
@@ -260,9 +263,9 @@ export const UtmLinkForm = ({ context, utm_link }: UtmLinkFormProps) => {
               id={`title-${uid}`}
               type="text"
               placeholder="Title"
-              value={title}
+              value={form.data.title}
               ref={titleRef}
-              onChange={(e) => setTitle(e.target.value)}
+              onChange={(e) => form.setData("title", e.target.value)}
             />
             {errorInfo?.attrName === "title" ? <small>{errorInfo.message}</small> : null}
           </fieldset>
@@ -283,9 +286,7 @@ export const UtmLinkForm = ({ context, utm_link }: UtmLinkFormProps) => {
               value={destination}
               isMulti={false}
               isDisabled={isEditing}
-              onChange={(option) =>
-                setDestination(option ? (context.destination_options.find((o) => o.id === option.id) ?? null) : null)
-              }
+              onChange={(option) => form.setData("destination_id", option ? option.id : null)}
             />
             {errorInfo?.attrName === "target_resource_id" || errorInfo?.attrName === "target_resource_type" ? (
               <small>{errorInfo.message}</small>
@@ -301,7 +302,7 @@ export const UtmLinkForm = ({ context, utm_link }: UtmLinkFormProps) => {
                 <input
                   type="text"
                   id={`${uid}-link-text`}
-                  value={permalink}
+                  value={form.data.permalink}
                   readOnly
                   disabled={isEditing}
                   ref={permalinkRef}
@@ -310,7 +311,7 @@ export const UtmLinkForm = ({ context, utm_link }: UtmLinkFormProps) => {
               <div className="flex gap-2">
                 <CopyToClipboard
                   copyTooltip="Copy short link"
-                  text={`${shortUrlProtocol}//${shortUrlPrefix}${permalink}`}
+                  text={`${shortUrlProtocol}//${shortUrlPrefix}${form.data.permalink}`}
                 >
                   <Button type="button" aria-label="Copy short link">
                     <Icon name="link" />
@@ -350,8 +351,8 @@ export const UtmLinkForm = ({ context, utm_link }: UtmLinkFormProps) => {
                 id={`${uid}-source`}
                 placeholder="newsletter"
                 baseOptionValues={context.utm_fields_values.sources}
-                value={utmSource}
-                onChange={setUtmSource}
+                value={form.data.utm_source || null}
+                onChange={(value) => form.setData("utm_source", value ?? "")}
               />
               {errorInfo?.attrName === "utm_source" ? (
                 <small>{errorInfo.message}</small>
@@ -367,8 +368,8 @@ export const UtmLinkForm = ({ context, utm_link }: UtmLinkFormProps) => {
                 id={`${uid}-medium`}
                 placeholder="email"
                 baseOptionValues={context.utm_fields_values.mediums}
-                value={utmMedium}
-                onChange={setUtmMedium}
+                value={form.data.utm_medium || null}
+                onChange={(value) => form.setData("utm_medium", value ?? "")}
               />
               {errorInfo?.attrName === "utm_medium" ? (
                 <small>{errorInfo.message}</small>
@@ -385,8 +386,8 @@ export const UtmLinkForm = ({ context, utm_link }: UtmLinkFormProps) => {
               id={`${uid}-campaign`}
               placeholder="new-course-launch"
               baseOptionValues={context.utm_fields_values.campaigns}
-              value={utmCampaign}
-              onChange={setUtmCampaign}
+              value={form.data.utm_campaign || null}
+              onChange={(value) => form.setData("utm_campaign", value ?? "")}
             />
             {errorInfo?.attrName === "utm_campaign" ? (
               <small>{errorInfo.message}</small>
@@ -402,8 +403,8 @@ export const UtmLinkForm = ({ context, utm_link }: UtmLinkFormProps) => {
               id={`${uid}-term`}
               placeholder="photo-editing"
               baseOptionValues={context.utm_fields_values.terms}
-              value={utmTerm}
-              onChange={setUtmTerm}
+              value={form.data.utm_term || null}
+              onChange={(value) => form.setData("utm_term", value ?? "")}
             />
             {errorInfo?.attrName === "utm_term" ? (
               <small>{errorInfo.message}</small>
@@ -419,8 +420,8 @@ export const UtmLinkForm = ({ context, utm_link }: UtmLinkFormProps) => {
               id={`${uid}-content`}
               placeholder="video-ad"
               baseOptionValues={context.utm_fields_values.contents}
-              value={utmContent}
-              onChange={setUtmContent}
+              value={form.data.utm_content || null}
+              onChange={(value) => form.setData("utm_content", value ?? "")}
             />
             {errorInfo?.attrName === "utm_content" ? (
               <small>{errorInfo.message}</small>

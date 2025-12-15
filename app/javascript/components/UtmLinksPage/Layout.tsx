@@ -21,14 +21,14 @@ export const Layout = ({ title, actions, children, selectedTab = "utm_links" }: 
     <div>
       <PageHeader title={title} actions={actions}>
         <Tabs>
-          <Tab href={Routes.audience_dashboard_path()} isSelected={selectedTab === "following"} asChild>
+          <Tab isSelected={selectedTab === "following"} asChild>
             <Link href={Routes.audience_dashboard_path()}>Following</Link>
           </Tab>
-          <Tab href={Routes.sales_dashboard_path()} isSelected={selectedTab === "sales"} asChild>
+          <Tab isSelected={selectedTab === "sales"} asChild>
             <Link href={Routes.sales_dashboard_path()}>Sales</Link>
           </Tab>
           {user.policies.utm_link.index ? (
-            <Tab href={Routes.utm_links_dashboard_path()} isSelected={selectedTab === "utm_links"} asChild>
+            <Tab isSelected={selectedTab === "utm_links"} asChild>
               <Link href={Routes.utm_links_dashboard_path()}>Links</Link>
             </Tab>
           ) : null}
