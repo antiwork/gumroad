@@ -24,6 +24,7 @@ import {
   CartItemEnd,
 } from "$app/components/CartItemList";
 import { PaymentForm } from "$app/components/Checkout/PaymentForm";
+import { Icon } from "$app/components/Icons";
 import { Popover } from "$app/components/Popover";
 import { Card } from "$app/components/Product/Card";
 import {
@@ -35,6 +36,7 @@ import {
 import { Thumbnail } from "$app/components/Product/Thumbnail";
 import { showAlert } from "$app/components/server-components/Alert";
 import { PageHeader } from "$app/components/ui/PageHeader";
+import { Pill } from "$app/components/ui/Pill";
 import Placeholder from "$app/components/ui/Placeholder";
 import { ProductCardGrid } from "$app/components/ui/ProductCardGrid";
 import { useIsAboveBreakpoint } from "$app/components/useIsAboveBreakpoint";
@@ -280,18 +282,21 @@ export const Checkout = ({
                             tip="This discount is applied based on the cost of living in your country."
                             position="top"
                           >
-                            <button
-                              className="pill small dismissable"
-                              onClick={() => updateCart({ rejectPppDiscount: true })}
-                              aria-label="Purchasing power parity discount"
-                            >
-                              Purchasing power parity discount
-                            </button>
+                            <Pill asChild size="small" className="cursor-pointer">
+                              <button
+                                onClick={() => updateCart({ rejectPppDiscount: true })}
+                                aria-label="Purchasing power parity discount"
+                              >
+                                Purchasing power parity discount
+                                <Icon name="x" className="ml-2" />
+                              </button>
+                            </Pill>
                           </WithTooltip>
                         ) : null}
                         {visibleDiscounts.map((code) => (
-                          <div
-                            className="pill small dismissable"
+                          <Pill
+                            size="small"
+                            className="cursor-pointer"
                             onClick={() =>
                               updateCart({ discountCodes: cart.discountCodes.filter((item) => item !== code) })
                             }
@@ -299,7 +304,8 @@ export const Checkout = ({
                             aria-label="Discount code"
                           >
                             {code.code}
-                          </div>
+                            <Icon name="x" className="ml-2" />
+                          </Pill>
                         ))}
                       </h4>
                       {discount > 0 ? <div>{formatPrice(-discount)}</div> : null}
