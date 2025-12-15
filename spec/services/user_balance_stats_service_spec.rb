@@ -5,7 +5,7 @@ require "spec_helper"
 describe UserBalanceStatsService do
   let(:user) { create(:user) }
   let(:instance) { described_class.new(user:) }
-  let(:example_values) { { foo: "bar", nested: { key: "value" }, items: ["item1", "item2"] } }
+  let(:example_values) { { foo: "bar", nested: { key1: { key2: "value2" } }, records: [{ id: 1, name: "first" }, { id: 2, name: "second" }] } }
 
   describe "#generate" do
     # We're not actually testing the values generated here.
