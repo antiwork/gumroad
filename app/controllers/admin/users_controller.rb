@@ -74,8 +74,8 @@ class Admin::UsersController < Admin::BaseController
                                                                    from_admin: true)
     render json: {
       success: true,
-      message: "Merchant Account created, ID: #{merchant_account.id} Stripe Account ID: #{merchant_account.charge_processor_merchant_id}",
-      merchant_account_id: merchant_account.id,
+      message: "Merchant Account created, External ID: #{merchant_account.external_id} Stripe Account ID: #{merchant_account.charge_processor_merchant_id}",
+      merchant_account_external_id: merchant_account.external_id,
       charge_processor_merchant_id: merchant_account.charge_processor_merchant_id
     }
   rescue MerchantRegistrationUserAlreadyHasAccountError
