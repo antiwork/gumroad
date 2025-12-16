@@ -119,4 +119,3 @@ class AffiliatesController < Sellers::BaseController
       { key: column, direction: direction == "desc" ? "desc" : "asc" }
     end
 end
-
