@@ -1,12 +1,9 @@
-import { usePage } from "@inertiajs/react";
+import { router, usePage } from "@inertiajs/react";
 import React from "react";
 import { cast } from "ts-safe-cast";
 
-import { unfollowWishlist } from "$app/data/wishlists";
-import { assertResponseError } from "$app/utils/request";
-
 import { Icon } from "$app/components/Icons";
-import { InertiaLayout } from "$app/components/Library/InertiaLayout";
+import { Layout as LibraryLayout } from "$app/components/Library/Layout";
 import { Popover } from "$app/components/Popover";
 import { showAlert } from "$app/components/server-components/Alert";
 import Placeholder from "$app/components/ui/Placeholder";
@@ -35,25 +32,21 @@ type Props = {
 const LibraryLayoutWrapper = ({ children }: { children: React.ReactNode }) => {
   const { reviews_page_enabled } = cast<Props>(usePage().props);
   return (
-    <InertiaLayout selectedTab="following_wishlists" reviewsPageEnabled={reviews_page_enabled} followingWishlistsEnabled>
+    <LibraryLayout selectedTab="following_wishlists" reviewsPageEnabled={reviews_page_enabled} followingWishlistsEnabled>
       {children}
-    </InertiaLayout>
+    </LibraryLayout>
   );
 };
 
 const WishlistsFollowing = () => {
-  const { wishlists: preloadedWishlists } = cast<Props>(usePage().props);
-  const [wishlists, setWishlists] = React.useState<Wishlist[]>(preloadedWishlists);
+  const { wishlists } = cast<Props>(usePage().props);
 
-  const destroy = async (wishlist: Wishlist) => {
-    setWishlists(wishlists.filter(({ id }) => id !== wishlist.id));
-    try {
-      await unfollowWishlist({ wishlistId: wishlist.id });
-      showAlert(`You are no longer following ${wishlist.name}.`, "success");
-    } catch (e) {
-      assertResponseError(e);
-      showAlert("Sorry, something went wrong. Please try again.", "error");
-    }
+  const destroy = (wishlist: Wishlist) => {
+    router.delete(Routes.wishlist_followers_path(wishlist.id), {
+      preserveScroll: true,
+      onSuccess: () => showAlert(`You are no longer following ${wishlist.name}.`, "success"),
+      onError: () => showAlert("Sorry, something went wrong. Please try again.", "error"),
+    });
   };
 
   return (
@@ -93,7 +86,7 @@ const WishlistsFollowing = () => {
                   <div className="flex flex-wrap gap-3 lg:justify-end">
                     <Popover aria-label="Actions" trigger={<Icon name="three-dots" />}>
                       <div role="menu">
-                        <div role="menuitem" className="danger" onClick={() => void destroy(wishlist)}>
+                        <div role="menuitem" className="danger" onClick={() => destroy(wishlist)}>
                           <Icon name="bookmark-x" /> Unfollow
                         </div>
                       </div>
