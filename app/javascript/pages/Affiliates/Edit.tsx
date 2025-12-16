@@ -1,10 +1,7 @@
-import { router, usePage } from "@inertiajs/react";
+import { useForm, usePage } from "@inertiajs/react";
 import cx from "classnames";
 import * as React from "react";
 
-import { updateAffiliate } from "$app/data/affiliates";
-import { asyncVoid } from "$app/utils/promise";
-import { assertResponseError } from "$app/utils/request";
 import { isUrlValid } from "$app/utils/url";
 
 import { Button } from "$app/components/Button";
@@ -42,76 +39,83 @@ type Props = {
 export default function AffiliatesEdit() {
   const props = usePage<{ props: Props }>().props as unknown as Props;
   const loggedInUser = useLoggedInUser();
-  const [isSubmitting, setIsSubmitting] = React.useState(false);
-  const [products, setProducts] = React.useState<AffiliateProduct[]>(props.affiliate.products);
-  const [feePercent, setFeePercent] = React.useState<number | null>(props.affiliate.fee_percent);
-  const [destinationUrl, setDestinationUrl] = React.useState<string | null>(props.affiliate.destination_url);
-  const [errors, setErrors] = React.useState<Map<string, string>>(new Map());
 
-  const applyToAllProducts = products.every((p) => p.enabled && p.fee_percent === feePercent);
+  const { data, setData, patch, processing, errors, setError, clearErrors } = useForm<{
+    affiliate: {
+      email: string;
+      products: AffiliateProduct[];
+      fee_percent: number | null;
+      apply_to_all_products: boolean;
+      destination_url: string | null;
+    };
+  }>({
+    affiliate: {
+      email: props.affiliate.email,
+      products: props.affiliate.products,
+      fee_percent: props.affiliate.fee_percent,
+      apply_to_all_products: props.affiliate.products.every(
+        (p) => p.enabled && p.fee_percent === props.affiliate.fee_percent,
+      ),
+      destination_url: props.affiliate.destination_url,
+    },
+  });
+
+  const applyToAllProducts = data.affiliate.products.every(
+    (p) => p.enabled && p.fee_percent === data.affiliate.fee_percent,
+  );
 
   const uid = React.useId();
 
   const toggleAllProducts = (checked: boolean) => {
     if (checked) {
-      setProducts(products.map((p) => ({ ...p, enabled: true, fee_percent: feePercent })));
+      setData(
+        "affiliate",
+        {
+          ...data.affiliate,
+          products: data.affiliate.products.map((p) => ({ ...p, enabled: true, fee_percent: data.affiliate.fee_percent })),
+        },
+      );
     } else {
-      setProducts(products.map((p) => ({ ...p, enabled: false })));
+      setData("affiliate", {
+        ...data.affiliate,
+        products: data.affiliate.products.map((p) => ({ ...p, enabled: false })),
+      });
     }
   };
 
-  const handleSubmit = asyncVoid(async () => {
-    const newErrors = new Map<string, string>();
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    clearErrors();
 
-    if (applyToAllProducts && (!feePercent || feePercent < 1 || feePercent > 90)) {
-      newErrors.set("feePercent", "Commission must be between 1% and 90%");
-    }
-
-    if (!applyToAllProducts && products.every((p) => !p.enabled)) {
-      newErrors.set("products", "Please enable at least one product");
-    }
-
-    if (!applyToAllProducts && products.some((p) => p.enabled && (!p.fee_percent || p.fee_percent < 1 || p.fee_percent > 90))) {
-      newErrors.set("products", "All enabled products must have commission between 1% and 90%");
-    }
-
-    if (destinationUrl && destinationUrl !== "" && !isUrlValid(destinationUrl)) {
-      newErrors.set("destinationUrl", "Please enter a valid URL");
-    }
-
-    if (newErrors.size > 0) {
-      setErrors(newErrors);
-      const [, firstError] = Array.from(newErrors.entries())[0] || [];
-      if (firstError) showAlert(firstError, "error");
+    if (applyToAllProducts && (!data.affiliate.fee_percent || data.affiliate.fee_percent < 1 || data.affiliate.fee_percent > 90)) {
+      setError("affiliate.fee_percent", "Commission must be between 1% and 90%");
+      showAlert("Commission must be between 1% and 90%", "error");
       return;
     }
 
-    try {
-      setIsSubmitting(true);
-      await updateAffiliate({
-        id: props.affiliate.id,
-        email: props.affiliate.email,
-        products: products.map((p) => ({
-          id: p.id,
-          enabled: p.enabled,
-          name: p.name,
-          fee_percent: p.fee_percent,
-          destination_url: p.destination_url || null,
-          referral_url: p.referral_url,
-        })),
-        fee_percent: feePercent,
-        apply_to_all_products: applyToAllProducts,
-        destination_url: destinationUrl,
-      });
-      showAlert("Changes saved!", "success");
-      router.visit(Routes.affiliates_path());
-    } catch (e) {
-      assertResponseError(e);
-      showAlert((e as Error).message || "Failed to update affiliate", "error");
-    } finally {
-      setIsSubmitting(false);
+    if (!applyToAllProducts && data.affiliate.products.every((p) => !p.enabled)) {
+      setError("affiliate.products", "Please enable at least one product");
+      showAlert("Please enable at least one product", "error");
+      return;
     }
-  });
+
+    if (
+      !applyToAllProducts &&
+      data.affiliate.products.some((p) => p.enabled && (!p.fee_percent || p.fee_percent < 1 || p.fee_percent > 90))
+    ) {
+      setError("affiliate.products", "All enabled products must have commission between 1% and 90%");
+      showAlert("All enabled products must have commission between 1% and 90%", "error");
+      return;
+    }
+
+    if (data.affiliate.destination_url && data.affiliate.destination_url !== "" && !isUrlValid(data.affiliate.destination_url)) {
+      setError("affiliate.destination_url", "Please enter a valid URL");
+      showAlert("Please enter a valid URL", "error");
+      return;
+    }
+
+    patch(Routes.affiliate_path(props.affiliate.id));
+  };
 
   return (
     <div>
@@ -120,21 +124,21 @@ export default function AffiliatesEdit() {
         title="Edit Affiliate"
         actions={
           <>
-            <NavigationButtonInertia href={Routes.affiliates_path()} disabled={isSubmitting}>
+            <NavigationButtonInertia href={Routes.affiliates_path()} disabled={processing}>
               <Icon name="x-square" />
               Cancel
             </NavigationButtonInertia>
             <Button
               color="accent"
               onClick={handleSubmit}
-              disabled={isSubmitting || !loggedInUser?.policies.direct_affiliate.update}
+              disabled={processing || !loggedInUser?.policies.direct_affiliate.update}
             >
-              {isSubmitting ? "Saving..." : "Save changes"}
+              {processing ? "Saving..." : "Save changes"}
             </Button>
           </>
         }
       />
-      <form>
+      <form onSubmit={handleSubmit}>
         <section className="p-4! md:p-8!">
           <header
             dangerouslySetInnerHTML={{
@@ -182,21 +186,24 @@ export default function AffiliatesEdit() {
                   <label htmlFor={`${uid}enableAllProducts`}>All products</label>
                 </TableCell>
                 <TableCell>
-                  <fieldset className={cx({ danger: errors.has("feePercent") })}>
+                  <fieldset className={cx({ danger: errors["affiliate.fee_percent"] })}>
                     <NumberInput
                       onChange={(value) => {
-                        setFeePercent(value);
-                        setProducts(products.map((p) => ({ ...p, fee_percent: value })));
+                        setData("affiliate", {
+                          ...data.affiliate,
+                          fee_percent: value,
+                          products: data.affiliate.products.map((p) => ({ ...p, fee_percent: value })),
+                        });
                       }}
-                      value={feePercent}
+                      value={data.affiliate.fee_percent}
                     >
                       {(inputProps) => (
-                        <div className={cx("input", { disabled: isSubmitting || !applyToAllProducts })}>
+                        <div className={cx("input", { disabled: processing || !applyToAllProducts })}>
                           <input
                             type="text"
                             autoComplete="off"
                             placeholder="Commission"
-                            disabled={isSubmitting || !applyToAllProducts}
+                            disabled={processing || !applyToAllProducts}
                             {...inputProps}
                           />
                           <div className="pill">%</div>
@@ -206,18 +213,18 @@ export default function AffiliatesEdit() {
                   </fieldset>
                 </TableCell>
                 <TableCell>
-                  <fieldset className={cx({ danger: errors.has("destinationUrl") })}>
+                  <fieldset className={cx({ danger: errors["affiliate.destination_url"] })}>
                     <input
                       type="url"
-                      value={destinationUrl || ""}
+                      value={data.affiliate.destination_url || ""}
                       placeholder="https://link.com"
-                      onChange={(e) => setDestinationUrl(e.target.value)}
-                      disabled={isSubmitting || !applyToAllProducts}
+                      onChange={(e) => setData("affiliate", { ...data.affiliate, destination_url: e.target.value })}
+                      disabled={processing || !applyToAllProducts}
                     />
                   </fieldset>
                 </TableCell>
               </TableRow>
-              {products.map((product) => (
+              {data.affiliate.products.map((product) => (
                 <TableRow key={product.id}>
                   <TableCell>
                     <input
@@ -225,26 +232,34 @@ export default function AffiliatesEdit() {
                       role="switch"
                       checked={product.enabled}
                       onChange={(e) =>
-                        setProducts(products.map((p) => (p.id === product.id ? { ...p, enabled: e.target.checked } : p)))
+                        setData("affiliate", {
+                          ...data.affiliate,
+                          products: data.affiliate.products.map((p) =>
+                            p.id === product.id ? { ...p, enabled: e.target.checked } : p,
+                          ),
+                        })
                       }
-                      disabled={isSubmitting}
+                      disabled={processing}
                     />
                   </TableCell>
                   <TableCell>{product.name}</TableCell>
                   <TableCell>
                     <NumberInput
                       onChange={(value) =>
-                        setProducts(products.map((p) => (p.id === product.id ? { ...p, fee_percent: value } : p)))
+                        setData("affiliate", {
+                          ...data.affiliate,
+                          products: data.affiliate.products.map((p) => (p.id === product.id ? { ...p, fee_percent: value } : p)),
+                        })
                       }
                       value={product.fee_percent}
                     >
                       {(inputProps) => (
-                        <div className={cx("input", { disabled: isSubmitting || !product.enabled })}>
+                        <div className={cx("input", { disabled: processing || !product.enabled })}>
                           <input
                             type="text"
                             autoComplete="off"
                             placeholder="Commission"
-                            disabled={isSubmitting || !product.enabled}
+                            disabled={processing || !product.enabled}
                             {...inputProps}
                           />
                           <div className="pill">%</div>
@@ -258,9 +273,14 @@ export default function AffiliatesEdit() {
                       placeholder="https://link.com"
                       value={product.destination_url || ""}
                       onChange={(e) =>
-                        setProducts(products.map((p) => (p.id === product.id ? { ...p, destination_url: e.target.value } : p)))
+                        setData("affiliate", {
+                          ...data.affiliate,
+                          products: data.affiliate.products.map((p) =>
+                            p.id === product.id ? { ...p, destination_url: e.target.value } : p,
+                          ),
+                        })
                       }
-                      disabled={isSubmitting || !product.enabled}
+                      disabled={processing || !product.enabled}
                     />
                   </TableCell>
                 </TableRow>

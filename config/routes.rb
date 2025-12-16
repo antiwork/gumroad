@@ -381,7 +381,7 @@ Rails.application.routes.draw do
         post :approve_all
       end
     end
-    resources :affiliates, only: [:index, :new, :edit] do
+    resources :affiliates, only: [:index, :new, :edit, :create, :update, :destroy] do
       member do
         get :subscribe_posts
         get :unsubscribe_posts

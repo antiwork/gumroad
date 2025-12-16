@@ -233,16 +233,16 @@ class AffiliatesController < Sellers::BaseController
     { success: true }
   end
 
-    def set_direct_affiliate
-      @direct_affiliate = DirectAffiliate.find_by_external_id(params[:id])
-    end
+  def set_direct_affiliate
+    @direct_affiliate = DirectAffiliate.find_by_external_id(params[:id])
+  end
 
-    def extract_sort_params
-      column = params[:column]
-      direction = params[:sort]
+  def extract_sort_params
+    column = params[:column]
+    direction = params[:sort]
 
-      return nil unless %w[affiliate_user_name products fee_percent volume_cents].include?(column)
+    return nil unless %w[affiliate_user_name products fee_percent volume_cents].include?(column)
 
-      { key: column, direction: direction == "desc" ? "desc" : "asc" }
-    end
+    { key: column, direction: direction == "desc" ? "desc" : "asc" }
+  end
 end

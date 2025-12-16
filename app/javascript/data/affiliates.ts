@@ -1,6 +1,5 @@
 import { cast } from "ts-safe-cast";
 
-import { assertDefined } from "$app/utils/assert";
 import { request, ResponseError } from "$app/utils/request";
 
 import { PaginationProps } from "$app/components/Pagination";
@@ -54,8 +53,6 @@ export type AffiliateRequestPayload = {
   destination_url: string | null;
 };
 
-type AffiliateResponse = { success: boolean; message?: string };
-
 type AffiliateSignupFormData = { products: readonly SelfServeAffiliateProduct[]; disable_global_affiliate: boolean };
 type AffiliateSignupFormResponse = { success: boolean } | { success: false; error: string };
 export type AffiliateSignupFormPageData = {
@@ -74,37 +71,7 @@ export type PagedAffiliatesData = {
   affiliates_disabled_reason: string | null;
 };
 
-export async function addAffiliate(data: AffiliateRequestPayload) {
-  const response = await request({
-    method: "POST",
-    accept: "json",
-    url: Routes.internal_affiliates_path(),
-    data: { affiliate: data },
-  });
 
-  if (!response.ok) throw new ResponseError();
-  const responseData = cast<AffiliateResponse>(await response.json());
-  if (!responseData.success) throw new ResponseError(responseData.message);
-}
-
-export async function updateAffiliate(data: AffiliateRequestPayload) {
-  const affiliateId = assertDefined(data.id, "Affiliate ID is required");
-  const response = await request({
-    method: "PATCH",
-    accept: "json",
-    url: Routes.internal_affiliate_path(affiliateId),
-    data: { affiliate: data },
-  });
-
-  if (!response.ok) throw new ResponseError();
-  const responseData = cast<AffiliateResponse>(await response.json());
-  if (!responseData.success) throw new ResponseError(responseData.message);
-}
-export async function removeAffiliate(id: string) {
-  const response = await request({ method: "DELETE", accept: "json", url: Routes.internal_affiliate_path(id) });
-  const parsed = cast<{ success: boolean }>(await response.json());
-  if (!response.ok || !parsed.success) throw new ResponseError();
-}
 export async function submitAffiliateSignupForm(data: AffiliateSignupFormData) {
   const response = await request({
     method: "PATCH",
