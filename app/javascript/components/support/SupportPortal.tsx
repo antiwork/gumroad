@@ -18,7 +18,7 @@ export default function SupportPortal() {
     const url = new URL(location.href);
     if (!isNewTicketOpen && url.searchParams.get("new_ticket")) {
       url.searchParams.delete("new_ticket");
-      router.visit(url.toString(), { replace: true, preserveState: true, preserveScroll: true });
+      router.get(url.toString(), { replace: true, preserveState: true, preserveScroll: true });
     }
   }, [isNewTicketOpen]);
 
