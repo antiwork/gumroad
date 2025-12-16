@@ -12,8 +12,7 @@ class TaxCenterController < Sellers::BaseController
 
     tax_center_presenter = TaxCenterPresenter.new(seller: current_seller, year:)
 
-    render inertia: "TaxCenter/Index",
-           props: { tax_center_presenter: tax_center_presenter.props }
+    render inertia: "TaxCenter/Index", props: tax_center_presenter.props
   end
 
   def download

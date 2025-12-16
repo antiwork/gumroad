@@ -27,7 +27,7 @@ class Admin::SearchController < Admin::BaseController
     )
     @purchases = @purchases.page_with_kaminari(params[:page]).per(RECORDS_PER_PAGE) if @purchases.present?
 
-    redirect_to admin_purchase_path(@purchases.first) if @purchases.one? && params[:page].blank?
+    redirect_to admin_purchase_path(@purchases.first.external_id) if @purchases.one? && params[:page].blank?
   end
 
   private

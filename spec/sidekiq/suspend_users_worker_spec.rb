@@ -11,7 +11,7 @@ describe SuspendUsersWorker do
     let(:reason) { "Violating our terms of service" }
     let(:additional_notes) { "Some additional notes" }
 
-    it "suspends the users appropriately" do
+    it "suspends the users appropriately with IDs" do
       described_class.new.perform(admin_user.id, user_ids_to_suspend, reason, additional_notes)
 
       expect(not_reviewed_user.reload.suspended?).to be(true)
@@ -25,6 +25,26 @@ describe SuspendUsersWorker do
       expect(comments.first.author_id).to eq(admin_user.id)
       expect(comments.last.content).to eq("Suspended for a policy violation by #{admin_user.name_or_username} on #{Time.current.to_fs(:formatted_date_full_month)} as part of mass suspension. Reason: #{reason}.\nAdditional notes: #{additional_notes}")
       expect(comments.last.author_id).to eq(admin_user.id)
+    end
+
+    it "suspends the users appropriately with external IDs" do
+      external_ids_to_suspend = [not_reviewed_user.external_id, compliant_user.external_id, already_suspended_user.external_id]
+      described_class.new.perform(admin_user.id, external_ids_to_suspend, reason, additional_notes)
+
+      expect(not_reviewed_user.reload.suspended?).to be(true)
+      expect(compliant_user.reload.suspended?).to be(true)
+      expect(already_suspended_user.reload.suspended?).to be(true)
+      expect(user_not_to_suspend.reload.suspended?).to be(false)
+    end
+
+    it "suspends the users appropriately with mixed internal and external IDs" do
+      mixed_ids = [not_reviewed_user.id, compliant_user.external_id, already_suspended_user.id]
+      described_class.new.perform(admin_user.id, mixed_ids, reason, additional_notes)
+
+      expect(not_reviewed_user.reload.suspended?).to be(true)
+      expect(compliant_user.reload.suspended?).to be(true)
+      expect(already_suspended_user.reload.suspended?).to be(true)
+      expect(user_not_to_suspend.reload.suspended?).to be(false)
     end
   end
 end

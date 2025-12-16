@@ -21,6 +21,7 @@ import { Modal } from "$app/components/Modal";
 import { Popover } from "$app/components/Popover";
 import { showAlert } from "$app/components/server-components/Alert";
 import { UserAvatar } from "$app/components/server-components/CommunitiesPage/UserAvatar";
+import { Pill } from "$app/components/ui/Pill";
 
 import defaultUserAvatar from "$assets/images/user-avatar.png";
 
@@ -252,7 +253,7 @@ const CommentContainer = ({ comment, upsertComment, confirmCommentDeletion }: Co
         <header className="flex flex-wrap items-center gap-3">
           <span className="text-decoration-none font-bold">{comment.author_name}</span>
           <time title={formatDate(parseISO(comment.created_at))}>{comment.created_at_humanized}</time>
-          {comment.author_id === seller_id ? <span className="pill small">Creator</span> : null}
+          {comment.author_id === seller_id ? <Pill size="small">Creator</Pill> : null}
           <div className="ml-auto">
             {comment.is_editable || comment.is_deletable ? (
               <Popover aria-label="Open comment action menu" trigger={<Icon name="three-dots" />}>
