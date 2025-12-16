@@ -280,6 +280,27 @@ const ProductEditPage = (props: Props) => {
     [imagesUploading.size],
   );
 
+  /*
+  TODO(Tri): leave page pop-up
+
+  custom modal for internal navigation
+  skipping confirmation if autosave just ran
+  warning only if uploads are incomplete
+
+  Check isDirty
+  */
+  React.useEffect(() => {
+    const handler = (e: BeforeUnloadEvent) => {
+      if (!saving) { // && isDirty
+        e.preventDefault();
+        e.returnValue = "";
+      }
+    };
+
+    window.addEventListener("beforeunload", handler);
+    return () => window.removeEventListener("beforeunload", handler);
+  }, [saving]); // isDirty,
+
   return (
     <ProductEditContext.Provider value={contextValue}>
       <ImageUploadSettingsContext.Provider value={imageSettings}>
