@@ -1,13 +1,8 @@
-import { Link, usePage } from "@inertiajs/react";
+import { Link, useForm, usePage } from "@inertiajs/react";
 import cx from "classnames";
 import * as React from "react";
 
-import {
-  submitAffiliateSignupForm,
-  SelfServeAffiliateProduct,
-} from "$app/data/affiliates";
-import { asyncVoid } from "$app/utils/promise";
-import { assertResponseError } from "$app/utils/request";
+import { SelfServeAffiliateProduct } from "$app/data/affiliates";
 import { isUrlValid } from "$app/utils/url";
 
 import { Button } from "$app/components/Button";
@@ -63,37 +58,41 @@ const AffiliatesNavigation = () => (
 );
 
 export default function AffiliatesOnboarding() {
-  const props = usePage<Props>().props;
+  const props = usePage<{ props: Props }>().props as unknown as Props;
   const loggedInUser = useLoggedInUser();
-  const [isSaving, setIsSaving] = React.useState(false);
-  const [products, setProducts] = React.useState<SelfServeAffiliateProduct[]>(props.products);
-  const [disableGlobalAffiliate, setDisableGlobalAffiliate] = React.useState(props.disable_global_affiliate);
-  const enableAffiliateLink = products.some(({ enabled, fee_percent }) => enabled && isValidFeePercent(fee_percent));
+
+  const { data, setData, patch, processing } = useForm({
+    products: props.products,
+    disable_global_affiliate: props.disable_global_affiliate,
+  });
+
+  const enableAffiliateLink = data.products.some(({ enabled, fee_percent }) => enabled && isValidFeePercent(fee_percent));
 
   const affiliateRequestUrl = Routes.custom_domain_new_affiliate_request_url({ host: props.creator_subdomain });
 
-  const handleProductChange = (productId: number, newValue: Partial<SelfServeAffiliateProduct>) => {
-    const newProducts = products.map((product) => (product.id === productId ? { ...product, ...newValue } : product));
-    setProducts(newProducts);
-  };
+  const handleSaveChanges = (e: React.FormEvent) => {
+    e.preventDefault();
 
-  const handleSaveChanges = asyncVoid(async () => {
-    if (products.some((product) => validateProduct(product).size > 0)) {
+    const hasErrors = data.products.some((product) => validateProduct(product).size > 0);
+
+    if (hasErrors) {
       showAlert("There are some errors on the page. Please fix them and try again.", "error");
       return;
     }
 
-    try {
-      setIsSaving(true);
-      await submitAffiliateSignupForm({ products, disable_global_affiliate: disableGlobalAffiliate });
-      showAlert("Changes saved!", "success");
-    } catch (e) {
-      assertResponseError(e);
-      showAlert(`An error occurred while saving changes${(e as Error).message ? ` - ${(e as Error).message}` : ""}`, "error");
-    } finally {
-      setIsSaving(false);
-    }
-  });
+    patch(Routes.affiliate_requests_onboarding_form_path());
+  };
+
+  const onToggleDisableGlobalAffiliate = (value: boolean) => {
+    setData("disable_global_affiliate", value);
+  };
+
+  const onUpdateProductLink = (index: number, updatedValues: Partial<SelfServeAffiliateProduct>) => {
+    setData(
+      "products",
+      data.products.map((product, i) => (i === index ? { ...product, ...updatedValues } : product)),
+    );
+  };
 
   return (
     <div>
@@ -111,17 +110,17 @@ export default function AffiliatesOnboarding() {
             </WithTooltip>
             <Button
               onClick={handleSaveChanges}
-              disabled={!loggedInUser?.policies.affiliate_requests_onboarding_form.update || isSaving}
+              disabled={processing || !loggedInUser?.policies.affiliate_requests_onboarding_form.update}
               color="accent"
             >
-              {isSaving ? "Saving..." : "Save changes"}
+              {processing ? "Saving..." : "Save changes"}
             </Button>
           </>
         }
       >
         <AffiliatesNavigation />
       </PageHeader>
-      {products.length === 0 ? (
+      {data.products.length === 0 ? (
         <section className="p-4! md:p-8!">
           <Placeholder>
             <figure>
@@ -139,7 +138,7 @@ export default function AffiliatesOnboarding() {
           </Placeholder>
         </section>
       ) : (
-        <form>
+        <form onSubmit={handleSaveChanges}>
           <section className="p-4! md:p-8!">
             <header>
               <h2>Affiliate link</h2>
@@ -195,12 +194,12 @@ export default function AffiliatesOnboarding() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {products.map((product) => (
+                {data.products.map((product, index) => (
                   <ProductRow
                     key={product.id}
                     product={product}
                     disabled={!loggedInUser?.policies.affiliate_requests_onboarding_form.update}
-                    onChange={(value) => handleProductChange(product.id, value)}
+                    onChange={(updatedValues) => onUpdateProductLink(index, updatedValues)}
                   />
                 ))}
               </TableBody>
@@ -220,8 +219,8 @@ export default function AffiliatesOnboarding() {
             <fieldset>
               <ToggleSettingRow
                 label="Opt out of the Gumroad Affiliate Program"
-                value={disableGlobalAffiliate}
-                onChange={setDisableGlobalAffiliate}
+                value={data.disable_global_affiliate}
+                onChange={onToggleDisableGlobalAffiliate}
               />
             </fieldset>
           </section>
