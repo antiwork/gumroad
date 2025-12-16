@@ -146,27 +146,6 @@ ActiveRecord::Schema[7.1].define(version: 2025_12_10_053000) do
     t.index ["link_id"], name: "index_asset_previews_on_link_id"
   end
 
-  create_table "audience_export_chunks", charset: "utf8mb4", collation: "utf8mb4_unicode_ci", force: :cascade do |t|
-    t.bigint "export_id", null: false
-    t.text "member_ids", size: :long
-    t.text "members_data", size: :long
-    t.boolean "processed", default: false, null: false
-    t.string "revision"
-    t.datetime "created_at", null: false
-    t.datetime "updated_at", null: false
-    t.index ["export_id"], name: "index_audience_export_chunks_on_export_id"
-  end
-
-  create_table "audience_exports", charset: "utf8mb4", collation: "utf8mb4_unicode_ci", force: :cascade do |t|
-    t.bigint "seller_id", null: false
-    t.bigint "recipient_id", null: false
-    t.text "options"
-    t.datetime "created_at", null: false
-    t.datetime "updated_at", null: false
-    t.index ["recipient_id"], name: "index_audience_exports_on_recipient_id"
-    t.index ["seller_id"], name: "index_audience_exports_on_seller_id"
-  end
-
   create_table "audience_members", charset: "utf8mb4", collation: "utf8mb4_unicode_ci", force: :cascade do |t|
     t.bigint "seller_id", null: false
     t.string "email", null: false
@@ -2474,6 +2453,17 @@ ActiveRecord::Schema[7.1].define(version: 2025_12_10_053000) do
     t.text "json_data"
     t.integer "flags", default: 0, null: false
     t.index ["user_id", "state"], name: "index_user_compliance_info_requests_on_user_id_and_state"
+  end
+
+  create_table "user_tax_forms", charset: "utf8mb4", collation: "utf8mb4_unicode_ci", force: :cascade do |t|
+    t.bigint "user_id", null: false
+    t.integer "tax_year", null: false
+    t.string "tax_form_type", null: false
+    t.text "json_data"
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.index ["user_id", "tax_year", "tax_form_type"], name: "index_user_tax_forms_on_user_id_and_tax_year_and_tax_form_type", unique: true
+    t.index ["user_id"], name: "index_user_tax_forms_on_user_id"
   end
 
   create_table "users", charset: "utf8mb4", collation: "utf8mb4_unicode_ci", force: :cascade do |t|
