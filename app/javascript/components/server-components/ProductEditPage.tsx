@@ -21,6 +21,7 @@ import { Page } from "$app/components/ProductEdit/ContentTab/PageTab";
 import { ProductTab } from "$app/components/ProductEdit/ProductTab";
 import { RefundPolicy } from "$app/components/ProductEdit/RefundPolicy";
 import { ShareTab } from "$app/components/ProductEdit/ShareTab";
+import { ProductEditRoot } from "$app/components/ProductEdit/Root";
 import {
   ProductEditContext,
   Product,
@@ -32,23 +33,27 @@ import {
 import { ImageUploadSettingsContext } from "$app/components/RichTextEditor";
 import { showAlert } from "$app/components/server-components/Alert";
 import { useAutosaveProduct } from "$app/components/ProductEdit/useAutosaveProduct";
-import { useLocation } from "react-router-dom";
 
 const routes: RouteObject[] = [
   {
-    path: "/products/:id/edit",
-    element: <ProductTab />,
-    handle: "product",
-  },
-  {
-    path: "/products/:id/edit/content",
-    element: <ContentTab />,
-    handle: "content",
-  },
-  {
-    path: "/products/:id/edit/share",
-    element: <ShareTab />,
-    handle: "share",
+    element: <ProductEditRoot />,
+    children: [
+      {
+        path: "/products/:id/edit",
+        element: <ProductTab />,
+        handle: "product",
+      },
+      {
+        path: "/products/:id/edit/content",
+        element: <ContentTab />,
+        handle: "content",
+      },
+      {
+        path: "/products/:id/edit/share",
+        element: <ShareTab />,
+        handle: "share",
+      },
+    ],
   },
 ];
 
@@ -148,15 +153,19 @@ const ProductEditPage = (props: Props) => {
       return updated;
     });
   const [existingFiles, setExistingFiles] = React.useState(props.existing_files);
-  const router = createBrowserRouter(routes); // !
+  const router = createBrowserRouter(routes);
 
   const [saving, setSaving] = React.useState(false);
   const [imagesUploading, setImagesUploading] = React.useState<Set<File>>(new Set());
 
   const isBlocked =
-  saving ||
-  imagesUploading.size > 0 ||
-  product.files.some((file) => file.status.type === "unsaved");
+    saving ||
+    imagesUploading.size > 0 ||
+    product.files.some(
+      (file) =>
+        file.status.type === "unsaved" &&
+        file.status.uploadStatus.type === "uploading",
+    );
 
   const [autosaveState, setAutosaveState] = React.useState<
     "idle" | "saving" | "saved" | "error"
@@ -217,19 +226,6 @@ const ProductEditPage = (props: Props) => {
     isBlocked,
   });
 
-  const location = useLocation();
-  const lastPathRef = React.useRef(location.pathname);
-
-  React.useEffect(() => {
-    if (lastPathRef.current !== location.pathname) {
-      // Route changed inside product edit
-      if (!saving && !isBlocked) {
-        void save();
-      }
-      lastPathRef.current = location.pathname;
-    }
-  }, [location.pathname, save, saving, isBlocked]);
-
   const contextValue = React.useMemo(
     () => ({
       ...createContextValue(props),
@@ -241,11 +237,12 @@ const ProductEditPage = (props: Props) => {
       updateProduct,
       save,
       saving,
+      isBlocked,
       autosaveState,
       contentUpdates,
       setContentUpdates,
     }),
-    [product, updateProduct, existingFiles, setExistingFiles],
+    [product, updateProduct, existingFiles, setExistingFiles, isBlocked],
   );
 
   const imageSettings = React.useMemo(
@@ -300,15 +297,10 @@ const ProductEditRouter = async (global: GlobalProps) => {
         ...createContextValue(props),
         setCurrencyType: (_currency) => {}, // no-op
 
-        /*
-        !!!: Tri
-        SSR never triggers autosave
-        SSR never mutates product state
-        These values are only read by layout/UI components
-        */
         saving: false,
         save: async () => {},
         autosaveState: "idle",
+        isBlocked: false,
 
         contentUpdates: null,
         setContentUpdates: () => {},
