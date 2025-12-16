@@ -1,3 +1,4 @@
+import { Link } from "@inertiajs/react";
 import * as React from "react";
 
 import { PageHeader } from "$app/components/ui/PageHeader";
@@ -32,8 +33,8 @@ export const Layout = ({
             {followingWishlistsEnabled ? "Saved" : "Wishlists"}
           </Tab>
           {followingWishlistsEnabled ? (
-            <Tab href={Routes.wishlists_following_index_path()} isSelected={selectedTab === "following_wishlists"}>
-              Following
+            <Tab asChild isSelected={selectedTab === "following_wishlists"}>
+              <Link href={Routes.wishlists_following_index_path()}>Following</Link>
             </Tab>
           ) : null}
           {reviewsPageEnabled ? (
