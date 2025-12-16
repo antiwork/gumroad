@@ -5,7 +5,7 @@ import { cast } from "ts-safe-cast";
 import { Icon } from "$app/components/Icons";
 import { Layout as LibraryLayout } from "$app/components/Library/Layout";
 import { Popover } from "$app/components/Popover";
-import { showAlert } from "$app/components/server-components/Alert";
+
 import Placeholder from "$app/components/ui/Placeholder";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "$app/components/ui/Table";
 import Layout from "$app/inertia/layout";
@@ -44,8 +44,6 @@ const WishlistsFollowing = () => {
   const destroy = (wishlist: Wishlist) => {
     router.delete(Routes.wishlist_followers_path(wishlist.id), {
       preserveScroll: true,
-      onSuccess: () => showAlert(`You are no longer following ${wishlist.name}.`, "success"),
-      onError: () => showAlert("Sorry, something went wrong. Please try again.", "error"),
     });
   };
 

@@ -28,7 +28,7 @@ class Wishlists::FollowersController < ApplicationController
     authorize wishlist_follower
     wishlist_follower.mark_deleted!
 
-    head :no_content
+    redirect_to wishlists_following_index_path, notice: "You are no longer following #{wishlist.name}."
   end
 
   def unsubscribe
