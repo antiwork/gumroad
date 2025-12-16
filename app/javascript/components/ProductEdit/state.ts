@@ -183,6 +183,7 @@ export const ProductEditContext = React.createContext<{
   saving: boolean;
   save: () => Promise<void>;
   autosaveState: "idle" | "saving" | "saved" | "error";
+  isBlocked: boolean;
   googleClientId: string;
   googleCalendarEnabled: boolean;
   seller_refund_policy_enabled: boolean;
