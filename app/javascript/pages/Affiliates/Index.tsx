@@ -9,7 +9,7 @@ import {
   AffiliateStatistics,
   getStatistics,
 } from "$app/data/affiliates";
-import { updateAffiliateRequest, approvePendingAffiliateRequests } from "$app/data/affiliate_request";
+import { updateAffiliateRequest } from "$app/data/affiliate_request";
 import { formatPriceCentsWithCurrencySymbol } from "$app/utils/currency";
 import { asyncVoid } from "$app/utils/promise";
 import { assertResponseError } from "$app/utils/request";
@@ -25,7 +25,7 @@ import { Popover } from "$app/components/Popover";
 import { showAlert } from "$app/components/server-components/Alert";
 import { Skeleton } from "$app/components/Skeleton";
 import { PageHeader } from "$app/components/ui/PageHeader";
-import { Pill } from "$app/components/ui/Pill";
+
 import Placeholder from "$app/components/ui/Placeholder";
 import { Sheet, SheetHeader } from "$app/components/ui/Sheet";
 import { Table, TableBody, TableCaption, TableCell, TableHead, TableHeader, TableRow } from "$app/components/ui/Table";
@@ -101,32 +101,18 @@ const SearchBoxPopover = ({ initialQuery, onSearch }: { initialQuery: string; on
   );
 };
 
-const ApproveAllButton = ({
-  isLoading,
-  setIsLoading,
-}: {
-  isLoading: boolean;
-  setIsLoading: (newState: boolean) => void;
-}) => (
-  <Button
-    color="primary"
-    onClick={asyncVoid(async () => {
-      setIsLoading(true);
-      try {
-        await approvePendingAffiliateRequests();
-        showAlert("Approved", "success");
-        router.reload();
-      } catch (e) {
-        assertResponseError(e);
-        showAlert("Error approving affiliate requests", "error");
-      }
-      setIsLoading(false);
-    })}
-    disabled={isLoading}
-  >
-    {isLoading ? "Approving" : "Approve all"}
-  </Button>
-);
+const ApproveAllButton = () => {
+  const isLoading = useRouteLoading();
+  return (
+    <Button
+      color="primary"
+      onClick={() => router.post(Routes.approve_all_affiliate_requests_path(), {}, { preserveState: true })}
+      disabled={isLoading}
+    >
+      {isLoading ? "Approving" : "Approve all"}
+    </Button>
+  );
+};
 
 const AffiliateRequestsTable = ({
   affiliateRequests: initialAffiliateRequests,
@@ -137,7 +123,7 @@ const AffiliateRequestsTable = ({
 }) => {
   const loggedInUser = useLoggedInUser();
   const userAgentInfo = useUserAgentInfo();
-  const [isLoading, setIsLoading] = React.useState(false);
+
   const [affiliateRequests, setAffiliateRequests] =
     React.useState<(AffiliateRequest & { processingState?: "approve" | "ignore" })[]>(initialAffiliateRequests);
 
@@ -180,7 +166,7 @@ const AffiliateRequestsTable = ({
           <TableCaption>
             <div style={{ display: "flex", justifyContent: "space-between" }}>
               Requests
-              {allowApproveAll ? <ApproveAllButton isLoading={isLoading} setIsLoading={setIsLoading} /> : null}
+              {allowApproveAll ? <ApproveAllButton /> : null}
             </div>
           </TableCaption>
           <TableHeader>
@@ -209,7 +195,6 @@ const AffiliateRequestsTable = ({
                     <Button
                       disabled={
                         !loggedInUser?.policies.direct_affiliate.update ||
-                        isLoading ||
                         !!affiliateRequest.processingState
                       }
                       onClick={() => update(affiliateRequest, "ignore")}
@@ -230,7 +215,6 @@ const AffiliateRequestsTable = ({
                         onClick={() => update(affiliateRequest, "approve")}
                         disabled={
                           !loggedInUser?.policies.direct_affiliate.update ||
-                          isLoading ||
                           affiliateRequest.state === "approved" ||
                           !!affiliateRequest.processingState
                         }
