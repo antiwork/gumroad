@@ -30,7 +30,7 @@ export default function SupportPortal() {
       url.searchParams.delete("id");
     }
     if (url.toString() !== window.location.href) {
-      router.visit(url.toString(), { preserveState: true, preserveScroll: true });
+      router.get(url.toString(), { preserveState: true, preserveScroll: true });
     }
   }, [selectedConversationSlug]);
 
