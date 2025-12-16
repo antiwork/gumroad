@@ -9,7 +9,7 @@ class Admin::PurchasePresenter
 
   def list_props
     {
-      id: purchase.id,
+      external_id: purchase.external_id,
       formatted_display_price: purchase.formatted_display_price,
       formatted_gumroad_tax_amount: purchase.gumroad_tax_cents > 0 ? purchase.formatted_gumroad_tax_amount : nil,
       gumroad_responsible_for_tax: purchase.gumroad_responsible_for_tax?,
@@ -29,7 +29,7 @@ class Admin::PurchasePresenter
       chargedback: purchase.chargedback?,
       chargeback_reversed: purchase.chargeback_reversed?,
       error_code: purchase.failed? ? purchase.formatted_error_code : nil,
-      last_chargebacked_purchase: purchase.find_past_chargebacked_purchases.first&.id,
+      last_chargebacked_purchase: purchase.find_past_chargebacked_purchases.first&.external_id,
     }
   end
 
@@ -115,9 +115,9 @@ class Admin::PurchasePresenter
                        affiliate_email: purchase.affiliate.present? ? purchase.affiliate.affiliate_user.form_email : nil,
                        can_contact: purchase.can_contact?,
                        gift: purchase.is_gift_sender_purchase ?
-                               { is_sender_purchase: true, other_purchase_id: purchase.gift.giftee_purchase_id, other_email: purchase.giftee_email, note: purchase.gift_note } :
+                               { is_sender_purchase: true, other_purchase_external_id: purchase.gift.giftee_purchase&.external_id, other_email: purchase.giftee_email, note: purchase.gift_note } :
                                purchase.is_gift_receiver_purchase ?
-                                 { is_sender_purchase: false, other_purchase_id: purchase.gift.gifter_purchase_id, other_email: purchase.gifter_email, note: purchase.gift_note } :
+                                 { is_sender_purchase: false, other_purchase_external_id: purchase.gift.gifter_purchase&.external_id, other_email: purchase.gifter_email, note: purchase.gift_note } :
                                  nil,
                        successful: purchase.successful?,
                        can_force_update: purchase.can_force_update?,

@@ -88,7 +88,7 @@ const TaxCenterIndex = () => {
   const { documents, available_years, selected_year } = cast<{
     documents: TaxDocument[];
     available_years: number[];
-    selected_year: number;
+    selected_year: number | null;
   }>(usePage().props);
   const loggedInUser = useLoggedInUser();
   const [isLoading, setIsLoading] = React.useState(false);
@@ -141,7 +141,7 @@ const TaxCenterIndex = () => {
       <section className="p-4 md:p-8">
         <div className="mb-4 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
           <h2>Tax documents</h2>
-          {available_years.length > 0 && (
+          {selected_year ? (
             <div className="flex items-center gap-3">
               <select
                 aria-label="Tax year"
@@ -156,7 +156,7 @@ const TaxCenterIndex = () => {
                 ))}
               </select>
             </div>
-          )}
+          ) : null}
         </div>
 
         {documents.length > 0 ? (
