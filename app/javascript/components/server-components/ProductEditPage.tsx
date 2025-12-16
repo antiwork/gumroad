@@ -32,6 +32,7 @@ import {
 import { ImageUploadSettingsContext } from "$app/components/RichTextEditor";
 import { showAlert } from "$app/components/server-components/Alert";
 import { useAutosaveProduct } from "$app/components/ProductEdit/useAutosaveProduct";
+import { useLocation } from "react-router-dom";
 
 const routes: RouteObject[] = [
   {
@@ -147,12 +148,11 @@ const ProductEditPage = (props: Props) => {
       return updated;
     });
   const [existingFiles, setExistingFiles] = React.useState(props.existing_files);
-  const router = createBrowserRouter(routes);
+  const router = createBrowserRouter(routes); // !
 
   const [saving, setSaving] = React.useState(false);
   const [imagesUploading, setImagesUploading] = React.useState<Set<File>>(new Set());
 
-  // Tri
   const isBlocked =
   saving ||
   imagesUploading.size > 0 ||
@@ -162,7 +162,6 @@ const ProductEditPage = (props: Props) => {
     "idle" | "saving" | "saved" | "error"
   >("idle");
 
-  // TODO(Tri): Handle autosave
   const save = async () => {
     if (saving) return;
 
@@ -218,6 +217,19 @@ const ProductEditPage = (props: Props) => {
     isBlocked,
   });
 
+  const location = useLocation();
+  const lastPathRef = React.useRef(location.pathname);
+
+  React.useEffect(() => {
+    if (lastPathRef.current !== location.pathname) {
+      // Route changed inside product edit
+      if (!saving && !isBlocked) {
+        void save();
+      }
+      lastPathRef.current = location.pathname;
+    }
+  }, [location.pathname, save, saving, isBlocked]);
+
   const contextValue = React.useMemo(
     () => ({
       ...createContextValue(props),
@@ -229,7 +241,7 @@ const ProductEditPage = (props: Props) => {
       updateProduct,
       save,
       saving,
-      autosaveState, // Tri
+      autosaveState,
       contentUpdates,
       setContentUpdates,
     }),
