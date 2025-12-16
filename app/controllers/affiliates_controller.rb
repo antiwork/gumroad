@@ -30,7 +30,7 @@ class AffiliatesController < Sellers::BaseController
     affiliates_data = presenter.index_props
 
     if affiliates_data[:affiliates].empty? && affiliates_data[:affiliate_requests].empty? && page == 1 && query.blank?
-      redirect_to onboarding_affiliates_path and return
+      redirect_to onboarding_affiliates_path && return
     end
 
     render inertia: "Affiliates/Index", props: affiliates_data
