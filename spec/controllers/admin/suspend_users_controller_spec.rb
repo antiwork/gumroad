@@ -33,16 +33,19 @@ describe Admin::SuspendUsersController, type: :controller, inertia: true do
   end
 
   describe "PUT update" do
-    let(:user_ids_to_suspend) { create_list(:user, 2).map { |user| user.id.to_s } }
+    let(:users_to_suspend) { create_list(:user, 2) }
+    let(:user_ids_to_suspend) { users_to_suspend.map { |user| user.id.to_s } }
     let(:reason) { "Violating our terms of service" }
     let(:additional_notes) { nil }
+
+    before do
+      put :update, params: { suspend_users: { identifiers: specified_ids, reason:, additional_notes: } }
+    end
 
     context "when the specified users IDs are separated by newlines" do
       let(:specified_ids) { user_ids_to_suspend.join("\n") }
 
       it "enqueues a job to suspend the specified users" do
-        put :update, params: { suspend_users: { identifiers: specified_ids, reason: } }
-
         expect(SuspendUsersWorker).to have_enqueued_sidekiq_job(admin_user.id, user_ids_to_suspend, reason, additional_notes)
         expect(flash[:notice]).to eq "User suspension in progress!"
         expect(response).to redirect_to(admin_suspend_users_url)
@@ -53,19 +56,28 @@ describe Admin::SuspendUsersController, type: :controller, inertia: true do
       let(:specified_ids) { user_ids_to_suspend.join(", ") }
 
       it "enqueues a job to suspend the specified users" do
-        put :update, params: { suspend_users: { identifiers: specified_ids, reason: } }
-
         expect(SuspendUsersWorker).to have_enqueued_sidekiq_job(admin_user.id, user_ids_to_suspend, reason, additional_notes)
         expect(flash[:notice]).to eq "User suspension in progress!"
         expect(response).to redirect_to(admin_suspend_users_url)
       end
     end
 
-    context "when additional notes are provided" do
-      it "passes the additional notes as job's param" do
-        additional_notes = "Some additional notes"
-        put :update, params: { suspend_users: { identifiers: user_ids_to_suspend.join(", "), reason:, additional_notes:  } }
+    context "when external IDs are provided" do
+      let(:external_ids_to_suspend) { users_to_suspend.map(&:external_id) }
+      let(:specified_ids) { external_ids_to_suspend.join(", ") }
 
+      it "enqueues a job to suspend the specified users" do
+        expect(SuspendUsersWorker).to have_enqueued_sidekiq_job(admin_user.id, external_ids_to_suspend, reason, additional_notes)
+        expect(flash[:notice]).to eq "User suspension in progress!"
+        expect(response).to redirect_to(admin_suspend_users_url)
+      end
+    end
+
+    context "when additional notes are provided" do
+      let(:additional_notes) { "Some additional notes" }
+      let(:specified_ids) { user_ids_to_suspend.join(", ") }
+
+      it "passes the additional notes as job's param" do
         expect(SuspendUsersWorker).to have_enqueued_sidekiq_job(admin_user.id, user_ids_to_suspend, reason, additional_notes)
         expect(flash[:notice]).to eq "User suspension in progress!"
         expect(response).to redirect_to(admin_suspend_users_url)

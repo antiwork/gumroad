@@ -197,7 +197,7 @@ export const EditProfile = (props: Props) => {
 
   return (
     <SectionReducerContext.Provider value={reducer}>
-      <header className="relative grid grid-cols-1 gap-4 border-b border-border px-4 py-8">
+      <header className="relative grid gap-4 border-b border-border px-4 py-8">
         {/* Work around position:absolute being affected by header's grid */}
         <SectionToolbar>
           <EditorMenu label="Page settings" onClose={() => void saveTabs(tabs)}>
@@ -227,28 +227,30 @@ export const EditProfile = (props: Props) => {
             </EditorSubmenu>
           </EditorMenu>
         </SectionToolbar>
-        {props.bio ? (
-          <h1 style={{ whiteSpace: "pre-line" }}>
-            <AutoLink text={props.bio} />
-          </h1>
-        ) : null}
-        <Tabs aria-label="Profile Tabs">
-          {tabs.map((tab) => (
-            <Tab
-              key={tab.id}
-              isSelected={tab === selectedTab}
-              onClick={() => {
-                if (imageUploadSettings.isUploading) {
-                  showAlert("Please wait for all images to finish uploading before switching tabs.", "warning");
-                  return;
-                }
-                setSelectedTab(tab);
-              }}
-            >
-              {tab.name}
-            </Tab>
-          ))}
-        </Tabs>
+        <div className="mx-auto grid w-full max-w-6xl gap-4">
+          {props.bio ? (
+            <h1 className="whitespace-pre-line">
+              <AutoLink text={props.bio} />
+            </h1>
+          ) : null}
+          <Tabs aria-label="Profile Tabs">
+            {tabs.map((tab) => (
+              <Tab
+                key={tab.id}
+                isSelected={tab === selectedTab}
+                onClick={() => {
+                  if (imageUploadSettings.isUploading) {
+                    showAlert("Please wait for all images to finish uploading before switching tabs.", "warning");
+                    return;
+                  }
+                  setSelectedTab(tab);
+                }}
+              >
+                {tab.name}
+              </Tab>
+            ))}
+          </Tabs>
+        </div>
       </header>
       <div className="fixed! top-5 right-3 z-30 p-0! lg:top-3 lg:right-auto lg:left-3">
         <WithTooltip tip="Edit profile" position={isDesktop ? "right" : "left"}>

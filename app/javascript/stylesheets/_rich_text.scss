@@ -40,7 +40,7 @@
     padding-left: spacer(6);
   }
 
-  figure {
+  figure:not(.tailwind-override) {
     margin-bottom: spacer(5);
 
     img {

@@ -5,7 +5,7 @@ import { request } from "$app/utils/request";
 export type ProductPurchase = {
   email: string;
   created: string;
-  id: number;
+  external_id: string;
   amount: number;
   displayed_price: string;
   formatted_gumroad_tax_amount: string;

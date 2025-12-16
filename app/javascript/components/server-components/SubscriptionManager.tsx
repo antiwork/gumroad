@@ -358,7 +358,7 @@ const SubscriptionManager = ({
 
       <StateContext.Provider value={reducer}>
         <div>
-          <PaymentForm className="borderless" notice={paymentNotice} />
+          <PaymentForm className="borderless" notice={paymentNotice} showCustomFields={false} />
           {totalPrice > 0 ? (
             <div>
               <div className="text-center">

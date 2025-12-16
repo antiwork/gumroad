@@ -830,6 +830,10 @@ Rails.application.routes.draw do
       resources :exports, only: [:create]
     end
 
+    # tax center
+    get "/payouts/taxes", to: "tax_center#index", as: :tax_center
+    get "/payouts/taxes/:year/:form_type/download", to: "tax_center#download", as: :download_tax_form
+
     # wishlists
     namespace :wishlists do
       resources :following, only: [:index]

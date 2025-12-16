@@ -806,7 +806,7 @@ class Purchase < ApplicationRecord
     {
       "email" => email,
       "created" => "#{time_ago_in_words(created_at)} ago",
-      "id" => id,
+      "external_id" => external_id,
       "amount" => price_cents,
       "displayed_price" => formatted_total_price,
       "formatted_gumroad_tax_amount" => formatted_gumroad_tax_amount,

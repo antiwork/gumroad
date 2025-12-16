@@ -11,6 +11,6 @@ describe Admin::Purchases::CommentsController do
 
   it_behaves_like "Admin::Commentable" do
     let(:commentable_object) { purchase }
-    let(:route_params) { { purchase_id: purchase.id } }
+    let(:route_params) { { purchase_external_id: purchase.external_id } }
   end
 end
