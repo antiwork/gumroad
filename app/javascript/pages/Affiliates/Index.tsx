@@ -281,7 +281,7 @@ export default function AffiliatesIndex() {
     }
     params.delete("page");
     setIsNavigating(true);
-    router.visit(`${Routes.affiliates_path()}?${params.toString()}`, {
+    router.get(`${Routes.affiliates_path()}?${params.toString()}`, {
       preserveState: true,
       onFinish: () => setIsNavigating(false),
     });
