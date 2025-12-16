@@ -4,14 +4,8 @@ import { assertDefined } from "$app/utils/assert";
 import { request, ResponseError } from "$app/utils/request";
 
 import { PaginationProps } from "$app/components/Pagination";
-import { Sort } from "$app/components/useSortingTableDriver";
 
 export type SortKey = "affiliate_user_name" | "products" | "fee_percent" | "volume_cents";
-export type Params = {
-  page: number | null;
-  query: string | null;
-  sort: Sort<SortKey> | null;
-};
 
 export type SelfServeAffiliateProduct = {
   id: number;
@@ -62,15 +56,6 @@ export type AffiliateRequestPayload = {
 
 type AffiliateResponse = { success: boolean; message?: string };
 
-type AffiliateData = {
-  id: string;
-  email: string;
-  destination_url: string | null;
-  affiliate_user_name: string;
-  fee_percent: number;
-  products: AffiliateProduct[];
-};
-
 type AffiliateSignupFormData = { products: readonly SelfServeAffiliateProduct[]; disable_global_affiliate: boolean };
 type AffiliateSignupFormResponse = { success: boolean } | { success: false; error: string };
 export type AffiliateSignupFormPageData = {
@@ -120,55 +105,6 @@ export async function removeAffiliate(id: string) {
   const parsed = cast<{ success: boolean }>(await response.json());
   if (!response.ok || !parsed.success) throw new ResponseError();
 }
-
-export function getPagedAffiliates({
-  page,
-  query,
-  sort,
-  shouldGetAffiliateRequests,
-  abortSignal,
-}: Params & { shouldGetAffiliateRequests?: boolean; abortSignal: AbortSignal }) {
-  return request({
-    method: "GET",
-    accept: "json",
-    url: Routes.internal_affiliates_path({
-      page,
-      query,
-      sort,
-      should_get_affiliate_requests: shouldGetAffiliateRequests ?? false,
-    }),
-    abortSignal,
-  })
-    .then((res) => {
-      if (!res.ok) throw new ResponseError();
-      return res.json();
-    })
-    .then((json) => cast<PagedAffiliatesData>(json));
-}
-
-export async function loadAffiliate(affiliateId: string) {
-  const response = await request({
-    method: "GET",
-    accept: "json",
-    url: Routes.internal_affiliate_path(affiliateId),
-  });
-  if (!response.ok) {
-    if (response.status === 404) return null;
-    throw new ResponseError();
-  }
-  return cast<AffiliateData>(await response.json());
-}
-
-export async function getOnboardingAffiliateData() {
-  const response = await request({
-    method: "GET",
-    accept: "json",
-    url: Routes.onboarding_internal_affiliates_path(),
-  });
-  if (!response.ok) throw new ResponseError();
-  return cast<AffiliateSignupFormPageData>(await response.json());
-}
-
 export async function submitAffiliateSignupForm(data: AffiliateSignupFormData) {
   const response = await request({
     method: "PATCH",

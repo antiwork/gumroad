@@ -4,7 +4,6 @@ import { parseISO } from "date-fns";
 import * as React from "react";
 
 import {
-  removeAffiliate,
   Affiliate,
   AffiliateRequest,
   AffiliateStatistics,
@@ -33,6 +32,7 @@ import { Table, TableBody, TableCaption, TableCell, TableHead, TableHeader, Tabl
 import { Tabs, Tab } from "$app/components/ui/Tabs";
 import { useDebouncedCallback } from "$app/components/useDebouncedCallback";
 import { useLocalPagination } from "$app/components/useLocalPagination";
+import useRouteLoading from "$app/components/useRouteLoading";
 import { useUserAgentInfo } from "$app/components/UserAgent";
 import { Sort, useClientSortingTableDriver, useSortingTableDriver } from "$app/components/useSortingTableDriver";
 import { WithTooltip } from "$app/components/WithTooltip";
@@ -263,7 +263,7 @@ const formattedSalesVolumeAmount = (amountCents: number) =>
 export default function AffiliatesIndex() {
   const props = usePage<Props>().props;
   const loggedInUser = useLoggedInUser();
-  const [isNavigating, setIsNavigating] = React.useState(false);
+  const isNavigating = useRouteLoading();
 
   const { affiliates, affiliate_requests, pagination, allow_approve_all_requests, affiliates_disabled_reason } = props;
   const [selectedAffiliate, setSelectedAffiliate] = React.useState<Affiliate | null>(null);
@@ -280,21 +280,13 @@ export default function AffiliatesIndex() {
       params.delete("query");
     }
     params.delete("page");
-    setIsNavigating(true);
-    router.get(`${Routes.affiliates_path()}?${params.toString()}`, {
-      preserveState: true,
-      onFinish: () => setIsNavigating(false),
-    });
+    router.reload({ data: Object.fromEntries(params) });
   }, 500);
 
   const onChangePage = (newPage: number) => {
     const params = new URLSearchParams(window.location.search);
     params.set("page", newPage.toString());
-    setIsNavigating(true);
-    router.visit(`${Routes.affiliates_path()}?${params.toString()}`, {
-      preserveState: true,
-      onFinish: () => setIsNavigating(false),
-    });
+    router.reload({ data: Object.fromEntries(params) });
   };
 
   const onSetSort = (newSort: Sort<SortKey> | null) => {
@@ -305,11 +297,7 @@ export default function AffiliatesIndex() {
       params.set("sort", newSort.direction);
     }
     setSort(newSort);
-    setIsNavigating(true);
-    router.reload({
-      data: params,
-      onFinish: () => setIsNavigating(false),
-    });
+    router.reload({ data: Object.fromEntries(params) });
   };
   const thProps = useSortingTableDriver<SortKey>(sort, onSetSort);
 
@@ -332,17 +320,10 @@ export default function AffiliatesIndex() {
   const productTooltipLabel = (products: Affiliate["products"]) =>
     products.map((product) => `${product.name} (${formatAffiliateBasisPoints(product.fee_percent ?? 0)})`).join(", ");
 
-  const remove = asyncVoid(async (affiliateId: string) => {
-    try {
-      await removeAffiliate(affiliateId);
-      if (selectedAffiliate) setSelectedAffiliate(null);
-      router.reload();
-      showAlert("The affiliate was removed successfully.", "success");
-    } catch (e) {
-      assertResponseError(e);
-      showAlert("Failed to remove the affiliate.", "error");
-    }
-  });
+  const remove = (affiliateId: string) => {
+    if (selectedAffiliate) setSelectedAffiliate(null);
+    router.delete(Routes.affiliate_path(affiliateId));
+  };
 
   const [affiliateStatistics, setAffiliateStatistics] = React.useState<Record<string, AffiliateStatistics>>({});
   const affiliateStatisticsRequests = React.useRef<Set<string>>(new Set());
