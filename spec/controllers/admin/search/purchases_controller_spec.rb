@@ -33,8 +33,8 @@ describe Admin::Search::PurchasesController, type: :controller, inertia: true do
 
       expect(response).to be_successful
       expect(response.content_type).to match(%r{application/json})
-      expect(response.parsed_body["purchases"]).to contain_exactly(hash_including("id" => purchase_3.id), hash_including("id" => purchase_2.id))
-      expect(response.parsed_body["purchases"]).not_to include(hash_including("id" => purchase_1.id))
+      expect(response.parsed_body["purchases"]).to contain_exactly(hash_including("external_id" => purchase_3.external_id), hash_including("external_id" => purchase_2.external_id))
+      expect(response.parsed_body["purchases"]).not_to include(hash_including("external_id" => purchase_1.external_id))
       expect(response.parsed_body["pagination"]).to be_present
     end
 
@@ -54,10 +54,10 @@ describe Admin::Search::PurchasesController, type: :controller, inertia: true do
       purchase_by_ip = create(:purchase, ip_address: ip_v4)
 
       get :index, params: { query: email }
-      expect(response).to redirect_to admin_purchase_path(purchase_by_email)
+      expect(response).to redirect_to admin_purchase_path(purchase_by_email.external_id)
 
       get :index, params: { query: ip_v4 }
-      expect(response).to redirect_to admin_purchase_path(purchase_by_ip)
+      expect(response).to redirect_to admin_purchase_path(purchase_by_ip.external_id)
     end
 
     it "returns purchases from AdminSearchService" do
