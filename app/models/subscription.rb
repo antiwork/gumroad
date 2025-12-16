@@ -262,7 +262,7 @@ class Subscription < ApplicationRecord
     end
     purchase.affiliate = original_purchase.affiliate if original_purchase.affiliate.try(:eligible_for_credit?)
     purchase.is_upgrade_purchase = is_upgrade_purchase if is_upgrade_purchase
-    get_vat_id_from_original_purchase(purchase)
+    set_vat_id_for_purchase(purchase)
     purchase
   end
 
@@ -692,6 +692,16 @@ class Subscription < ApplicationRecord
     update!(business_vat_id: vat_id) if vat_id.present? && business_vat_id.blank?
   end
 
+  def vat_id_from_any_subscription_purchase_refund
+    Refund.joins(:purchase)
+          .where(purchases: { subscription_id: id })
+          .where("refunds.gumroad_tax_cents > 0")
+          .where("refunds.amount_cents = 0")
+          .order("refunds.created_at DESC")
+          .find { |refund| refund.business_vat_id.present? } # business_vat_id stored in json_data
+          &.business_vat_id
+  end
+
   def last_resubscribed_at
     if defined?(@_last_resubscribed_at)
       @_last_resubscribed_at
@@ -931,7 +941,7 @@ class Subscription < ApplicationRecord
       payment_options.alive.last
     end
 
-    def get_vat_id_from_original_purchase(purchase)
+    def set_vat_id_for_purchase(purchase)
       vat_id = business_vat_id.presence ||
                original_purchase.purchase_sales_tax_info&.business_vat_id.presence ||
                vat_id_from_original_purchase_refund ||
@@ -945,18 +955,8 @@ class Subscription < ApplicationRecord
                        .where("gumroad_tax_cents > 0")
                        .where("amount_cents = 0")
                        .order(created_at: :desc)
-                       .find { |refund| refund.business_vat_id.present? }
+                       .find { |refund| refund.business_vat_id.present? } # business_vat_id stored in json_data
                        &.business_vat_id
-    end
-
-    def vat_id_from_any_subscription_purchase_refund
-      Refund.joins(:purchase)
-            .where(purchases: { subscription_id: id })
-            .where("refunds.gumroad_tax_cents > 0")
-            .where("refunds.amount_cents = 0")
-            .order("refunds.created_at DESC")
-            .find { |refund| refund.business_vat_id.present? }
-            &.business_vat_id
     end
 
     def schedule_member_cancellation_workflow_jobs
