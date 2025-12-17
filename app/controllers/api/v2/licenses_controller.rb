@@ -3,9 +3,9 @@
 class Api::V2::LicensesController < Api::V2::BaseController
   before_action :log_params, only: [:verify]
   before_action :clean_params, only: [:verify]
-  before_action(only: [:enable, :disable, :decrement_uses_count]) { doorkeeper_authorize! :edit_products }
+  before_action(only: [:enable, :disable, :decrement_uses_count, :rotate]) { doorkeeper_authorize! :edit_products }
   before_action :fetch_valid_license
-  before_action :validate_license_user, only: [:enable, :disable, :decrement_uses_count]
+  before_action :validate_license_user, only: [:enable, :disable, :decrement_uses_count, :rotate]
   skip_before_action :verify_authenticity_token, only: [:verify]
 
   # Purchase values we want to include for license API responses
@@ -25,6 +25,12 @@ class Api::V2::LicensesController < Api::V2::BaseController
 
   def disable
     @license.disable!
+
+    success_with_license
+  end
+
+  def rotate
+    @license.rotate!
 
     success_with_license
   end
