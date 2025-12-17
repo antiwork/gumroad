@@ -46,6 +46,8 @@ class Admin::UsersController < Admin::BaseController
     @user.email = params[:update_email][:email_address]
     @user.save!
     render json: { success: true }
+  rescue ActiveRecord::RecordInvalid => e
+    render json: { message: e.message }, status: :unprocessable_entity
   end
 
   def reset_password
