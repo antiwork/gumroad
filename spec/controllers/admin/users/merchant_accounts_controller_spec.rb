@@ -35,7 +35,7 @@ describe Admin::Users::MerchantAccountsController do
         expect(response.parsed_body["merchant_accounts"].length).to eq(2)
 
         merchant_account = response.parsed_body["merchant_accounts"].first
-        expect(merchant_account.keys).to match_array(%w[id charge_processor_id alive charge_processor_alive])
+        expect(merchant_account.keys).to match_array(%w[charge_processor_id external_id alive charge_processor_alive])
       end
 
       it "returns true for has_stripe_account" do

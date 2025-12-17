@@ -1449,6 +1449,46 @@ describe Subscription, :vcr do
       end
     end
 
+    context "when subscription has previously failed" do
+      context "within the last 7 days" do
+        it "sends email to customer but not creator on repeated recent failure" do
+          create(:purchase,
+                 link: @subscription.link,
+                 subscription: @subscription,
+                 email: @subscription.user.email,
+                 purchase_state: "failed",
+                 created_at: 2.hours.ago
+          )
+
+          expect(@subscription.seller.enable_payment_email).to eq(true)
+
+          expect do
+            @subscription.unsubscribe_and_fail!
+          end.to have_enqueued_mail(CustomerLowPriorityMailer, :subscription_autocancelled).with(@subscription.id)
+             .and not_have_enqueued_mail(ContactingCreatorMailer, :subscription_autocancelled).with(@subscription.id)
+        end
+      end
+
+      context "more than 7 days ago" do
+        it "sends email to customer and creator on new failure" do
+          create(:purchase,
+                 link: @subscription.link,
+                 subscription: @subscription,
+                 email: @subscription.user.email,
+                 purchase_state: "failed",
+                 created_at: 30.days.ago
+          )
+
+          expect(@subscription.seller.enable_payment_email).to eq(true)
+
+          expect do
+            @subscription.unsubscribe_and_fail!
+          end.to have_enqueued_mail(CustomerLowPriorityMailer, :subscription_autocancelled).with(@subscription.id)
+             .and have_enqueued_mail(ContactingCreatorMailer, :subscription_autocancelled).with(@subscription.id)
+        end
+      end
+    end
+
     it "emails the customer" do
       expect do
         @subscription.unsubscribe_and_fail!
