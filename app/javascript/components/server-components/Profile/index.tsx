@@ -63,21 +63,23 @@ const PublicProfile = (props: Props) => {
   return (
     <>
       {props.bio || props.tabs.length > 1 ? (
-        <header className="grid grid-cols-1 gap-4 border-b border-border px-4 py-8">
-          {props.bio ? (
-            <h1 className="whitespace-pre-line">
-              <AutoLink text={props.bio} />
-            </h1>
-          ) : null}
-          {props.tabs.length > 1 ? (
-            <UITabs aria-label="Profile Tabs">
-              {tabs.map((tab, i) => (
-                <UITab key={i} isSelected={tab === selectedTab} onClick={() => setSelectedTab(tab)}>
-                  {tab.name}
-                </UITab>
-              ))}
-            </UITabs>
-          ) : null}
+        <header className="border-b border-border">
+          <div className="mx-auto grid w-full max-w-6xl grid-cols-1 gap-4 px-4 py-8 lg:px-0">
+            {props.bio ? (
+              <h1 className="whitespace-pre-line">
+                <AutoLink text={props.bio} />
+              </h1>
+            ) : null}
+            {props.tabs.length > 1 ? (
+              <UITabs aria-label="Profile Tabs">
+                {tabs.map((tab, i) => (
+                  <UITab key={i} isSelected={tab === selectedTab} onClick={() => setSelectedTab(tab)}>
+                    {tab.name}
+                  </UITab>
+                ))}
+              </UITabs>
+            ) : null}
+          </div>
         </header>
       ) : null}
       {sections?.length ? (

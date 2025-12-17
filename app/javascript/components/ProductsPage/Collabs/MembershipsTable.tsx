@@ -147,13 +147,13 @@ export const CollabsMembershipsTable = (props: { entries: Membership[]; paginati
           <TableRow>
             <TableCell colSpan={4}>Totals</TableCell>
 
-            <TableCell>
+            <TableCell label="Members">
               {memberships
                 .reduce((sum, membership) => sum + membership.successful_sales_count, 0)
                 .toLocaleString(locale)}
             </TableCell>
 
-            <TableCell>
+            <TableCell label="Revenue">
               {formatPriceCentsWithCurrencySymbol(
                 "usd",
                 memberships.reduce((sum, membership) => sum + membership.revenue, 0),

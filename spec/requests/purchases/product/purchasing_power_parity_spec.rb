@@ -192,8 +192,8 @@ describe "Purchasing power parity", type: :system, js: true do
     it "applies the PPP discount" do
       visit @membership.long_url
       expect(page).to have_selector("[role='status']", text: "This product supports purchasing power parity. Because you're located in Latvia, the price has been discounted by 51% to $1.47.")
-      expect(page).to have_radio_button("First Tier", text: "$3 $1.47 a month")
-      expect(page).to have_radio_button("Second Tier", text: "$5 $2.45 a month")
+      expect(page).to have_radio_button("First Tier", text: /\$3\s+\$1\.47 a month/)
+      expect(page).to have_radio_button("Second Tier", text: /\$5\s+\$2\.45 a month/)
 
       add_to_cart(@membership, option: "First Tier")
       check_out(@membership, credit_card: { number: "4000004280000005" }, zip_code: nil)

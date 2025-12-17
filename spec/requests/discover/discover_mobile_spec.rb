@@ -43,7 +43,7 @@ describe("Discover - Nav - Mobile", :js, :mobile_view, type: :system) do
     end
   end
 
-  it "dismisses the menu via the close menu button" do
+  it "dismisses the menu by pressing escape key" do
     visit discover_url(host: discover_host)
 
     # 'All' is the first option of the nav
@@ -52,7 +52,7 @@ describe("Discover - Nav - Mobile", :js, :mobile_view, type: :system) do
     click_on "Categories"
     expect(page).to have_text("All")
 
-    click_on "Close Menu"
+    send_keys(:escape)
     expect(page).not_to have_text("All")
   end
 end

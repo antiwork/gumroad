@@ -132,13 +132,13 @@ export const CollabsProductsTable = (props: { entries: Product[]; pagination: Pa
         <TableFooter>
           <TableRow>
             <TableCell colSpan={4}>Totals</TableCell>
-            <TableCell>
+            <TableCell label="Sales">
               {products
                 .reduce((sum, product) => sum + product.successful_sales_count, 0)
                 .toLocaleString(userAgentInfo.locale)}
             </TableCell>
 
-            <TableCell>
+            <TableCell label="Revenue">
               {formatPriceCentsWithCurrencySymbol(
                 "usd",
                 products.reduce((sum, product) => sum + product.revenue, 0),

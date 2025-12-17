@@ -2,6 +2,8 @@ import cx from "classnames";
 import * as React from "react";
 import { ReactSortable as Sortable, ReactSortableProps } from "react-sortablejs";
 
+import { RowDragHandle } from "$app/components/ui/Rows";
+
 const IsBeingDraggedContext = React.createContext(false);
 const useIsBeingDragged = () => React.useContext(IsBeingDraggedContext);
 
@@ -51,7 +53,7 @@ export const ReorderingHandle = () => {
     setGrabbed(rowElement?.getAttribute("draggable") === "true");
   }, [rowIsBeingDragged]);
 
-  return <div ref={setRef} aria-grabbed={grabbed} data-drag-handle draggable />;
+  return <RowDragHandle ref={setRef} aria-grabbed={grabbed} data-drag-handle draggable />;
 };
 
 export const Drawer = ({ className, children, ...rest }: React.HTMLAttributes<HTMLDivElement>) => {

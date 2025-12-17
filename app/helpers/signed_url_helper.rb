@@ -10,6 +10,11 @@ module SignedUrlHelper
   private_constant :CF_WORKER_CACHE_KEY
 
   def signed_download_url_for_s3_key_and_filename(s3_key, s3_filename, is_video: false, expires_in: nil, cache_group: nil)
+    # For local MinIO, use S3 presigned URLs instead of Cloudflare or CloudFront
+    if USING_MINIO
+      return minio_presigned_url(s3_key, s3_filename, is_video, expires_in)
+    end
+
     content_length, public_url_path = Rails.cache.fetch("content_length_public_url_path_#{S3_BUCKET}_#{s3_key}") do
       obj = Aws::S3::Resource.new.bucket(S3_BUCKET).object(s3_key)
       [obj.content_length, obj.public_url]
@@ -49,6 +54,18 @@ module SignedUrlHelper
   end
 
   private
+    def minio_presigned_url(s3_key, s3_filename, is_video, expires_in)
+      obj = Aws::S3::Resource.new.bucket(S3_BUCKET).object(s3_key)
+      content_length = obj.content_length
+      expires_in ||= is_video ? SIGNED_VIDEO_URL_VALID_FOR : signed_url_validity_time_for_file_size(content_length)
+
+      obj.presigned_url(
+        :get,
+        expires_in: expires_in.to_i,
+        response_content_disposition: "attachment; filename=\"#{s3_filename}\""
+      )
+    end
+
     def signed_url_validity_time_for_file_size(file_size)
       return SIGNED_S3_URL_VALID_FOR_MINIMUM unless file_size
       valid_for = [(file_size / 1_024 / 50).seconds, SIGNED_S3_URL_VALID_FOR_MINIMUM].max

@@ -3,6 +3,7 @@ import * as React from "react";
 
 import { followSeller } from "$app/data/follow_seller";
 import { CreatorProfile } from "$app/parsers/profile";
+import { classNames } from "$app/utils/classNames";
 import { isValidEmail } from "$app/utils/email";
 
 import { Button } from "$app/components/Button";
@@ -23,6 +24,7 @@ export const FollowForm = ({
   const isOwnProfile = loggedInUser?.id === creatorProfile.external_id;
   const [email, setEmail] = React.useState(isOwnProfile ? "" : (loggedInUser?.email ?? ""));
   const [formStatus, setFormStatus] = React.useState<"initial" | "submitting" | "success" | "invalid">("initial");
+  const emailInputRef = React.useRef<HTMLInputElement>(null);
 
   React.useEffect(() => setFormStatus("initial"), [email]);
 
@@ -30,7 +32,12 @@ export const FollowForm = ({
     e.preventDefault();
 
     if (!isValidEmail(email)) {
+      emailInputRef.current?.focus();
       setFormStatus("invalid");
+      showAlert(
+        email.trim() === "" ? "Please enter your email address." : "Please enter a valid email address.",
+        "error",
+      );
       return;
     }
 
@@ -55,6 +62,7 @@ export const FollowForm = ({
       <fieldset className={cx({ danger: formStatus === "invalid" })}>
         <div className="flex gap-2">
           <input
+            ref={emailInputRef}
             type="email"
             value={email}
             className="flex-1"
@@ -76,11 +84,19 @@ export const FollowForm = ({
   );
 };
 
-export const FollowFormBlock = ({ creatorProfile }: { creatorProfile: CreatorProfile }) => (
-  <div className="flex grow flex-col justify-center gap-16 px-4 lg:px-0">
-    <h1>Subscribe to receive email updates from {creatorProfile.name}.</h1>
-    <div className="max-w-lg">
-      <FollowForm creatorProfile={creatorProfile} buttonColor="primary" />
+export const FollowFormBlock = ({
+  creatorProfile,
+  className,
+}: {
+  creatorProfile: CreatorProfile;
+  className?: string;
+}) => (
+  <div className={classNames("flex grow flex-col justify-center", className)}>
+    <div className="mx-auto flex w-full max-w-6xl flex-col gap-16">
+      <h1>Subscribe to receive email updates from {creatorProfile.name}.</h1>
+      <div className="max-w-lg">
+        <FollowForm creatorProfile={creatorProfile} buttonColor="primary" />
+      </div>
     </div>
   </div>
 );
