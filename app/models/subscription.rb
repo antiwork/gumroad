@@ -24,6 +24,7 @@ class Subscription < ApplicationRecord
   FREE_TRIAL_EXPIRING_REMINDER_EMAIL = 2.days
   # time to access membership manage page after requesting magic link
   TOKEN_VALIDITY = 24.hours
+  ALLOWED_TIME_BEFORE_SENDING_REPEATED_CANCELLATION_EMAIL_TO_CREATOR = 7.days
 
   module ResubscriptionReason
     PAYMENT_ISSUE_RESOLVED = "payment_issue_resolved"
@@ -360,10 +361,17 @@ class Subscription < ApplicationRecord
     with_lock do
       return if failed_at.present?
 
+      was_recently_failed = purchases.failed.where("created_at > ?", ALLOWED_TIME_BEFORE_SENDING_REPEATED_CANCELLATION_EMAIL_TO_CREATOR.ago).exists?
+
       self.failed_at = Time.current
       self.deactivate!
+
       CustomerLowPriorityMailer.subscription_autocancelled(id).deliver_later(queue: "low")
-      ContactingCreatorMailer.subscription_autocancelled(id).deliver_later(queue: "critical") if seller.enable_payment_email?
+
+      if seller.enable_payment_email? && !was_recently_failed
+        ContactingCreatorMailer.subscription_autocancelled(id).deliver_later(queue: "critical")
+      end
+
       send_cancelled_notification_webhook
     end
   end
