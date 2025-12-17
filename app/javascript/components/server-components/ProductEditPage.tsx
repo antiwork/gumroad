@@ -156,7 +156,6 @@ const ProductEditPage = (props: Props) => {
   const router = createBrowserRouter(routes);
 
   const [saving, setSaving] = React.useState(false);
-  // const [isDirty] = React.useState(false);
   const [imagesUploading, setImagesUploading] = React.useState<Set<File>>(new Set());
 
   const isBlocked =
@@ -294,12 +293,6 @@ const ProductEditPage = (props: Props) => {
     [imagesUploading.size],
   );
 
-  /*
-  TODO(Tri):
-  custom modal for internal navigation
-  skipping confirmation if autosave just ran
-  warning only if uploads are incomplete
-  */
   React.useEffect(() => {
     const handler = (e: BeforeUnloadEvent) => {
       if (!saving && isDirty) {
