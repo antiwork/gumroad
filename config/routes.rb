@@ -43,6 +43,7 @@ Rails.application.routes.draw do
           put :enable
           put :disable
           put :decrement_uses_count
+          put :rotate
         end
       end
 

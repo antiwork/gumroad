@@ -48,7 +48,7 @@ class Admin::PurchasePresenter
                        deleted_at: purchase.deleted_at,
                        external_id: purchase.external_id,
                        merchant_account: purchase.merchant_account.present? ? {
-                         id: purchase.merchant_account.id,
+                         external_id: purchase.merchant_account.external_id,
                          charge_processor_id: purchase.merchant_account.charge_processor_id&.capitalize,
                          holder_of_funds: purchase.merchant_account.holder_of_funds.capitalize,
                        } : nil,
