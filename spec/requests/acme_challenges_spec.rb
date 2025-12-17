@@ -9,7 +9,7 @@ describe "ACME Challenges", type: :request do
   describe "GET /.well-known/acme-challenge/:token" do
     context "when request is from a user custom domain" do
       let(:user) { create(:user) }
-      let!(:custom_domain) { create(:custom_domain, domain: "user-custom.example.com", user:) }
+      let!(:custom_domain) { create(:custom_domain, user:) }
 
       before do
         $redis.set(RedisKey.acme_challenge(token), challenge_content)
@@ -20,7 +20,7 @@ describe "ACME Challenges", type: :request do
       end
 
       it "returns the challenge content" do
-        get "/.well-known/acme-challenge/#{token}", headers: { "HOST" => "user-custom.example.com" }
+        get "/.well-known/acme-challenge/#{token}", headers: { "HOST" => custom_domain.domain }
 
         expect(response.status).to eq(200)
         expect(response.body).to eq(challenge_content)
@@ -29,7 +29,7 @@ describe "ACME Challenges", type: :request do
 
     context "when request is from a product custom domain" do
       let(:product) { create(:product) }
-      let!(:custom_domain) { create(:custom_domain, domain: "product-custom.example.com", user: nil, product:) }
+      let!(:custom_domain) { create(:custom_domain, user: nil, product:) }
 
       before do
         $redis.set(RedisKey.acme_challenge(token), challenge_content)
@@ -40,7 +40,7 @@ describe "ACME Challenges", type: :request do
       end
 
       it "returns the challenge content" do
-        get "/.well-known/acme-challenge/#{token}", headers: { "HOST" => "product-custom.example.com" }
+        get "/.well-known/acme-challenge/#{token}", headers: { "HOST" => custom_domain.domain }
 
         expect(response.status).to eq(200)
         expect(response.body).to eq(challenge_content)
