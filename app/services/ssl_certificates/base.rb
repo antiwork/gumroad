@@ -6,7 +6,7 @@ module SslCertificates
     SECRETS_S3_BUCKET = "gumroad-secrets"
 
     attr_reader :renew_in, :rate_limit, :acme_url, :sleep_duration, :rate_limit_hours,
-                :nginx_sync_duration, :account_email, :max_retries, :ssl_env, :invalid_domain_cache_expires_in
+                :account_email, :max_retries, :ssl_env, :invalid_domain_cache_expires_in
 
     def initialize
       load_config
@@ -54,7 +54,6 @@ module SslCertificates
         @acme_url                        = config["acme_url"]
         @invalid_domain_cache_expires_in = convert_duration_to_seconds(config["invalid_domain_cache_expires_in"])
         @max_retries                     = config["max_retries"]
-        @nginx_sync_duration             = convert_duration_to_seconds(config["nginx_sync_duration"])
         @rate_limit                      = config["rate_limit"]
         @rate_limit_hours                = convert_duration_to_seconds(config["rate_limit_hours"])
         @renew_in                        = convert_duration_to_seconds(config["renew_in"])
