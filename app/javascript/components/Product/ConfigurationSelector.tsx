@@ -694,7 +694,10 @@ export const ConfigurationSelector = React.forwardRef<
                     !option.recurrence_price_values?.[selection.recurrence])
                 }
                 selected={option.id === selection.optionId}
-                onClick={() => update({ optionId: option.id, price: { value: null, error: false } })}
+                onClick={() => {
+                  if (option.id === selection.optionId) return;
+                  update({ optionId: option.id, price: { value: null, error: false } });
+                }}
                 priceCents={basePriceCents + computeOptionPrice(option, selection.recurrence)}
                 name={option.name}
                 description={option.description}

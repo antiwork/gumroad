@@ -22,6 +22,19 @@ describe TaxCenterPresenter do
       end
     end
 
+    context "when seller was created in the current year" do
+      let(:seller) { create(:user, created_at: Time.current) }
+      let(:presenter) { described_class.new(seller:, year: Time.current.year) }
+
+      it "returns empty available years and nil selected year" do
+        result = presenter.props
+
+        expect(result[:available_years]).to eq([])
+        expect(result[:selected_year]).to be_nil
+        expect(result[:documents]).to eq([])
+      end
+    end
+
     context "when seller has a tax form for the year" do
       let!(:tax_form) { create(:user_tax_form, user: seller, tax_year: 2023, tax_form_type: "us_1099_k") }
       let!(:product) { create(:product, user: seller, price_cents: 1000) }
