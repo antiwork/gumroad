@@ -18,7 +18,6 @@ describe Admin::MerchantAccountPresenter do
       describe "fields" do
         it "returns the correct field values" do
           expect(props).to match(
-            id: merchant_account.id,
             charge_processor_id: merchant_account.charge_processor_id,
             charge_processor_merchant_id: merchant_account.charge_processor_merchant_id,
             created_at: merchant_account.created_at,
