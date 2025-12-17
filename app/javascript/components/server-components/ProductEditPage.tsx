@@ -156,6 +156,7 @@ const ProductEditPage = (props: Props) => {
   const router = createBrowserRouter(routes);
 
   const [saving, setSaving] = React.useState(false);
+  // const [isDirty] = React.useState(false);
   const [imagesUploading, setImagesUploading] = React.useState<Set<File>>(new Set());
 
   const isBlocked =
@@ -218,7 +219,7 @@ const ProductEditPage = (props: Props) => {
     }
   };
 
-  useAutosaveProduct({
+  const { isDirty } = useAutosaveProduct({
     product,
     lastSavedProductRef,
     save,
@@ -238,11 +239,24 @@ const ProductEditPage = (props: Props) => {
       save,
       saving,
       isBlocked,
+      isDirty,
       autosaveState,
       contentUpdates,
       setContentUpdates,
     }),
-    [product, updateProduct, existingFiles, setExistingFiles, isBlocked],
+    [
+      product,
+      updateProduct,
+      existingFiles,
+      setExistingFiles,
+      save,
+      saving,
+      isBlocked,
+      isDirty,
+      autosaveState,
+      currencyType,
+      contentUpdates,
+    ],
   );
 
   const imageSettings = React.useMemo(
@@ -281,17 +295,14 @@ const ProductEditPage = (props: Props) => {
   );
 
   /*
-  TODO(Tri): leave page pop-up
-
+  TODO(Tri):
   custom modal for internal navigation
   skipping confirmation if autosave just ran
   warning only if uploads are incomplete
-
-  Check isDirty
   */
   React.useEffect(() => {
     const handler = (e: BeforeUnloadEvent) => {
-      if (!saving) { // && isDirty
+      if (!saving && isDirty) {
         e.preventDefault();
         e.returnValue = "";
       }
@@ -299,7 +310,7 @@ const ProductEditPage = (props: Props) => {
 
     window.addEventListener("beforeunload", handler);
     return () => window.removeEventListener("beforeunload", handler);
-  }, [saving]); // isDirty,
+  }, [saving, isDirty]);
 
   return (
     <ProductEditContext.Provider value={contextValue}>
@@ -322,6 +333,7 @@ const ProductEditRouter = async (global: GlobalProps) => {
         save: async () => {},
         autosaveState: "idle",
         isBlocked: false,
+        isDirty: false,
 
         contentUpdates: null,
         setContentUpdates: () => {},

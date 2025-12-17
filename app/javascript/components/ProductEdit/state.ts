@@ -184,6 +184,7 @@ export const ProductEditContext = React.createContext<{
   save: () => Promise<void>;
   autosaveState: "idle" | "saving" | "saved" | "error";
   isBlocked: boolean;
+  isDirty: boolean,
   googleClientId: string;
   googleCalendarEnabled: boolean;
   seller_refund_policy_enabled: boolean;

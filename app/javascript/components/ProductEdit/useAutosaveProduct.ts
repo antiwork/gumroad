@@ -43,7 +43,7 @@ export const useAutosaveProduct = ({
     if (!isDirty || saving || isBlocked) return;
 
     clearDebounce();
-    debounceTimer.current = window.setTimeout(triggerSave, 5_000);
+    debounceTimer.current = window.setTimeout(triggerSave, 10_000);
 
     return clearDebounce;
   }, [product, isDirty, saving, isBlocked, triggerSave]);
@@ -58,4 +58,6 @@ export const useAutosaveProduct = ({
       }
     };
   }, [triggerSave]);
+
+  return { isDirty };
 };
