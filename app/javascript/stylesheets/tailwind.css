@@ -114,3 +114,30 @@
     transform: translateX(-50%);
   }
 }
+
+@keyframes fade-in {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes fade-out {
+  to {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+}
+
+.animate-fade-in {
+  animation: fade-in 150ms ease-out both;
+}
+
+.animate-fade-out-delayed {
+  animation: fade-in 150ms ease-out both,
+             fade-out 200ms ease-in 1.2s forwards;
+}

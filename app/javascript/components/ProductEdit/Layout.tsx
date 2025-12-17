@@ -387,5 +387,3 @@ const AutosaveIndicator = ({
     </Pill>
   );
 };
-
-// TODO(Trita): add fade-in/out animations
