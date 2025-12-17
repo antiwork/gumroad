@@ -13,6 +13,8 @@ import { CopyToClipboard } from "$app/components/CopyToClipboard";
 import { useCurrentSeller } from "$app/components/CurrentSeller";
 import { useDomains } from "$app/components/DomainSettings";
 import { Icon } from "$app/components/Icons";
+import { LoadingSpinner } from "$app/components/LoadingSpinner";
+import { Pill } from "$app/components/ui/Pill";
 import { Preview } from "$app/components/Preview";
 import { PreviewSidebar, WithPreviewSidebar } from "$app/components/PreviewSidebar";
 import { useImageUploadSettings } from "$app/components/RichTextEditor";
@@ -137,8 +139,8 @@ export const Layout = ({
   const url = useProductUrl();
   const checkoutUrl = useProductUrl({ wanted: true });
 
-  const [match] = useMatches();
-  const tab = match?.handle ?? "product";
+  const matches = useMatches();
+  const tab = matches.at(-1)?.handle ?? "product";
 
   const navigate = useRefToLatest(useNavigate());
 
@@ -190,13 +192,6 @@ export const Layout = ({
     return () => window.removeEventListener("beforeunload", beforeUnload);
   }, [isUploadingFilesOrImages]);
 
-  {autosaveState !== "idle" && (
-    <span className="text-sm text-muted">
-      {autosaveState === "saving" && "Saving…"}
-      {autosaveState === "saved" && "Saved"}
-      {autosaveState === "error" && "Save failed"}
-    </span>
-  )}
   const saveButton = (
     <WithTooltip tip={saveButtonTooltip}>
       <Button color="primary" disabled={isBusy} onClick={() => void save()}>
@@ -341,6 +336,56 @@ export const Layout = ({
       ) : (
         <div className="flex-1">{children}</div>
       )}
+      {autosaveState !== "idle" && (
+        <div
+          className="fixed bottom-4 right-4 z-50 pointer-events-none"
+          aria-live="polite"
+        >
+          <AutosaveIndicator state={autosaveState} />
+        </div>
+      )}
     </>
   );
 };
+
+const AutosaveIndicator = ({
+  state,
+}: {
+  state: "saving" | "saved" | "error";
+}) => {
+  if (state === "saving") {
+    return (
+      <Pill
+        size="small"
+        className="flex items-center gap-2 animate-fade-in"
+      >
+        <LoadingSpinner className="size-3" />
+        Saving…
+      </Pill>
+    );
+  }
+
+  if (state === "saved") {
+    return (
+      <Pill
+        size="small"
+        color="success"
+        className="animate-fade-out-delayed"
+      >
+        Saved
+      </Pill>
+    );
+  }
+
+  return (
+    <Pill
+      size="small"
+      color="danger"
+      className="animate-fade-in"
+    >
+      Save failed
+    </Pill>
+  );
+};
+
+// TODO(Trita): add fade-in/out animations
