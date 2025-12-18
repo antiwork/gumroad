@@ -14,7 +14,7 @@ import { writeQueryParams } from "$app/utils/url";
 import { Button } from "$app/components/Button";
 import { useDiscoverUrl } from "$app/components/DomainSettings";
 import { Icon } from "$app/components/Icons";
-import { Layout } from "$app/components/Library/Layout";
+import { Layout } from "$app/components/server-components/Library/Layout";
 import { Modal } from "$app/components/Modal";
 import { Popover } from "$app/components/Popover";
 import { AuthorByline } from "$app/components/Product/AuthorByline";

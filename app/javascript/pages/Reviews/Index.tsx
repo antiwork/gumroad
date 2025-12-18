@@ -7,7 +7,7 @@ import { Button, NavigationButton } from "$app/components/Button";
 import { CartItem, CartItemMain, CartItemMedia, CartItemTitle, CartItemList } from "$app/components/CartItemList";
 import { useDiscoverUrl } from "$app/components/DomainSettings";
 import { Icon } from "$app/components/Icons";
-import { Layout } from "$app/components/Library/Layout";
+import { Layout } from "$app/components/server-components/Library/Layout";
 import { Popover } from "$app/components/Popover";
 import { Thumbnail } from "$app/components/Product/Thumbnail";
 import { ProductIconCell } from "$app/components/ProductsPage/ProductIconCell";
