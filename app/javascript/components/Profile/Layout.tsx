@@ -46,7 +46,6 @@ export const Layout = ({ creatorProfile, hideFollowForm, children }: LayoutProps
                 href={Routes.admin_impersonate_url({
                   user_identifier: creatorProfile.external_id,
                 })}
-                className="absolute left-3"
                 color="filled"
               >
                 Impersonate
