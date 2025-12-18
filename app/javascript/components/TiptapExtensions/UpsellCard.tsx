@@ -13,6 +13,7 @@ import { Icon } from "$app/components/Icons";
 import { PriceTag } from "$app/components/Product/PriceTag";
 import { Thumbnail } from "$app/components/Product/Thumbnail";
 import { createInsertCommand } from "$app/components/TiptapExtensions/utils";
+import { ProductCard, ProductCardFigure, ProductCardHeader, ProductCardFooter } from "$app/components/ui/ProductCard";
 import { useRunOnce } from "$app/components/useRunOnce";
 
 declare module "@tiptap/core" {
@@ -54,12 +55,12 @@ type UpsellCardHeaderProps = {
 };
 
 const UpsellCardHeader = ({ product, variant }: UpsellCardHeaderProps) => (
-  <header>
-    <h3>
+  <ProductCardHeader className="lg:border-b-0 lg:p-0">
+    <h3 className="truncate">
       {product.name}
-      {variant ? <span className="ml-2 text-muted">({variant.name})</span> : null}
+      {variant ? <span className="ml-2 truncate text-muted">({variant.name})</span> : null}
     </h3>
-  </header>
+  </ProductCardHeader>
 );
 
 export const UpsellCard = TiptapNode.create({
@@ -172,12 +173,11 @@ const UpsellCardNodeView = ({ node, selected, editor }: NodeViewProps) => {
         {isLoading ? (
           <div className="dummy h-32"></div>
         ) : product ? (
-          <article className="product-card horizontal">
-            <figure>
+          <ProductCard className="lg:h-32 lg:flex-row">
+            <ProductCardFigure className="lg:h-full lg:rounded-l lg:rounded-tr-none lg:border-r lg:border-b-0">
               <Thumbnail url={null} nativeType={product.native_type} />
-            </figure>
-
-            <section>
+            </ProductCardFigure>
+            <section className="flex flex-1 flex-col lg:gap-8 lg:px-6 lg:py-4">
               {isEditable ? (
                 <UpsellCardHeader product={product} variant={variant} />
               ) : (
@@ -185,17 +185,17 @@ const UpsellCardNodeView = ({ node, selected, editor }: NodeViewProps) => {
                   <UpsellCardHeader product={product} variant={variant} />
                 </a>
               )}
-              <footer className="text-base">
+              <ProductCardFooter className="lg:divide-x-0">
                 {product.review_count > 0 ? (
-                  <div className="flex shrink-0 items-center gap-1">
+                  <div className="flex flex-[1_0_max-content] items-center gap-1 p-4 lg:p-0">
                     <Icon name="solid-star" />
                     <span className="rating-average">{product.average_rating.toFixed(1)}</span>
                     <span>{`(${formatOrderOfMagnitude(product.review_count, 1)})`}</span>
                   </div>
                 ) : (
-                  <div>No reviews</div>
+                  <div className="flex flex-1 items-center p-4 lg:p-0">No reviews</div>
                 )}
-                <div>
+                <div className="p-4 lg:p-0">
                   <PriceTag
                     currencyCode={product.currency_code}
                     oldPrice={oldPrice}
@@ -204,9 +204,9 @@ const UpsellCardNodeView = ({ node, selected, editor }: NodeViewProps) => {
                     isSalesLimited={false}
                   />
                 </div>
-              </footer>
+              </ProductCardFooter>
             </section>
-          </article>
+          </ProductCard>
         ) : null}
       </div>
       <NodeViewContent />

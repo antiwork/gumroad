@@ -3,11 +3,13 @@ import * as React from "react";
 import { cast } from "ts-safe-cast";
 
 import useLazyLoadingProps from "$app/hooks/useLazyLoadingProps";
+import { classNames } from "$app/utils/classNames";
 import { formatOrderOfMagnitude } from "$app/utils/formatOrderOfMagnitude";
 import { getCssVariable } from "$app/utils/styles";
 
 import { Icon } from "$app/components/Icons";
 import { AuthorByline } from "$app/components/Product/AuthorByline";
+import { ProductCard, ProductCardFigure, ProductCardHeader } from "$app/components/ui/ProductCard";
 import { useFollowWishlist } from "$app/components/Wishlist/FollowButton";
 
 const nativeTypeThumbnails = require.context("$assets/images/native_types/thumbnails/");
@@ -70,25 +72,35 @@ export const Card = ({ wishlist, hideSeller, eager }: CardProps) => {
   }, [thumbnailUrl]);
 
   return (
-    <article className="product-card horizontal">
-      <figure className="thumbnails" style={{ backgroundColor }}>
+    <ProductCard className="lg:flex-row">
+      <ProductCardFigure
+        className={classNames(
+          "lg:flex-1 lg:shrink-0 lg:rounded-l lg:rounded-tr-none lg:border-r lg:border-b-0",
+          wishlist.thumbnails.length > 0 && "grid gap-1 bg-accent !bg-none p-2",
+          wishlist.thumbnails.length >= 2 && "grid-cols-2 grid-rows-2",
+        )}
+        style={{ backgroundColor }}
+      >
         {wishlist.thumbnails.map(({ url, native_type }, index) => (
           <img
             key={index}
             src={url ?? cast(nativeTypeThumbnails(`./${native_type}.svg`))}
             role="presentation"
             crossOrigin="anonymous"
+            className="rounded border"
             {...lazyLoadingProps}
           />
         ))}
         {wishlist.thumbnails.length === 0 ? <img role="presentation" /> : null}
-      </figure>
-      <section>
-        <header>
-          <a className="stretched-link" href={wishlist.url}>
-            <h3>{wishlist.name}</h3>
+      </ProductCardFigure>
+      <section className="flex flex-1 flex-col lg:flex-2 lg:gap-8 lg:px-6 lg:py-4">
+        <ProductCardHeader className="lg:border-b-0 lg:p-0">
+          <a className="stretched-link no-underline" href={wishlist.url}>
+            <h3 className="truncate">{wishlist.name}</h3>
           </a>
-          {wishlist.description ? <small>{wishlist.description}</small> : null}
+          {wishlist.description ? (
+            <small className="hidden truncate text-muted lg:block">{wishlist.description}</small>
+          ) : null}
           {hideSeller ? null : (
             <AuthorByline
               name={wishlist.seller.name}
@@ -96,10 +108,10 @@ export const Card = ({ wishlist, hideSeller, eager }: CardProps) => {
               avatarUrl={wishlist.seller.avatar_url}
             />
           )}
-        </header>
-        <footer>
-          <div className="metrics">
-            <span className="detail">
+        </ProductCardHeader>
+        <footer className="flex">
+          <div className="flex flex-1 items-center gap-3 p-4 lg:p-0">
+            <span className="hidden lg:inline">
               <Icon name="file-text-fill" /> {wishlist.product_count}{" "}
               {wishlist.product_count === 1 ? "product" : "products"}
             </span>
@@ -109,13 +121,18 @@ export const Card = ({ wishlist, hideSeller, eager }: CardProps) => {
             </span>
           </div>
           {wishlist.can_follow ? (
-            <a onClick={() => void toggleFollowing()} className="actions" role="button" aria-disabled={isLoading}>
+            <a
+              onClick={() => void toggleFollowing()}
+              className="border-l border-border p-4 text-xl lg:border-l-0 lg:p-0"
+              role="button"
+              aria-disabled={isLoading}
+            >
               <Icon name={isFollowing ? "bookmark-check-fill" : "bookmark-plus"} />
             </a>
           ) : null}
         </footer>
       </section>
-    </article>
+    </ProductCard>
   );
 };
 
