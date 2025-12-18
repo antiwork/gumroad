@@ -1,8 +1,10 @@
 import * as React from "react";
 
+import { Icon } from "$app/components/Icons";
 import { NumberInput } from "$app/components/NumberInput";
 import { CallLimitationInfo } from "$app/components/ProductEdit/state";
 import { TypeSafeOptionSelect } from "$app/components/TypeSafeOptionSelect";
+import { Pill } from "$app/components/ui/Pill";
 import { useOnChange } from "$app/components/useOnChange";
 import { useOnOutsideClick } from "$app/components/useOnOutsideClick";
 
@@ -61,15 +63,19 @@ export const CallLimitationsEditor = ({
           {(props) => (
             <div className="input" ref={inputRef}>
               <input id={`${uid}-notice-period`} placeholder="15" {...props} />
-              <label className="pill select">
-                <span>{minimumNotice.unit}</span>
-                <TypeSafeOptionSelect
-                  aria-label="Units"
-                  onChange={(unit) => setMinimumNotice({ ...minimumNotice, unit })}
-                  value={minimumNotice.unit}
-                  options={UNITS.map((unit) => ({ id: unit, label: unit }))}
-                />
-              </label>
+              <Pill asChild className="relative -mr-2 shrink-0 cursor-pointer">
+                <label>
+                  <span>{minimumNotice.unit}</span>
+                  <TypeSafeOptionSelect
+                    aria-label="Units"
+                    onChange={(unit) => setMinimumNotice({ ...minimumNotice, unit })}
+                    value={minimumNotice.unit}
+                    options={UNITS.map((unit) => ({ id: unit, label: unit }))}
+                    className="absolute inset-0 z-1 m-0! cursor-pointer opacity-0"
+                  />
+                  <Icon name="outline-cheveron-down" className="ml-auto" />
+                </label>
+              </Pill>
             </div>
           )}
         </NumberInput>

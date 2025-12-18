@@ -65,7 +65,6 @@ import DisputeEvidencePage from "$app/components/server-components/Purchase/Disp
 import PurchaseProductPage from "$app/components/server-components/Purchase/ProductPage";
 import SubscribeReviewReminders from "$app/components/server-components/ReviewReminders/SubscribeReviewReminders";
 import UnsubscribeReviewReminders from "$app/components/server-components/ReviewReminders/UnsubscribeReviewReminders";
-import ReviewsPage from "$app/components/server-components/ReviewsPage";
 import SecureRedirectPage from "$app/components/server-components/SecureRedirectPage";
 import AdvancedSettingsPage from "$app/components/server-components/Settings/AdvancedPage";
 import ApplicationEditPage from "$app/components/server-components/Settings/AdvancedPage/EditApplicationPage";
@@ -89,6 +88,7 @@ import WishlistPage from "$app/components/server-components/WishlistPage";
 import WishlistsFollowingPage from "$app/components/server-components/WishlistsFollowingPage";
 import WishlistsPage from "$app/components/server-components/WishlistsPage";
 import CodeSnippet from "$app/components/ui/CodeSnippet";
+import { Pill } from "$app/components/ui/Pill";
 
 ReactOnRails.register({
   AdminActionButton,
@@ -148,6 +148,7 @@ ReactOnRails.register({
   PaymentsSettingsPage,
   PayoutCreditCard,
   PdfReaderPage,
+  Pill,
   ProductEditPage,
   ProductIframePage,
   PurchaseProductPage,
@@ -159,7 +160,6 @@ ReactOnRails.register({
   ProfileWishlistPage,
   PublicChargePage,
   PublicLicenseKeyPage,
-  ReviewsPage,
   SecureRedirectPage,
   SignupPage,
   SubscribePage,

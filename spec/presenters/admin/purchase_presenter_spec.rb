@@ -15,7 +15,6 @@ describe Admin::PurchasePresenter do
       describe "fields" do
         it "returns the correct field values" do
           expect(props).to match(
-            id: purchase.id,
             formatted_display_price: purchase.formatted_display_price,
             formatted_gumroad_tax_amount: nil,
             gumroad_responsible_for_tax: purchase.gumroad_responsible_for_tax?,
@@ -45,7 +44,7 @@ describe Admin::PurchasePresenter do
               search_url: ChargeProcessor.transaction_url_for_admin(purchase.charge_processor_id, purchase.stripe_transaction_id, purchase.charged_using_gumroad_merchant_account?),
             },
             merchant_account: {
-              id: purchase.merchant_account.id,
+              external_id: purchase.merchant_account.external_id,
               charge_processor_id: purchase.merchant_account.charge_processor_id.capitalize,
               holder_of_funds: purchase.merchant_account.holder_of_funds.capitalize,
             },

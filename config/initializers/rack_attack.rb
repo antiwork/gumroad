@@ -262,6 +262,12 @@ class Rack::Attack
                             requests: 10,
                             period: 60.seconds
 
+  # Throttle ACME challenge requests
+  # 120 requests per 60 seconds (per IP)
+  throttle_by_ip_for_period path: /\A\/\.well-known\/acme-challenge\//,
+                            requests: 120,
+                            period: 60.seconds
+
   # Do not throttle for health check requests
   safelist("allow from localhost", &:localhost?)
 end

@@ -20,7 +20,8 @@ class UserBalanceStatsService
   end
 
   def write_cache
-    Rails.cache.write(cache_key, generate, expires_in: 48.hours)
+    data = generate
+    $redis.setex(cache_key, 48.hours.to_i, data.to_json)
   end
 
   def self.cacheable_users
@@ -71,7 +72,13 @@ class UserBalanceStatsService
     end
 
     def read_cache
-      Rails.cache.read(cache_key)
+      data = $redis.get(cache_key)
+      return nil unless data
+
+      JSON.parse(data, symbolize_names: true)
+    rescue JSON::ParserError => e
+      Rails.logger.error("Failed to parse cached balance stats for user #{user.id}: #{e.message}")
+      nil
     end
 
     def should_use_cache?
