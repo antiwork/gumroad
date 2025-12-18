@@ -13,8 +13,8 @@ import { CopyToClipboard } from "$app/components/CopyToClipboard";
 import { Icon } from "$app/components/Icons";
 import { Select } from "$app/components/Select";
 import { showAlert } from "$app/components/server-components/Alert";
-import { Layout } from "$app/components/UtmLinksPage/Layout";
 import { Pill } from "$app/components/ui/Pill";
+import { Layout } from "$app/components/UtmLinksPage/Layout";
 import { WithTooltip } from "$app/components/WithTooltip";
 
 const MAX_UTM_PARAM_LENGTH = 200;
@@ -39,9 +39,8 @@ type UtmLinkFormProps = {
   utm_link: UtmLink | SavedUtmLink | null;
 };
 
-const getInitialDestinationId = (utmLink: UtmLink | SavedUtmLink | null): string | null => {
-  return utmLink?.destination_option?.id ?? null;
-};
+const getInitialDestinationId = (utmLink: UtmLink | SavedUtmLink | null): string | null =>
+  utmLink?.destination_option?.id ?? null;
 
 const parseDestinationId = (destinationId: string | null) => {
   if (!destinationId) return { targetResourceType: null, targetResourceId: null };
