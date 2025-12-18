@@ -91,6 +91,7 @@ const UserCard = ({ user, isAffiliateUser = false }: Props) => {
       <hr />
       <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
         <AdminUserPayoutInfo user={user} />
+        <hr className="block md:hidden" />
         <AdminUserMerchantAccounts user={user} />
       </div>
       <AdminUserEmailChanges user={user} />
