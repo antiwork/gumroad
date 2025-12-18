@@ -60,7 +60,7 @@ class ScheduleMembershipPriceUpdatesJob
         elsif new_price <= 0
           "zero or negative price (#{new_price})"
         else
-          "price unchanged"
+          "price has not changed"
         end
         Bugsnag.notify("Not adding a plan change for membership price change - subscription_id: #{subscription.id} - reason: #{reason}")
         next
