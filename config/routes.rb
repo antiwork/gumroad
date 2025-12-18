@@ -41,6 +41,7 @@ Rails.application.routes.draw do
           put :enable
           put :disable
           put :decrement_uses_count
+          put :rotate
         end
       end
 
@@ -1039,11 +1040,13 @@ Rails.application.routes.draw do
 
   # The following constraints will only catch non-gumroad domains as any domain owned by gumroad will be caught by the GumroadDomainConstraint
   constraints ProductCustomDomainConstraint do
+    get "/.well-known/acme-challenge/:token", to: "acme_challenges#show"
     product_tracking_routes(named_routes: false)
     get "/", to: "links#show", defaults: { format: "html" }
   end
 
   constraints UserCustomDomainConstraint do
+    get "/.well-known/acme-challenge/:token", to: "acme_challenges#show", as: :acme_challenge
     product_info_and_purchase_routes(named_routes: false)
     devise_scope :user do
       post "signup", to: "signup#create"

@@ -55,6 +55,7 @@ import { Covers as CoversComponent } from "$app/components/Product/Covers";
 import { CtaButton } from "$app/components/Product/CtaButton";
 import { DiscountExpirationCountdown } from "$app/components/Product/DiscountExpirationCountdown";
 import { PriceTag } from "$app/components/Product/PriceTag";
+import { Ribbon } from "$app/components/Product/Ribbon";
 import { ShareSection } from "$app/components/Product/ShareSection";
 import { Thumbnail } from "$app/components/Product/Thumbnail";
 import { PublicFilesSettingsContext } from "$app/components/ProductEdit/ProductTab/DescriptionEditor";
@@ -324,33 +325,42 @@ export const Product = ({
     />
   ) : null;
 
+  const showPrice =
+    !product.recurrences &&
+    product.options.length === 0 &&
+    !product.rental?.rent_only &&
+    (basePriceCents !== 0 || product.pwyw);
+
   return (
-    <article className="product">
+    <article className="relative grid rounded border border-border bg-background lg:grid-cols-[2fr_1fr]">
       <Covers covers={product.covers} mainCoverId={product.main_cover_id} />
-      {product.quantity_remaining !== null ? (
-        <div className="ribbon">{`${product.quantity_remaining} left`}</div>
-      ) : null}
-      <section>
-        <header>
+      {product.quantity_remaining !== null ? <Ribbon>{product.quantity_remaining} left</Ribbon> : null}
+      <section className="lg:border-r">
+        <header className="grid gap-4 p-6 not-first:border-t">
           <h1 itemProp="name">{product.name}</h1>
         </header>
-        <section className="details">
-          {!product.recurrences &&
-          product.options.length === 0 &&
-          !product.rental?.rent_only &&
-          (basePriceCents !== 0 || product.pwyw) ? (
-            <PriceTag
-              currencyCode={product.currency_code}
-              oldPrice={discountedPriceCents < basePriceCents ? basePriceCents : undefined}
-              price={discountedPriceCents}
-              url={product.long_url}
-              isPayWhatYouWant={!!product.pwyw}
-              isSalesLimited={product.is_sales_limited}
-              creatorName={product.seller?.name}
-            />
+        <section className="grid grid-cols-[auto_1fr] gap-[1px] border-t border-border p-0 sm:grid-cols-[auto_auto_minmax(max-content,1fr)]">
+          {showPrice ? (
+            <div className="px-6 py-4 outline outline-offset-0 outline-border">
+              <PriceTag
+                currencyCode={product.currency_code}
+                oldPrice={discountedPriceCents < basePriceCents ? basePriceCents : undefined}
+                price={discountedPriceCents}
+                url={product.long_url}
+                isPayWhatYouWant={!!product.pwyw}
+                isSalesLimited={product.is_sales_limited}
+                creatorName={product.seller?.name}
+              />
+            </div>
           ) : null}
           {sellerByline ? (
-            <div style={{ display: "flex", alignItems: "center", gap: "var(--spacer-2)", flexWrap: "wrap" }}>
+            <div
+              className={classNames(
+                "flex flex-wrap items-center gap-2 px-6 py-4 outline outline-offset-0 outline-border",
+                !showPrice && "col-span-full sm:col-auto",
+                showPrice && !(product.ratings != null && product.ratings.count > 0) && "sm:col-[2/-1]",
+              )}
+            >
               {product.collaborating_user ? (
                 <>
                   {sellerByline} with{" "}
@@ -366,7 +376,9 @@ export const Product = ({
             </div>
           ) : null}
           {product.ratings != null && product.ratings.count > 0 ? (
-            <RatingsSummary className="max-sm:col-span-full" ratings={product.ratings} />
+            <div className="flex items-center px-6 py-4 outline outline-offset-0 outline-border max-sm:col-span-full">
+              <RatingsSummary ratings={product.ratings} />
+            </div>
           ) : null}
         </section>
         {purchase !== null ? (
@@ -379,7 +391,7 @@ export const Product = ({
           />
         ) : null}
         {isBundle ? (
-          <section>
+          <section className="grid gap-4 border-t border-border p-6">
             <h2>This bundle contains...</h2>
             <CartItemList>
               {product.bundle_products.map((bundleProduct) => {
@@ -425,7 +437,7 @@ export const Product = ({
             </CartItemList>
           </section>
         ) : null}
-        <section>
+        <section className="border-t border-border p-6">
           {pageLoaded ? (
             <PublicFilesSettingsContext.Provider value={publicFilesSettings}>
               <EditorContent className="rich-text" editor={descriptionEditor} />
@@ -436,7 +448,7 @@ export const Product = ({
         </section>
       </section>
       <section>
-        <section>
+        <section className="grid gap-4 p-6 not-first:border-t">
           {notForSaleMessage ? (
             <div role="status" className="warning">
               {notForSaleMessage}
@@ -651,7 +663,7 @@ const ExistingPurchaseStack = ({
   if (!purchase.should_show_receipt) return null;
 
   return (
-    <section>
+    <section className="border-t border-border p-6">
       <div className="stack">
         {purchase.membership ? (
           <>
@@ -746,8 +758,8 @@ const Reviews = ({
   if (ratings.count === 0) return null;
 
   return (
-    <section>
-      <header>
+    <section className="grid gap-4 p-6 not-first:border-t">
+      <header className="flex items-center justify-between">
         <h3>Ratings</h3>
         <div className="flex shrink-0 items-center gap-1">
           <Icon name="solid-star" />

@@ -48,7 +48,13 @@ export const Covers = ({
   );
 
   return (
-    <figure className={classNames("group relative col-[1/-1]", className)} aria-label="Product preview">
+    <figure
+      className={classNames(
+        "group relative col-span-full overflow-hidden rounded-t border-b border-border bg-(image:--product-cover-placeholder) bg-cover",
+        className,
+      )}
+      aria-label="Product preview"
+    >
       {closeButton}
       {prevCover ? <PreviewArrow direction="previous" onClick={() => setActiveCoverId(prevCover.id)} /> : null}
       {nextCover ? <PreviewArrow direction="next" onClick={() => setActiveCoverId(nextCover.id)} /> : null}
