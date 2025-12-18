@@ -218,12 +218,15 @@ describe ScheduleMembershipPriceUpdatesJob do
 
             expect do
               described_class.new.perform(enabled_tier.id)
-            end.not_to change { enabled_subscription.subscription_plan_changes.count }
+            end.not_to change { enabled_subscription.reload.subscription_plan_changes.count }
 
             zero_price_plan_changes = enabled_subscription.subscription_plan_changes
                                                          .for_product_price_change
                                                          .where(perceived_price_cents: 0)
             expect(zero_price_plan_changes.count).to eq(0)
+            expect(enabled_subscription.current_subscription_price_cents).to eq(original_price)
+            expect(enabled_subscription.latest_applicable_plan_change).to be_nil
+            expect(enabled_subscription.build_purchase.perceived_price_cents).to eq(original_price)
           end
         end
       end
