@@ -66,6 +66,30 @@ describe "Tiered Membership Spec", type: :system, js: true do
       expect(@subscription.cancelled_at).to be_nil
     end
 
+    it "allows the user to restart their membership when product has required custom fields" do
+      @product.custom_fields.create!(
+        name: "Favorite Color",
+        required: true,
+        field_type: "text",
+        seller_id: @product.user.id
+      )
+      @product.custom_fields.create!(
+        name: "http://example.com/terms",
+        required: true,
+        field_type: "terms",
+        seller_id: @product.user.id
+      )
+
+      visit "/subscriptions/#{@subscription.external_id}/manage?token=#{@subscription.token}"
+
+      click_on "Restart membership"
+      wait_for_ajax
+
+      expect(page).to have_alert(text: "Membership restarted")
+      expect(@subscription.reload.purchases.successful.count).to eq 2
+      expect(@subscription.cancelled_at).to be_nil
+    end
+
     context "when the price has changed" do
       it "charges the pre-existing price" do
         old_price_cents = @original_tier_quarterly_price.price_cents

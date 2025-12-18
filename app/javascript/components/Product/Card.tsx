@@ -1,13 +1,15 @@
-import cx from "classnames";
 import * as React from "react";
 
 import { CardProduct, Ratings } from "$app/parsers/product";
+import { classNames } from "$app/utils/classNames";
 import { formatOrderOfMagnitude } from "$app/utils/formatOrderOfMagnitude";
 
 import { Icon } from "$app/components/Icons";
 import { AuthorByline } from "$app/components/Product/AuthorByline";
 import { PriceTag } from "$app/components/Product/PriceTag";
+import { Ribbon } from "$app/components/Product/Ribbon";
 import { Thumbnail } from "$app/components/Product/Thumbnail";
+import { ProductCard, ProductCardFigure, ProductCardHeader, ProductCardFooter } from "$app/components/ui/ProductCard";
 
 export const Card = ({
   product,
@@ -20,14 +22,16 @@ export const Card = ({
   footerAction?: React.ReactNode;
   eager?: boolean | undefined;
 }) => (
-  <article className="product-card">
-    <figure>
+  <ProductCard>
+    <ProductCardFigure>
       <Thumbnail url={product.thumbnail_url} nativeType={product.native_type} eager={eager} />
-    </figure>
-    {product.quantity_remaining != null ? <div className="ribbon">{`${product.quantity_remaining} left`}</div> : null}
-    <header>
+    </ProductCardFigure>
+    {product.quantity_remaining != null ? <Ribbon>{product.quantity_remaining} left</Ribbon> : null}
+    <ProductCardHeader>
       <a href={product.url} className="stretched-link">
-        <h4 itemProp="name">{product.name}</h4>
+        <h4 itemProp="name" className="line-clamp-4 lg:text-xl">
+          {product.name}
+        </h4>
       </a>
       {product.seller ? (
         <AuthorByline
@@ -37,46 +41,9 @@ export const Card = ({
         />
       ) : null}
       {product.ratings?.count ? <Rating ratings={product.ratings} /> : null}
-    </header>
-    <footer>
-      <PriceTag
-        url={product.url}
-        currencyCode={product.currency_code}
-        price={product.price_cents}
-        isPayWhatYouWant={product.is_pay_what_you_want}
-        isSalesLimited={product.is_sales_limited}
-        recurrence={
-          product.recurrence ? { id: product.recurrence, duration_in_months: product.duration_in_months } : undefined
-        }
-        creatorName={product.seller?.name}
-      />
-      {footerAction}
-    </footer>
-    {badge}
-  </article>
-);
-
-export const HorizontalCard = ({ product, big, eager }: { product: CardProduct; big?: boolean; eager?: boolean }) => (
-  <article className={cx("product-card horizontal relative", { big })}>
-    <figure>
-      <Thumbnail url={product.thumbnail_url} nativeType={product.native_type} eager={eager} />
-    </figure>
-    {product.quantity_remaining != null ? <div className="ribbon">{product.quantity_remaining} left</div> : null}
-    <section>
-      <header>
-        <a href={product.url} className="stretched-link" draggable="false">
-          {big ? <h2 itemProp="name">{product.name}</h2> : <h3 itemProp="name">{product.name}</h3>}
-        </a>
-        <small>{product.description}</small>
-        {product.seller ? (
-          <AuthorByline
-            name={product.seller.name}
-            profileUrl={product.seller.profile_url}
-            avatarUrl={product.seller.avatar_url ?? undefined}
-          />
-        ) : null}
-      </header>
-      <footer>
+    </ProductCardHeader>
+    <ProductCardFooter>
+      <div className="flex-1 p-4">
         <PriceTag
           url={product.url}
           currencyCode={product.currency_code}
@@ -88,10 +55,67 @@ export const HorizontalCard = ({ product, big, eager }: { product: CardProduct; 
           }
           creatorName={product.seller?.name}
         />
-        {product.ratings?.count ? <Rating ratings={product.ratings} /> : null}
-      </footer>
+      </div>
+      {footerAction}
+    </ProductCardFooter>
+    {badge}
+  </ProductCard>
+);
+
+export const HorizontalCard = ({ product, big, eager }: { product: CardProduct; big?: boolean; eager?: boolean }) => (
+  <ProductCard className="lg:flex-row">
+    <ProductCardFigure className="lg:h-full lg:rounded-l lg:rounded-tr-none lg:border-r lg:border-b-0 [&_img]:lg:h-0 [&_img]:lg:min-h-full lg:[&_img]:w-auto">
+      <Thumbnail url={product.thumbnail_url} nativeType={product.native_type} eager={eager} />
+    </ProductCardFigure>
+    {product.quantity_remaining !== null ? <Ribbon>{product.quantity_remaining} left</Ribbon> : null}
+    <section className="flex flex-1 flex-col lg:gap-8 lg:px-6 lg:py-4">
+      <ProductCardHeader className="lg:border-b-0 lg:p-0">
+        <a href={product.url} className="stretched-link" draggable="false">
+          {big ? (
+            <h2 itemProp="name" className="line-clamp-3 gap-3">
+              {product.name}
+            </h2>
+          ) : (
+            <h3 itemProp="name" className="truncate">
+              {product.name}
+            </h3>
+          )}
+        </a>
+        <small className={classNames("hidden truncate text-muted lg:block", big && "lg:line-clamp-4")}>
+          {product.description}
+        </small>
+        {product.seller ? (
+          <AuthorByline
+            name={product.seller.name}
+            profileUrl={product.seller.profile_url}
+            avatarUrl={product.seller.avatar_url ?? undefined}
+          />
+        ) : null}
+      </ProductCardHeader>
+      <ProductCardFooter className="items-center lg:divide-x-0">
+        <div className="flex-1 p-4 lg:p-0">
+          <PriceTag
+            url={product.url}
+            currencyCode={product.currency_code}
+            price={product.price_cents}
+            isPayWhatYouWant={product.is_pay_what_you_want}
+            isSalesLimited={product.is_sales_limited}
+            recurrence={
+              product.recurrence
+                ? { id: product.recurrence, duration_in_months: product.duration_in_months }
+                : undefined
+            }
+            creatorName={product.seller?.name}
+          />
+        </div>
+        {product.ratings?.count ? (
+          <div className="p-4 lg:p-0">
+            <Rating ratings={product.ratings} />
+          </div>
+        ) : null}
+      </ProductCardFooter>
     </section>
-  </article>
+  </ProductCard>
 );
 
 const Rating = ({ ratings, style }: { ratings: Ratings; style?: React.CSSProperties }) => (

@@ -644,7 +644,7 @@ describe("Product Edit Rich Text Editor", type: :system, js: true) do
 
       within ".node-moreLikeThis" do
         wait_for_ajax
-        expect(page).to have_selector(".product-card")
+        expect(page).to have_selector("article")
 
         find("[aria-label='Actions']").click
         within("[role='menu']") do

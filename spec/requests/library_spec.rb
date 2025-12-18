@@ -14,7 +14,7 @@ describe("Library Scenario", type: :system, js: true) do
   def expect_to_show_purchases_in_order(purchases)
     purchases.each_with_index do |purchase, index|
       variants = purchase.variant_attributes&.map(&:name)&.join(", ")
-      expect(page).to have_selector(".product-card:nth-of-type(#{index + 1})", text: "#{purchase.link.name}#{variants.present? ? " - #{variants}" : ""}")
+      expect(page).to have_selector("article:nth-of-type(#{index + 1})", text: "#{purchase.link.name}#{variants.present? ? " - #{variants}" : ""}")
     end
   end
 
