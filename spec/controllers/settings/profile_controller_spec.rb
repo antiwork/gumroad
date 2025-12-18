@@ -20,7 +20,7 @@ describe Settings::ProfileController, :vcr, inertia: true do
       get :show
 
       expect(response).to be_successful
-      expect(inertia.component).to eq("Settings/Profile/Index")
+      expect(inertia.component).to eq("Settings/Profile/Show")
       expect(inertia.props).to match(hash_including(
         SettingsPresenter.new(pundit_user:).profile_props.merge(
           ProfilePresenter.new(pundit_user:, seller:).profile_settings_props(request:)

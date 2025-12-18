@@ -9,7 +9,7 @@ class Settings::ProfileController < Sellers::BaseController
     @profile_presenter = ProfilePresenter.new(pundit_user:, seller: current_seller)
     @settings_presenter = SettingsPresenter.new(pundit_user:)
 
-    render inertia: "Settings/Profile/Index", props: @settings_presenter.profile_props.merge(
+    render inertia: "Settings/Profile/Show", props: @settings_presenter.profile_props.merge(
       @profile_presenter.profile_settings_props(request:)
     )
   end
