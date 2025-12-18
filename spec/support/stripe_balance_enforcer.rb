@@ -41,7 +41,7 @@ class StripeBalanceEnforcer
     end
 
     def using_dummy_stripe_key?
-      Stripe.api_key.nil? || Stripe.api_key.include?("dummy")
+      Stripe.api_key.nil? || Stripe.api_key == "sk_test_dummy"
     end
 
     def top_up!

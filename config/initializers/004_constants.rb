@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-GOOGLE_CLOUD_PROJECT_ID = GlobalConfig.get("GOOGLE_CLOUD_PROJECT_ID")
+GOOGLE_CLOUD_PROJECT_ID = GlobalConfig.get("GOOGLE_CLOUD_PROJECT_ID", Rails.env.test? ? "test-google-cloud-project" : nil)
 
 GUMROAD_ADMIN_ID = GlobalConfig.get("GUMROAD_ADMIN_ID", Rails.env.staging? ? 978 : 767082) # admin@gumroad.com
 GUMROAD_STARTED_DATE = Date.parse("2011-04-04")
