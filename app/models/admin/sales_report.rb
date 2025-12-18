@@ -6,7 +6,7 @@ class Admin::SalesReport
   YYYY_MM_DD_FORMAT = /\A\d{4}-\d{2}-\d{2}\z/
   INVALID_DATE_FORMAT_MESSAGE = "Invalid date format. Please use YYYY-MM-DD format"
 
-  ACCESSORS = %i[country_code start_date end_date].freeze
+  ACCESSORS = %i[country_code start_date end_date sales_type].freeze
   attr_accessor(*ACCESSORS)
   ACCESSORS.each do |accessor|
     define_method("#{accessor}?") do
@@ -19,6 +19,7 @@ class Admin::SalesReport
   validates :end_date, presence: { message: INVALID_DATE_FORMAT_MESSAGE }
   validates :start_date, comparison: { less_than: :end_date, message: "must be before end date", if: %i[start_date? end_date?] }
   validates :start_date, comparison: { less_than_or_equal_to: -> { Date.current }, message: "cannot be in the future", if: :start_date? }
+  validates_inclusion_of :sales_type, in: GenerateSalesReportJob::SALES_TYPES, message: "Invalid sales type, should be #{GenerateSalesReportJob::SALES_TYPES.join(" or ")}."
 
   class << self
     def fetch_job_history
@@ -34,6 +35,7 @@ class Admin::SalesReport
       country_code,
       start_date.to_s,
       end_date.to_s,
+      sales_type,
       true,
       nil
     )
@@ -73,6 +75,7 @@ class Admin::SalesReport
         country_code:,
         start_date: start_date.to_s,
         end_date: end_date.to_s,
+        sales_type:,
         enqueued_at: Time.current.to_s,
         status: "processing"
       }

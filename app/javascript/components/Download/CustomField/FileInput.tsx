@@ -10,6 +10,7 @@ import { Icon } from "$app/components/Icons";
 import { showAlert } from "$app/components/server-components/Alert";
 import { usePurchaseCustomFields, usePurchaseInfo } from "$app/components/server-components/DownloadPage/WithContent";
 import Placeholder from "$app/components/ui/Placeholder";
+import { Row, RowContent, Rows } from "$app/components/ui/Rows";
 
 const MAX_FILE_SIZE = 10 * 1024 * 1024;
 
@@ -88,10 +89,10 @@ export const FileInput = ({ customFieldId }: { customFieldId: string }) => {
   return files.length ? (
     <div className="stack">
       <div>
-        <div role="tree">
+        <Rows role="list">
           {files.map((file, index) => (
-            <div key={index} role="treeitem">
-              <div className="content">
+            <Row key={index} role="listitem">
+              <RowContent>
                 <FileKindIcon extension={file.extension} />
                 <div>
                   <h4>{file.name}</h4>
@@ -100,10 +101,10 @@ export const FileInput = ({ customFieldId }: { customFieldId: string }) => {
                     <li>{FileUtils.getFullFileSizeString(file.size)}</li>
                   </ul>
                 </div>
-              </div>
-            </div>
+              </RowContent>
+            </Row>
           ))}
-        </div>
+        </Rows>
       </div>
       <div style={{ justifyContent: "center" }}>{fileUpload}</div>
     </div>

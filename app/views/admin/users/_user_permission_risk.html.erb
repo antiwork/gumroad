@@ -13,7 +13,7 @@
   </div>
   <div>
     <%= with_tooltip(tip: "Risk State", position: "left") do %>
-      <div class="pill small <%= user.compliant? ? "success" : "warning" %>"><%= user.user_risk_state.humanize %></div>
+      <%= react_component "Pill", props: {size: "small",color: user.compliant? ? "success" : "warning", children: user.user_risk_state.humanize}, prerender: true %>
     <% end %>
   </div>
 </div>

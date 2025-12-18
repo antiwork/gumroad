@@ -2,6 +2,7 @@ import * as React from "react";
 import { createCast } from "ts-safe-cast";
 
 import { CreatorProfile } from "$app/parsers/profile";
+import { classNames } from "$app/utils/classNames";
 import { register } from "$app/utils/serverComponentUtil";
 
 import { Product, Props as ProductProps, Purchase } from "$app/components/Product";
@@ -30,7 +31,12 @@ export const CoffeePage = ({ creator_profile, selection: selectionOverride, ...p
 
   return (
     <ProfileLayout creatorProfile={creator_profile} hideFollowForm>
-      <CoffeeProduct product={props.product} purchase={props.purchase} selection={selectionOverride ?? null} />
+      <CoffeeProduct
+        product={props.product}
+        purchase={props.purchase}
+        selection={selectionOverride ?? null}
+        className="mx-auto w-full max-w-6xl lg:px-0"
+      />
     </ProfileLayout>
   );
 };
@@ -39,10 +45,12 @@ export const CoffeeProduct = ({
   product,
   purchase,
   selection: selectionOverride,
+  className,
 }: {
   product: Product;
   purchase: Purchase | null;
   selection?: Partial<PriceSelection> | null;
+  className?: string;
 }) => {
   const [selectionState, setSelection] = React.useState<PriceSelection>({
     optionId: product.options.length > 1 ? (product.options[0]?.id ?? null) : null,
@@ -77,7 +85,7 @@ export const CoffeeProduct = ({
     </>
   );
   return (
-    <section className="px-4" style={{ display: "grid", gap: "var(--spacer-7)", alignContent: "center", flexGrow: 1 }}>
+    <section className={classNames("grid grow content-center gap-12 px-4", className)}>
       <section className="grid gap-8">
         <h1>{product.name}</h1>
         {product.description_html ? <h3 dangerouslySetInnerHTML={{ __html: product.description_html }} /> : null}

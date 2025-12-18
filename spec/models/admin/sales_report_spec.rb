@@ -7,7 +7,8 @@ describe Admin::SalesReport do
     {
       country_code: "US",
       start_date: "2023-01-01",
-      end_date: "2023-12-31"
+      end_date: "2023-12-31",
+      sales_type: GenerateSalesReportJob::ALL_SALES,
     }
   end
 
@@ -199,6 +200,7 @@ describe Admin::SalesReport do
         "US",
         "2023-01-01",
         "2023-12-31",
+        GenerateSalesReportJob::ALL_SALES,
         true,
         nil
       )
@@ -223,6 +225,7 @@ describe Admin::SalesReport do
         expect(data["country_code"]).to eq("US")
         expect(data["start_date"]).to eq("2023-01-01")
         expect(data["end_date"]).to eq("2023-12-31")
+        expect(data["sales_type"]).to eq("all_sales")
         expect(data["enqueued_at"]).to be_present
         expect(data["status"]).to eq("processing")
       end
@@ -248,6 +251,7 @@ describe Admin::SalesReport do
             country_code: "US",
             start_date: "2023-01-01",
             end_date: "2023-03-31",
+            sales_type: GenerateSalesReportJob::ALL_SALES,
             enqueued_at: "2023-01-01T00:00:00Z",
             status: "processing"
           }.to_json,
@@ -256,6 +260,7 @@ describe Admin::SalesReport do
             country_code: "GB",
             start_date: "2023-04-01",
             end_date: "2023-06-30",
+            sales_type: GenerateSalesReportJob::ALL_SALES,
             enqueued_at: "2023-04-01T00:00:00Z",
             status: "completed"
           }.to_json
@@ -319,14 +324,18 @@ describe Admin::SalesReport do
       expect(errors[:sales_report][:country_code]).to include("Please select a country")
       expect(errors[:sales_report][:start_date]).to include("Invalid date format. Please use YYYY-MM-DD format")
       expect(errors[:sales_report][:end_date]).to include("Invalid date format. Please use YYYY-MM-DD format")
+      expect(errors[:sales_report][:sales_type]).to include("Invalid sales type, should be all_sales or discover_sales.")
     end
 
     it "returns empty hash when there are no errors" do
       sales_report = described_class.new(valid_attributes)
       sales_report.valid?
-
       errors = sales_report.errors_hash
+      expect(errors).to eq({ sales_report: {} })
 
+      sales_report = described_class.new(valid_attributes.merge(sales_type: GenerateSalesReportJob::DISCOVER_SALES))
+      sales_report.valid?
+      errors = sales_report.errors_hash
       expect(errors).to eq({ sales_report: {} })
     end
   end

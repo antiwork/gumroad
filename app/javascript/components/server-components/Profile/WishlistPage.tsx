@@ -12,7 +12,7 @@ type Props = WishlistProps & {
 
 const ProfileWishlistPage = (props: Props) => (
   <ProfileLayout creatorProfile={props.creator_profile}>
-    <Wishlist {...props} user={null} />
+    <Wishlist layout="profile" {...props} user={null} />
   </ProfileLayout>
 );
 

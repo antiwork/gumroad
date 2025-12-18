@@ -143,24 +143,52 @@ describe "Dashboard", js: true, type: :system do
       seller.update!(created_at: 1.year.ago)
     end
 
-    it "displays a 1099 form ready notice with a link to download if eligible" do
-      download_url = "#{AWS_S3_ENDPOINT}/#{S3_BUCKET}/attachments/23b2d41ac63a40b5afa1a99bf38a0982/original/test.pdf"
-      allow_any_instance_of(User).to receive(:eligible_for_1099?).and_return(true)
-      allow_any_instance_of(User).to receive(:tax_form_1099_download_url).and_return(download_url)
+    context "when tax_center feature is disabled" do
+      before do
+        Feature.deactivate_user(:tax_center, seller)
+      end
 
-      visit dashboard_path
+      it "displays a 1099 form ready notice with a link to download if eligible" do
+        download_url = "#{AWS_S3_ENDPOINT}/#{S3_BUCKET}/attachments/23b2d41ac63a40b5afa1a99bf38a0982/original/test.pdf"
+        allow_any_instance_of(User).to receive(:eligible_for_1099?).and_return(true)
+        allow_any_instance_of(User).to receive(:tax_form_1099_download_url).and_return(download_url)
 
-      expect(page).to have_text("Your 1099 tax form for #{Time.current.prev_year.year} is ready!")
-      expect(page).to have_link("Click here to download", href: dashboard_download_tax_form_path)
+        visit dashboard_path
+
+        expect(page).to have_text("Your 1099 tax form for #{Time.current.prev_year.year} is ready!")
+        expect(page).to have_link("Click here to download", href: dashboard_download_tax_form_path)
+      end
+
+      it "does not display a 1099 form ready notice if not eligible" do
+        allow_any_instance_of(User).to receive(:eligible_for_1099?).and_return(false)
+
+        visit dashboard_path
+
+        expect(page).not_to have_text("Your 1099 tax form for #{Time.current.prev_year.year} is ready!")
+        expect(page).not_to have_link("Click here to download", href: dashboard_download_tax_form_path)
+      end
     end
 
-    it "does not display a 1099 form ready notice if not eligible" do
-      allow_any_instance_of(User).to receive(:eligible_for_1099?).and_return(false)
+    context "when tax_center feature is enabled" do
+      before do
+        Feature.activate_user(:tax_center, seller)
+      end
 
-      visit dashboard_path
+      it "displays notice with link to tax center when user has tax form for previous year" do
+        create(:user_tax_form, user: seller, tax_year: Time.current.prev_year.year, tax_form_type: "us_1099_k")
 
-      expect(page).not_to have_text("Your 1099 tax form for #{Time.current.prev_year.year} is ready!")
-      expect(page).not_to have_link("Click here to download", href: dashboard_download_tax_form_path)
+        visit dashboard_path
+
+        expect(page).to have_text("Your 1099 tax form for #{Time.current.prev_year.year} is ready!")
+        expect(page).to have_link("Click here to download", href: tax_center_path(year: Time.current.prev_year.year))
+      end
+
+      it "does not display notice when user has no tax form for previous year" do
+        visit dashboard_path
+
+        expect(page).not_to have_text("Your 1099 tax form for")
+        expect(page).not_to have_link("Click here to download")
+      end
     end
   end
 

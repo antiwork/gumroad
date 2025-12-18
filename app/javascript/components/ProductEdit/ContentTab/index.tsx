@@ -57,6 +57,7 @@ import { MoveNode } from "$app/components/TiptapExtensions/MoveNode";
 import { Posts, PostsProvider } from "$app/components/TiptapExtensions/Posts";
 import { ShortAnswer } from "$app/components/TiptapExtensions/ShortAnswer";
 import { UpsellCard } from "$app/components/TiptapExtensions/UpsellCard";
+import { Row, RowContent, Rows } from "$app/components/ui/Rows";
 import { Tabs, Tab } from "$app/components/ui/Tabs";
 import { UpsellSelectModal, Product, ProductOption } from "$app/components/UpsellSelectModal";
 import { useConfigureEvaporate } from "$app/components/useConfigureEvaporate";
@@ -550,8 +551,8 @@ const ContentTabContent = ({ selectedVariantId }: { selectedVariantId: string | 
                           setSelectingExistingFiles({ ...selectingExistingFiles, query: evt.target.value })
                         }
                       />
-                      <div
-                        className="rows overflow-auto"
+                      <Rows
+                        className="overflow-auto"
                         role="listbox"
                         style={{ maxHeight: "20rem", textAlign: "initial" }}
                       >
@@ -561,31 +562,33 @@ const ContentTabContent = ({ selectedVariantId }: { selectedVariantId: string | 
                           </div>
                         ) : (
                           filteredExistingFiles.map((file) => (
-                            <label key={file.id} role="option" style={{ cursor: "pointer" }}>
-                              <div className="content">
-                                <FileKindIcon extension={file.extension} />
-                                <div>
-                                  <h4>{file.display_name}</h4>
-                                  <span>{`${file.attached_product_name || "N/A"} (${FileUtils.getFullFileSizeString(file.file_size ?? 0)})`}</span>
-                                </div>
-                                <input
-                                  type="checkbox"
-                                  checked={selectingExistingFiles.selected.includes(file)}
-                                  onChange={() => {
-                                    setSelectingExistingFiles({
-                                      ...selectingExistingFiles,
-                                      selected: selectingExistingFiles.selected.includes(file)
-                                        ? selectingExistingFiles.selected.filter((id) => id !== file)
-                                        : [...selectingExistingFiles.selected, file],
-                                    });
-                                  }}
-                                  style={{ marginLeft: "auto" }}
-                                />
-                              </div>
-                            </label>
+                            <Row key={file.id} role="option" className="cursor-pointer" asChild>
+                              <label>
+                                <RowContent>
+                                  <FileKindIcon extension={file.extension} />
+                                  <div>
+                                    <h4>{file.display_name}</h4>
+                                    <span>{`${file.attached_product_name || "N/A"} (${FileUtils.getFullFileSizeString(file.file_size ?? 0)})`}</span>
+                                  </div>
+                                  <input
+                                    type="checkbox"
+                                    checked={selectingExistingFiles.selected.includes(file)}
+                                    onChange={() => {
+                                      setSelectingExistingFiles({
+                                        ...selectingExistingFiles,
+                                        selected: selectingExistingFiles.selected.includes(file)
+                                          ? selectingExistingFiles.selected.filter((id) => id !== file)
+                                          : [...selectingExistingFiles.selected, file],
+                                      });
+                                    }}
+                                    style={{ marginLeft: "auto" }}
+                                  />
+                                </RowContent>
+                              </label>
+                            </Row>
                           ))
                         )}
-                      </div>
+                      </Rows>
                     </div>
                   </Modal>
                 ) : null}

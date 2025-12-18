@@ -13,6 +13,9 @@ import { useDomains } from "$app/components/DomainSettings";
 import { FileRowContent } from "$app/components/FileRowContent";
 import { Icon } from "$app/components/Icons";
 import { showAlert } from "$app/components/server-components/Alert";
+import { Row, RowActions, RowContent, RowDetails, Rows } from "$app/components/ui/Rows";
+
+export const ALLOWED_ATTACHMENT_MIMETYPES = "image/png,image/jpeg,image/gif,image/webp,application/pdf";
 
 function MessageListItem({ message, isLastMessage }: { message: Message; isLastMessage: boolean }) {
   const [isExpanded, setIsExpanded] = React.useState(isLastMessage);
@@ -20,9 +23,9 @@ function MessageListItem({ message, isLastMessage }: { message: Message; isLastM
   const attachments = [...message.publicAttachments, ...message.privateAttachments];
   const image = message.role === "user" ? (currentSeller?.avatarUrl ?? pinkIcon) : pinkIcon;
   return (
-    <div role="listitem" className="items-stretch! gap-0! p-0!">
-      <div
-        className="content peer cursor-pointer p-4 peer-hover:bg-(--active-bg) hover:bg-(--active-bg)"
+    <Row role="listitem" className="items-stretch! gap-0! p-0!">
+      <RowContent
+        className="peer cursor-pointer p-4 peer-hover:bg-(--active-bg) hover:bg-(--active-bg)"
         onClick={() => setIsExpanded((v) => !v)}
       >
         <img className={cx("user-avatar w-9!", image === pinkIcon ? "border-none!" : "")} src={image} />
@@ -35,22 +38,22 @@ function MessageListItem({ message, isLastMessage }: { message: Message; isLastM
         <div className="text-right whitespace-nowrap">
           {new Date(message.createdAt).toLocaleDateString(undefined, { month: "short", day: "numeric" })}
         </div>
-      </div>
-      <div
+      </RowContent>
+      <RowActions
         className="actions peer cursor-pointer p-4 pl-0 peer-hover:bg-(--active-bg) hover:bg-(--active-bg)"
         onClick={() => setIsExpanded((v) => !v)}
       >
         <Button outline aria-expanded={isExpanded} aria-label={isExpanded ? "Collapse message" : "Expand message"}>
           {isExpanded ? <Icon name="outline-cheveron-up" /> : <Icon name="outline-cheveron-down" />}
         </Button>
-      </div>
+      </RowActions>
       {isExpanded ? (
-        <div className="relative col-span-full cursor-default p-4 pl-16">
+        <RowDetails className="relative col-span-full cursor-default p-4 pl-16">
           <MessageContent message={message} />
           {attachments.length > 0 ? (
-            <div role="list" className="rows mt-4 w-full max-w-[500px]">
+            <Rows role="list" className="mt-4 w-full max-w-[500px]">
               {attachments.map((attachment) => (
-                <div
+                <Row
                   role="listitem"
                   className={attachment.contentType?.startsWith("image/") ? "p-0!" : ""}
                   key={attachment.url}
@@ -58,32 +61,30 @@ function MessageListItem({ message, isLastMessage }: { message: Message; isLastM
                   {attachment.contentType?.startsWith("image/") ? (
                     <img src={attachment.url} alt={attachment.name ?? "Attachment"} className="w-full rounded-xs" />
                   ) : (
-                    <FileRowContent
-                      name={FileUtils.getFileNameWithoutExtension(attachment.name ?? "Attachment")}
-                      extension={FileUtils.getFileExtension(attachment.name ?? "Attachment").toUpperCase()}
-                      externalLinkUrl={null}
-                      isUploading={false}
-                      details={<li>{attachment.contentType?.split("/")[1]}</li>}
-                    />
+                    <a href={attachment.url} download className="content no-underline">
+                      <FileRowContent
+                        name={FileUtils.getFileNameWithoutExtension(attachment.name ?? "Attachment")}
+                        extension={FileUtils.getFileExtension(attachment.name ?? "Attachment").toUpperCase()}
+                        externalLinkUrl={attachment.url}
+                        isUploading={false}
+                        details={<li>{attachment.contentType?.split("/")[1]}</li>}
+                      />
+                    </a>
                   )}
-                </div>
+                </Row>
               ))}
-            </div>
+            </Rows>
           ) : null}
-        </div>
+        </RowDetails>
       ) : null}
-    </div>
+    </Row>
   );
 }
 
 export function ConversationDetail({ conversationSlug, onBack }: { conversationSlug: string; onBack: () => void }) {
   const { apiDomain } = useDomains();
   const { data: conversation, isLoading, error, refetch } = useConversation(conversationSlug);
-  const { mutateAsync: createMessage, isPending: isSubmitting } = useCreateMessage({
-    onError: (error) => {
-      showAlert(error.message, "error");
-    },
-  });
+  const { mutateAsync: createMessage, isPending: isSubmitting } = useCreateMessage();
 
   useRealtimeEvents(conversation?.slug ?? "", { enabled: Boolean(conversation?.slug) });
 
@@ -95,15 +96,19 @@ export function ConversationDetail({ conversationSlug, onBack }: { conversationS
     e.preventDefault();
     const trimmed = input.trim();
     if (!trimmed) return;
-    await createMessage({
-      conversationSlug,
-      content: trimmed,
-      attachments,
-      customerInfoUrl: Routes.user_info_api_internal_helper_users_url({ host: apiDomain }),
-    });
-    setInput("");
-    setAttachments([]);
-    void refetch();
+    try {
+      await createMessage({
+        conversationSlug,
+        content: trimmed,
+        attachments,
+        customerInfoUrl: Routes.user_info_api_internal_helper_users_url({ host: apiDomain }),
+      });
+      setInput("");
+      setAttachments([]);
+      void refetch();
+    } catch (error) {
+      showAlert(error instanceof Error ? error.message : "Something went wrong.", "error");
+    }
   };
 
   if (isLoading) return null;
@@ -119,7 +124,7 @@ export function ConversationDetail({ conversationSlug, onBack }: { conversationS
       </header>
 
       <div className="p-4 md:p-8">
-        <div role="list" className="rows mb-12 overflow-hidden" aria-label="Messages">
+        <Rows role="list" className="mb-12 overflow-hidden" aria-label="Messages">
           {conversation.messages.map((message, index) => (
             <MessageListItem
               key={message.id}
@@ -127,7 +132,7 @@ export function ConversationDetail({ conversationSlug, onBack }: { conversationS
               isLastMessage={index === conversation.messages.length - 1}
             />
           ))}
-        </div>
+        </Rows>
 
         <form className="mt-4 flex flex-col gap-2" onSubmit={(e) => void handleSubmit(e)}>
           <label htmlFor="reply">Reply</label>
@@ -143,6 +148,7 @@ export function ConversationDetail({ conversationSlug, onBack }: { conversationS
             ref={fileInputRef}
             type="file"
             multiple
+            accept={ALLOWED_ATTACHMENT_MIMETYPES}
             onChange={(e) => {
               const files = Array.from(e.target.files ?? []);
               if (files.length === 0) return;
@@ -151,10 +157,10 @@ export function ConversationDetail({ conversationSlug, onBack }: { conversationS
             }}
           />
           {attachments.length > 0 ? (
-            <div role="list" className="rows mb-2" aria-label="Files">
+            <Rows role="list" className="mb-2" aria-label="Files">
               {attachments.map((file, index) => (
-                <div role="listitem" key={`${file.name}-${index}`}>
-                  <div className="content">
+                <Row role="listitem" key={`${file.name}-${index}`}>
+                  <RowContent>
                     <FileRowContent
                       name={FileUtils.getFileNameWithoutExtension(file.name)}
                       extension={FileUtils.getFileExtension(file.name).toUpperCase()}
@@ -162,8 +168,8 @@ export function ConversationDetail({ conversationSlug, onBack }: { conversationS
                       isUploading={false}
                       details={<li>{FileUtils.getReadableFileSize(file.size)}</li>}
                     />
-                  </div>
-                  <div className="actions">
+                  </RowContent>
+                  <RowActions>
                     <Button
                       outline
                       color="danger"
@@ -172,10 +178,10 @@ export function ConversationDetail({ conversationSlug, onBack }: { conversationS
                     >
                       <Icon name="trash2" />
                     </Button>
-                  </div>
-                </div>
+                  </RowActions>
+                </Row>
               ))}
-            </div>
+            </Rows>
           ) : null}
           <div className="flex gap-2">
             <Button onClick={() => fileInputRef.current?.click()} disabled={isSubmitting}>

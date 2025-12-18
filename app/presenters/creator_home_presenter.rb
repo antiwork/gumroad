@@ -66,10 +66,18 @@ class CreatorHomePresenter
       end
     end
 
-    tax_forms = (Time.current.year.downto(seller.created_at.year)).each_with_object({}) do |year, hash|
-      url = seller.eligible_for_1099?(year) ? seller.tax_form_1099_download_url(year: year) : nil
-      hash[year] = url if url.present?
+    tax_center_enabled = Feature.active?(:tax_center, seller)
+    if tax_center_enabled
+      tax_forms = []
+      show_1099_download_notice = seller.user_tax_forms.for_year(Time.current.prev_year.year).exists?
+    else
+      tax_forms = (Time.current.year.downto(seller.created_at.year)).each_with_object({}) do |year, hash|
+        url = seller.eligible_for_1099?(year) ? seller.tax_form_1099_download_url(year: year) : nil
+        hash[year] = url if url.present?
+      end
+      show_1099_download_notice = tax_forms[Time.current.prev_year.year].present?
     end
+
 
     {
       name: seller.alive_user_compliance_info&.first_name || "",
@@ -85,7 +93,8 @@ class CreatorHomePresenter
       activity_items:,
       stripe_verification_message:,
       tax_forms:,
-      show_1099_download_notice: tax_forms[Time.current.prev_year.year].present?
+      show_1099_download_notice:,
+      tax_center_enabled: Feature.active?(:tax_center, seller)
     }
   end
 

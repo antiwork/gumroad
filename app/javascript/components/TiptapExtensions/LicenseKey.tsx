@@ -12,6 +12,7 @@ import { Drawer } from "$app/components/SortableList";
 import { NodeActionsMenu } from "$app/components/TiptapExtensions/NodeActionsMenu";
 import { createInsertCommand } from "$app/components/TiptapExtensions/utils";
 import { Toggle } from "$app/components/Toggle";
+import { Row, RowActions, RowContent, RowDetails } from "$app/components/ui/Rows";
 
 declare module "@tiptap/core" {
   interface Commands<ReturnType> {
@@ -46,9 +47,9 @@ const LicenseKeyNodeView = ({ editor, selected }: NodeViewProps) => {
 
   return (
     <NodeViewWrapper>
-      <div className={cx("embed", { selected })}>
+      <Row className={cx("embed", { selected })}>
         {editor.isEditable ? <NodeActionsMenu editor={editor} /> : null}
-        <div className="content" contentEditable={false}>
+        <RowContent className="content" contentEditable={false}>
           <Icon name="solid-key" className="type-icon" />
           <div>
             <h4 className="text-singleline">{licenseKey}</h4>
@@ -57,9 +58,9 @@ const LicenseKeyNodeView = ({ editor, selected }: NodeViewProps) => {
               {isMultiSeatLicense && seats !== null ? <li>{`${seats} ${seats === 1 ? "Seat" : "Seats"}`}</li> : null}
             </ul>
           </div>
-        </div>
+        </RowContent>
 
-        <div className="actions">
+        <RowActions>
           {licenseKey !== null ? (
             <CopyToClipboard text={licenseKey}>
               <Button>Copy</Button>
@@ -70,30 +71,32 @@ const LicenseKeyNodeView = ({ editor, selected }: NodeViewProps) => {
               <Icon name={isDrawerOpen ? "outline-cheveron-up" : "outline-cheveron-down"} />
             </Button>
           ) : null}
-        </div>
+        </RowActions>
         {editor.isEditable && isDrawerOpen ? (
-          <Drawer>
-            {isMultiSeatLicense !== null ? (
-              <Toggle value={isMultiSeatLicense} onChange={assertDefined(onIsMultiSeatLicenseChange)}>
-                Allow customers to choose number of seats per license purchased
-              </Toggle>
-            ) : null}
-            {productId ? (
-              <fieldset>
-                <legend>
-                  <label htmlFor={`product_id-${uid}`}>Use your product ID to verify licenses through the API.</label>
-                </legend>
-                <div className="flex gap-2">
-                  <input id={`product_id-${uid}`} type="text" value={productId} className="flex-1" readOnly />
-                  <CopyToClipboard text={productId} tooltipPosition="bottom">
-                    <a className="button">Copy</a>
-                  </CopyToClipboard>
-                </div>
-              </fieldset>
-            ) : null}
-          </Drawer>
+          <RowDetails asChild>
+            <Drawer>
+              {isMultiSeatLicense !== null ? (
+                <Toggle value={isMultiSeatLicense} onChange={assertDefined(onIsMultiSeatLicenseChange)}>
+                  Allow customers to choose number of seats per license purchased
+                </Toggle>
+              ) : null}
+              {productId ? (
+                <fieldset>
+                  <legend>
+                    <label htmlFor={`product_id-${uid}`}>Use your product ID to verify licenses through the API.</label>
+                  </legend>
+                  <div className="flex gap-2">
+                    <input id={`product_id-${uid}`} type="text" value={productId} className="flex-1" readOnly />
+                    <CopyToClipboard text={productId} tooltipPosition="bottom">
+                      <a className="button">Copy</a>
+                    </CopyToClipboard>
+                  </div>
+                </fieldset>
+              ) : null}
+            </Drawer>
+          </RowDetails>
         ) : null}
-      </div>
+      </Row>
     </NodeViewWrapper>
   );
 };

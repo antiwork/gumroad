@@ -21,7 +21,7 @@ const AdminPausePayoutsForm = ({ user_id, onSuccess }: { user_id: number; onSucc
     >
       {(isLoading) => (
         <fieldset>
-          <div className="flex items-end gap-2">
+          <div className="flex flex-col gap-2 md:flex-row md:items-end">
             <textarea
               name="pause_payouts[reason]"
               rows={2}

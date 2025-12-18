@@ -24,7 +24,7 @@ describe Admin::Products::PurchasesController do
       purchases = response.parsed_body["purchases"]
       expect(purchases).to be_present
       expect(purchases.length).to eq(1)
-      expect(purchases.first["id"]).to eq(purchase.id)
+      expect(purchases.first["external_id"]).to eq(purchase.external_id)
 
       expect(response.parsed_body["pagination"]).to be_present
     end
@@ -38,10 +38,10 @@ describe Admin::Products::PurchasesController do
       expect(response).to have_http_status(:ok)
 
       purchases = response.parsed_body["purchases"]
-      purchase_ids = purchases.map { |p| p["id"] }
+      purchase_external_ids = purchases.map { |p| p["external_id"] }
 
-      expect(purchase_ids).to include(purchase.id)
-      expect(purchase_ids).not_to include(other_purchase.id)
+      expect(purchase_external_ids).to include(purchase.external_id)
+      expect(purchase_external_ids).not_to include(other_purchase.external_id)
     end
 
     context "with pagination parameters" do

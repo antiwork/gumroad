@@ -194,7 +194,7 @@ const SubscriptionManager = ({
     price: Math.round(amountDueToday / product.exchange_rate),
     payInInstallments: subscription.is_installment_plan,
     requireShipping: product.require_shipping,
-    customFields: product.custom_fields,
+    customFields: [], // Custom fields were already collected during original purchase
     bundleProductCustomFields: [],
     supportsPaypal: product.supports_paypal,
     testPurchase: subscription.is_test,
@@ -358,7 +358,7 @@ const SubscriptionManager = ({
 
       <StateContext.Provider value={reducer}>
         <div>
-          <PaymentForm className="borderless" notice={paymentNotice} />
+          <PaymentForm className="borderless" notice={paymentNotice} showCustomFields={false} />
           {totalPrice > 0 ? (
             <div>
               <div className="text-center">

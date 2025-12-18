@@ -10,6 +10,7 @@ import { CopyToClipboard } from "$app/components/CopyToClipboard";
 import { useDomains, useDiscoverUrl } from "$app/components/DomainSettings";
 import { Icon } from "$app/components/Icons";
 import { LoadingSpinner } from "$app/components/LoadingSpinner";
+import { Pill } from "$app/components/ui/Pill";
 
 const DiscoverLinkSection = ({
   globalAffiliateId,
@@ -38,7 +39,9 @@ const DiscoverLinkSection = ({
         <div className="input">
           <div className="input">{discoverUrl}</div>
           <CopyToClipboard text={discoverUrl} tooltipPosition="bottom">
-            <Button className="pill">Copy link</Button>
+            <Pill asChild>
+              <Button className="rounded-full! px-3! py-2!">Copy link</Button>
+            </Pill>
           </CopyToClipboard>
         </div>
         <small>
@@ -85,26 +88,28 @@ const LinkGenerationSection = ({
             value={inputLink}
             onChange={(evt) => setInputLink(evt.target.value)}
           />
-          <Button
-            className="pill"
-            onClick={() => {
-              try {
-                const url = new URL(inputLink);
-                const isGumroadDomain = [rootDomain, shortDomain].some((domain) => url.host.endsWith(domain));
-                if (isGumroadDomain) {
-                  url.searchParams.set(affiliateQueryParam, globalAffiliateId.toString());
-                  setGeneratedLink(url.toString());
-                  setHasError(false);
-                } else {
+          <Pill asChild>
+            <Button
+              className="rounded-full! px-3! py-2!"
+              onClick={() => {
+                try {
+                  const url = new URL(inputLink);
+                  const isGumroadDomain = [rootDomain, shortDomain].some((domain) => url.host.endsWith(domain));
+                  if (isGumroadDomain) {
+                    url.searchParams.set(affiliateQueryParam, globalAffiliateId.toString());
+                    setGeneratedLink(url.toString());
+                    setHasError(false);
+                  } else {
+                    setHasError(true);
+                  }
+                } catch {
                   setHasError(true);
                 }
-              } catch {
-                setHasError(true);
-              }
-            }}
-          >
-            Generate link
-          </Button>
+              }}
+            >
+              Generate link
+            </Button>
+          </Pill>
         </div>
         {hasError ? (
           <div role="alert" className={cx({ danger: hasError })}>
@@ -117,7 +122,9 @@ const LinkGenerationSection = ({
         <div className="input">
           <div className="input">{generatedLink}</div>
           <CopyToClipboard text={generatedLink} tooltipPosition="bottom">
-            <Button className="pill">Copy link</Button>
+            <Pill asChild>
+              <Button className="rounded-full! px-3! py-2!">Copy link</Button>
+            </Pill>
           </CopyToClipboard>
         </div>
         <small>Copy this affiliate link and share it with your audience</small>

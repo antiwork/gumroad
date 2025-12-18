@@ -6,6 +6,7 @@ class Admin::SalesReportsController < Admin::BaseController
 
     render inertia: "Admin/SalesReports/Index", props: {
       countries: Compliance::Countries.for_select.map { |alpha2, name| [name, alpha2] },
+      sales_types: GenerateSalesReportJob::SALES_TYPES.map { [_1, _1.humanize] },
       job_history: Admin::SalesReport.fetch_job_history
     }
   end
@@ -22,6 +23,6 @@ class Admin::SalesReportsController < Admin::BaseController
 
   private
     def sales_report_params
-      params.require(:sales_report).permit(:country_code, :start_date, :end_date)
+      params.require(:sales_report).permit(:country_code, :start_date, :end_date, :sales_type)
     end
 end

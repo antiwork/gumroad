@@ -28,6 +28,13 @@ describe "Admin::SearchController Scenario", type: :system, js: true do
         expect(page).not_to have_content("Different Product")
       end
 
+      it "renders the page for legacy search purchases URL" do
+        visit admin_legacy_search_purchases_path(query: "user@example.com", product_title_query:)
+
+        expect(page).to have_content("Graphic Design Course")
+        expect(page).not_to have_content("Different Product")
+      end
+
       it "shows clear button and clears product title filter" do
         different_product = create(:product, name: "Different Product")
         create(:purchase, email: "user@example.com", link: different_product)
