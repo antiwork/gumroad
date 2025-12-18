@@ -23,6 +23,7 @@ class StripeBalanceEnforcer
   private_class_method :new
 
   def ensure_sufficient_balance
+    return if using_dummy_stripe_key?
     top_up! if insufficient_balance?
   end
 
@@ -37,6 +38,10 @@ class StripeBalanceEnforcer
       balance = Stripe::Balance.retrieve
       usd_balance = balance.available.find { |b| b["currency"] == "usd" }
       usd_balance ? usd_balance["amount"] : 0
+    end
+
+    def using_dummy_stripe_key?
+      Stripe.api_key.nil? || Stripe.api_key.include?("dummy")
     end
 
     def top_up!
