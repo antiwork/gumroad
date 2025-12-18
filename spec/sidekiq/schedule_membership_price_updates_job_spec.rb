@@ -125,7 +125,7 @@ describe ScheduleMembershipPriceUpdatesJob do
             end
 
             it "does nothing but notify Bugsnag if the price is the same as the agreed on price" do
-              expect(Bugsnag).to receive(:notify).with("Not adding a plan change for membership price change - subscription_id: #{disabled_subscription.id} - reason: price has not changed")
+              expect(Bugsnag).to receive(:notify).with("Not adding a plan change for membership price change - subscription_id: #{disabled_subscription.id} - reason: price unchanged")
               create(:subscription_plan_change, subscription: disabled_subscription, tier: enabled_tier, perceived_price_cents: new_price)
               expect do
                 described_class.new.perform(enabled_tier.id)
@@ -148,7 +148,7 @@ describe ScheduleMembershipPriceUpdatesJob do
             end
 
             it "does nothing but notify Bugsnag if the new price is the same as the agreed on price" do
-              expect(Bugsnag).to receive(:notify).with("Not adding a plan change for membership price change - subscription_id: #{enabled_subscription.id} - reason: price has not changed")
+              expect(Bugsnag).to receive(:notify).with("Not adding a plan change for membership price change - subscription_id: #{enabled_subscription.id} - reason: price unchanged")
               create(:subscription_plan_change, subscription: enabled_subscription, tier: enabled_tier, recurrence: "yearly", perceived_price_cents: yearly_price)
               expect do
                 described_class.new.perform(enabled_tier.id)
@@ -201,12 +201,29 @@ describe ScheduleMembershipPriceUpdatesJob do
 
         context "when the price has not changed" do
           it "does nothing but notify Bugsnag" do
-            expect(Bugsnag).to receive(:notify).with("Not adding a plan change for membership price change - subscription_id: #{enabled_subscription.id} - reason: price has not changed")
+            expect(Bugsnag).to receive(:notify).with("Not adding a plan change for membership price change - subscription_id: #{enabled_subscription.id} - reason: price unchanged")
             enabled_subscription.original_purchase.update!(displayed_price_cents: new_price)
 
             expect do
               described_class.new.perform(enabled_tier.id)
             end.not_to change { enabled_subscription.subscription_plan_changes.count }
+          end
+        end
+
+        context "when the price for a recurrence is deleted" do
+          it "does nothing but notify Bugsnag" do
+            enabled_tier.prices.alive.find_by(recurrence: "monthly").mark_deleted!
+
+            expect(Bugsnag).to receive(:notify).with(/subscription_id: #{enabled_subscription.id} - reason: zero or negative price/)
+
+            expect do
+              described_class.new.perform(enabled_tier.id)
+            end.not_to change { enabled_subscription.subscription_plan_changes.count }
+
+            zero_price_plan_changes = enabled_subscription.subscription_plan_changes
+                                                         .for_product_price_change
+                                                         .where(perceived_price_cents: 0)
+            expect(zero_price_plan_changes.count).to eq(0)
           end
         end
       end
