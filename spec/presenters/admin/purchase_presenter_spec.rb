@@ -44,7 +44,7 @@ describe Admin::PurchasePresenter do
               search_url: ChargeProcessor.transaction_url_for_admin(purchase.charge_processor_id, purchase.stripe_transaction_id, purchase.charged_using_gumroad_merchant_account?),
             },
             merchant_account: {
-              id: purchase.merchant_account.id,
+              external_id: purchase.merchant_account.external_id,
               charge_processor_id: purchase.merchant_account.charge_processor_id.capitalize,
               holder_of_funds: purchase.merchant_account.holder_of_funds.capitalize,
             },

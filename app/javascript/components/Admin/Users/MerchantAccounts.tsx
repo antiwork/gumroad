@@ -20,16 +20,16 @@ type AdminUserMerchantAccountsData = {
 };
 
 export type MerchantAccountProps = {
-  id: number;
+  external_id: string;
   charge_processor_id: string;
   alive: boolean;
   charge_processor_alive: boolean;
 };
 
-const MerchantAccount = ({ id, charge_processor_id, alive, charge_processor_alive }: MerchantAccountProps) => (
+const MerchantAccount = ({ external_id, charge_processor_id, alive, charge_processor_alive }: MerchantAccountProps) => (
   <li>
-    <Link href={Routes.admin_merchant_account_path(id)}>
-      {id} - {charge_processor_id}
+    <Link href={Routes.admin_merchant_account_path(external_id)}>
+      {external_id} - {charge_processor_id}
     </Link>{" "}
     <BooleanIcon value={alive ? charge_processor_alive : false} />
   </li>
@@ -65,7 +65,7 @@ const AdminUserMerchantAccounts = ({ user }: AdminUserMerchantAccountsProps) => 
       {data?.merchant_accounts && data.merchant_accounts.length > 0 ? (
         <ul className="inline">
           {data.merchant_accounts.map((merchant_account: MerchantAccountProps) => (
-            <MerchantAccount key={merchant_account.id} {...merchant_account} />
+            <MerchantAccount key={merchant_account.external_id} {...merchant_account} />
           ))}
         </ul>
       ) : (
