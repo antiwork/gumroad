@@ -431,11 +431,10 @@ const CustomersPage = ({
                 >
                   Download
                 </NavigationButton>
-                {count > 2000 && (
-                  <div className="mt-2 text-sm text-gray-600">
-                    Exports over 2,000 rows will be processed in the background and emailed to you.
-                  </div>
-                )}
+                <div className="flex items-center gap-2 rounded-md bg-gray-50 p-2 text-sm text-gray-600">
+                  <Icon name="info-circle" className="text-gray-500" />
+                  <span>Exports over 2,000 rows are emailed when ready.</span>
+                </div>
               </div>
             </Popover>
           </>
