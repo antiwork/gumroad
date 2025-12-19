@@ -52,6 +52,7 @@ import { AuthorByline } from "$app/components/Product/AuthorByline";
 import { computeOptionPrice, OptionRadioButton, Option } from "$app/components/Product/ConfigurationSelector";
 import { PriceTag } from "$app/components/Product/PriceTag";
 import { showAlert } from "$app/components/server-components/Alert";
+import { ProductCard, ProductCardFigure, ProductCardHeader, ProductCardFooter } from "$app/components/ui/ProductCard";
 import { useAddThirdPartyAnalytics } from "$app/components/useAddThirdPartyAnalytics";
 import { useDebouncedCallback } from "$app/components/useDebouncedCallback";
 import { useOnChange, useOnChangeSync } from "$app/components/useOnChange";
@@ -673,27 +674,29 @@ export const CrossSellModal = ({
     <>
       <div className="grid gap-4">
         <h4 dangerouslySetInnerHTML={{ __html: crossSell.description }} />
-        <article className="product-card horizontal">
-          <figure>{product.thumbnail_url ? <img src={product.thumbnail_url} /> : null}</figure>
-          <section>
-            <header>
+        <ProductCard className="lg:flex-row">
+          <ProductCardFigure className="lg:h-full lg:rounded-l lg:rounded-tr-none lg:border-r lg:border-b-0 lg:[&_img]:w-auto lg:[&_img]:min-w-full">
+            {product.thumbnail_url ? <img src={product.thumbnail_url} /> : null}
+          </ProductCardFigure>
+          <section className="flex flex-1 flex-col overflow-hidden lg:gap-8 lg:px-6 lg:py-4">
+            <ProductCardHeader className="lg:border-b-0 lg:p-0">
               <a className="stretched-link" href={product.url} target="_blank" rel="noreferrer">
-                <h3>{option ? `${product.name} - ${option.name}` : product.name}</h3>
+                <h3 className="truncate">{option ? `${product.name} - ${option.name}` : product.name}</h3>
               </a>
               <AuthorByline
                 name={product.creator.name}
                 profileUrl={product.creator.profile_url}
                 avatarUrl={product.creator.avatar_url}
               />
-            </header>
-            <footer>
+            </ProductCardHeader>
+            <ProductCardFooter className="lg:divide-x-0">
               {crossSell.ratings ? (
-                <div className="flex shrink-0 items-center gap-1">
+                <div className="flex flex-[1_0_max-content] items-center gap-1 p-4 lg:p-0">
                   <span className="rating-average">{crossSell.ratings.average.toFixed(1)}</span>
                   <span>{`(${formatOrderOfMagnitude(crossSell.ratings.count, 1)})`}</span>
                 </div>
               ) : null}
-              <div>
+              <div className="p-4 lg:p-0">
                 <PriceTag
                   currencyCode={product.currency_code}
                   oldPrice={
@@ -714,9 +717,9 @@ export const CrossSellModal = ({
                   tooltipPosition="top"
                 />
               </div>
-            </footer>
+            </ProductCardFooter>
           </section>
-        </article>
+        </ProductCard>
       </div>
       <footer style={{ display: "grid", gap: "var(--spacer-4)", gridTemplateColumns: "1fr 1fr" }}>
         <Button onClick={decline}>

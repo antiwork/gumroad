@@ -60,6 +60,7 @@
   --grid-cols-sidebar: 1fr 3fr;
 
   --loading-spinner: url("~images/loading-rainbow.svg");
+  --product-cover-placeholder: url("~images/placeholders/product-cover.png");
 }
 
 @layer base {

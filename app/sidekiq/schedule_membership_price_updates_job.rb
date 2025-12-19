@@ -54,8 +54,15 @@ class ScheduleMembershipPriceUpdatesJob
         end
       end
 
-      if new_price.nil? || existing_price == new_price
-        Bugsnag.notify("Not adding a plan change for membership price change - subscription_id: #{subscription.id} - reason: price has not changed")
+      if new_price.nil? || new_price <= 0 || existing_price == new_price
+        reason = if new_price.nil?
+          "nil price"
+        elsif new_price <= 0
+          "zero or negative price (#{new_price})"
+        else
+          "price has not changed"
+        end
+        Bugsnag.notify("Not adding a plan change for membership price change - subscription_id: #{subscription.id} - reason: #{reason}")
         next
       end
 

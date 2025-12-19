@@ -9,7 +9,6 @@ class Admin::MerchantAccountPresenter
 
   def props
     {
-      id: merchant_account.id,
       charge_processor_id: merchant_account.charge_processor_id,
       charge_processor_merchant_id: merchant_account.charge_processor_merchant_id,
       created_at: merchant_account.created_at,

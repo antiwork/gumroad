@@ -253,7 +253,7 @@ const CtaBar = ({
   return (
     <section
       aria-label="Product information bar"
-      className="border-0"
+      className="border-0 bg-background"
       style={{
         overflow: "hidden",
         padding: 0,
@@ -276,7 +276,7 @@ const CtaBar = ({
     >
       <div
         ref={ref}
-        className="product-cta"
+        className="mx-auto flex max-w-product-page items-center justify-between gap-4 p-4 lg:px-8"
         style={{
           transition: "var(--transition-duration)",
           marginTop: visible || !isDesktop ? undefined : -height,
@@ -299,7 +299,7 @@ const CtaBar = ({
           isSalesLimited={product.is_sales_limited}
           creatorName={product.seller?.name}
         />
-        <h3>{product.name}</h3>
+        <h3 className="hidden flex-1 lg:block">{product.name}</h3>
         {product.ratings != null && product.ratings.count > 0 ? (
           <RatingsSummary className="hidden lg:flex" ratings={product.ratings} />
         ) : null}

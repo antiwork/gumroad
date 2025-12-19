@@ -7,10 +7,10 @@ import { PoweredByFooter } from "$app/components/PoweredByFooter";
 import { Layout, Props } from "$app/components/Product/Layout";
 
 const ProductPage = (props: Props) => (
-  <div className="product">
+  <>
     <Layout {...props} />
     <PoweredByFooter />
-  </div>
+  </>
 );
 
 export default register({ component: ProductPage, propParser: createCast() });

@@ -84,41 +84,6 @@ class Variant < BaseVariant
     recurrence_price_values
   end
 
-  def self.create_or_update!(external_id, params)
-    variant = external_id ? self.find_by_external_id(external_id) : self.new
-    if params.key?(:product_files)
-      variant.product_files = params.delete(:product_files) || []
-    end
-    if variant.disabling_apply_price_changes_to_existing_members?(params)
-      variant.subscription_plan_changes.for_product_price_change.alive.each(&:mark_deleted)
-    end
-    notify_members_of_price_change = variant.should_notify_members_of_price_change?(params)
-    %i[name description price_difference_cents max_purchase_count
-       position_in_category customizable_price subscription_price_change_effective_date
-       subscription_price_change_message duration_in_minutes].each do |attribute|
-      variant[attribute] = params[attribute] if params.key?(attribute)
-    end
-    variant.apply_price_changes_to_existing_memberships = params[:apply_price_changes_to_existing_memberships]
-    variant.variant_category = params[:variant_category] if params.key?(:variant_category)
-    variant.save!
-    # TODO (helen): Remove after debugging this issue: https://gumroad.slack.com/archives/C01DBV0A257/p1695383751410679
-    if !notify_members_of_price_change && (variant.flags_previously_changed? || variant.subscription_price_change_effective_date_previously_changed?)
-      Bugsnag.notify("Not notifying subscribers of membership price change - tier: #{variant.id}; apply_price_changes_to_existing_memberships: #{params[:apply_price_changes_to_existing_memberships]}; subscription_price_change_effective_date: #{params[:subscription_price_change_effective_date]}")
-    end
-    ScheduleMembershipPriceUpdatesJob.perform_async(variant.id) if notify_members_of_price_change
-
-    variant
-  end
-
-  def disabling_apply_price_changes_to_existing_members?(params)
-    apply_price_changes_to_existing_memberships? && !params[:apply_price_changes_to_existing_memberships]
-  end
-
-  def should_notify_members_of_price_change?(params)
-    return false unless params[:apply_price_changes_to_existing_memberships]
-    apply_price_changes_to_existing_memberships != params[:apply_price_changes_to_existing_memberships] || subscription_price_change_effective_date != params[:subscription_price_change_effective_date]&.to_date
-  end
-
   private
     def set_position
       return if self.position_in_category.present?
