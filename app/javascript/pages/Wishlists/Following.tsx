@@ -2,13 +2,13 @@ import { router, usePage } from "@inertiajs/react";
 import React from "react";
 import { cast } from "ts-safe-cast";
 
+import Layout from "$app/inertia/layout";
+
 import { Icon } from "$app/components/Icons";
 import { Layout as LibraryLayout } from "$app/components/Library/Layout";
 import { Popover } from "$app/components/Popover";
-
 import Placeholder from "$app/components/ui/Placeholder";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "$app/components/ui/Table";
-import Layout from "$app/inertia/layout";
 
 import placeholder from "$assets/images/placeholders/wishlists-following.png";
 
@@ -32,7 +32,11 @@ type Props = {
 const LibraryLayoutWrapper = ({ children }: { children: React.ReactNode }) => {
   const { reviews_page_enabled } = cast<Props>(usePage().props);
   return (
-    <LibraryLayout selectedTab="following_wishlists" reviewsPageEnabled={reviews_page_enabled} followingWishlistsEnabled>
+    <LibraryLayout
+      selectedTab="following_wishlists"
+      reviewsPageEnabled={reviews_page_enabled}
+      followingWishlistsEnabled
+    >
       {children}
     </LibraryLayout>
   );
