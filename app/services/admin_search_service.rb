@@ -16,6 +16,14 @@ class AdminSearchService
         Purchase.select("purchases.id as purchase_id").where(ip_address: query).to_sql,
       ]
 
+      if (purchase_id = Purchase.from_external_id(query))
+        unions << Purchase.select("purchases.id as purchase_id").where(id: purchase_id).to_sql
+      end
+
+      if !Purchase.external_id?(query)
+        unions << Purchase.select("purchases.id as purchase_id").where(id: query.to_i).to_sql
+      end
+
       union_sql = <<~SQL.squish
         SELECT purchase_id FROM (
           #{ unions.map { |u| "(#{u})" }.join(" UNION ") }

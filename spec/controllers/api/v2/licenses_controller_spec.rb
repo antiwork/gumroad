@@ -27,6 +27,8 @@ describe Api::V2::LicensesController do
       it "returns the correct JSON when it modifies the license state" do
         put action, params: { access_token: @token.token, license_key: @purchase.license.serial }.merge(@product_identifier)
 
+        @purchase.reload
+
         expect(response.parsed_body).to eq({
           success: true,
           uses: 0,
@@ -201,6 +203,51 @@ describe Api::V2::LicensesController do
       it_behaves_like "disable license", :product_permalink, :unique_permalink
       it_behaves_like "disable license", :product_permalink, :custom_permalink
       it_behaves_like "disable license", :product_id, :external_id
+    end
+  end
+
+  describe "PUT 'rotate'" do
+    before do
+      @app = create(:oauth_application, owner: create(:user))
+    end
+
+    it_behaves_like "a licenseable", :rotate, :product_permalink, :unique_permalink
+    it_behaves_like "a licenseable", :rotate, :product_permalink, :custom_permalink
+    it_behaves_like "a licenseable", :rotate, :product_id, :external_id
+
+    context "when logged in with edit_products scope" do
+      before do
+        @token = create("doorkeeper/access_token", application: @app,
+                                                   resource_owner_id: @product.user.id,
+                                                   scopes: "edit_products")
+      end
+
+      shared_examples_for "rotate license" do |product_identifier_key, product_identifier_value|
+        before do
+          @product_identifier = { product_identifier_key => @product.send(product_identifier_value) }
+        end
+
+        it "rotates the license key" do
+          old_serial = @purchase.license.serial
+          put :rotate, params: { access_token: @token.token, license_key: @purchase.license.serial }.merge(@product_identifier)
+
+          @purchase.reload
+          expect(@purchase.license.serial).not_to eq old_serial
+          expect(response.parsed_body["purchase"]["license_key"]).to eq @purchase.license.serial
+        end
+
+        it "returns a 404 error if the license user is not the current resource owner" do
+          token = create("doorkeeper/access_token", application: @app,
+                                                    resource_owner_id: create(:user).id,
+                                                    scopes: "edit_products")
+          put :rotate, params: { access_token: token.token, license_key: @purchase.license.serial }.merge(@product_identifier)
+          expect(response.code.to_i).to eq(404)
+        end
+      end
+
+      it_behaves_like "rotate license", :product_permalink, :unique_permalink
+      it_behaves_like "rotate license", :product_permalink, :custom_permalink
+      it_behaves_like "rotate license", :product_id, :external_id
     end
   end
 

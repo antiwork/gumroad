@@ -5,7 +5,7 @@ require "spec_helper"
 describe UserBalanceStatsService do
   let(:user) { create(:user) }
   let(:instance) { described_class.new(user:) }
-  let(:example_values) { { foo: "bar" } }
+  let(:example_values) { { foo: "bar", nested: { key1: { key2: "value2" } }, records: [{ id: 1, name: "first" }, { id: 2, name: "second" }] } }
 
   describe "#generate" do
     # We're not actually testing the values generated here.
@@ -33,7 +33,7 @@ describe UserBalanceStatsService do
 
       context "when cached value exists" do
         it "returns cached value" do
-          Rails.cache.write(instance.send(:cache_key), example_values)
+          $redis.setex(instance.send(:cache_key), 48.hours.to_i, example_values.to_json)
           expect(instance).not_to receive(:generate)
           expect(fetched).to eq(example_values)
         end

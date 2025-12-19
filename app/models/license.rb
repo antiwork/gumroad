@@ -1,6 +1,8 @@
 # frozen_string_literal: true
 
 class License < ApplicationRecord
+  has_paper_trail only: %i[disabled_at serial]
+
   include FlagShihTzu
   include ExternalId
 
@@ -35,6 +37,12 @@ class License < ApplicationRecord
 
   def enable!
     self.disabled_at = nil
+    save!
+  end
+
+  def rotate!
+    self.serial = nil
+    generate_serial
     save!
   end
 end

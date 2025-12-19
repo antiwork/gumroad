@@ -107,7 +107,7 @@ namespace :admin do
 
   resources :comments, only: :create
 
-  resources :purchases, only: [:show] do
+  resources :purchases, only: [:show], param: :external_id do
     scope module: :purchases do
       concerns :commentable
     end
@@ -128,7 +128,7 @@ namespace :admin do
 
   resources :sales_reports, only: [:index, :create]
 
-  resources :merchant_accounts, only: [:show] do
+  resources :merchant_accounts, only: [:show], param: :external_id do
     member do
       get :live_attributes
     end
