@@ -88,7 +88,7 @@ SecureHeaders::Configuration.default do |config|
 
       # helper widget
       "help.gumroad.com",
-    ].compact,
+    ],
     script_src: [
       "'self'",
 
