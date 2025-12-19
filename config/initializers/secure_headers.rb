@@ -46,7 +46,7 @@ SecureHeaders::Configuration.default do |config|
       "#{AWS_S3_ENDPOINT}/#{S3_BUCKET}",
       "#{AWS_S3_ENDPOINT}/#{S3_BUCKET}/",
 
-      # direct file uploads to aws s3
+      # direct file uploads to aws s3/minio
       "#{AWS_S3_ENDPOINT}/#{PUBLIC_STORAGE_S3_BUCKET}",
       "#{AWS_S3_ENDPOINT}/#{PUBLIC_STORAGE_S3_BUCKET}/",
 
