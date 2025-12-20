@@ -4,11 +4,8 @@ import { RouterProvider, createBrowserRouter, RouteObject, Link, json, useLocati
 import { StaticRouterProvider } from "react-router-dom/server";
 
 import {
-  getDraftInstallments,
   getEditInstallment,
   getNewInstallment,
-  getPublishedInstallments,
-  getScheduledInstallments,
   previewInstallment,
   SavedInstallment,
 } from "$app/data/installments";
@@ -22,10 +19,7 @@ import { Button } from "$app/components/Button";
 import { Icon } from "$app/components/Icons";
 import { Popover } from "$app/components/Popover";
 import { showAlert } from "$app/components/server-components/Alert";
-import { DraftsTab } from "$app/components/server-components/EmailsPage/DraftsTab";
 import { EmailForm } from "$app/components/server-components/EmailsPage/EmailForm";
-import { PublishedTab } from "$app/components/server-components/EmailsPage/PublishedTab";
-import { ScheduledTab } from "$app/components/server-components/EmailsPage/ScheduledTab";
 import { PageHeader } from "$app/components/ui/PageHeader";
 import Placeholder from "$app/components/ui/Placeholder";
 import { Tabs, Tab } from "$app/components/ui/Tabs";
@@ -188,21 +182,8 @@ export const audienceCountValue = (audienceCounts: AudienceCounts, installmentId
 };
 
 const routes: RouteObject[] = [
-  {
-    path: emailTabPath("published"),
-    element: <PublishedTab />,
-    loader: async () => json(await getPublishedInstallments({ page: 1, query: "" }).response, { status: 200 }),
-  },
-  {
-    path: emailTabPath("scheduled"),
-    element: <ScheduledTab />,
-    loader: async () => json(await getScheduledInstallments({ page: 1, query: "" }).response, { status: 200 }),
-  },
-  {
-    path: emailTabPath("drafts"),
-    element: <DraftsTab />,
-    loader: async () => json(await getDraftInstallments({ page: 1, query: "" }).response, { status: 200 }),
-  },
+  // List pages are now handled by Inertia (emails#published, emails#scheduled, emails#drafts)
+  // Only form routes remain here for the legacy React-on-Rails pages
   {
     path: newEmailPath,
     element: <EmailForm />,
