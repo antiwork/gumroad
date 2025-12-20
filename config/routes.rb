@@ -398,7 +398,6 @@ Rails.application.routes.draw do
     get "/collaborators/*other", to: "collaborators#index"
 
     get "/affiliates/*other", to: "affiliates#index" # route handled by react-router
-    get "/emails/*other", to: "emails#index" # route handled by react-router
     get "/dashboard/utm_links/*other", to: "utm_links#index" # route handled by react-router
     get "/communities/*other", to: "communities#index" # route handled by react-router
 
@@ -803,6 +802,13 @@ Rails.application.routes.draw do
 
     # emails
     get "/emails", to: "emails#index", as: :emails
+    get "/emails/published", to: "emails#published", as: :published_emails
+    get "/emails/scheduled", to: "emails#scheduled", as: :scheduled_emails
+    get "/emails/drafts", to: "emails#drafts", as: :drafts_emails
+    delete "/emails/:id", to: "emails#destroy", as: :email
+    get "/emails/new", to: "emails#legacy", as: :new_email
+    get "/emails/:id/edit", to: "emails#legacy", as: :edit_email
+    get "/emails/*other", to: "emails#legacy" # catch-all for other old React pages
     get "/posts", to: redirect("/emails")
 
     # workflows
