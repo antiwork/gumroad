@@ -11,6 +11,7 @@ import { Thumbnail } from "$app/components/Product/Thumbnail";
 import { showAlert } from "$app/components/server-components/Alert";
 import { Result } from "$app/components/server-components/CheckoutPage";
 import { PageHeader } from "$app/components/ui/PageHeader";
+import { ProductCard, ProductCardFigure, ProductCardHeader, ProductCardFooter } from "$app/components/ui/ProductCard";
 import { ProductCardGrid } from "$app/components/ui/ProductCardGrid";
 import { useRunOnce } from "$app/components/useRunOnce";
 
@@ -103,11 +104,11 @@ const Card = ({
   nativeType: ProductNativeType;
   creator: Creator | null;
 }) => (
-  <article className="product-card relative">
-    <figure>
+  <ProductCard>
+    <ProductCardFigure>
       <Thumbnail url={thumbnailUrl} nativeType={nativeType} />
-    </figure>
-    <header>
+    </ProductCardFigure>
+    <ProductCardHeader>
       {contentUrl ? (
         <a href={contentUrl} className="stretched-link" aria-label={name}>
           <h3 itemProp="name">{name}</h3>
@@ -115,13 +116,13 @@ const Card = ({
       ) : (
         <h3 itemProp="name">{name}</h3>
       )}
-    </header>
-    <footer className="relative">
+    </ProductCardHeader>
+    <ProductCardFooter>
       {creator ? (
-        <AuthorByline name={creator.name} profileUrl={creator.profile_url} avatarUrl={creator.avatar_url} />
-      ) : (
-        <div className="user" />
-      )}
-    </footer>
-  </article>
+        <div className="p-4">
+          <AuthorByline name={creator.name} profileUrl={creator.profile_url} avatarUrl={creator.avatar_url} />
+        </div>
+      ) : null}
+    </ProductCardFooter>
+  </ProductCard>
 );

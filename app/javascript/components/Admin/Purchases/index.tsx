@@ -35,7 +35,7 @@ export type Purchase = PurchaseStatesInfo & {
     email: string;
   };
   merchant_account: {
-    id: number;
+    external_id: string;
     charge_processor_id: string;
     holder_of_funds: string;
   } | null;
@@ -173,8 +173,8 @@ const Info = ({ purchase }: { purchase: Purchase }) => (
         <>
           <dt>Merchant account</dt>
           <dd>
-            <Link href={Routes.admin_merchant_account_path(purchase.merchant_account.id)}>
-              {purchase.merchant_account.id} – {purchase.merchant_account.charge_processor_id}
+            <Link href={Routes.admin_merchant_account_path(purchase.merchant_account.external_id)}>
+              {purchase.merchant_account.external_id} – {purchase.merchant_account.charge_processor_id}
             </Link>
           </dd>
           <dt>Funds held by</dt>

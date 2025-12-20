@@ -9,7 +9,7 @@ export const AuthorByline = ({
   profileUrl: string;
   avatarUrl?: string | undefined;
 }) => (
-  <a href={profileUrl} target="_blank" className="user relative" rel="noreferrer">
+  <a href={profileUrl} target="_blank" className="relative flex items-center gap-2" rel="noreferrer">
     {avatarUrl ? <img className="user-avatar" src={avatarUrl} /> : null}
     {name}
   </a>

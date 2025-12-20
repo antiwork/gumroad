@@ -1,3 +1,4 @@
+import { router } from "@inertiajs/react";
 import React, { useEffect } from "react";
 
 import { SupportHeader } from "$app/components/server-components/support/Header";
@@ -17,7 +18,7 @@ export default function SupportPortal() {
     const url = new URL(location.href);
     if (!isNewTicketOpen && url.searchParams.get("new_ticket")) {
       url.searchParams.delete("new_ticket");
-      history.replaceState(null, "", url.toString());
+      router.get(url.toString(), { replace: true, preserveState: true, preserveScroll: true });
     }
   }, [isNewTicketOpen]);
 
@@ -28,7 +29,9 @@ export default function SupportPortal() {
     } else {
       url.searchParams.delete("id");
     }
-    if (url.toString() !== window.location.href) history.pushState(null, "", url.toString());
+    if (url.toString() !== window.location.href) {
+      router.get(url.toString(), { preserveState: true, preserveScroll: true });
+    }
   }, [selectedConversationSlug]);
 
   useGlobalEventListener("popstate", () => {
