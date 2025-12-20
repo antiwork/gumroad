@@ -182,8 +182,6 @@ export const audienceCountValue = (audienceCounts: AudienceCounts, installmentId
 };
 
 const routes: RouteObject[] = [
-  // List pages are now handled by Inertia (emails#published, emails#scheduled, emails#drafts)
-  // Only form routes remain here for the legacy React-on-Rails pages
   {
     path: newEmailPath,
     element: <EmailForm />,
