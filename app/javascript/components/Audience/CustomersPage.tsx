@@ -59,6 +59,7 @@ import { AbortError, assertResponseError } from "$app/utils/request";
 
 import { Button, NavigationButton } from "$app/components/Button";
 import { useCurrentSeller } from "$app/components/CurrentSeller";
+import { RefundPaymentMethodBanner } from "$app/components/CustomersPage/RefundPaymentMethodBanner";
 import { DateInput } from "$app/components/DateInput";
 import { DateRangePicker } from "$app/components/DateRangePicker";
 import { FileKindIcon } from "$app/components/FileRowContent";
@@ -102,6 +103,7 @@ export type CustomerPageProps = {
   countries: string[];
   can_ping: boolean;
   show_refund_fee_notice: boolean;
+  show_refund_payment_method_banner: boolean;
 };
 
 const year = new Date().getFullYear();
@@ -125,6 +127,7 @@ const CustomersPage = ({
   countries,
   can_ping,
   show_refund_fee_notice,
+  show_refund_payment_method_banner,
   ...initialState
 }: CustomerPageProps) => {
   const currentSeller = useCurrentSeller();
@@ -252,6 +255,7 @@ const CustomersPage = ({
 
   return (
     <div className="h-full">
+      <RefundPaymentMethodBanner show={show_refund_payment_method_banner} />
       <PageHeader
         title="Sales"
         actions={

@@ -31,6 +31,9 @@ import BankAccountSection, {
 import DebitCardSection from "$app/components/Settings/PaymentsPage/DebitCardSection";
 import PayPalConnectSection, { PayPalConnect } from "$app/components/Settings/PaymentsPage/PayPalConnectSection";
 import PayPalEmailSection from "$app/components/Settings/PaymentsPage/PayPalEmailSection";
+import RefundPaymentMethodSection, {
+  RefundPaymentMethodProps,
+} from "$app/components/Settings/PaymentsPage/RefundPaymentMethodSection";
 import StripeConnectSection, { StripeConnect } from "$app/components/Settings/PaymentsPage/StripeConnectSection";
 import { Toggle } from "$app/components/Toggle";
 import { TypeSafeOptionSelect } from "$app/components/TypeSafeOptionSelect";
@@ -145,6 +148,7 @@ type Props = {
   minimum_payout_threshold_cents: number;
   payout_frequency: PayoutFrequency;
   payout_frequency_daily_supported: boolean;
+  refund_payment_method: RefundPaymentMethodProps;
 };
 
 export type PayoutMethod = "bank" | "card" | "paypal" | "stripe";
@@ -1155,6 +1159,10 @@ const PaymentsPage = (props: Props) => {
             read_only={props.is_form_disabled}
           />
         ) : null}
+        <RefundPaymentMethodSection
+          refundPaymentMethod={props.refund_payment_method}
+          isFormDisabled={props.is_form_disabled}
+        />
       </form>
     </Layout>
   );

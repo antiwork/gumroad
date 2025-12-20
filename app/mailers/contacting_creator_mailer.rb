@@ -534,6 +534,13 @@ class ContactingCreatorMailer < ApplicationMailer
     @subject = "Webhook ping endpoint delivery failed"
   end
 
+  def balance_top_up_confirmation(balance_top_up_id)
+    @balance_top_up = BalanceTopUp.find(balance_top_up_id)
+    @seller = @balance_top_up.user
+    @amount = Money.new(@balance_top_up.amount_cents, :usd).format(no_cents_if_whole: true, symbol: true)
+    @subject = "Your Gumroad balance has been topped up"
+  end
+
   private
     def do_not_send
       @do_not_send = true
