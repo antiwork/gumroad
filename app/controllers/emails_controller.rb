@@ -15,7 +15,6 @@ class EmailsController < Sellers::BaseController
     end
   end
 
-  # Legacy action for old React pages (new, edit) - will be migrated in PR 2
   def legacy
     authorize Installment, :index?
     create_user_event("emails_view")

@@ -801,11 +801,13 @@ Rails.application.routes.draw do
     get "/communities(/:seller_id/:community_id)", to: "communities#index", as: :community
 
     # emails
-    get "/emails", to: "emails#index", as: :emails
-    get "/emails/published", to: "emails#published", as: :published_emails
-    get "/emails/scheduled", to: "emails#scheduled", as: :scheduled_emails
-    get "/emails/drafts", to: "emails#drafts", as: :drafts_emails
-    delete "/emails/:id", to: "emails#destroy", as: :email
+    resources :emails, only: [:index, :destroy] do
+      collection do
+        get :published
+        get :scheduled
+        get :drafts
+      end
+    end
     get "/emails/new", to: "emails#legacy", as: :new_email
     get "/emails/:id/edit", to: "emails#legacy", as: :edit_email
     get "/emails/*other", to: "emails#legacy" # catch-all for other old React pages
