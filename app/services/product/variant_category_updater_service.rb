@@ -12,6 +12,21 @@ class Product::VariantCategoryUpdaterService
            :errors,
            :variant_categories, to: :product
 
+  ALLOWED_ATTRIBUTES = %i[
+    name
+    description
+    price_difference_cents
+    max_purchase_count
+    position_in_category
+    customizable_price
+    subscription_price_change_effective_date
+    subscription_price_change_message
+    duration_in_minutes
+    apply_price_changes_to_existing_memberships
+    variant_category
+    product_files
+  ].freeze
+
   def initialize(product:, category_params:)
     @product = product
     @category_params = category_params
@@ -34,7 +49,7 @@ class Product::VariantCategoryUpdaterService
       validate_variant_recurrences!(category_params[:options])
       category_params[:options].each_with_index do |option, index|
         begin
-          variant = Variant.create_or_update!(option[:id],
+          variant = create_or_update_variant!(option[:id],
                                               name: option[:name],
                                               description: option[:description],
                                               duration_in_minutes: option[:duration_in_minutes],
@@ -70,6 +85,28 @@ class Product::VariantCategoryUpdaterService
   end
 
   private
+    def create_or_update_variant!(external_id, params)
+      return Variant.create!(params.slice(*ALLOWED_ATTRIBUTES)) if external_id.blank?
+
+      variant = product.variants.find_by_external_id!(external_id)
+      variant.assign_attributes(params.slice(*ALLOWED_ATTRIBUTES))
+
+      if variant.apply_price_changes_to_existing_memberships_changed? && !variant.apply_price_changes_to_existing_memberships?
+        variant.subscription_plan_changes.for_product_price_change.alive.each(&:mark_deleted)
+      end
+
+      notify_members_of_price_change = variant.apply_price_changes_to_existing_memberships? && variant.subscription_price_change_effective_date_changed?
+      variant.save!
+
+      if notify_members_of_price_change
+        ScheduleMembershipPriceUpdatesJob.perform_async(variant.id)
+      elsif variant.flags_previously_changed? || variant.subscription_price_change_effective_date_previously_changed?
+        Bugsnag.notify("Not notifying subscribers of membership price change - tier: #{variant.id}; apply_price_changes_to_existing_memberships: #{variant.apply_price_changes_to_existing_memberships?}; subscription_price_change_effective_date: #{variant.subscription_price_change_effective_date}")
+      end
+
+      variant
+    end
+
     def has_variant_recurrences?
       @has_variant_recurrences ||= category_params[:options].map { |variant| variant[:recurrence_price_values] }.any?
     end
