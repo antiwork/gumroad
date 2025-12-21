@@ -7,17 +7,19 @@ describe NotificationWorker do
     let(:notification_category) { "payments" }
     let(:source) { "Canada Sales Reporting" }
     let(:message_text) { "Canada 2024-11 sales report is ready - https://example.com/report.csv" }
-    let(:attachments) { [] }
 
     before do
+      allow(Feature).to receive(:active?).with(:send_notifications_via_email).and_return(true)
+      allow(Feature).to receive(:active?).with(:send_notifications_via_slack).and_return(false)
       allow(GlobalConfig).to receive(:get).and_call_original
       allow(GlobalConfig).to receive(:get).with("NOTIFICATIONS_EMAIL_ADDRESS").and_return("notifications@gumroad.com")
     end
 
     context "when notifications email is configured" do
       it "sends notification email" do
+        options = {}
         expect do
-          described_class.new.perform(notification_category, source, message_text, {})
+          described_class.new.perform(notification_category, source, message_text, options)
         end.to change { ActionMailer::Base.deliveries.count }.by(1)
 
         email = ActionMailer::Base.deliveries.last
@@ -34,8 +36,9 @@ describe NotificationWorker do
           }
         ]
 
+        options = { "color" => "gray", "attachments" => attachments_with_string_keys }
         expect do
-          described_class.new.perform(notification_category, source, message_text, { "color" => "gray", "attachments" => attachments_with_string_keys })
+          described_class.new.perform(notification_category, source, message_text, options)
         end.to change { ActionMailer::Base.deliveries.count }.by(1)
 
         email = ActionMailer::Base.deliveries.last
@@ -44,8 +47,8 @@ describe NotificationWorker do
 
       it "handles array message_text" do
         array_message = ["Line 1", "Line 2", "Line 3"]
-
-        described_class.new.perform(notification_category, source, array_message, {})
+        options = {}
+        described_class.new.perform(notification_category, source, array_message, options)
 
         email = ActionMailer::Base.deliveries.last
         expect(email.subject).to eq("[Gumroad Notifications][Payments] Line 1 Line 2 Line 3")
@@ -55,14 +58,16 @@ describe NotificationWorker do
       end
 
       it "uses default subject when message_text is empty" do
-        described_class.new.perform(notification_category, source, "", {})
+        options = {}
+        described_class.new.perform(notification_category, source, "", options)
 
         email = ActionMailer::Base.deliveries.last
         expect(email.subject).to eq("[Gumroad Notifications][Payments] System notification")
       end
 
       it "titleizes notification category in subject" do
-        described_class.new.perform("internals_log", source, message_text, {})
+        options = {}
+        described_class.new.perform("internals_log", source, message_text, options)
 
         email = ActionMailer::Base.deliveries.last
         expect(email.subject).to include("[Internals Log]")
