@@ -175,4 +175,42 @@ describe Audience::PurchasePolicy do
       end
     end
   end
+
+  permissions :send_missed_posts? do
+    let(:link) { create(:product, user: seller) }
+    let(:purchase) { create(:purchase, seller:, link:) }
+    let(:other_seller) { create(:user) }
+    let(:other_link) { create(:product, user: other_seller) }
+    let(:other_purchase) { create(:purchase, seller: other_seller, link: other_link) }
+
+    it "grants access to owner" do
+      seller_context = SellerContext.new(user: seller, seller:)
+      expect(subject).to permit(seller_context, purchase)
+    end
+
+    it "denies access to accountant" do
+      seller_context = SellerContext.new(user: accountant_for_seller, seller:)
+      expect(subject).not_to permit(seller_context, purchase)
+    end
+
+    it "grants access to admin" do
+      seller_context = SellerContext.new(user: admin_for_seller, seller:)
+      expect(subject).to permit(seller_context, purchase)
+    end
+
+    it "grants access to marketing" do
+      seller_context = SellerContext.new(user: marketing_for_seller, seller:)
+      expect(subject).to permit(seller_context, purchase)
+    end
+
+    it "grants access to support" do
+      seller_context = SellerContext.new(user: support_for_seller, seller:)
+      expect(subject).to permit(seller_context, purchase)
+    end
+
+    it "denies access if purchase belongs to different seller" do
+      seller_context = SellerContext.new(user: seller, seller:)
+      expect(subject).not_to permit(seller_context, other_purchase)
+    end
+  end
 end

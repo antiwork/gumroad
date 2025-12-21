@@ -3,17 +3,30 @@
 class PostsController < ApplicationController
   include CustomDomainConfig
 
-  before_action :authenticate_user!, only: %i[send_for_purchase]
-  after_action :verify_authorized, only: %i[send_for_purchase]
-  before_action :fetch_post, only: %i[send_for_purchase]
-  before_action :ensure_seller_is_eligible_to_send_emails, only: %i[send_for_purchase]
+  before_action :authenticate_user!, only: %i[send_for_purchase send_missed_posts]
+  after_action :verify_authorized, only: %i[send_for_purchase send_missed_posts]
+  before_action :fetch_post, only: %i[show send_for_purchase redirect_from_purchase_id increment_post_views]
+  before_action :fetch_purchase, only: %i[send_for_purchase send_missed_posts]
   before_action :set_user_and_custom_domain_config, only: %i[show]
   before_action :check_if_needs_redirect, only: %i[show]
 
-  def show
-    # Skip fetching post again if it's already fetched in check_if_needs_redirect
-    @post || fetch_post(false)
+  rescue_from CustomersService::CustomerDNDEnabledError do |exception|
+    if action_name.in?(%w[send_for_purchase send_missed_posts])
+      render json: { message: "This customer has opted out of receiving emails." }, status: :unprocessable_entity
+    else
+      raise exception
+    end
+  end
 
+  rescue_from CustomersService::SellerNotEligibleError do |exception|
+    if action_name.in?(%w[send_for_purchase send_missed_posts])
+      render json: { message: "You are not eligible to resend this email." }, status: :forbidden
+    else
+      raise exception
+    end
+  end
+
+  def show
     @title = "#{@post.name} - #{@post.user.name_or_username}"
     @hide_layouts = true
     @show_user_favicon = true
@@ -47,38 +60,26 @@ class PostsController < ApplicationController
 
     # redirects legacy installment paths like /library/purchase/:purchase_id
     # to the new path /:username/p/:slug
-    fetch_post(false)
     redirect_to build_view_post_route(post: @post, purchase_id: params[:purchase_id])
   end
 
   def send_for_purchase
     authorize @post
 
-    purchase = current_seller.sales.find_by_external_id!(params[:purchase_id])
-
-    # Limit the number of emails sent per post to avoid abuse.
-    Rails.cache.fetch("post_email:#{@post.id}:#{purchase.id}", expires_in: 8.hours) do
-      CreatorContactingCustomersEmailInfo.where(purchase:, installment: @post).destroy_all
-
-      PostEmailApi.process(
-        post: @post,
-        recipients: [
-          {
-            email: purchase.email,
-            purchase:,
-            url_redirect: purchase.url_redirect,
-            subscription: purchase.subscription,
-          }.compact_blank
-        ])
-      true
-    end
+    CustomersService.send_post!(post: @post, purchase: @purchase)
 
     head :no_content
   end
 
-  def increment_post_views
-    fetch_post(false)
+  def send_missed_posts
+    authorize [:audience, @purchase], :send_missed_posts?
 
+    CustomersService.send_missed_posts_for!(purchase: @purchase, workflow_id: params[:workflow_id])
+
+    render json: { message: "Missed emails are queued for delivery" }, status: :ok
+  end
+
+  def increment_post_views
     skip = is_bot?
     skip |= logged_in_user.present? && (@post.seller_id == current_seller.id || logged_in_user.is_team_member?)
     skip |= impersonating_user&.id
@@ -89,7 +90,9 @@ class PostsController < ApplicationController
   end
 
   private
-    def fetch_post(viewed_by_seller = true)
+    def fetch_post
+      return if @post.present?
+
       if params[:slug]
         @post = Installment.find_by_slug(params[:slug])
       elsif params[:id]
@@ -98,21 +101,9 @@ class PostsController < ApplicationController
         e404
       end
       e404 if @post.blank?
-
-      if viewed_by_seller
-        e404 if @post.seller != current_seller
-      end
-
-      if @post.seller_id?
-        e404 if @post.seller.suspended?
-      elsif @post.link_id?
-        e404 if @post.link.seller&.suspended?
-      end
     end
 
     def check_if_needs_redirect
-      fetch_post(false)
-
       if !@is_user_custom_domain && @user.subdomain_with_protocol.present?
         redirect_to custom_domain_view_post_url(slug: @post.slug, host: @user.subdomain_with_protocol,
                                                 params: request.query_parameters),
@@ -120,10 +111,8 @@ class PostsController < ApplicationController
       end
     end
 
-    def ensure_seller_is_eligible_to_send_emails
-      seller = @post.seller || @post.link.seller
-      unless seller&.eligible_to_send_emails?
-        render json: { message: "You are not eligible to resend this email." }, status: :unauthorized
-      end
+    def fetch_purchase
+      @purchase = current_seller.sales.find_by_external_id(params[:purchase_id])
+      e404_json if @purchase.blank?
     end
 end

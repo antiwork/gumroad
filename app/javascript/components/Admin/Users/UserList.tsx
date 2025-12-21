@@ -1,9 +1,9 @@
 import { usePage } from "@inertiajs/react";
 import React from "react";
 
-import EmptyState from "$app/components/Admin/EmptyState";
 import PaginatedLoader, { type Pagination } from "$app/components/Admin/PaginatedLoader";
 import UserCard, { type User } from "$app/components/Admin/Users/User";
+import EmptyState from "$app/components/ui/EmptyState";
 
 type PageProps = {
   users: User[];

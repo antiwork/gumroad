@@ -7,8 +7,9 @@ class CustomerPresenter
     @purchase = purchase
   end
 
-  def missed_posts
-    posts = Installment.missed_for_purchase(purchase).order(published_at: :desc)
+  def missed_posts(workflow_id: nil)
+    posts = CustomersService.find_missed_posts_for(purchase:, workflow_id:).order(published_at: :desc)
+
     posts.map do |post|
       {
         id: post.external_id,
@@ -170,6 +171,47 @@ class CustomerPresenter
       chargedback: purchase.chargedback? && !purchase.chargeback_reversed?,
       paypal_refund_expired: purchase.paypal_refund_expired?,
     }
+  end
+
+  def customer_emails
+    all_purchases = if purchase.subscription.present?
+      purchase.subscription.purchases.all_success_states_except_preorder_auth_and_gift.preload(:receipt_email_info_from_purchase)
+    else
+      [purchase]
+    end
+
+    receipts = all_purchases.map do |purchase_for_receipt|
+      receipt_email_info = purchase_for_receipt.receipt_email_info
+      {
+        type: "receipt",
+        name: receipt_email_info&.email_name&.humanize || "Receipt",
+        id: purchase_for_receipt.external_id,
+        state: receipt_email_info&.state&.humanize || "Delivered",
+        state_at: receipt_email_info.present? ? receipt_email_info.most_recent_state_at.in_time_zone(purchase_for_receipt.seller.timezone) : purchase_for_receipt.created_at.in_time_zone(purchase_for_receipt.seller.timezone),
+        url: purchase_for_receipt.receipt_url,
+        date: purchase_for_receipt.created_at
+      }
+    end
+
+    published_posts, unpublished_posts = CustomersService.find_sent_posts_for(purchase).partition do |sent_email|
+      sent_email.installment.published_at.present?
+    end
+
+    emails = (published_posts.sort_by { |sent_email| -(sent_email.installment.published_at.to_i) } + unpublished_posts)
+      .map do |email_info|
+        {
+          type: "post",
+          name: email_info.installment.name,
+          id: email_info.installment.external_id,
+          state: email_info.state.humanize,
+          state_at: email_info.most_recent_state_at.in_time_zone(purchase.seller.timezone),
+          date: email_info.installment.published_at,
+        }
+      end
+
+    emails = receipts + emails unless purchase.is_bundle_product_purchase?
+
+    emails
   end
 
   private

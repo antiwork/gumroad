@@ -60,6 +60,8 @@ class InstallmentPolicy < ApplicationPolicy
   end
 
   def send_for_purchase?
+    return false unless record.user == seller
+
     create? ||
     user.role_support_for?(seller)
   end

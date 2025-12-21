@@ -564,9 +564,7 @@ Rails.application.routes.draw do
     post "/customers/import", to: "customers#customers_import", as: :customers_import
     post "/customers/import_manually_entered_emails", to: "customers#customers_import_manually_entered_emails", as: :customers_import_manually_entered_emails
     get "/customers/charges/:purchase_id", to: "customers#customer_charges", as: :customer_charges
-    get "/customers/customer_emails/:purchase_id", to: "customers#customer_emails", as: :customer_emails
-    get "/customers/missed_posts/:purchase_id", to: "customers#missed_posts", as: :missed_posts
-    get "/customers/product_purchases/:purchase_id", to: "customers#product_purchases", as: :product_purchases
+    post "/customers/:purchase_id/send_missed_posts", to: "posts#send_missed_posts", as: :send_missed_posts
     # imported customers
     get "/imported_customers", to: "imported_customers#index", as: :imported_customers
     delete "/imported_customers/:id", to: "imported_customers#destroy", as: :destroy_imported_customer

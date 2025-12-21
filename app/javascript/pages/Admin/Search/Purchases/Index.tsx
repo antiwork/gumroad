@@ -2,12 +2,12 @@ import { Link, useForm, usePage } from "@inertiajs/react";
 import React from "react";
 
 import DateTimeWithRelativeTooltip from "$app/components/Admin/DateTimeWithRelativeTooltip";
-import EmptyState from "$app/components/Admin/EmptyState";
 import PaginatedLoader, { Pagination } from "$app/components/Admin/PaginatedLoader";
 import { type RefundPolicy, RefundPolicyTitle } from "$app/components/Admin/Purchases/RefundPolicy";
 import { PurchaseStates } from "$app/components/Admin/Purchases/States";
 import { CopyToClipboard } from "$app/components/CopyToClipboard";
 import { Icon } from "$app/components/Icons";
+import EmptyState from "$app/components/ui/EmptyState";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "$app/components/ui/Table";
 import { useOriginalLocation } from "$app/components/useOriginalLocation";
 
