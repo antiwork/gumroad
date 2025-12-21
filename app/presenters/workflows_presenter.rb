@@ -13,6 +13,10 @@ class WorkflowsPresenter
     }
   end
 
+  def workflow_options_by_purchase_props(purchase)
+    CustomersService.find_workflow_options_for(purchase).map { WorkflowPresenter.new(seller:, workflow: _1).workflow_option_props }
+  end
+
   private
     attr_reader :seller
 end

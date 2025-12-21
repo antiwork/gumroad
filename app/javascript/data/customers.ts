@@ -189,39 +189,10 @@ export const getPagedCustomers = ({
   };
 };
 
-export type MissedPost = {
-  id: string;
-  name: string;
-  url: string;
-  published_at: string;
-};
-export const getMissedPosts = (purchaseId: string, purchaseEmail: string) =>
-  request({
-    method: "GET",
-    accept: "json",
-    url: Routes.missed_posts_path(purchaseId, { purchase_email: purchaseEmail }),
-  })
-    .then((res) => {
-      if (!res.ok) throw new ResponseError();
-      return res.json();
-    })
-    .then((json) => cast<MissedPost[]>(json));
-
 export type CustomerEmail = { id: string; name: string; state: string; state_at: string } & (
   | { type: "receipt"; url: string }
   | { type: "post" }
 );
-export const getCustomerEmails = (purchaseId: string) =>
-  request({
-    method: "GET",
-    accept: "json",
-    url: Routes.customer_emails_path(purchaseId),
-  })
-    .then((res) => {
-      if (!res.ok) throw new ResponseError();
-      return res.json();
-    })
-    .then((json) => cast<CustomerEmail[]>(json));
 
 export const resendReceipt = (purchaseId: string) =>
   request({
@@ -239,6 +210,18 @@ export const resendPost = async (purchaseId: string, postId: string) => {
     url: Routes.send_for_purchase_path(postId, purchaseId),
   });
   if (!response.ok) throw new ResponseError(cast<{ message: string }>(await response.json()).message);
+};
+
+export const resendPosts = async (purchaseId: string, workflowId?: string) => {
+  const response = await request({
+    method: "POST",
+    accept: "json",
+    url: Routes.send_missed_posts_path(purchaseId, {
+      workflow_id: workflowId,
+    }),
+  });
+  if (!response.ok) throw new ResponseError(cast<{ message: string }>(await response.json()).message);
+  return cast<{ message: string }>(await response.json());
 };
 
 export const updatePurchase = (
@@ -261,18 +244,6 @@ export const changeCanContact = (purchaseId: string, canContact: boolean) =>
   }).then((response) => {
     if (!response.ok) throw new ResponseError();
   });
-
-export const getProductPurchases = (purchaseId: string) =>
-  request({
-    method: "GET",
-    accept: "json",
-    url: Routes.product_purchases_path(purchaseId),
-  })
-    .then((res) => {
-      if (!res.ok) throw new ResponseError();
-      return res.json();
-    })
-    .then((json) => cast<Customer[]>(json));
 
 export const updateLicense = (licenseId: string, enabled: boolean) =>
   request({ method: "PUT", accept: "json", url: Routes.license_path(licenseId, { enabled }) }).then((response) => {

@@ -474,7 +474,7 @@ describe "Sales page", type: :system, js: true do
         visit customers_path
         find(:table_row, { "Name" => "Customer 1" }).click
         within_modal "Product 1" do
-          within_section "Send missed posts", section_element: :section do
+          within find("section[aria-label='Missed emails']") do
             10.times do |i|
               expect(page).to have_section("Post #{i}")
             end
@@ -484,8 +484,8 @@ describe "Sales page", type: :system, js: true do
             within_section "Post 10" do
               expect(page).to have_link("Post 10", href: post.full_url)
               expect(page).to have_text("Originally sent on #{post.published_at.strftime("%b %-d")}")
-              click_on "Send"
-              expect(page).to have_button("Sending...", disabled: true)
+              click_on "Resend"
+              expect(page).to have_button("Resending...", disabled: true)
             end
           end
         end
@@ -496,7 +496,7 @@ describe "Sales page", type: :system, js: true do
         visit customers_path
         find(:table_row, { "Name" => "Customer 1" }).click
         within_modal "Product 1" do
-          within_section "Send missed posts", section_element: :section do
+          within find("section[aria-label='Missed emails']") do
             expect(page).to_not have_button("Show more")
             expect(page).to_not have_section("Post 10")
           end
@@ -513,19 +513,110 @@ describe "Sales page", type: :system, js: true do
         within_section("Post 10") { expect(page).to have_button("Sent", disabled: true) }
       end
 
+      it "resends all missed emails for a workflow and notifies delivery status via socket" do
+        create(:payment_completed, user: seller)
+        allow_any_instance_of(User).to receive(:sales_cents_total).and_return(Installment::MINIMUM_SALES_CENTS_VALUE)
+        stripe_connect_account = create(:merchant_account_stripe_connect, user: seller)
+        create(:purchase, seller:, link: product1, merchant_account: stripe_connect_account)
+
+        workflow = create(:workflow, seller:, link: product1, name: "Test Workflow", published_at: Time.current)
+        workflow_post = create(:workflow_installment, workflow:, seller:, link: product1, name: "Workflow Post", published_at: Time.current)
+
+        login_as seller
+        visit customers_path
+        find(:table_row, { "Name" => "Customer 1" }).click
+        within_modal "Product 1" do
+          within find("section[aria-label='Missed emails']") do
+            find(:combo_box, match: :first).click
+            expect(page).to have_combo_box(expanded: true, with_enabled_options: ["All missed emails", "Test Workflow"])
+            select_combo_box_option "Test Workflow"
+
+            expect(page).to have_section("Workflow Post")
+            expect(page).to have_button("Resend all")
+            click_on "Resend all"
+            expect(page).to have_button("Resending all...", disabled: true)
+            expect(page).to have_button(text: /^Resend$/, disabled: true, count: 1)
+          end
+        end
+
+        expect(page).to have_alert(text: "Missed emails are queued for delivery")
+
+        Sidekiq::Testing.inline! do
+          job = SendMissedPostsJob.jobs.last
+          expect(job["args"]).to eq([purchase1.external_id, workflow.external_id])
+          SendMissedPostsJob.new.perform(*job["args"])
+        end
+
+        expect(page).to have_alert(
+          text: "Missed emails for workflow \"Test Workflow\" were sent to customer1@gumroad.com",
+        )
+
+        within_modal "Product 1" do
+          within_section "Emails received", section_element: :section do
+            within_section "Workflow Post" do
+              expect(page).to have_text("Sent #{workflow_post.published_at.strftime("%b %-d")}")
+            end
+          end
+        end
+
+        expect(EmailInfo.last.installment).to eq(workflow_post)
+      end
+
       it "does not allow re-sending an email if the seller is not eligible to send emails" do
         visit customers_path
         find(:table_row, { "Name" => "Customer 1" }).click
         within_modal "Product 1" do
-          within_section "Send missed posts", section_element: :section do
+          within find("section[aria-label='Missed emails']") do
             click_on "Show more"
             within_section "Post 10" do
-              click_on "Send"
-              expect(page).to have_button("Sending...", disabled: true)
+              click_on "Resend"
+              expect(page).to have_button("Resending...", disabled: true)
             end
           end
         end
         expect(page).to have_alert(text: "You are not eligible to resend this email.")
+        expect(EmailInfo.last.installment).to be_nil
+
+        within_modal "Product 1" do
+          within find("section[aria-label='Missed emails']") do
+            expect(page).to have_button("Resend all")
+            click_on "Resend all"
+            expect(page).to have_button("Resending all...", disabled: true)
+          end
+        end
+        expect(page).to have_alert(text: "You are not eligible to resend this email.")
+        expect(EmailInfo.last.installment).to be_nil
+      end
+
+      it "does not allow re-sending emails if the customer has opted out of receiving emails" do
+        allow_any_instance_of(User).to receive(:sales_cents_total).and_return(Installment::MINIMUM_SALES_CENTS_VALUE)
+        create(:payment_completed, user: seller)
+        purchase1.update!(can_contact: false)
+
+        visit customers_path
+        find(:table_row, { "Name" => "Customer 1" }).click
+        within_modal "Product 1" do
+          within find("section[aria-label='Missed emails']") do
+            click_on "Show more"
+            within_section "Post 10" do
+              click_on "Resend"
+              expect(page).to have_button("Resending...", disabled: true)
+            end
+          end
+        end
+        expect(page).to have_alert(text: "This customer has opted out of receiving emails.")
+        expect(EmailInfo.last.installment).to be_nil
+
+        visit customers_path
+        find(:table_row, { "Name" => "Customer 1" }).click
+        within_modal "Product 1" do
+          within find("section[aria-label='Missed emails']") do
+            expect(page).to have_button("Resend all")
+            click_on "Resend all"
+            expect(page).to have_button("Resending all...", disabled: true)
+          end
+        end
+        expect(page).to have_alert(text: "This customer has opted out of receiving emails.")
         expect(EmailInfo.last.installment).to be_nil
       end
     end

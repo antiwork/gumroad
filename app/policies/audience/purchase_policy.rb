@@ -49,4 +49,11 @@ class Audience::PurchasePolicy < ApplicationPolicy
     update? &&
     record.is_access_revoked
   end
+
+  def send_missed_posts?
+    return false unless record.seller == seller
+
+    update? ||
+    user.role_marketing_for?(seller)
+  end
 end

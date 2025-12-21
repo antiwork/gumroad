@@ -1,5 +1,7 @@
 # frozen_string_literal: true
 
+require "shared_examples/customer_drawer_missed_posts_context"
+
 describe CustomerPresenter do
   let(:seller) { create(:named_seller) }
 
@@ -16,6 +18,8 @@ describe CustomerPresenter do
     end
 
     it "returns the correct props" do
+      expect(CustomersService).to receive(:find_missed_posts_for).with(purchase:, workflow_id: nil).and_call_original
+
       expect(described_class.new(purchase:).missed_posts).to eq(
         [
           {
@@ -32,6 +36,23 @@ describe CustomerPresenter do
           },
         ]
       )
+    end
+
+    it "passes workflow_id to service when provided" do
+      workflow_id = "workflow-123"
+      expect(CustomersService).to receive(:find_missed_posts_for).with(purchase:, workflow_id:).and_call_original
+
+      described_class.new(purchase:).missed_posts(workflow_id:)
+    end
+
+    it "only returns installments, not receipts" do
+      create(:customer_email_info_opened, purchase:)
+
+      result = described_class.new(purchase:).missed_posts
+
+      expect(result).to be_an(Array)
+      expect(result.all? { |item| item.key?(:published_at) }).to be true
+      expect(result.none? { |item| item[:type] == "receipt" }).to be true
     end
   end
 
@@ -380,6 +401,221 @@ describe CustomerPresenter do
       it "returns nil for download count" do
         presenter = described_class.new(purchase: purchase.reload)
         expect(presenter.download_count).to be_nil
+      end
+    end
+  end
+
+  describe "#customer_emails" do
+    let(:product) { create(:product, user: seller) }
+    let(:purchase) { create(:purchase, link: product) }
+
+    context "with classic product" do
+      it "returns success true with only receipt default values" do
+        result = described_class.new(purchase:).customer_emails
+
+        expect(result.count).to eq 1
+        expect(result[0][:type]).to eq("receipt")
+        expect(result[0][:id]).to be_present
+        expect(result[0][:name]).to eq "Receipt"
+        expect(result[0][:state]).to eq "Delivered"
+        expect(result[0][:state_at]).to be_present
+        expect(result[0][:url]).to eq purchase.receipt_url
+      end
+
+      it "returns success true with only receipt" do
+        create(:customer_email_info_opened, purchase: purchase)
+        result = described_class.new(purchase:).customer_emails
+
+        expect(result.count).to eq 1
+        expect(result[0][:type]).to eq("receipt")
+        expect(result[0][:id]).to eq purchase.external_id
+        expect(result[0][:name]).to eq "Receipt"
+        expect(result[0][:state]).to eq "Opened"
+        expect(result[0][:state_at]).to be_present
+        expect(result[0][:url]).to eq purchase.receipt_url
+      end
+
+      it "returns success true with receipt and posts" do
+        now = Time.current
+        post1 = create(:installment, link: product, published_at: now - 10.seconds)
+        post2 = create(:installment, link: product, published_at: now - 5.seconds)
+        post3 = create(:installment, link: product, published_at: nil)
+
+        create(:customer_email_info_opened, purchase: purchase)
+        create(:creator_contacting_customers_email_info_delivered, installment: post1, purchase: purchase)
+        create(:creator_contacting_customers_email_info_opened, installment: post2, purchase: purchase)
+        create(:creator_contacting_customers_email_info_delivered, installment: post3, purchase: purchase)
+        post_from_diff_user = create(:installment, link: product, seller: create(:user), published_at: Time.current)
+        create(:creator_contacting_customers_email_info_delivered, installment: post_from_diff_user, purchase: purchase)
+
+        result = described_class.new(purchase:).customer_emails
+
+        expect(result.count).to eq 4
+
+        expect(result[0][:type]).to eq("receipt")
+        expect(result[0][:id]).to eq purchase.external_id
+        expect(result[0][:state]).to eq "Opened"
+        expect(result[0][:url]).to eq purchase.receipt_url
+
+        expect(result[1][:type]).to eq("post")
+        expect(result[1][:id]).to eq post2.external_id
+        expect(result[1][:state]).to eq "Opened"
+
+        expect(result[2][:type]).to eq("post")
+        expect(result[2][:id]).to eq post1.external_id
+        expect(result[2][:state]).to eq "Delivered"
+
+        expect(result[3][:type]).to eq("post")
+        expect(result[3][:id]).to eq post3.external_id
+        expect(result[3][:state]).to eq "Delivered"
+      end
+    end
+
+    context "with subscription product" do
+      it "returns all receipts and posts ordered by date", :vcr do
+        product = create(:membership_product, subscription_duration: "monthly", user: seller)
+        buyer = create(:user, credit_card: create(:credit_card))
+        subscription = create(:subscription, link: product, user: buyer)
+
+        travel_to 1.month.ago
+
+        original_purchase = create(:purchase_with_balance,
+                                   link: product,
+                                   seller: product.user,
+                                   subscription:,
+                                   purchaser: buyer,
+                                   is_original_subscription_purchase: true)
+        create(:customer_email_info_opened, purchase: original_purchase)
+
+        travel_back
+
+        first_post = create(:published_installment, link: product, name: "Thanks for buying!")
+
+        travel 1
+
+        recurring_purchase = create(:purchase_with_balance,
+                                    link: product,
+                                    seller: product.user,
+                                    subscription:,
+                                    purchaser: buyer)
+
+        travel 1
+
+        second_post = create(:published_installment, link: product, name: "Will you review my course?")
+        create(:creator_contacting_customers_email_info_opened, installment: second_post, purchase: original_purchase)
+
+        travel 1
+
+        create(:customer_email_info_opened, purchase: recurring_purchase)
+        create(:creator_contacting_customers_email_info_delivered, installment: first_post, purchase: original_purchase)
+
+        unrelated_post = create(:published_installment, link: product, name: "Message to other folks!")
+        create(:creator_contacting_customers_email_info_delivered, installment: unrelated_post)
+
+        result = described_class.new(purchase: original_purchase).customer_emails
+
+        expect(result.count).to eq 4
+
+        expect(result[0][:type]).to eq("receipt")
+        expect(result[0][:id]).to eq original_purchase.external_id
+        expect(result[0][:name]).to eq "Receipt"
+        expect(result[0][:state]).to eq "Opened"
+        expect(result[0][:url]).to eq original_purchase.receipt_url
+
+        expect(result[1][:type]).to eq("receipt")
+        expect(result[1][:id]).to eq recurring_purchase.external_id
+        expect(result[1][:name]).to eq "Receipt"
+        expect(result[1][:state]).to eq "Opened"
+        expect(result[1][:url]).to eq recurring_purchase.receipt_url
+
+        expect(result[2][:type]).to eq("post")
+        expect(result[2][:id]).to eq second_post.external_id
+        expect(result[2][:state]).to eq "Opened"
+
+        expect(result[3][:type]).to eq("post")
+        expect(result[3][:id]).to eq first_post.external_id
+        expect(result[3][:state]).to eq "Delivered"
+      end
+
+      it "includes receipts for free trial original purchases" do
+        product = create(:membership_product, :with_free_trial_enabled, user: seller)
+        original_purchase = create(:membership_purchase, link: product, seller:, is_free_trial_purchase: true, purchase_state: "not_charged")
+        create(:customer_email_info_opened, purchase: original_purchase)
+
+        result = described_class.new(purchase: original_purchase).customer_emails
+
+        expect(result.count).to eq 1
+
+        email_info = result[0]
+        expect(email_info[:type]).to eq("receipt")
+        expect(email_info[:id]).to eq original_purchase.external_id
+        expect(email_info[:name]).to eq "Receipt"
+        expect(email_info[:state]).to eq "Opened"
+        expect(email_info[:url]).to eq original_purchase.receipt_url
+      end
+    end
+
+    context "when purchase uses a charge receipt" do
+      let(:product) { create(:product, user: seller) }
+      let(:purchase) { create(:purchase, link: product) }
+      let(:charge) { create(:charge, purchases: [purchase], seller:) }
+      let(:order) { charge.order }
+      let!(:email_info) do
+        create(
+          :customer_email_info,
+          purchase_id: nil,
+          state: :opened,
+          opened_at: Time.current,
+          email_name: SendgridEventInfo::RECEIPT_MAILER_METHOD,
+          email_info_charge_attributes: { charge_id: charge.id }
+        )
+      end
+
+      before do
+        order.purchases << purchase
+      end
+
+      it "returns EmailInfo from charge" do
+        result = described_class.new(purchase:).customer_emails
+
+        expect(result.count).to eq 1
+
+        email_info = result[0]
+        expect(email_info[:type]).to eq("receipt")
+        expect(email_info[:id]).to eq purchase.external_id
+        expect(email_info[:name]).to eq "Receipt"
+        expect(email_info[:state]).to eq "Opened"
+        expect(email_info[:url]).to eq purchase.receipt_url
+      end
+    end
+
+    context "for bundle purchase" do
+      include_context "customer drawer missed posts setup"
+      include_context "with bundle purchase setup"
+
+      it "returns receipt only for bundle purchase" do
+        expect(CustomersService).to receive(:find_sent_posts_for).with(bundle_purchase).and_call_original
+        emails_for_bundle_purchase = described_class.new(purchase: bundle_purchase).customer_emails
+
+        expect(emails_for_bundle_purchase.count).to eq 1
+
+        expect(emails_for_bundle_purchase[0][:type]).to eq("receipt")
+        expect(emails_for_bundle_purchase[0][:id]).to eq bundle_purchase.external_id
+      end
+
+      it "doesn't return receipt for bundle product purchase" do
+        product_a_purchase = bundle_purchase.product_purchases.find_by(link: product_a)
+        product_b_purchase = bundle_purchase.product_purchases.find_by(link: product_b)
+
+        expect(CustomersService).to receive(:find_sent_posts_for).with(product_a_purchase).and_call_original
+        emails_for_product_a_purchase = described_class.new(purchase: product_a_purchase).customer_emails
+
+        expect(emails_for_product_a_purchase.count).to eq 0
+
+        expect(CustomersService).to receive(:find_sent_posts_for).with(product_b_purchase).and_call_original
+        emails_for_product_b_purchase = described_class.new(purchase: product_b_purchase).customer_emails
+
+        expect(emails_for_product_b_purchase.count).to eq 0
       end
     end
   end

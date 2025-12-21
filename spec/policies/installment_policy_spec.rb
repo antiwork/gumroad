@@ -73,29 +73,38 @@ describe InstallmentPolicy do
   end
 
   permissions :send_for_purchase? do
+    let(:installment) { create(:installment, seller:) }
+    let(:other_seller) { create(:user) }
+    let(:other_seller_installment) { create(:installment, seller: other_seller) }
+
     it "grants access to owner" do
       seller_context = SellerContext.new(user: seller, seller:)
-      expect(subject).to permit(seller_context, Installment)
+      expect(subject).to permit(seller_context, installment)
     end
 
     it "denies access to accountant" do
       seller_context = SellerContext.new(user: accountant_for_seller, seller:)
-      expect(subject).not_to permit(seller_context, Installment)
+      expect(subject).not_to permit(seller_context, installment)
     end
 
     it "grants access to admin" do
       seller_context = SellerContext.new(user: admin_for_seller, seller:)
-      expect(subject).to permit(seller_context, Installment)
+      expect(subject).to permit(seller_context, installment)
     end
 
     it "grants access to marketing" do
       seller_context = SellerContext.new(user: marketing_for_seller, seller:)
-      expect(subject).to permit(seller_context, Installment)
+      expect(subject).to permit(seller_context, installment)
     end
 
     it "grants access to support" do
       seller_context = SellerContext.new(user: support_for_seller, seller:)
-      expect(subject).to permit(seller_context, Installment)
+      expect(subject).to permit(seller_context, installment)
+    end
+
+    it "denies access for other seller's installment" do
+      seller_context = SellerContext.new(user: seller, seller:)
+      expect(subject).not_to permit(seller_context, other_seller_installment)
     end
   end
 end

@@ -190,4 +190,19 @@ describe WorkflowPresenter do
       end
     end
   end
+
+  describe "#workflow_option_props" do
+    let(:seller) { create(:named_seller) }
+    let(:product) { create(:product, user: seller) }
+    let(:workflow) { create(:workflow, seller:, link: product, name: "Test Workflow") }
+
+    it "returns the correct structure" do
+      props = described_class.new(seller:, workflow:).workflow_option_props
+
+      expect(props).to eq({
+                            id: workflow.external_id,
+                            label: "Test Workflow"
+                          })
+    end
+  end
 end

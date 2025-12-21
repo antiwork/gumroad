@@ -96,4 +96,11 @@ class WorkflowPresenter
       eligible_for_abandoned_cart_workflows: user_presenter.user.eligible_for_abandoned_cart_workflows?,
     }
   end
+
+  def workflow_option_props
+    {
+      id: workflow.external_id,
+      label: workflow.name,
+    }
+  end
 end
