@@ -8,6 +8,7 @@ import AdminActionButton from "$app/components/Admin/ActionButton";
 import { BooleanIcon } from "$app/components/Admin/Icons";
 import type { User } from "$app/components/Admin/Users/User";
 import { LoadingSpinner } from "$app/components/LoadingSpinner";
+import { Alert } from "$app/components/ui/Alert";
 import { useIsIntersecting } from "$app/components/useIsIntersecting";
 
 type AdminUserMerchantAccountsProps = {
@@ -69,9 +70,9 @@ const AdminUserMerchantAccounts = ({ user }: AdminUserMerchantAccountsProps) => 
           ))}
         </ul>
       ) : (
-        <div className="info" role="status">
+        <Alert role="status" variant="info">
           No merchant accounts.
-        </div>
+        </Alert>
       )}
 
       {!data?.has_stripe_account && (

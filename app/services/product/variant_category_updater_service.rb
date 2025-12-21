@@ -107,11 +107,6 @@ class Product::VariantCategoryUpdaterService
       variant
     end
 
-    def should_notify_members_of_price_change?(variant, params)
-      return false unless params[:apply_price_changes_to_existing_memberships]
-      variant.apply_price_changes_to_existing_memberships != params[:apply_price_changes_to_existing_memberships] || variant.subscription_price_change_effective_date != params[:subscription_price_change_effective_date]&.to_date
-    end
-
     def has_variant_recurrences?
       @has_variant_recurrences ||= category_params[:options].map { |variant| variant[:recurrence_price_values] }.any?
     end

@@ -15,6 +15,7 @@ import { Product, WishlistForProduct } from "$app/components/Product";
 import { PriceSelection } from "$app/components/Product/ConfigurationSelector";
 import { showAlert } from "$app/components/server-components/Alert";
 import { TwitterShareButton } from "$app/components/TwitterShareButton";
+import { Alert } from "$app/components/ui/Alert";
 import { WithTooltip } from "$app/components/WithTooltip";
 
 type SuccessState = { newlyCreated: boolean; wishlist: Wishlist };
@@ -161,15 +162,15 @@ export const ShareSection = ({
         </Popover>
       </div>
       {saveState.type === "success" ? (
-        <div role="alert" className="success">
+        <Alert variant="success">
           {saveState.newlyCreated ? (
-            <span>
+            <>
               Wishlist created! <a href={Routes.wishlists_url()}>Edit it here.</a>
-            </span>
+            </>
           ) : (
             "Added to wishlist!"
           )}
-        </div>
+        </Alert>
       ) : null}
     </>
   );
