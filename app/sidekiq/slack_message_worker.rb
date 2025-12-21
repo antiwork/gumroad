@@ -27,7 +27,6 @@ class SlackMessageWorker
     chat_room = CHAT_ROOMS[room_name.to_sym][:slack]
     return if chat_room.nil?
 
-    attachments = Array(options["attachments"] || options[:attachments])
     hex_color = Color::CSS[color].html
 
     Timeout.timeout(SLACK_MESSAGE_SEND_TIMEOUT) do
@@ -36,11 +35,12 @@ class SlackMessageWorker
                  username: sender
       end
 
+      extra_attachments = (options["attachments"].nil? ? [] : options["attachments"])
       client.ping("", attachments: [{
         fallback: message_text,
         color: hex_color,
         text: message_text
-      }] + attachments)
+      }] + extra_attachments)
     end
   rescue StandardError, Timeout::Error => e
     unless e.message.include? "rate_limited"
