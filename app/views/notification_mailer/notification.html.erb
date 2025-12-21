@@ -1,37 +1,27 @@
-<%= header_section(@notification_category.titleize, @source) %>
+<%= header_section(@subject) %>
 
-<% message_lines = Array(@message_text).flatten.compact.map(&:to_s).map(&:strip).reject(&:blank?) %>
-<% if message_lines.present? %>
-  <div>
-    <% message_lines.each do |line| %>
-      <p><%= auto_link(line, html: { target: "_blank", rel: "noopener noreferrer" }) %></p>
-    <% end %>
-  </div>
-<% end %>
+<div>
+  <% if @source.present? %>
+    <p><%= @source %></p>
+  <% end %>
 
-<% attachments = Array(@attachments).flatten.compact %>
-<% if attachments.present? %>
-  <div>
-    <% attachments.each do |raw_attachment| %>
-      <% attachment = raw_attachment.respond_to?(:with_indifferent_access) ? raw_attachment.with_indifferent_access : raw_attachment %>
-      <% attachment_hash = attachment.respond_to?(:[]) ? attachment : {} %>
-      <% title = attachment_hash[:title].presence || attachment_hash["title"].presence %>
-      <% text = attachment_hash[:text].presence || attachment_hash["text"].presence %>
-      <% url = attachment_hash[:url].presence || attachment_hash["url"].presence || attachment_hash[:title_link].presence || attachment_hash["title_link"].presence %>
+  <% @message_lines.each do |line| %>
+    <p><%= auto_link(line) %></p>
+  <% end %>
 
-      <p>
-        <% if title.present? && url.present? %>
-          <strong><%= link_to title, url, target: "_blank", rel: "noopener noreferrer" %></strong>
-        <% elsif title.present? %>
-          <strong><%= title %></strong>
-        <% elsif url.present? %>
-          <%= link_to url, url, target: "_blank", rel: "noopener noreferrer" %>
-        <% end %>
+  <% @attachments.each do |attachment| %>
+    <p>
+      <% if attachment[:title].present? && attachment[:url].present? %>
+        <strong><%= link_to attachment[:title], attachment[:url] %></strong>
+      <% elsif attachment[:title].present? %>
+        <strong><%= attachment[:title] %></strong>
+      <% elsif attachment[:url].present? %>
+        <%= link_to attachment[:url], attachment[:url] %>
+      <% end %>
 
-        <% if text.present? && text != url %>
-          <br><%= simple_format(text, {}, wrapper_tag: "span") %>
-        <% end %>
-      </p>
-    <% end %>
-  </div>
-<% end %>
+      <% if attachment[:text].present? && attachment[:text] != attachment[:url] %>
+        <br><%= attachment[:text] %>
+      <% end %>
+    </p>
+  <% end %>
+</div>

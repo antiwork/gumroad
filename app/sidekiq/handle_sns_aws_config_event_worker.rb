@@ -48,10 +48,10 @@ class HandleSnsAwsConfigEventWorker
     end
 
     if message
-      NotificationWorker.perform_async("internals_log", "AWS Config", message, "gray")
+      NotificationWorker.perform_async("internals_log", "AWS Config", message, { "color" => "gray" })
     else
       attachment = build_default_attachment(params)
-      NotificationWorker.perform_async("internals_log", "AWS Config", "", "red", attachments: [attachment])
+      NotificationWorker.perform_async("internals_log", "AWS Config", "", { "color" => "red", "attachments" => [attachment] })
     end
   end
 end

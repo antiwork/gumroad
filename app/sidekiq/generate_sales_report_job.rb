@@ -69,7 +69,7 @@ class GenerateSalesReportJob
 
       if send_slack_notification
         message = "#{country.common_name} sales report (#{start_time.to_date} to #{end_time.to_date}) is ready - #{s3_signed_url}"
-        NotificationMailer.perform_async("payments", slack_sender(country_code), message, "green")
+        NotificationWorker.perform_async("payments", slack_sender(country_code), message, { "color" => "green" })
       end
     ensure
       temp_file.close

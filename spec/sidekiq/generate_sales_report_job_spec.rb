@@ -60,7 +60,7 @@ describe GenerateSalesReportJob do
 
       described_class.new.perform(country_code, start_date, end_date, GenerateSalesReportJob::ALL_SALES)
 
-      expect(NotificationWorker).to have_enqueued_sidekiq_job("payments", "VAT Reporting", anything, "green")
+      expect(NotificationWorker).to have_enqueued_sidekiq_job("payments", "VAT Reporting", anything, hash_including("color" => "green"))
     end
 
     it "creates a CSV file for sales into Australia" do
@@ -74,7 +74,7 @@ describe GenerateSalesReportJob do
 
       described_class.new.perform("AU", start_date, end_date, GenerateSalesReportJob::ALL_SALES)
 
-      expect(NotificationWorker).to have_enqueued_sidekiq_job("payments", "GST Reporting", anything, "green")
+      expect(NotificationWorker).to have_enqueued_sidekiq_job("payments", "GST Reporting", anything, hash_including("color" => "green"))
     end
 
     it "creates a CSV file for sales into Singapore" do
@@ -88,7 +88,7 @@ describe GenerateSalesReportJob do
 
       described_class.new.perform("SG", start_date, end_date, GenerateSalesReportJob::ALL_SALES)
 
-      expect(NotificationWorker).to have_enqueued_sidekiq_job("payments", "GST Reporting", anything, "green")
+      expect(NotificationWorker).to have_enqueued_sidekiq_job("payments", "GST Reporting", anything, hash_including("color" => "green"))
     end
 
     it "creates a CSV file for sales into the United Kingdom and does not send slack notification when send_notification is false",
@@ -106,7 +106,7 @@ describe GenerateSalesReportJob do
 
       described_class.new.perform(country_code, start_date, end_date, GenerateSalesReportJob::ALL_SALES, true)
 
-      expect(NotificationWorker).to have_enqueued_sidekiq_job("payments", "VAT Reporting", anything, "green")
+      expect(NotificationWorker).to have_enqueued_sidekiq_job("payments", "VAT Reporting", anything, hash_including("color" => "green"))
     end
 
     it "creates a CSV file for sales into the United Kingdom and sends slack notification when send_slack_notification is not provided (default behavior)",
@@ -115,7 +115,7 @@ describe GenerateSalesReportJob do
 
       described_class.new.perform(country_code, start_date, end_date, GenerateSalesReportJob::ALL_SALES)
 
-      expect(SlackMessageWorker).to have_enqueued_sidekiq_job("payments", "VAT Reporting", anything, "green")
+      expect(NotificationWorker).to have_enqueued_sidekiq_job("payments", "VAT Reporting", anything, hash_including("color" => "green"))
     end
 
     it "creates a CSV file for discover sales into the United Kingdom sales_type is set as discover_sales",
@@ -130,7 +130,7 @@ describe GenerateSalesReportJob do
 
       described_class.new.perform(country_code, start_date, end_date, GenerateSalesReportJob::DISCOVER_SALES)
 
-      expect(NotificationWorker).to have_enqueued_sidekiq_job("payments", "VAT Reporting", anything, "green")
+      expect(NotificationWorker).to have_enqueued_sidekiq_job("payments", "VAT Reporting", anything, hash_including("color" => "green"))
     end
   end
 

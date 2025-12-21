@@ -7,7 +7,7 @@ describe NotificationMailer do
     let(:notification_category) { "payments" }
     let(:source) { "VAT Reporting" }
     let(:message_text) { "Q4 2024 VAT report is ready" }
-    let(:notifications_email) { "alerts@gumroad.com" }
+    let(:notifications_email) { "notifications@gumroad.com" }
 
     context "with basic parameters" do
       let(:mail) do

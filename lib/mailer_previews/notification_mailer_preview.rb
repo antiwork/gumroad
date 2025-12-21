@@ -12,7 +12,7 @@ class NotificationMailerPreview < ActionMailer::Preview
           text: "https://example.com/reports/q4"
         }
       ],
-      notifications_email: "alerts@gumroad.com"
+      notifications_email: "notifications@gumroad.com"
     ).notification
   end
 end

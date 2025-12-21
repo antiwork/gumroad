@@ -21,7 +21,7 @@ describe SendPaypalTopupNotificationJob do
 
       described_class.new.perform
 
-      expect(NotificationWorker).to have_enqueued_sidekiq_job("payments", "PayPal Top-up", notification_msg, "red")
+      expect(NotificationWorker).to have_enqueued_sidekiq_job("payments", "PayPal Top-up", notification_msg, hash_including("color" => "red"))
     end
 
     it "includes details of payout amount in transit in the slack notification" do
@@ -34,7 +34,7 @@ describe SendPaypalTopupNotificationJob do
 
       described_class.new.perform
 
-      expect(NotificationWorker).to have_enqueued_sidekiq_job("payments", "PayPal Top-up", notification_msg, "red")
+      expect(NotificationWorker).to have_enqueued_sidekiq_job("payments", "PayPal Top-up", notification_msg, hash_including("color" => "red"))
     end
 
     it "sends no more topup required green notification if there's sufficient amount in PayPal" do
@@ -47,7 +47,7 @@ describe SendPaypalTopupNotificationJob do
 
       described_class.new.perform
 
-      expect(NotificationWorker).to have_enqueued_sidekiq_job("payments", "PayPal Top-up", notification_msg, "green")
+      expect(NotificationWorker).to have_enqueued_sidekiq_job("payments", "PayPal Top-up", notification_msg, hash_including("color" => "green"))
     end
   end
 end

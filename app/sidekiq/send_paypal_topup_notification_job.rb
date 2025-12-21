@@ -36,6 +36,6 @@ class SendPaypalTopupNotificationJob
     NotificationWorker.perform_async("payments",
                                      "PayPal Top-up",
                                      notification_msg,
-                                     topup_amount_cents > 0 ? "red" : "green")
+                                     { color: topup_amount_cents > 0 ? "red" : "green" })
   end
 end

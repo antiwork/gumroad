@@ -132,7 +132,7 @@ describe CreateVatReportJob do
 
       described_class.new.perform(1, 2015)
 
-      expect(NotificationWorker).to have_enqueued_sidekiq_job("payments", "VAT Reporting", anything, "green")
+      expect(NotificationWorker).to have_enqueued_sidekiq_job("payments", "VAT Reporting", anything, hash_including("color" => "green"))
 
       report_verification_helper
     end
