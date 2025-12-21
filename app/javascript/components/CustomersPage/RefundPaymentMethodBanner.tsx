@@ -46,7 +46,7 @@ export const RefundPaymentMethodBanner = ({ show }: Props) => {
         alignItems: "center",
         gap: "1rem",
         padding: "1rem",
-        backgroundColor: "rgb(255, 240, 243)",
+        backgroundColor: "#FBEAF9",
         border: "1px solid rgb(255, 144, 185)",
         borderRadius: "4px",
       }}
@@ -114,12 +114,17 @@ export const RefundPaymentMethodBanner = ({ show }: Props) => {
           strokeLinejoin="round"
         />
       </svg>
-      <div style={{ flex: 1 }}>
+      <div style={{ flex: 1, color: "black", fontSize: "14px", lineHeight: "1.4" }}>
         <strong>New:</strong> Refund customers instantly, even when your balance is low. Add a backup payment method to
-        cover refunds automatically if your balance can't.{" "}
-        <a href={`${Routes.settings_payments_path()}#refund-payment-method`} style={{ textDecoration: "underline" }}>
-          Set up backup method
-        </a>
+        cover refunds automatically if your balance can't.
+        <div style={{ marginTop: "0.25rem" }}>
+          <a
+            href={`${Routes.settings_payments_path()}#refund-payment-method`}
+            style={{ textDecoration: "underline", color: "black", fontWeight: "500" }}
+          >
+            Set up backup method
+          </a>
+        </div>
       </div>
       <button
         type="button"
@@ -127,7 +132,7 @@ export const RefundPaymentMethodBanner = ({ show }: Props) => {
         onClick={handleDismiss}
         disabled={isDismissing}
         aria-label="Dismiss"
-        style={{ color: "#666", cursor: "pointer" }}
+        style={{ color: "black", cursor: "pointer", textDecoration: "underline", alignSelf: "flex-start" }}
       >
         close
       </button>

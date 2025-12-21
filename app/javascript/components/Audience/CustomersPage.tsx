@@ -255,7 +255,6 @@ const CustomersPage = ({
 
   return (
     <div className="h-full">
-      <RefundPaymentMethodBanner show={show_refund_payment_method_banner} />
       <PageHeader
         title="Sales"
         actions={
@@ -446,6 +445,7 @@ const CustomersPage = ({
         }
       />
       <section className="p-4 md:p-8">
+        <RefundPaymentMethodBanner show={show_refund_payment_method_banner} />
         {customers.length > 0 ? (
           <section className="flex flex-col gap-4">
             <Table aria-live="polite" className={cx(isLoading && "pointer-events-none opacity-50")}>
