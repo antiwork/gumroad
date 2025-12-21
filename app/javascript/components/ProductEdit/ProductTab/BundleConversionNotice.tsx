@@ -3,6 +3,7 @@ import * as React from "react";
 import { Button, NavigationButton } from "$app/components/Button";
 import { Modal } from "$app/components/Modal";
 import { useProductEditContext } from "$app/components/ProductEdit/state";
+import { Alert } from "$app/components/ui/Alert";
 
 const BUNDLE_WORDS = ["bundle", "pack"];
 
@@ -17,7 +18,7 @@ export const BundleConversionNotice = () => {
 
   return (
     <>
-      <div role="status" className="info">
+      <Alert role="status" variant="info">
         <div className="flex flex-col gap-4">
           <p>
             <strong>Looks like this product could be a great bundle!</strong> With bundles, your customers can get
@@ -30,7 +31,7 @@ export const BundleConversionNotice = () => {
             </Button>
           </div>
         </div>
-      </div>
+      </Alert>
       <Modal
         open={isModalOpen}
         onClose={() => setIsModalOpen(false)}

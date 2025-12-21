@@ -31,6 +31,7 @@ import { Layout } from "$app/components/Collaborators/Layout";
 import { Icon } from "$app/components/Icons";
 import { useLoggedInUser } from "$app/components/LoggedInUser";
 import { showAlert } from "$app/components/server-components/Alert";
+import { Alert } from "$app/components/ui/Alert";
 import Placeholder from "$app/components/ui/Placeholder";
 import { Sheet, SheetHeader } from "$app/components/ui/Sheet";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "$app/components/ui/Table";
@@ -88,9 +89,9 @@ const CollaboratorDetails = ({
     <Sheet open onOpenChange={onClose}>
       <SheetHeader>{selectedCollaborator.name}</SheetHeader>
       {selectedCollaborator.setup_incomplete ? (
-        <div role="alert" className="warning">
+        <Alert variant="warning">
           Collaborators won't receive their cut until they set up a payout account in their Gumroad settings.
-        </div>
+        </Alert>
       ) : null}
 
       <section className="stack">

@@ -21,6 +21,7 @@ import { AuthorByline } from "$app/components/Product/AuthorByline";
 import { Thumbnail } from "$app/components/Product/Thumbnail";
 import { Select } from "$app/components/Select";
 import { showAlert } from "$app/components/server-components/Alert";
+import { Alert } from "$app/components/ui/Alert";
 import Placeholder from "$app/components/ui/Placeholder";
 import { ProductCard, ProductCardFigure, ProductCardHeader, ProductCardFooter } from "$app/components/ui/ProductCard";
 import { ProductCardGrid } from "$app/components/ui/ProductCardGrid";
@@ -376,18 +377,16 @@ const LibraryPage = ({ results, creators, bundles, reviews_page_enabled, followi
           </Placeholder>
         ) : null}
         {archivedCount > 0 && !state.search.showArchivedOnly && !showArchivedNotice ? (
-          <div role="status" className="info mb-5">
-            <span>
-              You have {archivedCount} archived purchase{archivedCount === 1 ? "" : "s"}.{" "}
-              <button
-                type="button"
-                className="underline"
-                onClick={() => dispatch({ type: "update-search", search: { showArchivedOnly: true } })}
-              >
-                Click here to view
-              </button>
-            </span>
-          </div>
+          <Alert role="status" variant="info" className="mb-5">
+            You have {archivedCount} archived purchase{archivedCount === 1 ? "" : "s"}.{" "}
+            <button
+              type="button"
+              className="underline"
+              onClick={() => dispatch({ type: "update-search", search: { showArchivedOnly: true } })}
+            >
+              Click here to view
+            </button>
+          </Alert>
         ) : null}
         <div
           className={classNames(
