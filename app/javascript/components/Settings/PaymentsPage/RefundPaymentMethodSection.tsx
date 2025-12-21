@@ -1,5 +1,4 @@
 import { CardElement, Elements, useElements, useStripe } from "@stripe/react-stripe-js";
-import { loadStripe } from "@stripe/stripe-js";
 import * as React from "react";
 import { cast } from "ts-safe-cast";
 
@@ -24,9 +23,7 @@ type Props = {
   isFormDisabled: boolean;
 };
 
-declare const STRIPE_PUBLISHABLE_KEY: string;
-
-const stripePromise = loadStripe(STRIPE_PUBLISHABLE_KEY);
+import { getStripeInstance } from "$app/utils/stripe_loader";
 
 const RefundPaymentMethodForm = ({
   refundPaymentMethod,
@@ -240,7 +237,16 @@ const RefundPaymentMethodForm = ({
 };
 
 export const RefundPaymentMethodSection = ({ refundPaymentMethod, isFormDisabled }: Props) => {
+  const [stripePromise, setStripePromise] = React.useState<Promise<any> | null>(null);
   const handleSuccess = () => undefined;
+
+  React.useEffect(() => {
+    setStripePromise(getStripeInstance());
+  }, []);
+
+  if (!stripePromise) {
+    return <div>Loading...</div>;
+  }
 
   return (
     <Elements stripe={stripePromise}>
@@ -254,3 +260,4 @@ export const RefundPaymentMethodSection = ({ refundPaymentMethod, isFormDisabled
 };
 
 export default RefundPaymentMethodSection;
+
