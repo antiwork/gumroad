@@ -21,6 +21,7 @@ import { Icon } from "$app/components/Icons";
 import { Popover } from "$app/components/Popover";
 import { showAlert } from "$app/components/server-components/Alert";
 import { TypeSafeOptionSelect } from "$app/components/TypeSafeOptionSelect";
+import { Alert } from "$app/components/ui/Alert";
 import { PageHeader } from "$app/components/ui/PageHeader";
 import { Pill } from "$app/components/ui/Pill";
 import { WithTooltip } from "$app/components/WithTooltip";
@@ -295,23 +296,22 @@ const NewProductPage = ({
               </header>
 
               {ai_generation_enabled && aiPromoVisible ? (
-                <div
-                  role="status"
-                  className="tailwind-override grid grid-cols-[auto_1fr_auto] items-start gap-4 rounded-lg !border-pink bg-pink/20 p-6"
-                >
-                  <img src={hands} alt="Hands" className="h-12 w-12 self-center" />
-                  <div>
-                    <strong>New.</strong> You can create your product using AI now. Click the sparks button in the
-                    header to get started.
-                    <br />
-                    <a href="/help/article/149-adding-a-product" target="_blank" rel="noreferrer">
-                      Learn more
-                    </a>
+                <Alert className="gap-4 p-6" role="status" variant="accent">
+                  <div className="flex items-center gap-4">
+                    <img src={hands} alt="Hands" className="size-12" />
+                    <div className="flex-1">
+                      <strong>New.</strong> You can create your product using AI now. Click the sparks button in the
+                      header to get started.
+                      <br />
+                      <a href="/help/article/149-adding-a-product" target="_blank" rel="noreferrer">
+                        Learn more
+                      </a>
+                    </div>
+                    <button className="underline" onClick={() => void dismissAiPromo()}>
+                      close
+                    </button>
                   </div>
-                  <button className="col-start-3! self-center underline" onClick={() => void dismissAiPromo()}>
-                    close
-                  </button>
-                </div>
+                </Alert>
               ) : null}
 
               <fieldset className={cx({ danger: errors.has("name") })}>
