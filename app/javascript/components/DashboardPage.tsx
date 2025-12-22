@@ -21,6 +21,7 @@ import { useLoggedInUser } from "$app/components/LoggedInUser";
 import { ProductIconCell } from "$app/components/ProductsPage/ProductIconCell";
 import { DownloadTaxFormsPopover } from "$app/components/server-components/DashboardPage/DownloadTaxFormsPopover";
 import { Stats } from "$app/components/Stats";
+import { Alert } from "$app/components/ui/Alert";
 import { PageHeader } from "$app/components/ui/PageHeader";
 import Placeholder from "$app/components/ui/Placeholder";
 import { Table, TableBody, TableCaption, TableCell, TableHead, TableHeader, TableRow } from "$app/components/ui/Table";
@@ -325,24 +326,20 @@ export const DashboardPage = ({
         className="border-b-0 sm:border-b"
       />
       {stripe_verification_message ? (
-        <div role="alert" className="warning">
-          <div>
-            {stripe_verification_message} <a href={Routes.settings_payments_path()}>Update</a>
-          </div>
-        </div>
+        <Alert variant="warning">
+          {stripe_verification_message} <a href={Routes.settings_payments_path()}>Update</a>
+        </Alert>
       ) : null}
       {show_1099_download_notice ? (
-        <div role="alert" className="info">
-          <div>
-            Your 1099 tax form for {new Date().getFullYear() - 1} is ready!{" "}
-            {tax_center_enabled ? (
-              <Link href={Routes.tax_center_path({ year: new Date().getFullYear() - 1 })}>Click here to download</Link>
-            ) : (
-              <a href={Routes.dashboard_download_tax_form_path()}>Click here to download</a>
-            )}
-            .
-          </div>
-        </div>
+        <Alert variant="info">
+          Your 1099 tax form for {new Date().getFullYear() - 1} is ready!{" "}
+          {tax_center_enabled ? (
+            <Link href={Routes.tax_center_path({ year: new Date().getFullYear() - 1 })}>Click here to download</Link>
+          ) : (
+            <a href={Routes.dashboard_download_tax_form_path()}>Click here to download</a>
+          )}
+          .
+        </Alert>
       ) : null}
 
       {loggedInUser?.policies.settings_payments_user.show
