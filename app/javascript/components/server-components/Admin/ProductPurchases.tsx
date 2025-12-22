@@ -7,6 +7,7 @@ import { register } from "$app/utils/serverComponentUtil";
 
 import { LoadingSpinner } from "$app/components/LoadingSpinner";
 import { showAlert } from "$app/components/server-components/Alert";
+import { Alert } from "$app/components/ui/Alert";
 
 const AdminProductPurchases = ({
   product_id,
@@ -96,9 +97,9 @@ const AdminProductPurchases = ({
         ) : null}
         {isLoading ? <LoadingSpinner className="size-3" /> : null}
         {purchases?.length === 0 ? (
-          <div className="info" role="status">
+          <Alert role="status" variant="info">
             No purchases have been made.
-          </div>
+          </Alert>
         ) : null}
         {hasMore ? (
           <button className="button small" onClick={() => void loadPurchases()} disabled={isLoading}>

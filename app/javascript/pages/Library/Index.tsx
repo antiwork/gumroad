@@ -1,6 +1,7 @@
+import { router, usePage } from "@inertiajs/react";
 import { produce } from "immer";
 import * as React from "react";
-import { createCast, is } from "ts-safe-cast";
+import { cast, is } from "ts-safe-cast";
 
 import { deletePurchasedProduct, setPurchaseArchived } from "$app/data/library";
 import { ProductNativeType } from "$app/parsers/product";
@@ -8,7 +9,6 @@ import { assertDefined } from "$app/utils/assert";
 import { classNames } from "$app/utils/classNames";
 import { asyncVoid } from "$app/utils/promise";
 import { assertResponseError } from "$app/utils/request";
-import { register } from "$app/utils/serverComponentUtil";
 import { writeQueryParams } from "$app/utils/url";
 
 import { Button } from "$app/components/Button";
@@ -21,6 +21,7 @@ import { AuthorByline } from "$app/components/Product/AuthorByline";
 import { Thumbnail } from "$app/components/Product/Thumbnail";
 import { Select } from "$app/components/Select";
 import { showAlert } from "$app/components/server-components/Alert";
+import { Alert } from "$app/components/ui/Alert";
 import Placeholder from "$app/components/ui/Placeholder";
 import { ProductCard, ProductCardFigure, ProductCardHeader, ProductCardFooter } from "$app/components/ui/ProductCard";
 import { ProductCardGrid } from "$app/components/ui/ProductCardGrid";
@@ -242,7 +243,11 @@ const extractParams = (rawParams: URLSearchParams): Params => ({
   showArchivedOnly: rawParams.get("show_archived_only") === "true",
 });
 
-const LibraryPage = ({ results, creators, bundles, reviews_page_enabled, following_wishlists_enabled }: Props) => {
+export default function LibraryPage() {
+  const { results, creators, bundles, reviews_page_enabled, following_wishlists_enabled } = cast<Props>(
+    usePage().props,
+  );
+
   const originalLocation = useOriginalLocation();
   const discoverUrl = useDiscoverUrl();
   const [state, dispatch] = React.useReducer(reducer, null, () => ({
@@ -301,23 +306,24 @@ const LibraryPage = ({ results, creators, bundles, reviews_page_enabled, followi
   const addThirdPartyAnalytics = useAddThirdPartyAnalytics();
   useRunOnce(() => {
     const purchaseIds = url.searchParams.getAll("purchase_id");
+    if (purchaseIds.length === 0) return;
+
     url.searchParams.delete("purchase_id");
-    window.history.replaceState(window.history.state, "", url.toString());
-    if (purchaseIds.length > 0) {
-      const email = results.find(({ purchase }) => purchase.id === purchaseIds[0])?.purchase.email;
-      if (email) showAlert(`Your purchase was successful! We sent a receipt to ${email}.`, "success");
+    router.replace({ url: url.pathname + url.search, preserveState: true, preserveScroll: true });
 
-      for (const purchaseId of purchaseIds) {
-        const product = results.find(({ purchase }) => purchase.id === purchaseId)?.product;
-        if (!product) continue;
+    const email = results.find(({ purchase }) => purchase.id === purchaseIds[0])?.purchase.email;
+    if (email) showAlert(`Your purchase was successful! We sent a receipt to ${email}.`, "success");
 
-        if (product.has_third_party_analytics)
-          addThirdPartyAnalytics({
-            permalink: product.permalink,
-            location: "receipt",
-            purchaseId,
-          });
-      }
+    for (const purchaseId of purchaseIds) {
+      const product = results.find(({ purchase }) => purchase.id === purchaseId)?.product;
+      if (!product) continue;
+
+      if (product.has_third_party_analytics)
+        addThirdPartyAnalytics({
+          permalink: product.permalink,
+          location: "receipt",
+          purchaseId,
+        });
     }
   });
 
@@ -376,18 +382,16 @@ const LibraryPage = ({ results, creators, bundles, reviews_page_enabled, followi
           </Placeholder>
         ) : null}
         {archivedCount > 0 && !state.search.showArchivedOnly && !showArchivedNotice ? (
-          <div role="status" className="info mb-5">
-            <span>
-              You have {archivedCount} archived purchase{archivedCount === 1 ? "" : "s"}.{" "}
-              <button
-                type="button"
-                className="underline"
-                onClick={() => dispatch({ type: "update-search", search: { showArchivedOnly: true } })}
-              >
-                Click here to view
-              </button>
-            </span>
-          </div>
+          <Alert role="status" variant="info" className="mb-5">
+            You have {archivedCount} archived purchase{archivedCount === 1 ? "" : "s"}.{" "}
+            <button
+              type="button"
+              className="underline"
+              onClick={() => dispatch({ type: "update-search", search: { showArchivedOnly: true } })}
+            >
+              Click here to view
+            </button>
+          </Alert>
         ) : null}
         <div
           className={classNames(
@@ -566,6 +570,4 @@ const LibraryPage = ({ results, creators, bundles, reviews_page_enabled, followi
       </section>
     </Layout>
   );
-};
-
-export default register({ component: LibraryPage, propParser: createCast() });
+}

@@ -15,6 +15,7 @@ import { ReviewVideoRecorder } from "$app/components/ReviewForm/ReviewVideoRecor
 import { VideoState, ReviewVideoRecorderUiState } from "$app/components/ReviewForm/ReviewVideoRecorderCommon";
 import { useReviewVideoUploader } from "$app/components/ReviewForm/useReviewVideoUploader";
 import { showAlert } from "$app/components/server-components/Alert";
+import { Alert } from "$app/components/ui/Alert";
 
 export type Review = {
   rating: number;
@@ -316,9 +317,9 @@ export const ReviewForm = React.forwardRef<
   );
 
   const disabledStatusWarning = disabledStatus && (
-    <div role="status" className="warning">
+    <Alert role="status" variant="warning">
       {disabledStatus}
-    </div>
+    </Alert>
   );
 
   return (

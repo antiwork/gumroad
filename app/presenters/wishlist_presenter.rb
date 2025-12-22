@@ -53,10 +53,10 @@ class WishlistPresenter
     }.merge(product ? selections_in_wishlist_props(product:) : {})
   end
 
-  def public_props(request:, pundit_user:, recommended_by: nil)
+  def public_props(request:, pundit_user:, recommended_by: nil, layout: nil, taxonomies_for_nav: nil)
     items_with_pagination = paginated_public_items(request:, pundit_user:, recommended_by:, page: 1)
 
-    {
+    props = {
       id: wishlist.external_id,
       name: wishlist.name,
       description: wishlist.description,
@@ -72,6 +72,16 @@ class WishlistPresenter
       discover_opted_out: pundit_user&.user && Pundit.policy!(pundit_user, wishlist).update? ? wishlist.discover_opted_out? : nil,
       checkout_enabled: wishlist.alive_wishlist_products.available_to_buy.any?,
     }.merge(items_with_pagination)
+
+    props[:layout] = layout if layout.present?
+
+    if layout == Product::Layout::PROFILE
+      props[:creator_profile] = ProfilePresenter.new(pundit_user:, seller: wishlist.user).creator_profile
+    elsif layout == Product::Layout::DISCOVER && taxonomies_for_nav
+      props[:taxonomies_for_nav] = taxonomies_for_nav
+    end
+
+    props
   end
 
   ASSOCIATIONS_FOR_CARD = [

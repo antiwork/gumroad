@@ -45,7 +45,6 @@ import GenerateInvoicePage from "$app/components/server-components/GenerateInvoi
 import GumroadBlogIndexPage from "$app/components/server-components/GumroadBlog/IndexPage";
 import GumroadBlogPostPage from "$app/components/server-components/GumroadBlog/PostPage";
 import HelpCenterArticlesIndexPage from "$app/components/server-components/HelpCenter/ArticlesIndexPage";
-import LibraryPage from "$app/components/server-components/LibraryPage";
 import LoginPage from "$app/components/server-components/LoginPage";
 import Nav from "$app/components/server-components/Nav";
 import PasswordResetPage from "$app/components/server-components/PasswordResetPage";
@@ -85,8 +84,6 @@ import TaxesCollectionModal from "$app/components/server-components/TaxesCollect
 import TwoFactorAuthenticationPage from "$app/components/server-components/TwoFactorAuthenticationPage";
 import VideoStreamPlayer from "$app/components/server-components/VideoStreamPlayer";
 import WishlistPage from "$app/components/server-components/WishlistPage";
-import WishlistsFollowingPage from "$app/components/server-components/WishlistsFollowingPage";
-import WishlistsPage from "$app/components/server-components/WishlistsPage";
 import CodeSnippet from "$app/components/ui/CodeSnippet";
 import { Pill } from "$app/components/ui/Pill";
 
@@ -139,7 +136,6 @@ ReactOnRails.register({
   GenerateInvoicePage,
   GumroadBlogIndexPage,
   GumroadBlogPostPage,
-  LibraryPage,
   LoginPage,
   MainSettingsPage,
   Nav,
@@ -177,4 +173,5 @@ ReactOnRails.register({
   WishlistPage,
   WishlistsFollowingPage,
   WishlistsPage,
+  UtmLinksPage,
 });

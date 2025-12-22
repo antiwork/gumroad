@@ -35,6 +35,7 @@ import {
 } from "$app/components/Product/ConfigurationSelector";
 import { Thumbnail } from "$app/components/Product/Thumbnail";
 import { showAlert } from "$app/components/server-components/Alert";
+import { Alert } from "$app/components/ui/Alert";
 import { PageHeader } from "$app/components/ui/PageHeader";
 import { Pill } from "$app/components/ui/Pill";
 import Placeholder from "$app/components/ui/Placeholder";
@@ -581,11 +582,7 @@ const CartItemComponent = ({
                       discount={discount.discount && discount.discount.type !== "ppp" ? discount.discount.value : null}
                       showInstallmentPlan
                     />
-                    {error ? (
-                      <div role="alert" className="danger">
-                        {error}
-                      </div>
-                    ) : null}
+                    {error ? <Alert variant="danger">{error}</Alert> : null}
                     <Button color="accent" onClick={saveChanges}>
                       Save changes
                     </Button>

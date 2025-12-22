@@ -36,6 +36,7 @@ import {
   applySelection,
 } from "$app/components/Product/ConfigurationSelector";
 import { showAlert } from "$app/components/server-components/Alert";
+import { Alert } from "$app/components/ui/Alert";
 import { useOriginalLocation } from "$app/components/useOriginalLocation";
 
 import { useOnChangeSync } from "../useOnChange";
@@ -335,12 +336,10 @@ const SubscriptionManager = ({
 
       {!hasSavedCard && subscription.is_gift ? (
         <div>
-          <div role="alert" className="warning">
-            <div>
-              Your {subscriptionEntity} is paid up until {formattedSubscriptionEndDate}. Add your own payment method
-              below to ensure that your {subscriptionEntity} renews.
-            </div>
-          </div>
+          <Alert variant="warning">
+            Your {subscriptionEntity} is paid up until {formattedSubscriptionEndDate}. Add your own payment method below
+            to ensure that your {subscriptionEntity} renews.
+          </Alert>
         </div>
       ) : null}
 
