@@ -75,6 +75,7 @@ import { ReviewVideoPlayer } from "$app/components/ReviewVideoPlayer";
 import { Select } from "$app/components/Select";
 import { showAlert } from "$app/components/server-components/Alert";
 import { Toggle } from "$app/components/Toggle";
+import { Alert } from "$app/components/ui/Alert";
 import { PageHeader } from "$app/components/ui/PageHeader";
 import { Pill } from "$app/components/ui/Pill";
 import Placeholder from "$app/components/ui/Placeholder";
@@ -796,42 +797,33 @@ const CustomerDrawer = ({
         </div>
       ) : null}
       {customer.is_additional_contribution ? (
-        <div role="status" className="info">
-          <div>
-            <strong>Additional amount: </strong>
-            This is an additional contribution, added to a previous purchase of this product.
-          </div>
-        </div>
+        <Alert role="status" variant="info">
+          <strong>Additional amount: </strong>
+          This is an additional contribution, added to a previous purchase of this product.
+        </Alert>
       ) : null}
       {customer.ppp ? (
-        <div role="status" className="info">
-          <div>
-            This customer received a purchasing power parity discount of <b>{customer.ppp.discount}</b> because they are
-            located in <b>{customer.ppp.country}</b>.
-          </div>
-        </div>
+        <Alert role="status" variant="info">
+          This customer received a purchasing power parity discount of <b>{customer.ppp.discount}</b> because they are
+          located in <b>{customer.ppp.country}</b>.
+        </Alert>
       ) : null}
       {customer.giftee_email ? (
-        <div role="status" className="info">
+        <Alert role="status" variant="info">
           {customer.email} purchased this for {customer.giftee_email}.
-        </div>
+        </Alert>
       ) : null}
       {customer.is_preorder ? (
-        <div role="status" className="info">
-          <div>
-            <strong>Pre-order: </strong>
-            This is a pre-order authorization. The customer's card has not been charged yet.
-          </div>
-        </div>
+        <Alert role="status" variant="info">
+          <strong>Pre-order: </strong>
+          This is a pre-order authorization. The customer's card has not been charged yet.
+        </Alert>
       ) : null}
       {customer.affiliate && customer.affiliate.type !== "Collaborator" ? (
-        <div role="status" className="info">
-          <div>
-            <strong>Affiliate: </strong>
-            An affiliate ({customer.affiliate.email}) helped you make this sale and received {customer.affiliate.amount}
-            .
-          </div>
-        </div>
+        <Alert role="status" variant="info">
+          <strong>Affiliate: </strong>
+          An affiliate ({customer.affiliate.email}) helped you make this sale and received {customer.affiliate.amount}.
+        </Alert>
       ) : null}
       <EmailSection
         label="Email"
@@ -1509,9 +1501,9 @@ const TrackingSection = ({
           </div>
         ) : (
           <div>
-            <div role="status" className="success">
+            <Alert role="status" variant="success">
               Shipped
-            </div>
+            </Alert>
           </div>
         )
       ) : (
@@ -1891,15 +1883,13 @@ const UtmLinkStack = ({ link, showHeader }: { link: Customer["utm_link"]; showHe
             <h3>UTM link</h3>
           </section>
           <div>
-            <small role="status" className="info">
-              <span>
-                This sale was driven by a{" "}
-                <a href={link.utm_url} target="_blank" rel="noreferrer">
-                  UTM link
-                </a>
-                .
-              </span>
-            </small>
+            <Alert className="text-sm" role="status" variant="info">
+              This sale was driven by a{" "}
+              <a href={link.utm_url} target="_blank" rel="noreferrer">
+                UTM link
+              </a>
+              .
+            </Alert>
           </div>
         </>
       ) : null}
@@ -2214,14 +2204,12 @@ const RefundForm = ({
           )}
         </div>
         {showRefundFeeNotice ? (
-          <div role="status" className="info">
-            <p>
-              Going forward, Gumroad does not return any fees when a payment is refunded.{" "}
-              <a href="/help/article/47-how-to-refund-a-customer" target="_blank" rel="noreferrer">
-                Learn more
-              </a>
-            </p>
-          </div>
+          <Alert role="status" variant="info">
+            Going forward, Gumroad does not return any fees when a payment is refunded.{" "}
+            <a href="/help/article/47-how-to-refund-a-customer" target="_blank" rel="noreferrer">
+              Learn more
+            </a>
+          </Alert>
         ) : null}
       </fieldset>
       <div style={{ display: "contents" }}>
@@ -2365,9 +2353,9 @@ const ChargesSection = ({
         <>
           {remainingCharges !== null ? (
             <section>
-              <div role="status" className="info">
+              <Alert role="status" variant="info">
                 {`${remainingCharges} ${remainingCharges > 1 ? "charges" : "charge"} remaining`}
-              </div>
+              </Alert>
             </section>
           ) : null}
           {charges.map((charge) => (

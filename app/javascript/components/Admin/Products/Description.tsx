@@ -1,6 +1,7 @@
 import React, { useMemo } from "react";
 
 import { type Product } from "$app/components/Admin/Products/Product";
+import { Alert } from "$app/components/ui/Alert";
 
 type Props = {
   product: Product;
@@ -24,9 +25,9 @@ const AdminUsersProductsDescription = ({ product }: Props) => {
         {product.html_safe_description && strippedHtmlSafeDescription ? (
           <div dangerouslySetInnerHTML={{ __html: product.html_safe_description }} />
         ) : (
-          <div className="info" role="status">
+          <Alert role="status" variant="info">
             No description provided.
-          </div>
+          </Alert>
         )}
       </details>
     </>

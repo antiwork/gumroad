@@ -5,6 +5,7 @@ import { request } from "$app/utils/request";
 
 import type { User } from "$app/components/Admin/Users/User";
 import { LoadingSpinner } from "$app/components/LoadingSpinner";
+import { Alert } from "$app/components/ui/Alert";
 
 type LatestPostsProps = {
   user: User;
@@ -34,9 +35,9 @@ const LatestPostsContent = ({ posts, isLoading }: { posts: PostProps[]; isLoadin
       </div>
     );
   return (
-    <div className="info" role="status">
+    <Alert role="status" variant="info">
       No posts created.
-    </div>
+    </Alert>
   );
 };
 

@@ -247,12 +247,27 @@ $accent-color: map-get($colors, "pink"); // [1]
 
     [role="alert"],
     [role="status"] {
+      padding: spacer(3);
+      border: $border;
+      border-radius: border-radius(1);
+
       &::before {
         content: unset !important;
       }
 
+      tr {
+        display: revert;
+      }
+
       td {
+        display: revert;
         vertical-align: top;
+        border-bottom: none !important;
+        padding: 0;
+
+        &:nth-child(2) {
+          padding-left: spacer(2);
+        }
 
         &:first-child {
           width: calc(size(1) + size(0.5));
@@ -261,8 +276,8 @@ $accent-color: map-get($colors, "pink"); // [1]
           img {
             /* Some email clients don't support CSS variables: https://www.caniemail.com/search/?s=var */
             /* References line-height of font-size(2) */
-            height: size(0.875 * 1.3);
-            width: size(0.875 * 1.3);
+            height: size(1.5);
+            width: size(1.5);
           }
         }
       }
@@ -270,7 +285,7 @@ $accent-color: map-get($colors, "pink"); // [1]
       &.promo {
         td {
           &:first-child {
-            width: calc(size(2) + size(0.75));
+            width: size(1.25 * 1.6);
 
             img {
               /* Some email clients don't support CSS variables: https://www.caniemail.com/search/?s=var */
