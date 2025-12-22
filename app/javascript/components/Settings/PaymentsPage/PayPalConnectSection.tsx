@@ -7,6 +7,7 @@ import { request } from "$app/utils/request";
 import { Button } from "$app/components/Button";
 import { Icon } from "$app/components/Icons";
 import { showAlert } from "$app/components/server-components/Alert";
+import { Alert } from "$app/components/ui/Alert";
 
 export type PayPalConnect = {
   email: string | null;
@@ -75,16 +76,14 @@ const PayPalConnectSection = ({
                   </a>
                 </div>
                 {!paypalConnect.allow_paypal_connect ? (
-                  <div role="alert" className="warning">
-                    <div>
-                      <p>You must meet the following requirements in order to connect a PayPal account:</p>
-                      <ul>
-                        <li>Your account must be marked as compliant</li>
-                        <li>You must have earned at least $100</li>
-                        <li>You must have received at least one successful payout</li>
-                      </ul>
-                    </div>
-                  </div>
+                  <Alert variant="warning">
+                    <p>You must meet the following requirements in order to connect a PayPal account:</p>
+                    <ul>
+                      <li>Your account must be marked as compliant</li>
+                      <li>You must have earned at least $100</li>
+                      <li>You must have received at least one successful payout</li>
+                    </ul>
+                  </Alert>
                 ) : null}
               </>
             ) : null}
@@ -116,10 +115,10 @@ const PayPalConnectSection = ({
                     </Button>
                   </p>
                   {!paypalConnect.paypal_disconnect_allowed ? (
-                    <div role="alert" className="warning">
+                    <Alert variant="warning">
                       You cannot disconnect your PayPal account because it is being used for active subscription or
                       preorder payments.
-                    </div>
+                    </Alert>
                   ) : null}
                 </>
               ) : null}
@@ -142,21 +141,19 @@ const PayPalConnectSection = ({
                   </a>
                 </p>
                 {!paypalConnect.allow_paypal_connect ? (
-                  <div role="alert" className="warning">
-                    <div>
-                      <p>You must meet the following requirements in order to connect a PayPal account:</p>
-                      <ul>
-                        <li>Your account must be marked as compliant</li>
-                        <li>You must have earned at least $100</li>
-                        <li>You must have received at least one successful payout</li>
-                      </ul>
-                    </div>
-                  </div>
+                  <Alert variant="warning">
+                    <p>You must meet the following requirements in order to connect a PayPal account:</p>
+                    <ul>
+                      <li>Your account must be marked as compliant</li>
+                      <li>You must have earned at least $100</li>
+                      <li>You must have received at least one successful payout</li>
+                    </ul>
+                  </Alert>
                 ) : null}
-                <div role="alert" className="warning">
+                <Alert variant="warning">
                   Your PayPal account connect with Gumroad is incomplete because of missing permissions. Please try
                   connecting again and grant the requested permissions.
-                </div>
+                </Alert>
               </>
             ) : null}
           </>
