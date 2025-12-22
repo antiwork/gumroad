@@ -19,6 +19,8 @@ import { NumberInput } from "$app/components/NumberInput";
 import { AffiliatesNavigation, Layout } from "$app/components/server-components/AffiliatesPage";
 import { showAlert } from "$app/components/server-components/Alert";
 import { ToggleSettingRow } from "$app/components/SettingRow";
+import { Alert } from "$app/components/ui/Alert";
+import { Pill } from "$app/components/ui/Pill";
 import Placeholder from "$app/components/ui/Placeholder";
 import { Table, TableBody, TableCaption, TableCell, TableHead, TableHeader, TableRow } from "$app/components/ui/Table";
 import { WithTooltip } from "$app/components/WithTooltip";
@@ -152,9 +154,9 @@ export const AffiliateSignupForm = () => {
                 ) : null}
               </div>
               {enableAffiliateLink ? null : (
-                <div role="alert" className="warning">
+                <Alert variant="warning">
                   You must enable and set up the commission for at least one product before sharing your affiliate link.
-                </div>
+                </Alert>
               )}
             </fieldset>
           </section>
@@ -248,7 +250,7 @@ export const ProductRow = ({ product, disabled, onChange }: ProductRowProps) => 
                   disabled={disabled || !product.enabled}
                   {...inputProps}
                 />
-                <div className="pill">%</div>
+                <Pill className="-mr-2 shrink-0">%</Pill>
               </div>
             )}
           </NumberInput>

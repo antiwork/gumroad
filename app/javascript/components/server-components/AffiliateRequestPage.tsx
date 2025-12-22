@@ -12,6 +12,7 @@ import { useAppDomain } from "$app/components/DomainSettings";
 import { useLoggedInUser } from "$app/components/LoggedInUser";
 import { Layout } from "$app/components/Profile/Layout";
 import { showAlert } from "$app/components/server-components/Alert";
+import { Alert } from "$app/components/ui/Alert";
 import { PageHeader } from "$app/components/ui/PageHeader";
 
 type FormStatus =
@@ -53,9 +54,12 @@ const AffiliateRequestPage = ({ creator_profile }: Props) => {
 
   return (
     <Layout creatorProfile={creator_profile}>
-      <PageHeader title={`Become an affiliate for ${creator_profile.name}`} />
-      <form className="border-b border-border pt-8 max-lg:px-4">
-        <section>
+      <PageHeader
+        title={`Become an affiliate for ${creator_profile.name}`}
+        className="mx-auto w-full max-w-6xl border-0 lg:px-0"
+      />
+      <form className="border-y border-border px-4 pt-8 lg:px-0">
+        <section className="mx-auto w-full max-w-6xl">
           <header>
             <div className="flex flex-col gap-4">
               <p>
@@ -69,7 +73,7 @@ const AffiliateRequestPage = ({ creator_profile }: Props) => {
             </div>
           </header>
           {formStatus.type === "success" ? (
-            <div role="alert" className="success">
+            <Alert variant="success">
               <div className="flex flex-col gap-4">
                 <p>Your request has been submitted! We will send you an email notification when you are approved.</p>
                 {formStatus.requesterHasExistingAccount ? null : (
@@ -80,7 +84,7 @@ const AffiliateRequestPage = ({ creator_profile }: Props) => {
                   </p>
                 )}
               </div>
-            </div>
+            </Alert>
           ) : (
             <>
               {loggedInUser?.name ? null : (

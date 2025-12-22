@@ -6,6 +6,8 @@ AWS_SECRET_KEY = GlobalConfig.get("AWS_SECRET_ACCESS_KEY")
 AWS_S3_ENDPOINT = GlobalConfig.get("AWS_S3_ENDPOINT", "https://s3.amazonaws.com")
 AWS_DEFAULT_REGION = GlobalConfig.get("AWS_DEFAULT_REGION", "us-east-1")
 
+USING_MINIO = AWS_S3_ENDPOINT.present? && !AWS_S3_ENDPOINT.include?("amazonaws.com")
+
 aws_config = {
   region: AWS_DEFAULT_REGION,
   credentials: Aws::Credentials.new(AWS_ACCESS_KEY, AWS_SECRET_KEY)
@@ -33,7 +35,7 @@ KINDLE_EMAIL_REGEX = /\A(?=.{3,255}$)(                                         #
                      @kindle\.com\z/xi
 
 S3_BUCKET = {
-  development: "gumroad_dev",
+  development: "gumroad-dev",
   staging: "gumroad_dev",
   test: "gumroad-specs",
   production: "gumroad"
@@ -62,9 +64,16 @@ else
   HLS_DISTRIBUTION_URL = GlobalConfig.get("HLS_DISTRIBUTION_URL_DEV", "https://d1jmbc8d0c0hid.cloudfront.net/")
   HLS_PIPELINE_ID = GlobalConfig.get("HLS_PIPELINE_ID_DEV", "1390090734092-rg9pq5")
 
-  # File Download
-  FILE_DOWNLOAD_DISTRIBUTION_URL = GlobalConfig.get("FILE_DOWNLOAD_DISTRIBUTION_URL_DEV", "https://staging-files.gumroad.com/")
-  CLOUDFRONT_DOWNLOAD_DISTRIBUTION_URL = GlobalConfig.get("CLOUDFRONT_DOWNLOAD_DISTRIBUTION_URL_DEV", "https://d3t5lixau6dhwk.cloudfront.net/")
+  # File Download - use MinIO if AWS_S3_ENDPOINT is set (local dev with MinIO)
+  if USING_MINIO
+    # Using MinIO for local development
+    FILE_DOWNLOAD_DISTRIBUTION_URL = "#{AWS_S3_ENDPOINT}/#{S3_BUCKET}/"
+    CLOUDFRONT_DOWNLOAD_DISTRIBUTION_URL = "#{AWS_S3_ENDPOINT}/#{S3_BUCKET}/"
+  else
+    # Using AWS Cloudflare / CloudFront for staging
+    FILE_DOWNLOAD_DISTRIBUTION_URL = GlobalConfig.get("FILE_DOWNLOAD_DISTRIBUTION_URL_DEV", "https://staging-files.gumroad.com/")
+    CLOUDFRONT_DOWNLOAD_DISTRIBUTION_URL = GlobalConfig.get("CLOUDFRONT_DOWNLOAD_DISTRIBUTION_URL_DEV", "https://d3t5lixau6dhwk.cloudfront.net/")
+  end
 end
 
 HLS_PRESETS = {

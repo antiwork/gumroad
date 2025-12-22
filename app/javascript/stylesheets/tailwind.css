@@ -1,6 +1,7 @@
 @layer theme, base, components, utilities;
 @import "tailwindcss/theme.css" layer(theme);
-@import "tailwindcss/utilities.css" source(none); /* Should be layer(utilties) but that conflicts with the legacy non-layer CSS */
+@import "tailwindcss/utilities.css" source(none);
+/* Should be layer(utilities) but that conflicts with the legacy non-layer CSS */
 @plugin "@tailwindcss/typography";
 /*
  * By default Tailwind checks all files in the project for classes, but in Gumroad that causes performance issues.
@@ -44,8 +45,14 @@
   --color-active-bg: rgb(var(--color) / var(--gray-1));
   --color-muted: rgb(var(--color) / var(--gray-3));
   --color-success: rgb(var(--success));
+  --color-success-foreground: rgb(var(--contrast-success));
   --color-danger: rgb(var(--danger));
+  --color-danger-foreground: rgb(var(--contrast-danger));
+  --color-primary: rgb(var(--primary));
+  --color-primary-foreground: rgb(var(--contrast-primary));
   --color-warning: rgb(var(--warning));
+  --color-warning-foreground: rgb(var(--contrast-warning));
+  --color-info: rgb(var(--info));
 
   --shadow: 0.25rem 0.25rem 0 currentColor;
   --shadow-lg: 0.5rem 0.5rem 0 currentColor;
@@ -54,6 +61,7 @@
   --grid-cols-sidebar: 1fr 3fr;
 
   --loading-spinner: url("~images/loading-rainbow.svg");
+  --product-cover-placeholder: url("~images/placeholders/product-cover.png");
 }
 
 @layer base {
@@ -89,9 +97,11 @@
   0% {
     transform: translateX(0);
   }
+
   50% {
     transform: translateX(-50%);
   }
+
   100% {
     transform: translateX(0);
   }
@@ -101,6 +111,7 @@
   0% {
     transform: translateX(0);
   }
+
   100% {
     transform: translateX(-50%);
   }

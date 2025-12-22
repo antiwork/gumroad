@@ -55,6 +55,7 @@ import { LoadingSpinner } from "$app/components/LoadingSpinner";
 import { useLoggedInUser } from "$app/components/LoggedInUser";
 import { PriceInput } from "$app/components/PriceInput";
 import { showAlert } from "$app/components/server-components/Alert";
+import { Alert } from "$app/components/ui/Alert";
 import { Tab, Tabs } from "$app/components/ui/Tabs";
 import { useIsDarkTheme } from "$app/components/useIsDarkTheme";
 import { useOnChangeSync } from "$app/components/useOnChange";
@@ -253,7 +254,7 @@ const EmailAddress = () => {
   );
 };
 
-const SharedInputs = () => {
+const SharedInputs = ({ showCustomFields }: { showCustomFields: boolean }) => {
   const uid = React.useId();
   const [state, dispatch] = useState();
   const errors = getErrors(state);
@@ -401,7 +402,7 @@ const SharedInputs = () => {
           </div>
         </div>
       ) : null}
-      <CustomFields />
+      {showCustomFields ? <CustomFields /> : null}
     </>
   );
 };
@@ -422,6 +423,7 @@ const PaymentMethodRadio = ({
         if (paymentMethod !== state.paymentMethod) dispatch({ type: "set-value", paymentMethod });
       }}
       disabled={!selected && isProcessing(state)}
+      className="px-1"
     >
       {children}
     </Tab>
@@ -436,7 +438,7 @@ const useFail = () => {
   };
 };
 
-const CustomerDetails = () => {
+const CustomerDetails = ({ showCustomFields }: { showCustomFields: boolean }) => {
   const isLoggedIn = !!useLoggedInUser();
   const [state, dispatch] = useState();
   const uid = React.useId();
@@ -483,7 +485,7 @@ const CustomerDetails = () => {
 
   return (
     <>
-      <SharedInputs />
+      <SharedInputs showCustomFields={showCustomFields} />
       {hasShipping(state) ? (
         <div>
           <div className="flex flex-col gap-4">
@@ -591,9 +593,9 @@ const CustomerDetails = () => {
       ) : null}
       {state.warning ? (
         <div>
-          <div role="status" className="warning">
+          <Alert role="status" variant="warning">
             {state.warning}
-          </div>
+          </Alert>
         </div>
       ) : null}
       {isTippingEnabled(state) ? <TipSelector /> : null}
@@ -632,8 +634,10 @@ const CreditCard = () => {
           type: "card",
           button: (
             <PaymentMethodRadio paymentMethod="card">
-              <Icon name="outline-credit-card" />
-              <h4>Card</h4>
+              <div className="flex w-full flex-col items-center justify-center gap-2 self-center">
+                <Icon name="outline-credit-card" />
+                <h4 className="text-center">Card</h4>
+              </div>
             </PaymentMethodRadio>
           ),
         },
@@ -987,8 +991,10 @@ const PayPal = () => {
         type: "paypal",
         button: (
           <PaymentMethodRadio paymentMethod="paypal">
-            <span className="brand-icon brand-icon-paypal" />
-            <h4>PayPal</h4>
+            <div className="flex w-full flex-col items-center justify-center gap-2 self-center">
+              <span className="brand-icon brand-icon-paypal" />
+              <h4 className="text-center">PayPal</h4>
+            </div>
           </PaymentMethodRadio>
         ),
       },
@@ -1139,13 +1145,15 @@ const StripePaymentRequest = () => {
         type: "stripePaymentRequest",
         button: (
           <PaymentMethodRadio paymentMethod="stripePaymentRequest">
-            <span
-              className={cx("brand-icon", {
-                "brand-icon-google": paymentMethods.googlePay,
-                "brand-icon-apple": paymentMethods.applePay,
-              })}
-            />
-            <h4>{paymentMethods.googlePay ? "Google Pay" : "Apple Pay"}</h4>
+            <div className="flex w-full flex-col items-center justify-center gap-2 self-center">
+              <span
+                className={cx("brand-icon", {
+                  "brand-icon-google": paymentMethods.googlePay,
+                  "brand-icon-apple": paymentMethods.applePay,
+                })}
+              />
+              <h4 className="text-center">{paymentMethods.googlePay ? "Google Pay" : "Apple Pay"}</h4>
+            </div>
           </PaymentMethodRadio>
         ),
       },
@@ -1165,7 +1173,8 @@ const StripePaymentRequest = () => {
 export const PaymentForm = ({
   className,
   notice,
-}: React.HTMLAttributes<HTMLDivElement> & { notice?: string | null }) => {
+  showCustomFields = true,
+}: React.HTMLAttributes<HTMLDivElement> & { notice?: string | null; showCustomFields?: boolean }) => {
   const [state, dispatch] = useState();
   const loggedInUser = useLoggedInUser();
   const isTestPurchase = loggedInUser && state.products.find((product) => product.testPurchase);
@@ -1205,10 +1214,10 @@ export const PaymentForm = ({
     <div ref={paymentFormRef} className={cx("stack", className)} aria-label="Payment form">
       {isTestPurchase ? (
         <div>
-          <div role="alert" className="info">
+          <Alert variant="info">
             This will be a test purchase as you are the creator of at least one of the products. Your payment method
             will not be charged.
-          </div>
+          </Alert>
         </div>
       ) : null}
       <EmailAddress />
@@ -1218,7 +1227,7 @@ export const PaymentForm = ({
             <div className="flex flex-col gap-4">
               <h4>Pay with</h4>
               {state.availablePaymentMethods.length > 1 ? (
-                <Tabs variant="buttons" className="auto-cols-max grid-flow-col">
+                <Tabs variant="buttons" className="auto-cols-fr grid-flow-col">
                   {state.availablePaymentMethods.map((method) => (
                     <React.Fragment key={method.type}>{method.button}</React.Fragment>
                   ))}
@@ -1228,15 +1237,13 @@ export const PaymentForm = ({
           </div>
           {notice ? (
             <div>
-              <div role="alert" className="info">
-                {notice}
-              </div>
+              <Alert variant="info">{notice}</Alert>
             </div>
           ) : null}
           <CreditCard />
         </>
       ) : null}
-      <CustomerDetails />
+      <CustomerDetails showCustomFields={showCustomFields} />
       {!isFreePurchase ? (
         <>
           <PayPal />

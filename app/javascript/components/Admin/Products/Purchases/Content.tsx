@@ -2,6 +2,7 @@ import React from "react";
 
 import { Button } from "$app/components/Button";
 import { LoadingSpinner } from "$app/components/LoadingSpinner";
+import { Alert } from "$app/components/ui/Alert";
 
 import AdminProductPurchase, { ProductPurchase } from "./Purchase";
 
@@ -20,16 +21,16 @@ const AdminProductPurchasesContent = ({
 }: AdminProductPurchasesContentProps) => {
   if (purchases.length === 0 && !isLoading)
     return (
-      <div className="info" role="status">
+      <Alert role="status" variant="info">
         No purchases have been made.
-      </div>
+      </Alert>
     );
 
   return (
     <div className="flex flex-col gap-4">
       <div className="stack">
         {purchases.map((purchase) => (
-          <AdminProductPurchase key={purchase.id} purchase={purchase} />
+          <AdminProductPurchase key={purchase.external_id} purchase={purchase} />
         ))}
       </div>
 

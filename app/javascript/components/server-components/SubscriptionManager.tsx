@@ -36,6 +36,7 @@ import {
   applySelection,
 } from "$app/components/Product/ConfigurationSelector";
 import { showAlert } from "$app/components/server-components/Alert";
+import { Alert } from "$app/components/ui/Alert";
 import { useOriginalLocation } from "$app/components/useOriginalLocation";
 
 import { useOnChangeSync } from "../useOnChange";
@@ -194,7 +195,7 @@ const SubscriptionManager = ({
     price: Math.round(amountDueToday / product.exchange_rate),
     payInInstallments: subscription.is_installment_plan,
     requireShipping: product.require_shipping,
-    customFields: product.custom_fields,
+    customFields: [], // Custom fields were already collected during original purchase
     bundleProductCustomFields: [],
     supportsPaypal: product.supports_paypal,
     testPurchase: subscription.is_test,
@@ -335,12 +336,10 @@ const SubscriptionManager = ({
 
       {!hasSavedCard && subscription.is_gift ? (
         <div>
-          <div role="alert" className="warning">
-            <div>
-              Your {subscriptionEntity} is paid up until {formattedSubscriptionEndDate}. Add your own payment method
-              below to ensure that your {subscriptionEntity} renews.
-            </div>
-          </div>
+          <Alert variant="warning">
+            Your {subscriptionEntity} is paid up until {formattedSubscriptionEndDate}. Add your own payment method below
+            to ensure that your {subscriptionEntity} renews.
+          </Alert>
         </div>
       ) : null}
 
@@ -358,7 +357,7 @@ const SubscriptionManager = ({
 
       <StateContext.Provider value={reducer}>
         <div>
-          <PaymentForm className="borderless" notice={paymentNotice} />
+          <PaymentForm className="borderless" notice={paymentNotice} showCustomFields={false} />
           {totalPrice > 0 ? (
             <div>
               <div className="text-center">

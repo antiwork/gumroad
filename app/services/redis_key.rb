@@ -45,5 +45,6 @@ class RedisKey
     def max_seller_failed_purchases_price_cents = "max_seller_failed_purchases_price_cents"
     def seller_age_threshold_days = "seller_age_threshold_days"
     def sales_report_jobs = "sales_report_jobs"
+    def acme_challenge(token) = "acme_challenge:#{token}"
   end
 end

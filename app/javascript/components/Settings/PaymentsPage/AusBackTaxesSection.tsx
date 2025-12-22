@@ -1,6 +1,18 @@
 import * as React from "react";
 
 import { TaxesCollectionModal } from "$app/components/server-components/TaxesCollectionModal";
+import { Alert } from "$app/components/ui/Alert";
+
+export type AusBacktaxDetails = {
+  total_amount_to_au: string;
+  au_backtax_amount: string;
+  credit_creation_date: string;
+  opt_in_date: string | null;
+  opted_in_to_au_backtax: boolean;
+  legal_entity_name: string | null;
+  are_au_backtaxes_paid: boolean;
+  au_backtaxes_paid_date: string | null;
+};
 
 const AusBackTaxesSection = ({
   total_amount_to_au,
@@ -11,16 +23,7 @@ const AusBackTaxesSection = ({
   legal_entity_name,
   are_au_backtaxes_paid,
   au_backtaxes_paid_date,
-}: {
-  total_amount_to_au: string;
-  au_backtax_amount: string;
-  credit_creation_date: string;
-  opt_in_date: string | null;
-  opted_in_to_au_backtax: boolean;
-  legal_entity_name: string;
-  are_au_backtaxes_paid: boolean;
-  au_backtaxes_paid_date: string | null;
-}) => (
+}: AusBacktaxDetails) => (
   <section>
     <header>
       <h2>Backtaxes collection</h2>
@@ -28,9 +31,7 @@ const AusBackTaxesSection = ({
     <div>
       {opted_in_to_au_backtax ? (
         <div className="flex flex-col gap-4">
-          <div role="alert" className="success">
-            You've opted in to backtaxes collection.
-          </div>
+          <Alert variant="success">You've opted in to backtaxes collection.</Alert>
           <p>
             From 2018 to 2022, you made {total_amount_to_au} in sales to customers located in Australia. Taxes on these
             sales were not collected at the time.{" "}
@@ -53,9 +54,9 @@ const AusBackTaxesSection = ({
         </div>
       ) : (
         <div className="flex flex-col gap-4">
-          <div role="alert" className="warning">
+          <Alert variant="warning">
             The Australian government is claiming taxes for your sales between 2018 to 2022.
-          </div>
+          </Alert>
           <p>
             From 2018 to 2022, you made {total_amount_to_au} in sales to customers located in Australia. Taxes on these
             sales were not collected at the time.{" "}

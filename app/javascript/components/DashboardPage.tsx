@@ -1,3 +1,4 @@
+import { Link } from "@inertiajs/react";
 import cx from "classnames";
 import * as React from "react";
 
@@ -20,6 +21,7 @@ import { useLoggedInUser } from "$app/components/LoggedInUser";
 import { ProductIconCell } from "$app/components/ProductsPage/ProductIconCell";
 import { DownloadTaxFormsPopover } from "$app/components/server-components/DashboardPage/DownloadTaxFormsPopover";
 import { Stats } from "$app/components/Stats";
+import { Alert } from "$app/components/ui/Alert";
 import { PageHeader } from "$app/components/ui/PageHeader";
 import Placeholder from "$app/components/ui/Placeholder";
 import { Table, TableBody, TableCaption, TableCell, TableHead, TableHeader, TableRow } from "$app/components/ui/Table";
@@ -64,6 +66,7 @@ export type DashboardPageProps = {
   stripe_verification_message?: string | null;
   tax_forms: Record<number, string>;
   show_1099_download_notice: boolean;
+  tax_center_enabled: boolean;
 };
 type TableProps = { sales: ProductRow[] };
 
@@ -256,23 +259,29 @@ const ProductsTable = ({ sales }: TableProps) => {
         {items.map(({ id, name, thumbnail, today, last_7, last_30, sales, visits, revenue }) => (
           <TableRow key={id}>
             <ProductIconCell href={Routes.edit_link_url({ id }, { host: appDomain })} thumbnail={thumbnail} />
-            <TableCell>
+            <TableCell label="Products">
               <a href={Routes.edit_link_url({ id }, { host: appDomain })} className="line-clamp-2" title={name}>
                 {name}
               </a>
             </TableCell>
-            <TableCell title={sales.toLocaleString(locale)} className="whitespace-nowrap">
+            <TableCell label="Sales" title={sales.toLocaleString(locale)} className="whitespace-nowrap">
               {sales.toLocaleString(locale, { notation: "compact" })}
             </TableCell>
-            <TableCell title={formatPrice(revenue)} className="whitespace-nowrap">
+            <TableCell label="Revenue" title={formatPrice(revenue)} className="whitespace-nowrap">
               {formatPrice(revenue)}
             </TableCell>
-            <TableCell title={visits.toLocaleString(locale)} className="whitespace-nowrap">
+            <TableCell label="Visits" title={visits.toLocaleString(locale)} className="whitespace-nowrap">
               {visits.toLocaleString(locale, { notation: "compact" })}
             </TableCell>
-            <TableCell className="whitespace-nowrap">{formatPrice(today)}</TableCell>
-            <TableCell className="whitespace-nowrap">{formatPrice(last_7)}</TableCell>
-            <TableCell className="whitespace-nowrap">{formatPrice(last_30)}</TableCell>
+            <TableCell label="Today" className="whitespace-nowrap">
+              {formatPrice(today)}
+            </TableCell>
+            <TableCell label="Last 7 days" className="whitespace-nowrap">
+              {formatPrice(last_7)}
+            </TableCell>
+            <TableCell label="Last 30 days" className="whitespace-nowrap">
+              {formatPrice(last_30)}
+            </TableCell>
           </TableRow>
         ))}
       </TableBody>
@@ -290,6 +299,7 @@ export const DashboardPage = ({
   stripe_verification_message,
   tax_forms,
   show_1099_download_notice,
+  tax_center_enabled,
 }: DashboardPageProps) => {
   const loggedInUser = useLoggedInUser();
   const [gettingStartedMinimized, setGettingStartedMinimized] = React.useState<boolean>(false);
@@ -308,23 +318,28 @@ export const DashboardPage = ({
     <div>
       <PageHeader
         title="Dashboard"
-        actions={Object.keys(tax_forms).length > 0 && <DownloadTaxFormsPopover taxForms={tax_forms} />}
+        actions={
+          tax_center_enabled
+            ? null
+            : Object.keys(tax_forms).length > 0 && <DownloadTaxFormsPopover taxForms={tax_forms} />
+        }
         className="border-b-0 sm:border-b"
       />
       {stripe_verification_message ? (
-        <div role="alert" className="warning">
-          <div>
-            {stripe_verification_message} <a href={Routes.settings_payments_path()}>Update</a>
-          </div>
-        </div>
+        <Alert variant="warning">
+          {stripe_verification_message} <a href={Routes.settings_payments_path()}>Update</a>
+        </Alert>
       ) : null}
       {show_1099_download_notice ? (
-        <div role="alert" className="info">
-          <div>
-            Your 1099 tax form for {new Date().getFullYear() - 1} is ready!{" "}
-            <a href={Routes.dashboard_download_tax_form_path()}>Click here to download</a>.
-          </div>
-        </div>
+        <Alert variant="info">
+          Your 1099 tax form for {new Date().getFullYear() - 1} is ready!{" "}
+          {tax_center_enabled ? (
+            <Link href={Routes.tax_center_path({ year: new Date().getFullYear() - 1 })}>Click here to download</Link>
+          ) : (
+            <a href={Routes.dashboard_download_tax_form_path()}>Click here to download</a>
+          )}
+          .
+        </Alert>
       ) : null}
 
       {loggedInUser?.policies.settings_payments_user.show

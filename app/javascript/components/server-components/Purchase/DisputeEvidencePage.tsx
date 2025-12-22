@@ -21,6 +21,8 @@ import { Button, NavigationButton } from "$app/components/Button";
 import { Icon } from "$app/components/Icons";
 import { LoadingSpinner } from "$app/components/LoadingSpinner";
 import { showAlert } from "$app/components/server-components/Alert";
+import { Alert } from "$app/components/ui/Alert";
+import { Row, RowActions, RowContent, Rows } from "$app/components/ui/Rows";
 import { useUserAgentInfo } from "$app/components/UserAgent";
 
 const ALLOWED_EXTENSIONS = ["jpeg", "jpg", "png", "pdf"];
@@ -146,7 +148,7 @@ const DisputeEvidencePage = ({ dispute_evidence, disputable, products }: Props) 
   const disputeReason = disputeReasons[dispute_evidence.dispute_reason];
 
   return (
-    <div className="stack">
+    <div className="stack mx-auto my-8 max-w-2xl">
       <header>
         Dispute evidence
         <h2>Submit additional information</h2>
@@ -192,11 +194,11 @@ const DisputeEvidencePage = ({ dispute_evidence, disputable, products }: Props) 
                 {dispute_evidence.duration_left_to_submit_evidence_formatted} will help us win on your behalf.
               </strong>
             </p>
-            <div role="alert" className="warning">
+            <Alert variant="warning">
               You only have one opportunity to submit your response. We immediately forward your response and all
               supporting files to our payment processor. You can't edit the response or submit additional information,
               so make sure you've assembled all of your evidence before you submit.
-            </div>
+            </Alert>
           </div>
           <div>
             <fieldset>
@@ -364,10 +366,10 @@ const Files = ({
   };
 
   return (
-    <div className="rows" role="list">
+    <Rows role="list">
       {eligibleBlobs.map((blob) => (
-        <div role="listitem" key={blob.key}>
-          <div className="content">
+        <Row role="listitem" key={blob.key}>
+          <RowContent>
             <Icon name="solid-document-text" className="type-icon" />
             <div>
               <h4>{blob.title}</h4>
@@ -376,8 +378,8 @@ const Files = ({
                 <li>{FileUtils.getFullFileSizeString(blob.byte_size)}</li>
               </ul>
             </div>
-          </div>
-          <div className="actions">
+          </RowContent>
+          <RowActions>
             <NavigationButton outline href={Routes.s3_utility_cdn_url_for_blob_path({ key: blob.key })} target="_blank">
               View
             </NavigationButton>
@@ -392,10 +394,10 @@ const Files = ({
                 <Icon name="trash2" />
               </Button>
             ) : null}
-          </div>
-        </div>
+          </RowActions>
+        </Row>
       ))}
-    </div>
+    </Rows>
   );
 };
 

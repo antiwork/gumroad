@@ -2,6 +2,8 @@ import React from "react";
 
 import Comment, { type CommentProps } from "$app/components/Admin/Commentable/Comment";
 import { LoadingSpinner } from "$app/components/LoadingSpinner";
+import { Alert } from "$app/components/ui/Alert";
+import { Rows } from "$app/components/ui/Rows";
 import { useIsIntersecting } from "$app/components/useIsIntersecting";
 
 type AdminCommentableContentProps = {
@@ -23,9 +25,9 @@ const AdminCommentableContent = ({
 }: AdminCommentableContentProps) => {
   if (count === 0 && !isLoading)
     return (
-      <div className="info" role="status">
+      <Alert role="status" variant="info">
         No comments created.
-      </div>
+      </Alert>
     );
 
   const handleIntersection = React.useCallback(
@@ -42,11 +44,11 @@ const AdminCommentableContent = ({
     <div>
       {isLoading && !hasLoaded ? <LoadingSpinner /> : null}
 
-      <div className="rows" role="list">
+      <Rows role="list">
         {comments.map((comment) => (
           <Comment key={comment.id} comment={comment} />
         ))}
-      </div>
+      </Rows>
 
       {hasMore ? <div ref={elementRef}>{isLoading ? <LoadingSpinner /> : null}</div> : null}
     </div>

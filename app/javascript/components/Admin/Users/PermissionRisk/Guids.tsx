@@ -5,6 +5,7 @@ import { cast } from "ts-safe-cast";
 import { request } from "$app/utils/request";
 
 import { LoadingSpinner } from "$app/components/LoadingSpinner";
+import { Alert } from "$app/components/ui/Alert";
 
 type UserGuids = { guid: string; user_ids: number[] }[];
 
@@ -33,9 +34,9 @@ const UserGuidsContent = ({ userGuids, isLoading }: { userGuids: UserGuids; isLo
       </div>
     );
   return (
-    <div className="info" role="status">
+    <Alert role="status" variant="info">
       No GUIDs found.
-    </div>
+    </Alert>
   );
 };
 

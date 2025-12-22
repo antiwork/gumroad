@@ -12,6 +12,7 @@ import { DiscordButton } from "$app/components/DiscordButton";
 import { Icon } from "$app/components/Icons";
 import { useLoggedInUser } from "$app/components/LoggedInUser";
 import { showAlert } from "$app/components/server-components/Alert";
+import { Alert } from "$app/components/ui/Alert";
 
 export const LineItem = ({
   name,
@@ -55,11 +56,9 @@ const FailedLineItemResultEntry = ({ name, result }: { name: string; result: Err
         </section>
       </div>
       <div>
-        <div
-          className="payment_failed_notice warning"
-          role="alert"
-          dangerouslySetInnerHTML={{ __html: `<div>${message}</div>` }}
-        />
+        <Alert variant="warning">
+          <div dangerouslySetInnerHTML={{ __html: message }} />
+        </Alert>
       </div>
     </>
   );
@@ -209,9 +208,7 @@ export const CreateAccountForm = ({
       className="flex flex-col gap-4"
     >
       {status === "success" ? (
-        <div className="success" role="alert">
-          Done! Your account has been created. You'll get a confirmation email shortly.
-        </div>
+        <Alert variant="success">Done! Your account has been created. You'll get a confirmation email shortly.</Alert>
       ) : (
         <>
           <div>

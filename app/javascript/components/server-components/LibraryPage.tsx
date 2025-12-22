@@ -21,7 +21,9 @@ import { AuthorByline } from "$app/components/Product/AuthorByline";
 import { Thumbnail } from "$app/components/Product/Thumbnail";
 import { Select } from "$app/components/Select";
 import { showAlert } from "$app/components/server-components/Alert";
+import { Alert } from "$app/components/ui/Alert";
 import Placeholder from "$app/components/ui/Placeholder";
+import { ProductCard, ProductCardFigure, ProductCardHeader, ProductCardFooter } from "$app/components/ui/ProductCard";
 import { ProductCardGrid } from "$app/components/ui/ProductCardGrid";
 import { useAddThirdPartyAnalytics } from "$app/components/useAddThirdPartyAnalytics";
 import { useGlobalEventListener } from "$app/components/useGlobalEventListener";
@@ -81,11 +83,11 @@ export const Card = ({
   const name = purchase.variants ? `${product.name} - ${purchase.variants}` : product.name;
 
   return (
-    <article className="product-card relative">
-      <figure>
+    <ProductCard>
+      <ProductCardFigure>
         <Thumbnail url={product.thumbnail_url} nativeType={product.native_type} />
-      </figure>
-      <header>
+      </ProductCardFigure>
+      <ProductCardHeader>
         {purchase.download_url ? (
           <a href={purchase.download_url} className="stretched-link" aria-label={name}>
             <h3 itemProp="name">{name}</h3>
@@ -93,36 +95,38 @@ export const Card = ({
         ) : (
           <h3 itemProp="name">{name}</h3>
         )}
-      </header>
-      <footer className="relative">
-        {product.creator ? (
-          <AuthorByline
-            name={product.creator.name}
-            profileUrl={product.creator.profile_url}
-            avatarUrl={product.creator.avatar_url ?? undefined}
-          />
-        ) : (
-          <div className="user" />
-        )}
-        <Popover
-          aria-label="Open product action menu"
-          trigger={<Icon name="three-dots" />}
-          open={isPopoverOpen}
-          onToggle={setIsPopoverOpen}
-        >
-          <div role="menu">
-            <div role="menuitem" onClick={toggleArchived}>
-              <Icon name="archive" />
-              &ensp;{purchase.is_archived ? "Unarchive" : "Archive"}
+      </ProductCardHeader>
+      <ProductCardFooter>
+        <div className="flex-1 p-4">
+          {product.creator ? (
+            <AuthorByline
+              name={product.creator.name}
+              profileUrl={product.creator.profile_url}
+              avatarUrl={product.creator.avatar_url ?? undefined}
+            />
+          ) : null}
+        </div>
+        <div className="p-4">
+          <Popover
+            aria-label="Open product action menu"
+            trigger={<Icon name="three-dots" />}
+            open={isPopoverOpen}
+            onToggle={setIsPopoverOpen}
+          >
+            <div role="menu">
+              <div role="menuitem" onClick={toggleArchived}>
+                <Icon name="archive" />
+                &ensp;{purchase.is_archived ? "Unarchive" : "Archive"}
+              </div>
+              <div className="danger" role="menuitem" onClick={() => onDelete()}>
+                <Icon name="trash2" />
+                &ensp;Delete permanently
+              </div>
             </div>
-            <div className="danger" role="menuitem" onClick={() => onDelete()}>
-              <Icon name="trash2" />
-              &ensp;Delete permanently
-            </div>
-          </div>
-        </Popover>
-      </footer>
-    </article>
+          </Popover>
+        </div>
+      </ProductCardFooter>
+    </ProductCard>
   );
 };
 
@@ -373,18 +377,16 @@ const LibraryPage = ({ results, creators, bundles, reviews_page_enabled, followi
           </Placeholder>
         ) : null}
         {archivedCount > 0 && !state.search.showArchivedOnly && !showArchivedNotice ? (
-          <div role="status" className="info mb-5">
-            <span>
-              You have {archivedCount} archived purchase{archivedCount === 1 ? "" : "s"}.{" "}
-              <button
-                type="button"
-                className="underline"
-                onClick={() => dispatch({ type: "update-search", search: { showArchivedOnly: true } })}
-              >
-                Click here to view
-              </button>
-            </span>
-          </div>
+          <Alert role="status" variant="info" className="mb-5">
+            You have {archivedCount} archived purchase{archivedCount === 1 ? "" : "s"}.{" "}
+            <button
+              type="button"
+              className="underline"
+              onClick={() => dispatch({ type: "update-search", search: { showArchivedOnly: true } })}
+            >
+              Click here to view
+            </button>
+          </Alert>
         ) : null}
         <div
           className={classNames(

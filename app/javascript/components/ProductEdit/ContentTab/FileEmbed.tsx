@@ -37,6 +37,7 @@ import { SubtitleFile } from "$app/components/SubtitleList/Row";
 import { SubtitleUploadBox } from "$app/components/SubtitleUploadBox";
 import { NodeActionsMenu } from "$app/components/TiptapExtensions/NodeActionsMenu";
 import Placeholder from "$app/components/ui/Placeholder";
+import { Row, RowActions, RowContent, RowDetails } from "$app/components/ui/Rows";
 import { WithTooltip } from "$app/components/WithTooltip";
 
 export const getDownloadUrl = (productId: string, file: FileEntry) =>
@@ -353,81 +354,83 @@ const FileEmbedNodeView = ({ node, editor, getPos, updateAttributes }: NodeViewP
       className={cx({ "relative rounded-sm border border-dashed border-accent": isDropZone })}
       contentEditable={false}
     >
-      <div
+      <Row
         className={cx("embed", { selected, [connectedFileRowClassName(isLastInGroup)]: isConnectedRow })}
         role={isInGroup ? "treeitem" : undefined}
       >
         {file.is_streamable && !node.attrs.collapsed ? (
-          loadingVideo ? (
-            <figure className="preview">
-              <div style={{ position: "absolute", top: "50%", left: "50%", transform: "translate(-50%, -50%)" }}>
-                <LoadingSpinner className="size-16" />
-              </div>
-            </figure>
-          ) : file.thumbnail ? (
-            showingVideoPlayer ? (
-              <div className="preview">
-                <div id={`${uid}-video`}></div>
-              </div>
-            ) : (
+          <RowDetails asChild>
+            {loadingVideo ? (
               <figure className="preview">
-                <img
-                  src={file.thumbnail.url}
-                  style={{
-                    position: "absolute",
-                    height: "100%",
-                    objectFit: "cover",
-                    borderRadius: "var(--border-radius-1) var(--border-radius-1) 0 0",
-                  }}
-                />
-                <button
-                  className="underline"
-                  style={{
-                    position: "absolute",
-                    top: "50%",
-                    left: "50%",
-                    transform: "translate(-50%, -50%)",
-                  }}
-                  onClick={() => setShowingVideoPlayer(true)}
-                  aria-label="Watch"
-                >
-                  <PlayVideoIcon />
-                </button>
-                <div style={{ position: "absolute", top: "var(--spacer-5)", right: "var(--spacer-5)" }}>
-                  <WithTooltip tip="Replace thumbnail">
-                    <label className="button primary" aria-label="Replace thumbnail">
-                      {thumbnailInput}
-                      <Icon name="upload-fill" />
-                    </label>
-                  </WithTooltip>
+                <div style={{ position: "absolute", top: "50%", left: "50%", transform: "translate(-50%, -50%)" }}>
+                  <LoadingSpinner className="size-16" />
                 </div>
               </figure>
-            )
-          ) : (
-            <div className="preview">
-              <Placeholder>
-                <label className="button primary">
-                  {thumbnailInput}
-                  <Icon name="upload-fill" />
-                  Upload a thumbnail
-                </label>
-                <div>
-                  The thumbnail image is shown as a preview in the embedded video player. Your image should have a 16:9
-                  aspect ratio, at least 1280x720px, and be in JPG, PNG, or GIF format.
+            ) : file.thumbnail ? (
+              showingVideoPlayer ? (
+                <div className="preview">
+                  <div id={`${uid}-video`}></div>
                 </div>
-                <Separator>or</Separator>
-                <div>
-                  <Button onClick={generateThumbnail}>Generate a thumbnail</Button>
-                </div>
-              </Placeholder>
-            </div>
-          )
+              ) : (
+                <figure className="preview">
+                  <img
+                    src={file.thumbnail.url}
+                    style={{
+                      position: "absolute",
+                      height: "100%",
+                      objectFit: "cover",
+                      borderRadius: "var(--border-radius-1) var(--border-radius-1) 0 0",
+                    }}
+                  />
+                  <button
+                    className="underline"
+                    style={{
+                      position: "absolute",
+                      top: "50%",
+                      left: "50%",
+                      transform: "translate(-50%, -50%)",
+                    }}
+                    onClick={() => setShowingVideoPlayer(true)}
+                    aria-label="Watch"
+                  >
+                    <PlayVideoIcon />
+                  </button>
+                  <div style={{ position: "absolute", top: "var(--spacer-5)", right: "var(--spacer-5)" }}>
+                    <WithTooltip tip="Replace thumbnail">
+                      <label className="button primary" aria-label="Replace thumbnail">
+                        {thumbnailInput}
+                        <Icon name="upload-fill" />
+                      </label>
+                    </WithTooltip>
+                  </div>
+                </figure>
+              )
+            ) : (
+              <div className="preview">
+                <Placeholder>
+                  <label className="button primary">
+                    {thumbnailInput}
+                    <Icon name="upload-fill" />
+                    Upload a thumbnail
+                  </label>
+                  <div>
+                    The thumbnail image is shown as a preview in the embedded video player. Your image should have a
+                    16:9 aspect ratio, at least 1280x720px, and be in JPG, PNG, or GIF format.
+                  </div>
+                  <Separator>or</Separator>
+                  <div>
+                    <Button onClick={generateThumbnail}>Generate a thumbnail</Button>
+                  </div>
+                </Placeholder>
+              </div>
+            )}
+          </RowDetails>
         ) : null}
         <NodeActionsMenu
           editor={editor}
           actions={!isInGroup || fileEmbedGroups.length > 0 || parentNode.childCount > 1 ? [folderAction] : []}
         />
-        <div className="content">
+        <RowContent className="content">
           {file.is_streamable && node.attrs.collapsed ? (
             <label className="thumbnail" aria-label="Upload a thumbnail">
               {loadingVideo ? (
@@ -476,9 +479,9 @@ const FileEmbedNodeView = ({ node, editor, getPos, updateAttributes }: NodeViewP
               </>
             }
           />
-        </div>
+        </RowContent>
 
-        <div className="actions">
+        <RowActions>
           {downloadUrl && !file.stream_only ? (
             <NavigationButton
               href={downloadUrl}
@@ -560,16 +563,22 @@ const FileEmbedNodeView = ({ node, editor, getPos, updateAttributes }: NodeViewP
               {showingVideoPlayer ? "Close" : "Play"}
             </Button>
           ) : null}
-        </div>
+        </RowActions>
 
         {file.description?.trim() && !expanded ? (
-          <p style={{ marginLeft: "var(--spacer-2)", whiteSpace: "pre-wrap" }}>{file.description}</p>
+          <RowDetails>
+            <p className="ml-2 whitespace-pre-wrap">{file.description}</p>
+          </RowDetails>
         ) : null}
 
-        {showingAudioDrawer && downloadUrl ? <AudioPlayer src={downloadUrl} /> : null}
+        {showingAudioDrawer && downloadUrl ? (
+          <RowDetails>
+            <AudioPlayer src={downloadUrl} />
+          </RowDetails>
+        ) : null}
 
         {expanded ? (
-          <div className="drawer flex flex-col gap-4">
+          <RowDetails className="drawer flex flex-col gap-4">
             <fieldset>
               <legend>
                 <label htmlFor={`${uid}name`}>Name</label>
@@ -661,9 +670,9 @@ const FileEmbedNodeView = ({ node, editor, getPos, updateAttributes }: NodeViewP
                 </label>
               </>
             ) : null}
-          </div>
+          </RowDetails>
         ) : null}
-      </div>
+      </Row>
       {isDropZone ? (
         <div className="absolute inset-0 bg-backdrop">
           <div className="button primary absolute top-1/2 left-1/2 -translate-1/2">Create folder with 2 items</div>

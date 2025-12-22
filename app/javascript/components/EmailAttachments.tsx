@@ -15,6 +15,7 @@ import { SubtitleList } from "$app/components/SubtitleList";
 import { SubtitleFile } from "$app/components/SubtitleList/Row";
 import { SubtitleUploadBox } from "$app/components/SubtitleUploadBox";
 import { Toggle } from "$app/components/Toggle";
+import { Row, RowActions, RowContent, RowDetails, Rows } from "$app/components/ui/Rows";
 import { UploadProgress } from "$app/components/useConfigureEvaporate";
 import { WithTooltip } from "$app/components/WithTooltip";
 
@@ -97,8 +98,8 @@ export const FileRow = ({ file }: { file: FileState }) => {
       : null;
 
   return (
-    <div role="listitem">
-      <div className="content">
+    <Row role="listitem">
+      <RowContent>
         <FileRowContent
           name={file.file_name}
           extension={file.extension}
@@ -117,8 +118,8 @@ export const FileRow = ({ file }: { file: FileState }) => {
             </>
           }
         />
-      </div>
-      <div className="actions">
+      </RowContent>
+      <RowActions>
         {file.is_streamable ? (
           <Button onClick={() => setIsDrawerOpen(!isDrawerOpen)} aria-label="Edit">
             <Icon name="pencil" />
@@ -137,41 +138,43 @@ export const FileRow = ({ file }: { file: FileState }) => {
             <Icon name="trash2" />
           </Button>
         </WithTooltip>
-      </div>
+      </RowActions>
       {isDrawerOpen ? (
-        <Drawer>
-          {file.is_streamable ? (
-            <div className="grid gap-3">
-              <SubtitleList
-                subtitleFiles={file.subtitle_files}
-                onRemoveSubtitle={(subtitleUrl) =>
-                  filesDispatch({ type: "remove-subtitle", fileId: file.id, subtitleUrl })
-                }
-                onCancelSubtitleUpload={(subtitleUrl) => {
-                  uploader?.cancelUpload(uploadingSubtitleFileCancellationKey(file.id, subtitleUrl));
-                  filesDispatch({ type: "remove-subtitle", fileId: file.id, subtitleUrl });
-                }}
-                onChangeSubtitleLanguage={(subtitleUrl, language) =>
-                  filesDispatch({ type: "change-subtitle-language", fileId: file.id, subtitleUrl, language })
-                }
-              />
-              <SubtitleUploadBox
-                onUploadFiles={(subtitleFiles) => {
-                  if (uploadSubtitles) {
-                    uploadSubtitles(file.id, subtitleFiles);
-                  } else {
-                    showAlert(
-                      "Unfortunately, file uploads aren't supported in your browser. Please update to the latest version and try again.",
-                      "error",
-                    );
+        <RowDetails asChild>
+          <Drawer>
+            {file.is_streamable ? (
+              <div className="grid gap-3">
+                <SubtitleList
+                  subtitleFiles={file.subtitle_files}
+                  onRemoveSubtitle={(subtitleUrl) =>
+                    filesDispatch({ type: "remove-subtitle", fileId: file.id, subtitleUrl })
                   }
-                }}
-              />
-            </div>
-          ) : null}
-        </Drawer>
+                  onCancelSubtitleUpload={(subtitleUrl) => {
+                    uploader?.cancelUpload(uploadingSubtitleFileCancellationKey(file.id, subtitleUrl));
+                    filesDispatch({ type: "remove-subtitle", fileId: file.id, subtitleUrl });
+                  }}
+                  onChangeSubtitleLanguage={(subtitleUrl, language) =>
+                    filesDispatch({ type: "change-subtitle-language", fileId: file.id, subtitleUrl, language })
+                  }
+                />
+                <SubtitleUploadBox
+                  onUploadFiles={(subtitleFiles) => {
+                    if (uploadSubtitles) {
+                      uploadSubtitles(file.id, subtitleFiles);
+                    } else {
+                      showAlert(
+                        "Unfortunately, file uploads aren't supported in your browser. Please update to the latest version and try again.",
+                        "error",
+                      );
+                    }
+                  }}
+                />
+              </div>
+            ) : null}
+          </Drawer>
+        </RowDetails>
       ) : null}
-    </div>
+    </Row>
   );
 };
 
@@ -203,11 +206,11 @@ export const EmailAttachments = ({
   return (
     <>
       {files.length > 0 ? (
-        <div role="list" className="rows" aria-label="Files">
+        <Rows role="list" aria-label="Files">
           {files.map((file) => (
             <FileRow key={file.id} file={file} />
           ))}
-        </div>
+        </Rows>
       ) : null}
       <label className="button primary">
         <input type="file" name="file" tabIndex={-1} multiple onChange={(e) => onAttachFiles(e.target)} />

@@ -68,4 +68,41 @@ describe License do
       expect { license.enable! }.to raise_error(ActiveRecord::RecordInvalid)
     end
   end
+
+  describe "#rotate!" do
+    let(:license) { create(:license) }
+
+    it "generates a new serial key" do
+      old_serial = license.serial
+      expect(license.rotate!).to be(true)
+      expect(license.reload.serial).not_to eq old_serial
+      expect(license.serial).to match(/\A.{8}-.{8}-.{8}-.{8}\z/)
+    end
+  end
+
+  describe "paper_trail versioning" do
+    with_versioning do
+      let(:license) { create(:license) }
+
+      it "tracks changes to disabled_at when disabling" do
+        expect { license.disable! }.to change { license.versions.count }.by(1)
+        expect(license.versions.last.changeset).to have_key("disabled_at")
+      end
+
+      it "tracks changes to disabled_at when enabling" do
+        license.disable!
+        expect { license.enable! }.to change { license.versions.count }.by(1)
+        expect(license.versions.last.changeset).to have_key("disabled_at")
+      end
+
+      it "tracks changes to serial when rotating" do
+        expect { license.rotate! }.to change { license.versions.count }.by(1)
+        expect(license.versions.last.changeset).to have_key("serial")
+      end
+
+      it "does not track changes to uses" do
+        expect { license.increment!(:uses) }.not_to change { license.versions.count }
+      end
+    end
+  end
 end

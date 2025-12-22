@@ -37,7 +37,9 @@ import { LoadingSpinner } from "$app/components/LoadingSpinner";
 import { NumberInput } from "$app/components/NumberInput";
 import { PriceInput } from "$app/components/PriceInput";
 import { TypeSafeOptionSelect } from "$app/components/TypeSafeOptionSelect";
+import { Alert } from "$app/components/ui/Alert";
 import { Calendar } from "$app/components/ui/Calendar";
+import { Pill } from "$app/components/ui/Pill";
 import { useRunOnce } from "$app/components/useRunOnce";
 
 const PWYWInput = React.forwardRef<
@@ -239,12 +241,12 @@ export const OptionRadioButton = ({
       style={recurrence ? { flexDirection: "column" } : undefined}
     >
       {status ? (
-        <div role="status" className="info">
+        <Alert role="status" variant="info">
           {status}
-        </div>
+        </Alert>
       ) : null}
       {hidePrice ? null : (
-        <div className="pill">
+        <Pill>
           {discountedPriceCents < priceCents ? (
             <>
               <s>{formatPriceCentsWithCurrencySymbol(currencyCode, priceCents, { symbolFormat: "long" })}</s>{" "}
@@ -261,7 +263,7 @@ export const OptionRadioButton = ({
           <div itemProp="priceCurrency" hidden>
             {currencyCode}
           </div>
-        </div>
+        </Pill>
       )}
       <div>
         <h4>{name}</h4>
@@ -394,9 +396,9 @@ const CallDateAndTimeSelector = ({
 
   if (firstAvailableStartTime === null && !isLoading) {
     return (
-      <div role="status" className="warning">
+      <Alert role="status" variant="warning">
         {product.options.length > 1 ? "There are no available times for this option." : "There are no available times."}
-      </div>
+      </Alert>
     );
   }
 
@@ -693,7 +695,10 @@ export const ConfigurationSelector = React.forwardRef<
                     !option.recurrence_price_values?.[selection.recurrence])
                 }
                 selected={option.id === selection.optionId}
-                onClick={() => update({ optionId: option.id, price: { value: null, error: false } })}
+                onClick={() => {
+                  if (option.id === selection.optionId) return;
+                  update({ optionId: option.id, price: { value: null, error: false } });
+                }}
                 priceCents={basePriceCents + computeOptionPrice(option, selection.recurrence)}
                 name={option.name}
                 description={option.description}
