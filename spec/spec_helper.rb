@@ -307,6 +307,12 @@ RSpec.configure do |config|
     JSErrorReporter.instance.reset!
   end
 
+  # checkout page fetches Braintree client token for PayPal button rendering.
+  # but we don't use paypal in system tests for checkout, so we don't need to generate a real token.
+  config.before(:each, type: :system, js: true) do
+    allow(Braintree::ClientToken).to receive(:generate).and_return("dummy_braintree_client_token")
+  end
+
   config.before(:each) do
     # Needs to be a valid URL that returns 200 OK when accessed externally, otherwise requests to Stripe will error out.
     allow_any_instance_of(User).to receive(:business_profile_url).and_return("https://vipul.gumroad.com/")
