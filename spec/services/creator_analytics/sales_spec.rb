@@ -209,7 +209,6 @@ describe CreatorAnalytics::Sales, "DST handling" do
 
       result = service.by_product_and_date
 
-
       expect(result[[product.id, "2025-03-08"]]).to be_present
       expect(result[[product.id, "2025-03-10"]]).to be_present
     end
