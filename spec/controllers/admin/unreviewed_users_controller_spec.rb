@@ -104,7 +104,7 @@ describe Admin::UnreviewedUsersController, type: :controller, inertia: true do
           get :index
 
           expect(inertia.props[:users]).to be_empty
-          expect(inertia.props[:total_count]).to eq(0)
+          expect(inertia.props[:total_count]).to eq(1)
         end
       end
 

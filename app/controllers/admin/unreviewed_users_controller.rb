@@ -24,7 +24,7 @@ class Admin::UnreviewedUsersController < Admin::BaseController
     render inertia: "Admin/UnreviewedUsers/Index",
            props: {
              users: still_unreviewed_users,
-             total_count: still_unreviewed_users.size,
+             total_count: cached_data[:total_count],
              cutoff_date: cached_data[:cutoff_date]
            }
   end

@@ -48,7 +48,8 @@ const UnreviewedUsersPage = () => {
   return (
     <div className="flex flex-col gap-4">
       <div className="text-sm text-muted">
-        Top {total_count.toLocaleString()} unreviewed users with unpaid balance &gt; $10 (created since {cutoff_date})
+        Top {users.length.toLocaleString()} of {total_count.toLocaleString()} unreviewed users with unpaid balance &gt;
+        $10 (created since {cutoff_date})
       </div>
       <Table>
         <TableHeader>

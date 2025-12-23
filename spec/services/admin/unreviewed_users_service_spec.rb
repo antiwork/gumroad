@@ -3,6 +3,24 @@
 require "spec_helper"
 
 describe Admin::UnreviewedUsersService do
+  describe "#count" do
+    it "returns the total count of unreviewed users with unpaid balance" do
+      2.times do
+        user = create(:user, user_risk_state: "not_reviewed", created_at: 1.year.ago)
+        create(:balance, user:, amount_cents: 5000)
+      end
+
+      expect(described_class.new.count).to eq(2)
+    end
+
+    it "excludes users with balance <= $10" do
+      user = create(:user, user_risk_state: "not_reviewed", created_at: 1.year.ago)
+      create(:balance, user:, amount_cents: 500)
+
+      expect(described_class.new.count).to eq(0)
+    end
+  end
+
   describe "#users_with_unpaid_balance" do
     it "returns users ordered by total balance descending" do
       low_balance_user = create(:user, user_risk_state: "not_reviewed", created_at: 1.year.ago)
@@ -115,7 +133,7 @@ describe Admin::UnreviewedUsersService do
       expect(cached[:users].first[:id]).to eq(user.id)
     end
 
-    it "limits to MAX_CACHED_USERS" do
+    it "limits cached users to MAX_CACHED_USERS but total_count reflects true total" do
       stub_const("Admin::UnreviewedUsersService::MAX_CACHED_USERS", 2)
 
       3.times do |i|
@@ -126,6 +144,7 @@ describe Admin::UnreviewedUsersService do
       result = described_class.cache_users_data!
 
       expect(result[:users].size).to eq(2)
+      expect(result[:total_count]).to eq(3)
     end
   end
 

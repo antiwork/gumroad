@@ -11,6 +11,10 @@ class Admin::UnreviewedUsersService
     @cutoff_date = cutoff_date || DEFAULT_CUTOFF_YEARS.years.ago.to_date
   end
 
+  def count
+    base_scope.count.size
+  end
+
   def users_with_unpaid_balance(limit: nil)
     scope = base_scope
       .order(Arel.sql("SUM(balances.amount_cents) DESC"))
@@ -36,7 +40,7 @@ class Admin::UnreviewedUsersService
 
     cache_payload = {
       users: users_data,
-      total_count: users_data.size,
+      total_count: service.count,
       cutoff_date: service.cutoff_date.to_s,
       cached_at: Time.current.iso8601
     }
