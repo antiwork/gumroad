@@ -42,7 +42,7 @@ describe "Admin::UnreviewedUsersController", type: :system, js: true do
       it "links to the user's admin page" do
         visit admin_unreviewed_users_path
 
-        expect(page).to have_link(user_with_balance.id.to_s, href: admin_user_path(user_with_balance))
+        expect(page).to have_link(user_with_balance.external_id, href: admin_user_path(user_with_balance.external_id))
       end
 
       it "shows the cutoff date in the summary" do

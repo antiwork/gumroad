@@ -55,7 +55,7 @@ const UnreviewedUsersPage = () => {
       <Table>
         <TableHeader>
           <TableRow>
-            <TableHead>User ID</TableHead>
+            <TableHead>User</TableHead>
             <TableHead>Name</TableHead>
             <TableHead>Email</TableHead>
             <TableHead>Revenue sources</TableHead>
@@ -64,10 +64,10 @@ const UnreviewedUsersPage = () => {
         </TableHeader>
         <TableBody>
           {users.map((user) => (
-            <TableRow key={user.id}>
+            <TableRow key={user.external_id}>
               <TableCell>
                 <Link href={user.admin_url} className="text-accent hover:underline">
-                  {user.id}
+                  {user.external_id}
                 </Link>
               </TableCell>
               <TableCell>

@@ -62,7 +62,7 @@ class Admin::UnreviewedUsersController < Admin::BaseController
         email: user.email,
         unpaid_balance_cents: user.total_balance_cents.to_i,
         revenue_sources: revenue_sources_for_user(user),
-        admin_url: admin_user_path(user),
+        admin_url: admin_user_path(user.external_id),
         created_at: user.created_at.iso8601
       }
     end

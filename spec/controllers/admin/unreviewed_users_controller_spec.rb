@@ -107,7 +107,7 @@ describe Admin::UnreviewedUsersController, type: :controller, inertia: true do
           expect(user_data[:id]).to eq(unreviewed_user_with_balance.id)
           expect(user_data[:email]).to eq(unreviewed_user_with_balance.email)
           expect(user_data[:unpaid_balance_cents]).to eq(5000)
-          expect(user_data[:admin_url]).to eq(admin_user_path(unreviewed_user_with_balance))
+          expect(user_data[:admin_url]).to eq(admin_user_path(unreviewed_user_with_balance.external_id))
         end
 
         it "orders users by unpaid balance descending" do
