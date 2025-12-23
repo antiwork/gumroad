@@ -7,18 +7,15 @@ class Admin::UnreviewedUsersController < Admin::BaseController
     cached_data = Admin::UnreviewedUsersService.cached_users_data
 
     if cached_data.nil?
-      # No cached data yet, render empty state
       render inertia: "Admin/UnreviewedUsers/Index",
              props: {
                users: [],
                total_count: 0,
-               cutoff_date: Admin::UnreviewedUsersService::DEFAULT_CUTOFF_YEARS.years.ago.to_date.to_s,
-               cached_at: nil
+               cutoff_date: Admin::UnreviewedUsersService::DEFAULT_CUTOFF_YEARS.years.ago.to_date.to_s
              }
       return
     end
 
-    # Sanity check: filter out users who are no longer not_reviewed
     user_ids = cached_data[:users].map { |u| u[:id] }
     still_unreviewed_ids = User.where(id: user_ids, user_risk_state: "not_reviewed").pluck(:id).to_set
 
@@ -28,8 +25,7 @@ class Admin::UnreviewedUsersController < Admin::BaseController
            props: {
              users: still_unreviewed_users,
              total_count: still_unreviewed_users.size,
-             cutoff_date: cached_data[:cutoff_date],
-             cached_at: cached_data[:cached_at]
+             cutoff_date: cached_data[:cutoff_date]
            }
   end
 end

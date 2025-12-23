@@ -54,7 +54,6 @@ describe Admin::UnreviewedUsersController, type: :controller, inertia: true do
           expect(inertia.component).to eq "Admin/UnreviewedUsers/Index"
           expect(inertia.props[:users]).to be_empty
           expect(inertia.props[:total_count]).to eq(0)
-          expect(inertia.props[:cached_at]).to be_nil
         end
       end
 
@@ -87,15 +86,9 @@ describe Admin::UnreviewedUsersController, type: :controller, inertia: true do
 
           expect(inertia.props[:cutoff_date]).to eq(2.years.ago.to_date.to_s)
         end
-
-        it "returns cached_at timestamp" do
-          get :index
-
-          expect(inertia.props[:cached_at]).to be_present
-        end
       end
 
-      context "sanity check - filters out users no longer unreviewed" do
+      context "filters out users no longer unreviewed" do
         let!(:user) do
           create(:user, user_risk_state: "not_reviewed", created_at: 1.year.ago)
         end

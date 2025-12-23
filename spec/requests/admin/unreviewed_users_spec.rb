@@ -58,12 +58,6 @@ describe "Admin::UnreviewedUsersController", type: :system, js: true do
 
         expect(page).to have_text("created since #{2.years.ago.to_date}")
       end
-
-      it "shows last updated timestamp" do
-        visit admin_unreviewed_users_path
-
-        expect(page).to have_text("Last updated:")
-      end
     end
 
     context "with revenue source badges" do
@@ -106,7 +100,7 @@ describe "Admin::UnreviewedUsersController", type: :system, js: true do
       end
     end
 
-    context "sanity check - filters out reviewed users" do
+    context "filters out reviewed users" do
       let!(:user) do
         create(:user, user_risk_state: "not_reviewed", created_at: 1.year.ago)
       end

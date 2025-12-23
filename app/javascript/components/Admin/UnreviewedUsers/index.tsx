@@ -23,7 +23,6 @@ type PageProps = {
   users: UnreviewedUser[];
   total_count: number;
   cutoff_date: string;
-  cached_at: string | null;
 };
 
 const RevenueBadge = ({ type }: { type: RevenueSource }) => {
@@ -39,14 +38,8 @@ const RevenueBadge = ({ type }: { type: RevenueSource }) => {
   );
 };
 
-const formatCachedAt = (cachedAt: string | null) => {
-  if (!cachedAt) return null;
-  const date = new Date(cachedAt);
-  return date.toLocaleString();
-};
-
 const UnreviewedUsersPage = () => {
-  const { users, total_count, cutoff_date, cached_at } = usePage<PageProps>().props;
+  const { users, total_count, cutoff_date } = usePage<PageProps>().props;
 
   if (users.length === 0) {
     return <EmptyState message="No unreviewed users with unpaid balance found." />;
@@ -56,7 +49,6 @@ const UnreviewedUsersPage = () => {
     <div className="flex flex-col gap-4">
       <div className="text-sm text-muted">
         Top {total_count.toLocaleString()} unreviewed users with unpaid balance &gt; $10 (created since {cutoff_date})
-        {cached_at ? <span className="ml-2">• Last updated: {formatCachedAt(cached_at)}</span> : null}
       </div>
       <Table>
         <TableHeader>
