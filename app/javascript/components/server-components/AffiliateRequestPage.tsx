@@ -12,6 +12,7 @@ import { useAppDomain } from "$app/components/DomainSettings";
 import { useLoggedInUser } from "$app/components/LoggedInUser";
 import { Layout } from "$app/components/Profile/Layout";
 import { showAlert } from "$app/components/server-components/Alert";
+import { Alert } from "$app/components/ui/Alert";
 import { PageHeader } from "$app/components/ui/PageHeader";
 
 type FormStatus =
@@ -72,7 +73,7 @@ const AffiliateRequestPage = ({ creator_profile }: Props) => {
             </div>
           </header>
           {formStatus.type === "success" ? (
-            <div role="alert" className="success">
+            <Alert variant="success">
               <div className="flex flex-col gap-4">
                 <p>Your request has been submitted! We will send you an email notification when you are approved.</p>
                 {formStatus.requesterHasExistingAccount ? null : (
@@ -83,7 +84,7 @@ const AffiliateRequestPage = ({ creator_profile }: Props) => {
                   </p>
                 )}
               </div>
-            </div>
+            </Alert>
           ) : (
             <>
               {loggedInUser?.name ? null : (

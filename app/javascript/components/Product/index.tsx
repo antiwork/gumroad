@@ -68,6 +68,7 @@ import { showAlert } from "$app/components/server-components/Alert";
 import { PublicFileEmbed } from "$app/components/TiptapExtensions/PublicFileEmbed";
 import { ReviewCard } from "$app/components/TiptapExtensions/ReviewCard";
 import { UpsellCard } from "$app/components/TiptapExtensions/UpsellCard";
+import { Alert } from "$app/components/ui/Alert";
 import { useAddThirdPartyAnalytics } from "$app/components/useAddThirdPartyAnalytics";
 import { useOnChange } from "$app/components/useOnChange";
 import { useOriginalLocation } from "$app/components/useOriginalLocation";
@@ -450,19 +451,19 @@ export const Product = ({
       <section>
         <section className="grid gap-4 p-6 not-first:border-t">
           {notForSaleMessage ? (
-            <div role="status" className="warning">
+            <Alert role="status" variant="warning">
               {notForSaleMessage}
-            </div>
+            </Alert>
           ) : product.native_type === "commission" ? (
-            <div role="status" className="info">
+            <Alert role="status" variant="info">
               Secure your order with a {`${COMMISSION_DEPOSIT_PROPORTION * 100}%`} deposit today; the remaining balance
               will be charged upon completion.
-            </div>
+            </Alert>
           ) : null}
           {discountCode ? (
             discountCode.valid ? (
               (discountedPriceCents < priceCents || discountCode.discount.minimum_quantity) && !pppDiscounted ? (
-                <div role="status" className="success">
+                <Alert role="status" variant="success">
                   <div className="flex flex-col gap-4">
                     {discountCode.discount.minimum_quantity
                       ? `Get ${
@@ -506,16 +507,16 @@ export const Product = ({
                       />
                     ) : null}
                   </div>
-                </div>
+                </Alert>
               ) : null
             ) : (
-              <div role="status" className="danger">
+              <Alert role="status" variant="danger">
                 {discountCode.error_code === "sold_out"
                   ? "Sorry, the discount code you wish to use has expired."
                   : discountCode.error_code === "invalid_offer"
                     ? "Sorry, the discount code you wish to use is invalid."
                     : "Sorry, the discount code you wish to use is inactive."}
-              </div>
+              </Alert>
             )
           ) : null}
           <ConfigurationSelector
@@ -526,39 +527,37 @@ export const Product = ({
             ref={configurationSelectorRef}
           />
           {product.ppp_details && pppDiscounted ? (
-            <div role="status" className="info">
-              <div>
-                This product supports purchasing power parity. Because you're located in{" "}
-                <b>{product.ppp_details.country}</b>, the price has been discounted by{" "}
-                <b>
-                  {(Math.round((1 - discountedPriceCents / priceCents) * 100) / 100).toLocaleString(undefined, {
-                    style: "percent",
-                  })}
-                </b>{" "}
-                to{" "}
-                <b>
-                  {formatPriceCentsWithCurrencySymbol(product.currency_code, discountedPriceCents, {
-                    symbolFormat: "long",
-                  })}
-                </b>
-                .
-                {discountCode?.valid
-                  ? " This discount will be applied because it is greater than the offer code discount."
-                  : null}
-              </div>
-            </div>
+            <Alert role="status" variant="info">
+              This product supports purchasing power parity. Because you're located in{" "}
+              <b>{product.ppp_details.country}</b>, the price has been discounted by{" "}
+              <b>
+                {(Math.round((1 - discountedPriceCents / priceCents) * 100) / 100).toLocaleString(undefined, {
+                  style: "percent",
+                })}
+              </b>{" "}
+              to{" "}
+              <b>
+                {formatPriceCentsWithCurrencySymbol(product.currency_code, discountedPriceCents, {
+                  symbolFormat: "long",
+                })}
+              </b>
+              .
+              {discountCode?.valid
+                ? " This discount will be applied because it is greater than the offer code discount."
+                : null}
+            </Alert>
           ) : null}
           {product.free_trial ? (
-            <div role="status" className="info">
+            <Alert role="status" variant="info">
               All memberships include a {product.free_trial.duration.amount} {product.free_trial.duration.unit} free
               trial
-            </div>
+            </Alert>
           ) : null}
           {product.duration_in_months ? (
-            <div role="status" className="info">
+            <Alert role="status" variant="info">
               This membership will automatically end after{" "}
               {product.duration_in_months === 1 ? "one month" : `${product.duration_in_months} months`}
-            </div>
+            </Alert>
           ) : null}
           <CtaButton
             ref={ctaButtonRef}
@@ -573,29 +572,27 @@ export const Product = ({
             }}
           />
           {product.sales_count !== null ? (
-            <div role="status" className="info">
-              <span>
-                <strong>{product.sales_count.toLocaleString()}</strong>{" "}
-                {product.recurrences
-                  ? "member"
-                  : product.preorder
-                    ? "pre-order"
-                    : product.price_cents > 0 || product.options.some((option) => option.price_difference_cents)
-                      ? "sale"
-                      : "download"}
-                {product.sales_count === 1 ? "" : "s"}
-              </span>
-            </div>
+            <Alert role="status" variant="info">
+              <strong>{product.sales_count.toLocaleString()}</strong>{" "}
+              {product.recurrences
+                ? "member"
+                : product.preorder
+                  ? "pre-order"
+                  : product.price_cents > 0 || product.options.some((option) => option.price_difference_cents)
+                    ? "sale"
+                    : "download"}
+              {product.sales_count === 1 ? "" : "s"}
+            </Alert>
           ) : null}
           {product.preorder ? (
-            <div role="status" className="info">
+            <Alert role="status" variant="info">
               Available on {formatDate(parseISO(product.preorder.release_date))}
-            </div>
+            </Alert>
           ) : null}
           {product.streamable ? (
-            <div role="status" className="info">
+            <Alert role="status" variant="info">
               Watch link provided after purchase
-            </div>
+            </Alert>
           ) : null}
           {product.summary || product.attributes.length > 0 ? (
             <div className="stack">

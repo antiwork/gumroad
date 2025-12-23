@@ -29,6 +29,7 @@ import { Modal } from "$app/components/Modal";
 import { Option, Select } from "$app/components/Select";
 import { showAlert } from "$app/components/server-components/Alert";
 import { Layout as SettingsLayout } from "$app/components/Settings/Layout";
+import { Alert } from "$app/components/ui/Alert";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "$app/components/ui/Table";
 import { WithTooltip } from "$app/components/WithTooltip";
 
@@ -267,31 +268,31 @@ const TeamMembersSection = ({
         <h2 ref={ref}>Team members</h2>
       </header>
       {deletedMember ? (
-        <div role="alert" className="success">
-          <div>
+        <Alert variant="success">
+          <div className="flex flex-col justify-between sm:flex-row">
             {deletedMember.name !== "" ? deletedMember.name : deletedMember.email} was removed from team members
+            <button
+              className="underline"
+              type="button"
+              onClick={asyncVoid(async () => {
+                try {
+                  await restoreMember(deletedMember);
+                  refreshMemberInfos();
+                  showAlert(
+                    `${deletedMember.name !== "" ? deletedMember.name : deletedMember.email} was added back to the team`,
+                    "success",
+                  );
+                  setDeletedMember(null);
+                } catch (e) {
+                  assertResponseError(e);
+                  showAlert(e.message, "error");
+                }
+              })}
+            >
+              Undo
+            </button>
           </div>
-          <button
-            className="close underline"
-            type="button"
-            onClick={asyncVoid(async () => {
-              try {
-                await restoreMember(deletedMember);
-                refreshMemberInfos();
-                showAlert(
-                  `${deletedMember.name !== "" ? deletedMember.name : deletedMember.email} was added back to the team`,
-                  "success",
-                );
-                setDeletedMember(null);
-              } catch (e) {
-                assertResponseError(e);
-                showAlert(e.message, "error");
-              }
-            })}
-          >
-            Undo
-          </button>
-        </div>
+        </Alert>
       ) : null}
       <Table>
         <TableHeader>

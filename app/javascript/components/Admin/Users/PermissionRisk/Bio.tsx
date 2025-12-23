@@ -1,6 +1,7 @@
 import React from "react";
 
 import type { User } from "$app/components/Admin/Users/User";
+import { Alert } from "$app/components/ui/Alert";
 
 type BioProps = {
   user: User;
@@ -16,9 +17,9 @@ const Bio = ({ user }: BioProps) => (
       {user.bio ? (
         <div>{user.bio}</div>
       ) : (
-        <div className="info" role="status">
+        <Alert role="status" variant="info">
           No bio provided.
-        </div>
+        </Alert>
       )}
     </details>
   </>
