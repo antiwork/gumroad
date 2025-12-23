@@ -25,6 +25,7 @@ import {
   CartItemQuantity,
   CartItemActions,
 } from "$app/components/CartItemList";
+import { GiftForm } from "$app/components/Checkout/GiftForm";
 import { PaymentForm } from "$app/components/Checkout/PaymentForm";
 import { Icon } from "$app/components/Icons";
 import { Popover } from "$app/components/Popover";
@@ -225,6 +226,8 @@ export const Checkout = ({
   }, 0);
 
   const isDesktop = useIsAboveBreakpoint("lg");
+  const displayGiftForm =
+    state.products.length === 1 && state.products[0]?.canGift && !state.products[0]?.payInInstallments;
 
   return (
     <div className="mx-auto w-full max-w-product-page">
@@ -239,7 +242,7 @@ export const Checkout = ({
         <div className="grid gap-8 p-4 md:p-8">
           <div className="grid grid-cols-1 items-start gap-x-16 gap-y-8 lg:grid-cols-[2fr_minmax(26rem,1fr)]">
             <div className="grid gap-6">
-              <CartItemList>
+              <CartItemList className={classNames(displayGiftForm && "rounded-b-none border-b-0")}>
                 {cart.items.map((item) => (
                   <CartItemComponent
                     key={`${item.product.permalink}${item.option_id ? `_${item.option_id}` : ""}`}
@@ -250,6 +253,11 @@ export const Checkout = ({
                   />
                 ))}
               </CartItemList>
+              {displayGiftForm ? (
+                <CartItemList className="-mt-6 rounded-t-none px-3 sm:px-5">
+                  <GiftForm isMembership={state.products[0]?.nativeType === "membership"} />
+                </CartItemList>
+              ) : null}
               <CartItemList>
                 <div className="grid gap-4 border-border p-4">
                   {state.surcharges.type === "loaded" ? (

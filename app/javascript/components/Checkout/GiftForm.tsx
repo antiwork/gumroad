@@ -3,7 +3,6 @@ import * as React from "react";
 
 import { Button } from "$app/components/Button";
 import { useState, getErrors } from "$app/components/Checkout/payment";
-import { Icon } from "$app/components/Icons";
 import { Modal } from "$app/components/Modal";
 import { Alert } from "$app/components/ui/Alert";
 
@@ -17,13 +16,10 @@ export const GiftForm = ({ isMembership }: { isMembership: boolean }) => {
   const hasError = getErrors(state).has("gift");
 
   return (
-    <div className="flex flex-col">
-      <label className="flex w-full items-center justify-between">
-        <div className="flex items-center">
-          <Icon name="gift-fill" className="mr-2" />
-          <h4>Give as a gift?</h4>
-        </div>
+    <div className="flex flex-1 flex-col">
+      <label className="flex items-center gap-4 py-3">
         <input
+          className="h-6! w-10! after:size-4.5! checked:after:left-4.5!"
           type="checkbox"
           role="switch"
           checked={!!gift}
@@ -36,10 +32,11 @@ export const GiftForm = ({ isMembership }: { isMembership: boolean }) => {
             }
           }}
         />
+        <h4>Give as a gift?</h4>
       </label>
 
       {gift ? (
-        <div className="flex w-full flex-col gap-4">
+        <div className="flex flex-col gap-4 pt-1 pb-5">
           {isMembership ? (
             <Alert variant="info">
               Note: Free trials will be charged immediately. The membership will not auto-renew. The recipient must
@@ -91,7 +88,7 @@ export const GiftForm = ({ isMembership }: { isMembership: boolean }) => {
               </Modal>
             </Alert>
           )}
-          <fieldset className="w-full">
+          <fieldset>
             <legend>
               <label htmlFor={giftNoteUID}>Message</label>
             </legend>
@@ -100,7 +97,7 @@ export const GiftForm = ({ isMembership }: { isMembership: boolean }) => {
               value={gift.note}
               onChange={(evt) => dispatch({ type: "set-value", gift: { ...gift, note: evt.target.value } })}
               placeholder="A personalized message (optional)"
-              className="w-full"
+              rows={3}
             />
           </fieldset>
         </div>
