@@ -16,4 +16,3 @@ describe CacheUnreviewedUsersDataWorker do
     end
   end
 end
-

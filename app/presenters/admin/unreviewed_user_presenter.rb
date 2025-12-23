@@ -47,4 +47,3 @@ class Admin::UnreviewedUserPresenter
       types
     end
 end
-

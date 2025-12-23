@@ -125,4 +125,3 @@ describe Admin::UnreviewedUserPresenter do
     end
   end
 end
-

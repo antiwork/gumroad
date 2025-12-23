@@ -63,7 +63,7 @@ describe Admin::UnreviewedUsersController, type: :controller, inertia: true do
         end
 
         before do
-          balance = create(:balance, user: unreviewed_user, amount_cents: 5000)
+          create(:balance, user: unreviewed_user, amount_cents: 5000)
           Admin::UnreviewedUsersService.cache_users_data!
         end
 

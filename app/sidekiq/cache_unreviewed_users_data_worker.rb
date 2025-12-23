@@ -8,4 +8,3 @@ class CacheUnreviewedUsersDataWorker
     Admin::UnreviewedUsersService.cache_users_data!
   end
 end
-
