@@ -183,7 +183,8 @@ validate_pr() {
 create_test_branch() {
   local pr_number="$1"
   local head_ref="$2"
-  local new_branch="test/${head_ref}"
+  local timestamp=$(date +"%Y%m%d%H%M%S")
+  local new_branch="ci/${pr_number}-${timestamp}-${head_ref}"
   local current_branch=$(git branch --show-current)
 
   git show-ref --verify --quiet "refs/remotes/origin/$new_branch" && {

@@ -675,7 +675,7 @@ export const CrossSellModal = ({
       <div className="grid gap-4">
         <h4 dangerouslySetInnerHTML={{ __html: crossSell.description }} />
         <ProductCard className="lg:flex-row">
-          <ProductCardFigure className="lg:h-full lg:rounded-l lg:rounded-tr-none lg:border-r lg:border-b-0 lg:[&_img]:w-auto lg:[&_img]:min-w-full">
+          <ProductCardFigure className="lg:w-56 lg:rounded-l lg:rounded-tr-none lg:border-r lg:border-b-0">
             {product.thumbnail_url ? <img src={product.thumbnail_url} /> : null}
           </ProductCardFigure>
           <section className="flex flex-1 flex-col overflow-hidden lg:gap-8 lg:px-6 lg:py-4">

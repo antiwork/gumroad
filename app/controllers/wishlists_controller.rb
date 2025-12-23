@@ -5,7 +5,8 @@ class WishlistsController < ApplicationController
 
   before_action :authenticate_user!, except: :show
   after_action :verify_authorized, except: :show
-  before_action :hide_layouts, only: :show
+
+  layout "inertia", only: [:index, :show]
 
   def index
     authorize Wishlist
@@ -13,7 +14,13 @@ class WishlistsController < ApplicationController
     respond_to do |format|
       format.html do
         @title = Feature.active?(:follow_wishlists, current_seller) ? "Saved" : "Wishlists"
-        @wishlists_props = WishlistPresenter.library_props(wishlists: current_seller.wishlists.alive)
+        wishlists_props = WishlistPresenter.library_props(wishlists: current_seller.wishlists.alive)
+
+        render inertia: "Wishlists/Index", props: {
+          wishlists: wishlists_props,
+          reviews_page_enabled: Feature.active?(:reviews_page, current_seller),
+          following_wishlists_enabled: Feature.active?(:follow_wishlists, current_seller),
+        }
       end
       format.json do
         wishlists = current_seller.wishlists.alive.includes(:products).by_external_ids(params[:ids])
@@ -27,7 +34,10 @@ class WishlistsController < ApplicationController
 
     wishlist = current_seller.wishlists.create!
 
-    render json: { wishlist: WishlistPresenter.new(wishlist:).listing_props }, status: :created
+    respond_to do |format|
+      format.html { redirect_to wishlists_path, notice: "Wishlist created!", status: :see_other }
+      format.json { render json: { wishlist: WishlistPresenter.new(wishlist:).listing_props }, status: :created }
+    end
   end
 
   def show
@@ -37,8 +47,17 @@ class WishlistsController < ApplicationController
     @user = wishlist.user
     @title = wishlist.name
     @show_user_favicon = true
-    @wishlist_presenter = WishlistPresenter.new(wishlist:)
-    @discover_props = { taxonomies_for_nav: } if params[:layout] == Product::Layout::DISCOVER
+
+    layout = params[:layout]
+    props = WishlistPresenter.new(wishlist:).public_props(
+      request:,
+      pundit_user:,
+      recommended_by: params[:recommended_by],
+      layout:,
+      taxonomies_for_nav:
+    )
+
+    render inertia: "Wishlists/Show", props:
   end
 
   def update
@@ -46,9 +65,11 @@ class WishlistsController < ApplicationController
     authorize wishlist
 
     if wishlist.update(params.require(:wishlist).permit(:name, :description, :discover_opted_out))
-      head :no_content
+      redirect_to wishlists_path, notice: "Wishlist updated!", status: :see_other
     else
-      render json: { error: wishlist.errors.full_messages.first }, status: :unprocessable_entity
+      redirect_to wishlists_path,
+                  inertia: { errors: { base: wishlist.errors.full_messages } },
+                  status: :see_other
     end
   end
 
@@ -61,6 +82,6 @@ class WishlistsController < ApplicationController
       wishlist.wishlist_followers.alive.update_all(deleted_at: Time.current)
     end
 
-    head :no_content
+    redirect_to wishlists_path, notice: "Wishlist deleted!", status: :see_other
   end
 end

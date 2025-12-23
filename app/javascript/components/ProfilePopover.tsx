@@ -10,7 +10,7 @@ export const DashboardNavProfilePopover = ({ children, user }: { children: React
     position="top"
     trigger={(open) => (
       <div className="inline-flex px-6 py-4 hover:text-accent">
-        <div className="flex-1">
+        <div className="flex-1 truncate">
           <img
             className="user-avatar mr-3 border border-white! dark:border-foreground/35!"
             src={user?.avatarUrl}

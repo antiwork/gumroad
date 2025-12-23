@@ -17,7 +17,7 @@
     "@helperai/client": "^0.4.5",
     "@helperai/react": "^0.9.5",
     "@inertiajs/progress": "^0.2.7",
-    "@inertiajs/react": "^2.1.2",
+    "@inertiajs/react": "^2.3.4",
     "@paypal/paypal-js": "^8.0.0",
     "@radix-ui/react-dialog": "^1.1.15",
     "@radix-ui/react-slot": "^1.2.3",

@@ -1,9 +1,6 @@
-import * as React from "react";
-import { createCast } from "ts-safe-cast";
-
-import { deleteWishlist, updateWishlist } from "$app/data/wishlists";
-import { assertResponseError } from "$app/utils/request";
-import { register } from "$app/utils/serverComponentUtil";
+import { router, useForm, usePage } from "@inertiajs/react";
+import React from "react";
+import { cast } from "ts-safe-cast";
 
 import { Button } from "$app/components/Button";
 import { Icon } from "$app/components/Icons";
@@ -17,7 +14,7 @@ import { WithTooltip } from "$app/components/WithTooltip";
 
 import placeholder from "$assets/images/placeholders/wishlists.png";
 
-type Wishlist = {
+export type Wishlist = {
   id: string;
   name: string;
   url: string;
@@ -25,46 +22,34 @@ type Wishlist = {
   discover_opted_out: boolean;
 };
 
-const WishlistsPage = ({
-  wishlists: preloadedWishlists,
-  reviews_page_enabled,
-  following_wishlists_enabled,
-}: {
+type Props = {
   wishlists: Wishlist[];
   reviews_page_enabled: boolean;
   following_wishlists_enabled: boolean;
-}) => {
-  const [wishlists, setWishlists] = React.useState<Wishlist[]>(preloadedWishlists);
+};
+
+export default function WishlistsPage() {
+  const { wishlists, reviews_page_enabled, following_wishlists_enabled } = cast<Props>(usePage().props);
   const [deletingWishlist, setConfirmingDeleteWishlist] = React.useState<Wishlist | null>(null);
-  const [isDeleting, setIsDeleting] = React.useState(false);
 
-  const destroy = async (id: string) => {
-    setIsDeleting(true);
-
-    try {
-      await deleteWishlist({ wishlistId: id });
-      setWishlists(wishlists.filter((wishlist) => wishlist.id !== id));
-      setConfirmingDeleteWishlist(null);
-      showAlert("Wishlist deleted!", "success");
-    } catch (e) {
-      assertResponseError(e);
-      showAlert("Sorry, something went wrong. Please try again.", "error");
-    } finally {
-      setIsDeleting(false);
-    }
+  const deleteForm = useForm({});
+  const destroy = (id: string) => {
+    deleteForm.delete(Routes.wishlist_path(id), {
+      preserveScroll: true,
+      onSuccess: () => setConfirmingDeleteWishlist(null),
+      onError: () => showAlert("Sorry, something went wrong. Please try again.", "error"),
+    });
   };
 
-  const updateDiscoverOptOut = async (id: string, optOut: boolean) => {
-    try {
-      setWishlists(
-        wishlists.map((wishlist) => (wishlist.id === id ? { ...wishlist, discover_opted_out: optOut } : wishlist)),
-      );
-      await updateWishlist({ id, discover_opted_out: optOut });
-      showAlert(optOut ? "Opted out of Gumroad Discover." : "Wishlist is now discoverable!", "success");
-    } catch (e) {
-      assertResponseError(e);
-      showAlert("Sorry, something went wrong. Please try again.", "error");
-    }
+  const updateDiscoverOptOut = (id: string, optOut: boolean) => {
+    router.put(
+      Routes.wishlist_path(id),
+      { wishlist: { discover_opted_out: optOut } },
+      {
+        preserveScroll: true,
+        onError: () => showAlert("Sorry, something went wrong. Please try again.", "error"),
+      },
+    );
   };
 
   return (
@@ -111,7 +96,7 @@ const WishlistsPage = ({
                   <TableCell>
                     <Toggle
                       value={!wishlist.discover_opted_out}
-                      onChange={(checked) => void updateDiscoverOptOut(wishlist.id, !checked)}
+                      onChange={(checked) => updateDiscoverOptOut(wishlist.id, !checked)}
                       ariaLabel="Discoverable"
                     />
                   </TableCell>
@@ -152,8 +137,8 @@ const WishlistsPage = ({
             footer={
               <>
                 <Button onClick={() => setConfirmingDeleteWishlist(null)}>No, cancel</Button>
-                <Button color="danger" disabled={isDeleting} onClick={() => void destroy(deletingWishlist.id)}>
-                  {isDeleting ? "Deleting..." : "Yes, delete"}
+                <Button color="danger" disabled={deleteForm.processing} onClick={() => destroy(deletingWishlist.id)}>
+                  {deleteForm.processing ? "Deleting..." : "Yes, delete"}
                 </Button>
               </>
             }
@@ -166,6 +151,4 @@ const WishlistsPage = ({
       </section>
     </Layout>
   );
-};
-
-export default register({ component: WishlistsPage, propParser: createCast() });
+}

@@ -3,9 +3,11 @@
 require "spec_helper"
 require "shared_examples/sellers_base_controller_concern"
 require "shared_examples/authorize_called"
+require "inertia_rails/rspec"
 
-describe Settings::ProfileController, :vcr do
+describe Settings::ProfileController, :vcr, inertia: true do
   let(:seller) { create(:named_seller) }
+  let(:pundit_user) { SellerContext.new(user: user_with_role_for_seller, seller:) }
 
   include_context "with user signed in as admin for seller"
 
@@ -14,17 +16,16 @@ describe Settings::ProfileController, :vcr do
   end
 
   describe "GET show" do
-    it "returns http success and assigns correct instance variables" do
+    it "returns successful response with Inertia page data" do
       get :show
 
       expect(response).to be_successful
-      expect(assigns[:title]).to eq("Settings")
-      profile_presenter = assigns[:profile_presenter]
-      expect(profile_presenter.seller).to eq(seller)
-      expect(profile_presenter.pundit_user).to eq(controller.pundit_user)
-
-      settings_presenter = assigns[:settings_presenter]
-      expect(settings_presenter.pundit_user).to eq(controller.pundit_user)
+      expect(inertia.component).to eq("Settings/Profile/Show")
+      expect(inertia.props).to match(hash_including(
+        SettingsPresenter.new(pundit_user:).profile_props.merge(
+          ProfilePresenter.new(pundit_user:, seller:).profile_settings_props(request:)
+        )
+      ))
     end
   end
 

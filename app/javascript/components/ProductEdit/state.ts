@@ -200,6 +200,7 @@ export const ProductEditContext = React.createContext<{
   setAvailableDiscountCodes: React.Dispatch<React.SetStateAction<AvailableDiscountCode[] | null>>;
   contentUpdates: ContentUpdates;
   setContentUpdates: React.Dispatch<React.SetStateAction<ContentUpdates>>;
+  filesById: Map<string, FileEntry>;
 } | null>(null);
 export const useProductEditContext = () => assertDefined(React.useContext(ProductEditContext));
 
