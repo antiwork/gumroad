@@ -6,7 +6,7 @@ class Admin::UnreviewedUsersController < Admin::BaseController
 
     cached_data = Admin::UnreviewedUsersService.cached_users_data
 
-    if cached_data.nil?
+    if cached_data.blank?
       render inertia: "Admin/UnreviewedUsers/Index",
              props: {
                users: [],
