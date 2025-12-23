@@ -74,7 +74,13 @@ class Admin::UnreviewedUsersController < Admin::BaseController
         types << "sales"
       end
 
-      if user.balances.unpaid.joins(:successful_affiliate_credits).exists?
+      if user.balances.unpaid.joins(successful_affiliate_credits: :affiliate)
+            .where(affiliates: { type: "Collaborator" }).exists?
+        types << "collaborator"
+      end
+
+      if user.balances.unpaid.joins(successful_affiliate_credits: :affiliate)
+            .where.not(affiliates: { type: "Collaborator" }).exists?
         types << "affiliate"
       end
 

@@ -75,6 +75,18 @@ describe "Admin::UnreviewedUsersController", type: :system, js: true do
 
         expect(page).to have_text("affiliate")
       end
+
+      it "shows collaborator badge when user has collaborator credits" do
+        seller = create(:user)
+        product = create(:product, user: seller)
+        collaborator = create(:collaborator, affiliate_user: user, seller: seller, products: [product])
+        purchase = create(:purchase, link: product, affiliate: collaborator)
+        create(:affiliate_credit, affiliate_user: user, seller: seller, purchase:, link: product, affiliate: collaborator, affiliate_credit_success_balance: balance)
+
+        visit admin_unreviewed_users_path
+
+        expect(page).to have_text("collaborator")
+      end
     end
 
     context "with pagination" do

@@ -163,6 +163,21 @@ describe Admin::UnreviewedUsersController, type: :controller, inertia: true do
 
           expect(user_data[:revenue_sources]).to include("affiliate")
         end
+
+        it "includes collaborator badge when user has collaborator credits" do
+          seller = create(:user)
+          product = create(:product, user: seller)
+          collaborator = create(:collaborator, affiliate_user: user, seller: seller, products: [product])
+          purchase = create(:purchase, link: product, affiliate: collaborator)
+          create(:affiliate_credit, affiliate_user: user, seller: seller, purchase:, link: product, affiliate: collaborator, affiliate_credit_success_balance: balance)
+
+          get :index
+
+          user_data = inertia.props[:users].find { |u| u[:id] == user.id }
+
+          expect(user_data[:revenue_sources]).to include("collaborator")
+          expect(user_data[:revenue_sources]).not_to include("affiliate")
+        end
       end
 
       context "with pagination" do

@@ -7,7 +7,7 @@ import EmptyState from "$app/components/Admin/EmptyState";
 import PaginatedLoader, { type Pagination } from "$app/components/Admin/PaginatedLoader";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "$app/components/ui/Table";
 
-type RevenueSource = "sales" | "affiliate" | "credit";
+type RevenueSource = "sales" | "collaborator" | "affiliate" | "credit";
 
 type UnreviewedUser = {
   id: number;
@@ -30,6 +30,7 @@ type PageProps = {
 const RevenueBadge = ({ type }: { type: RevenueSource }) => {
   const styles: Record<RevenueSource, string> = {
     sales: "bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200",
+    collaborator: "bg-orange-100 text-orange-800 dark:bg-orange-900 dark:text-orange-200",
     affiliate: "bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-200",
     credit: "bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200",
   };
