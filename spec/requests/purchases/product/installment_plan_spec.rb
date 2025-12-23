@@ -16,7 +16,7 @@ describe "Product with installment plan", type: :system, js: true do
     within_cart_item product.name do
       expect(page).to have_text("US$10 in 3 installments", normalize_ws: true)
 
-      select_disclosure "Configure" do
+      select_disclosure "Edit" do
         choose "Pay in full"
         click_on "Save changes"
       end
@@ -30,7 +30,7 @@ describe "Product with installment plan", type: :system, js: true do
     within_cart_item product.name do
       expect(page).to_not have_text("in 3 installments")
 
-      select_disclosure "Configure" do
+      select_disclosure "Edit" do
         choose "Pay in 3 installments"
         click_on "Save changes"
       end
@@ -91,7 +91,7 @@ describe "Product with installment plan", type: :system, js: true do
       within_cart_item product.name do
         expect(page).to have_text("US$10 in 3 installments", normalize_ws: true)
 
-        select_disclosure "Configure" do
+        select_disclosure "Edit" do
           choose "Pay in full"
           click_on "Save changes"
         end
@@ -105,7 +105,7 @@ describe "Product with installment plan", type: :system, js: true do
       within_cart_item product.name do
         expect(page).to_not have_text("in 3 installments")
 
-        select_disclosure "Configure" do
+        select_disclosure "Edit" do
           choose "Pay in 3 installments"
           click_on "Save changes"
         end
@@ -176,7 +176,7 @@ describe "Product with installment plan", type: :system, js: true do
       expect(page).to have_field("Give as a gift")
 
       within_cart_item product.name do
-        select_disclosure "Configure" do
+        select_disclosure "Edit" do
           choose "Pay in 3 installments"
           click_on "Save changes"
         end
@@ -406,7 +406,7 @@ describe "Product with installment plan", type: :system, js: true do
       within_cart_item product.name do
         expect(page).to have_text("US$1,723.66 in 3 installments", normalize_ws: true)
 
-        select_disclosure "Configure" do
+        select_disclosure "Edit" do
           choose "Pay in full"
           click_on "Save changes"
         end
@@ -420,7 +420,7 @@ describe "Product with installment plan", type: :system, js: true do
       within_cart_item product.name do
         expect(page).to_not have_text("in 3 installments")
 
-        select_disclosure "Configure" do
+        select_disclosure "Edit" do
           choose "Pay in 3 installments"
           click_on "Save changes"
         end
@@ -486,7 +486,7 @@ describe "Product with installment plan", type: :system, js: true do
         within_cart_item product.name do
           expect(page).to have_text("US$1,723.66 in 3 installments", normalize_ws: true)
 
-          select_disclosure "Configure" do
+          select_disclosure "Edit" do
             choose "Pay in full"
             click_on "Save changes"
           end
@@ -501,7 +501,7 @@ describe "Product with installment plan", type: :system, js: true do
         within_cart_item product.name do
           expect(page).to_not have_text("in 3 installments")
 
-          select_disclosure "Configure" do
+          select_disclosure "Edit" do
             choose "Pay in 3 installments"
             click_on "Save changes"
           end

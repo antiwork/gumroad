@@ -17,6 +17,7 @@ import { buildStaticRouter, GlobalProps, register } from "$app/utils/serverCompo
 
 import { Seller } from "$app/components/Product";
 import { ContentTab } from "$app/components/ProductEdit/ContentTab";
+import { getDownloadUrl } from "$app/components/ProductEdit/ContentTab/FileEmbed";
 import { Page } from "$app/components/ProductEdit/ContentTab/PageTab";
 import { ProductTab } from "$app/components/ProductEdit/ProductTab";
 import { RefundPolicy } from "$app/components/ProductEdit/RefundPolicy";
@@ -112,6 +113,7 @@ const createContextValue = (props: Props) => ({
   cancellationDiscountsEnabled: props.cancellation_discounts_enabled,
   contentUpdates: null,
   setContentUpdates: () => {},
+  filesById: new Map(props.product.files.map((file) => [file.id, { ...file, url: getDownloadUrl(props.id, file) }])),
 });
 
 const pagesHaveSameContent = (pages1: Page[], pages2: Page[]): boolean => isEqual(pages1, pages2);
@@ -184,12 +186,11 @@ const ProductEditPage = (props: Props) => {
 
   const contextValue = React.useMemo(
     () => ({
-      ...createContextValue(props),
+      ...createContextValue({ ...props, product }),
       setCurrencyType,
       currencyType,
       existingFiles,
       setExistingFiles,
-      product,
       updateProduct,
       save,
       saving,

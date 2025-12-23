@@ -28,7 +28,7 @@ class CreatorAnalytics::Following
   # This method is used for displaying the running total of followers.
   # net_total = added - removed
   def net_total(before_date: nil)
-    must = [{ range: { timestamp: { time_zone: user.timezone_formatted_offset, lt: before_date.to_s } } }] if before_date
+    must = [{ range: { timestamp: { time_zone: user.timezone_id, lt: before_date.to_s } } }] if before_date
     aggs = ADDED_AND_REMOVED.index_with do |name|
       { filter: { term: { name: } }, aggs: { count: { value_count: { field: "name" } } } }
     end
@@ -68,12 +68,12 @@ class CreatorAnalytics::Following
         query: {
           bool: {
             filter: [{ term: { followed_user_id: user.id } }],
-            must: [{ range: { timestamp: { time_zone: user.timezone_formatted_offset, gte: start_date.to_s, lte: end_date.to_s } } }]
+            must: [{ range: { timestamp: { time_zone: user.timezone_id, gte: start_date.to_s, lte: end_date.to_s } } }]
           }
         },
         aggs: {
           dates: {
-            date_histogram: { time_zone: user.timezone_formatted_offset, field: "timestamp", calendar_interval: "day" },
+            date_histogram: { time_zone: user.timezone_id, field: "timestamp", calendar_interval: "day" },
             aggs: names_aggs
           }
         },

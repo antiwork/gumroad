@@ -1,15 +1,16 @@
 # frozen_string_literal: true
 
 class Settings::ProfileController < Sellers::BaseController
+  layout "inertia"
   before_action :authorize
 
   def show
     @title = "Settings"
-    @profile_presenter = ProfilePresenter.new(pundit_user:, seller: current_seller)
-    @settings_presenter = SettingsPresenter.new(pundit_user:)
+    profile_presenter = ProfilePresenter.new(pundit_user:, seller: current_seller)
+    settings_presenter = SettingsPresenter.new(pundit_user:)
 
-    @react_component_props = @settings_presenter.profile_props.merge(
-      @profile_presenter.profile_settings_props(request:)
+    render inertia: "Settings/Profile/Show", props: settings_presenter.profile_props.merge(
+      profile_presenter.profile_settings_props(request:)
     )
   end
 

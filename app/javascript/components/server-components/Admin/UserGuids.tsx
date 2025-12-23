@@ -6,6 +6,7 @@ import { register } from "$app/utils/serverComponentUtil";
 
 import { LoadingSpinner } from "$app/components/LoadingSpinner";
 import { showAlert } from "$app/components/server-components/Alert";
+import { Alert } from "$app/components/ui/Alert";
 
 type UserGuids = { guid: string; user_ids: number[] }[];
 
@@ -45,9 +46,9 @@ const AdminUserGuids = ({ user_id }: { user_id: number }) => {
             ))}
           </div>
         ) : (
-          <div role="status" className="info">
+          <Alert role="status" variant="info">
             No GUIDs found.
-          </div>
+          </Alert>
         )
       ) : (
         <LoadingSpinner className="size-3" />

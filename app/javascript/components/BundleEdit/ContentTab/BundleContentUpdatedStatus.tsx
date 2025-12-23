@@ -6,6 +6,7 @@ import { assertResponseError } from "$app/utils/request";
 import { useBundleEditContext } from "$app/components/BundleEdit/state";
 import { Button } from "$app/components/Button";
 import { showAlert } from "$app/components/server-components/Alert";
+import { Alert } from "$app/components/ui/Alert";
 
 export const BundleContentUpdatedStatus = () => {
   const { id } = useBundleEditContext();
@@ -28,7 +29,7 @@ export const BundleContentUpdatedStatus = () => {
   if (isHidden) return null;
 
   return (
-    <div role="status" className="info">
+    <Alert role="status" variant="info">
       <div className="flex flex-col gap-4">
         <strong>Some of your customers don't have access to the latest content in your bundle.</strong>
         Would you like to give them access and send them an email notification?
@@ -36,6 +37,6 @@ export const BundleContentUpdatedStatus = () => {
           Yes, update
         </Button>
       </div>
-    </div>
+    </Alert>
   );
 };
