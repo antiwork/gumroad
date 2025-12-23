@@ -52,4 +52,76 @@ describe UpdateSellerRefundEligibilityJob do
       expect { perform }.to change { user.reload.refunds_disabled? }.from(false).to(true)
     end
   end
+
+  it "enables refunds and marks not_reviewed when balance recovers for not_reviewed account" do
+    with_versioning do
+      user.send(:disable_refunds_and_put_on_probation!)
+      create(:balance, user: user, amount_cents: 100_00)
+
+      expect { perform }
+        .to change { user.reload.user_risk_state }.from("on_probation").to("not_reviewed")
+        .and change { user.reload.refunds_disabled? }.from(true).to(false)
+    end
+  end
+
+  context "when checking if user can recover from low balance probation" do
+    it "does not recover when user is not on probation" do
+      create(:balance, user: user, amount_cents: 100_00)
+      expect { perform }.not_to change { user.reload.user_risk_state }
+    end
+
+    context "when user is on probation for low balance" do
+      with_versioning do
+        before do
+          user.send(:disable_refunds_and_put_on_probation!)
+        end
+
+        it "does not recover when balance is below $100" do
+          create(:balance, user: user, amount_cents: 99_99)
+          expect { perform }.not_to change { user.reload.user_risk_state }
+        end
+
+        it "recovers when balance is at or above $100" do
+          create(:balance, user: user, amount_cents: 100_00)
+          expect { perform }.to change { user.reload.user_risk_state }.from("on_probation")
+        end
+      end
+    end
+
+    context "when user is on probation but not for low balance" do
+      with_versioning do
+        before do
+          user.comments.create!(comment_type: Comment::COMMENT_TYPE_ON_PROBATION, author_name: "LowBalanceFraudCheck", content: "Probated (payouts suspended) automatically on #{Time.current.to_fs(:formatted_date_full_month)} because of suspicious refund activity", created_at: 1.month.ago)
+          user.comments.create!(comment_type: Comment::COMMENT_TYPE_COMPLIANT, author_name: "LowBalanceFraudCheck", content: "Marked compliant automatically on #{Time.current.to_fs(:formatted_date_full_month)} as balance has recovered to $100", created_at: 1.day.ago)
+          user.put_on_probation!(author_name: "pause_payouts_for_seller_based_on_chargeback_rate", content: "Payouts automatically paused due to chargeback rate (50%) exceeding 3% volume.")
+        end
+
+        it "does not recover risk state even if balance is above $100" do
+          create(:balance, user: user, amount_cents: 100_00)
+          expect { perform }.not_to change { user.reload.user_risk_state }
+        end
+      end
+    end
+  end
+
+  describe "sidekiq_retry_in" do
+    it "returns :discard, logs, and notifies Bugsnag for InvalidRecoveryStateError" do
+      error_message = "Invalid previous state for recovery: suspended_for_fraud"
+      exception = User::LowBalanceFraudCheck::InvalidRecoveryStateError.new(error_message)
+
+      expect(Rails.logger).to receive(:error)
+        .with("[UpdateSellerRefundEligibilityJob] Discarding job on 1st attempt for invalid recovery state: #{error_message}")
+
+      expect(Bugsnag).to receive(:notify).with(exception)
+
+      result = described_class::RetryHandler.call(0, exception, {})
+      expect(result).to eq(:discard)
+    end
+
+    it "returns nil for other exceptions to allow normal retry" do
+      other_exception = StandardError.new("Some error")
+      result = described_class::RetryHandler.call(0, other_exception, {})
+      expect(result).to be_nil
+    end
+  end
 end
