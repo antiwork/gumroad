@@ -400,34 +400,32 @@ export const Product = ({
                   symbolFormat: "long",
                 });
                 return (
-                  <CartItem key={bundleProduct.id}>
-                    <CartItemMedia>
+                  <CartItem key={bundleProduct.id} isBundleItem>
+                    <CartItemMedia className="h-28 w-28">
                       <Thumbnail url={bundleProduct.thumbnail_url} nativeType={bundleProduct.native_type} />
                     </CartItemMedia>
-                    <CartItemMain>
+                    <CartItemMain className="h-28">
                       <CartItemTitle asChild>
                         <a href={bundleProduct.url}>
                           <h4 className="font-bold">{bundleProduct.name}</h4>
                         </a>
                       </CartItemTitle>
                       {bundleProduct.ratings ? (
-                        <div className="flex shrink-0 items-center gap-1" aria-label="Rating">
+                        <div className="line-clamp-1 flex shrink-0 items-center gap-1" aria-label="Rating">
                           <Icon name="solid-star" />
                           {`${bundleProduct.ratings.average.toFixed(1)} (${bundleProduct.ratings.count})`}
                         </div>
                       ) : null}
-                      <CartItemFooter>
-                        <span>
-                          <strong>Qty:</strong> {bundleProduct.quantity}
-                        </span>
-                        {bundleProduct.variant ? (
-                          <span>
+                      <span className="sr-only">Qty: {bundleProduct.quantity}</span>
+                      {bundleProduct.variant ? (
+                        <CartItemFooter>
+                          <span className="line-clamp-1">
                             <strong>{variantLabel(bundleProduct.native_type)}:</strong> {bundleProduct.variant}
                           </span>
-                        ) : null}
-                      </CartItemFooter>
+                        </CartItemFooter>
+                      ) : null}
                     </CartItemMain>
-                    <CartItemEnd>
+                    <CartItemEnd className="flex-row items-start gap-4 p-4">
                       <span className="current-price" aria-label="Price">
                         {discountedPriceCents < basePriceCents ? <s>{price}</s> : price}
                       </span>

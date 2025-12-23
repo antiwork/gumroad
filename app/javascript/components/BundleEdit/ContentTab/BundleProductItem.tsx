@@ -40,24 +40,22 @@ export const BundleProductItem = ({
   });
 
   return (
-    <CartItem key={bundleProduct.id}>
-      <CartItemMedia>
+    <CartItem key={bundleProduct.id} isBundleItem>
+      <CartItemMedia className="h-20 w-20">
         <Thumbnail url={bundleProduct.thumbnail_url} nativeType={bundleProduct.native_type} />
       </CartItemMedia>
-      <CartItemMain>
+      <CartItemMain className="h-20">
         <CartItemTitle>{bundleProduct.name}</CartItemTitle>
-        <CartItemFooter>
-          <span>
-            <strong>Qty:</strong> {bundleProduct.quantity}
-          </span>
-          {selectedVariant ? (
-            <span>
+        <span className="sr-only">Qty: {bundleProduct.quantity}</span>
+        {selectedVariant ? (
+          <CartItemFooter>
+            <span className="line-clamp-1">
               <strong>{variantLabel(bundleProduct.native_type)}:</strong> {selectedVariant.name}
             </span>
-          ) : null}
-        </CartItemFooter>
+          </CartItemFooter>
+        ) : null}
       </CartItemMain>
-      <CartItemEnd className="mt-auto flex-row gap-4">
+      <CartItemEnd className="flex-row items-center gap-4 p-4">
         {bundleProduct.is_quantity_enabled || bundleProduct.variants ? (
           <Popover trigger={<div className="link">Configure</div>} open={editPopoverOpen} onToggle={setEditPopoverOpen}>
             <div className="flex w-96 flex-col gap-4">

@@ -22,6 +22,8 @@ import {
   CartItemTitle,
   CartItemList,
   CartItemEnd,
+  CartItemQuantity,
+  CartItemActions,
 } from "$app/components/CartItemList";
 import { PaymentForm } from "$app/components/Checkout/PaymentForm";
 import { Icon } from "$app/components/Icons";
@@ -247,8 +249,9 @@ export const Checkout = ({
                     updateCart={updateCart}
                   />
                 ))}
-
-                <div className="grid gap-4 border-t border-border p-4">
+              </CartItemList>
+              <CartItemList>
+                <div className="grid gap-4 border-border p-4">
                   {state.surcharges.type === "loaded" ? (
                     <>
                       <CartPriceItem title="Subtotal" price={formatPrice(subtotal)} />
@@ -336,7 +339,7 @@ export const Checkout = ({
                 {total != null ? (
                   <>
                     <footer className="grid gap-4 border-t border-border p-4">
-                      <CartPriceItem title="Total" price={formatPrice(total)} className="*:text-lg" />
+                      <CartPriceItem title="Total" price={formatPrice(total)} large />
                     </footer>
                     {commissionCompletionTotal > 0 || futureInstallmentsWithoutTipsTotal > 0 ? (
                       <div className="grid gap-4 border-t border-border p-4">
@@ -398,15 +401,22 @@ export const Checkout = ({
 const CartPriceItem = ({
   title,
   price,
-  className,
+  large = false,
 }: {
   title: React.ReactNode;
   price: string | number | null;
-  className?: string;
+  large?: boolean;
 }) => (
-  <div className={classNames("grid grid-flow-col justify-between gap-4", className)}>
-    <h4 className="inline-flex flex-wrap gap-2">{title}</h4>
-    <div>{price}</div>
+  <div className={classNames("grid grid-flow-col justify-between gap-4")}>
+    <h4
+      className={classNames(
+        "inline-flex flex-wrap gap-2",
+        large ? "text-base font-bold sm:text-xl" : "text-sm sm:text-base",
+      )}
+    >
+      {title}
+    </h4>
+    <div className={classNames("text-base sm:text-lg", large && "font-bold")}>{price}</div>
   </div>
 );
 
@@ -469,58 +479,56 @@ const CartItemComponent = ({
     <CartItem
       extra={
         item.product.bundle_products.length > 0 ? (
-          <>
+          <div className="flex flex-col gap-3">
             <h4>This bundle contains...</h4>
-            <CartItemList>
+            <CartItemList className="overflow-hidden">
               {item.product.bundle_products.map((bundleProduct) => (
-                <CartItem key={bundleProduct.product_id}>
-                  <CartItemMedia>
-                    <Thumbnail url={bundleProduct.thumbnail_url} nativeType={bundleProduct.native_type} />
+                <CartItem key={bundleProduct.product_id} isBundleItem>
+                  <CartItemMedia className="h-20 w-20">
+                    <a href={item.product.url}>
+                      <Thumbnail url={item.product.thumbnail_url} nativeType={item.product.native_type} />
+                    </a>
                   </CartItemMedia>
-                  <CartItemMain>
-                    <CartItemTitle>{bundleProduct.name}</CartItemTitle>
-                    <CartItemFooter>
-                      <span>
-                        <strong>Qty:</strong> {bundleProduct.quantity}
-                      </span>
-                      {bundleProduct.variant ? (
+                  <span className="sr-only">Qty: {bundleProduct.quantity || item.quantity}</span>
+                  <CartItemMain className="h-20">
+                    <CartItemTitle className="line-clamp-1">{bundleProduct.name}</CartItemTitle>
+                    {bundleProduct.variant ? (
+                      <CartItemFooter className="line-clamp-1">
                         <span>
                           <strong>{variantLabel(bundleProduct.native_type)}:</strong> {bundleProduct.variant.name}
                         </span>
-                      ) : null}
-                    </CartItemFooter>
+                      </CartItemFooter>
+                    ) : null}
                   </CartItemMain>
                 </CartItem>
               ))}
             </CartItemList>
-          </>
+          </div>
         ) : null
       }
     >
-      <CartItemMedia>
-        <a href={item.product.url}>
-          <Thumbnail url={item.product.thumbnail_url} nativeType={item.product.native_type} />
-        </a>
-      </CartItemMedia>
+      <div className="relative inline-flex">
+        <CartItemMedia className="h-16 w-16 sm:h-30 sm:w-30">
+          <a href={item.product.url}>
+            <Thumbnail url={item.product.thumbnail_url} nativeType={item.product.native_type} />
+          </a>
+        </CartItemMedia>
+        <CartItemQuantity>{item.quantity}</CartItemQuantity>
+      </div>
+
       <CartItemMain>
         <CartItemTitle>
-          <a href={item.product.url}>{item.product.name}</a>
+          <a href={item.product.url} className="no-underline">
+            {item.product.name}
+          </a>
         </CartItemTitle>
-        <a href={item.product.creator.profile_url} className="line-clamp-2">
+        <a href={item.product.creator.profile_url} className="line-clamp-2 text-sm">
           {item.product.creator.name}
         </a>
         <CartItemFooter>
-          <span>
-            <strong>{item.product.is_multiseat_license ? "Seats:" : "Qty:"}</strong> {item.quantity}
-          </span>
           {option?.name ? (
             <span>
               <strong>{variantLabel(item.product.native_type)}:</strong> {option.name}
-            </span>
-          ) : null}
-          {item.recurrence ? (
-            <span>
-              <strong>Membership:</strong> {recurrenceNames[item.recurrence]}
             </span>
           ) : null}
           {item.call_start_time ? (
@@ -528,92 +536,86 @@ const CartItemComponent = ({
               <strong>Time:</strong> {formatCallDate(new Date(item.call_start_time), { date: { hideYear: true } })}
             </span>
           ) : null}
-        </CartItemFooter>
-      </CartItemMain>
-      <CartItemEnd>
-        <span className="current-price" aria-label="Price">
-          {formatPrice(convertToUSD(item, price))}
-        </span>
-        {hasFreeTrial(item, isGift) && item.product.free_trial ? (
-          <>
-            <span>
-              {item.product.free_trial.duration.amount === 1
-                ? `one ${item.product.free_trial.duration.unit}`
-                : `${item.product.free_trial.duration.amount} ${item.product.free_trial.duration.unit}s`}{" "}
-              free
-            </span>
-            {item.recurrence ? (
-              <span>
-                {formatAmountPerRecurrence(item.recurrence, formatPrice(convertToUSD(item, discount.price)))} after
-              </span>
-            ) : null}
-          </>
-        ) : item.pay_in_installments && item.product.installment_plan ? (
-          <span>in {item.product.installment_plan.number_of_installments} installments</span>
-        ) : item.recurrence ? (
-          isGift ? (
-            recurrenceDurationLabels[item.recurrence]
-          ) : (
-            recurrenceNames[item.recurrence]
-          )
-        ) : null}
-        <footer className="mt-auto">
-          <ul className="grid list-none gap-x-4 gap-y-1 md:flex md:flex-wrap">
+          <CartItemActions>
             {(item.product.rental && !item.product.rental.rent_only) ||
             item.product.is_quantity_enabled ||
             item.product.recurrences ||
             item.product.options.length > 0 ||
             item.product.installment_plan ||
             isPWYW ? (
-              <li>
-                <Popover
-                  trigger={<span className="link">Configure</span>}
-                  open={editPopoverOpen}
-                  onToggle={setEditPopoverOpen}
-                >
-                  <div className="flex w-96 flex-col gap-4">
-                    <ConfigurationSelector
-                      selection={selection}
-                      setSelection={(selection) => {
-                        setError(null);
-                        setSelection(selection);
-                      }}
-                      product={item.product}
-                      discount={discount.discount && discount.discount.type !== "ppp" ? discount.discount.value : null}
-                      showInstallmentPlan
-                    />
-                    {error ? <Alert variant="danger">{error}</Alert> : null}
-                    <Button color="accent" onClick={saveChanges}>
-                      Save changes
-                    </Button>
-                  </div>
-                </Popover>
-              </li>
-            ) : null}
-            <li>
-              <button
-                className="underline"
-                onClick={() => {
-                  const newItems = cart.items.filter((i) => i !== item);
-                  updateCart({
-                    discountCodes: cart.discountCodes.filter(({ products }) =>
-                      Object.keys(products).some((permalink) =>
-                        newItems.some((item) => item.product.permalink === permalink),
-                      ),
-                    ),
-                    items: newItems.map(({ accepted_offer, ...rest }) => ({
-                      ...rest,
-                      accepted_offer:
-                        accepted_offer?.original_product_id === item.product.id ? null : (accepted_offer ?? null),
-                    })),
-                  });
-                }}
+              <Popover
+                trigger={<Button className="h-8 w-15 !p-0 !text-xs">Edit</Button>}
+                open={editPopoverOpen}
+                onToggle={setEditPopoverOpen}
               >
-                Remove
-              </button>
-            </li>
-          </ul>
-        </footer>
+                <div className="flex w-96 flex-col gap-4">
+                  <ConfigurationSelector
+                    selection={selection}
+                    setSelection={(selection) => {
+                      setError(null);
+                      setSelection(selection);
+                    }}
+                    product={item.product}
+                    discount={discount.discount && discount.discount.type !== "ppp" ? discount.discount.value : null}
+                    showInstallmentPlan
+                  />
+                  {error ? <Alert variant="danger">{error}</Alert> : null}
+                  <Button color="accent" onClick={saveChanges}>
+                    Save changes
+                  </Button>
+                </div>
+              </Popover>
+            ) : null}
+            <Button
+              className="h-8 w-15 !p-0 !text-xs"
+              onClick={() => {
+                const newItems = cart.items.filter((i) => i !== item);
+                updateCart({
+                  discountCodes: cart.discountCodes.filter(({ products }) =>
+                    Object.keys(products).some((permalink) =>
+                      newItems.some((item) => item.product.permalink === permalink),
+                    ),
+                  ),
+                  items: newItems.map(({ accepted_offer, ...rest }) => ({
+                    ...rest,
+                    accepted_offer:
+                      accepted_offer?.original_product_id === item.product.id ? null : (accepted_offer ?? null),
+                  })),
+                });
+              }}
+            >
+              Remove
+            </Button>
+          </CartItemActions>
+        </CartItemFooter>
+      </CartItemMain>
+      <CartItemEnd>
+        <span className="current-price text-base font-bold sm:text-lg" aria-label="Price">
+          {formatPrice(convertToUSD(item, price))}
+        </span>
+        {hasFreeTrial(item, isGift) && item.product.free_trial ? (
+          <>
+            <span className="text-sm">
+              {item.product.free_trial.duration.amount === 1
+                ? `one ${item.product.free_trial.duration.unit}`
+                : `${item.product.free_trial.duration.amount} ${item.product.free_trial.duration.unit}s`}{" "}
+              free
+            </span>
+            {item.recurrence ? (
+              <span className="text-sm">
+                {formatAmountPerRecurrence(item.recurrence, formatPrice(convertToUSD(item, discount.price)))} after
+              </span>
+            ) : null}
+          </>
+        ) : item.pay_in_installments && item.product.installment_plan ? (
+          <span className="text-sm">in {item.product.installment_plan.number_of_installments} installments</span>
+        ) : item.recurrence ? (
+          isGift ? (
+            <span className="text-sm">{recurrenceDurationLabels[item.recurrence]}</span>
+          ) : (
+            <span className="text-sm">{recurrenceNames[item.recurrence]}</span>
+          )
+        ) : null}
       </CartItemEnd>
     </CartItem>
   );

@@ -45,7 +45,6 @@ import GenerateInvoicePage from "$app/components/server-components/GenerateInvoi
 import GumroadBlogIndexPage from "$app/components/server-components/GumroadBlog/IndexPage";
 import GumroadBlogPostPage from "$app/components/server-components/GumroadBlog/PostPage";
 import HelpCenterArticlesIndexPage from "$app/components/server-components/HelpCenter/ArticlesIndexPage";
-import LibraryPage from "$app/components/server-components/LibraryPage";
 import LoginPage from "$app/components/server-components/LoginPage";
 import Nav from "$app/components/server-components/Nav";
 import PasswordResetPage from "$app/components/server-components/PasswordResetPage";
@@ -58,7 +57,6 @@ import Profile from "$app/components/server-components/Profile";
 import ProfileCoffeePage from "$app/components/server-components/Profile/CoffeePage";
 import ProfilePostPage from "$app/components/server-components/Profile/PostPage";
 import ProfileProductPage from "$app/components/server-components/Profile/ProductPage";
-import ProfileSettingsPage from "$app/components/server-components/Profile/SettingsPage";
 import ProfileWishlistPage from "$app/components/server-components/Profile/WishlistPage";
 import PublicChargePage from "$app/components/server-components/Public/ChargePage";
 import PublicLicenseKeyPage from "$app/components/server-components/Public/LicenseKeyPage";
@@ -86,8 +84,6 @@ import TwoFactorAuthenticationPage from "$app/components/server-components/TwoFa
 import UtmLinksPage from "$app/components/server-components/UtmLinksPage";
 import VideoStreamPlayer from "$app/components/server-components/VideoStreamPlayer";
 import WishlistPage from "$app/components/server-components/WishlistPage";
-import WishlistsFollowingPage from "$app/components/server-components/WishlistsFollowingPage";
-import WishlistsPage from "$app/components/server-components/WishlistsPage";
 import CodeSnippet from "$app/components/ui/CodeSnippet";
 import { Pill } from "$app/components/ui/Pill";
 
@@ -140,7 +136,6 @@ ReactOnRails.register({
   GenerateInvoicePage,
   GumroadBlogIndexPage,
   GumroadBlogPostPage,
-  LibraryPage,
   LoginPage,
   MainSettingsPage,
   Nav,
@@ -158,7 +153,6 @@ ReactOnRails.register({
   ProfileCoffeePage,
   ProfilePostPage,
   ProfileProductPage,
-  ProfileSettingsPage,
   ProfileWishlistPage,
   PublicChargePage,
   PublicLicenseKeyPage,
@@ -176,7 +170,5 @@ ReactOnRails.register({
   TwoFactorAuthenticationPage,
   VideoStreamPlayer,
   WishlistPage,
-  WishlistsFollowingPage,
-  WishlistsPage,
   UtmLinksPage,
 });
