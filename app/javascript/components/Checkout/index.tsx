@@ -1,3 +1,4 @@
+import cx from "classnames";
 import * as React from "react";
 
 import { computeOfferDiscount } from "$app/data/offer_code";
@@ -28,6 +29,7 @@ import {
 import { PaymentForm } from "$app/components/Checkout/PaymentForm";
 import { Icon } from "$app/components/Icons";
 import { Popover } from "$app/components/Popover";
+import { PriceInput } from "$app/components/PriceInput";
 import { Card } from "$app/components/Product/Card";
 import {
   applySelection,
@@ -55,7 +57,16 @@ import {
   CartItem as CartItemProps,
   findCartItem,
 } from "./cartState";
-import { computeTip, computeTipForPrice, getTotalPrice, isProcessing, useState } from "./payment";
+import {
+  computeTip,
+  computeTipForPrice,
+  getErrors,
+  getTotalPrice,
+  getTotalPriceFromProducts,
+  isProcessing,
+  isTippingEnabled,
+  useState,
+} from "./payment";
 
 import placeholder from "$assets/images/placeholders/checkout.png";
 
@@ -225,18 +236,19 @@ export const Checkout = ({
   }, 0);
 
   const isDesktop = useIsAboveBreakpoint("lg");
+  const displayTipSelector = isTippingEnabled(state);
 
   return (
-    <div className="mx-auto w-full max-w-product-page">
+    <div className="mx-auto w-full max-w-400">
       <PageHeader
-        className="border-none"
+        className="border-none md:px-16"
         title="Checkout"
         actions={
           isDesktop ? <NavigationButton href={cart.returnUrl ?? discoverUrl}>Continue shopping</NavigationButton> : null
         }
       />
       {isOpenTuple(cart.items, 1) ? (
-        <div className="grid gap-8 p-4 md:p-8">
+        <div className="grid gap-8 p-4 md:p-8 md:px-16">
           <div className="grid grid-cols-1 items-start gap-x-16 gap-y-8 lg:grid-cols-[2fr_minmax(26rem,1fr)]">
             <div className="grid gap-6">
               <CartItemList>
@@ -250,7 +262,12 @@ export const Checkout = ({
                   />
                 ))}
               </CartItemList>
-              <CartItemList>
+              {displayTipSelector ? (
+                <CartItemList className="rounded-b-none p-3 sm:p-5">
+                  <TipSelector />
+                </CartItemList>
+              ) : null}
+              <CartItemList className={classNames(displayTipSelector && "-mt-6 rounded-t-none border-t-0")}>
                 <div className="grid gap-4 border-border p-4">
                   {state.surcharges.type === "loaded" ? (
                     <>
@@ -398,14 +415,86 @@ export const Checkout = ({
   );
 };
 
+const TipSelector = () => {
+  const [state, dispatch] = useState();
+  const errors = getErrors(state);
+  const showPercentageOptions = getTotalPriceFromProducts(state) > 0;
+
+  React.useEffect(() => {
+    if (!showPercentageOptions && state.tip.type === "percentage")
+      dispatch({ type: "set-value", tip: { type: "fixed", amount: null } });
+  }, [showPercentageOptions]);
+
+  const tipPercentages = [0, 15, 20, 25];
+
+  return (
+    <div className="flex flex-col gap-2 sm:gap-3">
+      <CartPriceItem title="Add a tip?" price={formatPrice(computeTip(state))} />
+      <div className="flex flex-wrap gap-3">
+        {showPercentageOptions ? (
+          <div
+            role="radiogroup"
+            className="radio-buttons flex-1 basis-[38rem]"
+            style={{ gridTemplateColumns: "repeat(auto-fit, minmax(5rem, 1fr))" }}
+          >
+            {tipPercentages.map((percentage) => (
+              <Button
+                className="text-sm! whitespace-nowrap"
+                key={percentage}
+                role="radio"
+                aria-checked={state.tip.type === "percentage" && percentage === state.tip.percentage}
+                onClick={() => {
+                  dispatch({
+                    type: "set-value",
+                    tip: {
+                      type: "percentage",
+                      percentage,
+                    },
+                  });
+                }}
+                disabled={isProcessing(state)}
+                style={{ justifyContent: "center" }}
+              >
+                {percentage === 0 ? "No Tip" : `${percentage}%`}
+              </Button>
+            ))}
+          </div>
+        ) : null}
+        <fieldset className={cx("flex-1 basis-[9.5rem]", { danger: errors.has("tip") })}>
+          <PriceInput
+            className={{ pill: "rounded-full text-sm" }}
+            hasError={errors.has("tip")}
+            ariaLabel="Tip"
+            currencyCode="usd"
+            cents={state.tip.type === "fixed" ? state.tip.amount : null}
+            onChange={(newAmount) => {
+              dispatch({
+                type: "set-value",
+                tip: {
+                  type: "fixed",
+                  amount: newAmount,
+                },
+              });
+            }}
+            placeholder="Custom tip"
+            disabled={isProcessing(state)}
+          />
+        </fieldset>
+      </div>
+    </div>
+  );
+};
+
 const CartPriceItem = ({
   title,
   price,
   large = false,
+  className,
 }: {
   title: React.ReactNode;
   price: string | number | null;
   large?: boolean;
+  className?: { priceField?: string };
 }) => (
   <div className={classNames("grid grid-flow-col justify-between gap-4")}>
     <h4
@@ -416,7 +505,7 @@ const CartPriceItem = ({
     >
       {title}
     </h4>
-    <div className={classNames("text-base sm:text-lg", large && "font-bold")}>{price}</div>
+    <div className={classNames("text-base sm:text-lg", large && "font-bold", className?.priceField)}>{price}</div>
   </div>
 );
 
