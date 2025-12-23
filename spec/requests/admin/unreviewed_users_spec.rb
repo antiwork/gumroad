@@ -34,7 +34,7 @@ describe "Admin::UnreviewedUsersController", type: :system, js: true do
       it "displays user information" do
         visit admin_unreviewed_users_path
 
-        expect(page).to have_text(user_with_balance.id.to_s)
+        expect(page).to have_text(user_with_balance.external_id)
         expect(page).to have_text(user_with_balance.email)
         expect(page).to have_text("$50")
       end
