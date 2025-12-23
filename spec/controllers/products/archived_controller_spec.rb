@@ -197,6 +197,25 @@ describe Products::ArchivedController, inertia: true do
       expect(response.parsed_body).to eq({ "success" => true })
       expect(membership.reload.archived?).to be(true)
     end
+
+    it "unpublishes the product when archiving" do
+      published_product = create(:product, user: seller, purchase_disabled_at: nil)
+
+      post :create, params: { id: published_product.unique_permalink }, as: :json
+
+      expect(response).to have_http_status(:ok)
+      expect(published_product.reload.purchase_disabled_at).to be_present
+    end
+
+    it "does not change purchase_disabled_at if already unpublished" do
+      unpublished_at = 1.day.ago
+      unpublished_product = create(:product, user: seller, purchase_disabled_at: unpublished_at)
+
+      post :create, params: { id: unpublished_product.unique_permalink }, as: :json
+
+      expect(response).to have_http_status(:ok)
+      expect(unpublished_product.reload.purchase_disabled_at).to be_within(1.second).of(unpublished_at)
+    end
   end
 
   describe "DELETE destroy" do

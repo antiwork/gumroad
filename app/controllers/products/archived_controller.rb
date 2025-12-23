@@ -71,7 +71,9 @@ class Products::ArchivedController < Sellers::BaseController
   def create
     authorize [:products, :archived, @product]
 
-    @product.update!(archived: true)
+    # When archiving, also unpublish the product to ensure it's no longer
+    # publicly accessible or indexed by search engines (fixes #2373)
+    @product.update!(archived: true, purchase_disabled_at: @product.purchase_disabled_at || Time.current)
     render json: { success: true }
   end
 
