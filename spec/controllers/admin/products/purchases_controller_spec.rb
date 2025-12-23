@@ -82,4 +82,45 @@ describe Admin::Products::PurchasesController do
       end
     end
   end
+
+  describe "POST mass_refund_for_fraud" do
+    let(:product) { create(:product) }
+    let!(:successful_purchase) { create(:purchase, link: product) }
+    let!(:failed_purchase) { create(:failed_purchase, link: product) }
+
+    it "enqueues the job with correct parameters" do
+      expect(MassRefundForFraudJob).to receive(:perform_async).with(
+        product.id,
+        [successful_purchase.external_id, failed_purchase.external_id],
+        admin_user.id
+      )
+
+      post :mass_refund_for_fraud,
+           params: { product_id: product.id, purchase_ids: [successful_purchase.external_id, failed_purchase.external_id] },
+           format: :json
+
+      body = response.parsed_body
+      expect(response).to have_http_status(:ok)
+      expect(body["success"]).to eq(true)
+      expect(body["message"]).to include("Processing 2 fraud refunds")
+    end
+
+    it "requires purchase ids" do
+      post :mass_refund_for_fraud, params: { product_id: product.id, purchase_ids: [] }, as: :json, format: :json
+
+      expect(response).to have_http_status(:unprocessable_entity)
+      expect(response.parsed_body["success"]).to eq(false)
+    end
+
+    it "rejects purchases that do not belong to the product" do
+      other_purchase = create(:purchase)
+
+      post :mass_refund_for_fraud,
+           params: { product_id: product.id, purchase_ids: [other_purchase.external_id] },
+           format: :json
+
+      expect(response).to have_http_status(:unprocessable_entity)
+      expect(response.parsed_body["success"]).to eq(false)
+    end
+  end
 end

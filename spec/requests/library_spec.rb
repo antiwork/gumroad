@@ -616,7 +616,7 @@ describe("Library Scenario", type: :system, js: true) do
         visit library_path
 
         select_tab "Reviews"
-        expect(page.current_path).to eq(reviews_path)
+        expect(page).to have_current_path(reviews_path)
 
         expect(page).to have_text("You've reviewed all your products!")
         expect(page).to have_link("Discover more", href: discover_url(host: DISCOVER_DOMAIN))
