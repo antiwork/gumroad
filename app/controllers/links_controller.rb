@@ -730,6 +730,10 @@ class LinksController < ApplicationController
 
       if default_offer_code_id.present?
         offer_code = @product.user.offer_codes.alive.find_by_external_id(default_offer_code_id)
+        unless offer_code
+          @product.errors.add(:default_offer_code, "Invalid offer code")
+          return
+        end
         @product.default_offer_code = offer_code
       else
         @product.default_offer_code = nil
