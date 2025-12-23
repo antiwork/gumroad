@@ -82,9 +82,9 @@ class ProductPresenter::ProductProps
 
     def discount_code_props(discount_code_from_url, quantity)
       candidates = []
-      candidates << { code: discount_code_from_url, is_default: false } if discount_code_from_url.present?
+      candidates << { code: discount_code_from_url } if discount_code_from_url.present?
       if product.default_offer_code.present?
-        candidates << { code: product.default_offer_code.code, is_default: true }
+        candidates << { code: product.default_offer_code.code }
       end
       candidates.uniq! { |c| c[:code] }
       return if candidates.empty?
@@ -121,7 +121,6 @@ class ProductPresenter::ProductProps
 
         candidate_data = {
           code:,
-          is_default: candidate[:is_default],
           discount:,
           amount_off_cents:,
         }
@@ -136,7 +135,6 @@ class ProductPresenter::ProductProps
       {
         valid: true,
         code: best_candidate[:code],
-        is_default: best_candidate[:is_default],
         discount: best_candidate[:discount],
       }
     end

@@ -165,7 +165,7 @@ export type Purchase = {
 };
 export type ProductDiscount =
   | { valid: false; error_code: "sold_out" | "invalid_offer" | "inactive" | "unmet_minimum_purchase_quantity" }
-  | { valid: true; code: string; discount: Discount; is_default?: boolean }
+  | { valid: true; code: string; discount: Discount }
   | null;
 
 export const getNotForSaleMessage = (product: Product) =>

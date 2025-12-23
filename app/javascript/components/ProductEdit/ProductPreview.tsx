@@ -40,7 +40,6 @@ export const ProductPreview = ({ showRefundPolicyModal }: { showRefundPolicyModa
     return {
       valid: true as const,
       code: defaultDiscountCodeData.code,
-      is_default: true,
       discount: {
         ...defaultDiscountCodeData.discount,
       },
