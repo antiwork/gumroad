@@ -104,4 +104,3 @@ const UnreviewedUsersPage = () => {
 };
 
 export default UnreviewedUsersPage;
-

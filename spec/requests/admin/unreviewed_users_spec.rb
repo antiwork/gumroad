@@ -126,4 +126,3 @@ describe "Admin::UnreviewedUsersController", type: :system, js: true do
     end
   end
 end
-

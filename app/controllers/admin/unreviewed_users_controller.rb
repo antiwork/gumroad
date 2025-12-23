@@ -91,4 +91,3 @@ class Admin::UnreviewedUsersController < Admin::BaseController
       types
     end
 end
-
