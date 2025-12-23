@@ -50,7 +50,7 @@ const Nav = () => {
         />
         <InertiaNavLink
           text="Unreviewed users"
-          icon="eye-fill"
+          icon="people-fill"
           href={Routes.admin_unreviewed_users_url(routeParams)}
           component={Link}
         />
