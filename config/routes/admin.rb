@@ -74,6 +74,7 @@ namespace :admin do
   resource :unblock_email_domains, only: [:show, :update]
   resource :suspend_users, only: [:show, :update]
   resource :refund_queue, only: [:show]
+  resources :unreviewed_users, only: [:index]
 
   resources :affiliates, only: [:index, :show], defaults: { format: "html" }
 
