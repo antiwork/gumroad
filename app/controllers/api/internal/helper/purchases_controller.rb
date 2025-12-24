@@ -502,6 +502,7 @@ class Api::Internal::Helper::PurchasesController < Api::Internal::Helper::BaseCo
     target_user = User.find_by(email: to_email)
 
     count = 0
+    reassigned_purchases = []
     purchases.each do |purchase|
       purchase.email = to_email
 
@@ -510,7 +511,8 @@ class Api::Internal::Helper::PurchasesController < Api::Internal::Helper::BaseCo
         count += 1 if purchase.original_purchase.saved_changes?
       end
 
-      if target_user && purchase.purchaser_id.present?
+      # Always link purchase to the target user's library if they exist
+      if target_user
         purchase.purchaser_id = target_user.id
       else
         purchase.purchaser_id = nil
@@ -526,8 +528,14 @@ class Api::Internal::Helper::PurchasesController < Api::Internal::Helper::BaseCo
         end
       end
 
-      count += 1 if purchase.save
+      if purchase.save
+        count += 1
+        reassigned_purchases << purchase
+      end
     end
+
+    # Send receipts to the new email so they have access to their purchases
+    reassigned_purchases.each(&:resend_receipt)
 
     render json: {
       success: true,

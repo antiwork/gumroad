@@ -44,7 +44,7 @@ describe Api::Internal::Helper::PurchasesController, :vcr do
 
         purchase3.reload
         expect(purchase3.email).to eq(to_email)
-        expect(purchase3.purchaser_id).to be_nil
+        expect(purchase3.purchaser_id).to eq(target_user.id)
 
         subscription_purchase.reload
         expect(subscription_purchase.email).to eq(to_email)
@@ -152,6 +152,29 @@ describe Api::Internal::Helper::PurchasesController, :vcr do
         expect(response).to have_http_status(:not_found)
         expect(response.parsed_body["success"]).to eq(false)
         expect(response.parsed_body["message"]).to eq("No purchases found for email: no-purchases@example.com")
+      end
+    end
+
+    context "when reassigning purchases" do
+      it "sends receipts to the new email after reassignment" do
+        post :reassign_purchases, params: { from: from_email, to: to_email }
+
+        expect(response).to have_http_status(:success)
+        # Check that receipts are sent for all reassigned purchases
+        expect(SendPurchaseReceiptJob).to have_enqueued_sidekiq_job(purchase1.id).on("critical")
+        expect(SendPurchaseReceiptJob).to have_enqueued_sidekiq_job(purchase2.id).on("critical")
+        expect(SendPurchaseReceiptJob).to have_enqueued_sidekiq_job(purchase3.id).on("critical")
+      end
+
+      it "links purchases to target user library even when purchaser_id was nil" do
+        # Create a purchase with no purchaser
+        orphan_purchase = create(:purchase, email: from_email, purchaser: nil)
+
+        post :reassign_purchases, params: { from: from_email, to: to_email }
+
+        expect(response).to have_http_status(:success)
+        orphan_purchase.reload
+        expect(orphan_purchase.purchaser_id).to eq(target_user.id)
       end
     end
   end
