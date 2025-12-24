@@ -187,10 +187,11 @@ export const Checkout = ({
   );
 
   const discountInputDisabled = loadingDiscount || isProcessing(state);
-  const subtotal = cart.items.reduce(
-    (sum, item) => sum + Math.round(hasFreeTrial(item, isGift) ? 0 : convertToUSD(item, item.price) * item.quantity),
-    0,
-  );
+  const subtotal =
+    cart.items.reduce(
+      (sum, item) => sum + Math.round(hasFreeTrial(item, isGift) ? 0 : convertToUSD(item, item.price) * item.quantity),
+      0,
+    ) + computeTip(state);
 
   const total = getTotalPrice(state);
   const visibleDiscounts = cart.discountCodes.filter(
@@ -216,7 +217,6 @@ export const Checkout = ({
     })();
   }, [isMobile, productIds.join(",")]);
 
-  const tip = computeTip(state);
   const commissionTotal = cart.items
     .filter((item) => item.product.native_type === "commission")
     .reduce((sum, item) => sum + getDiscountedPrice(cart, item).price, 0);
@@ -272,7 +272,6 @@ export const Checkout = ({
                   {state.surcharges.type === "loaded" ? (
                     <>
                       <CartPriceItem title="Subtotal" price={formatPrice(subtotal)} />
-                      {tip ? <CartPriceItem title="Tip" price={formatPrice(tip)} /> : null}
                       {state.surcharges.result.tax_included_cents ? (
                         <CartPriceItem
                           title={`${nameOfSalesTaxForCountry(state.country)} (included)`}
@@ -434,11 +433,11 @@ const TipSelector = () => {
         title="Add a tip?"
         price={formatPrice(computeTip(state))}
       />
-      <div className="flex flex-wrap gap-3">
+      <div className="flex flex-wrap gap-4">
         {showPercentageOptions ? (
           <div
             role="radiogroup"
-            className="radio-buttons flex-1 basis-[38rem]"
+            className="radio-buttons flex-1 basis-174"
             style={{ gridTemplateColumns: "repeat(auto-fit, minmax(5rem, 1fr))" }}
           >
             {tipPercentages.map((percentage) => (
@@ -464,7 +463,7 @@ const TipSelector = () => {
             ))}
           </div>
         ) : null}
-        <fieldset className={cx("flex-1 basis-[9.5rem]", { danger: errors.has("tip") })}>
+        <fieldset className={cx("flex-1 basis-38", { danger: errors.has("tip") })}>
           <PriceInput
             className={{ pill: "rounded-full text-sm" }}
             hasError={errors.has("tip")}

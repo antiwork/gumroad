@@ -22,10 +22,9 @@ describe("Product checkout with tipping", type: :system, js: true) do
       choose "20%"
 
       expect(page).to have_field("Custom tip", with: "")
-      expect(page).to have_text("Subtotal US$40", normalize_ws: true)
-      expect(page).to have_text("Tip US$8", normalize_ws: true)
-      expect(page).to have_text("Total US$48", normalize_ws: true)
+      expect(page).to have_text("Subtotal US$48", normalize_ws: true)
       expect(page).to have_text("Add a tip? US$8", normalize_ws: true)
+      expect(page).to have_text("Total US$48", normalize_ws: true)
       click_on "Pay"
 
       expect(page).to have_alert(text: "Your purchase was successful! We sent a receipt to test@gumroad.com.")
@@ -54,8 +53,8 @@ describe("Product checkout with tipping", type: :system, js: true) do
 
       fill_in "Custom tip", with: 20
 
-      expect(page).to have_text("Subtotal US$30", normalize_ws: true)
-      expect(page).to have_text("Tip US$20", normalize_ws: true)
+      expect(page).to have_text("Subtotal US$50", normalize_ws: true)
+      expect(page).to have_text("Add a tip? US$20", normalize_ws: true)
       expect(page).to have_text("Total US$50", normalize_ws: true)
       click_on "Pay"
 
@@ -106,8 +105,8 @@ describe("Product checkout with tipping", type: :system, js: true) do
 
         choose "20%"
 
-        expect(page).to have_text("Subtotal US$25", normalize_ws: true)
-        expect(page).to have_text("Tip US$5", normalize_ws: true)
+        expect(page).to have_text("Subtotal US$30", normalize_ws: true)
+        expect(page).to have_text("Add a tip? US$5", normalize_ws: true)
         expect(page).to have_text("Total US$30", normalize_ws: true)
         click_on "Pay"
 
@@ -155,8 +154,8 @@ describe("Product checkout with tipping", type: :system, js: true) do
 
       fill_checkout_form(free_product2)
 
-      expect(page).to have_text("Subtotal US$0", normalize_ws: true)
-      expect(page).to have_text("Tip US$5", normalize_ws: true)
+      expect(page).to have_text("Subtotal US$5", normalize_ws: true)
+      expect(page).to have_text("Add a tip? US$5", normalize_ws: true)
       expect(page).to have_text("Total US$5", normalize_ws: true)
       click_on "Pay"
 
@@ -329,9 +328,9 @@ describe("Product checkout with tipping", type: :system, js: true) do
       choose "20%"
       wait_for_ajax
 
-      expect(page).to have_text("Subtotal US$30", normalize_ws: true)
+      expect(page).to have_text("Subtotal US$35", normalize_ws: true)
       expect(page).to have_text("Discounts #{offer_code.code} US$-5", normalize_ws: true)
-      expect(page).to have_text("Tip US$5", normalize_ws: true)
+      expect(page).to have_text("Add a tip? US$5", normalize_ws: true)
       expect(page).to have_text("Total US$30", normalize_ws: true)
 
       click_on "Pay"
@@ -363,8 +362,8 @@ describe("Product checkout with tipping", type: :system, js: true) do
       choose "20%"
       wait_for_ajax
 
-      expect(page).to have_text("Subtotal US$4.34", normalize_ws: true)
-      expect(page).to have_text("Tip US$0.87", normalize_ws: true)
+      expect(page).to have_text("Subtotal US$5.21", normalize_ws: true)
+      expect(page).to have_text("Add a tip? US$0.87", normalize_ws: true)
       expect(page).to have_text("Total US$5.21", normalize_ws: true)
 
       click_on "Pay"
@@ -414,8 +413,8 @@ describe("Product checkout with tipping", type: :system, js: true) do
 
       choose "20%"
 
-      expect(page).to have_text("Subtotal US$22", normalize_ws: true)
-      expect(page).to have_text("Tip US$4.40", normalize_ws: true)
+      expect(page).to have_text("Subtotal US$26.40", normalize_ws: true)
+      expect(page).to have_text("Add a tip? US$4.40", normalize_ws: true)
       expect(page).to have_text("Total US$26.40", normalize_ws: true)
       expect(page).to have_text("Payment today US$25.20", normalize_ws: true)
       expect(page).to have_text("Payment after completion US$1.20", normalize_ws: true)

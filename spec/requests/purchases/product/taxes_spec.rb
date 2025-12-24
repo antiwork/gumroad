@@ -128,8 +128,8 @@ describe("Product Page - Tax Scenarios", type: :system, js: true) do
 
         choose "20%"
         wait_for_ajax
-        expect(page).to have_text("Subtotal US$500", normalize_ws: true)
-        expect(page).to have_text("Tip US$100", normalize_ws: true)
+        expect(page).to have_text("Subtotal US$600", normalize_ws: true)
+        expect(page).to have_text("Add a tip? US$100", normalize_ws: true)
         expect(page).to have_text("Sales tax US$58.85", normalize_ws: true)
         expect(page).to have_text("Total US$658.85", normalize_ws: true)
 

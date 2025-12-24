@@ -203,8 +203,8 @@ describe "Product with installment plan", type: :system, js: true do
 
       choose "20%"
 
-      expect(page).to have_text("Subtotal US$10", normalize_ws: true)
-      expect(page).to have_text("Tip US$2", normalize_ws: true)
+      expect(page).to have_text("Subtotal US$12", normalize_ws: true)
+      expect(page).to have_text("Add a tip? US$2", normalize_ws: true)
       expect(page).to have_text("Total US$12", normalize_ws: true)
       expect(page).to have_text("Payment today US$5.34", normalize_ws: true)
       expect(page).to have_text("Future installments US$6.66", normalize_ws: true)
