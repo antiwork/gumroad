@@ -5,10 +5,16 @@ class Admin::UnreviewedUsersService
   DEFAULT_CUTOFF_YEARS = 2
   MAX_CACHED_USERS = 1000
 
-  attr_reader :cutoff_date
+  def cutoff_date
+    @cutoff_date ||= cutoff_years.years.ago.to_date
+  end
 
-  def initialize(cutoff_date: nil)
-    @cutoff_date = cutoff_date || DEFAULT_CUTOFF_YEARS.years.ago.to_date
+  def self.cutoff_years
+    $redis.get(RedisKey.unreviewed_users_cutoff_years)&.to_i || DEFAULT_CUTOFF_YEARS
+  end
+
+  def cutoff_years
+    self.class.cutoff_years
   end
 
   def count

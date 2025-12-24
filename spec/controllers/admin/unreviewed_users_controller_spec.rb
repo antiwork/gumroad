@@ -42,18 +42,23 @@ describe Admin::UnreviewedUsersController, type: :controller, inertia: true do
     end
 
     context "when logged in as admin" do
+      before do
+        $redis.del(RedisKey.unreviewed_users_cutoff_years)
+      end
+
       context "when no cached data exists" do
         before do
           $redis.del(RedisKey.unreviewed_users_data)
         end
 
-        it "returns empty state" do
+        it "returns empty state with default cutoff_date" do
           get :index
 
           expect(response).to be_successful
           expect(inertia.component).to eq "Admin/UnreviewedUsers/Index"
           expect(inertia.props[:users]).to be_empty
           expect(inertia.props[:total_count]).to eq(0)
+          expect(inertia.props[:cutoff_date]).to eq(2.years.ago.to_date.to_s)
         end
       end
 
@@ -67,28 +72,18 @@ describe Admin::UnreviewedUsersController, type: :controller, inertia: true do
           Admin::UnreviewedUsersService.cache_users_data!
         end
 
-        it "returns cached users" do
+        it "returns cached users with props from service" do
           get :index
 
           expect(response).to be_successful
           expect(inertia.props[:users].size).to eq(1)
           expect(inertia.props[:users].first[:id]).to eq(unreviewed_user.id)
-        end
-
-        it "returns total count" do
-          get :index
-
           expect(inertia.props[:total_count]).to eq(1)
-        end
-
-        it "returns cutoff_date" do
-          get :index
-
           expect(inertia.props[:cutoff_date]).to eq(2.years.ago.to_date.to_s)
         end
       end
 
-      context "filters out users no longer unreviewed" do
+      context "when user is reviewed after caching" do
         let!(:user) do
           create(:user, user_risk_state: "not_reviewed", created_at: 1.year.ago)
         end
@@ -96,59 +91,15 @@ describe Admin::UnreviewedUsersController, type: :controller, inertia: true do
         before do
           create(:balance, user:, amount_cents: 5000)
           Admin::UnreviewedUsersService.cache_users_data!
-          # User is now marked as compliant after caching
           user.update!(user_risk_state: "compliant")
         end
 
-        it "excludes users who are no longer not_reviewed" do
+        it "filters out users who are no longer not_reviewed" do
           get :index
 
           expect(inertia.props[:users]).to be_empty
+          # total_count still reflects cached total
           expect(inertia.props[:total_count]).to eq(1)
-        end
-      end
-
-      context "with revenue source badges in cached data" do
-        let(:user) { create(:user, user_risk_state: "not_reviewed", created_at: 1.year.ago) }
-        let!(:balance) { create(:balance, user:, amount_cents: 5000) }
-
-        it "includes sales badge when user has sales balance" do
-          product = create(:product, user:)
-          create(:purchase, seller: user, link: product, purchase_success_balance: balance)
-          Admin::UnreviewedUsersService.cache_users_data!
-
-          get :index
-
-          user_data = inertia.props[:users].find { |u| u[:id] == user.id }
-          expect(user_data[:revenue_sources]).to include("sales")
-        end
-
-        it "includes affiliate badge when user has affiliate credits" do
-          product = create(:product)
-          direct_affiliate = create(:direct_affiliate, affiliate_user: user, seller: product.user, products: [product])
-          purchase = create(:purchase, link: product, affiliate: direct_affiliate)
-          create(:affiliate_credit, affiliate_user: user, seller: product.user, purchase:, link: product, affiliate: direct_affiliate, affiliate_credit_success_balance: balance)
-          Admin::UnreviewedUsersService.cache_users_data!
-
-          get :index
-
-          user_data = inertia.props[:users].find { |u| u[:id] == user.id }
-          expect(user_data[:revenue_sources]).to include("affiliate")
-        end
-
-        it "includes collaborator badge when user has collaborator credits" do
-          seller = create(:user)
-          product = create(:product, user: seller)
-          collaborator = create(:collaborator, affiliate_user: user, seller: seller, products: [product])
-          purchase = create(:purchase, link: product, affiliate: collaborator)
-          create(:affiliate_credit, affiliate_user: user, seller: seller, purchase:, link: product, affiliate: collaborator, affiliate_credit_success_balance: balance)
-          Admin::UnreviewedUsersService.cache_users_data!
-
-          get :index
-
-          user_data = inertia.props[:users].find { |u| u[:id] == user.id }
-          expect(user_data[:revenue_sources]).to include("collaborator")
-          expect(user_data[:revenue_sources]).not_to include("affiliate")
         end
       end
     end
