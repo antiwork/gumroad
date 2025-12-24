@@ -61,7 +61,7 @@ const UnreviewedUsersPage = () => {
             <TableHead>Email</TableHead>
             <TableHead>Revenue sources</TableHead>
             <TableHead>Payout method</TableHead>
-            <TableHead>Age</TableHead>
+            <TableHead>Account age</TableHead>
             <TableHead className="text-right">Unpaid balance</TableHead>
           </TableRow>
         </TableHeader>
