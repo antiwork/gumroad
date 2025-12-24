@@ -47,6 +47,6 @@ class RedisKey
     def sales_report_jobs = "sales_report_jobs"
     def acme_challenge(token) = "acme_challenge:#{token}"
     def unreviewed_users_data = "admin:unreviewed_users_data"
-    def unreviewed_users_cutoff_years = "admin:unreviewed_users_cutoff_years"
+    def unreviewed_users_cutoff_date = "admin:unreviewed_users_cutoff_date"
   end
 end

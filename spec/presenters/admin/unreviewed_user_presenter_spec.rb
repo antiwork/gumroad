@@ -60,6 +60,14 @@ describe Admin::UnreviewedUserPresenter do
       expect(props[:created_at]).to eq(user.created_at.iso8601)
     end
 
+    it "returns account_age_days" do
+      user.update!(created_at: 30.days.ago)
+
+      props = described_class.new(user).props
+
+      expect(props[:account_age_days]).to eq(30)
+    end
+
     describe "payout_method" do
       it "returns nil when no payout method is configured" do
         user.update!(payment_address: nil)

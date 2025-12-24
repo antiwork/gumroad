@@ -2,9 +2,9 @@ import cx from "classnames";
 import * as React from "react";
 
 import { SavedCreditCard } from "$app/parsers/card";
+import type { FormFieldName, User } from "$app/types/payments";
 
 import { Button } from "$app/components/Button";
-import { FormFieldName, User } from "$app/components/server-components/Settings/PaymentsPage";
 import { Alert } from "$app/components/ui/Alert";
 
 export type BankAccount =

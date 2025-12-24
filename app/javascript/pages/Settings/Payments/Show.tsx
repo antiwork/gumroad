@@ -1,32 +1,29 @@
-import { StripeCardElement } from "@stripe/stripe-js";
+import { useForm, usePage } from "@inertiajs/react";
 import cx from "classnames";
 import parsePhoneNumberFromString, { CountryCode } from "libphonenumber-js";
 import * as React from "react";
-import { cast, createCast } from "ts-safe-cast";
+import { cast } from "ts-safe-cast";
 
-import { CardPayoutError, prepareCardTokenForPayouts } from "$app/data/card_payout_data";
+import { CardPayoutError, prepareCardTokenForPayouts, type CardPayoutToken } from "$app/data/card_payout_data";
 import { SavedCreditCard } from "$app/parsers/card";
 import { SettingPage } from "$app/parsers/settings";
+import type { ComplianceInfo, PayoutMethod, FormFieldName, User, PayoutDebitCardData } from "$app/types/payments";
 import { formatPriceCentsWithCurrencySymbol, formatPriceCentsWithoutCurrencySymbol } from "$app/utils/currency";
 import { asyncVoid } from "$app/utils/promise";
-import { request, assertResponseError } from "$app/utils/request";
-import { register } from "$app/utils/serverComponentUtil";
 
 import { Button } from "$app/components/Button";
+import { ConfirmBalanceForfeitOnPayoutMethodChangeModal } from "$app/components/ConfirmBalanceForfeitOnPayoutMethodChangeModal";
+import { CountrySelectionModal } from "$app/components/CountrySelectionModal";
 import { Icon } from "$app/components/Icons";
+import { StripeConnectEmbeddedNotificationBanner } from "$app/components/PayoutPage/StripeConnectEmbeddedNotificationBanner";
 import { PriceInput } from "$app/components/PriceInput";
-import { showAlert } from "$app/components/server-components/Alert";
-import { ConfirmBalanceForfeitOnPayoutMethodChangeModal } from "$app/components/server-components/ConfirmBalanceForfeitOnPayoutMethodChangeModal";
-import { CountrySelectionModal } from "$app/components/server-components/CountrySelectionModal";
-import { StripeConnectEmbeddedNotificationBanner } from "$app/components/server-components/PayoutPage/StripeConnectEmbeddedNotificationBanner";
-import { CreditCardForm } from "$app/components/server-components/Settings/CreditCardForm";
-import { UpdateCountryConfirmationModal } from "$app/components/server-components/UpdateCountryConfirmationModal";
+import { CreditCardForm } from "$app/components/Settings/AdvancedPage/CreditCardForm";
 import { Layout } from "$app/components/Settings/Layout";
 import AccountDetailsSection from "$app/components/Settings/PaymentsPage/AccountDetailsSection";
 import AusBackTaxesSection, { type AusBacktaxDetails } from "$app/components/Settings/PaymentsPage/AusBackTaxesSection";
 import BankAccountSection, {
-  BankAccount,
   BankAccountDetails,
+  type BankAccount,
 } from "$app/components/Settings/PaymentsPage/BankAccountSection";
 import DebitCardSection from "$app/components/Settings/PaymentsPage/DebitCardSection";
 import PayPalConnectSection, { PayPalConnect } from "$app/components/Settings/PaymentsPage/PayPalConnectSection";
@@ -35,73 +32,16 @@ import StripeConnectSection, { StripeConnect } from "$app/components/Settings/Pa
 import { Toggle } from "$app/components/Toggle";
 import { TypeSafeOptionSelect } from "$app/components/TypeSafeOptionSelect";
 import { Alert } from "$app/components/ui/Alert";
+import { UpdateCountryConfirmationModal } from "$app/components/UpdateCountryConfirmationModal";
 import { useUserAgentInfo } from "$app/components/UserAgent";
 import { WithTooltip } from "$app/components/WithTooltip";
 
 import logo from "$assets/images/logo-g.svg";
 
-export type PayoutDebitCardData = { type: "saved" } | { type: "new"; element: StripeCardElement } | undefined;
-
-export type User = {
-  country_supports_native_payouts: boolean;
-  country_supports_iban: boolean;
-  need_full_ssn: boolean;
-  country_code: string | null;
-  payout_currency: string | null;
-  is_from_europe: boolean;
-  individual_tax_id_needed_countries: string[];
-  individual_tax_id_entered: boolean;
-  business_tax_id_entered: boolean;
-  requires_credit_card: boolean;
-  can_connect_stripe: boolean;
-  is_charged_paypal_payout_fee: boolean;
-  joined_at: string;
-};
-
 const PAYOUT_FREQUENCIES = ["daily", "weekly", "monthly", "quarterly"] as const;
 type PayoutFrequency = (typeof PAYOUT_FREQUENCIES)[number];
 
-export type ComplianceInfo = {
-  is_business: boolean;
-  business_name: string | null;
-  business_type: string | null;
-  business_street_address: string | null;
-  business_city: string | null;
-  business_state: string | null;
-  business_country: string | null;
-  business_zip_code: string | null;
-  business_phone: string | null;
-  job_title: string | null;
-  business_tax_id?: string | null;
-  first_name: string | null;
-  last_name: string | null;
-  street_address: string | null;
-  city: string | null;
-  state: string | null;
-  country: string | null;
-  zip_code: string | null;
-  phone: string | null;
-  nationality: string | null;
-  dob_month: number;
-  dob_day: number;
-  dob_year: number;
-  individual_tax_id?: string | null;
-  updated_country_code?: string | null;
-  first_name_kanji?: string | null;
-  last_name_kanji?: string | null;
-  first_name_kana?: string | null;
-  last_name_kana?: string | null;
-  business_name_kanji?: string | null;
-  business_name_kana?: string | null;
-  building_number?: string | null;
-  street_address_kanji?: string | null;
-  street_address_kana?: string | null;
-  business_building_number?: string | null;
-  business_street_address_kanji?: string | null;
-  business_street_address_kana?: string | null;
-};
-
-type Props = {
+type PaymentsPageProps = {
   settings_pages: SettingPage[];
   is_form_disabled: boolean;
   should_show_country_modal: boolean;
@@ -146,74 +86,40 @@ type Props = {
   minimum_payout_threshold_cents: number;
   payout_frequency: PayoutFrequency;
   payout_frequency_daily_supported: boolean;
+  errors?: {
+    base?: string[];
+    error_code?: string[];
+  };
 };
 
-export type PayoutMethod = "bank" | "card" | "paypal" | "stripe";
-export type FormFieldName =
-  | "first_name"
-  | "last_name"
-  | "first_name_kanji"
-  | "last_name_kanji"
-  | "first_name_kana"
-  | "last_name_kana"
-  | "building_number"
-  | "street_address_kanji"
-  | "street_address_kana"
-  | "street_address"
-  | "city"
-  | "state"
-  | "zip_code"
-  | "dob_year"
-  | "dob_month"
-  | "dob_day"
-  | "phone"
-  | "nationality"
-  | "individual_tax_id"
-  | "business_type"
-  | "business_name"
-  | "business_name_kanji"
-  | "business_name_kana"
-  | "business_street_address"
-  | "business_building_number"
-  | "business_street_address_kanji"
-  | "business_street_address_kana"
-  | "business_city"
-  | "business_state"
-  | "business_zip_code"
-  | "business_phone"
-  | "job_title"
-  | "business_tax_id"
-  | "routing_number"
-  | "transit_number"
-  | "institution_number"
-  | "bsb_number"
-  | "bank_code"
-  | "branch_code"
-  | "clearing_code"
-  | "sort_code"
-  | "ifsc"
-  | "account_type"
-  | "account_holder_full_name"
-  | "account_number"
-  | "account_number_confirmation"
-  | "paypal_email_address";
-
-export type ErrorMessageInfo = {
+type ErrorMessageInfo = {
   message: string;
   code?: string | null;
 };
 
-const PaymentsPage = (props: Props) => {
+export default function PaymentsPage() {
+  const page = usePage();
+  const props = cast<PaymentsPageProps>(page.props);
+  const errors = cast<{ base?: string[]; error_code?: string[] } | undefined>(page.props.errors);
+
   const userAgentInfo = useUserAgentInfo();
-  const [isSaving, setIsSaving] = React.useState(false);
-  const [errorMessage, setErrorMessage] = React.useState<ErrorMessageInfo | null>(null);
+  const [clientErrorMessage, setClientErrorMessage] = React.useState<ErrorMessageInfo | null>(null);
   const formRef = React.useRef<HTMLDivElement & HTMLFormElement>(null);
   const [errorFieldNames, setErrorFieldNames] = React.useState(() => new Set<FormFieldName>());
   const markFieldInvalid = (fieldName: FormFieldName) => setErrorFieldNames(new Set(errorFieldNames.add(fieldName)));
   const [isUpdateCountryConfirmed, setIsUpdateCountryConfirmed] = React.useState(false);
   const [isPayoutMethodChangeConfirmed, setIsPayoutMethodChangeConfirmed] = React.useState(false);
 
-  const [selectedPayoutMethod, setSelectedPayoutMethod] = React.useState<PayoutMethod>(
+  const form = useForm({
+    user: props.compliance_info,
+    payouts_paused_by_user: props.payouts_paused_by_user,
+    payout_threshold_cents: props.payout_threshold_cents,
+    payout_frequency: props.payout_frequency,
+    bank_account: props.bank_account_details.bank_account,
+    payment_address: props.paypal_address,
+  });
+
+  const [selectedPayoutMethod, setSelectedPayoutMethod] = React.useState<PayoutMethod>(() =>
     props.stripe_connect.has_connected_stripe
       ? "stripe"
       : props.bank_account_details.show_bank_account && props.bank_account_details.is_a_card
@@ -224,53 +130,74 @@ const PaymentsPage = (props: Props) => {
             ? "paypal"
             : "bank",
   );
+
   const updatePayoutMethod = (newPayoutMethod: PayoutMethod) => {
     setSelectedPayoutMethod(newPayoutMethod);
     setErrorFieldNames(new Set());
     if (props.user.country_code === "AE") {
       if (newPayoutMethod === "paypal") {
-        updateComplianceInfo({ is_business: false });
+        form.setData("user", { ...form.data.user, is_business: false });
       } else if (newPayoutMethod === "bank") {
-        updateComplianceInfo({ is_business: true });
+        form.setData("user", { ...form.data.user, is_business: true });
       }
     }
   };
 
-  const [payoutsPausedByUser, setPayoutsPausedByUser] = React.useState(props.payouts_paused_by_user);
-
-  const [payoutThresholdCents, setPayoutThresholdCents] = React.useState<{ value: number | null; error?: boolean }>({
-    value: props.payout_threshold_cents,
-  });
-  const [payoutFrequency, setPayoutFrequency] = React.useState<PayoutFrequency>(props.payout_frequency);
-
-  const [complianceInfo, setComplianceInfo] = React.useState(props.compliance_info);
   const updateComplianceInfo = (newComplianceInfo: Partial<ComplianceInfo>) => {
     if (
       props.user.country_code &&
       newComplianceInfo.updated_country_code &&
       props.user.country_code !== newComplianceInfo.updated_country_code
     ) {
-      setErrorMessage(null);
       setIsUpdateCountryConfirmed(false);
       setShowUpdateCountryConfirmationModal(true);
     }
-    setComplianceInfo((prevComplianceInfo) => ({ ...prevComplianceInfo, ...newComplianceInfo }));
+    form.setData("user", { ...form.data.user, ...newComplianceInfo });
     setErrorFieldNames(new Set());
   };
 
-  const [bankAccount, setBankAccount] = React.useState(props.bank_account_details.bank_account);
   const updateBankAccount = (newBankAccount: Partial<BankAccount>) => {
-    setBankAccount((prevBankAccount) => ({ ...prevBankAccount, ...newBankAccount }));
+    form.setData("bank_account", { ...form.data.bank_account, ...newBankAccount });
     setErrorFieldNames(new Set());
   };
 
-  const [paypalEmailAddress, setPaypalEmailAddress] = React.useState(props.paypal_address);
   const [debitCard, setDebitCard] = React.useState<PayoutDebitCardData | null>(null);
   const [showNewBankAccount, setShowNewBankAccount] = React.useState(!props.bank_account_details.account_number_visual);
+  const previousCountryRef = React.useRef<string | null>(
+    props.compliance_info.is_business ? props.compliance_info.business_country : props.compliance_info.country,
+  );
+
+  // Reset form data when country changes
+  React.useEffect(() => {
+    const currentCountry = props.compliance_info.is_business
+      ? props.compliance_info.business_country
+      : props.compliance_info.country;
+
+    if (previousCountryRef.current !== currentCountry) {
+      form.setData({
+        user: props.compliance_info,
+        payouts_paused_by_user: props.payouts_paused_by_user,
+        payout_threshold_cents: props.payout_threshold_cents,
+        payout_frequency: props.payout_frequency,
+        bank_account: props.bank_account_details.bank_account,
+        payment_address: props.paypal_address,
+      });
+      setErrorFieldNames(new Set());
+      setClientErrorMessage(null);
+      previousCountryRef.current = currentCountry;
+    }
+  }, [props.compliance_info.country, props.compliance_info.business_country]);
+
+  // Sync showNewBankAccount when bank account details change (e.g., after successful save or country change)
+  React.useEffect(() => {
+    setShowNewBankAccount(!props.bank_account_details.account_number_visual);
+  }, [props.bank_account_details.account_number_visual]);
 
   React.useEffect(() => {
-    if (errorMessage) formRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [errorMessage]);
+    if ((errors?.base && errors.base.length > 0) || clientErrorMessage) {
+      formRef.current?.scrollIntoView({ behavior: "smooth" });
+    }
+  }, [errors, clientErrorMessage]);
 
   const isStreetAddressPOBox = (input: string) => {
     const countryCode: CountryCode = cast(props.user.country_code);
@@ -294,394 +221,398 @@ const PaymentsPage = (props: Props) => {
   };
 
   const validateBankAccountFields = () => {
-    if (!bankAccount) {
+    if (!form.data.bank_account) {
       return;
     }
 
-    if (!bankAccount.account_holder_full_name) {
+    if (!form.data.bank_account.account_holder_full_name) {
       markFieldInvalid("account_holder_full_name");
     }
-    if (bankAccount.type === "AchAccount" && !bankAccount.routing_number) {
+    if (form.data.bank_account.type === "AchAccount" && !form.data.bank_account.routing_number) {
       markFieldInvalid("routing_number");
     }
-    if (bankAccount.type === "AustralianBankAccount" && !bankAccount.bsb_number) {
+    if (form.data.bank_account.type === "AustralianBankAccount" && !form.data.bank_account.bsb_number) {
       markFieldInvalid("bsb_number");
     }
-    if (bankAccount.type === "CanadianBankAccount" && !bankAccount.transit_number) {
+    if (form.data.bank_account.type === "CanadianBankAccount" && !form.data.bank_account.transit_number) {
       markFieldInvalid("transit_number");
     }
-    if (bankAccount.type === "CanadianBankAccount" && !bankAccount.institution_number) {
+    if (form.data.bank_account.type === "CanadianBankAccount" && !form.data.bank_account.institution_number) {
       markFieldInvalid("institution_number");
     }
-    if (bankAccount.type === "HongKongBankAccount" && !bankAccount.clearing_code) {
+    if (form.data.bank_account.type === "HongKongBankAccount" && !form.data.bank_account.clearing_code) {
       markFieldInvalid("clearing_code");
     }
-    if (bankAccount.type === "HongKongBankAccount" && !bankAccount.branch_code) {
+    if (form.data.bank_account.type === "HongKongBankAccount" && !form.data.bank_account.branch_code) {
       markFieldInvalid("branch_code");
     }
-    if (bankAccount.type === "KoreaBankAccount" && !bankAccount.bank_code) {
+    if (form.data.bank_account.type === "KoreaBankAccount" && !form.data.bank_account.bank_code) {
       markFieldInvalid("bank_code");
     }
-    if (bankAccount.type === "PhilippinesBankAccount" && !bankAccount.bank_code) {
+    if (form.data.bank_account.type === "PhilippinesBankAccount" && !form.data.bank_account.bank_code) {
       markFieldInvalid("bank_code");
     }
-    if (bankAccount.type === "SingaporeanBankAccount" && !bankAccount.bank_code) {
+    if (form.data.bank_account.type === "SingaporeanBankAccount" && !form.data.bank_account.bank_code) {
       markFieldInvalid("bank_code");
     }
-    if (bankAccount.type === "SingaporeanBankAccount" && !bankAccount.branch_code) {
+    if (form.data.bank_account.type === "SingaporeanBankAccount" && !form.data.bank_account.branch_code) {
       markFieldInvalid("branch_code");
     }
-    if (bankAccount.type === "ThailandBankAccount" && !bankAccount.bank_code) {
+    if (form.data.bank_account.type === "ThailandBankAccount" && !form.data.bank_account.bank_code) {
       markFieldInvalid("bank_code");
     }
-    if (bankAccount.type === "TrinidadAndTobagoBankAccount" && !bankAccount.bank_code) {
+    if (form.data.bank_account.type === "TrinidadAndTobagoBankAccount" && !form.data.bank_account.bank_code) {
       markFieldInvalid("bank_code");
     }
-    if (bankAccount.type === "TrinidadAndTobagoBankAccount" && !bankAccount.branch_code) {
+    if (form.data.bank_account.type === "TrinidadAndTobagoBankAccount" && !form.data.bank_account.branch_code) {
       markFieldInvalid("branch_code");
     }
-    if (bankAccount.type === "UkBankAccount" && !bankAccount.sort_code) {
+    if (form.data.bank_account.type === "UkBankAccount" && !form.data.bank_account.sort_code) {
       markFieldInvalid("sort_code");
     }
-    if (bankAccount.type === "IndianBankAccount" && !bankAccount.ifsc) {
+    if (form.data.bank_account.type === "IndianBankAccount" && !form.data.bank_account.ifsc) {
       markFieldInvalid("ifsc");
     }
-    if (bankAccount.type === "VietnamBankAccount" && !bankAccount.bank_code) {
+    if (form.data.bank_account.type === "VietnamBankAccount" && !form.data.bank_account.bank_code) {
       markFieldInvalid("bank_code");
     }
-    if (bankAccount.type === "TaiwanBankAccount" && !bankAccount.bank_code) {
+    if (form.data.bank_account.type === "TaiwanBankAccount" && !form.data.bank_account.bank_code) {
       markFieldInvalid("bank_code");
     }
-    if (bankAccount.type === "IndonesiaBankAccount" && !bankAccount.bank_code) {
+    if (form.data.bank_account.type === "IndonesiaBankAccount" && !form.data.bank_account.bank_code) {
       markFieldInvalid("bank_code");
     }
-    if (bankAccount.type === "ChileBankAccount" && !bankAccount.bank_code) {
+    if (form.data.bank_account.type === "ChileBankAccount" && !form.data.bank_account.bank_code) {
       markFieldInvalid("bank_code");
     }
-    if (bankAccount.type === "ChileBankAccount" && !bankAccount.account_type) {
+    if (form.data.bank_account.type === "ChileBankAccount" && !form.data.bank_account.account_type) {
       markFieldInvalid("account_type");
     }
-    if (bankAccount.type === "PakistanBankAccount" && !bankAccount.bank_code) {
+    if (form.data.bank_account.type === "PakistanBankAccount" && !form.data.bank_account.bank_code) {
       markFieldInvalid("bank_code");
     }
-    if (bankAccount.type === "TurkeyBankAccount" && !bankAccount.bank_code) {
+    if (form.data.bank_account.type === "TurkeyBankAccount" && !form.data.bank_account.bank_code) {
       markFieldInvalid("bank_code");
     }
-    if (bankAccount.type === "MoroccoBankAccount" && !bankAccount.bank_code) {
+    if (form.data.bank_account.type === "MoroccoBankAccount" && !form.data.bank_account.bank_code) {
       markFieldInvalid("bank_code");
     }
-    if (bankAccount.type === "JapanBankAccount" && !bankAccount.bank_code) {
+    if (form.data.bank_account.type === "JapanBankAccount" && !form.data.bank_account.bank_code) {
       markFieldInvalid("bank_code");
     }
-    if (bankAccount.type === "MalaysiaBankAccount" && !bankAccount.bank_code) {
+    if (form.data.bank_account.type === "MalaysiaBankAccount" && !form.data.bank_account.bank_code) {
       markFieldInvalid("bank_code");
     }
-    if (bankAccount.type === "BosniaAndHerzegovinaBankAccount" && !bankAccount.bank_code) {
+    if (form.data.bank_account.type === "BosniaAndHerzegovinaBankAccount" && !form.data.bank_account.bank_code) {
       markFieldInvalid("bank_code");
     }
-    if (bankAccount.type === "JapanBankAccount" && !bankAccount.branch_code) {
+    if (form.data.bank_account.type === "JapanBankAccount" && !form.data.bank_account.branch_code) {
       markFieldInvalid("branch_code");
     }
-    if (bankAccount.type === "BotswanaBankAccount" && !bankAccount.bank_code) {
+    if (form.data.bank_account.type === "BotswanaBankAccount" && !form.data.bank_account.bank_code) {
       markFieldInvalid("bank_code");
     }
-    if (bankAccount.type === "SerbiaBankAccount" && !bankAccount.bank_code) {
+    if (form.data.bank_account.type === "SerbiaBankAccount" && !form.data.bank_account.bank_code) {
       markFieldInvalid("bank_code");
     }
-    if (bankAccount.type === "SouthAfricaBankAccount" && !bankAccount.bank_code) {
+    if (form.data.bank_account.type === "SouthAfricaBankAccount" && !form.data.bank_account.bank_code) {
       markFieldInvalid("bank_code");
     }
-    if (bankAccount.type === "KenyaBankAccount" && !bankAccount.bank_code) {
+    if (form.data.bank_account.type === "KenyaBankAccount" && !form.data.bank_account.bank_code) {
       markFieldInvalid("bank_code");
     }
-    if (bankAccount.type === "NorthMacedoniaBankAccount" && !bankAccount.bank_code) {
+    if (form.data.bank_account.type === "NorthMacedoniaBankAccount" && !form.data.bank_account.bank_code) {
       markFieldInvalid("bank_code");
     }
-    if (bankAccount.type === "EgyptBankAccount" && !bankAccount.bank_code) {
+    if (form.data.bank_account.type === "EgyptBankAccount" && !form.data.bank_account.bank_code) {
       markFieldInvalid("bank_code");
     }
-    if (bankAccount.type === "AntiguaAndBarbudaBankAccount" && !bankAccount.bank_code) {
+    if (form.data.bank_account.type === "AntiguaAndBarbudaBankAccount" && !form.data.bank_account.bank_code) {
       markFieldInvalid("bank_code");
     }
-    if (bankAccount.type === "TanzaniaBankAccount" && !bankAccount.bank_code) {
+    if (form.data.bank_account.type === "TanzaniaBankAccount" && !form.data.bank_account.bank_code) {
       markFieldInvalid("bank_code");
     }
-    if (bankAccount.type === "NamibiaBankAccount" && !bankAccount.bank_code) {
+    if (form.data.bank_account.type === "NamibiaBankAccount" && !form.data.bank_account.bank_code) {
       markFieldInvalid("bank_code");
     }
-    if (bankAccount.type === "EthiopiaBankAccount" && !bankAccount.bank_code) {
+    if (form.data.bank_account.type === "EthiopiaBankAccount" && !form.data.bank_account.bank_code) {
       markFieldInvalid("bank_code");
     }
-    if (bankAccount.type === "BruneiBankAccount" && !bankAccount.bank_code) {
+    if (form.data.bank_account.type === "BruneiBankAccount" && !form.data.bank_account.bank_code) {
       markFieldInvalid("bank_code");
     }
-    if (bankAccount.type === "GuyanaBankAccount" && !bankAccount.bank_code) {
+    if (form.data.bank_account.type === "GuyanaBankAccount" && !form.data.bank_account.bank_code) {
       markFieldInvalid("bank_code");
     }
-    if (bankAccount.type === "GuatemalaBankAccount" && !bankAccount.bank_code) {
+    if (form.data.bank_account.type === "GuatemalaBankAccount" && !form.data.bank_account.bank_code) {
       markFieldInvalid("bank_code");
     }
-    if (bankAccount.type === "ColombiaBankAccount" && !bankAccount.bank_code) {
+    if (form.data.bank_account.type === "ColombiaBankAccount" && !form.data.bank_account.bank_code) {
       markFieldInvalid("bank_code");
     }
-    if (bankAccount.type === "ColombiaBankAccount" && !bankAccount.account_type) {
+    if (form.data.bank_account.type === "ColombiaBankAccount" && !form.data.bank_account.account_type) {
       markFieldInvalid("account_type");
     }
-    if (bankAccount.type === "SaudiArabiaBankAccount" && !bankAccount.bank_code) {
+    if (form.data.bank_account.type === "SaudiArabiaBankAccount" && !form.data.bank_account.bank_code) {
       markFieldInvalid("bank_code");
     }
-    if (bankAccount.type === "UruguayBankAccount" && !bankAccount.bank_code) {
+    if (form.data.bank_account.type === "UruguayBankAccount" && !form.data.bank_account.bank_code) {
       markFieldInvalid("bank_code");
     }
-    if (bankAccount.type === "MauritiusBankAccount" && !bankAccount.bank_code) {
+    if (form.data.bank_account.type === "MauritiusBankAccount" && !form.data.bank_account.bank_code) {
       markFieldInvalid("bank_code");
     }
-    if (bankAccount.type === "JamaicaBankAccount" && !bankAccount.bank_code) {
+    if (form.data.bank_account.type === "JamaicaBankAccount" && !form.data.bank_account.bank_code) {
       markFieldInvalid("bank_code");
     }
-    if (bankAccount.type === "JamaicaBankAccount" && !bankAccount.branch_code) {
+    if (form.data.bank_account.type === "JamaicaBankAccount" && !form.data.bank_account.branch_code) {
       markFieldInvalid("branch_code");
     }
-    if (bankAccount.type === "EcuadorBankAccount" && !bankAccount.bank_code) {
+    if (form.data.bank_account.type === "EcuadorBankAccount" && !form.data.bank_account.bank_code) {
       markFieldInvalid("bank_code");
     }
-    if (bankAccount.type === "KazakhstanBankAccount" && !bankAccount.bank_code) {
+    if (form.data.bank_account.type === "KazakhstanBankAccount" && !form.data.bank_account.bank_code) {
       markFieldInvalid("bank_code");
     }
-    if (bankAccount.type === "OmanBankAccount" && !bankAccount.bank_code) {
+    if (form.data.bank_account.type === "OmanBankAccount" && !form.data.bank_account.bank_code) {
       markFieldInvalid("bank_code");
     }
-    if (bankAccount.type === "RwandaBankAccount" && !bankAccount.bank_code) {
+    if (form.data.bank_account.type === "RwandaBankAccount" && !form.data.bank_account.bank_code) {
       markFieldInvalid("bank_code");
     }
-    if (bankAccount.type === "DominicanRepublicBankAccount" && !bankAccount.bank_code) {
+    if (form.data.bank_account.type === "DominicanRepublicBankAccount" && !form.data.bank_account.bank_code) {
       markFieldInvalid("bank_code");
     }
-    if (bankAccount.type === "UzbekistanBankAccount" && !bankAccount.bank_code) {
+    if (form.data.bank_account.type === "UzbekistanBankAccount" && !form.data.bank_account.bank_code) {
       markFieldInvalid("bank_code");
     }
-    if (bankAccount.type === "UzbekistanBankAccount" && !bankAccount.branch_code) {
+    if (form.data.bank_account.type === "UzbekistanBankAccount" && !form.data.bank_account.branch_code) {
       markFieldInvalid("branch_code");
     }
-    if (bankAccount.type === "BoliviaBankAccount" && !bankAccount.bank_code) {
+    if (form.data.bank_account.type === "BoliviaBankAccount" && !form.data.bank_account.bank_code) {
       markFieldInvalid("branch_code");
     }
-    if (bankAccount.type === "GhanaBankAccount" && !bankAccount.bank_code) {
+    if (form.data.bank_account.type === "GhanaBankAccount" && !form.data.bank_account.bank_code) {
       markFieldInvalid("bank_code");
     }
-    if (bankAccount.type === "AlbaniaBankAccount" && !bankAccount.bank_code) {
+    if (form.data.bank_account.type === "AlbaniaBankAccount" && !form.data.bank_account.bank_code) {
       markFieldInvalid("bank_code");
     }
-    if (bankAccount.type === "BahrainBankAccount" && !bankAccount.bank_code) {
+    if (form.data.bank_account.type === "BahrainBankAccount" && !form.data.bank_account.bank_code) {
       markFieldInvalid("bank_code");
     }
-    if (bankAccount.type === "JordanBankAccount" && !bankAccount.bank_code) {
+    if (form.data.bank_account.type === "JordanBankAccount" && !form.data.bank_account.bank_code) {
       markFieldInvalid("bank_code");
     }
-    if (bankAccount.type === "NigeriaBankAccount" && !bankAccount.bank_code) {
+    if (form.data.bank_account.type === "NigeriaBankAccount" && !form.data.bank_account.bank_code) {
       markFieldInvalid("bank_code");
     }
-    if (bankAccount.type === "AngolaBankAccount" && !bankAccount.bank_code) {
+    if (form.data.bank_account.type === "AngolaBankAccount" && !form.data.bank_account.bank_code) {
       markFieldInvalid("bank_code");
     }
-    if (bankAccount.type === "SanMarinoBankAccount" && !bankAccount.bank_code) {
+    if (form.data.bank_account.type === "SanMarinoBankAccount" && !form.data.bank_account.bank_code) {
       markFieldInvalid("bank_code");
     }
-    if (bankAccount.type === "AzerbaijanBankAccount" && !bankAccount.bank_code) {
+    if (form.data.bank_account.type === "AzerbaijanBankAccount" && !form.data.bank_account.bank_code) {
       markFieldInvalid("bank_code");
     }
-    if (bankAccount.type === "AzerbaijanBankAccount" && !bankAccount.branch_code) {
+    if (form.data.bank_account.type === "AzerbaijanBankAccount" && !form.data.bank_account.branch_code) {
       markFieldInvalid("branch_code");
     }
-    if (bankAccount.type === "MoldovaBankAccount" && !bankAccount.bank_code) {
+    if (form.data.bank_account.type === "MoldovaBankAccount" && !form.data.bank_account.bank_code) {
       markFieldInvalid("bank_code");
     }
-    if (bankAccount.type === "PanamaBankAccount" && !bankAccount.bank_code) {
+    if (form.data.bank_account.type === "PanamaBankAccount" && !form.data.bank_account.bank_code) {
       markFieldInvalid("bank_code");
     }
-    if (bankAccount.type === "ElSalvadorBankAccount" && !bankAccount.bank_code) {
+    if (form.data.bank_account.type === "ElSalvadorBankAccount" && !form.data.bank_account.bank_code) {
       markFieldInvalid("bank_code");
     }
-    if (bankAccount.type === "ParaguayBankAccount" && !bankAccount.bank_code) {
+    if (form.data.bank_account.type === "ParaguayBankAccount" && !form.data.bank_account.bank_code) {
       markFieldInvalid("bank_code");
     }
-    if (bankAccount.type === "ArmeniaBankAccount" && !bankAccount.bank_code) {
+    if (form.data.bank_account.type === "ArmeniaBankAccount" && !form.data.bank_account.bank_code) {
       markFieldInvalid("bank_code");
     }
-    if (bankAccount.type === "SriLankaBankAccount" && !bankAccount.bank_code) {
+    if (form.data.bank_account.type === "SriLankaBankAccount" && !form.data.bank_account.bank_code) {
       markFieldInvalid("bank_code");
     }
-    if (bankAccount.type === "SriLankaBankAccount" && !bankAccount.branch_code) {
+    if (form.data.bank_account.type === "SriLankaBankAccount" && !form.data.bank_account.branch_code) {
       markFieldInvalid("branch_code");
     }
-    if (bankAccount.type === "BangladeshBankAccount" && !bankAccount.bank_code) {
+    if (form.data.bank_account.type === "BangladeshBankAccount" && !form.data.bank_account.bank_code) {
       markFieldInvalid("bank_code");
     }
-    if (bankAccount.type === "BhutanBankAccount" && !bankAccount.bank_code) {
+    if (form.data.bank_account.type === "BhutanBankAccount" && !form.data.bank_account.bank_code) {
       markFieldInvalid("bank_code");
     }
-    if (bankAccount.type === "LaosBankAccount" && !bankAccount.bank_code) {
+    if (form.data.bank_account.type === "LaosBankAccount" && !form.data.bank_account.bank_code) {
       markFieldInvalid("bank_code");
     }
-    if (bankAccount.type === "MozambiqueBankAccount" && !bankAccount.bank_code) {
+    if (form.data.bank_account.type === "MozambiqueBankAccount" && !form.data.bank_account.bank_code) {
       markFieldInvalid("bank_code");
     }
-    if (bankAccount.type === "KuwaitBankAccount" && !bankAccount.bank_code) {
+    if (form.data.bank_account.type === "KuwaitBankAccount" && !form.data.bank_account.bank_code) {
       markFieldInvalid("bank_code");
     }
-    if (bankAccount.type === "QatarBankAccount" && !bankAccount.bank_code) {
+    if (form.data.bank_account.type === "QatarBankAccount" && !form.data.bank_account.bank_code) {
       markFieldInvalid("bank_code");
     }
-    if (bankAccount.type === "BahamasBankAccount" && !bankAccount.bank_code) {
+    if (form.data.bank_account.type === "BahamasBankAccount" && !form.data.bank_account.bank_code) {
       markFieldInvalid("bank_code");
     }
-    if (bankAccount.type === "SaintLuciaBankAccount" && !bankAccount.bank_code) {
+    if (form.data.bank_account.type === "SaintLuciaBankAccount" && !form.data.bank_account.bank_code) {
       markFieldInvalid("bank_code");
     }
-    if (bankAccount.type === "CambodiaBankAccount" && !bankAccount.bank_code) {
+    if (form.data.bank_account.type === "CambodiaBankAccount" && !form.data.bank_account.bank_code) {
       markFieldInvalid("bank_code");
     }
-    if (bankAccount.type === "MongoliaBankAccount" && !bankAccount.bank_code) {
+    if (form.data.bank_account.type === "MongoliaBankAccount" && !form.data.bank_account.bank_code) {
       markFieldInvalid("bank_code");
     }
-    if (bankAccount.type === "AlgeriaBankAccount" && !bankAccount.bank_code) {
+    if (form.data.bank_account.type === "AlgeriaBankAccount" && !form.data.bank_account.bank_code) {
       markFieldInvalid("bank_code");
     }
-    if (bankAccount.type === "MacaoBankAccount" && !bankAccount.bank_code) {
+    if (form.data.bank_account.type === "MacaoBankAccount" && !form.data.bank_account.bank_code) {
       markFieldInvalid("bank_code");
     }
-    if (!bankAccount.account_number) {
+    if (!form.data.bank_account.account_number) {
       markFieldInvalid("account_number");
     }
-    if (!bankAccount.account_number_confirmation) {
+    if (!form.data.bank_account.account_number_confirmation) {
       markFieldInvalid("account_number_confirmation");
     }
   };
 
   const validateComplianceInfoFields = () => {
-    if (!complianceInfo.first_name) {
+    if (!form.data.user.first_name) {
       markFieldInvalid("first_name");
     }
-    if (!complianceInfo.last_name) {
+    if (!form.data.user.last_name) {
       markFieldInvalid("last_name");
     }
-    if (complianceInfo.country === "JP") {
-      if (!complianceInfo.building_number) {
+    if (form.data.user.country === "JP") {
+      if (!form.data.user.building_number) {
         markFieldInvalid("building_number");
       }
-      if (!complianceInfo.street_address_kanji) {
+      if (!form.data.user.street_address_kanji) {
         markFieldInvalid("street_address_kanji");
       }
-      if (!complianceInfo.street_address_kana) {
+      if (!form.data.user.street_address_kana) {
         markFieldInvalid("street_address_kana");
       }
     } else if (
-      !complianceInfo.street_address ||
-      (complianceInfo.country === "US" && isStreetAddressPOBox(complianceInfo.street_address))
+      !form.data.user.street_address ||
+      (form.data.user.country === "US" && isStreetAddressPOBox(form.data.user.street_address))
     ) {
       markFieldInvalid("street_address");
-      if (complianceInfo.street_address) {
-        setErrorMessage({
+      if (form.data.user.street_address) {
+        setClientErrorMessage({
           message: "We require a valid physical US address. We cannot accept a P.O. Box as a valid address.",
         });
       }
     }
-    if (!complianceInfo.city) {
+    if (!form.data.user.city) {
       markFieldInvalid("city");
     }
     if (
-      complianceInfo.country !== null &&
-      complianceInfo.country.toLowerCase() in props.states &&
-      !complianceInfo.state
+      form.data.user.country !== null &&
+      form.data.user.country.toLowerCase() in props.states &&
+      !form.data.user.state
     ) {
       markFieldInvalid("state");
-      setErrorMessage({ message: "Please select a valid state or province." });
+      setClientErrorMessage({ message: "Please select a valid state or province." });
     }
-    if (!complianceInfo.zip_code && complianceInfo.country !== "BW") {
+    if (!form.data.user.zip_code && form.data.user.country !== "BW") {
       markFieldInvalid("zip_code");
     }
-    if (!validatePhoneNumber(complianceInfo.phone, complianceInfo.country)) {
+    if (!validatePhoneNumber(form.data.user.phone, form.data.user.country)) {
       markFieldInvalid("phone");
-      setErrorMessage({ message: 'Please enter your full phone number, starting with a "+" and your country code.' });
+      setClientErrorMessage({
+        message: 'Please enter your full phone number, starting with a "+" and your country code.',
+      });
     }
-    if (complianceInfo.dob_day === 0) {
+    if (form.data.user.dob_day === 0) {
       markFieldInvalid("dob_day");
     }
-    if (complianceInfo.dob_month === 0) {
+    if (form.data.user.dob_month === 0) {
       markFieldInvalid("dob_month");
     }
-    if (complianceInfo.dob_year === 0) {
+    if (form.data.user.dob_year === 0) {
       markFieldInvalid("dob_year");
     }
     if (
-      complianceInfo.country !== null &&
-      complianceInfo.country in props.user.individual_tax_id_needed_countries &&
+      form.data.user.country !== null &&
+      form.data.user.country in props.user.individual_tax_id_needed_countries &&
       !props.user.individual_tax_id_entered &&
-      !complianceInfo.individual_tax_id
+      !form.data.user.individual_tax_id
     ) {
       markFieldInvalid("individual_tax_id");
     }
-    if (complianceInfo.is_business) {
-      if (!complianceInfo.business_type) {
+    if (form.data.user.is_business) {
+      if (!form.data.user.business_type) {
         markFieldInvalid("business_type");
       }
-      if (!complianceInfo.business_name) {
+      if (!form.data.user.business_name) {
         markFieldInvalid("business_name");
       }
-      if (complianceInfo.business_country === "CA") {
-        if (!complianceInfo.job_title) {
+      if (form.data.user.business_country === "CA") {
+        if (!form.data.user.job_title) {
           markFieldInvalid("job_title");
         }
       }
-      if (complianceInfo.business_country === "JP") {
-        if (!complianceInfo.business_name_kanji) {
+      if (form.data.user.business_country === "JP") {
+        if (!form.data.user.business_name_kanji) {
           markFieldInvalid("business_name_kanji");
         }
-        if (!complianceInfo.business_name_kana) {
+        if (!form.data.user.business_name_kana) {
           markFieldInvalid("business_name_kana");
         }
-        if (!complianceInfo.business_building_number) {
+        if (!form.data.user.business_building_number) {
           markFieldInvalid("business_building_number");
         }
-        if (!complianceInfo.business_street_address_kanji) {
+        if (!form.data.user.business_street_address_kanji) {
           markFieldInvalid("business_street_address_kanji");
         }
-        if (!complianceInfo.business_street_address_kana) {
+        if (!form.data.user.business_street_address_kana) {
           markFieldInvalid("business_street_address_kana");
         }
       } else if (
-        !complianceInfo.business_street_address ||
-        (complianceInfo.business_country === "US" && isStreetAddressPOBox(complianceInfo.business_street_address))
+        !form.data.user.business_street_address ||
+        (form.data.user.business_country === "US" && isStreetAddressPOBox(form.data.user.business_street_address))
       ) {
         markFieldInvalid("business_street_address");
-        if (complianceInfo.business_street_address) {
-          setErrorMessage({
+        if (form.data.user.business_street_address) {
+          setClientErrorMessage({
             message: "We require a valid physical US address. We cannot accept a P.O. Box as a valid address.",
           });
         }
       }
-      if (!complianceInfo.business_city) {
+      if (!form.data.user.business_city) {
         markFieldInvalid("business_city");
       }
       if (
-        complianceInfo.business_country !== null &&
-        complianceInfo.business_country.toLowerCase() in props.states &&
-        !complianceInfo.business_state
+        form.data.user.business_country !== null &&
+        form.data.user.business_country.toLowerCase() in props.states &&
+        !form.data.user.business_state
       ) {
         markFieldInvalid("business_state");
-        setErrorMessage({ message: "Please select a valid state or province." });
+        setClientErrorMessage({ message: "Please select a valid state or province." });
       }
-      if (!complianceInfo.business_zip_code && props.user.country_code !== "BW") {
+      if (!form.data.user.business_zip_code && props.user.country_code !== "BW") {
         markFieldInvalid("business_zip_code");
       }
-      if (!validatePhoneNumber(complianceInfo.business_phone, complianceInfo.business_country)) {
+      if (!validatePhoneNumber(form.data.user.business_phone, form.data.user.business_country)) {
         markFieldInvalid("business_phone");
-        setErrorMessage({ message: 'Please enter your full phone number, starting with a "+" and your country code.' });
+        setClientErrorMessage({
+          message: 'Please enter your full phone number, starting with a "+" and your country code.',
+        });
       }
       if (
-        (props.user.country_supports_native_payouts || complianceInfo.business_country === "AE") &&
+        (props.user.country_supports_native_payouts || form.data.user.business_country === "AE") &&
         !props.user.business_tax_id_entered &&
-        !complianceInfo.business_tax_id
+        !form.data.user.business_tax_id
       ) {
         markFieldInvalid("business_tax_id");
       }
@@ -695,7 +626,7 @@ const PaymentsPage = (props: Props) => {
 
     if (selectedPayoutMethod === "bank" && showNewBankAccount) {
       validateBankAccountFields();
-    } else if (selectedPayoutMethod === "paypal" && !paypalEmailAddress) {
+    } else if (selectedPayoutMethod === "paypal" && !form.data.payment_address) {
       markFieldInvalid("paypal_email_address");
     }
 
@@ -707,10 +638,9 @@ const PaymentsPage = (props: Props) => {
   const handleSave = asyncVoid(async () => {
     if (!validateForm()) return;
 
-    setIsSaving(true);
-    setErrorMessage(null);
+    setClientErrorMessage(null);
 
-    let cardData;
+    let cardData: CardPayoutToken | { stripe_error: unknown } | null = null;
     if (selectedPayoutMethod === "card") {
       if (!debitCard || debitCard.type === "saved") {
         cardData = null;
@@ -729,48 +659,31 @@ const PaymentsPage = (props: Props) => {
       !isPayoutMethodChangeConfirmed
     ) {
       setShowPayoutMethodChangeConfirmationModal(true);
-      setIsSaving(false);
       return;
     }
 
-    let data = {
-      user: complianceInfo,
-      payouts_paused_by_user: payoutsPausedByUser,
-      payout_threshold_cents: payoutThresholdCents.value,
-      payout_frequency: payoutFrequency,
-    };
+    form.transform((data) => {
+      const transformed: Record<string, unknown> = {
+        user: data.user,
+        payouts_paused_by_user: data.payouts_paused_by_user,
+        payout_threshold_cents: data.payout_threshold_cents,
+        payout_frequency: data.payout_frequency,
+      };
 
-    if (selectedPayoutMethod === "bank") {
-      data = { ...data, ...{ bank_account: bankAccount } };
-    } else if (selectedPayoutMethod === "card") {
-      data = { ...data, ...{ card: cardData } };
-    } else if (selectedPayoutMethod === "paypal") {
-      data = { ...data, ...{ payment_address: paypalEmailAddress } };
-    }
-
-    try {
-      const response = await request({
-        method: "PUT",
-        url: Routes.settings_payments_path(),
-        accept: "json",
-        data,
-      });
-
-      const parsedResponse = cast<
-        { success: true } | { success: false; error_message: string; error_code?: string | null }
-      >(await response.json());
-      if (parsedResponse.success) {
-        showAlert("Thanks! You're all set.", "success");
-        window.location.reload();
-      } else {
-        setErrorMessage({ message: parsedResponse.error_message, code: parsedResponse.error_code ?? null });
+      if (selectedPayoutMethod === "bank") {
+        transformed.bank_account = data.bank_account;
+      } else if (selectedPayoutMethod === "card") {
+        transformed.card = cardData;
+      } else if (selectedPayoutMethod === "paypal") {
+        transformed.payment_address = data.payment_address;
       }
-    } catch (e) {
-      assertResponseError(e);
-      showAlert("Sorry, something went wrong. Please try again.", "error");
-    }
 
-    setIsSaving(false);
+      return transformed;
+    });
+
+    form.put(Routes.settings_payments_path(), {
+      preserveScroll: true,
+    });
   });
 
   const [showUpdateCountryConfirmationModal, setShowUpdateCountryConfirmationModal] = React.useState(false);
@@ -788,8 +701,8 @@ const PaymentsPage = (props: Props) => {
       handleSave();
     }
   }, [isUpdateCountryConfirmed]);
-  const updatedCountry = complianceInfo.updated_country_code
-    ? props.countries[complianceInfo.updated_country_code]
+  const updatedCountry = form.data.user.updated_country_code
+    ? props.countries[form.data.user.updated_country_code]
     : null;
 
   const [showPayoutMethodChangeConfirmationModal, setShowPayoutMethodChangeConfirmationModal] = React.useState(false);
@@ -807,11 +720,13 @@ const PaymentsPage = (props: Props) => {
     }
   }, [isPayoutMethodChangeConfirmed]);
 
+  const payoutThresholdError = form.data.payout_threshold_cents < props.minimum_payout_threshold_cents;
+
   const payoutsPausedToggle = (
     <fieldset>
       <Toggle
-        value={payoutsPausedByUser || props.payouts_paused_internally}
-        onChange={setPayoutsPausedByUser}
+        value={form.data.payouts_paused_by_user || props.payouts_paused_internally}
+        onChange={(value) => form.setData("payouts_paused_by_user", value)}
         ariaLabel="Pause payouts"
         disabled={props.is_form_disabled || props.payouts_paused_internally}
       >
@@ -829,7 +744,7 @@ const PaymentsPage = (props: Props) => {
       currentPage="payments"
       pages={props.settings_pages}
       onSave={handleSave}
-      canUpdate={!props.is_form_disabled && !isSaving && !payoutThresholdCents.error}
+      canUpdate={!props.is_form_disabled && !form.processing && !payoutThresholdError}
     >
       {props.should_show_country_modal ? (
         <CountrySelectionModal country={props.ip_country_code} countries={props.countries} />
@@ -914,14 +829,18 @@ const PaymentsPage = (props: Props) => {
           />
         ) : null}
 
-        {errorMessage ? (
+        {(errors?.base && errors.base.length > 0) || clientErrorMessage ? (
           <div className="mb-12 px-8">
-            <Alert role="status" variant="danger">
-              {errorMessage.code === "stripe_error" ? (
-                <div>Your account could not be updated due to an error with Stripe.</div>
-              ) : (
-                errorMessage.message
-              )}
+            <Alert role="status" className="danger">
+              {errors?.base && errors.base.length > 0 ? (
+                errors.error_code?.[0] === "stripe_error" ? (
+                  <div>Your account could not be updated due to an error with Stripe.</div>
+                ) : (
+                  errors.base[0]
+                )
+              ) : clientErrorMessage ? (
+                clientErrorMessage.message
+              ) : null}
             </Alert>
           </div>
         ) : null}
@@ -935,8 +854,8 @@ const PaymentsPage = (props: Props) => {
               <TypeSafeOptionSelect
                 id="payout_frequency"
                 name="Schedule"
-                value={payoutFrequency}
-                onChange={setPayoutFrequency}
+                value={form.data.payout_frequency}
+                onChange={(value) => form.setData("payout_frequency", value)}
                 options={PAYOUT_FREQUENCIES.map((frequency) => ({
                   id: frequency,
                   label: frequency.charAt(0).toUpperCase() + frequency.slice(1),
@@ -948,35 +867,34 @@ const PaymentsPage = (props: Props) => {
                 payouts.
               </small>
             </fieldset>
-            {payoutFrequency === "daily" && props.payout_frequency_daily_supported ? (
-              <Alert role="status" variant="info">
-                Every day, your balance from the previous day will be sent to you via instant payouts, subject to a{" "}
-                <b>3% fee</b>.
+            {form.data.payout_frequency === "daily" && props.payout_frequency_daily_supported ? (
+              <Alert role="status" className="info">
+                <div>
+                  Every day, your balance from the previous day will be sent to you via instant payouts, subject to a{" "}
+                  <b>3% fee</b>.
+                </div>
               </Alert>
             ) : null}
-            {payoutFrequency === "daily" && !props.payout_frequency_daily_supported && (
-              <Alert role="status" variant="danger">
-                Your account is no longer eligible for daily payouts. Please update your schedule.
+            {form.data.payout_frequency === "daily" && !props.payout_frequency_daily_supported && (
+              <Alert role="status" className="danger">
+                <div>Your account is no longer eligible for daily payouts. Please update your schedule.</div>
               </Alert>
             )}
-            <fieldset className={cx({ danger: payoutThresholdCents.error })}>
+            <fieldset className={cx({ danger: payoutThresholdError })}>
               <label htmlFor="payout_threshold_cents">Minimum payout threshold</label>
               <PriceInput
                 id="payout_threshold_cents"
                 currencyCode="usd"
-                cents={payoutThresholdCents.value}
+                cents={form.data.payout_threshold_cents}
                 disabled={props.is_form_disabled}
                 onChange={(value) => {
-                  if (value === null || value < props.minimum_payout_threshold_cents) {
-                    return setPayoutThresholdCents({ value, error: true });
-                  }
-                  setPayoutThresholdCents({ value });
+                  form.setData("payout_threshold_cents", value !== null ? value : props.minimum_payout_threshold_cents);
                 }}
                 placeholder={formatPriceCentsWithoutCurrencySymbol("usd", props.minimum_payout_threshold_cents)}
                 ariaLabel="Minimum payout threshold"
-                hasError={!!payoutThresholdCents.error}
+                hasError={!!payoutThresholdError}
               />
-              {payoutThresholdCents.error ? (
+              {payoutThresholdError ? (
                 <small>
                   Your payout threshold must be at least{" "}
                   {formatPriceCentsWithCurrencySymbol("usd", props.minimum_payout_threshold_cents, {
@@ -1083,7 +1001,7 @@ const PaymentsPage = (props: Props) => {
             {selectedPayoutMethod === "bank" ? (
               <BankAccountSection
                 bankAccountDetails={props.bank_account_details}
-                bankAccount={bankAccount}
+                bankAccount={form.data.bank_account}
                 updateBankAccount={updateBankAccount}
                 hasConnectedStripe={props.stripe_connect.has_connected_stripe}
                 user={props.user}
@@ -1106,8 +1024,8 @@ const PaymentsPage = (props: Props) => {
                 countrySupportsNativePayouts={props.user.country_supports_native_payouts}
                 showPayPalPayoutsFeeNote={props.user.is_charged_paypal_payout_fee}
                 isFormDisabled={props.is_form_disabled}
-                paypalEmailAddress={paypalEmailAddress}
-                setPaypalEmailAddress={setPaypalEmailAddress}
+                paypalEmailAddress={form.data.payment_address}
+                setPaypalEmailAddress={(value) => form.setData("payment_address", value)}
                 hasConnectedStripe={props.stripe_connect.has_connected_stripe}
                 feeInfoText={props.fee_info.paypal_fee_info_text}
                 updatePayoutMethod={updatePayoutMethod}
@@ -1118,7 +1036,7 @@ const PaymentsPage = (props: Props) => {
             {selectedPayoutMethod !== "stripe" ? (
               <AccountDetailsSection
                 user={props.user}
-                complianceInfo={complianceInfo}
+                complianceInfo={form.data.user}
                 updateComplianceInfo={updateComplianceInfo}
                 minDobYear={props.min_dob_year}
                 isFormDisabled={props.is_form_disabled}
@@ -1155,6 +1073,4 @@ const PaymentsPage = (props: Props) => {
       </form>
     </Layout>
   );
-};
-
-export default register({ component: PaymentsPage, propParser: createCast() });
+}

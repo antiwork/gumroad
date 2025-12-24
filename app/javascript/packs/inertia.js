@@ -14,6 +14,20 @@ router.on("before", (event) => {
       "X-CSRF-Token": token,
     };
   }
+
+  // Track previous route for navigation (only for GET requests)
+  const method = event.detail.visit.method?.toLowerCase() || "get";
+  if (method === "get") {
+    const currentUrl = new URL(window.location.href);
+    const newUrl =
+      typeof event.detail.visit.url === "string"
+        ? new URL(event.detail.visit.url, window.location.origin)
+        : event.detail.visit.url;
+
+    if (currentUrl.href !== newUrl.href) {
+      sessionStorage.setItem("inertia_previous_route", currentUrl.pathname);
+    }
+  }
 });
 
 async function resolvePageComponent(name) {

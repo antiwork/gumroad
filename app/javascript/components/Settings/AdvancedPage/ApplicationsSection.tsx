@@ -1,14 +1,17 @@
+import { Link, router } from "@inertiajs/react";
 import placeholderAppIcon from "images/gumroad_app.png";
 import * as React from "react";
 
-import { asyncVoid } from "$app/utils/promise";
-import { assertResponseError, request, ResponseError } from "$app/utils/request";
-
-import { Button, NavigationButton } from "$app/components/Button";
+import { Button } from "$app/components/Button";
 import { showAlert } from "$app/components/server-components/Alert";
-import { Application } from "$app/components/server-components/Settings/AdvancedPage";
 import ApplicationForm from "$app/components/Settings/AdvancedPage/ApplicationForm";
 import { Row, RowActions, RowContent, Rows } from "$app/components/ui/Rows";
+
+export type Application = {
+  id: string;
+  name: string;
+  icon_url: string | null;
+};
 
 const CreateApplication = () => (
   <>
@@ -43,24 +46,21 @@ const ApplicationList = (props: { applications: Application[] }) => {
 };
 
 const ApplicationRow = ({ application, onRemove }: { application: Application; onRemove: () => void }) => {
-  const deleteApp = asyncVoid(async () => {
+  const deleteApp = () => {
     // eslint-disable-next-line no-alert
     if (!confirm("Delete this application forever?")) return;
 
-    try {
-      const response = await request({
-        url: Routes.oauth_application_path(application.id),
-        method: "DELETE",
-        accept: "json",
-      });
-      if (!response.ok) throw new ResponseError();
-      showAlert("Application deleted.", "success");
-      onRemove();
-    } catch (e) {
-      assertResponseError(e);
-      showAlert("Failed to delete app.", "error");
-    }
-  });
+    router.delete(Routes.oauth_application_path(application.id), {
+      preserveScroll: true,
+      onSuccess: () => {
+        showAlert("Application deleted.", "success");
+        onRemove(); // This will update the local state immediately
+      },
+      onError: () => {
+        showAlert("Failed to delete app.", "error");
+      },
+    });
+  };
 
   return (
     <Row role="listitem">
@@ -69,7 +69,11 @@ const ApplicationRow = ({ application, onRemove }: { application: Application; o
         <h4>{application.name}</h4>
       </RowContent>
       <RowActions>
-        <NavigationButton href={Routes.oauth_application_path(application.id)}>Edit</NavigationButton>
+        <Button>
+          <Link className="no-underline" href={Routes.oauth_application_path(application.id)}>
+            Edit
+          </Link>
+        </Button>
         <Button color="danger" onClick={deleteApp}>
           Delete
         </Button>

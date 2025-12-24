@@ -3,13 +3,11 @@ find_expired_subscriptions_to_set_as_deactivated_worker:
   cron: "* * * * *" # Every minute
   class: FindExpiredSubscriptionsToSetAsDeactivatedWorker
 
-# Every 30 minutes
+# Hourly
 cache_unreviewed_users_data:
-  cron: "*/30 * * * *" # Every 30 minutes
+  cron: "0 * * * *" # Every hour
   class: CacheUnreviewedUsersDataWorker
   description: Caches unreviewed users data for admin dashboard
-
-# Hourly
 renew_custom_domain_ssl_certificates:
   cron: "0 * * * *" # Every hour
   class: RenewCustomDomainSslCertificates

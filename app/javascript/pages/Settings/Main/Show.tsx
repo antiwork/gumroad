@@ -1,18 +1,18 @@
+import { useForm, usePage } from "@inertiajs/react";
 import cx from "classnames";
 import * as React from "react";
-import { cast, createCast } from "ts-safe-cast";
+import { cast } from "ts-safe-cast";
 
 import { SettingPage } from "$app/parsers/settings";
 import { asyncVoid } from "$app/utils/promise";
-import { ResponseError, request, assertResponseError } from "$app/utils/request";
-import { register } from "$app/utils/serverComponentUtil";
+import { request, assertResponseError } from "$app/utils/request";
 
 import { Button } from "$app/components/Button";
 import { Modal } from "$app/components/Modal";
 import { NumberInput } from "$app/components/NumberInput";
 import { showAlert } from "$app/components/server-components/Alert";
-import { ProductLevelSupportEmailsForm } from "$app/components/server-components/Settings/ProductLevelSupportEmailsForm";
 import { ToggleSettingRow } from "$app/components/SettingRow";
+import { ProductLevelSupportEmailsForm } from "$app/components/Settings/AdvancedPage/ProductLevelSupportEmailsForm";
 import { Layout } from "$app/components/Settings/Layout";
 import { TagInput } from "$app/components/TagInput";
 import { Toggle } from "$app/components/Toggle";
@@ -24,7 +24,7 @@ type ProductLevelSupportEmail = {
   product_ids: string[];
 };
 
-type Props = {
+type MainPageProps = {
   settings_pages: SettingPage[];
   is_form_disabled: boolean;
   invalidate_active_sessions: boolean;
@@ -67,81 +67,52 @@ type Props = {
   };
 };
 
-const MainPage = (props: Props) => {
+export default function MainPage() {
+  const props = cast<MainPageProps>(usePage().props);
   const uid = React.useId();
-  const [userSettings, setUserSettings] = React.useState({
-    ...props.user,
-    email: props.user.email ?? "",
-    support_email: props.user.support_email ?? "",
-    tax_id: null,
-    purchasing_power_parity_excluded_product_ids: props.user.purchasing_power_parity_excluded_product_ids,
-    product_level_support_emails: props.user.product_level_support_emails ?? [],
+
+  const form = useForm({
+    user: {
+      ...props.user,
+      email: props.user.email ?? "",
+      support_email: props.user.support_email ?? "",
+      tax_id: null,
+      purchasing_power_parity_excluded_product_ids: props.user.purchasing_power_parity_excluded_product_ids,
+      product_level_support_emails: props.user.product_level_support_emails ?? [],
+    },
   });
-  const updateUserSettings = (settings: Partial<typeof userSettings>) =>
-    setUserSettings((prev) => ({ ...prev, ...settings }));
+
+  const isFormDisabled = props.is_form_disabled || form.processing;
+
+  const updateUserSettings = (settings: Partial<typeof form.data.user>) =>
+    form.setData("user", { ...form.data.user, ...settings });
   const handleProductLevelSupportEmailsChange = (emails: ProductLevelSupportEmail[]) =>
     updateUserSettings({ product_level_support_emails: emails });
 
-  const [isResendingConfirmationEmail, setIsResendingConfirmationEmail] = React.useState(false);
   const [resentConfirmationEmail, setResentConfirmationEmail] = React.useState(false);
-  const [isSaving, setIsSaving] = React.useState(false);
   const formRef = React.useRef<HTMLFormElement>(null);
 
-  const resendConfirmationEmail = async () => {
-    setIsResendingConfirmationEmail(true);
+  const resendConfirmationEmailForm = useForm({});
 
-    try {
-      const response = await request({
-        url: Routes.resend_confirmation_email_settings_main_path(),
-        method: "POST",
-        accept: "json",
-      });
-      const responseData = cast<{ success: boolean }>(await response.json());
-      if (!responseData.success) throw new ResponseError();
-      showAlert("Confirmation email resent!", "success");
-      setResentConfirmationEmail(true);
-    } catch (e) {
-      assertResponseError(e);
-      showAlert("Sorry, something went wrong. Please try again.", "error");
-    }
-
-    setIsResendingConfirmationEmail(false);
+  const resendConfirmationEmail = () => {
+    resendConfirmationEmailForm.post(Routes.resend_confirmation_email_settings_main_path(), {
+      onSuccess: () => {
+        setResentConfirmationEmail(true);
+      },
+    });
   };
 
-  const onSave = asyncVoid(async () => {
+  const onSave = () => {
     if (props.is_form_disabled) return;
     if (!formRef.current?.reportValidity()) return;
 
-    setIsSaving(true);
-
-    try {
-      const response = await request({
-        url: Routes.settings_main_path(),
-        method: "PUT",
-        accept: "json",
-        data: { user: userSettings },
-      });
-      const responseData = cast<{ success: true } | { success: false; error_message: string }>(await response.json());
-      if (responseData.success) {
-        showAlert("Your account has been updated!", "success");
-      } else {
-        showAlert(responseData.error_message, "error");
-      }
-    } catch (e) {
-      assertResponseError(e);
-      showAlert("Sorry, something went wrong. Please try again.", "error");
-    }
-
-    setIsSaving(false);
-  });
+    form.put(Routes.settings_main_path(), {
+      preserveScroll: true,
+    });
+  };
 
   return (
-    <Layout
-      currentPage="main"
-      pages={props.settings_pages}
-      onSave={onSave}
-      canUpdate={!props.is_form_disabled && !isSaving}
-    >
+    <Layout currentPage="main" pages={props.settings_pages} onSave={onSave} canUpdate={!isFormDisabled}>
       <form ref={formRef}>
         <section className="p-4! md:p-8!">
           <header>
@@ -154,8 +125,8 @@ const MainPage = (props: Props) => {
             <input
               type="email"
               id={`${uid}-email`}
-              value={userSettings.email}
-              disabled={props.is_form_disabled}
+              value={form.data.user.email}
+              disabled={isFormDisabled}
               required
               onChange={(e) => updateUserSettings({ email: e.target.value })}
             />
@@ -167,10 +138,10 @@ const MainPage = (props: Props) => {
                     className="underline"
                     onClick={(e) => {
                       e.preventDefault();
-                      void resendConfirmationEmail();
+                      resendConfirmationEmail();
                     }}
                   >
-                    {isResendingConfirmationEmail ? "Resending..." : "Resend confirmation?"}
+                    {resendConfirmationEmailForm.processing ? "Resending..." : "Resend confirmation?"}
                   </button>
                 )}
               </small>
@@ -207,16 +178,16 @@ const MainPage = (props: Props) => {
                   <TableHead scope="row">Purchases</TableHead>
                   <TableCell>
                     <Toggle
-                      value={userSettings.enable_payment_email}
+                      value={form.data.user.enable_payment_email}
                       onChange={(value) => updateUserSettings({ enable_payment_email: value })}
-                      disabled={props.is_form_disabled}
+                      disabled={isFormDisabled}
                     />
                   </TableCell>
                   <TableCell>
                     <Toggle
-                      value={userSettings.enable_payment_push_notification}
+                      value={form.data.user.enable_payment_push_notification}
                       onChange={(value) => updateUserSettings({ enable_payment_push_notification: value })}
-                      disabled={props.is_form_disabled}
+                      disabled={isFormDisabled}
                     />
                   </TableCell>
                 </TableRow>
@@ -224,20 +195,20 @@ const MainPage = (props: Props) => {
                   <TableHead scope="row">Recurring payments</TableHead>
                   <TableCell>
                     <Toggle
-                      value={userSettings.enable_recurring_subscription_charge_email}
+                      value={form.data.user.enable_recurring_subscription_charge_email}
                       onChange={(value) => updateUserSettings({ enable_recurring_subscription_charge_email: value })}
-                      disabled={props.is_form_disabled}
+                      disabled={isFormDisabled}
                     />
                   </TableCell>
                   <TableCell>
                     <Toggle
-                      value={userSettings.enable_recurring_subscription_charge_push_notification}
+                      value={form.data.user.enable_recurring_subscription_charge_push_notification}
                       onChange={(value) =>
                         updateUserSettings({
                           enable_recurring_subscription_charge_push_notification: value,
                         })
                       }
-                      disabled={props.is_form_disabled}
+                      disabled={isFormDisabled}
                     />
                   </TableCell>
                 </TableRow>
@@ -245,16 +216,16 @@ const MainPage = (props: Props) => {
                   <TableHead scope="row">Free downloads</TableHead>
                   <TableCell>
                     <Toggle
-                      value={userSettings.enable_free_downloads_email}
+                      value={form.data.user.enable_free_downloads_email}
                       onChange={(value) => updateUserSettings({ enable_free_downloads_email: value })}
-                      disabled={props.is_form_disabled}
+                      disabled={isFormDisabled}
                     />
                   </TableCell>
                   <TableCell>
                     <Toggle
-                      value={userSettings.enable_free_downloads_push_notification}
+                      value={form.data.user.enable_free_downloads_push_notification}
                       onChange={(value) => updateUserSettings({ enable_free_downloads_push_notification: value })}
-                      disabled={props.is_form_disabled}
+                      disabled={isFormDisabled}
                     />
                   </TableCell>
                 </TableRow>
@@ -262,9 +233,9 @@ const MainPage = (props: Props) => {
                   <TableHead scope="row">Personalized product announcements</TableHead>
                   <TableCell>
                     <Toggle
-                      value={userSettings.announcement_notification_enabled}
+                      value={form.data.user.announcement_notification_enabled}
                       onChange={(value) => updateUserSettings({ announcement_notification_enabled: value })}
-                      disabled={props.is_form_disabled}
+                      disabled={isFormDisabled}
                     />
                   </TableCell>
                   <TableCell></TableCell>
@@ -273,9 +244,9 @@ const MainPage = (props: Props) => {
                   <TableHead scope="row">Comments</TableHead>
                   <TableCell>
                     <Toggle
-                      value={!userSettings.disable_comments_email}
+                      value={!form.data.user.disable_comments_email}
                       onChange={(value) => updateUserSettings({ disable_comments_email: !value })}
-                      disabled={props.is_form_disabled}
+                      disabled={isFormDisabled}
                     />
                   </TableCell>
                   <TableCell></TableCell>
@@ -284,9 +255,9 @@ const MainPage = (props: Props) => {
                   <TableHead scope="row">Reviews</TableHead>
                   <TableCell>
                     <Toggle
-                      value={!userSettings.disable_reviews_email}
+                      value={!form.data.user.disable_reviews_email}
                       onChange={(value) => updateUserSettings({ disable_reviews_email: !value })}
-                      disabled={props.is_form_disabled}
+                      disabled={isFormDisabled}
                       ariaLabel="Reviews"
                     />
                   </TableCell>
@@ -307,18 +278,18 @@ const MainPage = (props: Props) => {
             <input
               type="email"
               id={`${uid}-support-email`}
-              value={userSettings.support_email}
+              value={form.data.user.support_email}
               placeholder={props.user.email ?? ""}
-              disabled={props.is_form_disabled}
+              disabled={isFormDisabled}
               onChange={(e) => updateUserSettings({ support_email: e.target.value })}
             />
             <small>This email is listed on the receipt of every sale.</small>
           </fieldset>
           {props.user.product_level_support_emails !== null && (
             <ProductLevelSupportEmailsForm
-              productLevelSupportEmails={userSettings.product_level_support_emails}
+              productLevelSupportEmails={form.data.user.product_level_support_emails}
               products={props.user.products}
-              isDisabled={props.is_form_disabled}
+              isDisabled={isFormDisabled}
               onChange={handleProductLevelSupportEmailsChange}
             />
           )}
@@ -335,18 +306,18 @@ const MainPage = (props: Props) => {
               </legend>
               <select
                 id="max-refund-period-in-days"
-                value={userSettings.seller_refund_policy.max_refund_period_in_days}
-                disabled={props.is_form_disabled}
+                value={form.data.user.seller_refund_policy.max_refund_period_in_days}
+                disabled={isFormDisabled}
                 onChange={(e) =>
                   updateUserSettings({
                     seller_refund_policy: {
-                      ...userSettings.seller_refund_policy,
+                      ...form.data.user.seller_refund_policy,
                       max_refund_period_in_days: Number(e.target.value),
                     },
                   })
                 }
               >
-                {userSettings.seller_refund_policy.allowed_refund_periods_in_days.map(({ key, value }) => (
+                {form.data.user.seller_refund_policy.allowed_refund_periods_in_days.map(({ key, value }) => (
                   <option key={key} value={key}>
                     {value}
                   </option>
@@ -356,19 +327,19 @@ const MainPage = (props: Props) => {
             <fieldset>
               <ToggleSettingRow
                 value={
-                  userSettings.seller_refund_policy.fine_print_enabled
-                    ? userSettings.seller_refund_policy.max_refund_period_in_days > 0
+                  form.data.user.seller_refund_policy.fine_print_enabled
+                    ? form.data.user.seller_refund_policy.max_refund_period_in_days > 0
                     : false
                 }
                 onChange={(value) =>
                   updateUserSettings({
                     seller_refund_policy: {
-                      ...userSettings.seller_refund_policy,
+                      ...form.data.user.seller_refund_policy,
                       fine_print_enabled: value,
                     },
                   })
                 }
-                disabled={props.is_form_disabled || userSettings.seller_refund_policy.max_refund_period_in_days === 0}
+                disabled={isFormDisabled || form.data.user.seller_refund_policy.max_refund_period_in_days === 0}
                 label="Add a fine print to your refund policy"
                 dropdown={
                   <fieldset>
@@ -379,13 +350,13 @@ const MainPage = (props: Props) => {
                       id="seller-refund-policy-fine-print"
                       maxLength={3000}
                       rows={10}
-                      value={userSettings.seller_refund_policy.fine_print || ""}
+                      value={form.data.user.seller_refund_policy.fine_print || ""}
                       placeholder="Describe your refund policy"
-                      disabled={props.is_form_disabled}
+                      disabled={isFormDisabled}
                       onChange={(e) =>
                         updateUserSettings({
                           seller_refund_policy: {
-                            ...userSettings.seller_refund_policy,
+                            ...form.data.user.seller_refund_policy,
                             fine_print: e.target.value,
                           },
                         })
@@ -407,8 +378,8 @@ const MainPage = (props: Props) => {
             </legend>
             <select
               id={`${uid}-timezone`}
-              disabled={props.is_form_disabled}
-              value={userSettings.timezone}
+              disabled={isFormDisabled}
+              value={form.data.user.timezone}
               onChange={(e) => updateUserSettings({ timezone: e.target.value })}
             >
               {props.timezones.map((tz) => (
@@ -424,8 +395,8 @@ const MainPage = (props: Props) => {
             </legend>
             <select
               id={`${uid}-local-currency`}
-              disabled={props.is_form_disabled}
-              value={userSettings.currency_type}
+              disabled={isFormDisabled}
+              value={form.data.user.currency_type}
               onChange={(e) => updateUserSettings({ currency_type: e.target.value })}
             >
               {props.currencies.map((currency) => (
@@ -442,9 +413,9 @@ const MainPage = (props: Props) => {
           </fieldset>
           <fieldset>
             <ToggleSettingRow
-              value={userSettings.purchasing_power_parity_enabled}
+              value={form.data.user.purchasing_power_parity_enabled}
               onChange={(value) => updateUserSettings({ purchasing_power_parity_enabled: value })}
-              disabled={props.is_form_disabled}
+              disabled={isFormDisabled}
               label="Enable purchasing power parity"
               dropdown={
                 <div className="flex flex-col gap-4">
@@ -454,7 +425,7 @@ const MainPage = (props: Props) => {
                     </legend>
                     <div className={cx("input", { disabled: props.is_form_disabled })}>
                       <NumberInput
-                        value={userSettings.purchasing_power_parity_limit}
+                        value={form.data.user.purchasing_power_parity_limit}
                         onChange={(value) => {
                           if (value === null || (value > 0 && value <= 100)) {
                             updateUserSettings({ purchasing_power_parity_limit: value });
@@ -466,7 +437,7 @@ const MainPage = (props: Props) => {
                             id={`${uid}-ppp-discount-percentage`}
                             type="text"
                             placeholder="60"
-                            disabled={props.is_form_disabled}
+                            disabled={isFormDisabled}
                             aria-label="Percentage"
                             {...inputProps}
                           />
@@ -476,8 +447,8 @@ const MainPage = (props: Props) => {
                     </div>
                   </fieldset>
                   <Toggle
-                    value={!userSettings.purchasing_power_parity_payment_verification_disabled}
-                    disabled={props.is_form_disabled}
+                    value={!form.data.user.purchasing_power_parity_payment_verification_disabled}
+                    disabled={isFormDisabled}
                     onChange={(newValue) =>
                       updateUserSettings({ purchasing_power_parity_payment_verification_disabled: !newValue })
                     }
@@ -491,9 +462,9 @@ const MainPage = (props: Props) => {
 
                     <TagInput
                       inputId={`${uid}-ppp-exclude-products`}
-                      tagIds={userSettings.purchasing_power_parity_excluded_product_ids}
+                      tagIds={form.data.user.purchasing_power_parity_excluded_product_ids}
                       tagList={props.user.products.map(({ id, name }) => ({ id, label: name }))}
-                      isDisabled={props.is_form_disabled}
+                      isDisabled={isFormDisabled}
                       onChangeTagIds={(productIds) =>
                         updateUserSettings({ purchasing_power_parity_excluded_product_ids: productIds })
                       }
@@ -502,9 +473,9 @@ const MainPage = (props: Props) => {
                     <label>
                       <input
                         type="checkbox"
-                        disabled={props.is_form_disabled}
+                        disabled={isFormDisabled}
                         checked={
-                          userSettings.purchasing_power_parity_excluded_product_ids.length ===
+                          form.data.user.purchasing_power_parity_excluded_product_ids.length ===
                           props.user.products.length
                         }
                         onChange={(evt) =>
@@ -535,9 +506,9 @@ const MainPage = (props: Props) => {
           </header>
           <fieldset>
             <ToggleSettingRow
-              value={userSettings.show_nsfw_products}
+              value={form.data.user.show_nsfw_products}
               onChange={(value) => updateUserSettings({ show_nsfw_products: value })}
-              disabled={props.is_form_disabled}
+              disabled={isFormDisabled}
               label="Show adult content in recommendations and search results"
             />
           </fieldset>
@@ -548,9 +519,9 @@ const MainPage = (props: Props) => {
           </header>
           <fieldset>
             <ToggleSettingRow
-              value={userSettings.disable_affiliate_requests}
+              value={form.data.user.disable_affiliate_requests}
               onChange={(value) => updateUserSettings({ disable_affiliate_requests: value })}
-              disabled={props.is_form_disabled}
+              disabled={isFormDisabled}
               label="Prevent others from adding me as an affiliate"
             />
             <small>When enabled, other users cannot add you as an affiliate or request to become your affiliate.</small>
@@ -560,7 +531,7 @@ const MainPage = (props: Props) => {
       </form>
     </Layout>
   );
-};
+}
 
 const InvalidateActiveSessionsSection = () => {
   const [isConfirmationDialogOpen, setIsConfirmationDialogOpen] = React.useState(false);
@@ -613,5 +584,3 @@ const InvalidateActiveSessionsSection = () => {
     </section>
   );
 };
-
-export default register({ component: MainPage, propParser: createCast() });
