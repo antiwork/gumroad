@@ -429,7 +429,11 @@ const TipSelector = () => {
 
   return (
     <div className="flex flex-col gap-2 sm:gap-3">
-      <CartPriceItem title="Add a tip?" price={formatPrice(computeTip(state))} />
+      <CartPriceItem
+        className={{ priceField: "font-bold" }}
+        title="Add a tip?"
+        price={formatPrice(computeTip(state))}
+      />
       <div className="flex flex-wrap gap-3">
         {showPercentageOptions ? (
           <div
