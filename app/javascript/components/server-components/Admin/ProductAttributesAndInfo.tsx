@@ -3,6 +3,7 @@ import { createCast } from "ts-safe-cast";
 
 import { register } from "$app/utils/serverComponentUtil";
 
+import { Alert } from "$app/components/ui/Alert";
 import { useUserAgentInfo } from "$app/components/UserAgent";
 
 type Props = {
@@ -46,27 +47,23 @@ export const ProductAttributesAndInfo = ({ productData }: Props) => {
   return hasNoAttributes && preorder == null && !should_show_sales_count && !has_stream_only_files ? null : (
     <div className="product-info grid gap-4">
       {should_show_sales_count ? (
-        <div role="alert" className="info">
+        <Alert variant="info">
           <div>
             <strong>{sales_count.toLocaleString(userAgentInfo.locale)}</strong> {salesUnit}
             {sales_count === 1 ? "" : "s"}
           </div>
-        </div>
+        </Alert>
       ) : null}
       {preorder != null ? (
         <>
-          <div role="alert" className="info">
-            Available on {preorder.release_date_fmt}
-          </div>
+          <Alert variant="info">Available on {preorder.release_date_fmt}</Alert>
           <h5 className="product-info-preorder-indicator legacy-only">Available on {preorder.release_date_fmt}</h5>
         </>
       ) : null}
 
       {has_stream_only_files ? (
         <>
-          <div role="alert" className="info">
-            Watch link provided after purchase
-          </div>
+          <Alert variant="info">Watch link provided after purchase</Alert>
           <div className="product-info-stream-only-indicator legacy-only">
             <h5>Available to stream instantly</h5>
             <small>Watch link provided after purchase</small>

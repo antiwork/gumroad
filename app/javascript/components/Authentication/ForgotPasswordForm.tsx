@@ -7,6 +7,7 @@ import { SocialAuth } from "$app/components/Authentication/SocialAuth";
 import { Button } from "$app/components/Button";
 import { Separator } from "$app/components/Separator";
 import { showAlert } from "$app/components/server-components/Alert";
+import { Alert } from "$app/components/ui/Alert";
 
 type SaveState = { type: "initial" | "submitting" } | { type: "error"; message: string };
 
@@ -35,11 +36,7 @@ export const ForgotPasswordForm = ({ onClose }: { onClose: () => void }) => {
         <span>or</span>
       </Separator>
       <section>
-        {saveState.type === "error" ? (
-          <div role="alert" className="danger">
-            {saveState.message}
-          </div>
-        ) : null}
+        {saveState.type === "error" ? <Alert variant="danger">{saveState.message}</Alert> : null}
         <fieldset>
           <legend>
             <label htmlFor={uid}>Email to send reset instructions to</label>

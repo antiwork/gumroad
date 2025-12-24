@@ -1636,7 +1636,7 @@ describe("Workflows", js: true, type: :system) do
 
         expect(page).to have_current_path("/workflows/#{@workflow.external_id}/emails")
 
-        expect(page).to have_selector("[role=alert].warning", text: "Your name contains a colon (:) which causes email delivery problems and will be removed from the sender name when emails are sent.")
+        expect_alert_message("Your name contains a colon (:) which causes email delivery problems and will be removed from the sender name when emails are sent.")
         expect(page).to have_link("Update your name", href: "/settings/profile")
       end
     end
@@ -1652,7 +1652,7 @@ describe("Workflows", js: true, type: :system) do
 
         expect(page).to have_current_path("/workflows/#{@workflow.external_id}/emails")
 
-        expect(page).to_not have_selector("[role=alert].warning")
+        expect(page).to_not have_selector("[role=alert]")
         expect(page).to_not have_text("Your name contains a colon (:) which causes email delivery problems and will be removed from the sender name when emails are sent.")
         expect(page).to_not have_link("Update your name", href: "/settings/profile")
       end
