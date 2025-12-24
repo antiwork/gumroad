@@ -348,13 +348,20 @@ class Purchase::CreateService < Purchase::BaseService
     def set_purchaser_for(purchase, purchase_email)
       if buyer.present?
         purchase.purchaser = buyer unless purchase.is_gift_receiver_purchase
-      else
-        user_from_email = User.find_by(email: purchase_email)
-        # This limits test purchase to be done in logged out mode
-        if purchase.link.user != user_from_email
-          purchase.purchaser = user_from_email
-        end
+        return
       end
+
+      user_from_email = User.find_by(email: purchase_email)
+
+      if user_from_email.nil?
+        if StripeSignup.disabled?
+          raise Purchase::PurchaseInvalid, "Please log in or create an account before purchasing."
+        end
+        return
+      end
+
+      # This limits test purchase to be done in logged out mode
+      purchase.purchaser = user_from_email if purchase.link.user != user_from_email
     end
 
     def parse_url_parameters(url_parameters_string)

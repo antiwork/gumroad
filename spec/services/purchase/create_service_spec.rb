@@ -128,6 +128,28 @@ describe Purchase::CreateService, :vcr do
     expect(purchase.purchaser).to eq buyer
   end
 
+  context "when Stripe signup is disabled" do
+    let(:new_email) { "newbuyer@example.com" }
+
+    before do
+      allow(ENV).to receive(:[]).and_call_original
+      allow(ENV).to receive(:[]).with("DISABLE_STRIPE_SIGNUP").and_return("true")
+    end
+
+    it "does not create a new user during purchase" do
+      params[:purchase][:email] = new_email
+
+      expect do
+        _purchase, error = Purchase::CreateService.new(
+          product:,
+          params:
+        ).perform
+
+        expect(error).to be_present
+      end.not_to change(User, :count)
+    end
+  end
+  
   context "when the product has a product refund policy enabled" do
     before do
       product.user.update!(refund_policy_enabled: false)
