@@ -65,11 +65,11 @@ describe Admin::UnreviewedUsersService do
       expect(described_class.new.users_with_unpaid_balance).to be_empty
     end
 
-    it "includes old users when cutoff_years is set in Redis" do
-      old_user = create(:user, user_risk_state: "not_reviewed", created_at: 3.years.ago)
+    it "includes old users when cutoff_date is set in Redis" do
+      old_user = create(:user, user_risk_state: "not_reviewed", created_at: Date.new(2023, 6, 1))
       create(:balance, user: old_user, amount_cents: 5000)
 
-      $redis.set(RedisKey.unreviewed_users_cutoff_years, 4)
+      $redis.set(RedisKey.unreviewed_users_cutoff_date, "2023-01-01")
       users = described_class.new.users_with_unpaid_balance
 
       expect(users.map(&:id)).to include(old_user.id)
@@ -120,7 +120,7 @@ describe Admin::UnreviewedUsersService do
       expect(result[:users].size).to eq(1)
       expect(result[:users].first[:id]).to eq(user.id)
       expect(result[:total_count]).to eq(1)
-      expect(result[:cutoff_date]).to eq(2.years.ago.to_date.to_s)
+      expect(result[:cutoff_date]).to eq("2024-01-01")
       expect(result[:cached_at]).to be_present
     end
 
@@ -149,31 +149,17 @@ describe Admin::UnreviewedUsersService do
     end
   end
 
-  describe ".cutoff_years" do
-    it "defaults to 2 when not set in Redis" do
-      $redis.del(RedisKey.unreviewed_users_cutoff_years)
+  describe ".cutoff_date" do
+    it "defaults to 2024-01-01 when not set in Redis" do
+      $redis.del(RedisKey.unreviewed_users_cutoff_date)
 
-      expect(described_class.cutoff_years).to eq(2)
+      expect(described_class.cutoff_date).to eq(Date.new(2024, 1, 1))
     end
 
     it "reads from Redis when set" do
-      $redis.set(RedisKey.unreviewed_users_cutoff_years, 5)
+      $redis.set(RedisKey.unreviewed_users_cutoff_date, "2023-06-15")
 
-      expect(described_class.cutoff_years).to eq(5)
-    end
-  end
-
-  describe "#cutoff_date" do
-    it "defaults to 2 years ago when Redis key not set" do
-      $redis.del(RedisKey.unreviewed_users_cutoff_years)
-
-      expect(described_class.new.cutoff_date).to eq(2.years.ago.to_date)
-    end
-
-    it "uses cutoff_years from Redis" do
-      $redis.set(RedisKey.unreviewed_users_cutoff_years, 3)
-
-      expect(described_class.new.cutoff_date).to eq(3.years.ago.to_date)
+      expect(described_class.cutoff_date).to eq(Date.new(2023, 6, 15))
     end
   end
 end
