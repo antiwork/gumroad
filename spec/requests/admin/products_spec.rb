@@ -3,10 +3,11 @@
 require "spec_helper"
 
 describe "Admin::LinksController Scenario", type: :system, js: true do
+  let(:admin_user) { create(:admin_user) }
   let(:product) { create(:product) }
 
   before do
-    login_as(create(:admin_user))
+    login_as(admin_user)
   end
 
   it "renders the product page", :sidekiq_inline, :elasticsearch_wait_for_refresh do
@@ -128,5 +129,74 @@ describe "Admin::LinksController Scenario", type: :system, js: true do
       expect(page).to have_text("Good article!")
     end
     expect(page).to have_alert(text: "Successfully added comment.")
+  end
+
+  describe "mass refund for fraud" do
+    let!(:purchase1) { create(:purchase, link: product) }
+    let!(:purchase2) { create(:purchase, link: product) }
+
+    it "allows selecting purchases and refunding for fraud" do
+      visit admin_link_path(product.unique_permalink)
+
+      toggle_disclosure("Purchases")
+      expect(page).to have_text("Select purchases to refund for fraud")
+      expect(page).to have_button("Refund for Fraud", disabled: true)
+
+      checkboxes = all("input[type='checkbox']")
+      checkboxes.first.check
+
+      expect(page).to have_text("1 purchase selected")
+      expect(page).to have_button("Refund for Fraud", disabled: false)
+      expect(page).to have_button("Clear selection")
+    end
+
+    it "allows selecting all purchases" do
+      visit admin_link_path(product.unique_permalink)
+
+      toggle_disclosure("Purchases")
+      expect(page).to have_text("Select purchases to refund for fraud")
+
+      click_on("Select all")
+
+      expect(page).to have_text("2 purchases selected")
+      expect(page).to have_button("Clear selection")
+      expect(page).not_to have_button("Select all")
+    end
+
+    it "clears selection when clicking clear selection" do
+      visit admin_link_path(product.unique_permalink)
+
+      toggle_disclosure("Purchases")
+      expect(page).to have_text("Select purchases to refund for fraud")
+
+      click_on("Select all")
+      expect(page).to have_text("2 purchases selected")
+
+      click_on("Clear selection")
+
+      expect(page).to have_text("Select purchases to refund for fraud")
+      expect(page).to have_button("Refund for Fraud", disabled: true)
+    end
+
+    it "enqueues mass refund job when confirmed" do
+      visit admin_link_path(product.unique_permalink)
+
+      toggle_disclosure("Purchases")
+      expect(page).to have_text("Select purchases to refund for fraud")
+
+      click_on("Select all")
+      expect(page).to have_text("2 purchases selected")
+
+      accept_confirm do
+        click_on("Refund for Fraud")
+      end
+
+      expect(page).to have_alert(text: "Processing 2 fraud refunds")
+      expect(MassRefundForFraudJob).to have_enqueued_sidekiq_job(
+        product.id,
+        array_including(purchase1.external_id, purchase2.external_id),
+        admin_user.id
+      ).on("default")
+    end
   end
 end

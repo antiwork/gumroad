@@ -53,7 +53,7 @@ export const getDraggedFileEmbed = (editor: Editor) => {
 };
 
 const FileEmbedNodeView = ({ node, editor, getPos, updateAttributes }: NodeViewProps) => {
-  const { id, product, updateProduct } = useProductEditContext();
+  const { id, updateProduct, filesById } = useProductEditContext();
   const uid = React.useId();
   const ref = React.useRef<HTMLDivElement>(null);
   const [expanded, setExpanded] = React.useState(false);
@@ -64,7 +64,7 @@ const FileEmbedNodeView = ({ node, editor, getPos, updateAttributes }: NodeViewP
   const uploader = assertDefined(useEvaporateUploader());
   const s3UploadConfig = useS3UploadConfig();
 
-  const file = product.files.find((file) => file.id === node.attrs.id);
+  const file = filesById.get(cast<string>(node.attrs.id));
   const downloadUrl = file && getDownloadUrl(id, file);
 
   const playerRef = React.useRef<jwplayer.JWPlayer | null>(null);
@@ -163,7 +163,7 @@ const FileEmbedNodeView = ({ node, editor, getPos, updateAttributes }: NodeViewP
   );
 
   const isInGroup = parentNode?.type.name === FileEmbedGroup.name;
-  const { hasStreamable } = useFilesInGroup(parentNode, product.files);
+  const { hasStreamable } = useFilesInGroup(parentNode, filesById);
   const isConnectedRow = isInGroup && !hasStreamable;
   const isLastInGroup = node === parentNode?.content.lastChild;
 
@@ -299,7 +299,7 @@ const FileEmbedNodeView = ({ node, editor, getPos, updateAttributes }: NodeViewP
             onClick={() => {
               editor.commands.moveFileEmbedToGroup({ fileUid: cast(node.attrs.uid), groupUid: uid });
 
-              const fileName = product.files.find((file) => file.id === node.attrs.id)?.display_name;
+              const fileName = filesById.get(cast<string>(node.attrs.id))?.display_name;
               if (fileName) showAlert(`Moved "${fileName}" to "${name}".`, "success");
             }}
             role="menuitem"
@@ -682,7 +682,7 @@ const FileEmbedNodeView = ({ node, editor, getPos, updateAttributes }: NodeViewP
   );
 };
 
-export type FileEmbedConfig = { files: FileEntry[] };
+export type FileEmbedConfig = { filesById: Map<string, FileEntry> };
 
 export const FileEmbed = TiptapNode.create<{ getConfig?: () => FileEmbedConfig }>({
   name: "fileEmbed",
@@ -713,7 +713,7 @@ export const FileEmbed = TiptapNode.create<{ getConfig?: () => FileEmbedConfig }
             fragment.querySelectorAll("file-embed").forEach((node) => {
               const id = node.getAttribute("id");
               if (id) {
-                const file = config.files.find((file) => file.id === id);
+                const file = config.filesById.get(id);
                 if (file?.url) node.setAttribute("url", file.url);
               }
             });

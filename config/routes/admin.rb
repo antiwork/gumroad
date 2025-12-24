@@ -74,6 +74,7 @@ namespace :admin do
   resource :unblock_email_domains, only: [:show, :update]
   resource :suspend_users, only: [:show, :update]
   resource :refund_queue, only: [:show]
+  resources :unreviewed_users, only: [:index]
 
   resources :affiliates, only: [:index, :show], defaults: { format: "html" }
 
@@ -101,7 +102,11 @@ namespace :admin do
       resource :details, controller: "details", only: [:show]
       resource :info, only: [:show]
       resource :staff_picked, controller: "staff_picked", only: [:create]
-      resources :purchases, only: [:index]
+      resources :purchases, only: [:index] do
+        collection do
+          post :mass_refund_for_fraud
+        end
+      end
     end
   end
 
