@@ -17,12 +17,25 @@ class Admin::UnreviewedUserPresenter
       email: user.email,
       unpaid_balance_cents: user.total_balance_cents.to_i,
       revenue_sources: revenue_sources,
+      payout_method: payout_method,
       admin_url: admin_user_path(user.external_id),
       created_at: user.created_at.iso8601
     }
   end
 
   private
+    def payout_method
+      if user.has_stripe_account_connected?
+        "Stripe Connect"
+      elsif user.active_bank_account.present?
+        "Stripe"
+      elsif user.has_paypal_account_connected?
+        "PayPal Connect"
+      elsif user.payment_address.present?
+        "PayPal"
+      end
+    end
+
     def revenue_sources
       types = []
 

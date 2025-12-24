@@ -60,6 +60,49 @@ describe Admin::UnreviewedUserPresenter do
       expect(props[:created_at]).to eq(user.created_at.iso8601)
     end
 
+    describe "payout_method" do
+      it "returns nil when no payout method is configured" do
+        user.update!(payment_address: nil)
+
+        props = described_class.new(user).props
+
+        expect(props[:payout_method]).to be_nil
+      end
+
+      it "returns 'Stripe Connect' when user has Stripe Connect account" do
+        allow(user).to receive(:has_stripe_account_connected?).and_return(true)
+
+        props = described_class.new(user).props
+
+        expect(props[:payout_method]).to eq("Stripe Connect")
+      end
+
+      it "returns 'Stripe' when user has active bank account" do
+        create(:ach_account, user:)
+
+        props = described_class.new(user).props
+
+        expect(props[:payout_method]).to eq("Stripe")
+      end
+
+      it "returns 'PayPal Connect' when user has PayPal account connected" do
+        allow(user).to receive(:has_paypal_account_connected?).and_return(true)
+        user.update!(payment_address: nil)
+
+        props = described_class.new(user).props
+
+        expect(props[:payout_method]).to eq("PayPal Connect")
+      end
+
+      it "returns 'PayPal' when user has legacy PayPal email" do
+        user.update!(payment_address: "paypal@example.com")
+
+        props = described_class.new(user).props
+
+        expect(props[:payout_method]).to eq("PayPal")
+      end
+    end
+
     describe "revenue_sources" do
       it "returns empty array when no revenue sources exist" do
         props = described_class.new(user).props

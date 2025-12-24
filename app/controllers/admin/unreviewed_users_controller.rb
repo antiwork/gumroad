@@ -16,14 +16,14 @@ class Admin::UnreviewedUsersController < Admin::BaseController
       return
     end
 
-    user_ids = cached_data[:users].map { |u| u[:id] }
-    still_unreviewed_ids = User.where(id: user_ids, user_risk_state: "not_reviewed").pluck(:id).to_set
+    # user_ids = cached_data[:users].map { |u| u[:id] }
+    # still_unreviewed_ids = User.where(id: user_ids, user_risk_state: "not_reviewed").pluck(:id).to_set
 
-    still_unreviewed_users = cached_data[:users].select { |u| still_unreviewed_ids.include?(u[:id]) }
+    # still_unreviewed_users = cached_data[:users].select { |u| still_unreviewed_ids.include?(u[:id]) }
 
     render inertia: "Admin/UnreviewedUsers/Index",
            props: {
-             users: still_unreviewed_users,
+             users: cached_data[:users],
              total_count: cached_data[:total_count],
              cutoff_date: cached_data[:cutoff_date]
            }
