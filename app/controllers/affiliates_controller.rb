@@ -30,9 +30,11 @@ class AffiliatesController < ApplicationController
   def export
     authorize DirectAffiliate, :index?
 
+    seller = seller_for_export
+
     result = Exports::AffiliateExportService.export(
-      seller: current_seller,
-      recipient: impersonating_user || current_seller,
+      seller:,
+      recipient: impersonating_user || seller,
     )
 
     if result
@@ -44,6 +46,21 @@ class AffiliatesController < ApplicationController
   end
 
   private
+    # When impersonating, we must use logged_in_user (the impersonated user), not current_seller.
+    # See PurchasesController#seller_for_export for detailed explanation.
+    def seller_for_export
+      return current_seller unless impersonating?
+
+      if current_seller != logged_in_user
+        Rails.logger.warn(
+          "[Impersonation] Seller mismatch during affiliate export: " \
+          "current_seller=#{current_seller.id}, logged_in_user=#{logged_in_user.id}"
+        )
+      end
+
+      logged_in_user
+    end
+
     def set_meta
       @title = "Affiliates"
       @on_affiliates_page = true

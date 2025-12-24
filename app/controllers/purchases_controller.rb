@@ -404,8 +404,10 @@ class PurchasesController < ApplicationController
   def export
     authorize [:audience, Purchase], :index?
 
+    seller = seller_for_export
+
     tempfile = Exports::PurchaseExportService.export(
-      seller: current_seller,
+      seller:,
       recipient: impersonating_user || logged_in_user,
       filters: params.slice(:start_time, :end_time, :product_ids, :variant_ids),
     )
@@ -417,6 +419,27 @@ class PurchasesController < ApplicationController
       redirect_back(fallback_location: customers_path)
     end
   end
+
+  # When impersonating, we must use logged_in_user (the impersonated user), not current_seller.
+  # current_seller could incorrectly return the admin's account if:
+  # 1. The admin has a seller cookie from their own account, AND
+  # 2. The impersonated user happens to be a team member of the admin's account
+  # This edge case would cause valid_seller? to return true for the wrong seller.
+  def seller_for_export
+    return current_seller unless impersonating?
+
+    if current_seller != logged_in_user
+      Rails.logger.warn(
+        "[Impersonation] Seller mismatch during export: " \
+        "current_seller=#{current_seller.id} (#{current_seller.email}), " \
+        "logged_in_user=#{logged_in_user.id} (#{logged_in_user.email}), " \
+        "admin=#{impersonating_user.id} (#{impersonating_user.email})"
+      )
+    end
+
+    logged_in_user
+  end
+
 
   protected
     def verify_current_seller_is_seller_for_purchase

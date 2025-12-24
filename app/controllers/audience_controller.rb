@@ -20,7 +20,10 @@ class AudienceController < Sellers::BaseController
                  .permit(:followers, :customers, :affiliates)
                  .to_hash
 
-    Exports::AudienceExportWorker.perform_async(current_seller.id, (impersonating_user || current_seller).id, options)
+    seller = seller_for_export
+    recipient = impersonating_user || seller
+
+    Exports::AudienceExportWorker.perform_async(seller.id, recipient.id, options)
 
     head :ok
   end
@@ -32,6 +35,22 @@ class AudienceController < Sellers::BaseController
 
     render json: data
   end
+
+  private
+    # When impersonating, we must use logged_in_user (the impersonated user), not current_seller.
+    # See PurchasesController#seller_for_export for detailed explanation.
+    def seller_for_export
+      return current_seller unless impersonating?
+
+      if current_seller != logged_in_user
+        Rails.logger.warn(
+          "[Impersonation] Seller mismatch during audience export: " \
+          "current_seller=#{current_seller.id}, logged_in_user=#{logged_in_user.id}"
+        )
+      end
+
+      logged_in_user
+    end
 
   protected
     def set_time_range

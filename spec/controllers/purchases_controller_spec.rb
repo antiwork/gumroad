@@ -723,6 +723,7 @@ describe PurchasesController, :vcr do
 
             export = SalesExport.last!
             expect(export.recipient).to eq(@admin_user)
+            expect(export.query.dig("bool", "filter")).to include(hash_including("terms" => { "seller_id" => [seller.id] }))
 
             expect(Exports::Sales::CreateAndEnqueueChunksWorker).to have_enqueued_sidekiq_job(export.id)
             expect(flash[:warning]).to eq("You will receive an email in your inbox with the data you've requested shortly.")
