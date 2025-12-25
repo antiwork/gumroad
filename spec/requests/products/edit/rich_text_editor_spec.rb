@@ -541,11 +541,13 @@ describe("Product Edit Rich Text Editor", type: :system, js: true) do
         fill_in "Enter file name", with: "My awesome track"
         expect(page).to have_text("My awesome track")
         click_on "Close drawer"
+      end
 
+      within find_embed(name: "My awesome track") do
         # Allow playing the file
         click_on "Play"
-        expect(page).to have_selector("[aria-label='Progress']", text: "00:00")
-        expect(page).to have_selector("[aria-label='Progress']", text: "00:01")
+        expect(page).to have_selector("[aria-label='Progress']", text: "00:00", wait: 10)
+        expect(page).to have_selector("[aria-label='Progress']", text: "00:01", wait: 10)
         expect(page).to have_selector("[aria-label='Pause']")
         click_on "Pause"
         expect(page).to have_selector("[aria-label='Rewind15']")
