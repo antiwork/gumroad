@@ -14,7 +14,7 @@ class AnalyticsController < Sellers::BaseController
     @analytics_props = AnalyticsPresenter.new(seller: current_seller).page_props
     LargeSeller.create_if_warranted(current_seller)
 
-    render inertia: "Analytics/Index",
+    render inertia: "Analytics/Sales/Index",
            props: { analytics_props: @analytics_props }
   end
 
@@ -69,6 +69,6 @@ class AnalyticsController < Sellers::BaseController
     end
 
     def set_title
-      @title = "Analytics"
+      @title = "Sales"
     end
 end

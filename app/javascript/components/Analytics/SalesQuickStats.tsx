@@ -2,7 +2,7 @@ import * as React from "react";
 
 import { formatPriceCentsWithCurrencySymbol } from "$app/utils/currency";
 
-import { type AnalyticsTotal } from "$app/components/Analytics";
+import { type AnalyticsTotal } from "$app/components/Analytics/types";
 import { Icon } from "$app/components/Icons";
 import { Stats } from "$app/components/Stats";
 

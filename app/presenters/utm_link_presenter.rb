@@ -17,11 +17,11 @@ class UtmLinkPresenter
       utm_link_props[:short_url] = context_props[:short_url]
     end
 
-    { context: context_props, utm_link: utm_link_props }
+    { form_static: context_props, utm_link: utm_link_props }
   end
 
   def edit_page_react_props
-    { context: utm_link_form_context_props, utm_link: utm_link_props }
+    { form_static: utm_link_form_context_props, utm_link: utm_link_props }
   end
 
   def utm_link_props

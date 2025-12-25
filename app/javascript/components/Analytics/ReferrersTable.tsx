@@ -2,7 +2,7 @@ import * as React from "react";
 
 import { formatPriceCentsWithCurrencySymbol } from "$app/utils/currency";
 
-import { type AnalyticsReferrerTotals } from "$app/components/Analytics";
+import { type AnalyticsReferrerTotals } from "$app/components/Analytics/types";
 import { Button } from "$app/components/Button";
 import { Table, TableBody, TableCaption, TableCell, TableHead, TableHeader, TableRow } from "$app/components/ui/Table";
 import { useClientSortingTableDriver } from "$app/components/useSortingTableDriver";
