@@ -26,7 +26,6 @@ import AdminUserStats from "$app/components/server-components/Admin/UserStats";
 import AffiliateRequestPage from "$app/components/server-components/AffiliateRequestPage";
 import AffiliatesPage from "$app/components/server-components/AffiliatesPage";
 import Alert from "$app/components/server-components/Alert";
-import AudiencePage from "$app/components/server-components/AudiencePage";
 import BundleEditPage from "$app/components/server-components/BundleEditPage";
 import CheckoutPage from "$app/components/server-components/CheckoutPage";
 import CommunitiesPage from "$app/components/server-components/CommunitiesPage";
@@ -71,7 +70,6 @@ import SubscriptionManagerMagicLink from "$app/components/server-components/Subs
 import SupportHeader from "$app/components/server-components/support/Header";
 import TaxesCollectionModal from "$app/components/server-components/TaxesCollectionModal";
 import TwoFactorAuthenticationPage from "$app/components/server-components/TwoFactorAuthenticationPage";
-import UtmLinksPage from "$app/components/server-components/UtmLinksPage";
 import VideoStreamPlayer from "$app/components/server-components/VideoStreamPlayer";
 import WishlistPage from "$app/components/server-components/WishlistPage";
 import CodeSnippet from "$app/components/ui/CodeSnippet";
@@ -103,7 +101,6 @@ ReactOnRails.register({
   AdminAddCreditForm,
   HelpCenterArticlesIndexPage,
   SupportHeader,
-  AudiencePage,
   BundleEditPage,
   CheckoutPage,
   CodeSnippet,
@@ -150,5 +147,4 @@ ReactOnRails.register({
   TwoFactorAuthenticationPage,
   VideoStreamPlayer,
   WishlistPage,
-  UtmLinksPage,
 });

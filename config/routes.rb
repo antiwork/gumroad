@@ -399,7 +399,6 @@ Rails.application.routes.draw do
 
     get "/affiliates/*other", to: "affiliates#index" # route handled by react-router
     get "/emails/*other", to: "emails#index" # route handled by react-router
-    get "/dashboard/utm_links/*other", to: "utm_links#index" # route handled by react-router
     get "/communities/*other", to: "communities#index" # route handled by react-router
 
     get "/a/:affiliate_id", to: "affiliate_redirect#set_cookie_and_redirect", as: :affiliate_redirect
@@ -768,7 +767,6 @@ Rails.application.routes.draw do
     # audience
     get "/audience" => redirect("/dashboard/audience")
     get "/dashboard/audience", to: "audience#index", as: :audience_dashboard
-    get "/audience/data/by_date/:start_time/:end_time", to: "audience#data_by_date", as: "audience_data_by_date"
     post "/audience/export", to: "audience#export", as: :audience_export
     get "/dashboard/consumption" => redirect("/dashboard/audience")
 
@@ -816,6 +814,9 @@ Rails.application.routes.draw do
 
     # utm links
     get "/utm_links" => redirect("/dashboard/utm_links")
+    scope "/dashboard", as: "dashboard" do
+      resources :utm_links, only: [:index, :new, :create, :edit, :update, :destroy]
+    end
     get "/dashboard/utm_links", to: "utm_links#index", as: :utm_links_dashboard
 
     # shipments
@@ -933,12 +934,7 @@ Rails.application.routes.draw do
           resources :product_posts, only: [:index]
           resources :existing_product_files, only: [:index]
         end
-        resources :utm_links, only: [:index, :new, :create, :edit, :update, :destroy] do
-          collection do
-            resource :unique_permalink, only: [:show], controller: "utm_links/unique_permalinks", as: :utm_link_unique_permalink
-            resources :stats, only: [:index], controller: "utm_links/stats", as: :utm_links_stats
-          end
-        end
+        resources :utm_links, only: [:index, :new, :create, :edit, :update, :destroy]
         resources :product_public_files, only: [:create]
         resources :communities, only: [:index] do
           resources :chat_messages, only: [:index, :create, :update, :destroy], controller: "communities/chat_messages", as: "chat_messages"

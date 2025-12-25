@@ -1,6 +1,6 @@
 import * as React from "react";
 
-import { type Product } from "$app/components/Analytics";
+import { type Product } from "$app/components/Analytics/types";
 import { Button } from "$app/components/Button";
 import { Icon } from "$app/components/Icons";
 import { Popover } from "$app/components/Popover";

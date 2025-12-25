@@ -266,7 +266,7 @@ describe "UTM links", :js, type: :system do
         expect(page).not_to have_table_row({ "Link" => utm_link2.title })
         expect(page).to_not have_button("Next")
         # Always takes to the first page when searching regardless of the previous page number
-        expect(page).to have_current_path("#{utm_links_dashboard_path}?key=link&direction=desc&query=+Sale+++++")
+        expect(page).to have_current_path("#{utm_links_dashboard_path}?key=link&direction=desc&query=%20Sale%20%20%20%20%20")
 
         # Search by source
         select_disclosure "Search" do
@@ -339,7 +339,7 @@ describe "UTM links", :js, type: :system do
         click_on "Next"
         expect(page).to have_table_row({ "Link" => utm_link2.title })
         expect(page).to_not have_table_row({ "Link" => utm_link1.title })
-        within find(:table_row, { "Link" => utm_link2.title }) do
+        within find(:table_row, { "Link" => utm_link2.title, "Revenue" => "$0" }) do
           select_disclosure "Open action menu"  do
             click_on "Delete"
           end
@@ -577,7 +577,7 @@ describe "UTM links", :js, type: :system do
         existing_utm_link = create(:utm_link, seller:, title: "Existing UTM Link", target_resource_type: :product_page, target_resource_id: product.id, utm_source: "newsletter", utm_medium: "email", utm_campaign: "summer-sale", utm_term: "sale", utm_content: "banner")
         visit utm_links_dashboard_path
 
-        within(:table_row, { "Link" => "Existing UTM Link" }) do
+        within(:table_row, { "Link" => "Existing UTM Link", "Revenue" => "$0" }) do
           select_disclosure "Open action menu"  do
             click_on "Duplicate"
           end
@@ -637,7 +637,7 @@ describe "UTM links", :js, type: :system do
         old_permalink = utm_link.permalink
 
         visit utm_links_dashboard_path
-        within(:table_row, { "Link" => utm_link.title }) do
+        within(:table_row, { "Link" => utm_link.title, "Revenue" => "$0" }) do
           select_disclosure "Open action menu"  do
             click_on "Edit"
           end

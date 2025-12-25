@@ -3,7 +3,7 @@ import { XAxis, YAxis, Bar, Line, Cell } from "recharts";
 
 import { formatPriceCentsWithCurrencySymbol } from "$app/utils/currency";
 
-import { type AnalyticsDailyTotal } from "$app/components/Analytics";
+import { type AnalyticsDailyTotal } from "$app/components/Analytics/types";
 import useChartTooltip from "$app/components/Analytics/useChartTooltip";
 import { Chart, xAxisProps, yAxisProps, lineProps } from "$app/components/Chart";
 

@@ -1,6 +1,8 @@
+import { usePage } from "@inertiajs/react";
 import { lightFormat } from "date-fns";
 import pickBy from "lodash/pickBy";
 import * as React from "react";
+import { cast } from "ts-safe-cast";
 
 import {
   AnalyticsDataByReferral,
@@ -17,6 +19,7 @@ import { ProductsPopover } from "$app/components/Analytics/ProductsPopover";
 import { ReferrersTable } from "$app/components/Analytics/ReferrersTable";
 import { SalesChart } from "$app/components/Analytics/SalesChart";
 import { SalesQuickStats } from "$app/components/Analytics/SalesQuickStats";
+import type { AnalyticsData, AnalyticsProps } from "$app/components/Analytics/types";
 import { useAnalyticsDateRange } from "$app/components/Analytics/useAnalyticsDateRange";
 import { DateRangePicker } from "$app/components/DateRangePicker";
 import { LoadingSpinner } from "$app/components/LoadingSpinner";
@@ -24,38 +27,6 @@ import { showAlert } from "$app/components/server-components/Alert";
 import Placeholder from "$app/components/ui/Placeholder";
 
 import placeholder from "$assets/images/placeholders/sales.png";
-
-export type Product = {
-  name: string;
-  id: string;
-  alive: boolean;
-  unique_permalink: string;
-};
-
-export type AnalyticsTotal = {
-  sales: number;
-  views: number;
-  totals: number;
-};
-
-export type AnalyticsDailyTotal = {
-  date: string;
-  month: string;
-  monthIndex: number;
-  sales: number;
-  views: number;
-  totals: number;
-};
-
-export type AnalyticsReferrerTotals = Record<string, AnalyticsTotal>;
-
-export type AnalyticsData = {
-  total: AnalyticsTotal;
-  startDate: string;
-  endDate: string;
-  dailyTotal: AnalyticsDailyTotal[];
-  referrerTotal: AnalyticsReferrerTotals;
-};
 
 const formatData = (data: AnalyticsDataByReferral, selectedPermalinks: string[]) => {
   const result: AnalyticsData = {
@@ -94,13 +65,10 @@ const formatData = (data: AnalyticsDataByReferral, selectedPermalinks: string[])
   return result;
 };
 
-export type AnalyticsProps = {
-  products: Product[];
-  country_codes: Record<string, string>;
-  state_names: Record<string, string>;
-};
+export default function Sales() {
+  const { analytics_props } = cast<{ analytics_props: AnalyticsProps }>(usePage().props);
+  const { products: initialProducts, country_codes, state_names } = analytics_props;
 
-const Analytics = ({ products: initialProducts, country_codes, state_names }: AnalyticsProps) => {
   const [products, setProducts] = React.useState(
     initialProducts.map((product) => ({ ...product, selected: product.alive })),
   );
@@ -146,7 +114,9 @@ const Analytics = ({ products: initialProducts, country_codes, state_names }: An
 
   return (
     <AnalyticsLayout
+      title="Analytics"
       selectedTab="sales"
+      showTabs
       actions={
         hasContent ? (
           <>
@@ -222,6 +192,4 @@ const Analytics = ({ products: initialProducts, country_codes, state_names }: An
       )}
     </AnalyticsLayout>
   );
-};
-
-export default Analytics;
+}
