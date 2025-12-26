@@ -178,7 +178,7 @@ class Api::Internal::Helper::PurchasesController < Api::Internal::Helper::BaseCo
 
   SEARCH_PURCHASE_OPENAPI = {
     summary: "Search purchase",
-    description: "Search purchase by email, seller, license key, or card details. At least one of the parameters is required.",
+    description: "Search purchase by order ID, email, seller, license key, or card details. At least one of the parameters is required. Order ID is the most efficient search method when available.",
     requestBody: {
       required: true,
       content: {
@@ -186,6 +186,7 @@ class Api::Internal::Helper::PurchasesController < Api::Internal::Helper::BaseCo
           schema: {
             type: "object",
             properties: {
+              order_id: { type: "string", description: "Order ID (also known as purchase ID or external ID) - the unique identifier shown to customers on receipts" },
               email: { type: "string", description: "Email address of the customer/buyer" },
               creator_email: { type: "string", description: "Email address of the creator/seller" },
               license_key: { type: "string", description: "Product license key (4 groups of alphanumeric characters separated by dashes)" },
@@ -259,6 +260,7 @@ class Api::Internal::Helper::PurchasesController < Api::Internal::Helper::BaseCo
   }.freeze
   def search
     search_params = {
+      order_id: params[:order_id],
       query: params[:email],
       creator_email: params[:creator_email],
       license_key: params[:license_key],

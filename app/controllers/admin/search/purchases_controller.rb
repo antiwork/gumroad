@@ -7,7 +7,7 @@ class Admin::Search::PurchasesController < Admin::BaseController
   def index
     @title = "Purchase results"
 
-    search_params = params.permit(:transaction_date, :last_4, :card_type, :price, :expiry_date, :purchase_status).to_hash.symbolize_keys
+    search_params = params.permit(:transaction_date, :last_4, :card_type, :price, :expiry_date, :purchase_status, :order_id).to_hash.symbolize_keys
 
     if search_params[:transaction_date].present?
       begin

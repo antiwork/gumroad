@@ -42,6 +42,7 @@ const SearchPopover = () => {
     user_query: initialQueries.user_query,
     purchase_query: initialQueries.purchase_query,
     affiliate_query: initialQueries.affiliate_query,
+    order_id: searchParams.get("order_id") || "",
     product_title_query: searchParams.get("product_title_query") || "",
     purchase_status: searchParams.get("purchase_status") || "",
     card_type: searchParams.get("card_type") || "",
@@ -52,7 +53,7 @@ const SearchPopover = () => {
   });
 
   const resetOtherQueryFields = (activeField?: keyof typeof data | null) => {
-    const queryFields = ["user_query", "purchase_query", "affiliate_query"] as const;
+    const queryFields = ["user_query", "purchase_query", "affiliate_query", "order_id"] as const;
     const cardFields = ["card_type", "transaction_date", "last_4", "expiry_date", "price"] as const;
 
     if (activeField === null) {
@@ -60,7 +61,7 @@ const SearchPopover = () => {
       return;
     }
 
-    if (activeField && ["user_query", "purchase_query", "affiliate_query"].includes(activeField)) {
+    if (activeField && ["user_query", "purchase_query", "affiliate_query", "order_id"].includes(activeField)) {
       cardFields.forEach((field) => setData(field, ""));
       queryFields.forEach((field) => {
         if (field !== activeField) setData(field, "");
@@ -68,12 +69,10 @@ const SearchPopover = () => {
     }
   };
 
-  const submit = (endpoint: string, queryParam?: keyof typeof data | null) => {
-    const queryData = { query: queryParam ? String(data[queryParam]) : "" };
+  const submit = (endpoint: string, queryParam?: keyof typeof data | null, paramName = "query") => {
+    const queryValue: string = queryParam ? String(data[queryParam]) : "";
     const url = new URL(endpoint, window.location.origin);
-    Object.entries(queryData).forEach(([key, value]) => {
-      url.searchParams.set(key, value);
-    });
+    url.searchParams.set(paramName, queryValue);
 
     get(url.toString(), {
       onBefore: () => resetOtherQueryFields(queryParam),
@@ -145,6 +144,28 @@ const SearchPopover = () => {
               type="text"
               value={data.affiliate_query}
               onChange={(e) => setData("affiliate_query", e.target.value)}
+            />
+          </div>
+          <Button color="primary" type="submit">
+            <Icon name="solid-search" />
+          </Button>
+        </form>
+
+        <form
+          onSubmit={(e) => {
+            e.preventDefault();
+            submit(Routes.admin_search_purchases_path(), "order_id", "order_id");
+          }}
+          className="flex gap-2"
+        >
+          <div className="input">
+            <Icon name="outline-shopping-bag" />
+            <input
+              name="order_id"
+              placeholder="Search by Order ID"
+              type="text"
+              value={data.order_id}
+              onChange={(e) => setData("order_id", e.target.value)}
             />
           </div>
           <Button color="primary" type="submit">

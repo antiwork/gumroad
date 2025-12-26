@@ -38,6 +38,41 @@ describe AdminSearchService do
       expect(purchases).not_to include(other_purchase)
     end
 
+    describe "searching by order_id" do
+      it "returns purchase when searching by order_id (external_id)" do
+        purchase = create(:purchase)
+        other_purchase = create(:purchase)
+
+        purchases = AdminSearchService.new.search_purchases(order_id: purchase.external_id)
+        expect(purchases).to eq([purchase])
+        expect(purchases).not_to include(other_purchase)
+      end
+
+      it "returns purchase when searching by order_id (external_id_numeric)" do
+        purchase = create(:purchase)
+        other_purchase = create(:purchase)
+
+        purchases = AdminSearchService.new.search_purchases(order_id: purchase.external_id_numeric.to_s)
+        expect(purchases).to eq([purchase])
+        expect(purchases).not_to include(other_purchase)
+      end
+
+      it "returns no purchases when order_id is invalid" do
+        create(:purchase)
+        purchases = AdminSearchService.new.search_purchases(order_id: "invalid_order_id")
+        expect(purchases).to be_empty
+      end
+
+      it "prioritizes order_id over other search parameters" do
+        purchase = create(:purchase, email: "user@example.com")
+        other_purchase = create(:purchase, email: "user@example.com")
+
+        purchases = AdminSearchService.new.search_purchases(order_id: purchase.external_id, query: "user@example.com")
+        expect(purchases).to eq([purchase])
+        expect(purchases).not_to include(other_purchase)
+      end
+    end
+
     it "returns purchases when searching by email with empty card parameters" do
       email = "user@example.com"
       purchase = create(:purchase, email:)
