@@ -48,6 +48,12 @@ const Nav = () => {
           href={Routes.admin_sales_reports_url(routeParams)}
           component={Link}
         />
+        <InertiaNavLink
+          text="Unreviewed users"
+          icon="people-fill"
+          href={Routes.admin_unreviewed_users_url(routeParams)}
+          component={Link}
+        />
       </NavSection>
     </NavFramework>
   );

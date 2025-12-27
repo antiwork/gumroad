@@ -1,8 +1,8 @@
-import { Head, router, usePage } from "@inertiajs/react";
+import { Head, router, usePage, useForm } from "@inertiajs/react";
 import * as React from "react";
 import { cast } from "ts-safe-cast";
 
-import { updateProfileSettings as requestUpdateProfileSettings, unlinkTwitter } from "$app/data/profile_settings";
+import { unlinkTwitter } from "$app/data/profile_settings";
 import { CreatorProfile, ProfileSettings } from "$app/parsers/profile";
 import { SettingPage } from "$app/parsers/settings";
 import { getContrastColor } from "$app/utils/color";
@@ -21,7 +21,7 @@ import { Profile, Props as ProfileProps } from "$app/components/server-component
 import { Layout as SettingsLayout } from "$app/components/Settings/Layout";
 import { SocialAuthButton } from "$app/components/SocialAuthButton";
 
-type Props = {
+type ProfilePageProps = {
   profile_settings: ProfileSettings;
   settings_pages: SettingPage[];
 } & ProfileProps;
@@ -37,7 +37,9 @@ const FONT_DESCRIPTIONS: Record<string, string> = {
 };
 
 export default function SettingsPage() {
-  const { creator_profile, profile_settings, settings_pages, ...profileProps } = cast<Props>(usePage().props);
+  const { creator_profile, profile_settings, settings_pages, ...profileProps } = cast<ProfilePageProps>(
+    usePage().props,
+  );
   const { rootDomain, scheme } = useDomains();
   const loggedInUser = useLoggedInUser();
   const [creatorProfile, setCreatorProfile] = React.useState(creator_profile);
@@ -45,23 +47,29 @@ export default function SettingsPage() {
   const updateCreatorProfile = (newProfile: Partial<CreatorProfile>) =>
     setCreatorProfile((prevProfile) => ({ ...prevProfile, ...newProfile }));
 
-  const [profileSettings, setProfileSettings] = React.useState(profile_settings);
+  const form = useForm(profile_settings);
+
+  const profileSettings = form.data;
   const updateProfileSettings = (newSettings: Partial<ProfileSettings>) =>
-    setProfileSettings((prevSettings) => ({ ...prevSettings, ...newSettings }));
+    form.setData({ ...form.data, ...newSettings });
 
   const uid = React.useId();
 
-  const canUpdate = loggedInUser?.policies.settings_profile.update || false;
+  const canUpdate = Boolean(loggedInUser?.policies.settings_profile.update) && !form.processing;
 
-  const handleSave = asyncVoid(async () => {
-    try {
-      await requestUpdateProfileSettings(profileSettings);
-      showAlert("Changes saved!", "success");
-    } catch (e) {
-      assertResponseError(e);
-      showAlert(e.message, "error");
-    }
-  });
+  const handleSave = () => {
+    form.transform((data) => {
+      const { background_color, highlight_color, font, profile_picture_blob_id, ...user } = data;
+      return {
+        profile_picture_blob_id,
+        user,
+        seller_profile: { background_color, highlight_color, font },
+      };
+    });
+    form.put(Routes.settings_profile_path(), {
+      preserveScroll: true,
+    });
+  };
 
   const handleUnlinkTwitter = asyncVoid(async () => {
     try {
@@ -257,7 +265,11 @@ export default function SettingsPage() {
               color: "rgb(var(--color))",
             }}
           >
-            <Profile creator_profile={creatorProfile} {...profileProps} bio={profileSettings.bio} />
+            <Profile
+              creator_profile={creatorProfile}
+              {...(() => ({ profile_settings, settings_pages, ...profileProps }))()}
+              bio={profileSettings.bio}
+            />
           </Preview>
         </PreviewSidebar>
       </WithPreviewSidebar>

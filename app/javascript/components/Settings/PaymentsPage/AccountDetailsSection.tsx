@@ -3,9 +3,10 @@ import parsePhoneNumberFromString, { CountryCode } from "libphonenumber-js";
 import * as React from "react";
 import { cast } from "ts-safe-cast";
 
+import type { ComplianceInfo, FormFieldName, User } from "$app/types/payments";
+
 import { Button } from "$app/components/Button";
 import { Icon } from "$app/components/Icons";
-import { ComplianceInfo, FormFieldName, User } from "$app/components/server-components/Settings/PaymentsPage";
 
 const AccountDetailsSection = ({
   user,
