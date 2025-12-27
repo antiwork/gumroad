@@ -21,14 +21,14 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "$
 import { useDebouncedCallback } from "$app/components/useDebouncedCallback";
 import { useUserAgentInfo } from "$app/components/UserAgent";
 import { Sort, useSortingTableDriver } from "$app/components/useSortingTableDriver";
-import { Layout } from "$app/components/UtmLinksPage/Layout";
+import { AnalyticsLayout } from "$app/components/Analytics/AnalyticsLayout";
 import { WithTooltip } from "$app/components/WithTooltip";
 
 import noLinksYetPlaceholder from "$assets/images/placeholders/utm_links_empty.png";
 import noLinksFoundPlaceholder from "$assets/images/placeholders/utm_links_not_found.png";
 
-const duplicateLinkPath = (link: SavedUtmLink) => `/dashboard/utm_links/new?copy_from=${link.id}`;
-const editLinkPath = (link: SavedUtmLink) => `/dashboard/utm_links/${link.id}/edit`;
+const duplicateLinkPath = (link: SavedUtmLink) => `${Routes.utm_links_dashboard_path()}/new?copy_from=${link.id}`;
+const editLinkPath = (link: SavedUtmLink) => `${Routes.utm_links_dashboard_path()}/${link.id}/edit`;
 
 const truncateText = (text: string, maxLength: number) => {
   const truncated = text.length > maxLength ? `${text.slice(0, maxLength)}...` : text;
@@ -160,7 +160,7 @@ export default function UtmLinksIndex() {
     if (!deletingUtmLink) return;
 
     setDeletingUtmLink({ ...deletingUtmLink, state: "deleting" });
-    router.delete(`/dashboard/utm_links/${deletingUtmLink.id}`, {
+    router.delete(`${Routes.utm_links_dashboard_path()}/${deletingUtmLink.id}`, {
       only: ["utm_links", "pagination", "flash"],
       onSuccess: () => {
         setDeletingUtmLink(null);
@@ -174,13 +174,12 @@ export default function UtmLinksIndex() {
   };
 
   return (
-    <Layout
-      title="Analytics"
+    <AnalyticsLayout
       selectedTab="utm_links"
       actions={
         <>
           <SearchBoxPopover initialQuery={query} onSearch={onSearch} />
-          <Link href="/dashboard/utm_links/new" className="button accent">
+          <Link href={`${Routes.utm_links_dashboard_path()}/new`} className="button accent">
             Create link
           </Link>
         </>
@@ -343,7 +342,7 @@ export default function UtmLinksIndex() {
           </Placeholder>
         </div>
       )}
-    </Layout>
+    </AnalyticsLayout>
   );
 }
 

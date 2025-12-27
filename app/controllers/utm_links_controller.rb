@@ -32,11 +32,10 @@ class UtmLinksController < Sellers::BaseController
   def create
     authorize UtmLink
 
-    SaveUtmLinkService.new(seller: current_seller, params: permitted_params, utm_link: nil).perform
-    redirect_to utm_links_dashboard_path, notice: "Link created!", status: :see_other
-  rescue ActiveRecord::RecordInvalid => e
-    error = e.record.errors.first
-    redirect_to new_utm_link_dashboard_path, inertia: { errors: { error.attribute => [error.message] } }, alert: error.message
+    save_utm_link(
+      success_message: "Link created!",
+      error_redirect_path: new_utm_link_dashboard_path
+    )
   end
 
   def edit
@@ -47,11 +46,10 @@ class UtmLinksController < Sellers::BaseController
   def update
     return e404 if @utm_link.deleted?
 
-    SaveUtmLinkService.new(seller: current_seller, params: permitted_params, utm_link: @utm_link).perform
-    redirect_to utm_links_dashboard_path, notice: "Link updated!", status: :see_other
-  rescue ActiveRecord::RecordInvalid => e
-    error = e.record.errors.first
-    redirect_to edit_utm_link_dashboard_path(@utm_link.external_id), inertia: { errors: { error.attribute => [error.message] } }, alert: error.message
+    save_utm_link(
+      success_message: "Link updated!",
+      error_redirect_path: edit_utm_link_dashboard_path(@utm_link.external_id)
+    )
   end
 
   def destroy
@@ -90,5 +88,13 @@ class UtmLinksController < Sellers::BaseController
         ip_address: request.remote_ip,
         browser_guid: cookies[:_gumroad_guid]
       )
+    end
+
+    def save_utm_link(success_message:, error_redirect_path:)
+      SaveUtmLinkService.new(seller: current_seller, params: permitted_params, utm_link: @utm_link).perform
+      redirect_to utm_links_dashboard_path, notice: success_message, status: :see_other
+    rescue ActiveRecord::RecordInvalid => e
+      error = e.record.errors.first
+      redirect_to error_redirect_path, inertia: { errors: { error.attribute => [error.message] } }, alert: error.message
     end
 end

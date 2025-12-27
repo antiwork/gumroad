@@ -169,7 +169,4 @@ ReactOnRails.register({
   TwoFactorAuthenticationPage,
   VideoStreamPlayer,
   WishlistPage,
-  WishlistsFollowingPage,
-  WishlistsPage,
-  UtmLinksPage,
 });

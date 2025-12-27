@@ -14,7 +14,7 @@ import { Icon } from "$app/components/Icons";
 import { Select } from "$app/components/Select";
 import { showAlert } from "$app/components/server-components/Alert";
 import { Pill } from "$app/components/ui/Pill";
-import { Layout } from "$app/components/UtmLinksPage/Layout";
+import { AnalyticsLayout } from "$app/components/Analytics/AnalyticsLayout";
 import { WithTooltip } from "$app/components/WithTooltip";
 
 const MAX_UTM_PARAM_LENGTH = 200;
@@ -223,15 +223,14 @@ export const UtmLinkForm = ({ context, utm_link }: UtmLinkFormProps) => {
     };
 
     if (isEditing) {
-      form.patch(`/dashboard/utm_links/${assertDefined(utm_link.id)}`, options);
+      form.patch(`${Routes.utm_links_dashboard_path()}/${assertDefined(utm_link.id)}`, options);
     } else {
-      form.post("/dashboard/utm_links", options);
+      form.post(Routes.utm_links_dashboard_path(), options);
     }
   };
 
   return (
-    <Layout
-      title={isEditing ? "Edit link" : "Create link"}
+    <AnalyticsLayout
       selectedTab="utm_links"
       actions={
         <>
@@ -451,7 +450,7 @@ export const UtmLinkForm = ({ context, utm_link }: UtmLinkFormProps) => {
           ) : null}
         </section>
       </form>
-    </Layout>
+    </AnalyticsLayout>
   );
 };
 
