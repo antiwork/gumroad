@@ -4,7 +4,113 @@ require "spec_helper"
 
 describe Product::VariantCategoryUpdaterService do
   describe ".perform" do
-    describe "associating files" do
+    context "when trying to update a variant from another product" do
+      let(:product) { create(:product) }
+      let(:other_product) { create(:product) }
+      let(:variant) { create(:variant, variant_category: create(:variant_category, link: product)) }
+      let(:other_variant) { create(:variant, variant_category: create(:variant_category, link: other_product)) }
+      let(:variant_category_params) do
+        {
+          id: variant.variant_category.external_id, title: variant.variant_category.title,
+          options: [
+            {
+              id: other_variant.external_id,
+              name: other_variant.name,
+            }
+          ]
+        }
+      end
+
+      it "raises an error and does not update the variant" do
+        expect { Product::VariantCategoryUpdaterService.new(product: product, category_params: variant_category_params).perform }.to raise_error(ActiveRecord::RecordNotFound)
+        expect(variant.reload.name).not_to eq other_variant.name
+      end
+    end
+
+    describe "notifying subscribers of price changes" do
+      let(:product) { create(:product) }
+      let(:was_applying_price_changes_to_existing_memberships) { false }
+      let(:was_subscription_price_change_effective_date) { 10.days.from_now.to_date }
+      let(:variant) do
+        create(
+          :variant,
+          variant_category: create(:variant_category, link: product),
+          apply_price_changes_to_existing_memberships: was_applying_price_changes_to_existing_memberships,
+          subscription_price_change_effective_date: was_subscription_price_change_effective_date
+        )
+      end
+
+      let(:variant_category_params) do
+        {
+          id: variant.variant_category.external_id,
+          title: variant.variant_category.title,
+          options: [
+            {
+              id: variant.external_id,
+              name: variant.name,
+              apply_price_changes_to_existing_memberships:,
+              subscription_price_change_effective_date:,
+            }
+          ]
+        }
+      end
+
+      context "when apply_price_changes_to_existing_memberships is enabled and the effective date changed" do
+        let(:apply_price_changes_to_existing_memberships) { true }
+        let(:subscription_price_change_effective_date) { 7.days.from_now.to_date }
+
+        it "schedules ScheduleMembershipPriceUpdatesJob" do
+          expect(ScheduleMembershipPriceUpdatesJob).to receive(:perform_async).with(variant.id)
+
+          Product::VariantCategoryUpdaterService.new(product: product, category_params: variant_category_params).perform
+        end
+      end
+
+      context "when disabling apply_price_changes_to_existing_memberships" do
+        let(:was_applying_price_changes_to_existing_memberships) { true }
+        let(:apply_price_changes_to_existing_memberships) { false }
+        let(:subscription_price_change_effective_date) { was_subscription_price_change_effective_date }
+
+        it "does not schedule ScheduleMembershipPriceUpdatesJob" do
+          expect(ScheduleMembershipPriceUpdatesJob).not_to receive(:perform_async).with(variant.id)
+        end
+
+        context "when the flags previously changed" do
+          it "notifies Bugsnag" do
+            expect(Bugsnag).to receive(:notify).with("Not notifying subscribers of membership price change - tier: #{variant.id}; apply_price_changes_to_existing_memberships: false; subscription_price_change_effective_date: #{was_subscription_price_change_effective_date}")
+
+            Product::VariantCategoryUpdaterService.new(product: product, category_params: variant_category_params).perform
+          end
+        end
+
+        context "when the effective date previously changed" do
+          let(:was_applying_price_changes_to_existing_memberships) { false }
+          let(:apply_price_changes_to_existing_memberships) { false }
+          let(:was_subscription_price_change_effective_date) { 7.days.from_now.to_date }
+          let(:subscription_price_change_effective_date) { 10.days.from_now.to_date }
+
+          it "notifies Bugsnag" do
+            expect(Bugsnag).to receive(:notify).with("Not notifying subscribers of membership price change - tier: #{variant.id}; apply_price_changes_to_existing_memberships: false; subscription_price_change_effective_date: #{subscription_price_change_effective_date}")
+
+            Product::VariantCategoryUpdaterService.new(product: product, category_params: variant_category_params).perform
+          end
+        end
+      end
+
+      context "when changing the effective date and apply_price_changes_to_existing_memberships is already enabled" do
+        let(:was_applying_price_changes_to_existing_memberships) { true }
+        let(:apply_price_changes_to_existing_memberships) { true }
+        let(:subscription_price_change_effective_date) { 7.days.from_now.to_date }
+
+        it "schedules ScheduleMembershipPriceUpdatesJob" do
+          expect(ScheduleMembershipPriceUpdatesJob).to receive(:perform_async).with(variant.id)
+
+          Product::VariantCategoryUpdaterService.new(product: product, category_params: variant_category_params).perform
+        end
+      end
+    end
+
+    context "when associating files" do
       before do
         @product = create(:product)
         vc = create(:variant_category, link: @product)

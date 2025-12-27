@@ -11,6 +11,7 @@ import { SocialAuth } from "$app/components/Authentication/SocialAuth";
 import { Button } from "$app/components/Button";
 import { PasswordInput } from "$app/components/PasswordInput";
 import { Separator } from "$app/components/Separator";
+import { Alert } from "$app/components/ui/Alert";
 import { useOriginalLocation } from "$app/components/useOriginalLocation";
 import { RecaptchaCancelledError, useRecaptcha } from "$app/components/useRecaptcha";
 
@@ -82,11 +83,7 @@ export const SignupPage = ({
           <span>or</span>
         </Separator>
         <section>
-          {saveState.type === "error" ? (
-            <div role="alert" className="danger">
-              {saveState.message}
-            </div>
-          ) : null}
+          {saveState.type === "error" ? <Alert variant="danger">{saveState.message}</Alert> : null}
           <fieldset>
             <legend>
               <label htmlFor={`${uid}-email`}>Email</label>

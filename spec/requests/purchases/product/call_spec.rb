@@ -98,7 +98,7 @@ describe "Call", type: :system, js: true do
       within_cart_item "Call me!" do
         expect(page).to have_text("Duration: 30 minutes")
 
-        select_disclosure "Configure" do
+        select_disclosure "Edit" do
           choose "$20"
           click_on "Next Month"
           click_on "1", match: :first

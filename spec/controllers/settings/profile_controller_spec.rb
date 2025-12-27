@@ -3,9 +3,11 @@
 require "spec_helper"
 require "shared_examples/sellers_base_controller_concern"
 require "shared_examples/authorize_called"
+require "inertia_rails/rspec"
 
-describe Settings::ProfileController, :vcr do
+describe Settings::ProfileController, :vcr, type: :controller, inertia: true do
   let(:seller) { create(:named_seller) }
+  let(:pundit_user) { SellerContext.new(user: user_with_role_for_seller, seller:) }
 
   include_context "with user signed in as admin for seller"
 
@@ -14,28 +16,33 @@ describe Settings::ProfileController, :vcr do
   end
 
   describe "GET show" do
-    it "returns http success and assigns correct instance variables" do
+    it "returns successful response with Inertia page data" do
       get :show
 
       expect(response).to be_successful
-      expect(assigns[:title]).to eq("Settings")
-      profile_presenter = assigns[:profile_presenter]
-      expect(profile_presenter.seller).to eq(seller)
-      expect(profile_presenter.pundit_user).to eq(controller.pundit_user)
-
-      settings_presenter = assigns[:settings_presenter]
-      expect(settings_presenter.pundit_user).to eq(controller.pundit_user)
+      expect(inertia.component).to eq("Settings/Profile/Show")
+      settings_presenter = SettingsPresenter.new(pundit_user: controller.pundit_user)
+      profile_presenter = ProfilePresenter.new(pundit_user: controller.pundit_user, seller:)
+      expected_props = settings_presenter.profile_props.merge(
+        profile_presenter.profile_settings_props(request:)
+      )
+      # Compare only the expected props from inertia.props (ignore shared props)
+      actual_props = inertia.props.slice(*expected_props.keys)
+      expect(actual_props).to eq(expected_props)
     end
   end
 
   describe "PUT update" do
     before do
       sign_in seller
+      request.headers["X-Inertia"] = "true"
     end
 
     it "submits the form successfully" do
-      put :update, xhr: true, params: { user: { name: "New name", username: "gum" } }
-      expect(response.parsed_body["success"]).to be(true)
+      put :update, params: { user: { name: "New name", username: "gum" } }
+      expect(response).to redirect_to(settings_profile_path)
+      expect(response).to have_http_status :see_other
+      expect(flash[:notice]).to eq("Changes saved!")
       expect(seller.reload.name).to eq("New name")
       expect(seller.username).to eq("gum")
     end
@@ -44,16 +51,19 @@ describe Settings::ProfileController, :vcr do
       seller.username = "oldusername"
       seller.save
 
-      expect { put :update, xhr: true, params: { user: { username: "" } } }.to change {
+      expect { put :update, params: { user: { username: "" } } }.to change {
         seller.reload.read_attribute(:username)
       }.from("oldusername").to(nil)
+      expect(response).to redirect_to(settings_profile_path)
+      expect(response).to have_http_status :see_other
+      expect(flash[:notice]).to eq("Changes saved!")
     end
 
     it "performs model validations" do
-      put :update, xhr: true, params: { user: { username: "ab" } }
-      expect(response).to have_http_status :unprocessable_content
-      expect(response.parsed_body["success"]).to be(false)
-      expect(response.parsed_body["error_message"]).to eq("Username is too short (minimum is 3 characters)")
+      put :update, params: { user: { username: "ab" } }
+      expect(response).to redirect_to(settings_profile_path)
+      expect(response).to have_http_status :found
+      expect(flash[:alert]).to eq("Username is too short (minimum is 3 characters)")
     end
 
     describe "when the user has not confirmed their email address" do
@@ -62,9 +72,10 @@ describe Settings::ProfileController, :vcr do
       end
 
       it "returns an error" do
-        put :update, xhr: true, params: { user: { name: "New name" } }
-        expect(response.parsed_body["success"]).to be(false)
-        expect(response.parsed_body["error_message"]).to eq("You have to confirm your email address before you can do that.")
+        put :update, params: { user: { name: "New name" } }
+        expect(response).to redirect_to(settings_profile_path)
+        expect(response).to have_http_status :found
+        expect(flash[:alert]).to eq("You have to confirm your email address before you can do that.")
       end
     end
 
@@ -76,8 +87,9 @@ describe Settings::ProfileController, :vcr do
       seller.avatar.attach(file_fixture("test.png"))
 
       put :update, params: { tabs: [{ name: "Tab 1", sections: [section1.external_id] }, { name: "Tab 2", sections: [section2.external_id] }, { name: "Tab 3", sections: [] }] }
-      puts response.parsed_body
-      expect(response).to be_successful
+      expect(response).to redirect_to(settings_profile_path)
+      expect(response).to have_http_status :see_other
+      expect(flash[:notice]).to eq("Changes saved!")
       expect(seller.seller_profile_sections.count).to eq 3
       expect(seller.seller_profile_sections.on_profile.count).to eq 2
       expect(seller.reload.seller_profile.json_data["tabs"]).to eq [{ name: "Tab 1", sections: [section1.id] }, { name: "Tab 2", sections: [section2.id] }, { name: "Tab 3", sections: [] }].as_json
@@ -95,8 +107,9 @@ describe Settings::ProfileController, :vcr do
       seller.avatar.purge
 
       put :update, params: { user: { name: "New name" }, profile_picture_blob_id: signed_id }
-      expect(response.parsed_body["success"]).to be(false)
-      expect(response.parsed_body["error_message"]).to eq("The logo is already removed. Please refresh the page and try again.")
+      expect(response).to redirect_to(settings_profile_path)
+      expect(response).to have_http_status :found
+      expect(flash[:alert]).to eq("The logo is already removed. Please refresh the page and try again.")
     end
 
     it "regenerates the subscribe preview when the avatar changes" do
@@ -113,6 +126,9 @@ describe Settings::ProfileController, :vcr do
         }
       end.to change { GenerateSubscribePreviewJob.jobs.size }.by(1)
 
+      expect(response).to redirect_to(settings_profile_path)
+      expect(response).to have_http_status :see_other
+      expect(flash[:notice]).to eq("Changes saved!")
       expect(GenerateSubscribePreviewJob).to have_enqueued_sidekiq_job(seller.id)
     end
   end

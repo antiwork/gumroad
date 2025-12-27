@@ -45,6 +45,7 @@ import { editEmailPath, emailTabPath, newEmailPath } from "$app/components/serve
 import { InvalidNameForEmailDeliveryWarning } from "$app/components/server-components/InvalidNameForEmailDeliveryWarning";
 import { TagInput } from "$app/components/TagInput";
 import { UpsellCard } from "$app/components/TiptapExtensions/UpsellCard";
+import { Alert } from "$app/components/ui/Alert";
 import { PageHeader } from "$app/components/ui/PageHeader";
 import { useConfigureEvaporate } from "$app/components/useConfigureEvaporate";
 import { useDebouncedCallback } from "$app/components/useDebouncedCallback";
@@ -879,18 +880,16 @@ export const EmailForm = () => {
                         </label>
                       ))}
                       {installment?.published_at ? null : (
-                        <div className="info" role="status">
-                          <div>The post will be shown in the selected profile sections once it is published.</div>
-                        </div>
+                        <Alert role="status" variant="info">
+                          The post will be shown in the selected profile sections once it is published.
+                        </Alert>
                       )}
                     </>
                   ) : (
-                    <div className="info" role="status">
-                      <div>
-                        You currently have no sections in your profile to display this,{" "}
-                        <a href={Routes.root_url({ host: currentSeller.subdomain })}>create one here</a>
-                      </div>
-                    </div>
+                    <Alert role="status" variant="info">
+                      You currently have no sections in your profile to display this,{" "}
+                      <a href={Routes.root_url({ host: currentSeller.subdomain })}>create one here</a>
+                    </Alert>
                   )
                 ) : null}
               </fieldset>

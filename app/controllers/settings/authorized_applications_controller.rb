@@ -1,10 +1,10 @@
 # frozen_string_literal: true
 
-class Settings::AuthorizedApplicationsController < Sellers::BaseController
+class Settings::AuthorizedApplicationsController < Settings::BaseController
   def index
     authorize([:settings, :authorized_applications, OauthApplication])
 
     @title = "Settings"
-    @react_component_props = SettingsPresenter.new(pundit_user:).authorized_applications_props
+    render inertia: "Settings/AuthorizedApplications/Index", props: settings_presenter.authorized_applications_props
   end
 end
