@@ -1,7 +1,4 @@
 import * as React from "react";
-import { createCast } from "ts-safe-cast";
-
-import { register } from "$app/utils/serverComponentUtil";
 
 import { Button } from "$app/components/Button";
 import { Modal } from "$app/components/Modal";
@@ -64,4 +61,4 @@ export const UpdateCountryConfirmationModal = ({ country, balance, open, onClose
   );
 };
 
-export default register({ component: UpdateCountryConfirmationModal, propParser: createCast() });
+export default UpdateCountryConfirmationModal;

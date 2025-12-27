@@ -1,11 +1,9 @@
+import { router, usePage } from "@inertiajs/react";
 import { parseISO } from "date-fns";
 import * as React from "react";
-import { createCast, cast } from "ts-safe-cast";
+import { cast } from "ts-safe-cast";
 
 import { SettingPage } from "$app/parsers/settings";
-import { asyncVoid } from "$app/utils/promise";
-import { assertResponseError, request } from "$app/utils/request";
-import { register } from "$app/utils/serverComponentUtil";
 
 import { Button } from "$app/components/Button";
 import { Icon } from "$app/components/Icons";
@@ -63,35 +61,30 @@ type Props = {
   authorized_applications: AuthorizedApplication[];
 };
 
-const AuthorizedApplicationsPage = (props: Props) => {
+export default function AuthorizedApplicationsPage() {
+  const props = cast<Props>(usePage().props);
   const userAgentInfo = useUserAgentInfo();
   const [applications, setApplications] = React.useState(props.authorized_applications);
   const [revokingAccessForApp, setRevokingAccessForApp] = React.useState<{ id: string; revoking?: boolean } | null>(
     null,
   );
 
-  const handleRevokeAccess = asyncVoid(async (id: string) => {
+  const handleRevokeAccess = (id: string) => {
     setRevokingAccessForApp({ id, revoking: true });
-    try {
-      const response = await request({
-        url: Routes.oauth_authorized_application_path(id),
-        method: "DELETE",
-        accept: "json",
-      });
-      const responseData = cast<{ success: boolean; message: string }>(await response.json());
-
-      if (responseData.success) {
-        showAlert(responseData.message, "success");
-        setApplications((prevApplications) => prevApplications.filter((application) => application.id !== id));
-      } else {
-        showAlert(responseData.message, "error");
-      }
-    } catch (error) {
-      assertResponseError(error);
-      showAlert("Sorry, something went wrong. Please try again.", "error");
-    }
-    setRevokingAccessForApp(null);
-  });
+    router.delete(Routes.oauth_authorized_application_path(id), {
+      only: ["authorized_applications"],
+      onSuccess: (page) => {
+        const updatedProps = cast<Props>(page.props);
+        setApplications(updatedProps.authorized_applications);
+        showAlert("Authorized application revoked", "success");
+        setRevokingAccessForApp(null);
+      },
+      onError: () => {
+        showAlert("Sorry, something went wrong. Please try again.", "error");
+        setRevokingAccessForApp(null);
+      },
+    });
+  };
 
   return (
     <Layout currentPage="authorized_applications" pages={props.settings_pages}>
@@ -193,5 +186,4 @@ const AuthorizedApplicationsPage = (props: Props) => {
       )}
     </Layout>
   );
-};
-export default register({ component: AuthorizedApplicationsPage, propParser: createCast() });
+}

@@ -19,19 +19,17 @@ describe Oauth::AuthorizedApplicationsController do
   end
 
   describe "DELETE destroy" do
-    it "revokes access to the authorized application" do
+    it "revokes access to the authorized application and redirects" do
       expect { delete(:destroy, params: { id: @application.external_id }) }.to change { OauthApplication.authorized_for(@user).count }.by(-1)
-      expect(response).to have_http_status(:ok)
-      expect(response.parsed_body["success"]).to eq(true)
-      expect(response.parsed_body["message"]).to eq("Authorized application revoked")
+      expect(response).to redirect_to(settings_authorized_applications_path)
+      expect(flash[:notice]).to eq("Authorized application revoked")
     end
 
     context "when the user hasn't authorized the application" do
-      it "renders json with error message" do
+      it "redirects with error message" do
         delete :destroy, params: { id: "invalid_id" }
-        expect(response).to have_http_status(:forbidden)
-        expect(response.parsed_body["success"]).to eq(false)
-        expect(response.parsed_body["message"]).to eq("Authorized application could not be revoked")
+        expect(response).to redirect_to(settings_authorized_applications_path)
+        expect(flash[:alert]).to eq("Authorized application could not be revoked")
       end
     end
   end

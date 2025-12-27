@@ -1,7 +1,8 @@
+import { usePage, router } from "@inertiajs/react";
 import { cx } from "class-variance-authority";
 import * as React from "react";
 import { GroupBase, SelectInstance } from "react-select";
-import { cast, createCast } from "ts-safe-cast";
+import { cast } from "ts-safe-cast";
 
 import {
   ROLES,
@@ -9,7 +10,6 @@ import {
   MemberInfo,
   TeamInvitation,
   createTeamInvitation,
-  fetchMemberInfos,
   deleteMember,
   resendInvitation,
   restoreMember,
@@ -19,7 +19,6 @@ import { SettingPage } from "$app/parsers/settings";
 import { isValidEmail } from "$app/utils/email";
 import { asyncVoid } from "$app/utils/promise";
 import { assertResponseError } from "$app/utils/request";
-import { register } from "$app/utils/serverComponentUtil";
 
 import { Button } from "$app/components/Button";
 import { useCurrentSeller } from "$app/components/CurrentSeller";
@@ -41,38 +40,35 @@ const ROLE_TITLES: Record<Role, string> = {
   support: "Support",
 };
 
-const TeamPage = ({
-  member_infos,
-  can_invite_member,
-  settings_pages,
-}: {
+type TeamPageProps = {
   member_infos: MemberInfo[];
   can_invite_member: boolean;
   settings_pages: SettingPage[];
-}) => {
-  const [memberInfos, setMemberInfos] = React.useState<MemberInfo[]>(member_infos);
+};
+
+export default function TeamPage() {
+  const props = cast<TeamPageProps>(usePage().props);
 
   const options: Option[] = ROLES.map((role) => ({
     id: role,
     label: ROLE_TITLES[role],
   }));
 
-  const refreshMemberInfos = asyncVoid(async () => {
-    const result = await fetchMemberInfos();
-    if (result.success) {
-      setMemberInfos(result.member_infos);
-    }
-  });
+  const refreshMemberInfos = () => {
+    router.reload({ only: ["member_infos"] });
+  };
 
   return (
-    <SettingsLayout currentPage="team" pages={settings_pages}>
+    <SettingsLayout currentPage="team" pages={props.settings_pages}>
       <form>
-        {can_invite_member ? <AddTeamMembersSection refreshMemberInfos={refreshMemberInfos} options={options} /> : null}
-        <TeamMembersSection memberInfos={memberInfos} refreshMemberInfos={refreshMemberInfos} />
+        {props.can_invite_member ? (
+          <AddTeamMembersSection refreshMemberInfos={refreshMemberInfos} options={options} />
+        ) : null}
+        <TeamMembersSection memberInfos={props.member_infos} refreshMemberInfos={refreshMemberInfos} />
       </form>
     </SettingsLayout>
   );
-};
+}
 
 const AddTeamMembersSection = ({
   refreshMemberInfos,
@@ -396,5 +392,3 @@ const TeamMembersSection = ({
     </section>
   );
 };
-
-export default register({ component: TeamPage, propParser: createCast() });

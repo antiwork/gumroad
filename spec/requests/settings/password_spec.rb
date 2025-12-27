@@ -30,12 +30,10 @@ describe("Password Settings Scenario", type: :system, js: true) do
         VCR.use_cassette("Add Password-with a compromised password") do
           with_real_pwned_password_check do
             click_on("Change password")
-            wait_for_ajax
+            expect(page).to have_alert(text: "New password has previously appeared in a data breach as per haveibeenpwned.com and should never be used. Please choose something harder to guess.")
           end
         end
       end
-
-      expect(page).to have_alert(text: "New password has previously appeared in a data breach as per haveibeenpwned.com and should never be used. Please choose something harder to guess.")
     end
 
     it "allows setting a new password with a value that was not found in the password breaches" do
@@ -51,12 +49,10 @@ describe("Password Settings Scenario", type: :system, js: true) do
         VCR.use_cassette("Add Password-with a not compromised password") do
           with_real_pwned_password_check do
             click_on("Change password")
-            wait_for_ajax
+            expect(page).to have_alert(text: "You have successfully changed your password.")
           end
         end
       end
-
-      expect(page).to have_alert(text: "You have successfully changed your password.")
     end
   end
 
@@ -111,12 +107,12 @@ describe("Password Settings Scenario", type: :system, js: true) do
         VCR.use_cassette("Add Password-with a compromised password") do
           with_real_pwned_password_check do
             click_on("Change password")
-            wait_for_ajax
+            expect(page).to have_alert(
+              text: "New password has previously appeared in a data breach as per haveibeenpwned.com and should never be used. Please choose something harder to guess.",
+            )
           end
         end
       end
-
-      expect(page).to have_alert(text: "New password has previously appeared in a data breach as per haveibeenpwned.com and should never be used. Please choose something harder to guess.")
     end
 
     it "allows changing the password with a value that was not found in the password breaches" do
@@ -132,12 +128,10 @@ describe("Password Settings Scenario", type: :system, js: true) do
         VCR.use_cassette("Add Password-with a not compromised password") do
           with_real_pwned_password_check do
             click_on("Change password")
-            wait_for_ajax
+            expect(page).to have_alert(text: "You have successfully changed your password.")
           end
         end
       end
-
-      expect(page).to have_alert(text: "You have successfully changed your password.")
     end
   end
 end

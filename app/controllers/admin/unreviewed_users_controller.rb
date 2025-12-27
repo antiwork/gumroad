@@ -11,7 +11,7 @@ class Admin::UnreviewedUsersController < Admin::BaseController
              props: {
                users: [],
                total_count: 0,
-               cutoff_date: Admin::UnreviewedUsersService.cutoff_years.years.ago.to_date.to_s
+               cutoff_date: Admin::UnreviewedUsersService.cutoff_date.to_s
              }
       return
     end

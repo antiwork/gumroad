@@ -2,19 +2,16 @@
 
 class Admin::UnreviewedUsersService
   MINIMUM_BALANCE_CENTS = 1000
-  DEFAULT_CUTOFF_YEARS = 2
+  DEFAULT_CUTOFF_DATE = "2024-01-01"
   MAX_CACHED_USERS = 1000
 
   def cutoff_date
-    @cutoff_date ||= cutoff_years.years.ago.to_date
+    @cutoff_date ||= self.class.cutoff_date
   end
 
-  def self.cutoff_years
-    $redis.get(RedisKey.unreviewed_users_cutoff_years)&.to_i || DEFAULT_CUTOFF_YEARS
-  end
-
-  def cutoff_years
-    self.class.cutoff_years
+  def self.cutoff_date
+    date_str = $redis.get(RedisKey.unreviewed_users_cutoff_date) || DEFAULT_CUTOFF_DATE
+    Date.parse(date_str)
   end
 
   def count

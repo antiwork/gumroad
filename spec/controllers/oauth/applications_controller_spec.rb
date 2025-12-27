@@ -2,8 +2,9 @@
 
 require "spec_helper"
 require "shared_examples/authorize_called"
+require "inertia_rails/rspec"
 
-describe Oauth::ApplicationsController do
+describe Oauth::ApplicationsController, type: :controller, inertia: true do
   shared_examples_for "redirects to page with OAuth apps" do
     it "redirects to settings_advanced_path" do
       raise "no @action in before block of test" unless @action
@@ -55,15 +56,17 @@ describe Oauth::ApplicationsController do
       }
     } end
 
-    it "adds a new application" do
+    it "creates a new application and redirects" do
       expect { post(:create, params:) }.to change { seller.oauth_applications.count }.by 1
-      expect(response.parsed_body["success"]).to eq(true)
+      id = OauthApplication.last.external_id
+      expect(response).to redirect_to(edit_oauth_application_path(id))
+      expect(flash[:notice]).to eq("Application created.")
     end
 
-    it "returns a url redirect to the application's page" do
+    it "returns a redirect to the application's edit page" do
       post(:create, params:)
       id = OauthApplication.last.external_id
-      expect(response.parsed_body["redirect_location"]).to eq(oauth_application_path(id))
+      expect(response).to redirect_to(edit_oauth_application_path(id))
     end
 
     it "creates a new application with no revenue share" do
@@ -104,18 +107,16 @@ describe Oauth::ApplicationsController do
       let(:request_params) { params }
     end
 
-    it "returns http success and assigns correct instance variables" do
+    it "returns http success and renders Inertia component" do
       get(:edit, params:)
 
       expect(response).to be_successful
       expect(assigns(:application)).to eq(app)
+      expect(inertia.component).to eq("Oauth/Applications/Edit")
       pundit_user = SellerContext.new(user: user_with_role_for_seller, seller:)
-      expect(assigns(:react_component_props)).to eq(SettingsPresenter.new(pundit_user:).application_props(app))
-    end
-
-    it "renders the right template" do
-      get(:edit, params:)
-      expect(response).to render_template(:edit)
+      expected_props = SettingsPresenter.new(pundit_user:).application_props(app)
+      actual_props = inertia.props.slice(*expected_props.keys)
+      expect(actual_props).to eq(expected_props)
     end
 
     context "when application has been deleted" do
@@ -174,28 +175,29 @@ describe Oauth::ApplicationsController do
         expect(assigns(:application)).to eq(app)
       end
 
-      it "updates the application" do
+      it "updates the application and redirects" do
         put(:update, params:)
 
-        expect(response.status).to eq(200)
+        expect(response).to redirect_to(edit_oauth_application_path(app.external_id))
         expect(app.reload.name).to eq(newappname)
+        expect(flash[:notice]).to eq("Application updated.")
       end
 
-      it "returns the right json" do
+      it "returns redirect with success notice" do
         put(:update, params:)
 
-        expect(response.parsed_body["success"]).to eq(true)
-        expect(response.parsed_body["message"]).to eq("Application updated.")
+        expect(response).to redirect_to(edit_oauth_application_path(app.external_id))
+        expect(flash[:notice]).to eq("Application updated.")
       end
 
       describe "bad update params" do
         let(:params) { { id: app.external_id, oauth_application: { redirect_uri: "foo" } } }
 
-        it "returns the right json" do
+        it "redirects with error message" do
           put(:update, params:)
 
-          expect(response.parsed_body["success"]).to be(false)
-          expect(response.parsed_body["message"]).to eq("Redirect URI must be an absolute URI.")
+          expect(response).to redirect_to(edit_oauth_application_path(app.external_id))
+          expect(flash[:alert]).to eq("Redirect URI must be an absolute URI.")
         end
       end
     end
@@ -261,17 +263,20 @@ describe Oauth::ApplicationsController do
       expect(assigns(:application)).to eq(app)
     end
 
-    it "marks the application and its resource subscriptions as deleted" do
+    it "marks the application and its resource subscriptions as deleted and redirects" do
       delete(:destroy, params:)
 
+      expect(response).to redirect_to(settings_advanced_path)
       expect(OauthApplication.last.deleted_at).to be_present
       expect(OauthApplication.last.resource_subscriptions.alive.count).to eq(0)
+      expect(flash[:notice]).to eq("Application deleted.")
     end
 
-    it "return a successful response" do
+    it "returns redirect with success notice" do
       delete(:destroy, params:)
 
-      expect(response).to have_http_status(:ok)
+      expect(response).to redirect_to(settings_advanced_path)
+      expect(flash[:notice]).to eq("Application deleted.")
     end
 
     describe "if application has been deleted" do

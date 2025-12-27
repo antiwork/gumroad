@@ -16,6 +16,7 @@ type UnreviewedUser = {
   unpaid_balance_cents: number;
   revenue_sources: RevenueSource[];
   payout_method: string | null;
+  account_age_days: number;
   admin_url: string;
   created_at: string;
 };
@@ -60,6 +61,7 @@ const UnreviewedUsersPage = () => {
             <TableHead>Email</TableHead>
             <TableHead>Revenue sources</TableHead>
             <TableHead>Payout method</TableHead>
+            <TableHead>Account age</TableHead>
             <TableHead className="text-right">Unpaid balance</TableHead>
           </TableRow>
         </TableHeader>
@@ -89,6 +91,7 @@ const UnreviewedUsersPage = () => {
                 </div>
               </TableCell>
               <TableCell>{user.payout_method || ""}</TableCell>
+              <TableCell>{user.account_age_days}d</TableCell>
               <TableCell className="text-right font-mono">
                 {formatPriceCentsWithCurrencySymbol("usd", user.unpaid_balance_cents, {
                   symbolFormat: "short",
