@@ -141,20 +141,20 @@ describe Admin::Search::PurchasesController, type: :controller, inertia: true do
       end
     end
 
-    describe "order_id" do
-      it "redirects to purchase page when searching by order_id" do
+    describe "searching by order ID" do
+      it "redirects to purchase page when searching by order ID via query" do
         purchase = create(:purchase)
 
-        get :index, params: { order_id: purchase.external_id }
+        get :index, params: { query: purchase.external_id }
         expect(response).to redirect_to admin_purchase_path(purchase.external_id)
       end
 
-      it "passes order_id to AdminSearchService" do
+      it "passes query parameter to AdminSearchService" do
         purchase = create(:purchase)
 
-        expect_any_instance_of(AdminSearchService).to receive(:search_purchases).with(query: nil, product_title_query: nil, order_id: purchase.external_id).and_call_original
+        expect_any_instance_of(AdminSearchService).to receive(:search_purchases).with(query: purchase.external_id, product_title_query: nil).and_call_original
 
-        get :index, params: { order_id: purchase.external_id }
+        get :index, params: { query: purchase.external_id }
       end
     end
   end

@@ -77,10 +77,10 @@ export const SearchPopover = ({ card_types }: Props) => {
           <div className="input">
             <Icon name="outline-shopping-bag" />
             <input
-              name="order_id"
+              name="query"
               placeholder="Search by Order ID"
               type="text"
-              defaultValue={searchParams.get("order_id") || ""}
+              defaultValue={searchParams.get("query") || ""}
             />
           </div>
           <Button color="primary" type="submit">

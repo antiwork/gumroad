@@ -178,7 +178,7 @@ class Api::Internal::Helper::PurchasesController < Api::Internal::Helper::BaseCo
 
   SEARCH_PURCHASE_OPENAPI = {
     summary: "Search purchase",
-    description: "Search purchase by order ID, email, seller, license key, or card details. At least one of the parameters is required. Order ID is the most efficient search method when available.",
+    description: "Search purchase by query (order ID, email, IP, card fingerprint, or external ID), seller email, license key, or card details. At least one parameter is required. Using query with an order ID is the most efficient search method.",
     requestBody: {
       required: true,
       content: {
@@ -186,8 +186,8 @@ class Api::Internal::Helper::PurchasesController < Api::Internal::Helper::BaseCo
           schema: {
             type: "object",
             properties: {
-              order_id: { type: "string", description: "Order ID (also known as purchase ID or external ID) - the unique identifier shown to customers on receipts" },
-              email: { type: "string", description: "Email address of the customer/buyer" },
+              query: { type: "string", description: "Search query - can be order ID (external ID), email, IP address, or card fingerprint" },
+              email: { type: "string", description: "Email address of the customer/buyer (alternative to query)" },
               creator_email: { type: "string", description: "Email address of the creator/seller" },
               license_key: { type: "string", description: "Product license key (4 groups of alphanumeric characters separated by dashes)" },
               charge_amount: { type: "number", description: "Charge amount in dollars" },
@@ -260,8 +260,7 @@ class Api::Internal::Helper::PurchasesController < Api::Internal::Helper::BaseCo
   }.freeze
   def search
     search_params = {
-      order_id: params[:order_id],
-      query: params[:email],
+      query: params[:query] || params[:email],
       creator_email: params[:creator_email],
       license_key: params[:license_key],
       transaction_date: params[:purchase_date],

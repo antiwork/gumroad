@@ -154,7 +154,7 @@ const SearchPopover = () => {
         <form
           onSubmit={(e) => {
             e.preventDefault();
-            submit(Routes.admin_search_purchases_path(), "order_id", "order_id");
+            submit(Routes.admin_search_purchases_path(), "order_id", "query");
           }}
           className="flex gap-2"
         >
