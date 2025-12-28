@@ -414,7 +414,7 @@ class PurchasesController < ApplicationController
       send_file tempfile.path
     else
       flash[:warning] = "You will receive an email in your inbox with the data you've requested shortly."
-      redirect_back(fallback_location: customers_path)
+      redirect_back(fallback_location: customers_path, format: :html)
     end
   end
 
