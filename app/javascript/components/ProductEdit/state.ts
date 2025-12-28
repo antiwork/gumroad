@@ -81,6 +81,16 @@ export type CancellationDiscount = {
   duration_in_billing_cycles: number | null;
 };
 
+export type DefaultOfferCode = {
+  id: string;
+  code: string;
+};
+
+export type AvailableOfferCode = {
+  id: string;
+  label: string;
+};
+
 export type InstallmentPlan = {
   number_of_installments: number;
 };
@@ -139,6 +149,8 @@ export type Product = {
   call_limitation_info: CallLimitationInfo | null;
   require_shipping: boolean;
   cancellation_discount: CancellationDiscount | null;
+  default_offer_code: DefaultOfferCode | null;
+  available_offer_codes: AvailableOfferCode[];
   public_files: PublicFileWithStatus[];
   audio_previews_enabled: boolean;
   community_chat_enabled: boolean | null;

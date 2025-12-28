@@ -38,6 +38,7 @@ class OfferCode < ApplicationRecord
 
   after_save :invalidate_product_cache
   after_save :reindex_associated_products
+  after_save :clear_as_default_if_deleted, if: -> { saved_change_to_deleted_at? && deleted? }
   before_destroy :capture_associated_product_ids
   after_destroy :reindex_captured_products
 
@@ -300,5 +301,9 @@ class OfferCode < ApplicationRecord
 
     def reindex_captured_products
       reindex_associated_products(products_to_reindex: Link.where(id: @product_ids_to_reindex)) if @product_ids_to_reindex.present?
+    end
+
+    def clear_as_default_if_deleted
+      Link.where(default_offer_code_id: id).update_all(default_offer_code_id: nil)
     end
 end

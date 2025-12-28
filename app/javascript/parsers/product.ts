@@ -33,6 +33,13 @@ export type Ratings = { count: number; average: number };
 
 export type RatingsWithPercentages = Ratings & { percentages: Tuple<number, 5> };
 
+export type DiscountBadge = {
+  code: string;
+  percent_off: number | null;
+  amount_off_cents: number | null;
+  is_default: boolean;
+};
+
 export type CardProduct = {
   id: string;
   permalink: string;
@@ -40,6 +47,7 @@ export type CardProduct = {
   seller: { id: string; name: string; profile_url: string; avatar_url: string | null } | null;
   ratings: Ratings | null;
   price_cents: number;
+  original_price_cents?: number | null;
   currency_code: CurrencyCode;
   thumbnail_url: string | null;
   native_type: ProductNativeType;
@@ -50,6 +58,7 @@ export type CardProduct = {
   duration_in_months: number | null;
   recurrence: RecurrenceId | null;
   description?: string;
+  discount_badge?: DiscountBadge | null;
 };
 
 export type AnalyticsData = {

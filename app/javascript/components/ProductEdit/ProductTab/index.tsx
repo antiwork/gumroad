@@ -15,6 +15,7 @@ import { AvailabilityEditor } from "$app/components/ProductEdit/ProductTab/Avail
 import { BundleConversionNotice } from "$app/components/ProductEdit/ProductTab/BundleConversionNotice";
 import { CallLimitationsEditor } from "$app/components/ProductEdit/ProductTab/CallLimitationsEditor";
 import { CancellationDiscountSelector } from "$app/components/ProductEdit/ProductTab/CancellationDiscountSelector";
+import { DefaultDiscountSelector } from "$app/components/ProductEdit/ProductTab/DefaultDiscountSelector";
 import { CircleIntegrationEditor } from "$app/components/ProductEdit/ProductTab/CircleIntegrationEditor";
 import { CoverEditor } from "$app/components/ProductEdit/ProductTab/CoverEditor";
 import { CustomButtonTextOptionInput } from "$app/components/ProductEdit/ProductTab/CustomButtonTextOptionInput";
@@ -307,6 +308,7 @@ export const ProductTab = () => {
                         Commission products use a 50% deposit upfront, 50% upon completion payment split.
                       </p>
                     ) : null}
+                    <DefaultDiscountSelector />
                   </section>
                   {product.native_type === "call" ? (
                     <>

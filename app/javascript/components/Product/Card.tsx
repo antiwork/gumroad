@@ -1,6 +1,6 @@
 import * as React from "react";
 
-import { CardProduct, Ratings } from "$app/parsers/product";
+import { CardProduct, DiscountBadge, Ratings } from "$app/parsers/product";
 import { classNames } from "$app/utils/classNames";
 import { formatOrderOfMagnitude } from "$app/utils/formatOrderOfMagnitude";
 
@@ -48,6 +48,7 @@ export const Card = ({
           url={product.url}
           currencyCode={product.currency_code}
           price={product.price_cents}
+          oldPrice={product.original_price_cents ?? undefined}
           isPayWhatYouWant={product.is_pay_what_you_want}
           isSalesLimited={product.is_sales_limited}
           recurrence={
@@ -55,6 +56,7 @@ export const Card = ({
           }
           creatorName={product.seller?.name}
         />
+        {product.discount_badge ? <DiscountBadgeDisplay badge={product.discount_badge} /> : null}
       </div>
       {footerAction}
     </ProductCardFooter>
@@ -98,6 +100,7 @@ export const HorizontalCard = ({ product, big, eager }: { product: CardProduct; 
             url={product.url}
             currencyCode={product.currency_code}
             price={product.price_cents}
+            oldPrice={product.original_price_cents ?? undefined}
             isPayWhatYouWant={product.is_pay_what_you_want}
             isSalesLimited={product.is_sales_limited}
             recurrence={
@@ -107,6 +110,7 @@ export const HorizontalCard = ({ product, big, eager }: { product: CardProduct; 
             }
             creatorName={product.seller?.name}
           />
+          {product.discount_badge ? <DiscountBadgeDisplay badge={product.discount_badge} /> : null}
         </div>
         {product.ratings?.count ? (
           <div className="p-4 lg:p-0">
@@ -127,3 +131,14 @@ const Rating = ({ ratings, style }: { ratings: Ratings; style?: React.CSSPropert
     </span>
   </div>
 );
+
+const DiscountBadgeDisplay = ({ badge }: { badge: DiscountBadge }) => {
+  const discountText = badge.percent_off ? `${badge.percent_off}% off` : "Discount";
+
+  return (
+    <div className="mt-1 text-sm text-green-600">
+      <Icon name="outline-check-circle" className="mr-1 inline-block h-4 w-4" />
+      {discountText} will be applied at checkout (Code {badge.code})
+    </div>
+  );
+};

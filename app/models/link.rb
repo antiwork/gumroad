@@ -113,6 +113,7 @@ class Link < ApplicationRecord
   has_many :installments
   has_many :subscriptions
   has_and_belongs_to_many :offer_codes, join_table: "offer_codes_products", foreign_key: "product_id"
+  belongs_to :default_offer_code, class_name: "OfferCode", optional: true
   has_many :transcoded_videos
   has_many :imported_customers
   has_many :licenses
@@ -205,6 +206,7 @@ class Link < ApplicationRecord
   validate :commission_price_is_valid, if: -> { native_type == Link::NATIVE_TYPE_COMMISSION }
   validate :one_coffee_per_user, on: :create, if: -> { native_type == Link::NATIVE_TYPE_COFFEE }
   validate :quantity_enabled_state_is_allowed
+  validate :default_offer_code_validity
 
   validates_associated :installment_plan, message: -> (link, _) { link.installment_plan.errors.full_messages.first }
 
@@ -1129,6 +1131,15 @@ class Link < ApplicationRecord
     offer_codes.is_cancellation_discount.alive.first
   end
 
+  # Returns the effective default offer code for auto-apply discount feature.
+  # Returns nil if no default is set, or if the default code is invalid/expired/inapplicable.
+  def effective_default_offer_code
+    return nil unless default_offer_code&.alive?
+    return nil if default_offer_code.inactive?
+    return nil unless default_offer_code.applicable?(self)
+    default_offer_code
+  end
+
   def toggle_community_chat!(enable)
     if enable
       return if community_chat_enabled?
@@ -1312,6 +1323,15 @@ class Link < ApplicationRecord
     def quantity_enabled_state_is_allowed
       if quantity_enabled && !can_enable_quantity?
         errors.add(:base, "Customers cannot be allowed to choose a quantity for this product.")
+      end
+    end
+
+    def default_offer_code_validity
+      return if default_offer_code_id.blank?
+
+      offer_code = OfferCode.find_by(id: default_offer_code_id)
+      if offer_code.blank? || !offer_code.alive? || !offer_code.applicable?(self)
+        errors.add(:default_offer_code, "is invalid or not applicable to this product")
       end
     end
 

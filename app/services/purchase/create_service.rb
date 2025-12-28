@@ -241,7 +241,17 @@ class Purchase::CreateService < Purchase::BaseService
       purchase.save_card = !!params_for_purchase[:save_card] || (product.is_recurring_billing && !is_gift?) || purchase.is_preorder_authorization || purchase.is_installment_payment
       purchase.seller = product.user
       purchase.is_gift_sender_purchase = is_gift? unless params_for_purchase.has_key?(:is_gift_receiver_purchase)
-      purchase.offer_code = product.find_offer_code(code: purchase.discount_code.downcase.strip) if purchase.discount_code.present?
+      # Handle offer code - URL/user-provided code takes priority, otherwise use default
+      if purchase.discount_code.present?
+        purchase.offer_code = product.find_offer_code(code: purchase.discount_code.downcase.strip)
+        # Track if this was the default discount code
+        purchase.was_default_discount = (purchase.offer_code == product.effective_default_offer_code)
+      elsif product.effective_default_offer_code.present?
+        # Auto-apply the default discount code
+        purchase.offer_code = product.effective_default_offer_code
+        purchase.discount_code = product.effective_default_offer_code.code
+        purchase.was_default_discount = true
+      end
       purchase.business_vat_id = (params_for_purchase[:business_vat_id] && params_for_purchase[:business_vat_id].size > 0 ? params_for_purchase[:business_vat_id] : nil)
       purchase.is_original_subscription_purchase = (product.is_recurring_billing && !params_for_purchase[:is_gift_receiver_purchase]) || purchase.is_installment_payment
       purchase.is_free_trial_purchase = product.free_trial_enabled? && !is_gift?

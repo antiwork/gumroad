@@ -146,6 +146,7 @@ class LinkPolicy < ApplicationPolicy
         { discount: [:type, :cents, :percents] },
         :duration_in_billing_cycles
       ],
+      :default_offer_code_id,
       installment_plan: [
         :number_of_installments,
       ]
