@@ -21,8 +21,10 @@ import placeholder from "$assets/images/placeholders/audience.png";
 
 export default function Audience() {
   const { total_follower_count, audience_data } = cast<AudienceIndexPageProps>(usePage().props);
-  const dateRange = useAnalyticsDateRange(() => {
-    router.reload({ only: ["audience_data"] });
+  const dateRange = useAnalyticsDateRange({
+    onDateChange: () => {
+      router.reload({ only: ["audience_data"] });
+    },
   });
   const hasContent = total_follower_count > 0;
 

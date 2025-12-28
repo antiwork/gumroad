@@ -3,7 +3,7 @@ import * as React from "react";
 
 import { useOriginalLocation } from "$app/components/useOriginalLocation";
 
-export const useAnalyticsDateRange = (onDateChange?: (from: Date, to: Date) => void) => {
+export const useAnalyticsDateRange = ({ onDateChange }: { onDateChange?: (from: Date, to: Date) => void } = {}) => {
   const location = useOriginalLocation();
   const url = new URL(location);
 
