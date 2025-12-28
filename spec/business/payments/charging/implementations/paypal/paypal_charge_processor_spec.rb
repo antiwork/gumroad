@@ -1532,4 +1532,188 @@ describe PaypalChargeProcessor, :vcr do
       expect(PaypalChargeProcessor.formatted_amount_for_paypal(1644, "jpy").class).to eq(Integer)
     end
   end
+
+  describe "#fight_chargeback" do
+    let(:purchase) do
+      create(:purchase,
+             charge_processor_id: PaypalChargeProcessor.charge_processor_id,
+             stripe_transaction_id: "PAYPAL-CAPTURE-123")
+    end
+
+    let(:dispute) do
+      create(:dispute_formalized, purchase: purchase).tap do |d|
+        d.update!(charge_processor_dispute_id: "PP-D-12345")
+      end
+    end
+
+    let(:dispute_evidence) do
+      create(:dispute_evidence,
+             dispute: dispute,
+             customer_email: "customer@example.com",
+             customer_name: "John Doe",
+             customer_purchase_ip: "192.168.1.1",
+             billing_address: "123 Main St, San Francisco, CA 94105",
+             shipping_address: "456 Oak Ave, Los Angeles, CA 90001",
+             product_description: "Digital Product - eBook",
+             access_activity_log: "Downloaded on 2024-01-15",
+             refund_policy_disclosure: "30 day refund policy",
+             uncategorized_text: "Additional evidence text")
+    end
+
+    context "when dispute has a PayPal dispute ID" do
+      it "calls provide_evidence on the PayPal API" do
+        mock_api = instance_double(PaypalRestApi)
+        allow(PaypalRestApi).to receive(:new).and_return(mock_api)
+        allow(mock_api).to receive(:provide_evidence).and_return(
+          OpenStruct.new(status_code: 200, result: OpenStruct.new(links: []))
+        )
+        allow(mock_api).to receive(:successful_response?).and_return(true)
+
+        expect(mock_api).to receive(:provide_evidence).with(
+          dispute_id: "PP-D-12345",
+          evidences: array_including(hash_including(evidence_type: "OTHER"))
+        )
+
+        subject.fight_chargeback("PAYPAL-CAPTURE-123", dispute_evidence)
+      end
+
+      it "raises ChargeProcessorInvalidRequestError on API failure" do
+        mock_api = instance_double(PaypalRestApi)
+        allow(PaypalRestApi).to receive(:new).and_return(mock_api)
+        allow(mock_api).to receive(:provide_evidence).and_return(
+          OpenStruct.new(status_code: 400, result: OpenStruct.new(message: "INVALID_DISPUTE_ID"))
+        )
+        allow(mock_api).to receive(:successful_response?).and_return(false)
+
+        expect do
+          subject.fight_chargeback("PAYPAL-CAPTURE-123", dispute_evidence)
+        end.to raise_error(ChargeProcessorInvalidRequestError, /PayPal dispute evidence submission failed/)
+      end
+    end
+
+    context "when dispute has no PayPal dispute ID" do
+      before { dispute.update!(charge_processor_dispute_id: nil) }
+
+      it "returns early without calling the API" do
+        expect(PaypalRestApi).not_to receive(:new)
+        subject.fight_chargeback("PAYPAL-CAPTURE-123", dispute_evidence)
+      end
+    end
+  end
+
+  describe "#build_paypal_evidences (private)" do
+    let(:dispute) { create(:dispute_formalized) }
+
+    context "with tracking information (physical product)" do
+      let(:dispute_evidence) do
+        create(:dispute_evidence,
+               dispute: dispute,
+               shipping_carrier: "UPS",
+               shipping_tracking_number: "1Z999AA10123456784",
+               customer_email: "test@example.com")
+      end
+
+      it "returns PROOF_OF_FULFILLMENT evidence type" do
+        evidences = subject.send(:build_paypal_evidences, dispute_evidence)
+
+        expect(evidences.length).to eq(1)
+        expect(evidences.first[:evidence_type]).to eq("PROOF_OF_FULFILLMENT")
+        expect(evidences.first[:evidence_info][:tracking_info].first[:carrier_name]).to eq("UPS")
+        expect(evidences.first[:evidence_info][:tracking_info].first[:tracking_number]).to eq("1Z999AA10123456784")
+      end
+    end
+
+    context "without tracking information (digital product)" do
+      let(:dispute_evidence) do
+        create(:dispute_evidence,
+               dispute: dispute,
+               shipping_carrier: nil,
+               shipping_tracking_number: nil,
+               customer_email: "test@example.com",
+               product_description: "Digital download")
+      end
+
+      it "returns OTHER evidence type" do
+        evidences = subject.send(:build_paypal_evidences, dispute_evidence)
+
+        expect(evidences.length).to eq(1)
+        expect(evidences.first[:evidence_type]).to eq("OTHER")
+        expect(evidences.first[:notes]).to include("test@example.com")
+      end
+    end
+  end
+
+  describe "#normalize_carrier_name (private)" do
+    it "returns valid PayPal carrier names unchanged" do
+      expect(subject.send(:normalize_carrier_name, "UPS")).to eq("UPS")
+      expect(subject.send(:normalize_carrier_name, "FEDEX")).to eq("FEDEX")
+      expect(subject.send(:normalize_carrier_name, "USPS")).to eq("USPS")
+    end
+
+    it "converts lowercase carrier names to uppercase" do
+      expect(subject.send(:normalize_carrier_name, "ups")).to eq("UPS")
+      expect(subject.send(:normalize_carrier_name, "fedex")).to eq("FEDEX")
+    end
+
+    it "returns OTHER for unknown carriers" do
+      expect(subject.send(:normalize_carrier_name, "UnknownCarrier")).to eq("OTHER")
+      expect(subject.send(:normalize_carrier_name, "SomeRandomService")).to eq("OTHER")
+    end
+
+    it "returns OTHER for nil/blank carriers" do
+      expect(subject.send(:normalize_carrier_name, nil)).to eq("OTHER")
+      expect(subject.send(:normalize_carrier_name, "")).to eq("OTHER")
+    end
+  end
+
+  describe "#build_evidence_notes (private)" do
+    let(:dispute) { create(:dispute_formalized) }
+    let(:dispute_evidence) do
+      create(:dispute_evidence,
+             dispute: dispute,
+             customer_email: "test@example.com",
+             customer_name: "Jane Doe",
+             customer_purchase_ip: "10.0.0.1",
+             billing_address: "100 Market St",
+             product_description: "Test Product",
+             reason_for_winning: "Customer received the product")
+    end
+
+    it "includes customer information" do
+      notes = subject.send(:build_evidence_notes, dispute_evidence)
+
+      expect(notes).to include("Customer Email: test@example.com")
+      expect(notes).to include("Customer Name: Jane Doe")
+      expect(notes).to include("Customer IP: 10.0.0.1")
+    end
+
+    it "includes billing address" do
+      notes = subject.send(:build_evidence_notes, dispute_evidence)
+
+      expect(notes).to include("BILLING ADDRESS")
+      expect(notes).to include("100 Market St")
+    end
+
+    it "includes product description" do
+      notes = subject.send(:build_evidence_notes, dispute_evidence)
+
+      expect(notes).to include("PRODUCT DESCRIPTION")
+      expect(notes).to include("Test Product")
+    end
+
+    it "includes reason for winning" do
+      notes = subject.send(:build_evidence_notes, dispute_evidence)
+
+      expect(notes).to include("WHY MERCHANT SHOULD WIN")
+      expect(notes).to include("Customer received the product")
+    end
+
+    it "truncates notes to 10000 characters" do
+      dispute_evidence.update!(uncategorized_text: "A" * 15000)
+      notes = subject.send(:build_evidence_notes, dispute_evidence)
+
+      expect(notes.length).to be <= 10000
+    end
+  end
 end
+
