@@ -27,7 +27,6 @@ import { createBillingAgreement, createBillingAgreementToken } from "$app/data/p
 import { PurchasePaymentMethod } from "$app/data/purchase";
 import { VerificationResult, verifyShippingAddress } from "$app/data/shipping";
 import { assert, assertDefined } from "$app/utils/assert";
-import { formatPriceCentsWithoutCurrencySymbol } from "$app/utils/currency";
 import { checkEmailForTypos as checkEmailForTyposUtil } from "$app/utils/email";
 import { asyncVoid } from "$app/utils/promise";
 
@@ -46,13 +45,10 @@ import {
   usePayLabel,
   requiresReusablePaymentMethod,
   isSubmitDisabled,
-  isTippingEnabled,
-  getTotalPriceFromProducts,
 } from "$app/components/Checkout/payment";
 import { Icon } from "$app/components/Icons";
 import { LoadingSpinner } from "$app/components/LoadingSpinner";
 import { useLoggedInUser } from "$app/components/LoggedInUser";
-import { PriceInput } from "$app/components/PriceInput";
 import { showAlert } from "$app/components/server-components/Alert";
 import { Alert } from "$app/components/ui/Alert";
 import { Tab, Tabs } from "$app/components/ui/Tabs";
@@ -597,7 +593,6 @@ const CustomerDetails = ({ showCustomFields }: { showCustomFields: boolean }) =>
           </Alert>
         </div>
       ) : null}
-      {isTippingEnabled(state) ? <TipSelector /> : null}
       {state.paymentMethod !== "paypal" && state.paymentMethod !== "stripePaymentRequest" ? (
         <div>
           <Button color="primary" onClick={() => dispatch({ type: "offer" })} disabled={isSubmitDisabled(state)}>
@@ -718,87 +713,6 @@ const CreditCard = () => {
           setUseSavedCard={setUseSavedCard}
           onChange={(evt) => setCardError(!!evt.error)}
         />
-      </div>
-    </div>
-  );
-};
-
-const TipSelector = () => {
-  const [state, dispatch] = useState();
-  const errors = getErrors(state);
-  const showPercentageOptions = getTotalPriceFromProducts(state) > 0;
-
-  React.useEffect(() => {
-    if (!showPercentageOptions && state.tip.type === "percentage")
-      dispatch({ type: "set-value", tip: { type: "fixed", amount: 0 } });
-  }, [showPercentageOptions]);
-
-  const defaultOther = state.surcharges.type === "loaded" ? state.surcharges.result.subtotal * 0.3 : 5;
-
-  return (
-    <div>
-      <div className="flex flex-col gap-4">
-        <h4>Add a tip</h4>
-        {showPercentageOptions ? (
-          <div
-            role="radiogroup"
-            className="radio-buttons"
-            style={{ gridTemplateColumns: "repeat(auto-fit, minmax(min(5rem, 100%), 1fr))" }}
-          >
-            {state.tipOptions.map((tip) => (
-              <Button
-                key={tip}
-                role="radio"
-                aria-checked={state.tip.type === "percentage" && tip === state.tip.percentage}
-                onClick={() => {
-                  dispatch({
-                    type: "set-value",
-                    tip: {
-                      type: "percentage",
-                      percentage: tip,
-                    },
-                  });
-                }}
-                disabled={isProcessing(state)}
-                style={{ justifyContent: "center" }}
-              >
-                {tip}%
-              </Button>
-            ))}
-            <Button
-              role="radio"
-              aria-checked={state.tip.type === "fixed"}
-              onClick={() => {
-                dispatch({
-                  type: "set-value",
-                  tip: {
-                    type: "fixed",
-                    amount: state.tip.type === "fixed" ? state.tip.amount : defaultOther,
-                  },
-                });
-              }}
-              disabled={isProcessing(state)}
-              style={{ justifyContent: "center" }}
-            >
-              Other
-            </Button>
-          </div>
-        ) : null}
-        {state.tip.type === "fixed" ? (
-          <fieldset className={cx({ danger: errors.has("tip") })}>
-            <PriceInput
-              hasError={errors.has("tip")}
-              ariaLabel="Tip"
-              currencyCode="usd"
-              cents={state.tip.amount}
-              onChange={(newAmount) => {
-                dispatch({ type: "set-value", tip: { type: "fixed", amount: newAmount } });
-              }}
-              placeholder={formatPriceCentsWithoutCurrencySymbol("usd", defaultOther)}
-              disabled={isProcessing(state)}
-            />
-          </fieldset>
-        ) : null}
       </div>
     </div>
   );
