@@ -192,7 +192,8 @@ class Api::Internal::Helper::PurchasesController < Api::Internal::Helper::BaseCo
               charge_amount: { type: "number", description: "Charge amount in dollars" },
               purchase_date: { type: "string", description: "Purchase date in YYYY-MM-DD format" },
               card_type: { type: "string", description: "Card type" },
-              card_last4: { type: "string", description: "Last 4 digits of the card" }
+              card_last4: { type: "string", description: "Last 4 digits of the card" },
+              order_id: { type: "string", description: "Order ID/Purchase number" }
             },
           }
         }
@@ -258,19 +259,29 @@ class Api::Internal::Helper::PurchasesController < Api::Internal::Helper::BaseCo
     }
   }.freeze
   def search
-    search_params = {
-      query: params[:email],
-      creator_email: params[:creator_email],
-      license_key: params[:license_key],
-      transaction_date: params[:purchase_date],
-      price: params[:charge_amount].present? ? params[:charge_amount].to_f : nil,
-      card_type: params[:card_type],
-      last_4: params[:card_last4],
-    }
-    return render json: { success: false, message: "At least one of the parameters is required." }, status: :bad_request if search_params.compact.blank?
+    # If order_id is provided, find the purchase directly
+    if params[:order_id].present?
+      purchase = Purchase.find_by_external_id_numeric(params[:order_id].to_i)
+      # If email is also provided, verify it matches
+      if params[:email].present? && purchase.present?
+        return render json: { success: false, message: "Purchase not found" }, status: :not_found unless purchase.email.downcase == params[:email].downcase
+      end
+      return render json: { success: false, message: "Purchase not found" }, status: :not_found if purchase.nil?
+    else
+      search_params = {
+        query: params[:email],
+        creator_email: params[:creator_email],
+        license_key: params[:license_key],
+        transaction_date: params[:purchase_date],
+        price: params[:charge_amount].present? ? params[:charge_amount].to_f : nil,
+        card_type: params[:card_type],
+        last_4: params[:card_last4],
+      }
+      return render json: { success: false, message: "At least one of the parameters is required." }, status: :bad_request if search_params.compact.blank?
 
-    purchase = AdminSearchService.new.search_purchases(**search_params, limit: 1).first
-    return render json: { success: false, message: "Purchase not found" }, status: :not_found if purchase.nil?
+      purchase = AdminSearchService.new.search_purchases(**search_params, limit: 1).first
+      return render json: { success: false, message: "Purchase not found" }, status: :not_found if purchase.nil?
+    end
 
     purchase_json = purchase.slice(:email, :link_name, :price_cents, :purchase_state, :created_at)
     purchase_json[:id] = purchase.external_id_numeric
