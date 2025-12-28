@@ -426,7 +426,7 @@ class Api::Internal::Helper::PurchasesController < Api::Internal::Helper::BaseCo
 
   REASSIGN_PURCHASES_OPENAPI = {
     summary: "Reassign purchases",
-    description: "Update the email on all purchases belonging to the 'from' email address to the 'to' email address",
+    description: "Update the email on all purchases belonging to the 'from' email address to the 'to' email address. A receipt will also be sent to the new email address.",
     requestBody: {
       required: true,
       content: {
@@ -507,7 +507,10 @@ class Api::Internal::Helper::PurchasesController < Api::Internal::Helper::BaseCo
 
       if purchase.subscription.present? && !purchase.is_original_subscription_purchase? && !purchases.include?(purchase.original_purchase)
         purchase.original_purchase.update(email: to_email)
-        count += 1 if purchase.original_purchase.saved_changes?
+        if purchase.original_purchase.saved_changes?
+          purchase.original_purchase.resend_receipt
+          count += 1
+        end
       end
 
       if target_user && purchase.purchaser_id.present?
@@ -527,6 +530,9 @@ class Api::Internal::Helper::PurchasesController < Api::Internal::Helper::BaseCo
       end
 
       count += 1 if purchase.save
+
+      # Send receipt to new email after successful reassignment
+      purchase.resend_receipt if purchase.saved_changes?
     end
 
     render json: {
