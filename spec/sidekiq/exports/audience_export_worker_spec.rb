@@ -25,5 +25,10 @@ describe Exports::AudienceExportWorker do
       mail = ActionMailer::Base.deliveries.last
       expect(mail.to).to eq([recipient.email])
     end
+
+    it "uses extended query timeout for large exports" do
+      expect(WithMaxExecutionTime).to receive(:timeout_queries).with(seconds: 1.hour).and_call_original
+      described_class.new.perform(seller.id, seller.id, audience_options)
+    end
   end
 end

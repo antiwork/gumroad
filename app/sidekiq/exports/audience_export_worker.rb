@@ -8,12 +8,14 @@ class Exports::AudienceExportWorker
     seller, recipient = User.find(seller_id, recipient_id)
     recipient ||= seller
 
-    result = Exports::AudienceExportService.new(seller, audience_options).perform
+    WithMaxExecutionTime.timeout_queries(seconds: 1.hour) do
+      result = Exports::AudienceExportService.new(seller, audience_options).perform
 
-    ContactingCreatorMailer.subscribers_data(
-      recipient:,
-      tempfile: result.tempfile,
-      filename: result.filename,
-    ).deliver_now
+      ContactingCreatorMailer.subscribers_data(
+        recipient:,
+        tempfile: result.tempfile,
+        filename: result.filename,
+      ).deliver_now
+    end
   end
 end
