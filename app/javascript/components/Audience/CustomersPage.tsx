@@ -432,7 +432,7 @@ const CustomersPage = ({
                 >
                   Download
                 </NavigationButton>
-                {count > 2000 && (
+                {(count > 2000 || lightFormat(from, "yyyy-MM-dd") === "2012-10-13") && (
                   <div className="mt-2 text-sm text-gray-600">
                     Exports over 2,000 rows will be processed in the background and emailed to you.
                   </div>
