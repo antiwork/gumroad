@@ -63,8 +63,6 @@ describe AudienceController, inertia: true do
         it "returns nil when end date is before start date" do
           get :index, params: { from: Time.utc(2021, 1, 2), to: Time.utc(2021, 1, 1) }
 
-          puts "flash: #{inertia.props}"
-
           expect(response).to be_successful
           expect(inertia).to render_component("Analytics/Audience/Index")
           expect(inertia.props["flash"]["message"]).to eq("Please select a valid date range")
