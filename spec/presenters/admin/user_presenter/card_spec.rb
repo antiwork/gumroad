@@ -103,7 +103,7 @@ describe Admin::UserPresenter::Card do
       end
     end
 
-    describe "user memberships" do
+    describe "user collaborations" do
       context "when user has no memberships" do
         it "returns an empty array" do
           expect(props[:admin_manageable_user_memberships]).to eq([])

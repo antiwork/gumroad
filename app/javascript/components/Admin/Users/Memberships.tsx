@@ -44,7 +44,7 @@ const Memberships = ({ user: { admin_manageable_user_memberships } }: Membership
       <hr />
       <details>
         <summary>
-          <h3>User memberships</h3>
+          <h3>User Collaborations</h3>
         </summary>
         <div className="stack">
           {admin_manageable_user_memberships.map((membership) => (
