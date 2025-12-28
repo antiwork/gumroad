@@ -13,5 +13,8 @@ class UpdateSellerRefundEligibilityJob
     elsif unpaid_balance_cents < -10000 && !user.refunds_disabled?
       user.disable_refunds!
     end
+
+    # Auto-remove LowBalanceFraudCheck probation when balance exceeds $100
+    user.check_for_high_balance_and_comply
   end
 end

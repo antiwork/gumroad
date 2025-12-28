@@ -6,6 +6,9 @@ module User::LowBalanceFraudCheck
   LOW_BALANCE_THRESHOLD = -100_00 # USD -100
   private_constant :LOW_BALANCE_THRESHOLD
 
+  HIGH_BALANCE_THRESHOLD = 100_00 # USD $100
+  private_constant :HIGH_BALANCE_THRESHOLD
+
   LOW_BALANCE_PROBATION_WAIT_TIME = 2.months
   private_constant :LOW_BALANCE_PROBATION_WAIT_TIME
 
@@ -30,6 +33,14 @@ module User::LowBalanceFraudCheck
     disable_refunds_and_put_on_probation! unless recently_probated_for_low_balance? || suspended?
   end
 
+  def check_for_high_balance_and_comply
+    return unless unpaid_balance_cents > HIGH_BALANCE_THRESHOLD
+    return unless on_probation?
+    return unless probated_by_low_balance_fraud_check?
+
+    enable_refunds_and_mark_compliant!
+  end
+
   private
     def disable_refunds_and_put_on_probation!
       disable_refunds!
@@ -38,10 +49,24 @@ module User::LowBalanceFraudCheck
       self.put_on_probation(author_name: LOW_BALANCE_FRAUD_CHECK_AUTHOR_NAME, content:)
     end
 
+    def enable_refunds_and_mark_compliant!
+      enable_refunds!
+
+      content = "Marked compliant automatically on #{Time.current.to_fs(:formatted_date_full_month)} because balance exceeded $100"
+      self.mark_compliant!(author_name: LOW_BALANCE_FRAUD_CHECK_AUTHOR_NAME, content:)
+    end
+
     def recently_probated_for_low_balance?
       comments.with_type_on_probation
               .where(author_name: LOW_BALANCE_FRAUD_CHECK_AUTHOR_NAME)
               .where("created_at > ?", LOW_BALANCE_PROBATION_WAIT_TIME.ago)
               .exists?
     end
+
+    def probated_by_low_balance_fraud_check?
+      comments.with_type_on_probation
+              .where(author_name: LOW_BALANCE_FRAUD_CHECK_AUTHOR_NAME)
+              .exists?
+    end
+end
 end
