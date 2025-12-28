@@ -8,6 +8,15 @@ describe Onetime::BackfillPaymentOptionInstallmentSnapshots do
   let(:installment_plan) { create(:product_installment_plan, link: product, number_of_installments: 3, recurrence: "monthly") }
   let(:subscription) { create(:subscription, link: product, user: seller) }
 
+  let(:offer_code) do
+    create(:percentage_offer_code,
+           user: seller,
+           products: [product],
+           code: "SAVE20",
+           amount_percentage: 20,
+           duration_in_months: 6)
+  end
+
   describe ".perform" do
     context "when payment_option has installment plan but no snapshot" do
       it "creates snapshot with correct attributes" do
@@ -32,6 +41,61 @@ describe Onetime::BackfillPaymentOptionInstallmentSnapshots do
         expect(snapshot.number_of_installments).to eq(3)
         expect(snapshot.recurrence).to eq("monthly")
         expect(snapshot.total_price_cents).to eq(14700)
+      end
+
+      it "captures offer code when original purchase had one" do
+        payment_option = create(:payment_option, subscription: subscription, installment_plan: installment_plan)
+        original_purchase = build(:purchase,
+                                  link: product,
+                                  subscription: subscription,
+                                  is_original_subscription_purchase: true,
+                                  is_installment_payment: true,
+                                  price_cents: 4900,
+                                  offer_code: offer_code)
+        original_purchase.save!(validate: false)
+
+        second_purchase = build(:purchase,
+                                link: product,
+                                subscription: subscription,
+                                is_installment_payment: true,
+                                price_cents: 4900,
+                                installment_plan: installment_plan)
+        second_purchase.save!(validate: false)
+
+        described_class.perform
+
+        snapshot = payment_option.reload.installment_plan_snapshot
+        expect(snapshot).to be_present
+        expect(snapshot.has_locked_offer_code?).to be true
+        expect(snapshot.locked_offer_code_code).to eq("SAVE20")
+        expect(snapshot.locked_discount_percentage).to eq(20)
+        expect(snapshot.locked_offer_code_duration_in_months).to eq(6)
+      end
+
+      it "creates snapshot without offer code when none was used" do
+        payment_option = create(:payment_option, subscription: subscription, installment_plan: installment_plan)
+        original_purchase = build(:purchase,
+                                  link: product,
+                                  subscription: subscription,
+                                  is_original_subscription_purchase: true,
+                                  is_installment_payment: true,
+                                  price_cents: 4900,
+                                  offer_code: nil)
+        original_purchase.save!(validate: false)
+
+        second_purchase = build(:purchase,
+                                link: product,
+                                subscription: subscription,
+                                is_installment_payment: true,
+                                price_cents: 4900,
+                                installment_plan: installment_plan)
+        second_purchase.save!(validate: false)
+
+        described_class.perform
+
+        snapshot = payment_option.reload.installment_plan_snapshot
+        expect(snapshot).to be_present
+        expect(snapshot.has_locked_offer_code?).to be false
       end
     end
 
@@ -95,10 +159,16 @@ describe Onetime::BackfillPaymentOptionInstallmentSnapshots do
         purchase2_2 = build(:purchase, link: product, subscription: subscription2, is_installment_payment: true, price_cents: 4900, installment_plan: installment_plan)
         purchase2_2.save!(validate: false)
 
-        allow(InstallmentPlanSnapshot).to receive(:create!).and_call_original
-        allow(InstallmentPlanSnapshot).to receive(:create!)
-          .with(hash_including(payment_option: payment_option1))
-          .and_raise(StandardError.new("Test error"))
+        # Mock the first save to fail
+        call_count = 0
+        allow_any_instance_of(InstallmentPlanSnapshot).to receive(:save!) do |snapshot|
+          call_count += 1
+          if snapshot.payment_option_id == payment_option1.id
+            raise StandardError.new("Test error")
+          else
+            snapshot.save(validate: false) || raise(ActiveRecord::RecordInvalid.new(snapshot))
+          end
+        end
 
         expect(Rails.logger).to receive(:error).with(/Failed to backfill PaymentOption #{payment_option1.id}/)
 

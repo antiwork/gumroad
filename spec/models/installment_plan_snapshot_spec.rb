@@ -80,6 +80,143 @@ describe InstallmentPlanSnapshot do
     end
   end
 
+  describe "offer code snapshot" do
+    let(:seller) { create(:user) }
+    let(:product) { create(:product, user: seller, price_cents: 10000) }
+
+    let(:offer_code) do
+      create(:percentage_offer_code,
+             user: seller,
+             products: [product],
+             code: "SAVE20",
+             amount_percentage: 20,
+             duration_in_months: 6)
+    end
+
+    let(:fixed_offer_code) do
+      create(:offer_code,
+             user: seller,
+             products: [product],
+             code: "FLAT500",
+             amount_cents: 500,
+             duration_in_months: nil)
+    end
+
+    describe "#snapshot_offer_code!" do
+      it "captures percentage discount offer code data" do
+        snapshot = create(:installment_plan_snapshot, payment_option: payment_option)
+
+        snapshot.snapshot_offer_code!(offer_code)
+        snapshot.save!
+        snapshot.reload
+
+        expect(snapshot.offer_code_snapshot).to be_present
+        expect(snapshot.locked_offer_code_id).to eq(offer_code.id)
+        expect(snapshot.locked_offer_code_code).to eq("SAVE20")
+        expect(snapshot.locked_discount_percentage).to eq(20)
+        expect(snapshot.locked_discount_amount_cents).to be_nil
+        expect(snapshot.locked_offer_code_is_percent?).to be true
+        expect(snapshot.locked_offer_code_duration_in_months).to eq(6)
+        expect(snapshot.locked_offer_code_currency).to eq("usd")
+      end
+
+      it "captures fixed amount offer code data" do
+        snapshot = create(:installment_plan_snapshot, payment_option: payment_option)
+
+        snapshot.snapshot_offer_code!(fixed_offer_code)
+        snapshot.save!
+        snapshot.reload
+
+        expect(snapshot.has_locked_offer_code?).to be true
+        expect(snapshot.locked_offer_code_code).to eq("FLAT500")
+        expect(snapshot.locked_discount_amount_cents).to eq(500)
+        expect(snapshot.locked_discount_percentage).to be_nil
+        expect(snapshot.locked_offer_code_is_percent?).to be false
+      end
+
+      it "handles nil offer code gracefully" do
+        snapshot = create(:installment_plan_snapshot, payment_option: payment_option)
+
+        snapshot.snapshot_offer_code!(nil)
+
+        expect(snapshot.offer_code_snapshot).to be_nil
+        expect(snapshot.has_locked_offer_code?).to be false
+      end
+    end
+
+    describe "#has_locked_offer_code?" do
+      it "returns true when offer code snapshot has amount_percentage" do
+        snapshot = create(:installment_plan_snapshot, payment_option: payment_option)
+        snapshot.snapshot_offer_code!(offer_code)
+
+        expect(snapshot.has_locked_offer_code?).to be true
+      end
+
+      it "returns true when offer code snapshot has amount_cents" do
+        snapshot = create(:installment_plan_snapshot, payment_option: payment_option)
+        snapshot.snapshot_offer_code!(fixed_offer_code)
+
+        expect(snapshot.has_locked_offer_code?).to be true
+      end
+
+      it "returns false when no offer code snapshot" do
+        snapshot = create(:installment_plan_snapshot, payment_option: payment_option)
+
+        expect(snapshot.has_locked_offer_code?).to be false
+      end
+    end
+
+    describe "#locked_discount_amount_off" do
+      it "calculates percentage discount correctly" do
+        snapshot = create(:installment_plan_snapshot, payment_option: payment_option)
+        snapshot.snapshot_offer_code!(offer_code)
+
+        expect(snapshot.locked_discount_amount_off(10000)).to eq(2000)  # 20% of 10000
+        expect(snapshot.locked_discount_amount_off(5000)).to eq(1000)   # 20% of 5000
+      end
+
+      it "returns fixed amount for fixed discounts" do
+        snapshot = create(:installment_plan_snapshot, payment_option: payment_option)
+        snapshot.snapshot_offer_code!(fixed_offer_code)
+
+        expect(snapshot.locked_discount_amount_off(10000)).to eq(500)
+        expect(snapshot.locked_discount_amount_off(5000)).to eq(500)
+      end
+
+      it "returns 0 when no offer code" do
+        snapshot = create(:installment_plan_snapshot, payment_option: payment_option)
+
+        expect(snapshot.locked_discount_amount_off(10000)).to eq(0)
+      end
+    end
+
+    describe "persistence after offer code changes" do
+      it "preserves discount after offer code is deleted" do
+        snapshot = create(:installment_plan_snapshot, payment_option: payment_option)
+        snapshot.snapshot_offer_code!(offer_code)
+        snapshot.save!
+
+        offer_code.destroy!
+
+        snapshot.reload
+        expect(snapshot.has_locked_offer_code?).to be true
+        expect(snapshot.locked_offer_code_code).to eq("SAVE20")
+        expect(snapshot.locked_discount_percentage).to eq(20)
+      end
+
+      it "preserves original discount after offer code amount is modified" do
+        snapshot = create(:installment_plan_snapshot, payment_option: payment_option)
+        snapshot.snapshot_offer_code!(offer_code)
+        snapshot.save!
+
+        offer_code.update!(amount_percentage: 50)
+
+        snapshot.reload
+        expect(snapshot.locked_discount_percentage).to eq(20)  # Original value preserved
+      end
+    end
+  end
+
   describe "#calculate_installment_payment_price_cents" do
     context "when total divides evenly" do
       it "returns equal payments" do

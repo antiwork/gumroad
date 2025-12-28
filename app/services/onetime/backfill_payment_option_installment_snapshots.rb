@@ -6,21 +6,26 @@ module Onetime
       PaymentOption.where.not(product_installment_plan_id: nil)
                    .where.missing(:installment_plan_snapshot)
                    .find_each do |payment_option|
-        next unless payment_option.installment_plan.present?
-        next unless payment_option.subscription&.original_purchase.present?
+        next if payment_option.installment_plan.blank?
+        next if payment_option.subscription&.original_purchase.blank?
 
         subscription = payment_option.subscription
         installment_plan = payment_option.installment_plan
 
         total_price = calculate_total_price_from_history(subscription, installment_plan)
-        next unless total_price
+        next if total_price.nil?
 
-        InstallmentPlanSnapshot.create!(
+        snapshot = InstallmentPlanSnapshot.new(
           payment_option: payment_option,
           number_of_installments: installment_plan.number_of_installments,
           recurrence: installment_plan.recurrence,
           total_price_cents: total_price
         )
+
+        offer_code = subscription.original_purchase&.offer_code
+        snapshot.snapshot_offer_code!(offer_code) if offer_code
+
+        snapshot.save!
       rescue StandardError => e
         Rails.logger.error("Failed to backfill PaymentOption #{payment_option.id}: #{e.message}")
       end

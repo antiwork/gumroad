@@ -248,7 +248,7 @@ class Subscription < ApplicationRecord
     purchase = Purchase.new(purchase_params)
     purchase.variant_attributes = original_purchase.variant_attributes
 
-    purchase.offer_code = original_purchase.offer_code if discount_applies_to_next_charge?
+    purchase.offer_code = original_purchase.offer_code if discount_applies_to_next_charge? && !is_installment_plan
 
     purchase.purchaser = user
     purchase.link = link
