@@ -4799,4 +4799,146 @@ describe Link, :vcr do
       end
     end
   end
+
+  describe "#effective_offer_code_for_display" do
+    let(:seller) { create(:user) }
+    let(:product) { create(:product, user: seller, price_cents: 1000) }
+
+    context "when no default_offer_code is set" do
+      it "returns nil" do
+        expect(product.effective_offer_code_for_display).to be_nil
+      end
+    end
+
+    context "when default_offer_code is set" do
+      let(:offer_code) { create(:offer_code, user: seller, products: [product], amount_cents: 100) }
+
+      before do
+        product.update!(default_offer_code: offer_code)
+      end
+
+      it "returns the offer code when active and valid" do
+        expect(product.effective_offer_code_for_display).to eq(offer_code)
+      end
+
+      context "when offer code is expired" do
+        before do
+          offer_code.update!(valid_at: 2.days.ago, expires_at: 1.day.ago)
+        end
+
+        it "returns nil" do
+          expect(product.effective_offer_code_for_display).to be_nil
+        end
+      end
+
+      context "when offer code valid_at is in the future" do
+        before do
+          offer_code.update!(valid_at: 1.day.from_now)
+        end
+
+        it "returns nil" do
+          expect(product.effective_offer_code_for_display).to be_nil
+        end
+      end
+
+      context "when offer code has no remaining uses" do
+        before do
+          offer_code.update!(max_purchase_count: 1)
+          allow(offer_code).to receive(:times_used).and_return(1)
+        end
+
+        it "returns nil" do
+          expect(product.effective_offer_code_for_display).to be_nil
+        end
+      end
+    end
+  end
+
+  describe "#discounted_price_cents_for_display" do
+    let(:seller) { create(:user) }
+    let(:product) { create(:product, user: seller, price_cents: 1000) }
+
+    context "when no effective offer code exists" do
+      it "returns nil" do
+        expect(product.discounted_price_cents_for_display).to be_nil
+      end
+    end
+
+    context "with a fixed amount discount" do
+      let(:offer_code) { create(:offer_code, user: seller, products: [product], amount_cents: 200) }
+
+      before do
+        product.update!(default_offer_code: offer_code)
+      end
+
+      it "returns the discounted price" do
+        expect(product.discounted_price_cents_for_display).to eq(800)
+      end
+    end
+
+    context "with a percentage discount" do
+      let(:offer_code) { create(:percentage_offer_code, user: seller, products: [product], amount_percentage: 25) }
+
+      before do
+        product.update!(default_offer_code: offer_code)
+      end
+
+      it "returns the discounted price" do
+        expect(product.discounted_price_cents_for_display).to eq(750)
+      end
+    end
+
+    context "when offer code becomes invalid" do
+      let(:offer_code) { create(:offer_code, user: seller, products: [product], amount_cents: 200) }
+
+      before do
+        product.update!(default_offer_code: offer_code)
+        offer_code.update!(valid_at: 2.days.ago, expires_at: 1.day.ago)
+      end
+
+      it "returns nil" do
+        expect(product.discounted_price_cents_for_display).to be_nil
+      end
+    end
+  end
+
+  describe "#available_offer_codes_for_selection" do
+    let(:seller) { create(:user) }
+    let(:product) { create(:product, user: seller, price_cents: 1000) }
+
+    context "with no offer codes" do
+      it "returns an empty array" do
+        expect(product.available_offer_codes_for_selection).to be_empty
+      end
+    end
+
+    context "with various offer codes" do
+      let!(:active_offer_code) { create(:offer_code, user: seller, products: [product]) }
+      let!(:expired_offer_code) { create(:offer_code, user: seller, products: [product], code: "expired", valid_at: 2.days.ago, expires_at: 1.day.ago) }
+      let!(:future_offer_code) { create(:offer_code, user: seller, products: [product], code: "future", valid_at: 1.day.from_now) }
+      let!(:universal_offer_code) { create(:universal_offer_code, user: seller, code: "universal") }
+
+      it "excludes inactive offer codes and includes active ones" do
+        result = product.available_offer_codes_for_selection
+
+        expect(result).to include(active_offer_code)
+        expect(result).to include(universal_offer_code)
+        expect(result).not_to include(expired_offer_code)
+        expect(result).not_to include(future_offer_code)
+      end
+    end
+
+    context "with a membership product and cancellation discount" do
+      let(:membership_product) { create(:membership_product_with_preset_tiered_pricing, user: seller) }
+      let!(:cancellation_discount) { create(:cancellation_discount_offer_code, user: seller, products: [membership_product]) }
+      let!(:active_offer_code) { create(:offer_code, user: seller, products: [membership_product], code: "active_membership") }
+
+      it "excludes cancellation discount offer codes" do
+        result = membership_product.available_offer_codes_for_selection
+
+        expect(result).to include(active_offer_code)
+        expect(result).not_to include(cancellation_discount)
+      end
+    end
+  end
 end

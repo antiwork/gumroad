@@ -4,7 +4,9 @@ import { CurrencyCode, formatPriceCentsWithoutCurrencySymbol } from "$app/utils/
 
 import { Details } from "$app/components/Details";
 import { PriceInput } from "$app/components/PriceInput";
+import { ApplyDiscountEditor } from "$app/components/ProductEdit/ProductTab/ApplyDiscountEditor";
 import { InstallmentPlanEditor } from "$app/components/ProductEdit/ProductTab/InstallmentPlanEditor";
+import { AvailableOfferCode, DefaultOfferCode } from "$app/components/ProductEdit/state";
 import { Toggle } from "$app/components/Toggle";
 
 export const PriceEditor = ({
@@ -21,6 +23,9 @@ export const PriceEditor = ({
   onAllowInstallmentPlanChange,
   onNumberOfInstallmentsChange,
   currencyCodeSelector,
+  availableOfferCodes,
+  defaultOfferCode,
+  onDefaultOfferCodeChange,
 }: {
   priceCents: number;
   suggestedPriceCents: number | null;
@@ -35,6 +40,9 @@ export const PriceEditor = ({
   onAllowInstallmentPlanChange: (allowed: boolean) => void;
   onNumberOfInstallmentsChange: (numberOfInstallments: number) => void;
   currencyCodeSelector?: { options: CurrencyCode[]; onChange: (currencyCode: CurrencyCode) => void };
+  availableOfferCodes?: AvailableOfferCode[];
+  defaultOfferCode?: DefaultOfferCode | null;
+  onDefaultOfferCodeChange?: (value: DefaultOfferCode | null) => void;
 }) => {
   const uid = React.useId();
   const isFreeProduct = priceCents === 0;
@@ -97,6 +105,13 @@ export const PriceEditor = ({
           numberOfInstallments={numberOfInstallments}
           onAllowInstallmentPaymentsChange={onAllowInstallmentPlanChange}
           onNumberOfInstallmentsChange={onNumberOfInstallmentsChange}
+        />
+      ) : null}
+      {availableOfferCodes && onDefaultOfferCodeChange ? (
+        <ApplyDiscountEditor
+          availableOfferCodes={availableOfferCodes}
+          defaultOfferCode={defaultOfferCode ?? null}
+          onDefaultOfferCodeChange={onDefaultOfferCodeChange}
         />
       ) : null}
     </fieldset>

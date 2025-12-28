@@ -3,11 +3,28 @@ import * as React from "react";
 import { recurrenceIds } from "$app/utils/recurringPricing";
 
 import { useCurrentSeller } from "$app/components/CurrentSeller";
-import { Product } from "$app/components/Product";
+import { Product, ProductDiscount } from "$app/components/Product";
 import { useProductUrl } from "$app/components/ProductEdit/Layout";
 import { RefundPolicyModalPreview } from "$app/components/ProductEdit/RefundPolicy";
-import { useProductEditContext } from "$app/components/ProductEdit/state";
+import { useProductEditContext, DefaultOfferCode } from "$app/components/ProductEdit/state";
 import { CoffeePage } from "$app/components/server-components/Profile/CoffeePage";
+
+const convertDefaultOfferCodeToProductDiscount = (defaultOfferCode: DefaultOfferCode | null): ProductDiscount => {
+  if (!defaultOfferCode) return null;
+
+  return {
+    valid: true,
+    code: defaultOfferCode.code,
+    discount: {
+      ...defaultOfferCode.discount,
+      product_ids: null,
+      expires_at: null,
+      minimum_quantity: null,
+      duration_in_billing_cycles: null,
+      minimum_amount_cents: null,
+    },
+  };
+};
 
 export const ProductPreview = ({ showRefundPolicyModal }: { showRefundPolicyModal?: boolean }) => {
   const currentSeller = useCurrentSeller();
@@ -139,6 +156,8 @@ export const ProductPreview = ({ showRefundPolicyModal }: { showRefundPolicyModa
     audio_previews_enabled: product.audio_previews_enabled,
   };
 
+  const discountCode = convertDefaultOfferCodeToProductDiscount(product.default_offer_code);
+
   return product.native_type === "coffee" ? (
     <CoffeePage
       product={{
@@ -161,7 +180,7 @@ export const ProductPreview = ({ showRefundPolicyModal }: { showRefundPolicyModa
         twitter_handle: "",
       }}
       purchase={null}
-      discount_code={null}
+      discount_code={discountCode}
       wishlists={[]}
       selection={{
         optionId: null,
@@ -180,6 +199,7 @@ export const ProductPreview = ({ showRefundPolicyModal }: { showRefundPolicyModa
       <Product
         product={serializedProduct}
         purchase={null}
+        discountCode={discountCode}
         selection={{
           quantity: 1,
           optionId: serializedProduct.options[0]?.id ?? null,

@@ -340,6 +340,7 @@ class LinksController < ApplicationController
           :products,
           :description,
           :cancellation_discount,
+          :default_offer_code_id,
           :custom_button_text_option,
           :custom_summary,
           :custom_attributes,
@@ -383,6 +384,14 @@ class LinksController < ApplicationController
             Product::SaveCancellationDiscountService.new(@product, product_permitted_params[:cancellation_discount]).perform
           rescue ActiveRecord::RecordInvalid => e
             return render json: { error_message: e.record.errors.full_messages.first }, status: :unprocessable_entity
+          end
+        end
+
+        if product_permitted_params.key?(:default_offer_code_id)
+          begin
+            Product::SaveDefaultOfferCodeService.new(@product, product_permitted_params[:default_offer_code_id]).perform
+          rescue ActiveRecord::RecordNotFound, ActiveRecord::RecordInvalid => e
+            return render json: { error_message: e.message }, status: :unprocessable_entity
           end
         end
 

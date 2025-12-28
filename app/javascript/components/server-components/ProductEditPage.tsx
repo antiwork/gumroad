@@ -29,6 +29,7 @@ import {
   ExistingFileEntry,
   ShippingCountry,
   ContentUpdates,
+  AvailableOfferCode,
 } from "$app/components/ProductEdit/state";
 import { ImageUploadSettingsContext } from "$app/components/RichTextEditor";
 import { showAlert } from "$app/components/server-components/Alert";
@@ -78,6 +79,7 @@ type Props = {
   seller_refund_policy_enabled: boolean;
   seller_refund_policy: Pick<RefundPolicy, "title" | "fine_print">;
   cancellation_discounts_enabled: boolean;
+  available_offer_codes: AvailableOfferCode[];
 };
 
 const createContextValue = (props: Props) => ({
@@ -111,6 +113,7 @@ const createContextValue = (props: Props) => ({
   seller_refund_policy_enabled: props.seller_refund_policy_enabled,
   seller_refund_policy: props.seller_refund_policy,
   cancellationDiscountsEnabled: props.cancellation_discounts_enabled,
+  availableOfferCodes: props.available_offer_codes,
   contentUpdates: null,
   setContentUpdates: () => {},
   filesById: new Map(props.product.files.map((file) => [file.id, { ...file, url: getDownloadUrl(props.id, file) }])),

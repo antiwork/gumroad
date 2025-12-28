@@ -192,6 +192,12 @@ class ProductPresenter
             { type: "percent", percents: cancellation_discount.amount_percentage },
           duration_in_billing_cycles: cancellation_discount.duration_in_billing_cycles,
         } : nil,
+        default_offer_code: product.default_offer_code.present? ? {
+          id: product.default_offer_code.external_id,
+          name: product.default_offer_code.name.presence || product.default_offer_code.code,
+          code: product.default_offer_code.code,
+          discount: product.default_offer_code.discount.slice(:type, :cents, :percents),
+        } : nil,
         public_files: product.alive_public_files.attached.map { PublicFilePresenter.new(public_file: _1).props },
         audio_previews_enabled: Feature.active?(:audio_previews, product.user),
         community_chat_enabled: Feature.active?(:communities, product.user) ? product.community_chat_enabled? : nil,
@@ -237,6 +243,15 @@ class ProductPresenter
         fine_print: product.user.refund_policy.fine_print,
       },
       cancellation_discounts_enabled: Feature.active?(:cancellation_discounts, product.user),
+      available_offer_codes: product.available_offer_codes_for_selection.map do |oc|
+        {
+          id: oc.external_id,
+          name: oc.name.presence || oc.code,
+          code: oc.code,
+          display_amount: oc.displayed_amount_off(product.price_currency_type, with_symbol: true),
+          discount: oc.discount.slice(:type, :cents, :percents),
+        }
+      end,
     }
   end
 

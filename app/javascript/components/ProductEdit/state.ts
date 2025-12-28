@@ -85,6 +85,23 @@ export type InstallmentPlan = {
   number_of_installments: number;
 };
 
+export type OfferCodeDiscount = { type: "fixed"; cents: number } | { type: "percent"; percents: number };
+
+export type AvailableOfferCode = {
+  id: string;
+  name: string;
+  code: string;
+  display_amount: string;
+  discount: OfferCodeDiscount;
+};
+
+export type DefaultOfferCode = {
+  id: string;
+  name: string;
+  code: string;
+  discount: OfferCodeDiscount;
+};
+
 export type Product = {
   name: string;
   description: string;
@@ -139,6 +156,7 @@ export type Product = {
   call_limitation_info: CallLimitationInfo | null;
   require_shipping: boolean;
   cancellation_discount: CancellationDiscount | null;
+  default_offer_code: DefaultOfferCode | null;
   public_files: PublicFileWithStatus[];
   audio_previews_enabled: boolean;
   community_chat_enabled: boolean | null;
@@ -187,6 +205,7 @@ export const ProductEditContext = React.createContext<{
   seller_refund_policy_enabled: boolean;
   seller_refund_policy: Pick<RefundPolicy, "title" | "fine_print">;
   cancellationDiscountsEnabled: boolean;
+  availableOfferCodes: AvailableOfferCode[];
   contentUpdates: ContentUpdates;
   setContentUpdates: React.Dispatch<React.SetStateAction<ContentUpdates>>;
   filesById: Map<string, FileEntry>;

@@ -69,7 +69,7 @@ class ProductPresenter::ProductProps
         public_files: product.alive_public_files.attached.map { PublicFilePresenter.new(public_file: _1).props },
         audio_previews_enabled: Feature.active?(:audio_previews, product.user),
       },
-      discount_code: discount_code_props(discount_code, quantity),
+      discount_code: discount_code_props(discount_code, quantity, use_default: discount_code.blank?),
       purchase: purchase_props(product.purchase_info_for_product_page(pundit_user&.user, request.cookie_jar[:_gumroad_guid])),
       wishlists: pundit_user&.seller.present? ? (
         pundit_user.seller.wishlists.alive.includes(:alive_wishlist_products).map { |wishlist| WishlistPresenter.new(wishlist:).listing_props(product:) }
@@ -80,15 +80,26 @@ class ProductPresenter::ProductProps
   private
     attr_reader :product, :seller
 
-    def discount_code_props(discount_code, quantity)
-      return if discount_code.blank?
+    def discount_code_props(discount_code, quantity, use_default: false)
+      effective_code = discount_code.presence
+      is_default = false
+
+      if effective_code.blank? && use_default
+        default_offer_code = product.effective_offer_code_for_display
+        if default_offer_code.present?
+          effective_code = default_offer_code.code
+          is_default = true
+        end
+      end
+
+      return if effective_code.blank?
 
       offer_code_response = OfferCodeDiscountComputingService.new(
-        discount_code,
+        effective_code,
         {
           product.unique_permalink => {
             permalink: product.unique_permalink,
-            quantity: [quantity, product.find_offer_code(code: discount_code)&.minimum_quantity || 0].max
+            quantity: [quantity, product.find_offer_code(code: effective_code)&.minimum_quantity || 0].max
           }
         }
       ).process
@@ -96,7 +107,7 @@ class ProductPresenter::ProductProps
       if offer_code_response[:error_code].present?
         { valid: false, error_code: offer_code_response[:error_code] }
       else
-        { valid: true, code: discount_code, **offer_code_response[:products_data][product.unique_permalink] }
+        { valid: true, code: effective_code, is_default:, **offer_code_response[:products_data][product.unique_permalink] }
       end
     end
 

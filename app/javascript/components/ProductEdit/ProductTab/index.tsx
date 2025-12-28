@@ -58,6 +58,7 @@ export const ProductTab = () => {
     googleCalendarEnabled,
     seller_refund_policy_enabled,
     cancellationDiscountsEnabled,
+    availableOfferCodes,
   } = useProductEditContext();
   const [initialProduct] = React.useState(product);
 
@@ -295,6 +296,9 @@ export const ProductTab = () => {
                           installment_plan: { ...product.installment_plan, number_of_installments: value },
                         })
                       }
+                      availableOfferCodes={availableOfferCodes}
+                      defaultOfferCode={product.default_offer_code}
+                      onDefaultOfferCodeChange={(value) => updateProduct({ default_offer_code: value })}
                     />
                     {product.native_type === "commission" ? (
                       <p

@@ -113,6 +113,7 @@ class Link < ApplicationRecord
   has_many :installments
   has_many :subscriptions
   has_and_belongs_to_many :offer_codes, join_table: "offer_codes_products", foreign_key: "product_id"
+  belongs_to :default_offer_code, class_name: "OfferCode", optional: true
   has_many :transcoded_videos
   has_many :imported_customers
   has_many :licenses
@@ -818,6 +819,27 @@ class Link < ApplicationRecord
   # Returns list of offer codes.
   def product_and_universal_offer_codes
     (offer_codes.alive + user.offer_codes.universal_with_matching_currency(price_currency_type).alive).sort_by(&:created_at)
+  end
+
+  def effective_offer_code_for_display
+    return nil if default_offer_code.blank?
+    return nil if default_offer_code.inactive?
+    return nil if !default_offer_code.is_valid_for_purchase?
+
+    default_offer_code
+  end
+
+  def discounted_price_cents_for_display
+    offer_code = effective_offer_code_for_display
+    return nil if offer_code.blank?
+
+    price_cents - offer_code.amount_off(price_cents)
+  end
+
+  def available_offer_codes_for_selection
+    product_and_universal_offer_codes.reject do |oc|
+      oc.inactive? || oc.is_cancellation_discount? || !oc.is_valid_for_purchase?
+    end
   end
 
   def purchase_info_for_product_page(requested_user, browser_guid)
