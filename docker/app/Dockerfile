@@ -1,9 +1,18 @@
+# Build arguments with defaults (can be overridden via --build-arg)
+# These are declared before FROM so RUBY_VERSION can be used in the FROM line
 ARG RUBY_VERSION=3.4.3
+ARG NODE_VERSION=20.17.0
+ARG NPM_VERSION=10.8.2
+
 FROM ruby:${RUBY_VERSION}-slim-bullseye
 
 ENV APP_DIR=/workspace
 
+# Re-declare ARGs after FROM (Docker scoping rules require this)
+# They inherit values from the pre-FROM ARGs or from --build-arg
 ARG DEBIAN_FRONTEND=noninteractive
+ARG NODE_VERSION
+ARG NPM_VERSION
 
 # Packages
 RUN apt-get update -y -qq \
@@ -23,7 +32,6 @@ RUN apt-get update -y -qq \
       libcurl4-openssl-dev \
       liblzma-dev \
       default-libmysqlclient-dev \
-      libnss3-tools \
       libssl-dev \
       libtag1-dev \
       libvips-dev \
@@ -42,16 +50,11 @@ RUN apt-get update -y -qq \
       zlib1g-dev \
       git \
     \
-    # Mkcert
-    && export MKCERT_VERSION=1.4.4 \
-    && wget -qO /usr/local/bin/mkcert "https://github.com/FiloSottile/mkcert/releases/download/v${MKCERT_VERSION}/mkcert-v${MKCERT_VERSION}-linux-amd64" \
-    && chmod +x /usr/local/bin/mkcert \
-    \
-    # Node v20
-    && curl -fsSL https://deb.nodesource.com/setup_20.x | bash - \
+    # Node (use major version for nodesource)
+    && curl -fsSL https://deb.nodesource.com/setup_${NODE_VERSION%%.*}.x | bash - \
     && apt-get install -y --no-install-recommends nodejs \
     && corepack enable \
-    && npm install -g npm@10.8.2 \
+    && npm install -g npm@${NPM_VERSION} \
     \
     # Cleanup
     && apt-get clean autoclean \
@@ -62,13 +65,13 @@ WORKDIR ${APP_DIR}
 
 COPY Gemfile Gemfile.lock .ruby-version ${APP_DIR}/
 RUN gem install bundler:$(awk '/BUNDLED WITH/{getline; print}' Gemfile.lock | tr -d " ") \
-    && bundle install --retry 3 --without production test \
-    && gem install foreman
+    && bundle install --retry 3 --without production staging deployer
 
 # Node dependencies
 COPY package*.json ${APP_DIR}/
 RUN npm install
 
+# Entrypoint
 COPY docker/app/entrypoint.sh /usr/local/bin/docker-entrypoint
 RUN chmod +x /usr/local/bin/docker-entrypoint
 

@@ -1,0 +1,36 @@
+#!/bin/bash
+set -euo pipefail
+
+# Check if SSL certificates exist FIRST
+if [ ! -f "docker/local-nginx/certs/gumroad_dev.crt" ] || [ ! -f "docker/local-nginx/certs/gumroad_dev.key" ]; then
+  echo "SSL certificates not found. Please generate them by running:"
+  echo "  bin/generate_ssl_certificates"
+  exit 1
+fi
+
+# Get versions from project files
+RUBY_VERSION=$(cat .ruby-version | tr -d '[:space:]')
+NODE_VERSION=$(cat .node-version | tr -d '[:space:]')
+NPM_VERSION=$(grep -o '"npm@[^"]*"' package.json | head -1 | sed 's/"npm@\([^"]*\)"/\1/')
+
+# Fallback defaults if extraction fails
+NODE_VERSION=${NODE_VERSION:-20.17.0}
+NPM_VERSION=${NPM_VERSION:-10.8.2}
+
+echo "Building Docker image with:"
+echo "  Ruby: $RUBY_VERSION"
+echo "  Node: $NODE_VERSION"
+echo "  NPM:  $NPM_VERSION"
+
+# Build the Docker image
+docker build \
+  --build-arg RUBY_VERSION="$RUBY_VERSION" \
+  --build-arg NODE_VERSION="$NODE_VERSION" \
+  --build-arg NPM_VERSION="$NPM_VERSION" \
+  -f docker/app/Dockerfile \
+  -t gumroad-app:latest \
+  .
+
+echo ""
+echo "Docker image built successfully!"
+echo "  Tagged as: gumroad-app:latest"
