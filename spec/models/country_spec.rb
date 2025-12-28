@@ -292,6 +292,7 @@ describe Country do
       expect(Country.new("GB").default_currency).to eq Currency::GBP
       expect(Country.new("AU").default_currency).to eq Currency::AUD
       expect(Country.new("FR").default_currency).to eq Currency::EUR
+      expect(Country.new("BG").default_currency).to eq Currency::EUR
       expect(Country.new("TH").default_currency).to eq nil
       expect(Country.new("KR").default_currency).to eq nil
       expect(Country.new("AE").default_currency).to eq nil
@@ -387,6 +388,7 @@ describe Country do
       expect(Country.new("GB").payout_currency).to eq Currency::GBP
       expect(Country.new("AU").payout_currency).to eq Currency::AUD
       expect(Country.new("FR").payout_currency).to eq Currency::EUR
+      expect(Country.new("BG").payout_currency).to eq Currency::EUR
       expect(Country.new("TH").payout_currency).to eq Currency::THB
       expect(Country.new("KR").payout_currency).to eq Currency::KRW
       expect(Country.new("AE").payout_currency).to eq Currency::AED

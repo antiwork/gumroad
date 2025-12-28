@@ -120,6 +120,7 @@ class Country
       Currency::GBP
     when Compliance::Countries::AUT.alpha2,
         Compliance::Countries::BEL.alpha2,
+        Compliance::Countries::BGR.alpha2,
         Compliance::Countries::HRV.alpha2,
         Compliance::Countries::CYP.alpha2,
         Compliance::Countries::EST.alpha2,
@@ -163,7 +164,7 @@ class Country
     when Compliance::Countries::THA.alpha2
       Currency::THB
     when Compliance::Countries::BGR.alpha2
-      Currency::BGN
+      Currency::EUR
     when Compliance::Countries::DNK.alpha2
       Currency::DKK
     when Compliance::Countries::HUN.alpha2
