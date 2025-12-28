@@ -1,10 +1,9 @@
 import * as React from "react";
-import { cast, createCast } from "ts-safe-cast";
+import { cast } from "ts-safe-cast";
 
 import { SavedCreditCard } from "$app/parsers/card";
 import { asyncVoid } from "$app/utils/promise";
 import { assertResponseError, request, ResponseError } from "$app/utils/request";
-import { register } from "$app/utils/serverComponentUtil";
 
 import { Button } from "$app/components/Button";
 import { Icon } from "$app/components/Icons";
@@ -69,4 +68,4 @@ export const CreditCardForm = ({ card, can_remove, read_only }: Props) => {
   );
 };
 
-export default register({ component: CreditCardForm, propParser: createCast() });
+export default CreditCardForm;

@@ -18,12 +18,17 @@ class Admin::UnreviewedUserPresenter
       unpaid_balance_cents: user.total_balance_cents.to_i,
       revenue_sources: revenue_sources,
       payout_method: payout_method,
+      account_age_days: account_age_days,
       admin_url: admin_user_path(user.external_id),
       created_at: user.created_at.iso8601
     }
   end
 
   private
+    def account_age_days
+      (Date.current - user.created_at.to_date).to_i
+    end
+
     def payout_method
       if user.has_stripe_account_connected?
         "Stripe Connect"

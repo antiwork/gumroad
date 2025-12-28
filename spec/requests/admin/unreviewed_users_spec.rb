@@ -56,7 +56,7 @@ describe "Admin::UnreviewedUsersController", type: :system, js: true do
       it "shows the cutoff date in the header" do
         visit admin_unreviewed_users_path
 
-        expect(page).to have_text("created since #{2.years.ago.to_date}")
+        expect(page).to have_text("created since 2024-01-01")
       end
     end
 

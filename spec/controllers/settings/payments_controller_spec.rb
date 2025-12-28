@@ -3,8 +3,9 @@
 require "spec_helper"
 require "shared_examples/sellers_base_controller_concern"
 require "shared_examples/authorize_called"
+require "inertia_rails/rspec"
 
-describe Settings::PaymentsController, :vcr do
+describe Settings::PaymentsController, :vcr, type: :controller, inertia: true do
   it_behaves_like "inherits from Sellers::BaseController"
 
   let(:seller) { create(:named_seller) }
@@ -34,18 +35,19 @@ describe Settings::PaymentsController, :vcr do
       seller.save!
     end
 
-    it "returns http success and assigns correct instance variables" do
+    it "returns http success and renders Inertia component" do
       get :show
 
       expect(response).to be_successful
-      react_component_props = assigns[:react_component_props]
-      expect(react_component_props[:user][:country_code]).to eq("US")
-    end
-
-    it "assigns oauth_authorizations" do
-      get :show
-      expect(assigns(:stripe_authorization))
-      expect(assigns(:paypal_authorization))
+      expect(inertia.component).to eq("Settings/Payments/Show")
+      settings_presenter = SettingsPresenter.new(pundit_user: controller.pundit_user)
+      expected_props = settings_presenter.payments_props(remote_ip: request.remote_ip)
+      # Compare only the expected props from inertia.props (ignore shared props)
+      actual_props = inertia.props.slice(*expected_props.keys)
+      # Convert actual countries hash keys from symbols to strings to match presenter output
+      # Inertia RSpec helper returns symbol keys, but presenter uses string keys
+      actual_props[:countries] = actual_props[:countries].transform_keys(&:to_s) if actual_props[:countries] && actual_props[:countries].keys.first.is_a?(Symbol)
+      expect(actual_props).to eq(expected_props)
     end
   end
 
@@ -94,10 +96,13 @@ describe Settings::PaymentsController, :vcr do
 
           it "updates the tos last agreed at" do
             travel_to(time_freeze) do
-              put :update, xhr: true, params: { user: params, terms_accepted: true }
+              put :update, params: { user: params, terms_accepted: true }
             end
             user.reload
             expect(user.tos_agreements.last.created_at).to eq(time_freeze)
+            expect(response).to redirect_to(settings_payments_path)
+            expect(response).to have_http_status :see_other
+            expect(flash[:notice]).to eq("Thanks! You're all set.")
           end
         end
 
@@ -109,9 +114,12 @@ describe Settings::PaymentsController, :vcr do
           end
 
           it "updates the tos last agreed ip" do
-            put :update, xhr: true, params: { user: params, terms_accepted: true }
+            put :update, params: { user: params, terms_accepted: true }
             user.reload
             expect(user.tos_agreements.last.ip).to eq(ip)
+            expect(response).to redirect_to(settings_payments_path)
+            expect(response).to have_http_status :see_other
+            expect(flash[:notice]).to eq("Thanks! You're all set.")
           end
         end
       end
@@ -126,17 +134,20 @@ describe Settings::PaymentsController, :vcr do
     describe "minimum payout threshold" do
       it "updates the payout threshold for valid amounts" do
         expect do
-          put :update, params: { payout_threshold_cents: 2000 }, as: :json
-        end.to change { user.reload.payout_threshold_cents }.from(1000).to(2000)
+          put :update, params: { payout_threshold_cents: 2000 }
+        end.to change { user.reload.payout_threshold_cents.to_i }.from(1000).to(2000)
 
-        expect(response.parsed_body["success"]).to be(true)
+        expect(response).to redirect_to(settings_payments_path)
+        expect(response).to have_http_status :see_other
+        expect(flash[:notice]).to eq("Thanks! You're all set.")
       end
 
       it "returns an error for invalid amounts" do
-        put :update, params: { payout_threshold_cents: 500 }, as: :json
+        put :update, params: { payout_threshold_cents: 500 }
 
-        expect(response.parsed_body["success"]).to be(false)
-        expect(response.parsed_body["error_message"]).to eq("Your payout threshold must be greater than the minimum payout amount")
+        expect(response).to redirect_to(settings_payments_path)
+        expect(response).to have_http_status :found
+        expect(session[:inertia_errors][:base]).to include("Your payout threshold must be greater than the minimum payout amount")
         expect(user.reload.payout_threshold_cents).to eq(1000)
       end
     end
@@ -144,17 +155,20 @@ describe Settings::PaymentsController, :vcr do
     describe "payout frequency" do
       it "updates the payout frequency for valid values" do
         expect do
-          put :update, params: { payout_frequency: User::PayoutSchedule::MONTHLY }, as: :json
+          put :update, params: { payout_frequency: User::PayoutSchedule::MONTHLY }
         end.to change { user.reload.payout_frequency }.from(User::PayoutSchedule::WEEKLY).to(User::PayoutSchedule::MONTHLY)
 
-        expect(response.parsed_body["success"]).to be(true)
+        expect(response).to redirect_to(settings_payments_path)
+        expect(response).to have_http_status :see_other
+        expect(flash[:notice]).to eq("Thanks! You're all set.")
       end
 
       it "returns an error for invalid values" do
-        put :update, params: { payout_frequency: "invalid" }, as: :json
+        put :update, params: { payout_frequency: "invalid" }
 
-        expect(response.parsed_body["success"]).to be(false)
-        expect(response.parsed_body["error_message"]).to eq("Payout frequency must be daily, weekly, monthly, or quarterly")
+        expect(response).to redirect_to(settings_payments_path)
+        expect(response).to have_http_status :found
+        expect(session[:inertia_errors][:base]).to include("Payout frequency must be daily, weekly, monthly, or quarterly")
         expect(user.reload.payout_frequency).to eq(User::PayoutSchedule::WEEKLY)
       end
     end
@@ -170,7 +184,7 @@ describe Settings::PaymentsController, :vcr do
         }
       ) end
       it "updates the compliance information and return the proper response" do
-        put :update, xhr: true, params: all_params
+        put :update, params: all_params
         compliance_info = user.fetch_or_build_user_compliance_info
         expect(compliance_info.first_name).to eq "barnabas"
         expect(compliance_info.last_name).to eq "barnabastein"
@@ -182,12 +196,14 @@ describe Settings::PaymentsController, :vcr do
         expect(compliance_info.is_business).to be(false)
         expect(compliance_info.individual_tax_id.decrypt("1234")).to eq "6789"
 
-        expect(response.parsed_body["success"]).to be(true)
+        expect(response).to redirect_to(settings_payments_path)
+        expect(response).to have_http_status :see_other
+        expect(flash[:notice]).to eq("Thanks! You're all set.")
       end
 
       it "does not overwrite information for steps that the ui did not provide" do
-        put :update, xhr: true, params: all_params
-        put :update, xhr: true, params: { user: { first_name: "newfirst", last_name: "newlast" } }
+        put :update, params: all_params
+        put :update, params: { user: { first_name: "newfirst", last_name: "newlast" } }
         compliance_info = user.fetch_or_build_user_compliance_info
         expect(compliance_info.first_name).to eq "newfirst"
         expect(compliance_info.last_name).to eq "newlast"
@@ -197,24 +213,28 @@ describe Settings::PaymentsController, :vcr do
         expect(compliance_info.zip_code).to eq "94104"
         expect(compliance_info.is_business).to be(false)
 
-        expect(response.parsed_body["success"]).to be(true)
+        expect(response).to redirect_to(settings_payments_path)
+        expect(response).to have_http_status :see_other
+        expect(flash[:notice]).to eq("Thanks! You're all set.")
       end
 
       it "does not overwrite information for steps that the ui did provide as blank" do
-        put :update, xhr: true, params: all_params
-        put :update, xhr: true, params: { user: { first_name: "newfirst", last_name: "newlast", individual_tax_id: "" } }
+        put :update, params: all_params
+        put :update, params: { user: { first_name: "newfirst", last_name: "newlast", individual_tax_id: "" } }
         compliance_info = user.fetch_or_build_user_compliance_info
         expect(compliance_info.first_name).to eq "newfirst"
         expect(compliance_info.last_name).to eq "newlast"
         expect(compliance_info.individual_tax_id).to be_present
         expect(compliance_info.individual_tax_id.decrypt(GlobalConfig.get("STRONGBOX_GENERAL_PASSWORD"))).to be_present
 
-        expect(response.parsed_body["success"]).to be(true)
+        expect(response).to redirect_to(settings_payments_path)
+        expect(response).to have_http_status :see_other
+        expect(flash[:notice]).to eq("Thanks! You're all set.")
       end
 
       it "clears only the requests that are present" do
-        put :update, xhr: true, params: all_params
-        put :update, xhr: true, params: { user: { first_name: "newfirst", last_name: "newlast" } }
+        put :update, params: all_params
+        put :update, params: { user: { first_name: "newfirst", last_name: "newlast" } }
         request_1.reload
         request_2.reload
         request_3.reload
@@ -245,9 +265,11 @@ describe Settings::PaymentsController, :vcr do
           it "does not try to create a new stripe account because user already has one" do
             expect(StripeMerchantAccountManager).not_to receive(:create_account)
 
-            put :update, xhr: true, params: all_params
+            put :update, params: all_params
 
-            expect(response.parsed_body["success"]).to be(true)
+            expect(response).to redirect_to(settings_payments_path)
+            expect(response).to have_http_status :see_other
+            expect(flash[:notice]).to eq("Thanks! You're all set.")
           end
         end
 
@@ -255,9 +277,11 @@ describe Settings::PaymentsController, :vcr do
           it "does not try to create a new stripe account because user does not have a bank account" do
             expect(StripeMerchantAccountManager).not_to receive(:create_account)
 
-            put :update, xhr: true, params: all_params
+            put :update, params: all_params
 
-            expect(response.parsed_body["success"]).to be(true)
+            expect(response).to redirect_to(settings_payments_path)
+            expect(response).to have_http_status :see_other
+            expect(flash[:notice]).to eq("Thanks! You're all set.")
           end
         end
 
@@ -275,10 +299,12 @@ describe Settings::PaymentsController, :vcr do
 
             expect(StripeMerchantAccountManager).to receive(:create_account).with(user, passphrase: GlobalConfig.get("STRONGBOX_GENERAL_PASSWORD")).and_call_original
 
-            put :update, xhr: true, params: all_params
+            put :update, params: all_params
 
             expect(user.reload.stripe_account).to be_present
-            expect(response.parsed_body["success"]).to be(true)
+            expect(response).to redirect_to(settings_payments_path)
+            expect(response).to have_http_status :see_other
+            expect(flash[:notice]).to eq("Thanks! You're all set.")
           end
 
           it "raises error if stripe account creation fails" do
@@ -294,18 +320,19 @@ describe Settings::PaymentsController, :vcr do
 
             expect(StripeMerchantAccountManager).to receive(:create_account).with(user, passphrase: GlobalConfig.get("STRONGBOX_GENERAL_PASSWORD")).and_call_original
 
-            put :update, xhr: true, params: all_params
+            put :update, params: all_params
 
             expect(user.reload.stripe_account).to be_nil
-            expect(response.parsed_body["success"]).to be(false)
-            expect(response.parsed_body["error_message"]).to eq("You must use a test bank account number in test mode. Try 000123456789 or see more options at https://stripe.com/docs/connect/testing#account-numbers.")
+            expect(response).to redirect_to(settings_payments_path)
+            expect(response).to have_http_status :found
+            expect(session[:inertia_errors][:base]).to include("You must use a test bank account number in test mode. Try 000123456789 or see more options at https://stripe.com/docs/connect/testing#account-numbers.")
           end
         end
       end
 
       describe "user enters a birthday accidentally that is under 13 years old given todays date" do
         before do
-          put :update, xhr: true, params: { user: params }
+          put :update, params: { user: params }
           params.merge!(
             dob_month: "1",
             dob_day: "1",
@@ -314,15 +341,16 @@ describe Settings::PaymentsController, :vcr do
         end
 
         it "returns an error" do
-          put :update, xhr: true, params: { user: params }
-          expect(response.parsed_body["success"]).to eq(false)
-          expect(response.parsed_body["error_message"]).to eq("You must be 13 years old to use Gumroad.")
+          put :update, params: { user: params }
+          expect(response).to redirect_to(settings_payments_path)
+          expect(response).to have_http_status :found
+          expect(session[:inertia_errors][:base]).to include("You must be 13 years old to use Gumroad.")
         end
 
         it "leaves the previous user compliance info data unchanged" do
           old_user_compliance_info_id = user.alive_user_compliance_info.id
           old_user_compliance_info_birthday = user.alive_user_compliance_info.birthday
-          put :update, xhr: true, params: { user: params }
+          put :update, params: { user: params }
           expect(user.alive_user_compliance_info.id).to eq(old_user_compliance_info_id)
           expect(user.alive_user_compliance_info.birthday).to eq(old_user_compliance_info_birthday)
         end
@@ -336,25 +364,28 @@ describe Settings::PaymentsController, :vcr do
         end
 
         it "returns an error response" do
-          put :update, xhr: true, params: { user: params }
-          expect(response.parsed_body["success"]).to eq(false)
-          expect(response.parsed_body["error_message"]).to eq("You entered a ZIP Code that doesn't exist within your country.")
+          put :update, params: { user: params }
+          expect(response).to redirect_to(settings_payments_path)
+          expect(response).to have_http_status :found
+          expect(session[:inertia_errors][:base]).to include("You entered a ZIP Code that doesn't exist within your country.")
         end
       end
 
       describe "user is verified" do
         before do
-          put :update, xhr: true, params: { user: params }
+          put :update, params: { user: params }
           user.merchant_accounts << create(:merchant_account, charge_processor_verified_at: Time.current)
         end
 
         describe "user saves existing data unchanged" do
           before do
-            put :update, xhr: true, params: { user: params }
+            put :update, params: { user: params }
           end
 
           it "returns success" do
-            expect(response.parsed_body["success"]).to be(true)
+            expect(response).to redirect_to(settings_payments_path)
+            expect(response).to have_http_status :see_other
+            expect(flash[:notice]).to eq("Thanks! You're all set.")
           end
 
           it "the users current compliance info should contain the same data" do
@@ -375,11 +406,13 @@ describe Settings::PaymentsController, :vcr do
             error_message = "Invalid request: You cannot change legal_entity[first_name] via API if an account is verified."
             allow(StripeMerchantAccountManager).to receive(:handle_new_user_compliance_info).and_raise(Stripe::InvalidRequestError.new(error_message, nil))
             params.merge!(first_name: "barny")
-            put :update, xhr: true, params: { user: params }
+            put :update, params: { user: params }
           end
 
           it "returns an error" do
-            expect(response.parsed_body["success"]).to be(false)
+            expect(response).to redirect_to(settings_payments_path)
+            expect(response).to have_http_status :found
+            expect(session[:inertia_errors][:base]).to be_present
           end
 
           it "the users current compliance info should be changed" do
@@ -412,11 +445,13 @@ describe Settings::PaymentsController, :vcr do
 
           before do
             params.merge!(dob_month: "02", dob_day: "01", dob_year: "1980")
-            put :update, xhr: true, params: { user: params }
+            put :update, params: { user: params }
           end
 
           it "returns success" do
-            expect(response.parsed_body["success"]).to be(true)
+            expect(response).to redirect_to(settings_payments_path)
+            expect(response).to have_http_status :see_other
+            expect(flash[:notice]).to eq("Thanks! You're all set.")
           end
 
           it "the users current compliance info should be changed" do
@@ -436,11 +471,13 @@ describe Settings::PaymentsController, :vcr do
         describe "user wishes to edit a non-frozen feild (e.g. address)" do
           before do
             params.merge!(street_address: "124 Barnabas St")
-            put :update, xhr: true, params: { user: params }
+            put :update, params: { user: params }
           end
 
           it "returns success" do
-            expect(response.parsed_body["success"]).to be(true)
+            expect(response).to redirect_to(settings_payments_path)
+            expect(response).to have_http_status :see_other
+            expect(flash[:notice]).to eq("Thanks! You're all set.")
           end
 
           it "the users current compliance info should contain the new address" do
@@ -458,7 +495,7 @@ describe Settings::PaymentsController, :vcr do
 
         it "allows the user to change the account type from individual to business" do
           # Save the account type as "individual"
-          put :update, xhr: true, params: { user: params }
+          put :update, params: { user: params }
 
           # Then try to switch to the "business" account type
           params.merge!(
@@ -470,9 +507,11 @@ describe Settings::PaymentsController, :vcr do
             business_type: UserComplianceInfo::BusinessTypes::LLC,
             business_tax_id: "123-123-123"
           )
-          put :update, xhr: true, params: { user: params }
+          put :update, params: { user: params }
 
-          expect(response.parsed_body["success"]).to be(true)
+          expect(response).to redirect_to(settings_payments_path)
+          expect(response).to have_http_status :see_other
+          expect(flash[:notice]).to eq("Thanks! You're all set.")
 
           compliance_info = user.alive_user_compliance_info
           expect(compliance_info.first_name).to eq "barnabas"
@@ -498,7 +537,7 @@ describe Settings::PaymentsController, :vcr do
           params.merge!(
             is_business: nil
           )
-          put :update, xhr: true, params: { user: params }
+          put :update, params: { user: params }
           compliance_info = user.fetch_or_build_user_compliance_info
           expect(compliance_info.is_business).to be(nil)
           user.merchant_accounts << create(:merchant_account, charge_processor_verified_at: Time.current)
@@ -509,11 +548,13 @@ describe Settings::PaymentsController, :vcr do
             params.merge!(
               is_business: "off"
             )
-            put :update, xhr: true, params: { user: params }
+            put :update, params: { user: params }
           end
 
           it "returns success" do
-            expect(response.parsed_body["success"]).to be(true)
+            expect(response).to redirect_to(settings_payments_path)
+            expect(response).to have_http_status :see_other
+            expect(flash[:notice]).to eq("Thanks! You're all set.")
           end
 
           it "the users current compliance info should contain the same details" do
@@ -549,7 +590,7 @@ describe Settings::PaymentsController, :vcr do
       end
 
       it "updates the compliance information and return the proper response" do
-        put :update, xhr: true, params: { user: business_params }
+        put :update, params: { user: business_params }
         compliance_info = user.fetch_or_build_user_compliance_info
         expect(compliance_info.first_name).to eq "barnabas"
         expect(compliance_info.last_name).to eq "barnabastein"
@@ -567,11 +608,13 @@ describe Settings::PaymentsController, :vcr do
         expect(compliance_info.business_type).to eq "llc"
         expect(compliance_info.business_tax_id.decrypt("1234")).to eq "123-123-123"
 
-        expect(response.parsed_body["success"]).to be(true)
+        expect(response).to redirect_to(settings_payments_path)
+        expect(response).to have_http_status :see_other
+        expect(flash[:notice]).to eq("Thanks! You're all set.")
       end
 
       it "clears the requests that are present" do
-        put :update, xhr: true, params: { user: business_params }
+        put :update, params: { user: business_params }
         request_1.reload
         request_2.reload
         request_3.reload
@@ -584,14 +627,16 @@ describe Settings::PaymentsController, :vcr do
 
       it "allows the user to change the account type from business to individual after verification" do
         # Save the account type as "business" and mark verified
-        put :update, xhr: true, params: { user: business_params }
+        put :update, params: { user: business_params }
         user.merchant_accounts << create(:merchant_account, charge_processor_verified_at: Time.current)
 
         # Then try to switch to the "individual" account type
         business_params.merge!(is_business: "off")
-        put :update, xhr: true, params: { user: business_params }
+        put :update, params: { user: business_params }
 
-        expect(response.parsed_body["success"]).to be(true)
+        expect(response).to redirect_to(settings_payments_path)
+        expect(response).to have_http_status :see_other
+        expect(flash[:notice]).to eq("Thanks! You're all set.")
 
         compliance_info = user.alive_user_compliance_info
         expect(compliance_info.first_name).to eq "barnabas"
@@ -640,7 +685,7 @@ describe Settings::PaymentsController, :vcr do
         end
 
         it "creates the ach account" do
-          put(:update, xhr: true, params:)
+          put(:update, params:)
 
           bank_account = AchAccount.last
           expect(bank_account.account_number.decrypt("1234")).to eq "000123456789"
@@ -651,7 +696,7 @@ describe Settings::PaymentsController, :vcr do
         end
 
         it "clears the request for the bank account" do
-          put(:update, xhr: true, params:)
+          put(:update, params:)
 
           request.reload
           expect(request.state).to eq("provided")
@@ -664,10 +709,11 @@ describe Settings::PaymentsController, :vcr do
           end
 
           it "returns error" do
-            put(:update, xhr: true, params:)
+            put(:update, params:)
 
-            expect(response.parsed_body["success"]).to be(false)
-            expect(response.parsed_body["error_message"]).to eq("The bank code is invalid. and The branch code is invalid.")
+            expect(response).to redirect_to(settings_payments_path)
+            expect(response).to have_http_status :found
+            expect(session[:inertia_errors][:base]).to include("The bank code is invalid. and The branch code is invalid.")
           end
         end
       end
@@ -694,7 +740,7 @@ describe Settings::PaymentsController, :vcr do
         end
 
         it "creates the ach account" do
-          put(:update, xhr: true, params:)
+          put(:update, params:)
           bank_account = AchAccount.last
           expect(bank_account.account_number.decrypt("1234")).to eq "000123456789"
           expect(bank_account.account_number_last_four).to eq "6789"
@@ -704,7 +750,7 @@ describe Settings::PaymentsController, :vcr do
         end
 
         it "clears the request for the bank account" do
-          put(:update, xhr: true, params:)
+          put(:update, params:)
           request.reload
           expect(request.state).to eq("provided")
         end
@@ -732,12 +778,14 @@ describe Settings::PaymentsController, :vcr do
         end
 
         it "fails if the account numbers don't match" do
-          put(:update, xhr: true, params:)
-          expect(response.parsed_body["success"]).to be(false)
+          put(:update, params:)
+          expect(response).to redirect_to(settings_payments_path)
+          expect(response).to have_http_status :found
+          expect(session[:inertia_errors][:base]).to include("The account numbers do not match.")
         end
 
         it "does not clear the request for the bank account" do
-          put(:update, xhr: true, params:)
+          put(:update, params:)
           request.reload
           expect(request.state).to eq("requested")
         end
@@ -774,7 +822,7 @@ describe Settings::PaymentsController, :vcr do
           end
 
           it "creates the ach account" do
-            put(:update, xhr: true, params:)
+            put(:update, params:)
             bank_account = CanadianBankAccount.last
             expect(bank_account.account_number.decrypt("1234")).to eq "000123456789"
             expect(bank_account.account_number_last_four).to eq "6789"
@@ -783,7 +831,7 @@ describe Settings::PaymentsController, :vcr do
           end
 
           it "clears the request for the bank account" do
-            put(:update, xhr: true, params:)
+            put(:update, params:)
             request.reload
             expect(request.state).to eq("provided")
           end
@@ -812,12 +860,14 @@ describe Settings::PaymentsController, :vcr do
           end
 
           it "fails if the account numbers don't match" do
-            put(:update, xhr: true, params:)
-            expect(response.parsed_body["success"]).to be(false)
+            put(:update, params:)
+            expect(response).to redirect_to(settings_payments_path)
+            expect(response).to have_http_status :found
+            expect(session[:inertia_errors][:base]).to include("The account numbers do not match.")
           end
 
           it "does not clear the request for the bank account" do
-            put(:update, xhr: true, params:)
+            put(:update, params:)
             request.reload
             expect(request.state).to eq("requested")
           end
@@ -854,7 +904,7 @@ describe Settings::PaymentsController, :vcr do
           end
 
           it "creates the ach account" do
-            put(:update, xhr: true, params:)
+            put(:update, params:)
             bank_account = AustralianBankAccount.last
             expect(bank_account.account_number.decrypt("1234")).to eq "000123456"
             expect(bank_account.account_number_last_four).to eq "3456"
@@ -864,7 +914,7 @@ describe Settings::PaymentsController, :vcr do
           end
 
           it "clears the request for the bank account" do
-            put(:update, xhr: true, params:)
+            put(:update, params:)
             request.reload
             expect(request.state).to eq("provided")
           end
@@ -892,13 +942,14 @@ describe Settings::PaymentsController, :vcr do
           end
 
           it "fails if the account numbers don't match" do
-            put(:update, xhr: true, params:)
-            expect(response.parsed_body["success"]).to be(false)
-            expect(response.parsed_body["error_message"]).to eq("The account numbers do not match.")
+            put(:update, params:)
+            expect(response).to redirect_to(settings_payments_path)
+            expect(response).to have_http_status :found
+            expect(session[:inertia_errors][:base]).to include("The account numbers do not match.")
           end
 
           it "does not clear the request for the bank account" do
-            put(:update, xhr: true, params:)
+            put(:update, params:)
             request.reload
             expect(request.state).to eq("requested")
           end
@@ -935,7 +986,7 @@ describe Settings::PaymentsController, :vcr do
           end
 
           it "creates the ach account" do
-            put(:update, xhr: true, params:)
+            put(:update, params:)
             bank_account = UkBankAccount.last
             expect(bank_account.account_number.decrypt("1234")).to eq "00012345"
             expect(bank_account.account_number_last_four).to eq "2345"
@@ -944,7 +995,7 @@ describe Settings::PaymentsController, :vcr do
           end
 
           it "clears the request for the bank account" do
-            put(:update, xhr: true, params:)
+            put(:update, params:)
             request.reload
             expect(request.state).to eq("provided")
           end
@@ -972,12 +1023,14 @@ describe Settings::PaymentsController, :vcr do
           end
 
           it "fails if the account numbers don't match" do
-            put(:update, xhr: true, params:)
-            expect(response.parsed_body["success"]).to be(false)
+            put(:update, params:)
+            expect(response).to redirect_to(settings_payments_path)
+            expect(response).to have_http_status :found
+            expect(session[:inertia_errors][:base]).to include("The account numbers do not match.")
           end
 
           it "does not clear the request for the bank account" do
-            put(:update, xhr: true, params:)
+            put(:update, params:)
             request.reload
             expect(request.state).to eq("requested")
           end
@@ -991,10 +1044,11 @@ describe Settings::PaymentsController, :vcr do
       end
 
       it "fails if payout address contains non-ASCII characters" do
-        put :update, xhr: true, params: { payment_address: "sebastian.ripenås@example.com" }
+        put :update, params: { payment_address: "sebastian.ripenås@example.com" }
 
-        expect(response.parsed_body["success"]).to be(false)
-        expect(response.parsed_body["error_message"]).to eq("Email address cannot contain non-ASCII characters")
+        expect(response).to redirect_to(settings_payments_path)
+        expect(response).to have_http_status :found
+        expect(session[:inertia_errors][:base]).to include("Email address cannot contain non-ASCII characters")
       end
 
       it "fails if bank payouts are supported in seller's country" do
@@ -1002,16 +1056,19 @@ describe Settings::PaymentsController, :vcr do
 
         put :update, xhr: true, params: { payment_address: "sebastian@example.com" }
 
-        expect(response.parsed_body["success"]).to be(false)
-        expect(response.parsed_body["error_message"]).to eq("PayPal payouts are not supported in your country.")
+        expect(response).to redirect_to(settings_payments_path)
+        expect(response).to have_http_status :found
+        expect(session[:inertia_errors][:base]).to include("PayPal payouts are not supported in your country.")
       end
 
       it "succeeds if bank payouts are not supported in seller's country" do
         user.alive_user_compliance_info.dup_and_save { |nuci| nuci.country = "Brazil" }
 
-        put :update, xhr: true, params: { payment_address: "sebastian@example.com" }
+        put :update, params: { payment_address: "sebastian@example.com" }
 
-        expect(response.parsed_body["success"]).to be(true)
+        expect(response).to redirect_to(settings_payments_path)
+        expect(response).to have_http_status :see_other
+        expect(flash[:notice]).to eq("Thanks! You're all set.")
         expect(user.reload.payment_address).to eq("sebastian@example.com")
       end
 
@@ -1022,8 +1079,10 @@ describe Settings::PaymentsController, :vcr do
         user.update!(payouts_paused_internally: true, payouts_paused_by: User::PAYOUT_PAUSE_SOURCE_STRIPE)
         user.alive_user_compliance_info.dup_and_save { |nuci| nuci.country = "Brazil" }
 
-        put :update, xhr: true, params: { payment_address: "sebastian@example.com" }
+        put :update, params: { payment_address: "sebastian@example.com" }
 
+        expect(response).to redirect_to(settings_payments_path)
+        expect(response).to have_http_status :see_other
         expect(user.reload.payment_address).to eq("sebastian@example.com")
         expect(stripe_account.reload.alive?).to be false
         expect(user.user_compliance_info_requests.requested.count).to eq(0)
@@ -1039,8 +1098,10 @@ describe Settings::PaymentsController, :vcr do
         user.update!(payouts_paused_internally: true)
         user.alive_user_compliance_info.dup_and_save { |nuci| nuci.country = "Brazil" }
 
-        put :update, xhr: true, params: { payment_address: "sebastian@example.com" }
+        put :update, params: { payment_address: "sebastian@example.com" }
 
+        expect(response).to redirect_to(settings_payments_path)
+        expect(response).to have_http_status :see_other
         expect(user.reload.payment_address).to eq("sebastian@example.com")
         expect(stripe_account.reload.alive?).to be false
         expect(user.user_compliance_info_requests.requested.count).to eq(0)
@@ -1065,7 +1126,9 @@ describe Settings::PaymentsController, :vcr do
 
         put :update, xhr: true, params: @card_params.call
 
-        expect(response.parsed_body["success"]).to be(true)
+        expect(response).to redirect_to(settings_payments_path)
+        expect(response).to have_http_status :see_other
+        expect(flash[:notice]).to eq("Thanks! You're all set.")
 
         user.reload
         active_bank_account = user.active_bank_account
@@ -1082,8 +1145,10 @@ describe Settings::PaymentsController, :vcr do
       it "calls UpdateUserCountry service" do
         expect(UpdateUserCountry).to receive(:new).with(new_country_code: "GB", user:).and_call_original
 
-        put :update, xhr: true, params: { user: { updated_country_code: "GB" } }
+        put :update, params: { user: { updated_country_code: "GB" } }
 
+        expect(response).to redirect_to(settings_payments_path)
+        expect(response).to have_http_status :see_other
         expect(flash[:notice]).to eq("Your country has been updated!")
       end
 
@@ -1091,10 +1156,11 @@ describe Settings::PaymentsController, :vcr do
         expect(Bugsnag).to receive(:notify).exactly(:once)
         allow_any_instance_of(User).to receive(:update!).and_raise(StandardError)
 
-        put :update, xhr: true, params: { user: { updated_country_code: "GB" } }
+        put :update, params: { user: { updated_country_code: "GB" } }
 
-        expect(response.parsed_body["success"]).to eq(false)
-        expect(response.parsed_body["error_message"]).to eq("Country update failed")
+        expect(response).to redirect_to(settings_payments_path)
+        expect(response).to have_http_status :found
+        expect(session[:inertia_errors][:base]).to include("Country update failed")
       end
     end
   end

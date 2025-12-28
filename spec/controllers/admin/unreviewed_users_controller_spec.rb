@@ -43,7 +43,7 @@ describe Admin::UnreviewedUsersController, type: :controller, inertia: true do
 
     context "when logged in as admin" do
       before do
-        $redis.del(RedisKey.unreviewed_users_cutoff_years)
+        $redis.del(RedisKey.unreviewed_users_cutoff_date)
       end
 
       context "when no cached data exists" do
@@ -58,7 +58,7 @@ describe Admin::UnreviewedUsersController, type: :controller, inertia: true do
           expect(inertia.component).to eq "Admin/UnreviewedUsers/Index"
           expect(inertia.props[:users]).to be_empty
           expect(inertia.props[:total_count]).to eq(0)
-          expect(inertia.props[:cutoff_date]).to eq(2.years.ago.to_date.to_s)
+          expect(inertia.props[:cutoff_date]).to eq("2024-01-01")
         end
       end
 
@@ -79,7 +79,7 @@ describe Admin::UnreviewedUsersController, type: :controller, inertia: true do
           expect(inertia.props[:users].size).to eq(1)
           expect(inertia.props[:users].first[:id]).to eq(unreviewed_user.id)
           expect(inertia.props[:total_count]).to eq(1)
-          expect(inertia.props[:cutoff_date]).to eq(2.years.ago.to_date.to_s)
+          expect(inertia.props[:cutoff_date]).to eq("2024-01-01")
         end
       end
 

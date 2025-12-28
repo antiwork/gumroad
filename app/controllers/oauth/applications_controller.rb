@@ -7,10 +7,11 @@ class Oauth::ApplicationsController < Doorkeeper::ApplicationsController
   include Impersonate
 
   before_action :authenticate_user!
-  before_action :set_display_vars
   before_action :set_application_params, only: %i[create update]
   before_action :set_application, only: %i[edit update destroy]
   after_action :verify_authorized, except: %i[index new show]
+
+  layout "inertia"
 
   def index
     redirect_to settings_advanced_path
@@ -34,13 +35,9 @@ class Oauth::ApplicationsController < Doorkeeper::ApplicationsController
     end
 
     if @application.save
-      render json: {
-        success: true,
-        message: "Application created.",
-        redirect_location: oauth_application_path(@application.external_id)
-      }
+      redirect_to edit_oauth_application_path(@application.external_id), notice: "Application created."
     else
-      render json: { success: false, message: @application.errors.full_messages.to_sentence }
+      redirect_to settings_advanced_path, alert: @application.errors.full_messages.to_sentence
     end
   end
 
@@ -52,7 +49,9 @@ class Oauth::ApplicationsController < Doorkeeper::ApplicationsController
     @title = "Update application"
     authorize([:settings, :authorized_applications, @application])
 
-    @react_component_props = SettingsPresenter.new(pundit_user:).application_props(@application)
+    settings_presenter = SettingsPresenter.new(pundit_user:)
+    render inertia: "Oauth/Applications/Edit",
+           props: settings_presenter.application_props(@application)
   end
 
   def update
@@ -65,10 +64,10 @@ class Oauth::ApplicationsController < Doorkeeper::ApplicationsController
     end
 
     if @application.save
-      render json: { success: true, message: "Application updated." }
+      redirect_to edit_oauth_application_path(@application.external_id), notice: "Application updated."
     else
-      render json: { success: false, message: @application.errors.full_messages.to_sentence },
-             status: :unprocessable_entity
+      redirect_to edit_oauth_application_path(@application.external_id),
+                  alert: @application.errors.full_messages.to_sentence
     end
   end
 
@@ -77,7 +76,7 @@ class Oauth::ApplicationsController < Doorkeeper::ApplicationsController
 
     @application.mark_deleted!
 
-    head :ok
+    redirect_to settings_advanced_path, notice: "Application deleted."
   end
 
   private
@@ -104,10 +103,5 @@ class Oauth::ApplicationsController < Doorkeeper::ApplicationsController
           redirect_to oauth_applications_url
         end
       end
-    end
-
-    # set display instance vars here because we don't inherit from application controller
-    def set_display_vars
-      @body_id = "app"
     end
 end
