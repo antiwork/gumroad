@@ -22,6 +22,7 @@ class ReceiptPresenter::ItemInfo
       notes:,
       custom_receipt_note:,
       show_download_button:,
+      receipt_button_text:,
       license_key:,
       gift_attributes:,
       general_attributes:,
@@ -47,7 +48,9 @@ class ReceiptPresenter::ItemInfo
     end
 
     def custom_receipt_note
-      nil
+      return unless product.receipt_custom_text.present?
+
+      "#{product.receipt_custom_text}\n\n— Added by the creator"
     end
 
     def free_trial_purchase_note
@@ -90,6 +93,10 @@ class ReceiptPresenter::ItemInfo
       !purchase.is_preorder_authorization &&
       (purchase.url_redirect.present? || purchase.is_commission_completion_purchase?) &&
       purchase.link.native_type != Link::NATIVE_TYPE_COFFEE
+    end
+
+    def receipt_button_text
+      product.receipt_button_text.presence || "Get Content"
     end
 
     def license_key

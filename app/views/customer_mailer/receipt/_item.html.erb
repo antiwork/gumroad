@@ -20,6 +20,12 @@
     </p>
   <% end %>
 
+  <% if item_props[:custom_receipt_note].present? %>
+    <div style="margin: 16px 0; padding: 12px; background-color: #f9f9f9; border-left: 3px solid #ccc; font-style: italic;">
+      <%= simple_format(item_props[:custom_receipt_note]) %>
+    </div>
+  <% end %>
+
   <% if item_props[:license_key].present? %>
     <h4>License key</h4>
     <pre style="text-align: center; white-space: pre-wrap;">
@@ -30,7 +36,7 @@
   <% if item_props[:show_download_button] %>
     <% purchase = item_info.purchase %>
     <% url_redirect = purchase.is_commission_completion_purchase? ? purchase.commission.deposit_purchase.url_redirect : purchase.url_redirect %>
-    <%= render("shared/download_button", link: item_info.product, url_redirect: url_redirect) %>
+    <%= render("shared/download_button", link: item_info.product, url_redirect: url_redirect, button_text: item_props[:receipt_button_text]) %>
   <% end %>
 
   <%= render("customer_mailer/receipt/attributes", attributes: item_props[:gift_attributes]) %>

@@ -6,6 +6,7 @@ Parameters:
 - is_preview (optional, Boolean) - A boolean used to designate that the download button is being only used for
   a visual preview, the links generated should not be real (i.e. href is #)
 - url_redirect (optional, UrlRedirect object) - a url redirect object
+- button_text (optional, String) - Custom text for the download button. If not provided, defaults to view_content_button_text(link)
 
 Notes:
 
@@ -17,9 +18,10 @@ is true then the url_redirect is nil. If the url_redirect is not nil then is_pre
 question the use of try in this template. %>
 
 <% preview = !!(defined?(is_preview) && is_preview) %>
+<% custom_button_text = defined?(button_text) ? button_text : nil %>
 
 <% if !url_redirect&.is_rental? %>
-  <%= link_to view_content_button_text(link), preview ? "#" : url_redirect_download_page_url(url_redirect.token), class: "button primary" %>
+  <%= link_to custom_button_text || view_content_button_text(link), preview ? "#" : url_redirect_download_page_url(url_redirect.token), class: "button primary" %>
 <% elsif link.streamable? %>
   <%= link_to "Watch", preview ? "#" : url_redirect_stream_page_url(url_redirect.token), class: "button primary" %>
 <% end %>
