@@ -33,7 +33,7 @@ describe("Product Page - Shipping with offer codes", type: :system, js: true, sh
 
     visit "/l/#{@product.unique_permalink}/#{@offer_code.code}"
     add_to_cart(@product, offer_code: @offer_code)
-    check_out(@product, offer_code: @offer_code.code, should_verify_address: true) do
+    check_out(@product, should_verify_address: true) do
       expect(page).to have_text("Shipping rate US$20", normalize_ws: true)
     end
 
