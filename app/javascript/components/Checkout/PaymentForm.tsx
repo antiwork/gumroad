@@ -34,7 +34,6 @@ import { asyncVoid } from "$app/utils/promise";
 import { Button } from "$app/components/Button";
 import { CreditCardInput, StripeElementsProvider } from "$app/components/Checkout/CreditCardInput";
 import { CustomFields } from "$app/components/Checkout/CustomFields";
-import { GiftForm } from "$app/components/Checkout/GiftForm";
 import {
   addressFields,
   getErrors,
@@ -599,9 +598,6 @@ const CustomerDetails = ({ showCustomFields }: { showCustomFields: boolean }) =>
         </div>
       ) : null}
       {isTippingEnabled(state) ? <TipSelector /> : null}
-      {state.products.length === 1 && state.products[0]?.canGift && !state.products[0]?.payInInstallments ? (
-        <GiftForm isMembership={state.products[0]?.nativeType === "membership"} />
-      ) : null}
       {state.paymentMethod !== "paypal" && state.paymentMethod !== "stripePaymentRequest" ? (
         <div>
           <Button color="primary" onClick={() => dispatch({ type: "offer" })} disabled={isSubmitDisabled(state)}>
@@ -734,7 +730,7 @@ const TipSelector = () => {
 
   React.useEffect(() => {
     if (!showPercentageOptions && state.tip.type === "percentage")
-      dispatch({ type: "set-value", tip: { type: "fixed", amount: null } });
+      dispatch({ type: "set-value", tip: { type: "fixed", amount: 0 } });
   }, [showPercentageOptions]);
 
   const defaultOther = state.surcharges.type === "loaded" ? state.surcharges.result.subtotal * 0.3 : 5;
