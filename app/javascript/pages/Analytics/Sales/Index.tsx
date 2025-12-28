@@ -65,7 +65,7 @@ const formatData = (data: AnalyticsDataByReferral, selectedPermalinks: string[])
   return result;
 };
 
-export default function Sales() {
+const Sales = () => {
   const { analytics_props } = cast<{ analytics_props: AnalyticsProps }>(usePage().props);
   const { products: initialProducts, country_codes, state_names } = analytics_props;
 
@@ -192,4 +192,6 @@ export default function Sales() {
       )}
     </AnalyticsLayout>
   );
-}
+};
+
+export default Sales;

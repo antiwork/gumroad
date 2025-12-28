@@ -934,7 +934,6 @@ Rails.application.routes.draw do
           resources :product_posts, only: [:index]
           resources :existing_product_files, only: [:index]
         end
-        resources :utm_links, only: [:index, :new, :create, :edit, :update, :destroy]
         resources :product_public_files, only: [:create]
         resources :communities, only: [:index] do
           resources :chat_messages, only: [:index, :create, :update, :destroy], controller: "communities/chat_messages", as: "chat_messages"

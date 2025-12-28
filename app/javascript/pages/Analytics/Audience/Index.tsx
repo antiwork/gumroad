@@ -1,4 +1,5 @@
 import { Deferred, router, usePage } from "@inertiajs/react";
+import { lightFormat } from "date-fns";
 import * as React from "react";
 import { cast } from "ts-safe-cast";
 
@@ -15,16 +16,23 @@ import { Icon } from "$app/components/Icons";
 import { LoadingSpinner } from "$app/components/LoadingSpinner";
 import { Popover } from "$app/components/Popover";
 import Placeholder from "$app/components/ui/Placeholder";
+import { useOnChange } from "$app/components/useOnChange";
 import { WithTooltip } from "$app/components/WithTooltip";
 
 import placeholder from "$assets/images/placeholders/audience.png";
 
 export default function Audience() {
   const { total_follower_count, audience_data } = cast<AudienceIndexPageProps>(usePage().props);
-  const dateRange = useAnalyticsDateRange(() => {
-    router.reload({ only: ["audience_data"] });
-  });
+  const dateRange = useAnalyticsDateRange();
   const hasContent = total_follower_count > 0;
+
+  const startTime = lightFormat(dateRange.from, "yyyy-MM-dd");
+  const endTime = lightFormat(dateRange.to, "yyyy-MM-dd");
+
+  useOnChange(() => {
+    if (!hasContent) return;
+    router.reload({ only: ["audience_data"], data: { from: startTime, to: endTime } });
+  }, [hasContent, startTime, endTime]);
 
   return (
     <AnalyticsLayout

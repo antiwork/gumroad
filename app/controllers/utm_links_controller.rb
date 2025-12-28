@@ -2,12 +2,10 @@
 
 class UtmLinksController < Sellers::BaseController
   before_action :set_utm_link, only: [:edit, :update, :destroy]
-  before_action :authorize_utm_link, only: [:edit, :update, :destroy]
-  layout "inertia", only: [:index, :new, :edit]
+  before_action :authorize_utm_link
+  layout "inertia"
 
   def index
-    authorize UtmLink
-
     route_params = index_route_params_helper
 
     render inertia: "Analytics/UtmLinks/Index",
@@ -23,8 +21,6 @@ class UtmLinksController < Sellers::BaseController
   end
 
   def new
-    authorize UtmLink
-
     utm_link_presenter = UtmLinkPresenter.new(seller: current_seller)
 
     render inertia: "Analytics/UtmLinks/New", props: {
@@ -38,13 +34,11 @@ class UtmLinksController < Sellers::BaseController
   end
 
   def create
-    authorize UtmLink
-
     save_utm_link
   end
 
   def update
-    return head :not_found if @utm_link.deleted?
+    return redirect_to utm_links_dashboard_path, status: :see_other, alert: "Link not found!" if @utm_link.deleted?
 
     save_utm_link
   end
@@ -57,15 +51,7 @@ class UtmLinksController < Sellers::BaseController
 
   private
     def index_route_params_helper
-      permitted = params.permit(:query, :page, :key, :direction, ids: [])
-
-      {
-        direction: permitted[:direction],
-        ids: permitted[:ids],
-        key: permitted[:key],
-        page: permitted[:page],
-        query: permitted[:query],
-      }.compact
+      params.permit(:query, :page, :key, :direction, ids: []).to_h.compact
     end
 
     def fetch_utm_links_stats(ids)
@@ -82,7 +68,7 @@ class UtmLinksController < Sellers::BaseController
     end
 
     def authorize_utm_link
-      authorize @utm_link
+      authorize(@utm_link || UtmLink)
     end
 
     def utm_link_params

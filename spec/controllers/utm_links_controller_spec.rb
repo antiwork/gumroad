@@ -435,14 +435,16 @@ describe UtmLinksController, inertia: true do
       expect(response).to have_http_status(:not_found)
     end
 
-    it "returns an error if the UTM link is deleted" do
+    it "redirects to index page" do
       utm_link.mark_deleted!
 
       expect do
         patch :update, params: params
-      end.not_to change { utm_link.reload }
 
-      expect(response).to have_http_status(:not_found)
+        expect(response).to be_redirect
+        expect(response).to redirect_to(dashboard_utm_links_path)
+        expect(flash[:alert]).to eq("Link not found!")
+      end.not_to change { utm_link.reload }
     end
 
     it "returns an error for missing required param" do

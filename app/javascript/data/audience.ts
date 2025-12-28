@@ -15,7 +15,7 @@ export type AudienceDataByDate = {
 
 export type AudienceIndexPageProps = {
   total_follower_count: number;
-  audience_data?: AudienceDataByDate;
+  audience_data?: AudienceDataByDate | null;
 };
 
 export const sendSubscribersReport = async ({

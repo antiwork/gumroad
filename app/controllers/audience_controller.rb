@@ -14,7 +14,7 @@ class AudienceController < Sellers::BaseController
     total_follower_count = current_seller.audience_members.where(follower: true).count
 
     render inertia: "Analytics/Audience/Index", props: {
-      total_follower_count:,
+      total_follower_count: InertiaRails.always { total_follower_count },
       audience_data: InertiaRails.defer do
         if total_follower_count.zero?
           nil
@@ -43,14 +43,15 @@ class AudienceController < Sellers::BaseController
   protected
     def set_time_range
       begin
-        end_time = DateTime.parse(params[:to])
+        end_date = DateTime.parse(params[:to])
         start_date = DateTime.parse(params[:from])
+        end_date = start_date if end_date < start_date
       rescue StandardError
-        end_time = DateTime.current
-        start_date = end_time.ago(29.days)
+        end_date = DateTime.current
+        start_date = end_date.ago(29.days)
       end
       @start_date = start_date
-      @end_date = end_time
+      @end_date = end_date
     end
 
     def set_title
