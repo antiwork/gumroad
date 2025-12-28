@@ -94,7 +94,10 @@ class User::OmniauthCallbacksController < Devise::OmniauthCallbacksController
     if logged_in_user.blank?
       user = User.find_or_create_for_stripe_connect_account(auth)
 
-      if user.nil?
+      if user.nil? && Feature.inactive?(:stripe_signup_enabled)
+        flash[:alert] = "New signups with Stripe are currently disabled. Please sign up with email first, then connect your Stripe account."
+        return safe_redirect_to signup_path
+      elsif user.nil?
         flash[:alert] = "An account already exists with this email."
         return safe_redirect_to referer
       elsif user.is_team_member?

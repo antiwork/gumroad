@@ -11,6 +11,9 @@ module User::StripeConnect
                  .find { |ma| ma.is_a_stripe_connect_account? }&.user
 
       if user.nil?
+        # If stripe signup is disabled via feature flag, don't create new accounts
+        return nil if Feature.inactive?(:stripe_signup_enabled)
+
         ActiveRecord::Base.transaction do
           user = User.new
           user.provider = :stripe_connect
