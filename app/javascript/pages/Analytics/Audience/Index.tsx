@@ -1,10 +1,8 @@
-import { lightFormat } from "date-fns";
+import { Deferred, router, usePage } from "@inertiajs/react";
 import * as React from "react";
-import { createCast } from "ts-safe-cast";
+import { cast } from "ts-safe-cast";
 
-import { AudienceDataByDate, fetchAudienceDataByDate } from "$app/data/audience";
-import { AbortError } from "$app/utils/request";
-import { register } from "$app/utils/serverComponentUtil";
+import { AudienceIndexPageProps } from "$app/data/audience";
 
 import { AnalyticsLayout } from "$app/components/Analytics/AnalyticsLayout";
 import { useAnalyticsDateRange } from "$app/components/Analytics/useAnalyticsDateRange";
@@ -16,39 +14,20 @@ import { ExportSubscribersPopover } from "$app/components/Followers/ExportSubscr
 import { Icon } from "$app/components/Icons";
 import { LoadingSpinner } from "$app/components/LoadingSpinner";
 import { Popover } from "$app/components/Popover";
-import { showAlert } from "$app/components/server-components/Alert";
 import Placeholder from "$app/components/ui/Placeholder";
 import { WithTooltip } from "$app/components/WithTooltip";
 
 import placeholder from "$assets/images/placeholders/audience.png";
 
-const AudiencePage = ({ total_follower_count }: { total_follower_count: number }) => {
-  const dateRange = useAnalyticsDateRange();
-  const [data, setData] = React.useState<AudienceDataByDate | null>(null);
-  const startTime = lightFormat(dateRange.from, "yyyy-MM-dd");
-  const endTime = lightFormat(dateRange.to, "yyyy-MM-dd");
-
+export default function Audience() {
+  const { total_follower_count, audience_data } = cast<AudienceIndexPageProps>(usePage().props);
+  const onlyProps = ["audience_data", "flash"];
+  const dateRange = useAnalyticsDateRange({
+    onDateChange: () => {
+      router.reload({ only: onlyProps });
+    },
+  });
   const hasContent = total_follower_count > 0;
-
-  const activeRequest = React.useRef<AbortController | null>(null);
-  React.useEffect(() => {
-    const loadData = async () => {
-      if (!hasContent) return;
-
-      try {
-        if (activeRequest.current) activeRequest.current.abort();
-        setData(null);
-        const request = fetchAudienceDataByDate({ startTime, endTime });
-        activeRequest.current = request.abort;
-        setData(await request.response);
-        activeRequest.current = null;
-      } catch (e) {
-        if (e instanceof AbortError) return;
-        showAlert("Sorry, something went wrong. Please try again.", "error");
-      }
-    };
-    void loadData();
-  }, [startTime, endTime]);
 
   return (
     <AnalyticsLayout
@@ -75,15 +54,21 @@ const AudiencePage = ({ total_follower_count }: { total_follower_count: number }
     >
       {hasContent ? (
         <div className="space-y-8 p-4 md:p-8">
-          <AudienceQuickStats totalFollowers={total_follower_count} newFollowers={data?.new_followers ?? null} />
-          {data ? (
-            <AudienceChart data={data} />
-          ) : (
-            <div className="input">
-              <LoadingSpinner />
-              Loading charts...
-            </div>
-          )}
+          <AudienceQuickStats
+            totalFollowers={total_follower_count}
+            newFollowers={audience_data?.new_followers ?? null}
+          />
+          <Deferred
+            data={onlyProps}
+            fallback={
+              <div className="input">
+                <LoadingSpinner />
+                Loading charts...
+              </div>
+            }
+          >
+            {audience_data ? <AudienceChart data={audience_data} /> : null}
+          </Deferred>
         </div>
       ) : (
         <div className="p-4 md:p-8">
@@ -104,6 +89,4 @@ const AudiencePage = ({ total_follower_count }: { total_follower_count: number }
       )}
     </AnalyticsLayout>
   );
-};
-
-export default register({ component: AudiencePage, propParser: createCast() });
+}

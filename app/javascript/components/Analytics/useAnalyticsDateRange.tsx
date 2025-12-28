@@ -3,7 +3,7 @@ import * as React from "react";
 
 import { useOriginalLocation } from "$app/components/useOriginalLocation";
 
-export const useAnalyticsDateRange = () => {
+export const useAnalyticsDateRange = ({ onDateChange }: { onDateChange?: (from: Date, to: Date) => void } = {}) => {
   const location = useOriginalLocation();
   const url = new URL(location);
 
@@ -19,11 +19,16 @@ export const useAnalyticsDateRange = () => {
     const value = tryParseDateParam("to") ?? new Date();
     return value < from ? from : value;
   });
+  const isInitialMount = React.useRef(true);
 
   React.useEffect(() => {
     url.searchParams.set("from", lightFormat(from, "yyyy-MM-dd"));
     url.searchParams.set("to", lightFormat(to, "yyyy-MM-dd"));
     history.pushState(null, "", url);
+    if (!isInitialMount.current) {
+      onDateChange?.(from, to);
+    }
+    isInitialMount.current = false;
   }, [from.getTime(), to.getTime()]);
 
   return { from, to, setFrom, setTo };
