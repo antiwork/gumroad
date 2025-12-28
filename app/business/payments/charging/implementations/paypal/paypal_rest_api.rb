@@ -123,6 +123,19 @@ class PaypalRestApi
     execute_request
   end
 
+  # Dispute API methods i got them from https://developer.paypal.com/docs/api/customer-disputes/v1/
+  def get_dispute(dispute_id:)
+    @request = new_request(path: "/v1/customer/disputes/#{dispute_id}", verb: "GET")
+    execute_request
+  end
+
+  def provide_evidence(dispute_id:, evidences:)
+    @request = new_request(path: "/v1/customer/disputes/#{dispute_id}/provide-evidence", verb: "POST")
+    @request.headers["PayPal-Request-Id"] = "provide-evidence-#{dispute_id}-#{timestamp}"
+    @request.body = { evidences: evidences }
+    execute_request
+  end
+
   def successful_response?(api_response)
     (200...300).include?(api_response.status_code)
   end

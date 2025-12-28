@@ -582,6 +582,34 @@ class PaypalChargeProcessor
     "https://#{sub_domain}.paypal.com/us/cgi-bin/webscr?cmd=_history-details-from-hub&id=#{charge_id}"
   end
 
+  # Submit evidence to fight a PayPal dispute
+  # This mirrors the Stripe implementation in stripe_charge_processor.rb
+  def fight_chargeback(paypal_capture_id, dispute_evidence, merchant_account: nil)
+    dispute = dispute_evidence.dispute
+    paypal_dispute_id = dispute.charge_processor_dispute_id
+
+    if paypal_dispute_id.blank?
+      Rails.logger.warn("PayPal fight_chargeback: No dispute ID found for dispute #{dispute.id}")
+      return
+    end
+
+    # Build evidence array for PayPal API
+    evidences = build_paypal_evidences(dispute_evidence)
+
+    # Submit evidence to PayPal
+    paypal_rest_api = PaypalRestApi.new
+    api_response = paypal_rest_api.provide_evidence(dispute_id: paypal_dispute_id, evidences: evidences)
+
+    self.class.log_paypal_api_response("Provide Dispute Evidence", paypal_dispute_id, api_response)
+
+    unless paypal_rest_api.successful_response?(api_response)
+      error_message = api_response.result&.message || api_response.result&.details&.first&.description || "Unknown PayPal error"
+      raise ChargeProcessorInvalidRequestError, "PayPal dispute evidence submission failed: #{error_message}"
+    end
+
+    Rails.logger.info("PayPal fight_chargeback: Successfully submitted evidence for dispute #{paypal_dispute_id}")
+  end
+
   private_class_method
   def self.determine_paypal_event_type(paypal_event)
     case paypal_event["payment_status"]
@@ -638,6 +666,135 @@ class PaypalChargeProcessor
       PaypalCharge.new(paypal_transaction_id: capture_id,
                        order_api_used: true,
                        payment_details: order_details)
+    end
+
+    # Constants for PayPal evidence
+    PAYPAL_EVIDENCE_NOTES_MAX_LENGTH = 10000 # PayPal's character limit for notes field
+    PAYPAL_CARRIER_NAMES = %w[UPS USPS FEDEX DHL_EXPRESS DHL_GLOBAL_MAIL DHL_ECOMMERCE_US DHL_ECOMMERCE_UK
+                               LASERSHIP ROYAL_MAIL CANADA_POST PARCELFORCE YODEL CITY_LINK DPD TNT OTHER].freeze
+
+    # Build evidence payload for PayPal Disputes API
+    # Follows PayPal's evidence structure: https://developer.paypal.com/docs/api/customer-disputes/v1/#definition-evidence
+    def build_paypal_evidences(dispute_evidence)
+      evidences = []
+
+      # If physical product with tracking info, use PROOF_OF_FULFILLMENT
+      if dispute_evidence.shipping_tracking_number.present?
+        carrier_name = normalize_carrier_name(dispute_evidence.shipping_carrier)
+
+        evidence = {
+          evidence_type: "PROOF_OF_FULFILLMENT",
+          evidence_info: {
+            tracking_info: [{
+              carrier_name: carrier_name,
+              tracking_number: dispute_evidence.shipping_tracking_number
+            }]
+          },
+          notes: build_evidence_notes(dispute_evidence)
+        }
+
+        evidences << evidence
+      else
+        # Digital product or no tracking - use OTHER evidence type with detailed notes
+        evidences << {
+          evidence_type: "OTHER",
+          notes: build_evidence_notes(dispute_evidence)
+        }
+      end
+
+      evidences
+    end
+
+    # Normalize carrier name to PayPal's expected format
+    def normalize_carrier_name(carrier)
+      return "OTHER" if carrier.blank?
+
+      normalized = carrier.to_s.upcase.gsub(/[^A-Z0-9]/, "_")
+      PAYPAL_CARRIER_NAMES.include?(normalized) ? normalized : "OTHER"
+    end
+
+    # Build comprehensive evidence notes from DisputeEvidence fields
+    # This mirrors the data we send to Stripe but formatted for PayPal's notes field
+    def build_evidence_notes(dispute_evidence)
+      notes = []
+
+      # Customer information
+      notes << "=== CUSTOMER INFORMATION ==="
+      notes << "Customer Email: #{dispute_evidence.customer_email}" if dispute_evidence.customer_email.present?
+      notes << "Customer Name: #{dispute_evidence.customer_name}" if dispute_evidence.customer_name.present?
+      notes << "Customer IP: #{dispute_evidence.customer_purchase_ip}" if dispute_evidence.customer_purchase_ip.present?
+      notes << "Purchase Date: #{dispute_evidence.purchased_at&.to_fs(:formatted_date_full_month)}"
+
+      # Address information
+      if dispute_evidence.billing_address.present?
+        notes << ""
+        notes << "=== BILLING ADDRESS ==="
+        notes << dispute_evidence.billing_address
+      end
+
+      if dispute_evidence.shipping_address.present?
+        notes << ""
+        notes << "=== SHIPPING ADDRESS ==="
+        notes << dispute_evidence.shipping_address
+      end
+
+      # Shipping information (for physical products)
+      if dispute_evidence.shipping_carrier.present? || dispute_evidence.shipping_tracking_number.present?
+        notes << ""
+        notes << "=== SHIPPING DETAILS ==="
+        notes << "Carrier: #{dispute_evidence.shipping_carrier}" if dispute_evidence.shipping_carrier.present?
+        notes << "Tracking Number: #{dispute_evidence.shipping_tracking_number}" if dispute_evidence.shipping_tracking_number.present?
+        notes << "Ship Date: #{dispute_evidence.shipped_at&.to_fs(:formatted_date_full_month)}" if dispute_evidence.shipped_at.present?
+      end
+
+      # Product information
+      if dispute_evidence.product_description.present?
+        notes << ""
+        notes << "=== PRODUCT DESCRIPTION ==="
+        notes << dispute_evidence.product_description
+      end
+
+      # Access activity (for digital products)
+      if dispute_evidence.access_activity_log.present?
+        notes << ""
+        notes << "=== ACCESS ACTIVITY LOG ==="
+        notes << dispute_evidence.access_activity_log
+      end
+
+      # Refund policy disclosure
+      if dispute_evidence.refund_policy_disclosure.present?
+        notes << ""
+        notes << "=== REFUND POLICY DISCLOSURE ==="
+        notes << dispute_evidence.refund_policy_disclosure
+      end
+
+      # Merchant-provided evidence fields
+      if dispute_evidence.reason_for_winning.present?
+        notes << ""
+        notes << "=== WHY MERCHANT SHOULD WIN ==="
+        notes << dispute_evidence.reason_for_winning
+      end
+
+      if dispute_evidence.cancellation_rebuttal.present?
+        notes << ""
+        notes << "=== CANCELLATION REBUTTAL ==="
+        notes << dispute_evidence.cancellation_rebuttal
+      end
+
+      if dispute_evidence.refund_refusal_explanation.present?
+        notes << ""
+        notes << "=== REFUND REFUSAL EXPLANATION ==="
+        notes << dispute_evidence.refund_refusal_explanation
+      end
+
+      # Additional uncategorized evidence
+      if dispute_evidence.uncategorized_text.present?
+        notes << ""
+        notes << "=== ADDITIONAL EVIDENCE ==="
+        notes << dispute_evidence.uncategorized_text
+      end
+
+      notes.compact.join("\n").truncate(PAYPAL_EVIDENCE_NOTES_MAX_LENGTH)
     end
 
     # Types of error which could be raised while refunding using the Orders API:

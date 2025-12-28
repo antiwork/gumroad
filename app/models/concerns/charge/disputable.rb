@@ -225,7 +225,9 @@ module Charge::Disputable
   end
 
   def eligible_for_dispute_evidence?
-    return false unless charge_processor == StripeChargeProcessor.charge_processor_id
+    # Enable automatic dispute evidence for Stripe and PayPal charges
+    eligible_processors = [StripeChargeProcessor.charge_processor_id, PaypalChargeProcessor.charge_processor_id]
+    return false unless eligible_processors.include?(charge_processor)
     return false if merchant_account&.is_a_stripe_connect_account?
     true
   end
