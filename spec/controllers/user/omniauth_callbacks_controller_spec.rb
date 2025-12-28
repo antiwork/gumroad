@@ -129,6 +129,30 @@ describe User::OmniauthCallbacksController do
       end
     end
 
+    context "when signup via Stripe is disabled" do
+      before do
+        Feature.activate(:disable_user_signup_via_stripe)
+        request.env["omniauth.params"] = { "referer" => signup_path }
+      end
+
+      it "does not create a new user and shows error message" do
+        expect { post :stripe_connect }.not_to change { User.count }
+
+        expect(flash[:alert]).to eq "Signup via Stripe is disabled."
+        expect(response).to redirect_to signup_url
+      end
+
+      it "allows existing users to log in" do
+        creator = create(:user)
+        create(:merchant_account_stripe_connect, user: creator, charge_processor_merchant_id: stripe_uid)
+
+        post :stripe_connect
+
+        expect(flash[:alert]).to be_nil
+        expect(response).to redirect_to safe_redirect_path(two_factor_authentication_path(next: oauth_completions_stripe_path))
+      end
+    end
+
     context "when referer is signup" do
       let(:referer) { "signup" }
       before { request.env["omniauth.params"] = { "referer" => signup_path } }

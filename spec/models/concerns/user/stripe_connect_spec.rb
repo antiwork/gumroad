@@ -68,6 +68,27 @@ describe User::StripeConnect do
       expect(purchase1.reload.purchaser_id).to eq(user.id)
       expect(purchase2.reload.purchaser_id).to eq(user.id)
     end
+
+    context "when signup via Stripe is disabled" do
+      before do
+        Feature.activate(:disable_user_signup_via_stripe)
+      end
+
+      it "returns SIGNUP_DISABLED when no existing user is found" do
+        expect do
+          expect do
+            expect(User.find_or_create_for_stripe_connect_account(@data)).to eq(User::StripeConnect::SIGNUP_DISABLED)
+          end.not_to change { User.count }
+        end.not_to change { UserComplianceInfo.count }
+      end
+
+      it "returns the existing user if one exists" do
+        creator = create(:user)
+        create(:merchant_account_stripe_connect, user: creator, charge_processor_merchant_id: @data["uid"])
+
+        expect(User.find_or_create_for_stripe_connect_account(@data)).to eq(creator)
+      end
+    end
   end
 
   describe "#has_brazilian_stripe_connect_account?" do

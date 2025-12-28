@@ -3,6 +3,8 @@
 module User::StripeConnect
   extend ActiveSupport::Concern
 
+  SIGNUP_DISABLED = :signup_disabled
+
   class_methods do
     def find_or_create_for_stripe_connect_account(data)
       return nil if data.blank?
@@ -10,25 +12,29 @@ module User::StripeConnect
       user = MerchantAccount.where(charge_processor_merchant_id: data["uid"]).alive
                  .find { |ma| ma.is_a_stripe_connect_account? }&.user
 
-      if user.nil?
-        ActiveRecord::Base.transaction do
-          user = User.new
-          user.provider = :stripe_connect
-          email = data["info"]["email"]
-          user.email = email if EmailFormatValidator.valid?(email)
-          user.name = data["info"]["name"]
-          user.password = Devise.friendly_token[0, 20]
-          user.skip_confirmation!
-          user.save!
-          user.user_compliance_infos.build.tap do |new_user_compliance_info|
-            new_user_compliance_info.country = Compliance::Countries.mapping[data["extra"]["extra_info"]["country"]]
-            new_user_compliance_info.json_data = {}
-            new_user_compliance_info.save!
-          end
-          if user.email.present?
-            Purchase.where(email: user.email, purchaser_id: nil).each do |past_purchase|
-              past_purchase.attach_to_user_and_card(user, nil, nil)
-            end
+      # If user exists, return them (allow login)
+      return user if user.present?
+
+      # If no existing user and signup is disabled, return special value
+      return SIGNUP_DISABLED if Feature.active?(:disable_user_signup_via_stripe)
+
+      ActiveRecord::Base.transaction do
+        user = User.new
+        user.provider = :stripe_connect
+        email = data["info"]["email"]
+        user.email = email if EmailFormatValidator.valid?(email)
+        user.name = data["info"]["name"]
+        user.password = Devise.friendly_token[0, 20]
+        user.skip_confirmation!
+        user.save!
+        user.user_compliance_infos.build.tap do |new_user_compliance_info|
+          new_user_compliance_info.country = Compliance::Countries.mapping[data["extra"]["extra_info"]["country"]]
+          new_user_compliance_info.json_data = {}
+          new_user_compliance_info.save!
+        end
+        if user.email.present?
+          Purchase.where(email: user.email, purchaser_id: nil).each do |past_purchase|
+            past_purchase.attach_to_user_and_card(user, nil, nil)
           end
         end
       end
