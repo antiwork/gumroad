@@ -105,6 +105,13 @@ class User::OmniauthCallbacksController < Devise::OmniauthCallbacksController
         return safe_redirect_to referer
       end
 
+      # If this is a new user and Stripe signup is disabled, block the request
+      if user.previously_new_record? && Feature.active?(:disable_signup_with_stripe)
+        user.destroy!
+        flash[:alert] = "Sign up with Stripe is currently disabled. Please sign up with email and password."
+        return safe_redirect_to signup_path
+      end
+
       session[:stripe_connect_data] = {
         "auth_uid" => auth.uid,
         "referer" => referer,
