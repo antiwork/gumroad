@@ -649,7 +649,6 @@ describe "Products Page Scenario", type: :system, js: true do
           click_on "Archive"
         end
       end
-      wait_for_ajax
 
       expect(page).to have_tab_button("Archived")
       expect(page).not_to have_content(membership.name)
@@ -659,8 +658,9 @@ describe "Products Page Scenario", type: :system, js: true do
       expect(page).to have_content(membership.name)
     end
 
-    it "archives a product" do
+    it "archives and unpublishes a published product" do
       product = create(:product, user: seller)
+      expect(product.purchase_disabled_at).to be_nil
 
       visit(products_path)
 
@@ -671,14 +671,36 @@ describe "Products Page Scenario", type: :system, js: true do
           click_on "Archive"
         end
       end
-      wait_for_ajax
 
+      expect(page).to have_alert(text: "Product was archived and unpublished successfully")
       expect(page).to have_tab_button("Archived")
       expect(page).not_to have_content(product.name)
 
+      product.reload
+      expect(product.archived?).to be(true)
+      expect(product.purchase_disabled_at).to be_present
+
       find(:tab_button, "Archived").click
 
-      expect(page).to have_content(product.name)
+      within find_product_row product do
+        expect(page).to have_content(product.name)
+        expect(page).to have_text("Unpublished")
+      end
+    end
+
+    it "archives an unpublished product" do
+      product = create(:product, :unpublished, user: seller)
+
+      visit(products_path)
+
+      within find_product_row product do
+        select_disclosure "Open product action menu" do
+          click_on "Archive"
+        end
+      end
+
+      expect(page).to have_alert(text: "Product was archived successfully")
+      expect(product.reload.archived?).to be(true)
     end
   end
 end

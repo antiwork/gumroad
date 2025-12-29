@@ -124,125 +124,37 @@ describe("Product checkout with tipping", type: :system, js: true) do
     end
   end
 
-  context "when the cart is free," do
+  context "when the cart is free" do
     let(:seller2) { create(:user, :eligible_for_service_products, tipping_enabled: true, name: "Seller 2", username: "seller2", email: "seller2@example.com", payment_address: "seller2@example.com") }
-    let(:free_product1) { create(:product, name: "Free Product 1", user: seller, price_cents: 0) }
-    let(:free_product2) { create(:product, name: "Free Product 2", user: seller, price_cents: 0) }
-    let(:free_product3) { create(:product, name: "Free Product 3", user: seller2, price_cents: 0) }
+    let(:free_product1) { create(:product, name: "Free Product", user: seller, price_cents: 0) }
+    let(:free_product2) { create(:product, name: "Free Product 2", user: seller2, price_cents: 0) }
 
-    it "only allows the buyer to tip a fixed amount" do
-      visit free_product2.long_url
-      add_to_cart(free_product2, pwyw_price: 0)
+    it "does not show tip selector and allows checkout without tip" do
       visit free_product1.long_url
       add_to_cart(free_product1, pwyw_price: 0)
+      visit free_product2.long_url
+      add_to_cart(free_product2, pwyw_price: 0)
 
+      expect(page).not_to have_text("Add a tip")
       expect(page).not_to have_radio_button("0%")
       expect(page).not_to have_radio_button("10%")
       expect(page).not_to have_radio_button("20%")
       expect(page).not_to have_radio_button("Other")
+      expect(page).not_to have_field("Tip")
 
-      fill_in "Tip", with: 5
+      check_out(free_product1, is_free: true)
 
-      expect(page).not_to have_radio_button("0%")
-      expect(page).not_to have_radio_button("10%")
-      expect(page).not_to have_radio_button("20%")
-      expect(page).not_to have_radio_button("Other")
+      purchase = Purchase.last
+      expect(purchase).to be_successful
+      expect(purchase.link).to eq(free_product1)
+      expect(purchase.price_cents).to eq(0)
+      expect(purchase.tip).to be_nil
 
-      fill_checkout_form(free_product2)
-
-      expect(page).to have_text("Subtotal US$0", normalize_ws: true)
-      expect(page).to have_text("Tip US$5", normalize_ws: true)
-      expect(page).to have_text("Total US$5", normalize_ws: true)
-      click_on "Pay"
-
-      expect(page).to have_alert(text: "Your purchase was successful! We sent a receipt to test@gumroad.com.")
-
-      purchase_free_product2 = Purchase.last
-      expect(purchase_free_product2).to be_successful
-      expect(purchase_free_product2.link).to eq(free_product2)
-      expect(purchase_free_product2.price_cents).to eq(0)
-      expect(purchase_free_product2.tip).to be_nil
-
-      purchase_free_product1 = Purchase.second_to_last
-      expect(purchase_free_product1).to be_successful
-      expect(purchase_free_product1.link).to eq(free_product1)
-      expect(purchase_free_product1.price_cents).to eq(500)
-      expect(purchase_free_product1.tip.value_cents).to eq(500)
-    end
-
-    context "for single creator" do
-      it "applies full tip to first product when tip meets minimum" do
-        visit free_product2.long_url
-        add_to_cart(free_product2, pwyw_price: 0)
-        visit free_product1.long_url
-        add_to_cart(free_product1, pwyw_price: 0)
-
-        fill_in "Tip", with: 0.99
-        fill_checkout_form(free_product1)
-        expect(page).to have_text("Total US$0.99", normalize_ws: true)
-        click_on "Pay"
-
-        expect(page).to have_alert(text: "Your purchase was successful!")
-
-        purchase1 = Purchase.second_to_last
-        purchase2 = Purchase.last
-
-        expect(purchase1.tip.value_cents).to eq(99)
-        expect(purchase1.price_cents).to eq(99)
-
-        expect(purchase2.tip).to be_nil
-        expect(purchase2.price_cents).to eq(0)
-      end
-
-      it "shows backend validation error when tip below minimum" do
-        visit free_product1.long_url
-        add_to_cart(free_product1, pwyw_price: 0)
-
-        fill_in "Tip", with: 0.5
-        fill_checkout_form(free_product1)
-        expect(page).to have_text("Total US$0.5", normalize_ws: true)
-        click_on "Pay"
-
-        expect(page).to have_text("The amount must be at least $0.99.")
-      end
-    end
-
-    context "for multiple creators" do
-      it "distributes tip per creator to first product from each when tip meets minimum" do
-        visit free_product3.long_url
-        add_to_cart(free_product3, pwyw_price: 0)
-        visit free_product1.long_url
-        add_to_cart(free_product1, pwyw_price: 0)
-
-        fill_in "Tip", with: 1.98
-        fill_checkout_form(free_product1)
-        expect(page).to have_text("Total US$1.98", normalize_ws: true)
-        click_on "Pay"
-
-        expect(page).to have_alert(text: "Your purchase was successful!")
-
-        purchase1 = Purchase.second_to_last
-        purchase3 = Purchase.last
-
-        expect(purchase1.tip.value_cents).to eq(99)
-        expect(purchase1.price_cents).to eq(99)
-        expect(purchase3.tip.value_cents).to eq(99)
-        expect(purchase3.price_cents).to eq(99)
-      end
-
-      it "shows backend validation error with per-creator minimum when tip below minimum" do
-        visit free_product3.long_url
-        add_to_cart(free_product3, pwyw_price: 0)
-        visit free_product1.long_url
-        add_to_cart(free_product1, pwyw_price: 0)
-
-        fill_in "Tip", with: 1.5
-        fill_checkout_form(free_product1)
-        expect(page).to have_text("Total US$1.5", normalize_ws: true)
-        click_on "Pay"
-
-        expect(page).to have_text("The amount must be at least $0.99.", count: 2)
-      end
+      purchase2 = Purchase.second_to_last
+      expect(purchase2).to be_successful
+      expect(purchase2.link).to eq(free_product2)
+      expect(purchase2.price_cents).to eq(0)
+      expect(purchase2.tip).to be_nil
     end
   end
 
