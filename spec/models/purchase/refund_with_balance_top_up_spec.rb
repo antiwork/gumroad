@@ -9,13 +9,12 @@ describe "Refund with balance top-up", :vcr, type: :model do
   let(:credit_card) { create(:credit_card) }
   let(:purchase) do
     create(:purchase,
-           :successful,
-           :with_charge,
            link: product,
            seller:,
            purchaser: buyer,
            price_cents: 2000,
-           total_transaction_cents: 2000)
+           total_transaction_cents: 2000,
+           succeeded_at: 1.day.ago)
   end
 
   before do
@@ -26,7 +25,7 @@ describe "Refund with balance top-up", :vcr, type: :model do
   context "when seller has no refund funding credit card" do
     context "when balance is insufficient" do
       it "fails with insufficient balance error" do
-        result = purchase.refund_and_save!
+        result = purchase.refund_and_save!(nil)
 
         expect(result).to be false
         expect(purchase.errors[:base]).to include("Your balance is insufficient to process this refund.")
@@ -42,7 +41,7 @@ describe "Refund with balance top-up", :vcr, type: :model do
       end
 
       it "processes the refund successfully" do
-        expect(purchase.refund_and_save!).to be true
+        expect(purchase.refund_and_save!(nil)).to be true
       end
     end
   end
@@ -68,7 +67,7 @@ describe "Refund with balance top-up", :vcr, type: :model do
 
       it "charges the credit card for the shortfall and processes refund" do
         expect {
-          purchase.refund_and_save!
+          purchase.refund_and_save!(nil)
         }.to change(BalanceTopUp, :count).by(1)
 
         balance_top_up = BalanceTopUp.last
@@ -78,7 +77,7 @@ describe "Refund with balance top-up", :vcr, type: :model do
 
       it "creates a credit for the seller" do
         expect {
-          purchase.refund_and_save!
+          purchase.refund_and_save!(nil)
         }.to change(Credit, :count)
       end
     end
@@ -91,7 +90,7 @@ describe "Refund with balance top-up", :vcr, type: :model do
       end
 
       it "fails the refund with card error" do
-        result = purchase.refund_and_save!
+        result = purchase.refund_and_save!(nil)
 
         expect(result).to be false
         expect(purchase.errors[:base].first).to include("Card declined")
@@ -100,7 +99,7 @@ describe "Refund with balance top-up", :vcr, type: :model do
       it "does not process the refund" do
         expect(ChargeProcessor).not_to receive(:refund!)
 
-        purchase.refund_and_save!
+        purchase.refund_and_save!(nil)
       end
     end
   end

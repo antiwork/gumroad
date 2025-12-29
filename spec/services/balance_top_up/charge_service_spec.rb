@@ -133,7 +133,8 @@ describe BalanceTopUp::ChargeService, :vcr do
     end
 
     context "when a purchase is associated" do
-      let(:purchase) { create(:purchase, seller: user) }
+      let(:product) { create(:product, user:) }
+      let(:purchase) { create(:purchase, seller: user, link: product) }
 
       before do
         allow(Stripe::PaymentIntent).to receive(:create).and_return(
