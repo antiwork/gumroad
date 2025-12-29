@@ -2,9 +2,9 @@
 
 require "spec_helper"
 
-describe BalanceTopUp::ChargeService do
+describe BalanceTopUp::ChargeService, :vcr do
   let(:user) { create(:user) }
-  let(:credit_card) { create(:credit_card, :stripe) }
+  let(:credit_card) { create(:credit_card) }
 
   before do
     user.update!(refund_funding_credit_card: credit_card)

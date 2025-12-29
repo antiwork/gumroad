@@ -2,11 +2,11 @@
 
 require "spec_helper"
 
-describe "Refund with balance top-up", type: :model do
+describe "Refund with balance top-up", :vcr, type: :model do
   let(:seller) { create(:user) }
   let(:buyer) { create(:user) }
   let(:product) { create(:product, user: seller) }
-  let(:credit_card) { create(:credit_card, :stripe) }
+  let(:credit_card) { create(:credit_card) }
   let(:purchase) do
     create(:purchase,
            :successful,
