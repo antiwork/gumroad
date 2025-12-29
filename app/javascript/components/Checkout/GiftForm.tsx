@@ -3,7 +3,6 @@ import * as React from "react";
 
 import { Button } from "$app/components/Button";
 import { useState, getErrors } from "$app/components/Checkout/payment";
-import { Icon } from "$app/components/Icons";
 import { Modal } from "$app/components/Modal";
 import { Alert } from "$app/components/ui/Alert";
 
@@ -17,12 +16,8 @@ export const GiftForm = ({ isMembership }: { isMembership: boolean }) => {
   const hasError = getErrors(state).has("gift");
 
   return (
-    <div className="flex flex-col">
-      <label className="flex w-full items-center justify-between">
-        <div className="flex items-center">
-          <Icon name="gift-fill" className="mr-2" />
-          <h4>Give as a gift?</h4>
-        </div>
+    <div className="flex flex-col gap-4">
+      <label className="flex w-full items-center gap-4">
         <input
           type="checkbox"
           role="switch"
@@ -36,6 +31,7 @@ export const GiftForm = ({ isMembership }: { isMembership: boolean }) => {
             }
           }}
         />
+        <h4>Give as a gift?</h4>
       </label>
 
       {gift ? (

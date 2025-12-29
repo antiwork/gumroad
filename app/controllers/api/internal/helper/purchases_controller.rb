@@ -500,21 +500,17 @@ class Api::Internal::Helper::PurchasesController < Api::Internal::Helper::BaseCo
     return render json: { success: false, message: "No purchases found for email: #{from_email}" }, status: :not_found if purchases.empty?
 
     target_user = User.find_by(email: to_email)
+    reassigned_purchase_ids = []
 
-    count = 0
     purchases.each do |purchase|
       purchase.email = to_email
 
       if purchase.subscription.present? && !purchase.is_original_subscription_purchase? && !purchases.include?(purchase.original_purchase)
         purchase.original_purchase.update(email: to_email)
-        count += 1 if purchase.original_purchase.saved_changes?
+        reassigned_purchase_ids << purchase.original_purchase.id if purchase.original_purchase.saved_changes?
       end
 
-      if target_user && purchase.purchaser_id.present?
-        purchase.purchaser_id = target_user.id
-      else
-        purchase.purchaser_id = nil
-      end
+      purchase.purchaser_id = target_user&.id
 
       if purchase.is_original_subscription_purchase? && purchase.subscription.present?
         if target_user
@@ -526,13 +522,20 @@ class Api::Internal::Helper::PurchasesController < Api::Internal::Helper::BaseCo
         end
       end
 
-      count += 1 if purchase.save
+      if purchase.save
+        reassigned_purchase_ids << purchase.id
+      end
+    end
+
+    if reassigned_purchase_ids.any?
+      CustomerMailer.grouped_receipt(reassigned_purchase_ids).deliver_later(queue: "critical")
     end
 
     render json: {
       success: true,
-      message: "Successfully reassigned #{count} purchases from #{from_email} to #{to_email}",
-      count:
+      message: "Successfully reassigned #{reassigned_purchase_ids.size} purchases from #{from_email} to #{to_email}. Receipt sent to #{to_email}.",
+      count: reassigned_purchase_ids.size,
+      reassigned_purchase_ids: reassigned_purchase_ids
     }
   end
 
