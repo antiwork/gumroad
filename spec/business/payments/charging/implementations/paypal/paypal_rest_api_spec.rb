@@ -396,4 +396,51 @@ describe PaypalRestApi, :vcr do
       end
     end
   end
+
+  describe "#get_dispute" do
+    let(:api_object) { described_class.new }
+    let(:dispute_id) { "PP-D-12345" }
+
+    it "makes a GET request to the disputes endpoint" do
+      expect(api_object).to receive(:execute_request)
+      expect(api_object).to receive(:new_request).with(
+        path: "/v1/customer/disputes/#{dispute_id}",
+        verb: "GET"
+      ).and_call_original
+
+      api_object.get_dispute(dispute_id: dispute_id)
+    end
+  end
+
+  describe "#provide_evidence" do
+    let(:api_object) { described_class.new }
+    let(:dispute_id) { "PP-D-12345" }
+    let(:evidences) do
+      [{ evidence_type: "PROOF_OF_FULFILLMENT", notes: "Package delivered" }]
+    end
+
+    it "makes a POST request to provide-evidence endpoint" do
+      expect(api_object).to receive(:execute_request)
+
+      api_object.provide_evidence(dispute_id: dispute_id, evidences: evidences)
+    end
+
+    it "includes evidences in the request body" do
+      allow(api_object).to receive(:execute_request)
+
+      api_object.provide_evidence(dispute_id: dispute_id, evidences: evidences)
+
+      request = api_object.instance_variable_get(:@request)
+      expect(request.body).to eq({ evidences: evidences })
+    end
+
+    it "sets the correct path" do
+      allow(api_object).to receive(:execute_request)
+
+      api_object.provide_evidence(dispute_id: dispute_id, evidences: evidences)
+
+      request = api_object.instance_variable_get(:@request)
+      expect(request.path).to eq("/v1/customer/disputes/#{dispute_id}/provide-evidence")
+    end
+  end
 end

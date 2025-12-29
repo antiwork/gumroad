@@ -577,6 +577,195 @@ class PaypalChargeProcessor
     HolderOfFunds::GUMROAD
   end
 
+  def fight_chargeback(paypal_capture_id, dispute_evidence, merchant_account: nil)
+    dispute = dispute_evidence.dispute
+    paypal_dispute_id = dispute.charge_processor_dispute_id
+
+    return if paypal_dispute_id.blank?
+
+    paypal_rest_api = PaypalRestApi.new
+    evidences = build_paypal_evidences(dispute_evidence, dispute)
+
+    api_response = paypal_rest_api.provide_evidence(
+      dispute_id: paypal_dispute_id,
+      evidences: evidences
+    )
+
+    PaypalChargeProcessor.log_paypal_api_response("Provide Dispute Evidence", paypal_dispute_id, api_response)
+
+    unless paypal_rest_api.successful_response?(api_response)
+      error_message = PaypalChargeProcessor.build_error_message(
+        "Failed to submit dispute evidence for #{paypal_dispute_id}",
+        api_response.result&.message || api_response.result.to_s
+      )
+      raise ChargeProcessorInvalidRequestError, error_message
+    end
+
+    api_response
+  end
+
+  EVIDENCE_TYPE_MAPPING = {
+    Dispute::REASON_PRODUCT_NOT_RECEIVED => "PROOF_OF_FULFILLMENT",
+    Dispute::REASON_PRODUCT_UNACCEPTABLE => "PROOF_OF_FULFILLMENT",
+    Dispute::REASON_CREDIT_NOT_PROCESSED => "PROOF_OF_REFUND",
+    Dispute::REASON_SUBSCRIPTION_CANCELED => "PROOF_OF_FULFILLMENT",
+    Dispute::REASON_DUPLICATE => "OTHER",
+    Dispute::REASON_FRAUDULENT => "OTHER",
+    Dispute::REASON_UNRECOGNIZED => "OTHER",
+    Dispute::REASON_GENERAL => "OTHER"
+  }.freeze
+
+  PAYPAL_CARRIER_MAPPING = {
+    "ups" => "UPS",
+    "usps" => "USPS",
+    "fedex" => "FEDEX",
+    "dhl" => "DHL",
+    "dhl_express" => "DHL",
+    "royal_mail" => "ROYAL_MAIL",
+    "canada_post" => "CANADA_POST",
+    "australia_post" => "AUSTRALIA_POST"
+  }.freeze
+
+  def build_paypal_evidences(dispute_evidence, dispute)
+    evidences = []
+
+    primary_evidence = build_primary_evidence(dispute_evidence, dispute)
+    evidences << primary_evidence if primary_evidence
+
+    supporting_notes = build_comprehensive_notes(dispute_evidence)
+    if supporting_notes.present?
+      evidences << { evidence_type: "OTHER", notes: supporting_notes.truncate(2000) }
+    end
+
+    evidences
+  end
+
+  def build_primary_evidence(dispute_evidence, dispute)
+    evidence_type = EVIDENCE_TYPE_MAPPING[dispute.reason] || "OTHER"
+
+    case evidence_type
+    when "PROOF_OF_FULFILLMENT"
+      build_fulfillment_evidence(dispute_evidence)
+    when "PROOF_OF_REFUND"
+      build_refund_evidence(dispute_evidence)
+    else
+      build_general_evidence(dispute_evidence)
+    end
+  end
+
+  def build_fulfillment_evidence(dispute_evidence)
+    evidence = { evidence_type: "PROOF_OF_FULFILLMENT" }
+
+    if dispute_evidence.shipping_tracking_number.present?
+      carrier = normalize_carrier_name(dispute_evidence.shipping_carrier)
+      evidence[:evidence_info] = {
+        tracking_info: [{
+          carrier_name: carrier,
+          carrier_name_other: carrier == "OTHER" ? dispute_evidence.shipping_carrier : nil,
+          tracking_number: dispute_evidence.shipping_tracking_number
+        }.compact]
+      }
+    end
+
+    if dispute_evidence.access_activity_log.present?
+      evidence[:notes] = "Digital product delivery confirmed. #{dispute_evidence.access_activity_log}".truncate(2000)
+    elsif dispute_evidence.product_description.present?
+      evidence[:notes] = "Product/service delivered: #{dispute_evidence.product_description}".truncate(2000)
+    end
+
+    evidence
+  end
+
+  def build_refund_evidence(dispute_evidence)
+    {
+      evidence_type: "PROOF_OF_REFUND",
+      notes: [
+        dispute_evidence.refund_refusal_explanation,
+        "Refund policy: #{dispute_evidence.refund_policy_disclosure}"
+      ].compact.join("\n\n").truncate(2000)
+    }
+  end
+
+  def build_general_evidence(dispute_evidence)
+    notes = [
+      dispute_evidence.reason_for_winning,
+      dispute_evidence.uncategorized_text
+    ].compact.join("\n\n")
+
+    {
+      evidence_type: "OTHER",
+      notes: notes.truncate(2000)
+    }
+  end
+
+  def normalize_carrier_name(carrier)
+    return "OTHER" if carrier.blank?
+
+    normalized = PAYPAL_CARRIER_MAPPING[carrier.to_s.downcase.strip]
+    normalized || "OTHER"
+  end
+
+  def build_comprehensive_notes(dispute_evidence)
+    sections = []
+
+    if dispute_evidence.customer_name.present? || dispute_evidence.customer_email.present?
+      sections << "CUSTOMER INFORMATION:"
+      sections << "Name: #{dispute_evidence.customer_name}" if dispute_evidence.customer_name.present?
+      sections << "Email: #{dispute_evidence.customer_email}" if dispute_evidence.customer_email.present?
+      sections << "Purchase IP: #{dispute_evidence.customer_purchase_ip}" if dispute_evidence.customer_purchase_ip.present?
+    end
+
+    if dispute_evidence.product_description.present?
+      sections << "\nPRODUCT/SERVICE:"
+      sections << dispute_evidence.product_description
+    end
+
+    if dispute_evidence.billing_address.present?
+      sections << "\nBILLING ADDRESS:"
+      sections << dispute_evidence.billing_address
+    end
+
+    if dispute_evidence.shipping_address.present? || dispute_evidence.shipping_tracking_number.present?
+      sections << "\nSHIPPING INFORMATION:"
+      sections << "Address: #{dispute_evidence.shipping_address}" if dispute_evidence.shipping_address.present?
+      sections << "Carrier: #{dispute_evidence.shipping_carrier}" if dispute_evidence.shipping_carrier.present?
+      sections << "Tracking: #{dispute_evidence.shipping_tracking_number}" if dispute_evidence.shipping_tracking_number.present?
+      sections << "Shipped: #{dispute_evidence.shipped_at}" if dispute_evidence.shipped_at.present?
+    end
+
+    if dispute_evidence.access_activity_log.present?
+      sections << "\nACCESS ACTIVITY LOG:"
+      sections << dispute_evidence.access_activity_log
+    end
+
+    if dispute_evidence.refund_policy_disclosure.present?
+      sections << "\nREFUND POLICY DISCLOSURE:"
+      sections << dispute_evidence.refund_policy_disclosure
+    end
+
+    if dispute_evidence.cancellation_policy_disclosure.present?
+      sections << "\nCANCELLATION POLICY DISCLOSURE:"
+      sections << dispute_evidence.cancellation_policy_disclosure
+    end
+
+    if dispute_evidence.reason_for_winning.present?
+      sections << "\nMERCHANT STATEMENT:"
+      sections << dispute_evidence.reason_for_winning
+    end
+
+    if dispute_evidence.cancellation_rebuttal.present?
+      sections << "\nCANCELLATION REBUTTAL:"
+      sections << dispute_evidence.cancellation_rebuttal
+    end
+
+    if dispute_evidence.refund_refusal_explanation.present?
+      sections << "\nREFUND REFUSAL EXPLANATION:"
+      sections << dispute_evidence.refund_refusal_explanation
+    end
+
+    sections.join("\n")
+  end
+
   def transaction_url(charge_id)
     sub_domain = Rails.env.production? ? "history" : "sandbox"
     "https://#{sub_domain}.paypal.com/us/cgi-bin/webscr?cmd=_history-details-from-hub&id=#{charge_id}"
