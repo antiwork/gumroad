@@ -23,6 +23,8 @@ import { getIncomingCollaborators } from "$app/data/incoming_collaborators";
 import { assertDefined } from "$app/utils/assert";
 import { asyncVoid } from "$app/utils/promise";
 import { assertResponseError } from "$app/utils/request";
+import { classNames } from "$app/utils/classNames";
+
 
 import { Button } from "$app/components/Button";
 import CollaboratorForm from "$app/components/Collaborators/Form";
@@ -94,21 +96,43 @@ const CollaboratorDetails = ({
         </Alert>
       ) : null}
 
-      <section className="stack">
-        <h3>Email</h3>
-        <div>
-          <span>{selectedCollaborator.email}</span>
-        </div>
+      <section
+  className={classNames(
+    "grid rounded border",
+    "bg-white dark:bg-gray-900",
+    "divide-y divide-gray-200 dark:divide-gray-700"
+  )}
+><div className="flex flex-wrap items-center justify-between gap-4 p-4">
+  <h3 className="font-semibold">Email</h3>
+</div>
+
+<div className="flex flex-wrap items-center gap-4 p-4">
+  <span>{selectedCollaborator.email}</span>
+</div>
+
       </section>
 
-      <section className="stack">
-        <h3>Products</h3>
-        {selectedCollaborator.products.map((product) => (
-          <section key={product.id}>
-            <div>{product.name}</div>
-            <div>{formatAsPercent(product.percent_commission || selectedCollaborator.percent_commission || 0)}</div>
-          </section>
-        ))}
+      <section
+  className={classNames(
+    "grid rounded border mt-4",
+    "bg-white dark:bg-gray-900",
+    "divide-y divide-gray-200 dark:divide-gray-700"
+  )}
+>
+        <div className="flex flex-wrap items-center justify-between gap-4 p-4">
+  <h3 className="font-semibold">Products</h3>
+</div>
+
+{selectedCollaborator.products.map((product) => (
+  <div
+    key={product.id}
+    className="flex flex-wrap items-center justify-between gap-4 p-4"
+  >
+    <div>{product.name}</div>
+    <div>{formatAsPercent(product.percent_commission || selectedCollaborator.percent_commission || 0)}</div>
+  </div>
+))}
+
       </section>
 
       <section className="mt-auto flex gap-4">
