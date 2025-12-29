@@ -1,5 +1,4 @@
 # Build arguments with defaults (can be overridden via --build-arg)
-# These are declared before FROM so RUBY_VERSION can be used in the FROM line
 ARG RUBY_VERSION=3.4.3
 ARG NODE_VERSION=20.17.0
 ARG NPM_VERSION=10.8.2
@@ -14,7 +13,6 @@ ARG DEBIAN_FRONTEND=noninteractive
 ARG NODE_VERSION
 ARG NPM_VERSION
 
-# Packages
 RUN apt-get update -y -qq \
     && apt-get install -y --no-install-recommends \
       build-essential \
@@ -50,7 +48,6 @@ RUN apt-get update -y -qq \
       zlib1g-dev \
       git \
     \
-    # Node (use major version for nodesource)
     && curl -fsSL https://deb.nodesource.com/setup_${NODE_VERSION%%.*}.x | bash - \
     && apt-get install -y --no-install-recommends nodejs \
     && corepack enable \
@@ -67,11 +64,9 @@ COPY Gemfile Gemfile.lock .ruby-version ${APP_DIR}/
 RUN gem install bundler:$(awk '/BUNDLED WITH/{getline; print}' Gemfile.lock | tr -d " ") \
     && bundle install --retry 3 --without production staging deployer
 
-# Node dependencies
 COPY package*.json ${APP_DIR}/
 RUN npm install
 
-# Entrypoint
 COPY docker/app/entrypoint.sh /usr/local/bin/docker-entrypoint
 RUN chmod +x /usr/local/bin/docker-entrypoint
 

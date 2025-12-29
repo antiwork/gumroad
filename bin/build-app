@@ -9,13 +9,23 @@ if [ ! -f "docker/local-nginx/certs/gumroad_dev.crt" ] || [ ! -f "docker/local-n
 fi
 
 # Get versions from project files
-RUBY_VERSION=$(cat .ruby-version | tr -d '[:space:]')
-NODE_VERSION=$(cat .node-version | tr -d '[:space:]')
-NPM_VERSION=$(grep -o '"npm@[^"]*"' package.json | head -1 | sed 's/"npm@\([^"]*\)"/\1/')
+RUBY_VERSION=$(cat .ruby-version 2>/dev/null | tr -d '[:space:]')
+NODE_VERSION=$(cat .node-version 2>/dev/null | tr -d '[:space:]')
+NPM_VERSION=$(grep -o '"npm@[^"]*"' package.json 2>/dev/null | head -1 | sed 's/"npm@\([^"]*\)"/\1/')
 
-# Fallback defaults if extraction fails
-NODE_VERSION=${NODE_VERSION:-20.17.0}
-NPM_VERSION=${NPM_VERSION:-10.8.2}
+# Validate required versions
+if [ -z "$RUBY_VERSION" ]; then
+  echo "Error: Could not read Ruby version from .ruby-version"
+  exit 1
+fi
+if [ -z "$NODE_VERSION" ]; then
+  echo "Error: Could not read Node version from .node-version"
+  exit 1
+fi
+if [ -z "$NPM_VERSION" ]; then
+  echo "Error: Could not read NPM version from package.json (expected \"npm@<version>\" in packageManager field)"
+  exit 1
+fi
 
 echo "Building Docker image with:"
 echo "  Ruby: $RUBY_VERSION"

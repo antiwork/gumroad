@@ -21,10 +21,7 @@ x-app-common: &app-common
     AWS_S3_ENDPOINT: http://minio:9000
 
 services:
-  # ===================
-  # Infrastructure Services
-  # ===================
-
+  # Infrastructure services
   db:
     image: mysql:8.0.32
     volumes:
@@ -135,10 +132,7 @@ services:
         fi;
       done < /fixture-files-public.txt; echo \"Fixture files copied successfully\"; exit 0; "
 
-  # ===================
-  # Init Service (one-time setup)
-  # ===================
-
+  # This service is used to run one-time setup tasks
   init:
     <<: *app-common
     restart: "no"
@@ -206,10 +200,7 @@ services:
       createbuckets:
         condition: service_completed_successfully
 
-  # ===================
-  # Application Services
-  # ===================
-
+  # Application services
   web:
     <<: *app-common
     command: ./bin/rails s -b 0.0.0.0 -p 3000
@@ -260,6 +251,8 @@ services:
     environment:
       <<: *app-env
       ANYCABLE_RPC_HOST: 0.0.0.0:50051
+      ANYCABLE_SECRET: anycable-local-secret
+      ANYCABLE_REDIS_URL: redis://redis:6379/0
     depends_on:
       init:
         condition: service_completed_successfully
@@ -287,7 +280,6 @@ services:
 
   nginx:
     image: nginx:1.23.3
-    restart: unless-stopped
     volumes:
       - ./local-nginx/gumroad_dev_docker.conf:/etc/nginx/conf.d/default.conf:Z
       - ./local-nginx/helperai_dev.conf:/etc/nginx/conf.d/helperai_dev.conf:Z
