@@ -6,6 +6,7 @@ import { formatPrice } from "$app/utils/price";
 import { assertResponseError } from "$app/utils/request";
 import { register } from "$app/utils/serverComponentUtil";
 
+import { Input } from "$app/components/Input";
 import { Layout } from "$app/components/Authentication/Layout";
 import { SocialAuth } from "$app/components/Authentication/SocialAuth";
 import { Button } from "$app/components/Button";
@@ -77,22 +78,32 @@ export const SignupPage = ({
       }
       headerActions={<a href={Routes.login_path({ next })}>Log in</a>}
     >
-      <form onSubmit={(e) => void handleSubmit(e)}>
+      <form onSubmit={(e) => void handleSubmit(e)} className="flex flex-col gap-12">
         <SocialAuth />
         <Separator>
           <span>or</span>
         </Separator>
-        <section>
+        <section className="flex flex-col gap-8 pb-12">
           {saveState.type === "error" ? <Alert variant="danger">{saveState.message}</Alert> : null}
-          <fieldset>
+          <fieldset className="flex flex-col space-y-2">
             <legend>
-              <label htmlFor={`${uid}-email`}>Email</label>
+              <label className="cursor-pointer" htmlFor={`${uid}-email`}>
+                Email
+              </label>
             </legend>
-            <input id={`${uid}-email`} type="email" value={email} onChange={(e) => setEmail(e.target.value)} required />
+            <Input
+              id={`${uid}-email`}
+              type="email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              required
+            />
           </fieldset>
-          <fieldset>
+          <fieldset className="flex flex-col space-y-2">
             <legend>
-              <label htmlFor={`${uid}-password`}>Password</label>
+              <label className="cursor-pointer" htmlFor={`${uid}-password`}>
+                Password
+              </label>
             </legend>
             <PasswordInput
               id={`${uid}-password`}
@@ -104,9 +115,16 @@ export const SignupPage = ({
           <Button color="primary" type="submit" disabled={saveState.type === "submitting"}>
             {saveState.type === "submitting" ? "Creating..." : "Create account"}
           </Button>
-          <p>
-            You agree to our <a href="https://gumroad.com/terms">Terms of Use</a> and{" "}
-            <a href="https://gumroad.com/privacy">Privacy Policy</a>.
+          <p className="text-base">
+            You agree to our{" "}
+            <a className="underline" href="https://gumroad.com/terms">
+              Terms of Use
+            </a>{" "}
+            and{" "}
+            <a className="underline" href="https://gumroad.com/privacy">
+              Privacy Policy
+            </a>
+            .
           </p>
         </section>
       </form>
