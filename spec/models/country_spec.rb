@@ -7,6 +7,7 @@ describe Country do
       expect(Country.new("GB").supports_stripe_cross_border_payouts?).to be false
       expect(Country.new("AU").supports_stripe_cross_border_payouts?).to be false
       expect(Country.new("FR").supports_stripe_cross_border_payouts?).to be false
+      expect(Country.new("BG").supports_stripe_cross_border_payouts?).to be false
       expect(Country.new("TH").supports_stripe_cross_border_payouts?).to be true
       expect(Country.new("KR").supports_stripe_cross_border_payouts?).to be true
       expect(Country.new("AE").supports_stripe_cross_border_payouts?).to be false
@@ -188,6 +189,7 @@ describe Country do
       expect(Country.new("MO").can_accept_stripe_charges?).to be false
       expect(Country.new("BJ").can_accept_stripe_charges?).to be false
       expect(Country.new("CI").can_accept_stripe_charges?).to be false
+      expect(Country.new("BG").can_accept_stripe_charges?).to be true
     end
   end
 
@@ -283,6 +285,7 @@ describe Country do
       expect(Country.new("MO").stripe_capabilities).to eq StripeMerchantAccountManager::CROSS_BORDER_PAYOUTS_ONLY_CAPABILITIES
       expect(Country.new("BJ").stripe_capabilities).to eq StripeMerchantAccountManager::CROSS_BORDER_PAYOUTS_ONLY_CAPABILITIES
       expect(Country.new("CI").stripe_capabilities).to eq StripeMerchantAccountManager::CROSS_BORDER_PAYOUTS_ONLY_CAPABILITIES
+      expect(Country.new("BG").stripe_capabilities).to eq StripeMerchantAccountManager::REQUESTED_CAPABILITIES
     end
   end
 
@@ -292,6 +295,7 @@ describe Country do
       expect(Country.new("GB").default_currency).to eq Currency::GBP
       expect(Country.new("AU").default_currency).to eq Currency::AUD
       expect(Country.new("FR").default_currency).to eq Currency::EUR
+      expect(Country.new("BG").default_currency).to eq Currency::EUR
       expect(Country.new("TH").default_currency).to eq nil
       expect(Country.new("KR").default_currency).to eq nil
       expect(Country.new("AE").default_currency).to eq nil
@@ -473,6 +477,7 @@ describe Country do
       expect(Country.new("MO").payout_currency).to eq Currency::MOP
       expect(Country.new("BJ").payout_currency).to eq Currency::XOF
       expect(Country.new("CI").payout_currency).to eq Currency::XOF
+      expect(Country.new("BG").payout_currency).to eq Currency::EUR
     end
   end
 
