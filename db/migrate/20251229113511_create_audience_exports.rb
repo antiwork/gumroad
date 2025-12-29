@@ -1,0 +1,13 @@
+# frozen_string_literal: true
+
+class CreateAudienceExports < ActiveRecord::Migration[7.1]
+  def change
+    create_table :audience_exports do |t|
+      t.string :external_id, null: false, index: { unique: true }
+      t.bigint :seller_id, null: false, index: true
+      t.bigint :recipient_id, null: false, index: true
+      t.text :audience_options
+      t.timestamps
+    end
+  end
+end
