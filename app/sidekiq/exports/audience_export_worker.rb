@@ -7,8 +7,11 @@ class Exports::AudienceExportWorker
   def perform(seller_id, recipient_id, audience_options = {})
     seller, recipient = User.find(seller_id, recipient_id)
     recipient ||= seller
+    result = nil
 
-    result = Exports::AudienceExportService.new(seller, audience_options).perform
+    WithMaxExecutionTime.timeout_queries(seconds: 1.hour) do
+      result = Exports::AudienceExportService.new(seller, audience_options).perform
+    end
 
     ContactingCreatorMailer.subscribers_data(
       recipient:,
