@@ -1,5 +1,7 @@
 import * as React from "react";
 
+import { classNames } from "$app/utils/classNames";
+
 type PasswordInputProps = Omit<React.ComponentPropsWithoutRef<"input">, "type"> & {
   value: string;
   onChange: (e: React.ChangeEvent<HTMLInputElement>) => void;
@@ -50,12 +52,21 @@ export const PasswordInput = React.forwardRef<HTMLInputElement, PasswordInputPro
   const IconComponent = showPassword ? EyeSlashIcon : EyeIcon;
 
   return (
-    <div className="input">
-      <input ref={ref} type={showPassword ? "text" : "password"} className={className} {...props} />
+    <div
+      className={classNames(
+        "bg-filled flex h-12 items-center gap-2 rounded border border-border px-4 focus-within:ring-2 focus-within:ring-accent focus-within:outline-none",
+      )}
+    >
+      <input
+        ref={ref}
+        type={showPassword ? "text" : "password"}
+        className={classNames("flex-1 bg-transparent font-[inherit] text-base outline-none", className)}
+        {...props}
+      />
       <IconComponent
         onClick={togglePasswordVisibility}
         role="button"
-        className="cursor-pointer select-none"
+        className="cursor-pointer"
         aria-label={showPassword ? "Hide password" : "Show password"}
         onKeyDown={(e) => {
           if (e.key === "Enter" || e.key === " ") {
