@@ -65,7 +65,7 @@ import { useIsAboveBreakpoint } from "$app/components/useIsAboveBreakpoint";
 import { useRefToLatest } from "$app/components/useRefToLatest";
 import { WithTooltip } from "$app/components/WithTooltip";
 
-import { FileEmbed, FileEmbedConfig, getDownloadUrl } from "./FileEmbed";
+import { FileEmbed, FileEmbedConfig } from "./FileEmbed";
 import { Page, PageTab, titleWithFallback } from "./PageTab";
 
 declare global {
@@ -92,7 +92,7 @@ export const extensions = (productId: string, extraExtensions: TiptapNode[] = []
 ];
 
 const ContentTabContent = ({ selectedVariantId }: { selectedVariantId: string | null }) => {
-  const { id, product, updateProduct, seller, save, existingFiles, setExistingFiles, uniquePermalink } =
+  const { id, product, updateProduct, seller, save, existingFiles, setExistingFiles, uniquePermalink, filesById } =
     useProductEditContext();
   const uid = React.useId();
   const isDesktop = useIsAboveBreakpoint("lg");
@@ -210,9 +210,9 @@ const ContentTabContent = ({ selectedVariantId }: { selectedVariantId: string | 
     productId: id,
     variantId: selectedVariantId,
     prepareDownload: save,
-    files: product.files.map((file) => ({ ...file, url: getDownloadUrl(id, file) })),
+    filesById,
   });
-  const fileEmbedConfig = useRefToLatest<FileEmbedConfig>({ files: product.files });
+  const fileEmbedConfig = useRefToLatest<FileEmbedConfig>({ filesById });
   const uploadFilesRef = useRefToLatest(uploadFiles);
   const contentEditorExtensions = extensions(id, [
     FileEmbedGroup.configure({ getConfig: () => fileEmbedGroupConfig.current }),
@@ -363,10 +363,13 @@ const ContentTabContent = ({ selectedVariantId }: { selectedVariantId: string | 
 
   const addDropboxFiles = (files: ResponseDropboxFile[]) => {
     updateProduct((product) => {
+      const [updatedFiles, nonModifiedFiles] = partition(product.files, (file) =>
+        files.some(({ external_id }) => file.id === external_id),
+      );
       product.files = [
-        ...product.files.filter((file) => !files.some(({ external_id }) => file.id === external_id)),
+        ...nonModifiedFiles,
         ...files.map((file) => {
-          const existing = product.files.find(({ id }) => id === file.external_id);
+          const existing = updatedFiles.find(({ id }) => id === file.external_id);
           const extension = FileUtils.getFileExtension(file.name).toUpperCase();
           return {
             display_name: existing?.display_name ?? FileUtils.getFileNameWithoutExtension(file.name),

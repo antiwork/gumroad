@@ -14,9 +14,9 @@
 <% end %>
 
 <% content_for :content do %>
-  <div class="block bg-white text-black font-['ABC_Favorit'] text-base font-normal leading-relaxed tracking-tight">
+  <div class="flex-1 flex flex-col bg-white text-black font-['ABC_Favorit'] text-base font-normal leading-relaxed tracking-tight">
     <%= render "home/shared/nav" %>
-    <div class="overflow-hidden">
+    <div class="flex-1 overflow-hidden">
       <%= yield %>
     </div>
   </div>

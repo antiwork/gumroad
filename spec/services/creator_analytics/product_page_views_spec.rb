@@ -158,4 +158,56 @@ describe CreatorAnalytics::ProductPageViews do
       end
     end
   end
+
+  describe "DST handling" do
+    context "when page view occurs near midnight during DST" do
+      let(:user_timezone) { "Pacific Time (US & Canada)" }
+
+      it "correctly attributes page view to the right day" do
+        user = create(:user, timezone: user_timezone)
+        product = create(:product, user: user)
+
+        # Page view at July 15, 00:30 PDT = July 15, 07:30 UTC
+        add_page_view(product, Time.utc(2025, 7, 15, 7, 30))
+        ProductPageView.__elasticsearch__.refresh_index!
+
+        service = described_class.new(
+          user: user,
+          products: [product],
+          dates: [Date.new(2025, 7, 14), Date.new(2025, 7, 15)]
+        )
+
+        result = service.by_product_and_date
+
+        expect(result[[product.id, "2025-07-15"]]).to eq(1)
+        expect(result[[product.id, "2025-07-14"]]).to be_nil
+      end
+    end
+
+    context "when query spans DST transition" do
+      let(:user_timezone) { "Pacific Time (US & Canada)" }
+
+      it "correctly buckets page views across DST boundary" do
+        user = create(:user, timezone: user_timezone)
+        product = create(:product, user: user)
+
+        # Page view on March 8 at 11:00 PM PST = March 9, 07:00 UTC (before DST starts)
+        add_page_view(product, Time.utc(2025, 3, 9, 7, 0))
+        # Page view on March 10 at 01:00 AM PDT = March 10, 08:00 UTC (after DST starts)
+        add_page_view(product, Time.utc(2025, 3, 10, 8, 0))
+        ProductPageView.__elasticsearch__.refresh_index!
+
+        service = described_class.new(
+          user: user,
+          products: [product],
+          dates: (Date.new(2025, 3, 8)..Date.new(2025, 3, 10)).to_a
+        )
+
+        result = service.by_product_and_date
+
+        expect(result[[product.id, "2025-03-08"]]).to eq(1)
+        expect(result[[product.id, "2025-03-10"]]).to eq(1)
+      end
+    end
+  end
 end

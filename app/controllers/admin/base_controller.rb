@@ -33,7 +33,7 @@ class Admin::BaseController < ApplicationController
 
     if user
       impersonate_user(user)
-      redirect_to dashboard_path
+      redirect_to products_path
     else
       flash[:alert] = "User not found"
       redirect_to admin_path

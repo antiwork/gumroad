@@ -1,3 +1,4 @@
+import { router } from "@inertiajs/react";
 import { DirectUpload } from "@rails/activestorage";
 import cx from "classnames";
 import placeholderAppIcon from "images/gumroad_app.png";
@@ -11,8 +12,16 @@ import { assertResponseError, request, ResponseError } from "$app/utils/request"
 
 import { Button } from "$app/components/Button";
 import { showAlert } from "$app/components/server-components/Alert";
-import { Application } from "$app/components/server-components/Settings/AdvancedPage/EditApplicationPage";
 import { WithTooltip } from "$app/components/WithTooltip";
+
+export type Application = {
+  id: string;
+  name: string;
+  redirect_uri: string;
+  icon_url: string | null;
+  uid: string;
+  secret: string;
+};
 
 const ALLOWED_ICON_EXTENSIONS = ["jpeg", "jpg", "png"];
 
@@ -48,7 +57,7 @@ const ApplicationForm = ({ application }: { application?: Application }) => {
     return isValid;
   };
 
-  const handleSubmit = asyncVoid(async () => {
+  const handleSubmit = () => {
     if (!isFormValid()) return;
 
     setIsSubmitting(true);
@@ -61,38 +70,31 @@ const ApplicationForm = ({ application }: { application?: Application }) => {
       signed_blob_id: icon && "signedBlobId" in icon ? icon.signedBlobId : null,
     };
 
-    try {
-      if (application) {
-        const response = await request({
-          url: Routes.oauth_application_path(application.id),
-          method: "PUT",
-          accept: "json",
-          data,
-        });
-        const responseData = cast<{ success: boolean; message: string }>(await response.json());
-        if (!responseData.success) throw new ResponseError(responseData.message);
-        showAlert(responseData.message, "success");
-      } else {
-        const response = await request({
-          url: Routes.oauth_applications_path(),
-          method: "POST",
-          accept: "json",
-          data,
-        });
-        const responseData = cast<
-          { success: true; message: string; redirect_location: string } | { success: false; message: string }
-        >(await response.json());
-        if (!responseData.success) throw new ResponseError(responseData.message);
-        showAlert(responseData.message, "success");
-        window.location.href = responseData.redirect_location;
-      }
-    } catch (e) {
-      assertResponseError(e);
-      showAlert(e.message, "error");
+    if (application) {
+      router.put(Routes.oauth_application_path(application.id), data, {
+        preserveScroll: true,
+        onSuccess: () => {
+          showAlert("Application updated.", "success");
+          setIsSubmitting(false);
+        },
+        onError: () => {
+          showAlert("Sorry, something went wrong. Please try again.", "error");
+          setIsSubmitting(false);
+        },
+      });
+    } else {
+      router.post(Routes.oauth_applications_path(), data, {
+        onSuccess: () => {
+          showAlert("Application created.", "success");
+          setIsSubmitting(false);
+        },
+        onError: () => {
+          showAlert("Sorry, something went wrong. Please try again.", "error");
+          setIsSubmitting(false);
+        },
+      });
     }
-
-    setIsSubmitting(false);
-  });
+  };
 
   const handleIconChange = asyncVoid(async () => {
     const file = iconInputRef.current?.files?.[0];
