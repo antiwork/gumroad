@@ -51,7 +51,7 @@ describe "Admin::UsersController Scenario", type: :system, js: true do
       it "doesn't render user memberships" do
         visit admin_user_path(user.id)
 
-        expect(page).not_to have_text("User memberships")
+        expect(page).not_to have_text("User Collaborations")
       end
     end
 
@@ -67,7 +67,7 @@ describe "Admin::UsersController Scenario", type: :system, js: true do
       it "renders user memberships" do
         visit admin_user_path(user.id)
 
-        find_and_click "h3", text: "User memberships"
+        find_and_click "h3", text: "User Collaborations"
         expect(page).to have_text(seller_one.display_name(prefer_email_over_default_username: true))
         expect(page).to have_text(seller_two.display_name(prefer_email_over_default_username: true))
         expect(page).not_to have_text(seller_three.display_name(prefer_email_over_default_username: true))
