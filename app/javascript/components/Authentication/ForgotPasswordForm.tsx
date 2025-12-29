@@ -5,6 +5,7 @@ import { assertResponseError } from "$app/utils/request";
 
 import { SocialAuth } from "$app/components/Authentication/SocialAuth";
 import { Button } from "$app/components/Button";
+import { Input } from "$app/components/Input";
 import { Separator } from "$app/components/Separator";
 import { showAlert } from "$app/components/server-components/Alert";
 import { Alert } from "$app/components/ui/Alert";
@@ -30,18 +31,20 @@ export const ForgotPasswordForm = ({ onClose }: { onClose: () => void }) => {
   };
 
   return (
-    <form onSubmit={(e) => void handleSubmit(e)}>
+    <form onSubmit={(e) => void handleSubmit(e)} className="flex flex-col gap-12">
       <SocialAuth />
       <Separator>
         <span>or</span>
       </Separator>
-      <section>
+      <section className="flex flex-col gap-8 pb-12">
         {saveState.type === "error" ? <Alert variant="danger">{saveState.message}</Alert> : null}
-        <fieldset>
+        <fieldset className="flex flex-col space-y-2">
           <legend>
-            <label htmlFor={uid}>Email to send reset instructions to</label>
+            <label className="cursor-pointer" htmlFor={uid}>
+              Email to send reset instructions to
+            </label>
           </legend>
-          <input id={uid} type="email" value={email} onChange={(e) => setEmail(e.target.value)} required />
+          <Input id={uid} type="email" value={email} onChange={(e) => setEmail(e.target.value)} required />
         </fieldset>
         <Button color="primary" type="submit" disabled={saveState.type === "submitting"}>
           {saveState.type === "submitting" ? "Sending..." : "Send"}
