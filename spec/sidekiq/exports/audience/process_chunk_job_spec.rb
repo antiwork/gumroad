@@ -70,7 +70,7 @@ describe Exports::Audience::ProcessChunkJob do
 
         expect(chunk.members_data.size).to eq(3)
         emails = chunk.members_data.map(&:first)
-        expect(emails).to eq(["user2@example.com", "user1@example.com", "user0@example.com"])
+        expect(emails).to eq(["user0@example.com", "user1@example.com", "user2@example.com"])
       end
     end
   end

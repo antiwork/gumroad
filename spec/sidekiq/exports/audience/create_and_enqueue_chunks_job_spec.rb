@@ -61,7 +61,7 @@ describe Exports::Audience::CreateAndEnqueueChunksJob do
         create(:audience_member, seller: seller, email: "follower@example.com",
           details: { "follower" => { "id" => 1, "created_at" => Time.current.iso8601 } })
         create(:audience_member, seller: seller, email: "customer@example.com",
-          details: { "purchases" => [{ "id" => 1, "product_id" => 1, "created_at" => Time.current.iso8601 }] })
+          details: { "purchases" => [{ "id" => 1, "product_id" => 1, "price_cents" => 1000, "created_at" => Time.current.iso8601 }] })
       end
 
       it "only includes followers when followers option is set" do
