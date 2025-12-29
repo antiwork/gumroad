@@ -18,7 +18,7 @@ describe Admin::PurchasePresenter do
             formatted_display_price: purchase.formatted_display_price,
             formatted_gumroad_tax_amount: nil,
             gumroad_responsible_for_tax: purchase.gumroad_responsible_for_tax?,
-            product: { id: product.id, name: product.name, long_url: product.long_url },
+            product: { external_id: product.external_id, name: product.name, long_url: product.long_url },
             seller: { email: seller.email, support_email: seller.support_email },
             email: purchase.email,
             created_at: purchase.created_at,
@@ -43,11 +43,11 @@ describe Admin::PurchasePresenter do
               id: purchase.stripe_transaction_id,
               search_url: ChargeProcessor.transaction_url_for_admin(purchase.charge_processor_id, purchase.stripe_transaction_id, purchase.charged_using_gumroad_merchant_account?),
             },
-            merchant_account: {
+            merchant_account: purchase.merchant_account.present? ? {
               external_id: purchase.merchant_account.external_id,
               charge_processor_id: purchase.merchant_account.charge_processor_id.capitalize,
               holder_of_funds: purchase.merchant_account.holder_of_funds.capitalize,
-            },
+            } : nil,
             refund_policy: nil,
             stripe_refunded: purchase.stripe_refunded?,
             stripe_partially_refunded: purchase.stripe_partially_refunded?,

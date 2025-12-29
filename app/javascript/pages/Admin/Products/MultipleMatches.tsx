@@ -6,7 +6,7 @@ import { Icon } from "$app/components/Icons";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "$app/components/ui/Table";
 
 type ProductMatchProps = {
-  id: number;
+  external_id: string;
   name: string;
   price_formatted: string;
   long_url: string;
@@ -22,7 +22,7 @@ const ProductMatch = ({ product }: { product: ProductMatchProps }) => {
       <TableCell className="space-x-1">
         <span>{product.price_formatted}</span>
         <span>&bull;</span>
-        <Link href={Routes.admin_product_url(product.id)} title={product.id.toString()}>
+        <Link href={Routes.admin_product_url(product.external_id)} title={product.external_id}>
           {product.name}
         </Link>
         <a href={product.long_url} target="_blank" rel="noreferrer noopener">
@@ -55,7 +55,7 @@ const AdminProductsMultipleMatches = () => {
       </TableHeader>
       <TableBody>
         {product_matches.map((product) => (
-          <ProductMatch key={product.id} product={product} />
+          <ProductMatch key={product.external_id} product={product} />
         ))}
       </TableBody>
     </Table>
