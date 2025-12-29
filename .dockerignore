@@ -10,4 +10,3 @@ ci_scripts/
 docker/tmp/
 .env
 .env.*.local
-bin/dist/
