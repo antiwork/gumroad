@@ -241,22 +241,7 @@ const RefundPaymentMethodForm = ({
                     }}
                   />
                 ) : null}
-                <svg
-                  width="20"
-                  height="16"
-                  viewBox="0 0 20 16"
-                  fill="none"
-                  xmlns="http://www.w3.org/2000/svg"
-                  style={{ flexShrink: 0, opacity: 0.5 }}
-                >
-                  <path
-                    d="M0.75 5.75H18.75M4.75 10.75H5.75M9.75 10.75H10.75M3.75 14.75H15.75C17.4069 14.75 18.75 13.4069 18.75 11.75V3.75C18.75 2.09315 17.4069 0.75 15.75 0.75H3.75C2.09315 0.75 0.75 2.09315 0.75 3.75V11.75C0.75 13.4069 2.09315 14.75 3.75 14.75Z"
-                    stroke="currentColor"
-                    strokeWidth="1.5"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                  />
-                </svg>
+                <Icon name="outline-credit-card" className="text-muted" />
                 <div style={{ flex: 1 }}>
                   <CardElement
                     options={{

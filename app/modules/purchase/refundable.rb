@@ -47,9 +47,10 @@ class Purchase
         if amount_cents_to_refund > seller.unpaid_balance_cents && charged_using_gumroad_merchant_account?
           if seller.refund_funding_credit_card.present?
             shortfall = amount_cents_to_refund - seller.unpaid_balance_cents
+            charge_amount = [shortfall, BalanceTopUp::ChargeService::MINIMUM_TOP_UP_AMOUNT_CENTS].max
             top_up_result = BalanceTopUp::ChargeService.new(
               user: seller,
-              amount_cents: shortfall,
+              amount_cents: charge_amount,
               purchase: self
             ).perform
 
