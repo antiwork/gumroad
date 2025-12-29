@@ -91,8 +91,17 @@ class User::OmniauthCallbacksController < Devise::OmniauthCallbacksController
       return safe_redirect_to referer
     end
 
-    if logged_in_user.blank?
+   if logged_in_user.blank?
+      # 1. Let the existing (hidden) method do its thing
       user = User.find_or_create_for_stripe_connect_account(auth)
+
+      # 2. Check if the user was JUST created (is a new signup)
+      # .previously_new_record? is a built-in Rails tool for exactly this.
+      if user&.previously_new_record? && FeatureConfig.enabled?(:disable_stripe_signup)
+        user.destroy # Clean up the newly created record
+        flash[:alert] = "New signups via Stripe are currently disabled. Please sign up with an email address."
+        return safe_redirect_to signup_path
+      end
 
       if user.nil?
         flash[:alert] = "An account already exists with this email."
