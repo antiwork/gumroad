@@ -9,6 +9,7 @@ import { ForgotPasswordForm } from "$app/components/Authentication/ForgotPasswor
 import { Layout } from "$app/components/Authentication/Layout";
 import { SocialAuth } from "$app/components/Authentication/SocialAuth";
 import { Button } from "$app/components/Button";
+import { Input } from "$app/components/Input";
 import { PasswordInput } from "$app/components/PasswordInput";
 import { Separator } from "$app/components/Separator";
 import { Alert } from "$app/components/ui/Alert";
@@ -62,18 +63,20 @@ export const LoginPage = ({
       {showForgotPassword ? (
         <ForgotPasswordForm onClose={() => setShowForgotPassword(false)} />
       ) : (
-        <form onSubmit={(e) => void handleSubmit(e)}>
+        <form className="flex flex-col gap-12" onSubmit={(e) => void handleSubmit(e)}>
           <SocialAuth />
           <Separator>
             <span>or</span>
           </Separator>
-          <section>
+          <section className="flex flex-col gap-8 pb-12">
             {saveState.type === "error" ? <Alert variant="danger">{saveState.message}</Alert> : null}
-            <fieldset>
+            <fieldset className="flex flex-col space-y-2">
               <legend>
-                <label htmlFor={`${uid}-email`}>Email</label>
+                <label className="cursor-pointer" htmlFor={`${uid}-email`}>
+                  Email
+                </label>
               </legend>
-              <input
+              <Input
                 id={`${uid}-email`}
                 type="email"
                 value={email}
@@ -84,9 +87,11 @@ export const LoginPage = ({
                 autoComplete="email"
               />
             </fieldset>
-            <fieldset>
-              <legend>
-                <label htmlFor={`${uid}-password`}>Password</label>
+            <fieldset className="flex flex-col space-y-2">
+              <legend className="flex w-full justify-between">
+                <label className="cursor-pointer" htmlFor={`${uid}-password`}>
+                  Password
+                </label>
                 <button type="button" className="font-normal underline" onClick={() => setShowForgotPassword(true)}>
                   Forgot your password?
                 </button>
