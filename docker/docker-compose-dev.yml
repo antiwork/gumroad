@@ -19,6 +19,7 @@ x-app-common: &app-common
     MONGO_DATABASE_URL: mongo:27017
     ELASTICSEARCH_HOST: http://elasticsearch:9200
     AWS_S3_ENDPOINT: http://minio:9000
+    SHAKAPACKER_DEV_SERVER_HOST: webpack
 
 services:
   # Infrastructure services

@@ -55,7 +55,7 @@ configuration_by_env = {
   development: {
     protocol: "https",
     domain: "gumroad.dev",
-    asset_domain: "gumroad.dev",
+    asset_domain: "app.gumroad.dev",
     root_domain: "gumroad.dev",
     short_domain: "short-domain.gumroad.dev",
     discover_domain: "gumroad.dev",
