@@ -6527,4 +6527,35 @@ describe Purchase, :vcr do
       end
     end
   end
+
+  describe "#was_default_offer_code_applied" do
+    let(:product) { create(:product, price_cents: 1000) }
+    let(:offer_code) { create(:offer_code, products: [product], amount_cents: 200) }
+
+    before do
+      product.update!(default_offer_code: offer_code)
+    end
+
+    it "tracks when a purchase uses the product's default offer code" do
+      purchase = build(:purchase, link: product, offer_code: offer_code)
+      purchase.send(:set_price_and_rate)
+
+      expect(purchase.was_default_offer_code_applied).to be true
+    end
+
+    it "does not set the flag when using a different offer code" do
+      other_offer_code = create(:offer_code, products: [product], code: "OTHER", amount_cents: 100)
+      purchase = build(:purchase, link: product, offer_code: other_offer_code)
+      purchase.send(:set_price_and_rate)
+
+      expect(purchase.was_default_offer_code_applied).to be_nil
+    end
+
+    it "does not set the flag when no offer code is used" do
+      purchase = build(:purchase, link: product, offer_code: nil)
+      purchase.send(:set_price_and_rate)
+
+      expect(purchase.was_default_offer_code_applied).to be_nil
+    end
+  end
 end

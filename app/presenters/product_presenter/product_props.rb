@@ -13,6 +13,9 @@ class ProductPresenter::ProductProps
   end
 
   def props(seller_custom_domain_url:, request:, pundit_user:, recommended_by: nil, discount_code: nil, quantity: 1, layout: nil)
+    # Use explicit discount_code if provided, otherwise fall back to product's default
+    effective_code = effective_discount_code(discount_code)
+
     {
       product: {
         id: product.external_id,
@@ -69,7 +72,7 @@ class ProductPresenter::ProductProps
         public_files: product.alive_public_files.attached.map { PublicFilePresenter.new(public_file: _1).props },
         audio_previews_enabled: Feature.active?(:audio_previews, product.user),
       },
-      discount_code: discount_code_props(discount_code, quantity),
+      discount_code: discount_code_props(effective_code, quantity),
       purchase: purchase_props(product.purchase_info_for_product_page(pundit_user&.user, request.cookie_jar[:_gumroad_guid])),
       wishlists: pundit_user&.seller.present? ? (
         pundit_user.seller.wishlists.alive.includes(:alive_wishlist_products).map { |wishlist| WishlistPresenter.new(wishlist:).listing_props(product:) }
@@ -79,6 +82,16 @@ class ProductPresenter::ProductProps
 
   private
     attr_reader :product, :seller
+
+    # Returns the effective discount code string, prioritizing explicit code over product's default
+    def effective_discount_code(explicit_code)
+      return explicit_code if explicit_code.present?
+
+      default_offer_code = product.default_offer_code
+      return nil unless default_offer_code.present? && !default_offer_code.deleted? && !default_offer_code.inactive?
+
+      default_offer_code.code
+    end
 
     def discount_code_props(discount_code, quantity)
       return if discount_code.blank?

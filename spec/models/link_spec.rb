@@ -4799,4 +4799,128 @@ describe Link, :vcr do
       end
     end
   end
+
+  describe "#default_offer_code" do
+    let(:product) { create(:product) }
+    let(:offer_code) { create(:offer_code, products: [product]) }
+
+    it "can be associated with an offer code" do
+      product.default_offer_code = offer_code
+      product.save!
+      expect(product.reload.default_offer_code).to eq(offer_code)
+    end
+
+    it "can be set to nil" do
+      product.update!(default_offer_code: offer_code)
+      product.update!(default_offer_code: nil)
+      expect(product.reload.default_offer_code).to be_nil
+    end
+
+    describe "validation" do
+      it "is valid when the offer code is applicable to the product" do
+        product.default_offer_code = offer_code
+        expect(product).to be_valid
+      end
+
+      it "is invalid when the offer code is not applicable to the product" do
+        other_product = create(:product)
+        other_offer_code = create(:offer_code, products: [other_product])
+        product.default_offer_code = other_offer_code
+        expect(product).not_to be_valid
+        expect(product.errors[:base]).to include("The selected discount code is not applicable to this product.")
+      end
+
+      it "is invalid when the offer code currency doesn't match the product" do
+        gbp_offer_code = create(:offer_code, products: [product], currency_type: "gbp", amount_cents: 100)
+        product.default_offer_code = gbp_offer_code
+        expect(product).not_to be_valid
+        expect(product.errors[:base]).to include("The selected discount code currency does not match this product's currency.")
+      end
+
+      it "is invalid when the offer code amount exceeds the product price" do
+        expensive_offer_code = create(:offer_code, products: [product], amount_cents: product.price_cents + 100)
+        product.default_offer_code = expensive_offer_code
+        expect(product).not_to be_valid
+        expect(product.errors[:base]).to include("The selected discount code would result in an invalid price for this product.")
+      end
+
+      it "allows a deleted offer code to be set (but it won't be applied)" do
+        offer_code.mark_deleted!
+        product.default_offer_code = offer_code
+        expect(product).to be_valid
+      end
+    end
+  end
+
+  describe "#effective_offer_code" do
+    let(:product) { create(:product) }
+    let(:offer_code) { create(:offer_code, products: [product]) }
+    let(:other_offer_code) { create(:offer_code, products: [product], code: "OTHER") }
+
+    it "returns the explicit offer code when provided" do
+      product.update!(default_offer_code: offer_code)
+      result = product.effective_offer_code(explicit_code: other_offer_code.code)
+      expect(result).to eq(other_offer_code)
+    end
+
+    it "returns the default offer code when no explicit code is provided" do
+      product.update!(default_offer_code: offer_code)
+      result = product.effective_offer_code
+      expect(result).to eq(offer_code)
+    end
+
+    it "returns nil when no default offer code is set and no explicit code is provided" do
+      result = product.effective_offer_code
+      expect(result).to be_nil
+    end
+
+    it "returns nil when the default offer code is deleted" do
+      product.update!(default_offer_code: offer_code)
+      offer_code.mark_deleted!
+      result = product.effective_offer_code
+      expect(result).to be_nil
+    end
+
+    it "returns nil when the default offer code is inactive" do
+      product.update!(default_offer_code: offer_code)
+      offer_code.update!(expires_at: 1.day.ago)
+      result = product.effective_offer_code
+      expect(result).to be_nil
+    end
+  end
+
+  describe "#discounted_price_cents_with_default_offer_code" do
+    let(:product) { create(:product, price_cents: 1000) }
+    let(:offer_code) { create(:offer_code, products: [product], amount_cents: 200) }
+
+    it "returns nil when no default offer code is set" do
+      expect(product.discounted_price_cents_with_default_offer_code).to be_nil
+    end
+
+    it "returns the discounted price when a default offer code is set" do
+      product.update!(default_offer_code: offer_code)
+      expect(product.discounted_price_cents_with_default_offer_code).to eq(800)
+    end
+
+    it "returns nil when the default offer code is deleted" do
+      product.update!(default_offer_code: offer_code)
+      offer_code.mark_deleted!
+      expect(product.discounted_price_cents_with_default_offer_code).to be_nil
+    end
+
+    it "returns nil when the default offer code is inactive" do
+      product.update!(default_offer_code: offer_code)
+      offer_code.update!(expires_at: 1.day.ago)
+      expect(product.discounted_price_cents_with_default_offer_code).to be_nil
+    end
+
+    context "with percentage discount" do
+      let(:percent_offer_code) { create(:offer_code, products: [product], amount_percentage: 25) }
+
+      it "returns the correct discounted price" do
+        product.update!(default_offer_code: percent_offer_code)
+        expect(product.discounted_price_cents_with_default_offer_code).to eq(750)
+      end
+    end
+  end
 end

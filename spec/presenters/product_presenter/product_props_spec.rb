@@ -565,5 +565,55 @@ describe ProductPresenter::ProductProps do
         expect(props[:audio_previews_enabled]).to be(true)
       end
     end
+
+    context "with default offer code" do
+      let(:product) { create(:product, price_cents: 1000) }
+      let(:offer_code) { create(:offer_code, products: [product], amount_cents: 200) }
+
+      before do
+        product.update!(default_offer_code: offer_code)
+      end
+
+      it "uses the default offer code when no discount_code param is provided" do
+        props = described_class.new(product:).props(seller_custom_domain_url: nil, request:, pundit_user: nil)
+
+        expect(props[:discount_code]).to include(
+          valid: true,
+          code: offer_code.code
+        )
+      end
+
+      it "uses the explicit discount_code param over the default offer code" do
+        other_offer_code = create(:offer_code, products: [product], code: "OTHER", amount_cents: 100)
+
+        props = described_class.new(product:).props(
+          seller_custom_domain_url: nil,
+          request:,
+          pundit_user: nil,
+          discount_code: other_offer_code.code
+        )
+
+        expect(props[:discount_code]).to include(
+          valid: true,
+          code: other_offer_code.code
+        )
+      end
+
+      it "does not apply the default offer code if it is expired" do
+        offer_code.update!(expires_at: 1.day.ago)
+
+        props = described_class.new(product:).props(seller_custom_domain_url: nil, request:, pundit_user: nil)
+
+        expect(props[:discount_code]).to be_nil
+      end
+
+      it "does not apply the default offer code if it is deleted" do
+        offer_code.mark_deleted!
+
+        props = described_class.new(product:).props(seller_custom_domain_url: nil, request:, pundit_user: nil)
+
+        expect(props[:discount_code]).to be_nil
+      end
+    end
   end
 end

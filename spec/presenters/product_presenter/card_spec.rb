@@ -115,4 +115,82 @@ describe ProductPresenter::Card do
       )
     end
   end
+
+  describe "default_offer_code in for_web" do
+    let(:offer_code) { create(:offer_code, products: [product], amount_cents: 200) }
+
+    context "when product has a default offer code" do
+      before do
+        product.update!(default_offer_code: offer_code)
+      end
+
+      it "includes the discounted price" do
+        data = described_class.new(product:).for_web
+
+        expect(data[:price_cents]).to eq(product.price_cents - 200)
+        expect(data[:original_price_cents]).to eq(product.price_cents)
+      end
+
+      it "includes the offer code in the URL" do
+        data = described_class.new(product:).for_web
+
+        expect(data[:url]).to include("code=#{offer_code.code}")
+      end
+    end
+
+    context "when explicit offer_code param is provided" do
+      let(:other_offer_code) { create(:offer_code, products: [product], code: "OTHER", amount_cents: 100) }
+
+      before do
+        product.update!(default_offer_code: offer_code)
+      end
+
+      it "uses the explicit offer code over the default" do
+        data = described_class.new(product:).for_web(offer_code: other_offer_code.code)
+
+        expect(data[:price_cents]).to eq(product.price_cents - 100)
+        expect(data[:original_price_cents]).to eq(product.price_cents)
+        expect(data[:url]).to include("code=#{other_offer_code.code}")
+      end
+    end
+
+    context "when product has no default offer code" do
+      it "does not include original_price_cents" do
+        data = described_class.new(product:).for_web
+
+        expect(data).not_to have_key(:original_price_cents)
+        expect(data[:price_cents]).to eq(product.price_cents)
+      end
+    end
+
+    context "when default offer code is expired" do
+      before do
+        product.update!(default_offer_code: offer_code)
+        offer_code.update!(expires_at: 1.day.ago)
+      end
+
+      it "does not apply the discount" do
+        data = described_class.new(product:).for_web
+
+        expect(data).not_to have_key(:original_price_cents)
+        expect(data[:price_cents]).to eq(product.price_cents)
+      end
+    end
+
+    context "with percentage discount" do
+      let(:percent_offer_code) { create(:offer_code, products: [product], amount_percentage: 25) }
+
+      before do
+        product.update!(default_offer_code: percent_offer_code)
+      end
+
+      it "calculates the correct discounted price" do
+        data = described_class.new(product:).for_web
+
+        expected_discount = (product.price_cents * 0.25).to_i
+        expect(data[:price_cents]).to eq(product.price_cents - expected_discount)
+        expect(data[:original_price_cents]).to eq(product.price_cents)
+      end
+    end
+  end
 end

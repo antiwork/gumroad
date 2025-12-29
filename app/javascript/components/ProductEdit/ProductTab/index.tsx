@@ -20,6 +20,7 @@ import { CoverEditor } from "$app/components/ProductEdit/ProductTab/CoverEditor"
 import { CustomButtonTextOptionInput } from "$app/components/ProductEdit/ProductTab/CustomButtonTextOptionInput";
 import { CustomPermalinkInput } from "$app/components/ProductEdit/ProductTab/CustomPermalinkInput";
 import { CustomSummaryInput } from "$app/components/ProductEdit/ProductTab/CustomSummaryInput";
+import { DefaultDiscountSelector } from "$app/components/ProductEdit/ProductTab/DefaultDiscountSelector";
 import { DescriptionEditor, useImageUpload } from "$app/components/ProductEdit/ProductTab/DescriptionEditor";
 import { DiscordIntegrationEditor } from "$app/components/ProductEdit/ProductTab/DiscordIntegrationEditor";
 import { DurationEditor } from "$app/components/ProductEdit/ProductTab/DurationEditor";
@@ -307,6 +308,7 @@ export const ProductTab = () => {
                         Commission products use a 50% deposit upfront, 50% upon completion payment split.
                       </p>
                     ) : null}
+                    <DefaultDiscountSelector />
                   </section>
                   {product.native_type === "call" ? (
                     <>

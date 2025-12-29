@@ -999,4 +999,44 @@ describe ProductPresenter do
       expect(presenter.existing_files).to eq(product_files)
     end
   end
+
+  describe "default_offer_code in edit_props" do
+    let(:seller) { create(:user) }
+    let(:product) { create(:product, user: seller) }
+    let(:offer_code) { create(:offer_code, products: [product], amount_cents: 200) }
+    let(:presenter) { described_class.new(product: product) }
+
+    it "includes default_offer_code_id when set" do
+      product.update!(default_offer_code: offer_code)
+      props = presenter.edit_props
+
+      expect(props[:product][:default_offer_code_id]).to eq(offer_code.external_id)
+    end
+
+    it "returns nil for default_offer_code_id when not set" do
+      props = presenter.edit_props
+
+      expect(props[:product][:default_offer_code_id]).to be_nil
+    end
+
+    it "includes available_offer_codes for the product" do
+      offer_code # create the offer code
+      props = presenter.edit_props
+
+      expect(props[:available_offer_codes]).to include(
+        hash_including(
+          id: offer_code.external_id,
+          code: offer_code.code,
+          discount: { type: "cents", value: 200 }
+        )
+      )
+    end
+
+    it "excludes inactive offer codes from available_offer_codes" do
+      offer_code.update!(expires_at: 1.day.ago)
+      props = presenter.edit_props
+
+      expect(props[:available_offer_codes]).to be_empty
+    end
+  end
 end

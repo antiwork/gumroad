@@ -895,6 +895,44 @@ describe LinksController, :vcr, inertia: true do
         expect(@product.reload.should_show_sales_count).to be(false)
       end
 
+      describe "default_offer_code_id" do
+        let(:offer_code) { create(:offer_code, products: [@product], amount_cents: 200) }
+
+        it "sets the default offer code when provided" do
+          post :update, params: @params.merge(default_offer_code_id: offer_code.external_id), format: :json
+
+          expect(response).to have_http_status(:no_content)
+          expect(@product.reload.default_offer_code).to eq(offer_code)
+        end
+
+        it "clears the default offer code when set to empty string" do
+          @product.update!(default_offer_code: offer_code)
+
+          post :update, params: @params.merge(default_offer_code_id: ""), format: :json
+
+          expect(response).to have_http_status(:no_content)
+          expect(@product.reload.default_offer_code).to be_nil
+        end
+
+        it "clears the default offer code when set to nil" do
+          @product.update!(default_offer_code: offer_code)
+
+          post :update, params: @params.merge(default_offer_code_id: nil), format: :json
+
+          expect(response).to have_http_status(:no_content)
+          expect(@product.reload.default_offer_code).to be_nil
+        end
+
+        it "does not change the default offer code when not provided" do
+          @product.update!(default_offer_code: offer_code)
+
+          post :update, params: @params, format: :json
+
+          expect(response).to have_http_status(:no_content)
+          expect(@product.reload.default_offer_code).to eq(offer_code)
+        end
+      end
+
       describe "adding variants" do
         describe "variants" do
           it "adds variants to the product" do

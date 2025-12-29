@@ -81,6 +81,14 @@ export type CancellationDiscount = {
   duration_in_billing_cycles: number | null;
 };
 
+export type AvailableOfferCode = {
+  id: string;
+  code: string;
+  name: string | null;
+  discount: { type: "percent"; value: number } | { type: "cents"; value: number };
+  currency_type: string;
+};
+
 export type InstallmentPlan = {
   number_of_installments: number;
 };
@@ -142,6 +150,7 @@ export type Product = {
   public_files: PublicFileWithStatus[];
   audio_previews_enabled: boolean;
   community_chat_enabled: boolean | null;
+  default_offer_code_id: string | null;
 } & (
   | { native_type: "call"; variants: Duration[] }
   | { native_type: "membership"; variants: Tier[] }
@@ -190,6 +199,7 @@ export const ProductEditContext = React.createContext<{
   contentUpdates: ContentUpdates;
   setContentUpdates: React.Dispatch<React.SetStateAction<ContentUpdates>>;
   filesById: Map<string, FileEntry>;
+  availableOfferCodes: AvailableOfferCode[];
 } | null>(null);
 export const useProductEditContext = () => assertDefined(React.useContext(ProductEditContext));
 

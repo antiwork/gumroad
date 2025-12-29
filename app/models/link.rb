@@ -113,6 +113,7 @@ class Link < ApplicationRecord
   has_many :installments
   has_many :subscriptions
   has_and_belongs_to_many :offer_codes, join_table: "offer_codes_products", foreign_key: "product_id"
+  belongs_to :default_offer_code, class_name: "OfferCode", optional: true
   has_many :transcoded_videos
   has_many :imported_customers
   has_many :licenses
@@ -205,6 +206,7 @@ class Link < ApplicationRecord
   validate :commission_price_is_valid, if: -> { native_type == Link::NATIVE_TYPE_COMMISSION }
   validate :one_coffee_per_user, on: :create, if: -> { native_type == Link::NATIVE_TYPE_COFFEE }
   validate :quantity_enabled_state_is_allowed
+  validate :default_offer_code_is_applicable
 
   validates_associated :installment_plan, message: -> (link, _) { link.installment_plan.errors.full_messages.first }
 
@@ -808,6 +810,27 @@ class Link < ApplicationRecord
       user.offer_codes.universal_with_matching_currency(price_currency_type).alive.find_by_code(code)
   end
 
+  # Returns the effective offer code for this product.
+  # If an explicit code is provided, it takes priority.
+  # Otherwise, returns the default offer code if set and valid.
+  def effective_offer_code(explicit_code: nil)
+    if explicit_code.present?
+      find_offer_code(code: explicit_code)
+    elsif default_offer_code.present? && !default_offer_code.deleted? && !default_offer_code.inactive?
+      default_offer_code
+    end
+  end
+
+  # Returns the discounted price cents when the default offer code is applied.
+  # Returns nil if no default offer code is set or if it's invalid.
+  def discounted_price_cents_with_default_offer_code
+    return nil unless default_offer_code.present? && !default_offer_code.deleted? && !default_offer_code.inactive?
+
+    base_price = display_price_cents(for_default_duration: true)
+    discount_amount = default_offer_code.amount_off(base_price)
+    [base_price - discount_amount, 0].max
+  end
+
   def find_offer_code_by_external_id(external_id)
     offer_codes.alive.find_by_external_id(external_id) ||
       user.offer_codes.universal_with_matching_currency(price_currency_type).alive.find_by_external_id(external_id)
@@ -1312,6 +1335,25 @@ class Link < ApplicationRecord
     def quantity_enabled_state_is_allowed
       if quantity_enabled && !can_enable_quantity?
         errors.add(:base, "Customers cannot be allowed to choose a quantity for this product.")
+      end
+    end
+
+    def default_offer_code_is_applicable
+      return if default_offer_code.blank?
+      return if default_offer_code.deleted?
+
+      unless default_offer_code.applicable?(self)
+        errors.add(:base, "The selected discount code is not applicable to this product.")
+        return
+      end
+
+      unless default_offer_code.is_currency_valid?(self)
+        errors.add(:base, "The selected discount code currency does not match this product's currency.")
+        return
+      end
+
+      unless default_offer_code.is_amount_valid?(self)
+        errors.add(:base, "The selected discount code would result in an invalid price for this product.")
       end
     end
 

@@ -71,6 +71,7 @@ class Purchase < ApplicationRecord
   attr_json_data_accessor :perceived_price_cents
   attr_json_data_accessor :recommender_model_name
   attr_json_data_accessor :custom_fee_per_thousand
+  attr_json_data_accessor :was_default_offer_code_applied
 
   alias_attribute :total_transaction_cents_usd, :total_transaction_cents
 
@@ -1664,6 +1665,11 @@ class Purchase < ApplicationRecord
       self.build_purchase_offer_code_discount(offer_code:, offer_code_amount: offer_code.amount, offer_code_is_percent: offer_code.is_percent?,
                                               pre_discount_minimum_price_cents: minimum_paid_price_cents_per_unit_before_discount,
                                               duration_in_months: link.is_tiered_membership? ? offer_code.duration_in_months : nil)
+
+      # Track if this purchase used the product's default auto-applied offer code
+      if link.default_offer_code_id.present? && offer_code.id == link.default_offer_code_id
+        self.was_default_offer_code_applied = true
+      end
     end
 
     self.build_purchasing_power_parity_info(factor: purchasing_power_parity_factor) if is_purchasing_power_parity_discounted? && purchasing_power_parity_factor < 1

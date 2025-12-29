@@ -195,6 +195,7 @@ class ProductPresenter
         public_files: product.alive_public_files.attached.map { PublicFilePresenter.new(public_file: _1).props },
         audio_previews_enabled: Feature.active?(:audio_previews, product.user),
         community_chat_enabled: Feature.active?(:communities, product.user) ? product.community_chat_enabled? : nil,
+        default_offer_code_id: product.default_offer_code&.external_id,
       },
       id: product.external_id,
       unique_permalink: product.unique_permalink,
@@ -237,6 +238,7 @@ class ProductPresenter
         fine_print: product.user.refund_policy.fine_print,
       },
       cancellation_discounts_enabled: Feature.active?(:cancellation_discounts, product.user),
+      available_offer_codes: available_offer_codes_for_product,
     }
   end
 
@@ -298,6 +300,20 @@ class ProductPresenter
         {
           success: false,
           message: "Domain verification failed. Please make sure you have correctly configured the DNS record for #{domain}.",
+        }
+      end
+    end
+
+    def available_offer_codes_for_product
+      product.product_and_universal_offer_codes.reject(&:inactive?).map do |offer_code|
+        {
+          id: offer_code.external_id,
+          code: offer_code.code,
+          name: offer_code.name,
+          discount: offer_code.is_percent? ?
+            { type: "percent", value: offer_code.amount_percentage } :
+            { type: "cents", value: offer_code.amount_cents },
+          currency_type: offer_code.currency_type || product.price_currency_type,
         }
       end
     end

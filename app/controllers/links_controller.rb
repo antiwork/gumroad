@@ -360,7 +360,8 @@ class LinksController < ApplicationController
           :shipping_destinations,
           :call_limitation_info,
           :installment_plan,
-          :community_chat_enabled
+          :community_chat_enabled,
+          :default_offer_code_id
         ))
         @product.description = SaveContentUpsellsService.new(seller: @product.user, content: product_permitted_params[:description], old_content: @product.description_was).from_html
         @product.skus_enabled = false
@@ -377,6 +378,16 @@ class LinksController < ApplicationController
         end
         @product.show_in_sections!(product_permitted_params[:section_ids] || [])
         @product.save_shipping_destinations!(product_permitted_params[:shipping_destinations] || []) if @product.is_physical
+
+        # Handle default offer code (auto-apply discount)
+        if product_permitted_params.key?(:default_offer_code_id)
+          if product_permitted_params[:default_offer_code_id].present?
+            offer_code = @product.find_offer_code_by_external_id(product_permitted_params[:default_offer_code_id])
+            @product.default_offer_code = offer_code
+          else
+            @product.default_offer_code = nil
+          end
+        end
 
         if Feature.active?(:cancellation_discounts, @product.user) && (product_permitted_params[:cancellation_discount].present? || @product.cancellation_discount_offer_code.present?)
           begin
