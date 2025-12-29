@@ -1532,7 +1532,7 @@ describe("Payments Settings Scenario", type: :system, js: true) do
         fill_in("Confirm IBAN", with: "BG80BNBG96611020345678")
 
         expect(page).to have_content("Must exactly match the name on your bank account")
-        expect(page).to have_content("Payouts will be made in BGN.")
+        expect(page).to have_content("Payouts will be made in EUR.")
 
         click_on("Update settings")
         wait_for_ajax
