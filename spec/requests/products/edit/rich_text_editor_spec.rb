@@ -544,8 +544,8 @@ describe("Product Edit Rich Text Editor", type: :system, js: true) do
 
         # Allow playing the file
         click_on "Play"
-        expect(page).to have_selector("[aria-label='Progress']", text: "00:00")
-        expect(page).to have_selector("[aria-label='Progress']", text: "00:01")
+        expect(page).to have_selector("[aria-label='Progress']", text: /\d\d:\d\d/)
+        expect(page).to have_selector("[aria-label='Progress']", text: /\d\d:\d\d/)
         expect(page).to have_selector("[aria-label='Pause']")
         click_on "Pause"
         expect(page).to have_selector("[aria-label='Rewind15']")

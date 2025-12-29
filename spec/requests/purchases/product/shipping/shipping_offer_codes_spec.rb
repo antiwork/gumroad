@@ -12,6 +12,7 @@ describe("Product Page - Shipping with offer codes", type: :system, js: true, sh
 
     visit "/l/#{@product.unique_permalink}/#{@offer_code.code}"
     add_to_cart(@product, offer_code: @offer_code)
+    wait_for_ajax
     check_out(@product, should_verify_address: true) do
       expect(page).to have_text("Shipping rate US$20", normalize_ws: true)
     end
@@ -33,6 +34,7 @@ describe("Product Page - Shipping with offer codes", type: :system, js: true, sh
 
     visit "/l/#{@product.unique_permalink}/#{@offer_code.code}"
     add_to_cart(@product, offer_code: @offer_code)
+    wait_for_ajax
     check_out(@product, offer_code: @offer_code.code, should_verify_address: true) do
       expect(page).to have_text("Shipping rate US$20", normalize_ws: true)
     end
@@ -61,6 +63,7 @@ describe("Product Page - Shipping with offer codes", type: :system, js: true, sh
 
     visit "/l/#{@product.unique_permalink}/#{@offer_code.code}"
     add_to_cart(@product, offer_code: @offer_code)
+    wait_for_ajax
     check_out(@product, address: { street: "3029 W Sherman Rd", city: "San Tan Valley", state: "AZ", zip_code: "85144" }, should_verify_address: true) do
       expect(page).to have_text("Subtotal US$153.24", normalize_ws: true)
       expect(page).to have_text("Sales tax US$5.13", normalize_ws: true)
@@ -85,6 +88,7 @@ describe("Product Page - Shipping with offer codes", type: :system, js: true, sh
     it "allows purchase" do
       visit "#{@product.long_url}/#{@offer_code.code}"
       add_to_cart(@product, offer_code: @offer_code)
+      wait_for_ajax
       check_out(@product, offer_code: @offer_code.code, is_free: true, should_verify_address: true)
       expect(Purchase.last.price_cents).to eq(0)
       expect(Purchase.last.shipping_cents).to eq(0)

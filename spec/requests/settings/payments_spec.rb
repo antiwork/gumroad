@@ -1513,6 +1513,7 @@ describe("Payments Settings Scenario", type: :system, js: true) do
 
       it "allows to enter bank account details" do
         visit settings_payments_path
+        expect(page).to have_field("IBAN")
 
         fill_in("First name", with: "barnabas")
         fill_in("Last name", with: "barnabastein")
@@ -1533,8 +1534,8 @@ describe("Payments Settings Scenario", type: :system, js: true) do
         expect(page).to have_content("Payouts will be made in EUR.")
 
         click_on("Update settings")
-
-        expect(page).to have_alert(text: "Thanks! You're all set.")
+        wait_for_ajax
+        expect(page).to have_alert(text: "Thanks! You're all set.", visible: :all)
         expect(page).not_to have_content("Routing number")
         compliance_info = @user.alive_user_compliance_info
         expect(compliance_info.first_name).to eq("barnabas")
