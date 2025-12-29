@@ -34,21 +34,9 @@
 
 > 💡 If you're on Windows, follow our [Windows setup guide](docs/development/windows.md) instead.
 
-Before you begin, ensure you have the following installed:
-
-#### Ruby
-
-- https://www.ruby-lang.org/en/documentation/installation/
-- Install the version listed in [the .ruby-version file](./.ruby-version)
-
-#### Node.js
-
-- https://nodejs.org/en/download
-- Install the version listed in [the .node-version file](./.node-version)
+The only requirement is **Docker**. All dependencies (Ruby, Node.js, MySQL, Redis, etc.) run inside Docker containers.
 
 #### Docker
-
-We use Docker to setup the services for development environment.
 
 - For MacOS: Download the Docker app from the [Docker website](https://www.docker.com/products/docker-desktop)
 - For Linux:
@@ -58,104 +46,7 @@ sudo wget -qO- https://get.docker.com/ | sh
 sudo usermod -aG docker $(whoami)
 ```
 
-#### MySQL & Percona Toolkit
-
-Install a local version of MySQL 8.0.x to match the version running in production.
-
-The local version of MySQL is a dependency of the Ruby `mysql2` gem. You do not need to start an instance of the MySQL service locally. The app will connect to a MySQL instance running in the Docker container.
-
-- For MacOS:
-
-```bash
-brew install mysql@8.0 percona-toolkit
-brew link --force mysql@8.0
-
-# to use Homebrew's `openssl`:
-brew install openssl
-bundle config --global build.mysql2 --with-opt-dir="$(brew --prefix openssl)"
-
-# ensure MySQL is not running as a service
-brew services stop mysql@8.0
-```
-
-- For Linux:
-  - MySQL:
-    - https://dev.mysql.com/doc/refman/8.0/en/linux-installation.html
-    - `apt install libmysqlclient-dev`
-  - Percona Toolkit: https://www.percona.com/doc/percona-toolkit/LATEST/installation.html
-
-#### Image Processing Libraries
-
-##### ImageMagick
-
-We use `imagemagick` for preview editing.
-
-- For MacOS: `brew install imagemagick`
-- For Linux: `sudo apt-get install imagemagick`
-
-##### libvips
-
-For newer image formats we use `libvips` for image processing with ActiveStorage.
-
-- For MacOS: `brew install libvips`
-- For Linux: `sudo apt-get install libvips-dev`
-
-#### FFmpeg
-
-We use `ffprobe` that comes with `FFmpeg` package to fetch metadata from video files.
-
-- For MacOS: `brew install ffmpeg`
-- For Linux: `sudo apt-get install ffmpeg`
-
-#### PDFtk
-
-We use [pdftk](https://www.pdflabs.com/tools/pdftk-server/) to stamp PDF files with the Gumroad logo and the buyers' emails.
-
-- For MacOS: Download from [here](https://www.pdflabs.com/tools/pdftk-the-pdf-toolkit/pdftk_server-2.02-mac_osx-10.11-setup.pkg)
-  - **Note:** pdftk may be blocked by Apple's firewall. If this happens, go to Settings > Privacy & Security and click "Open Anyways" to allow the installation.
-- For Linux: `sudo apt-get install pdftk`
-
-#### wkhtmltopdf
-
-While generating invoices, to convert HTML to PDF, PDFKit expects [wkhtmltopdf](https://wkhtmltopdf.org/) to be installed on your system. [Download](https://wkhtmltopdf.org/downloads.html) and install the version 0.12.6 for your platform.
-
-- **Note** similar to pdftk, this may also be blocked by Apple's firewall on MacOS. Follow a similar process as above.
-
-### Installation
-
-#### Bundler and gems
-
-We use Bundler to install Ruby gems.
-
-```shell
-gem install bundler
-```
-
-Install gems:
-
-```shell
-bundle install
-```
-
-Also make sure to install `dotenv` as it is required for some console commands:
-
-```shell
-gem install dotenv
-```
-
-#### npm and Node.js dependencies
-
-Make sure the correct version of `npm` is enabled:
-
-```shell
-corepack enable
-```
-
-Install dependencies:
-
-```shell
-npm install
-```
+If you are on Linux, or installed Docker via a package manager on a mac, you may need to manually give docker superuser access to open ports 80 and 443. To do that, use `sudo` with the commands below.
 
 ### Configuration
 
@@ -163,56 +54,69 @@ npm install
 
 App can be booted without any custom credentials. But if you would like to use services that require custom credentials (e.g. S3, Stripe, Resend, etc.), you can copy the `.env.example` file to `.env` and fill in the values.
 
-#### Local SSL Certificates
+#### SSL Certificates
 
-1. Install mkcert on macOS:
+SSL certificates are **automatically generated** inside Docker containers when you first run the development environment. The certificates are self-signed, which means:
 
-```shell
-brew install mkcert
+- Browsers will show a security warning when you first visit `https://gumroad.dev`
+- This is normal and expected for development environments
+- To proceed, click "Advanced" → "Proceed to gumroad.dev" (or similar option in your browser)
+- You may need to accept the certificate once per browser
+
+If you need to regenerate certificates, run:
+
+```bash
+make dev-clean-certs
 ```
 
-For other operating systems, see [mkcert installation instructions](https://github.com/FiloSottile/mkcert?tab=readme-ov-file#installation).
-
-2. Generate certificates by running:
-
-```shell
-bin/generate_ssl_certificates
-```
+Then restart the development environment.
 
 ### Running Locally
 
-#### Start Docker services
+#### First-time setup
 
-If you installed Docker Desktop (on a Mac or Windows machine), you can run the following command to start the Docker services:
+Build the development Docker images:
 
-```shell
-make local
+```bash
+make dev-build
 ```
 
-If you are on Linux, or installed Docker via a package manager on a mac, you may have to manually give docker superuser access to open ports 80 and 443. To do that, use `sudo make local` instead.
+This may take several minutes the first time as it downloads base images and installs dependencies.
 
-This command will not terminate. You run this in one tab and start the application in another tab.
-If you want to run Docker services in the background, use `LOCAL_DETACHED=true make local` instead.
+#### Start the development environment
 
-#### Set up the database
+Start all services (Rails, webpack, Sidekiq, AnyCable, databases, etc.):
 
-```shell
-bin/rails db:prepare
+```bash
+make dev
 ```
 
-For Linux (Debian / Ubuntu) you might need the following:
+This command will:
 
-- `apt install libxslt-dev libxml2-dev`
-
-#### Start the application
-
-```shell
-bin/dev
-```
-
-This starts the Rails server, the JavaScript build system, and a Sidekiq worker.
+- Automatically generate SSL certificates (if they don't exist)
+- Start all required services (MySQL, Redis, MongoDB, Elasticsearch, MinIO, etc.)
+- Start the Rails server, webpack dev server, Sidekiq, and AnyCable
+- Set up the database automatically
+- Run in the foreground (press Ctrl+C to stop)
 
 You can now access the application at `https://gumroad.dev`.
+
+#### Running in the background
+
+To run services in the background:
+
+```bash
+make dev-build
+docker compose -f docker/docker-compose.dev.yml up -d
+```
+
+To stop services:
+
+```bash
+make dev-down
+```
+
+For more information, see [Docker Development Guide](docs/development/docker.md).
 
 ## Development
 
@@ -244,14 +148,36 @@ INITIALIZE_RPUSH_APPS=true bundle exec rpush start -e development -f
 #### Rails console:
 
 ```shell
-bin/rails c
+make dev-shell
+# Then inside the container:
+bundle exec rails c
+```
+
+Or using docker compose directly:
+
+```shell
+docker compose -f docker/docker-compose.dev.yml exec web bundle exec rails c
 ```
 
 #### Rake tasks:
 
 ```shell
-bin/rake task_name
+docker compose -f docker/docker-compose.dev.yml exec web bundle exec rake task_name
 ```
+
+#### View logs:
+
+```shell
+make dev-logs
+```
+
+#### Access container shell:
+
+```shell
+make dev-shell
+```
+
+Read more about [dev docker](docs/development/docker.md).
 
 ### Linting
 

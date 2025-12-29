@@ -1,4 +1,4 @@
-.PHONY: build_base build_base_test build build_nginx build_branch_app_nginx build_test build_staging build_production clean clean_local pull stop
+.PHONY: build_base build_base_test build build_nginx build_branch_app_nginx build_test build_staging build_production clean clean_local pull stop dev dev-build dev-down dev-logs dev-shell dev-clean-certs
 
 NEW_BASE_REPO ?= $(ECR_REGISTRY)/gumroad/web_base
 NEW_WEB_REPO ?= $(ECR_REGISTRY)/gumroad/web
@@ -18,6 +18,7 @@ AWS_CLI_DOCKER_IMAGE ?= garland/aws-cli-docker
 PUSH_ASSETS ?= false
 LOCAL_DETACHED ?= false
 LOCAL_DOCKER_COMPOSE_CONFIG = docker-compose-local.yml
+DEV_DOCKER_COMPOSE_CONFIG = docker-compose.dev.yml
 
 build_base:
 	: $${BUNDLE_GEMS__CONTRIBSYS__COM?"Need to set BUNDLE_GEMS__CONTRIBSYS__COM for sidekiq-pro"}
@@ -204,7 +205,29 @@ stop_local:
 	COMPOSE_PROJECT_NAME=$(COMPOSE_PROJECT_NAME) \
 		$(DOCKER_COMPOSE_CMD) -f docker/$(LOCAL_DOCKER_COMPOSE_CONFIG) down
 
+dev:
+	COMPOSE_PROJECT_NAME=$(COMPOSE_PROJECT_NAME) \
+		$(DOCKER_COMPOSE_CMD) -f docker/$(DEV_DOCKER_COMPOSE_CONFIG) up
 
+dev-build:
+	COMPOSE_PROJECT_NAME=$(COMPOSE_PROJECT_NAME) \
+		$(DOCKER_COMPOSE_CMD) -f docker/$(DEV_DOCKER_COMPOSE_CONFIG) build
+
+dev-down:
+	COMPOSE_PROJECT_NAME=$(COMPOSE_PROJECT_NAME) \
+		$(DOCKER_COMPOSE_CMD) -f docker/$(DEV_DOCKER_COMPOSE_CONFIG) down
+
+dev-logs:
+	COMPOSE_PROJECT_NAME=$(COMPOSE_PROJECT_NAME) \
+		$(DOCKER_COMPOSE_CMD) -f docker/$(DEV_DOCKER_COMPOSE_CONFIG) logs -f
+
+dev-shell:
+	COMPOSE_PROJECT_NAME=$(COMPOSE_PROJECT_NAME) \
+		$(DOCKER_COMPOSE_CMD) -f docker/$(DEV_DOCKER_COMPOSE_CONFIG) exec web bash
+
+dev-clean-certs:
+	rm -f docker/local-nginx/certs/*.crt docker/local-nginx/certs/*.key
+	@echo "Certificates removed. They will be regenerated on next 'make dev'"
 
 stop:
 	COMPOSE_PROJECT_NAME=$(COMPOSE_PROJECT_NAME) \

@@ -10,3 +10,13 @@ ci_scripts/
 docker/tmp/
 .env
 .env.*.local
+node_modules/
+public/packs/
+public/packs-test/
+public/assets/
+coverage/
+.sass-cache/
+*.swp
+*.swo
+*~
+.cache/
