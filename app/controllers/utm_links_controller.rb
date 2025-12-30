@@ -76,7 +76,20 @@ class UtmLinksController < Sellers::BaseController
     end
 
     def index_params
-      params.permit(:query, :page, sort: [:key, :direction])
+      {
+        query: params[:query],
+        page: params[:page],
+        sort: extract_sort_params
+      }
+    end
+
+    def extract_sort_params
+      key = params[:key]
+      direction = params[:direction]
+
+      return nil unless %w[link date source medium campaign clicks sales_count revenue_cents conversion_rate].include?(key)
+
+      { key: key, direction: direction == "desc" ? "desc" : "asc" }
     end
 
     def paginated_utm_links_props
