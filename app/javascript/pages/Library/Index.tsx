@@ -290,13 +290,10 @@ export default function LibraryPage() {
 
   const validCreators = React.useMemo(
     () =>
-      creators
-        .map((creator) => ({
-          ...creator,
-          count: state.search.showArchivedOnly ? creator.archived_count : creator.non_archived_count,
-        }))
-        .filter((creator) => creator.count > 0)
-        .sort((a, b) => b.count - a.count),
+      creators.map((creator) => ({
+        ...creator,
+        count: state.search.showArchivedOnly ? creator.archived_count : creator.non_archived_count,
+      })),
     [creators, state.search.showArchivedOnly],
   );
 
