@@ -136,10 +136,25 @@
 }
 
 .animate-fade-in {
-  animation: fade-in 150ms ease-out both;
+  animation-name: fade-in;
+  animation-fill-mode: both;
+  animation-timing-function: ease-out;
 }
 
-.animate-fade-out-delayed {
-  animation: fade-in 150ms ease-out both,
-             fade-out 200ms ease-in 1.2s forwards;
+.animate-fade-out {
+  animation-name: fade-out;
+  animation-fill-mode: forwards;
+  animation-timing-function: ease-in;
+}
+
+.animation-duration-150 {
+  animation-duration: 150ms;
+}
+
+.animation-duration-200 {
+  animation-duration: 200ms;
+}
+
+.animation-delay-1200 {
+  animation-delay: 1.2s;
 }

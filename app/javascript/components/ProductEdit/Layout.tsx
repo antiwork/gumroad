@@ -358,7 +358,7 @@ const AutosaveIndicator = ({
     return (
       <Pill
         size="small"
-        className="flex items-center gap-2 animate-fade-in"
+        className="flex items-center gap-2 animate-fade-in animation-duration-150"
       >
         <LoadingSpinner className="size-3" />
         Saving…
@@ -371,7 +371,7 @@ const AutosaveIndicator = ({
       <Pill
         size="small"
         color="success"
-        className="animate-fade-out-delayed"
+        className="animate-fade-in animation-duration-150 animate-fade-out animation-duration-200 animation-delay-1200"
       >
         Saved
       </Pill>
