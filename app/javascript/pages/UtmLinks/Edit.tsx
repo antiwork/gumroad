@@ -17,7 +17,6 @@ import { UtmLinkDestinationOption, UtmLinkEditProps } from "$app/types/utm_link"
 
 const MAX_UTM_PARAM_LENGTH = 200;
 
-// Helper function to compute target_resource from destination
 const computeTargetResource = (dest: UtmLinkDestinationOption | null) => {
   if (!dest) return { target_resource_type: null, target_resource_id: null };
 
@@ -47,7 +46,6 @@ export default function UtmLinksEdit() {
     };
   });
 
-  // Compute initial destination and target resource before useForm
   const initialDestination = utm_link.destination_option?.id
     ? (context.destination_options.find((o) => o.id === assertDefined(utm_link.destination_option).id) ?? null)
     : null;

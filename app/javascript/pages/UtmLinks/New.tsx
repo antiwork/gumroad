@@ -22,7 +22,6 @@ const MAX_UTM_PARAM_LENGTH = 200;
 
 const duplicatedTitle = (title?: string) => (title ? `${title} (copy)` : "");
 
-// Helper function to compute target_resource from destination
 const computeTargetResource = (dest: UtmLinkDestinationOption | null) => {
   if (!dest) return { target_resource_type: null, target_resource_id: null };
 
@@ -54,7 +53,6 @@ export default function UtmLinksNew() {
   });
   const [isLoadingNewPermalink, setIsLoadingNewPermalink] = React.useState(false);
 
-  // Compute initial destination and target resource before useForm
   const initialDestination = utm_link?.destination_option?.id
     ? (context.destination_options.find((o) => o.id === assertDefined(utm_link.destination_option).id) ?? null)
     : null;
@@ -160,7 +158,6 @@ export default function UtmLinksNew() {
     e.preventDefault();
     if (!validate()) return;
 
-    // Preserve copy_from query param for error redirect
     const url = new URL(window.location.href);
     const copyFrom = url.searchParams.get("copy_from");
     const postUrl = copyFrom
