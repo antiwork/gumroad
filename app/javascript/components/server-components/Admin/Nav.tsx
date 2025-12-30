@@ -64,6 +64,7 @@ export const Nav = ({ title, current_user }: Props) => {
         <NavLink text="Features" icon="solid-flag" href={Routes.admin_flipper_ui_url(routeParams)} />
         <NavLink text="Refund queue" icon="solid-currency-dollar" href={Routes.admin_refund_queue_url(routeParams)} />
         <NavLink text="Sales reports" icon="bar-chart-fill" href={Routes.admin_sales_reports_url(routeParams)} />
+        <NavLink text="Unreviewed users" icon="people-fill" href={Routes.admin_unreviewed_users_url(routeParams)} />
       </NavSection>
     </NavFramework>
   );

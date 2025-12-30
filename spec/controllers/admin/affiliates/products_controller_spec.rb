@@ -32,7 +32,7 @@ describe Admin::Affiliates::ProductsController, inertia: true do
     it "returns successful response with Inertia page data" do
       expect(response).to be_successful
       expect(inertia.component).to eq("Admin/Affiliates/Products/Index")
-      expect(inertia.props[:products].map { _1[:id] }).to contain_exactly(published_product.id, unpublished_product.id)
+      expect(inertia.props[:products].map { _1[:external_id] }).to contain_exactly(published_product.external_id, unpublished_product.external_id)
       expect(inertia.props[:pagination]).to eq({ pages: 1, page: 1 })
     end
   end

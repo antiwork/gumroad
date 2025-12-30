@@ -42,15 +42,6 @@ class SettingsPresenter
     end
   end
 
-  def page_title(page)
-    case page
-    when "main" then "Settings"
-    when "authorized_applications" then "Applications"
-    when "third_party_analytics" then "Third-party analytics"
-    else page.humanize
-    end
-  end
-
   def main_props
     {
       settings_pages: pages,

@@ -1,11 +1,12 @@
 # frozen_string_literal: true
 
-class Settings::AdvancedController < Sellers::BaseController
+class Settings::AdvancedController < Settings::BaseController
   before_action :authorize
 
   def show
     @title = "Settings"
-    @react_component_props = SettingsPresenter.new(pundit_user:).advanced_props
+
+    render inertia: "Settings/Advanced/Show", props: settings_presenter.advanced_props
   end
 
   def update
@@ -15,19 +16,19 @@ class Settings::AdvancedController < Sellers::BaseController
       end
 
       if @invalid_blocked_email.present?
-        return render json: { success: false, error_message: "The email #{@invalid_blocked_email} cannot be blocked as it is invalid." }
+        return redirect_to settings_advanced_path, alert: "The email #{@invalid_blocked_email} cannot be blocked as it is invalid."
       end
     rescue => e
       Bugsnag.notify(e)
       logger.error "Couldn't block customer emails: #{e.message}"
-      return render json: { success: false, error_message: "Sorry, something went wrong. Please try again." }
+      return redirect_to settings_advanced_path, alert: "Sorry, something went wrong. Please try again."
     end
 
     begin
       current_seller.with_lock { current_seller.update(advanced_params) }
     rescue => e
       Bugsnag.notify(e)
-      return render json: { success: false, error_message: "Something broke. We're looking into what happened. Sorry about this!" }
+      return redirect_to settings_advanced_path, alert: "Something broke. We're looking into what happened. Sorry about this!"
     end
 
     if params[:domain].present?
@@ -39,15 +40,17 @@ class Settings::AdvancedController < Sellers::BaseController
       rescue ActiveRecord::RecordNotUnique
         error_message = "The custom domain is already in use."
       end
-      return render json: { success: false, error_message: } if error_message
+      if error_message
+        return redirect_to settings_advanced_path, alert: error_message
+      end
     elsif params[:domain] == "" && current_seller.custom_domain.present?
       current_seller.custom_domain.mark_deleted!
     end
 
     if current_seller.save
-      render json: { success: true }
+      redirect_to settings_advanced_path, status: :see_other, notice: "Your account has been updated!"
     else
-      render json: { success: false, error_message: current_seller.errors.full_messages.to_sentence }
+      redirect_to settings_advanced_path, alert: current_seller.errors.full_messages.to_sentence
     end
   end
 

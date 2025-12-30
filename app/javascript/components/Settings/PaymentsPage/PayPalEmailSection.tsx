@@ -1,7 +1,8 @@
 import cx from "classnames";
 import * as React from "react";
 
-import { FormFieldName, PayoutMethod } from "$app/components/server-components/Settings/PaymentsPage";
+import type { FormFieldName, PayoutMethod } from "$app/types/payments";
+
 import { Alert } from "$app/components/ui/Alert";
 
 const PayPalEmailSection = ({
