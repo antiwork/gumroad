@@ -8,7 +8,12 @@ type Options = {
   save: () => Promise<void>;
   saving: boolean;
   isBlocked: boolean;
+  debounceMs?: number;
+  intervalMs?: number;
 };
+
+const DEFAULT_DEBOUNCE_MS = 10_000;
+const DEFAULT_INTERVAL_MS = 120_000;
 
 export const useAutosaveProduct = ({
   product,
@@ -16,6 +21,8 @@ export const useAutosaveProduct = ({
   save,
   saving,
   isBlocked,
+  debounceMs,
+  intervalMs,
 }: Options) => {
   const debounceTimer = React.useRef<number | null>(null);
   const intervalTimer = React.useRef<number | null>(null);
@@ -43,14 +50,14 @@ export const useAutosaveProduct = ({
     if (!isDirty || saving || isBlocked) return;
 
     clearDebounce();
-    debounceTimer.current = window.setTimeout(triggerSave, 10_000);
+    debounceTimer.current = window.setTimeout(triggerSave, debounceMs ?? DEFAULT_DEBOUNCE_MS);
 
     return clearDebounce;
   }, [product, isDirty, saving, isBlocked, triggerSave]);
 
   // Periodic safety save
   React.useEffect(() => {
-    intervalTimer.current = window.setInterval(triggerSave, 120_000);
+    intervalTimer.current = window.setInterval(triggerSave, intervalMs ?? DEFAULT_INTERVAL_MS);
 
     return () => {
       if (intervalTimer.current !== null) {
