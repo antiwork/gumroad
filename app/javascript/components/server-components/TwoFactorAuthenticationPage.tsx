@@ -7,6 +7,7 @@ import { register } from "$app/utils/serverComponentUtil";
 
 import { Layout } from "$app/components/Authentication/Layout";
 import { Button } from "$app/components/Button";
+import { Input } from "$app/components/Input";
 import { showAlert } from "$app/components/server-components/Alert";
 import { Alert } from "$app/components/ui/Alert";
 import { useOriginalLocation } from "$app/components/useOriginalLocation";
@@ -63,14 +64,16 @@ export const TwoFactorAuthenticationPage = ({
         </>
       }
     >
-      <form onSubmit={(e) => void handleSubmit(e)}>
-        <section>
+      <form onSubmit={(e) => void handleSubmit(e)} className="flex flex-col gap-12">
+        <section className="flex flex-col gap-8 pb-12">
           {loginState.type === "error" ? <Alert variant="danger">{loginState.message}</Alert> : null}
-          <fieldset>
+          <fieldset className="flex flex-col space-y-2">
             <legend>
-              <label htmlFor={uid}>Authentication Token</label>
+              <label className="cursor-pointer" htmlFor={uid}>
+                Authentication Token
+              </label>
             </legend>
-            <input id={uid} type="text" value={token} onChange={(e) => setToken(e.target.value)} required autoFocus />
+            <Input id={uid} type="text" value={token} onChange={(e) => setToken(e.target.value)} required autoFocus />
           </fieldset>
           <Button color="primary" type="submit" disabled={loginState.type === "submitting"}>
             {loginState.type === "submitting" ? "Logging in..." : "Login"}
