@@ -25,6 +25,7 @@ import {
   CartItemQuantity,
   CartItemActions,
 } from "$app/components/CartItemList";
+import { GiftForm } from "$app/components/Checkout/GiftForm";
 import { PaymentForm } from "$app/components/Checkout/PaymentForm";
 import { Icon } from "$app/components/Icons";
 import { Popover } from "$app/components/Popover";
@@ -249,6 +250,11 @@ export const Checkout = ({
                     updateCart={updateCart}
                   />
                 ))}
+                {state.products.length === 1 && state.products[0]?.canGift && !state.products[0]?.payInInstallments ? (
+                  <div className="border-t border-border p-4">
+                    <GiftForm isMembership={state.products[0]?.nativeType === "membership"} />
+                  </div>
+                ) : null}
               </CartItemList>
               <CartItemList>
                 <div className="grid gap-4 border-border p-4">

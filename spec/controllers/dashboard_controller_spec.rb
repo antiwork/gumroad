@@ -46,6 +46,12 @@ describe DashboardController, type: :controller, inertia: true do
           activity_items: []
         )
       end
+
+      it "creates LargeSeller record for sellers with many sales" do
+        stub_const("LargeSeller::SALES_LOWER_LIMIT", 0)
+
+        expect { get :index }.to change { LargeSeller.where(user: seller).count }.from(0).to(1)
+      end
     end
 
     context "when seller has products, but no sales" do
