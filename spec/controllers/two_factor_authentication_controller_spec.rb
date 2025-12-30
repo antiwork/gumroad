@@ -177,6 +177,7 @@ describe TwoFactorAuthenticationController do
         let(:user) { @user }
         let(:call_action) { post :create, params: { token: @user.otp_code, user_id: @user.encrypted_external_id }, format: :json }
         let(:expected_redirect_location) { controller.send(:login_path_for, @user) }
+        let(:expects_json_response) { true }
       end
     end
 

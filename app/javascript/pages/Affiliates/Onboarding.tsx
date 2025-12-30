@@ -1,33 +1,35 @@
+import { Link, useForm, usePage } from "@inertiajs/react";
 import cx from "classnames";
 import * as React from "react";
-import { Link, useLoaderData } from "react-router-dom";
 import { cast } from "ts-safe-cast";
 
-import {
-  submitAffiliateSignupForm,
-  SelfServeAffiliateProduct,
-  AffiliateSignupFormPageData,
-} from "$app/data/affiliates";
-import { asyncVoid } from "$app/utils/promise";
-import { assertResponseError } from "$app/utils/request";
+import { SelfServeAffiliateProduct } from "$app/data/affiliates";
 import { isUrlValid } from "$app/utils/url";
 
-import { Button, NavigationButton } from "$app/components/Button";
+import { Button } from "$app/components/Button";
 import { CopyToClipboard } from "$app/components/CopyToClipboard";
 import { useLoggedInUser } from "$app/components/LoggedInUser";
+import { NavigationButtonInertia } from "$app/components/NavigationButton";
 import { NumberInput } from "$app/components/NumberInput";
-import { AffiliatesNavigation, Layout } from "$app/components/server-components/AffiliatesPage";
 import { showAlert } from "$app/components/server-components/Alert";
 import { ToggleSettingRow } from "$app/components/SettingRow";
-import { Alert } from "$app/components/ui/Alert";
-import { Pill } from "$app/components/ui/Pill";
+import { PageHeader } from "$app/components/ui/PageHeader";
 import Placeholder from "$app/components/ui/Placeholder";
 import { Table, TableBody, TableCaption, TableCell, TableHead, TableHeader, TableRow } from "$app/components/ui/Table";
+import { Tabs, Tab } from "$app/components/ui/Tabs";
 import { WithTooltip } from "$app/components/WithTooltip";
 
 import placeholderImage from "$assets/images/placeholders/affiliate-signup-form.png";
 
 type InvalidProductAttrs = Set<"commission" | "destination_url">;
+
+type Props = {
+  creator_subdomain: string;
+  products: SelfServeAffiliateProduct[];
+  disable_global_affiliate: boolean;
+  global_affiliate_percentage: number;
+  affiliates_disabled_reason: string | null;
+};
 
 const MIN_FEE_PERCENT = 1;
 const MAX_FEE_PERCENT = 90;
@@ -44,65 +46,83 @@ const validateProduct = (product: SelfServeAffiliateProduct): InvalidProductAttr
   return invalidAttributes;
 };
 
-export const AffiliateSignupForm = () => {
-  const data = cast<AffiliateSignupFormPageData>(useLoaderData());
+const AffiliatesNavigation = () => (
+  <Tabs>
+    <Tab asChild isSelected={false}>
+      <Link href={cast<string>(Routes.affiliates_path())}>Affiliates</Link>
+    </Tab>
+    <Tab asChild isSelected>
+      <Link href={cast<string>(Routes.onboarding_affiliates_path())}>Affiliate Signup Form</Link>
+    </Tab>
+  </Tabs>
+);
+
+export default function AffiliatesOnboarding() {
+  const props = cast<Props>(usePage().props);
   const loggedInUser = useLoggedInUser();
-  const [isSaving, setIsSaving] = React.useState(false);
-  const [products, setProducts] = React.useState<SelfServeAffiliateProduct[]>(data.products);
-  const [disableGlobalAffiliate, setDisableGlobalAffiliate] = React.useState(data.disable_global_affiliate);
-  const enableAffiliateLink = products.some(({ enabled, fee_percent }) => enabled && isValidFeePercent(fee_percent));
 
-  const affiliateRequestUrl = Routes.custom_domain_new_affiliate_request_url({ host: data.creator_subdomain });
+  const { data, setData, patch, processing } = useForm({
+    products: props.products,
+    disable_global_affiliate: props.disable_global_affiliate,
+  });
 
-  const handleProductChange = (productId: number, newValue: Partial<SelfServeAffiliateProduct>) => {
-    const newProducts = products.map((product) => (product.id === productId ? { ...product, ...newValue } : product));
-    setProducts(newProducts);
-  };
+  const enableAffiliateLink = data.products.some(
+    ({ enabled, fee_percent }) => enabled && isValidFeePercent(fee_percent),
+  );
 
-  const handleSaveChanges = asyncVoid(async () => {
-    if (products.some((product) => validateProduct(product).size > 0)) {
+  const affiliateRequestUrl = Routes.custom_domain_new_affiliate_request_url({ host: props.creator_subdomain });
+
+  const handleSaveChanges = (e: React.FormEvent) => {
+    e.preventDefault();
+
+    const hasErrors = data.products.some((product) => validateProduct(product).size > 0);
+
+    if (hasErrors) {
       showAlert("There are some errors on the page. Please fix them and try again.", "error");
       return;
     }
 
-    try {
-      setIsSaving(true);
-      await submitAffiliateSignupForm({ products, disable_global_affiliate: disableGlobalAffiliate });
-      showAlert("Changes saved!", "success");
-    } catch (e) {
-      assertResponseError(e);
-      showAlert(`An error occurred while saving changes${e.message ? ` - ${e.message}` : ""}`, "error");
-    } finally {
-      setIsSaving(false);
-    }
-  });
+    patch(Routes.affiliate_requests_onboarding_form_path());
+  };
+
+  const onToggleDisableGlobalAffiliate = (value: boolean) => {
+    setData("disable_global_affiliate", value);
+  };
+
+  const onUpdateProductLink = (index: number, updatedValues: Partial<SelfServeAffiliateProduct>) => {
+    setData(
+      "products",
+      data.products.map((product, i) => (i === index ? { ...product, ...updatedValues } : product)),
+    );
+  };
 
   return (
-    <Layout
-      navigation={<AffiliatesNavigation />}
-      title="Affiliates"
-      actions={
-        <>
-          <WithTooltip position="bottom" tip={data.affiliates_disabled_reason}>
-            <Link
-              to="/affiliates/new"
-              className="button"
-              inert={!loggedInUser?.policies.direct_affiliate.create || data.affiliates_disabled_reason !== null}
+    <div>
+      <PageHeader
+        title="Affiliates"
+        actions={
+          <>
+            <WithTooltip position="bottom" tip={props.affiliates_disabled_reason}>
+              <NavigationButtonInertia
+                href={cast<string>(Routes.new_affiliate_path())}
+                disabled={!loggedInUser?.policies.direct_affiliate.create || props.affiliates_disabled_reason !== null}
+              >
+                Add affiliate
+              </NavigationButtonInertia>
+            </WithTooltip>
+            <Button
+              onClick={handleSaveChanges}
+              disabled={processing || !loggedInUser?.policies.affiliate_requests_onboarding_form.update}
+              color="accent"
             >
-              Add affiliate
-            </Link>
-          </WithTooltip>
-          <Button
-            onClick={handleSaveChanges}
-            disabled={!loggedInUser?.policies.affiliate_requests_onboarding_form.update || isSaving}
-            color="accent"
-          >
-            {isSaving ? "Saving..." : "Save changes"}
-          </Button>
-        </>
-      }
-    >
-      {products.length === 0 ? (
+              {processing ? "Saving..." : "Save changes"}
+            </Button>
+          </>
+        }
+      >
+        <AffiliatesNavigation />
+      </PageHeader>
+      {data.products.length === 0 ? (
         <section className="p-4! md:p-8!">
           <Placeholder>
             <figure>
@@ -110,17 +130,17 @@ export const AffiliateSignupForm = () => {
             </figure>
             <h2>Almost there!</h2>
             You need a published product to add affiliates.
-            <NavigationButton
+            <NavigationButtonInertia
               href={Routes.new_product_path()}
               color="accent"
               disabled={!loggedInUser?.policies.product.create}
             >
               New product
-            </NavigationButton>
+            </NavigationButtonInertia>
           </Placeholder>
         </section>
       ) : (
-        <form>
+        <form onSubmit={handleSaveChanges}>
           <section className="p-4! md:p-8!">
             <header>
               <h2>Affiliate link</h2>
@@ -154,9 +174,9 @@ export const AffiliateSignupForm = () => {
                 ) : null}
               </div>
               {enableAffiliateLink ? null : (
-                <Alert variant="warning">
+                <div role="alert" className="warning">
                   You must enable and set up the commission for at least one product before sharing your affiliate link.
-                </Alert>
+                </div>
               )}
             </fieldset>
           </section>
@@ -176,12 +196,12 @@ export const AffiliateSignupForm = () => {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {products.map((product) => (
+                {data.products.map((product, index) => (
                   <ProductRow
                     key={product.id}
                     product={product}
                     disabled={!loggedInUser?.policies.affiliate_requests_onboarding_form.update}
-                    onChange={(value) => handleProductChange(product.id, value)}
+                    onChange={(updatedValues) => onUpdateProductLink(index, updatedValues)}
                   />
                 ))}
               </TableBody>
@@ -192,7 +212,7 @@ export const AffiliateSignupForm = () => {
               <h2>Gumroad Affiliate Program</h2>
               <div>
                 Being part of Gumroad Affiliate Program enables other creators to share your products in exchange for a{" "}
-                {data.global_affiliate_percentage}% commission.
+                {props.global_affiliate_percentage}% commission.
               </div>
               <a href="/help/article/249-affiliate-faq" target="_blank" rel="noreferrer">
                 Learn more
@@ -201,16 +221,16 @@ export const AffiliateSignupForm = () => {
             <fieldset>
               <ToggleSettingRow
                 label="Opt out of the Gumroad Affiliate Program"
-                value={disableGlobalAffiliate}
-                onChange={setDisableGlobalAffiliate}
+                value={data.disable_global_affiliate}
+                onChange={onToggleDisableGlobalAffiliate}
               />
             </fieldset>
           </section>
         </form>
       )}
-    </Layout>
+    </div>
   );
-};
+}
 
 type ProductRowProps = {
   product: SelfServeAffiliateProduct;
@@ -218,7 +238,7 @@ type ProductRowProps = {
   onChange: (value: Partial<SelfServeAffiliateProduct>) => void;
 };
 
-export const ProductRow = ({ product, disabled, onChange }: ProductRowProps) => {
+const ProductRow = ({ product, disabled, onChange }: ProductRowProps) => {
   const invalidAttrs = validateProduct(product);
   const uid = React.useId();
 
@@ -250,7 +270,7 @@ export const ProductRow = ({ product, disabled, onChange }: ProductRowProps) => 
                   disabled={disabled || !product.enabled}
                   {...inputProps}
                 />
-                <Pill className="-mr-2 shrink-0">%</Pill>
+                <div className="pill">%</div>
               </div>
             )}
           </NumberInput>

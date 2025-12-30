@@ -1,8 +1,9 @@
 # frozen_string_literal: true
 
 require "spec_helper"
+require "inertia_rails/rspec"
 
-describe SignupController do
+describe SignupController, type: :controller, inertia: true do
   render_views
 
   before :each do
@@ -16,25 +17,84 @@ describe SignupController do
         @next_url = oauth_authorization_path(client_id: @oauth_application.uid, redirect_uri: @oauth_application.redirect_uri, scope: "edit_products")
       end
 
-      it "returns the page successfully" do
+      it "returns the page successfully, sets the props correctly and sets noindex header" do
         get :new, params: { next: @next_url }
+
         expect(response).to be_successful
-      end
-
-      it "sets the application" do
-        get :new, params: { next: @next_url }
-
         expect(assigns[:application]).to eq @oauth_application
-      end
-
-      it "sets noindex header when next param starts with /oauth/authorize" do
-        get :new, params: { next: "/oauth/authorize?client_id=123" }
+        expect(inertia.component).to eq("Signup/New")
+        expect(inertia.props[:email]).to be_nil
+        expect(inertia.props[:application_name]).to eq(@oauth_application.name)
+        expect(inertia.props[:recaptcha_site_key]).to eq(GlobalConfig.get("RECAPTCHA_SIGNUP_SITE_KEY"))
         expect(response.headers["X-Robots-Tag"]).to eq "noindex"
       end
 
-      it "does not set noindex header for regular signup" do
-        get :new
-        expect(response.headers["X-Robots-Tag"]).to be_nil
+      def signup_props
+        referrer = User.find_by_username(params[:referrer]) if params[:referrer].present?
+        number_of_creators, total_made = $redis.mget(RedisKey.number_of_creators, RedisKey.total_made)
+        login_props.merge(
+          recaptcha_site_key: GlobalConfig.get("RECAPTCHA_SIGNUP_SITE_KEY"),
+          referrer: referrer ? {
+            id: referrer.external_id,
+            name: referrer.name_or_username,
+          } : nil,
+          stats: {
+            number_of_creators: number_of_creators.to_i,
+            total_made: total_made.to_i,
+          },
+        )
+      end
+
+      context "when an email is provided in the params" do
+        it "sets the email in the props" do
+          get :new, params: { email: "test@example.com" }
+          expect(inertia.props[:email]).to eq "test@example.com"
+        end
+      end
+
+      context "when an email is present in the next parameter" do
+        it "sets the email in the props" do
+          get :new, params: { next: settings_team_invitations_path(email: "test@example.com", format: :json) }
+          expect(inertia.props[:email]).to eq "test@example.com"
+        end
+      end
+
+      context "when a referrer is provided in the params" do
+        let(:referrer) { create(:user, username: "testreferrer") }
+
+        it "sets the referrer in the props" do
+          get :new, params: { referrer: referrer.username }
+          expect(inertia.props[:referrer]).to eq({
+                                                   id: referrer.external_id,
+                                                   name: referrer.name_or_username,
+                                                 })
+        end
+      end
+
+      context "when stats are present in Redis" do
+        before do
+          $redis.mset(RedisKey.number_of_creators, 100, RedisKey.total_made, 1000000)
+        end
+
+        after do
+          $redis.del(RedisKey.number_of_creators)
+          $redis.del(RedisKey.total_made)
+        end
+
+        it "sets the stats in the props" do
+          get :new
+          expect(inertia.props[:stats]).to eq({
+                                                number_of_creators: 100,
+                                                total_made: 1000000,
+                                              })
+        end
+      end
+
+      context "when next param does not start with /oauth/authorize" do
+        it "sets noindex header" do
+          get :new, params: { next: "invalid-url" }
+          expect(response.headers["X-Robots-Tag"]).to be_nil
+        end
       end
     end
   end
@@ -49,8 +109,15 @@ describe SignupController do
         it "signs in as user" do
           post "create", params: { user: { email: @user.email, password: "password" } }
 
-          expect(response.parsed_body["success"]).to eq true
+          expect(response).to redirect_to(dashboard_path)
           expect(controller.user_signed_in?).to eq true
+        end
+
+        it "returns json response" do
+          post "create", params: { user: { email: @user.email, password: "password" } }, format: :json
+
+          expect(response.parsed_body["success"]).to be(true)
+          expect(response.parsed_body["redirect_location"]).to eq(dashboard_path)
         end
       end
 
@@ -64,8 +131,7 @@ describe SignupController do
           post "create", params: { user: { email: @user.email, password: "password" } }
 
           expect(session[:verify_two_factor_auth_for]).to eq @user.id
-          expect(response.parsed_body["redirect_location"]).to eq two_factor_authentication_path(next: dashboard_path)
-          expect(response.parsed_body["success"]).to eq true
+          expect(response).to redirect_to(two_factor_authentication_path(next: dashboard_path))
           expect(controller.user_signed_in?).to eq false
         end
       end
@@ -75,7 +141,7 @@ describe SignupController do
       user = build(:user, password: "password")
       post "create", params: { user: { email: user.email, password: "password" } }
 
-      expect(response.parsed_body["redirect_location"]).to eq dashboard_path
+      expect(response).to redirect_to(dashboard_path)
 
       last_user = User.last
       expect(last_user.email).to eq user.email
@@ -84,13 +150,21 @@ describe SignupController do
       expect(last_user.check_merchant_account_is_linked).to be(false)
     end
 
+    it "creates a user and returns json response" do
+      user = build(:user, password: "password")
+      post "create", params: { user: { email: user.email, password: "password" } }, format: :json
+
+      expect(response.parsed_body["success"]).to be(true)
+      expect(response.parsed_body["redirect_location"]).to eq(dashboard_path)
+    end
+
     it "sets two factor authenticated" do
       expect(controller).to receive(:remember_two_factor_auth).and_call_original
 
       user = build(:user, password: "password")
       post :create, params: { user: { email: user.email, password: "password" } }
 
-      expect(response).to be_successful
+      expect(response).to redirect_to(dashboard_path)
     end
 
     describe "Sign up and connect to OAuth app" do
@@ -103,8 +177,7 @@ describe SignupController do
       it "redirects to the OAuth authorization path after successful login" do
         post "create", params: { user: { email: @user.email, password: "password" }, next: @next_url }
 
-        expect(response.parsed_body["redirect_location"]).to eq(CGI.unescape(@next_url))
-        expect(response.parsed_body["success"]).to be(true)
+        expect(response).to redirect_to(CGI.unescape(@next_url))
       end
     end
 
@@ -170,7 +243,14 @@ describe SignupController do
 
     it "does not create user if user payload is not given" do
       post "create"
-      expect(response.parsed_body["success"]).to eq false
+      expect(response).to redirect_to(signup_path)
+      expect(flash[:warning]).to eq "Please provide a valid email address."
+    end
+
+    it "returns json error if user payload is not given" do
+      post "create", format: :json
+      expect(response.parsed_body["success"]).to be(false)
+      expect(response.parsed_body["error_message"]).to eq "Please provide a valid email address."
     end
 
     it "turns notifications off the user if the user is from Canada" do
@@ -206,9 +286,9 @@ describe SignupController do
       referrer_url = [request.protocol, "badguy.com", referrer_path].join
       request.headers["HTTP_REFERER"] = referrer_url
       expect do
-        post :create, params: { format: :json, user:
+        post :create, params: { user:
           { email: purchase.email, add_purchase_to_existing_account: false, buyer_signup: true, password: "password", purchase_id: purchase.external_id } }
-        expect(response.parsed_body["redirect_location"]).to eq(Addressable::URI.escape(referrer_path))
+        expect(response).to redirect_to(Addressable::URI.escape(referrer_path))
       end.to change { User.count }.by(1)
     end
 
