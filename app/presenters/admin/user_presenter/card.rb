@@ -62,7 +62,8 @@ class Admin::UserPresenter::Card
 
       # Associations
       admin_manageable_user_memberships: user_memberships,
-      alive_user_compliance_info: compliance_info
+      alive_user_compliance_info: compliance_info,
+      collaborations: collaborations
     }
   end
 
@@ -119,5 +120,20 @@ class Admin::UserPresenter::Card
         has_individual_tax_id: info.has_individual_tax_id,
         has_business_tax_id: info.has_business_tax_id
       }
+    end
+
+    def collaborations
+      user.accepted_alive_collaborations.includes(:seller).map do |collaboration|
+        {
+          id: collaboration.id,
+          percent_commission: collaboration.affiliate_percentage,
+          created_at: collaboration.created_at,
+          seller: {
+            id: collaboration.seller.id,
+            avatar_url: collaboration.seller.avatar_url,
+            display_name_or_email: collaboration.seller.display_name_or_email
+          }
+        }
+      end
     end
 end

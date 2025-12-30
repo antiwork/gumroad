@@ -147,6 +147,72 @@ describe Admin::UserPresenter::Card do
       end
     end
 
+    describe "collaborations" do
+      context "when user has no collaborations" do
+        it "returns an empty array" do
+          expect(props[:collaborations]).to eq([])
+        end
+      end
+
+      context "when user has accepted collaborations" do
+        let(:seller) { create(:user) }
+        let!(:collaboration) do
+          create(:collaborator, affiliate_user: user, seller:, affiliate_basis_points: 20_00)
+        end
+
+        it "returns an array of collaboration hashes" do
+          collaborations = props[:collaborations]
+
+          expect(collaborations).to be_an(Array)
+          expect(collaborations.size).to eq(1)
+        end
+
+        it "includes collaboration attributes" do
+          collaboration_data = props[:collaborations].first
+
+          expect(collaboration_data).to include(
+            id: collaboration.id,
+            percent_commission: 20,
+            created_at: collaboration.created_at
+          )
+        end
+
+        it "includes seller information" do
+          collaboration_data = props[:collaborations].first
+
+          expect(collaboration_data[:seller]).to eq(
+            id: seller.id,
+            avatar_url: seller.avatar_url,
+            display_name_or_email: seller.display_name_or_email
+          )
+        end
+      end
+
+      context "when user has pending collaboration invitations" do
+        let(:seller) { create(:user) }
+        let!(:collaboration) do
+          create(:collaborator, :with_pending_invitation, affiliate_user: user, seller:)
+        end
+
+        it "does not include pending collaborations" do
+          expect(props[:collaborations]).to eq([])
+        end
+      end
+
+      context "when user has deleted collaborations" do
+        let(:seller) { create(:user) }
+        let!(:collaboration) do
+          collaborator = create(:collaborator, affiliate_user: user, seller:)
+          collaborator.mark_deleted!
+          collaborator
+        end
+
+        it "does not include deleted collaborations" do
+          expect(props[:collaborations]).to eq([])
+        end
+      end
+    end
+
     describe "compliance info" do
       context "when user has no compliance info" do
         before do

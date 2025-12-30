@@ -4,6 +4,7 @@ import React from "react";
 import AdminUserActions from "$app/components/Admin/Users/Actions";
 import AdminUserAddCredit from "$app/components/Admin/Users/AddCredit";
 import AdminUserChangeEmail from "$app/components/Admin/Users/ChangeEmail";
+import AdminUserCollaborations from "$app/components/Admin/Users/Collaborations";
 import AdminUserComments from "$app/components/Admin/Users/Comments";
 import AdminUserComplianceInfo, { type ComplianceInfoProps } from "$app/components/Admin/Users/ComplianceInfo";
 import AdminUserCustomFee from "$app/components/Admin/Users/CustomFee";
@@ -30,6 +31,13 @@ export type UserMembership = {
   created_at: string;
 };
 
+export type Collaboration = {
+  id: number;
+  seller: Seller;
+  percent_commission: number;
+  created_at: string;
+};
+
 type BlockedObject = {
   blocked_at: string | null;
   created_at: string;
@@ -53,6 +61,7 @@ export type User = {
   verified: boolean | null;
   all_adult_products: boolean;
   admin_manageable_user_memberships: UserMembership[];
+  collaborations: Collaboration[];
   alive_user_compliance_info?: ComplianceInfoProps | null;
   compliant?: boolean | null;
   suspended: boolean;
@@ -86,6 +95,7 @@ const UserCard = ({ user, isAffiliateUser = false }: Props) => {
 
       <AdminUserActions user={user} />
       <AdminUserMemberships user={user} />
+      <AdminUserCollaborations user={user} />
       <AdminUserPermissionRisk user={user} />
       <AdminUserComplianceInfo user={user} />
       <hr />
