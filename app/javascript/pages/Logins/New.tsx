@@ -71,10 +71,10 @@ function LoginPage() {
           <Separator>
             <span>or</span>
           </Separator>
-          <section>
+          <section className="flex flex-col gap-8">
             <WarningFlash />
             <fieldset>
-              <legend>
+              <legend className="mb-2">
                 <label className="cursor-pointer" htmlFor={`${uid}-email`}>
                   Email
                 </label>
@@ -89,12 +89,10 @@ function LoginPage() {
                 autoComplete="email"
               />
             </fieldset>
-            <fieldset className="flex flex-col space-y-2">
-              <legend className="flex w-full justify-between">
-                <label className="cursor-pointer" htmlFor={`${uid}-password`}>
-                  Password
-                </label>
-                <button type="button" className="font-normal underline" onClick={() => setShowForgotPassword(true)}>
+            <fieldset>
+              <legend className="mb-2 flex w-full justify-between">
+                <label htmlFor={`${uid}-password`}>Password</label>
+                <button type="button" className="underline" onClick={() => setShowForgotPassword(true)}>
                   Forgot your password?
                 </button>
               </legend>
