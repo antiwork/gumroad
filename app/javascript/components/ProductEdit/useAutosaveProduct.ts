@@ -27,10 +27,8 @@ export const useAutosaveProduct = ({
   const debounceTimer = React.useRef<number | null>(null);
   const intervalTimer = React.useRef<number | null>(null);
 
-  // TODO(Tri): Optimize with a dirtyRef instead of a deep-equality check
+  // Using deep equality to ensure correctness across complex nested product state which runs only on render
   const isDirty = !isEqual(product, lastSavedProductRef.current);
-
-  // TODO(Tri): Handle `const autosaveErrorCount = React.useRef(0);`
 
   const clearDebounce = () => {
     if (debounceTimer.current !== null) {
