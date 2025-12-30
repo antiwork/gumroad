@@ -62,6 +62,7 @@ class Admin::UserPresenter::Card
 
       # Associations
       admin_manageable_user_memberships: user_memberships,
+      incoming_collaborations: incoming_collaborations,
       alive_user_compliance_info: compliance_info
     }
   end
@@ -86,6 +87,23 @@ class Admin::UserPresenter::Card
             id: membership.seller.id,
             avatar_url: membership.seller.avatar_url,
             display_name_or_email: membership.seller.display_name_or_email
+          }
+        }
+      end
+    end
+
+    def incoming_collaborations
+      user.incoming_collaborators.alive.includes(:seller, :collaborator_invitation).map do |collaborator|
+        {
+          id: collaborator.id,
+          invitation_accepted: collaborator.invitation_accepted?,
+          percent_commission: collaborator.affiliate_percentage,
+          apply_to_all_products: collaborator.apply_to_all_products?,
+          created_at: collaborator.created_at,
+          seller: {
+            id: collaborator.seller.id,
+            avatar_url: collaborator.seller.avatar_url,
+            display_name_or_email: collaborator.seller.display_name_or_email
           }
         }
       end

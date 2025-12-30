@@ -147,6 +147,69 @@ describe Admin::UserPresenter::Card do
       end
     end
 
+    describe "incoming collaborations" do
+      context "when user has no incoming collaborations" do
+        it "returns an empty array" do
+          expect(props[:incoming_collaborations]).to eq([])
+        end
+      end
+
+      context "when user has incoming collaborations" do
+        let(:seller) { create(:user) }
+        let!(:collaboration) do
+          create(:collaborator, affiliate_user: user, seller: seller)
+        end
+
+        it "returns an array of collaboration hashes" do
+          collaborations = props[:incoming_collaborations]
+
+          expect(collaborations).to be_an(Array)
+          expect(collaborations.size).to eq(1)
+        end
+
+        it "includes collaboration attributes" do
+          collaboration_data = props[:incoming_collaborations].first
+
+          expect(collaboration_data).to include(
+            id: collaboration.id,
+            invitation_accepted: true,
+            percent_commission: collaboration.affiliate_percentage,
+            apply_to_all_products: collaboration.apply_to_all_products?,
+            created_at: collaboration.created_at
+          )
+        end
+
+        it "includes seller information" do
+          collaboration_data = props[:incoming_collaborations].first
+
+          expect(collaboration_data[:seller]).to eq(
+            id: seller.id,
+            avatar_url: seller.avatar_url,
+            display_name_or_email: seller.display_name_or_email
+          )
+        end
+
+        context "with pending invitation" do
+          let!(:collaboration) do
+            create(:collaborator, :with_pending_invitation, affiliate_user: user, seller: seller)
+          end
+
+          it "returns invitation_accepted as false" do
+            collaboration_data = props[:incoming_collaborations].first
+            expect(collaboration_data[:invitation_accepted]).to be false
+          end
+        end
+
+        context "when collaboration is deleted" do
+          before { collaboration.mark_deleted! }
+
+          it "does not include deleted collaborations" do
+            expect(props[:incoming_collaborations]).to eq([])
+          end
+        end
+      end
+    end
+
     describe "compliance info" do
       context "when user has no compliance info" do
         before do

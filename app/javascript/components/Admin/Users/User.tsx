@@ -30,6 +30,15 @@ export type UserMembership = {
   created_at: string;
 };
 
+export type IncomingCollaboration = {
+  id: number;
+  invitation_accepted: boolean;
+  percent_commission: number | null;
+  apply_to_all_products: boolean;
+  created_at: string;
+  seller: Seller;
+};
+
 type BlockedObject = {
   blocked_at: string | null;
   created_at: string;
@@ -53,6 +62,7 @@ export type User = {
   verified: boolean | null;
   all_adult_products: boolean;
   admin_manageable_user_memberships: UserMembership[];
+  incoming_collaborations: IncomingCollaboration[];
   alive_user_compliance_info?: ComplianceInfoProps | null;
   compliant?: boolean | null;
   suspended: boolean;
