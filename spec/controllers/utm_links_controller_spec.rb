@@ -70,7 +70,7 @@ describe UtmLinksController, type: :controller, inertia: true do
       create(:utm_link, seller:, title: "A Link", created_at: 3.days.ago)
       create(:utm_link, seller:, title: "B Link", created_at: 2.days.ago)
 
-      get :index, params: { sort: { key: "link", direction: "asc" } }
+      get :index, params: { key: "link", direction: "asc" }
 
       expect(response).to be_successful
       expect(inertia.props[:utm_links].map { _1[:title] }).to eq([
