@@ -577,13 +577,9 @@ class PaypalChargeProcessor
     dispute = dispute_evidence.dispute
     dispute_id = dispute.charge_processor_dispute_id
 
-    unless dispute_id.present?
-      Rails.logger.error("PayPal fight_chargeback: No dispute_id found for transaction #{paypal_transaction_id}")
-      raise ChargeProcessorInvalidRequestError, "PayPal dispute ID not found for transaction"
-    end
+    raise ChargeProcessorInvalidRequestError, "PayPal dispute ID not found for transaction" unless dispute_id.present?
 
     evidence_data = build_paypal_evidence(dispute_evidence, dispute)
-
     paypal_rest_api = PaypalRestApi.new
     api_response = paypal_rest_api.provide_dispute_evidence(
       dispute_id:,
@@ -598,11 +594,8 @@ class PaypalChargeProcessor
         "Failed to submit evidence for dispute #{dispute_id}",
         api_response.result&.message || api_response.result&.details&.first&.description
       )
-      Rails.logger.error("PayPal fight_chargeback failed: #{error_message}")
       raise ChargeProcessorInvalidRequestError, error_message
     end
-
-    Rails.logger.info("PayPal dispute #{dispute_id} evidence submitted successfully")
   end
 
   def holder_of_funds(_merchant_account)
