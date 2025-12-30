@@ -1,9 +1,5 @@
+import { Link, useForm, usePage } from "@inertiajs/react";
 import * as React from "react";
-import { createCast } from "ts-safe-cast";
-
-import { login } from "$app/data/login";
-import { assertResponseError } from "$app/utils/request";
-import { register } from "$app/utils/serverComponentUtil";
 
 import { ForgotPasswordForm } from "$app/components/Authentication/ForgotPasswordForm";
 import { Layout } from "$app/components/Authentication/Layout";
@@ -12,53 +8,60 @@ import { Button } from "$app/components/Button";
 import { Input } from "$app/components/Input";
 import { PasswordInput } from "$app/components/PasswordInput";
 import { Separator } from "$app/components/Separator";
-import { Alert } from "$app/components/ui/Alert";
 import { useOriginalLocation } from "$app/components/useOriginalLocation";
 import { RecaptchaCancelledError, useRecaptcha } from "$app/components/useRecaptcha";
+import { WarningFlash } from "$app/components/WarningFlashMessage";
 
-type SaveState = { type: "initial" | "submitting" } | { type: "error"; message: string };
-
-export const LoginPage = ({
-  email: initialEmail,
-  application_name,
-  recaptcha_site_key,
-}: {
+type PageProps = {
   email: string | null;
   application_name: string | null;
   recaptcha_site_key: string | null;
-}) => {
+};
+
+function LoginPage() {
+  const { email: initialEmail, application_name, recaptcha_site_key } = usePage<PageProps>().props;
+
   const url = new URL(useOriginalLocation());
   const next = url.searchParams.get("next");
   const recaptcha = useRecaptcha({ siteKey: recaptcha_site_key });
   const uid = React.useId();
-  const [email, setEmail] = React.useState(initialEmail ?? "");
-  const [password, setPassword] = React.useState("");
-  const [saveState, setSaveState] = React.useState<SaveState>({ type: "initial" });
   const [showForgotPassword, setShowForgotPassword] = React.useState(false);
+
+  const form = useForm<{
+    user: {
+      login_identifier: string;
+      password: string;
+    };
+    next: string | null;
+    "g-recaptcha-response": string | null;
+  }>({
+    user: {
+      login_identifier: initialEmail ?? "",
+      password: "",
+    },
+    next,
+    "g-recaptcha-response": null,
+  });
 
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
-    setSaveState({ type: "submitting" });
     try {
       const recaptchaResponse = recaptcha_site_key !== null ? await recaptcha.execute() : null;
-      const { redirectLocation } = await login({
-        email,
-        password,
-        recaptchaResponse,
-        next,
-      });
-      window.location.href = redirectLocation;
+      form.transform((data) => ({
+        ...data,
+        "g-recaptcha-response": recaptchaResponse,
+      }));
+      form.post(Routes.login_path());
     } catch (e) {
-      if (e instanceof RecaptchaCancelledError) return setSaveState({ type: "initial" });
-      assertResponseError(e);
-      setSaveState({ type: "error", message: e.message });
+      if (e instanceof RecaptchaCancelledError) return;
+      throw e;
     }
   };
 
   return (
     <Layout
       header={<h1>{application_name ? `Connect ${application_name} to Gumroad` : "Log in"}</h1>}
-      headerActions={<a href={Routes.signup_path({ next })}>Sign up</a>}
+      headerActions={<Link href={Routes.signup_path({ next })}>Sign up</Link>}
     >
       {showForgotPassword ? (
         <ForgotPasswordForm onClose={() => setShowForgotPassword(false)} />
@@ -68,9 +71,9 @@ export const LoginPage = ({
           <Separator>
             <span>or</span>
           </Separator>
-          <section className="flex flex-col gap-8 pb-12">
-            {saveState.type === "error" ? <Alert variant="danger">{saveState.message}</Alert> : null}
-            <fieldset className="flex flex-col space-y-2">
+          <section>
+            <WarningFlash />
+            <fieldset>
               <legend>
                 <label className="cursor-pointer" htmlFor={`${uid}-email`}>
                   Email
@@ -79,10 +82,9 @@ export const LoginPage = ({
               <Input
                 id={`${uid}-email`}
                 type="email"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
+                value={form.data.user.login_identifier}
+                onChange={(e) => form.setData("user.login_identifier", e.target.value)}
                 required
-                // We override the tabIndex to prevent the forgot password link interrupting the email -> password tab order
                 tabIndex={1}
                 autoComplete="email"
               />
@@ -98,15 +100,15 @@ export const LoginPage = ({
               </legend>
               <PasswordInput
                 id={`${uid}-password`}
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
+                value={form.data.user.password}
+                onChange={(e) => form.setData("user.password", e.target.value)}
                 required
                 tabIndex={1}
                 autoComplete="current-password"
               />
             </fieldset>
-            <Button color="primary" type="submit" disabled={saveState.type === "submitting"}>
-              {saveState.type === "submitting" ? "Logging in..." : "Login"}
+            <Button color="primary" type="submit" disabled={form.processing}>
+              {form.processing ? "Logging in..." : "Login"}
             </Button>
           </section>
         </form>
@@ -114,6 +116,7 @@ export const LoginPage = ({
       {recaptcha.container}
     </Layout>
   );
-};
+}
 
-export default register({ component: LoginPage, propParser: createCast() });
+LoginPage.disableLayout = true;
+export default LoginPage;

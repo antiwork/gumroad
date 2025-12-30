@@ -54,8 +54,29 @@ describe WishlistsController, type: :controller, inertia: true do
       let(:record) { Wishlist }
     end
 
+    it "creates a wishlist with the given name" do
+      expect { post :create, format: :json, params: { wishlist: { name: "My Favorite Products" } } }
+        .to change(Wishlist, :count).by(1)
+
+      expect(Wishlist.last).to have_attributes(name: "My Favorite Products", user:)
+      expect(response.parsed_body).to eq(
+        "wishlist" => {
+          "id" => Wishlist.last.external_id,
+          "name" => "My Favorite Products"
+        }
+      )
+    end
+
+    it "returns an error when name is blank" do
+      expect { post :create, format: :json, params: { wishlist: { name: "" } } }
+        .not_to change(Wishlist, :count)
+
+      expect(response).to have_http_status(:unprocessable_entity)
+    end
+
     it "creates a wishlist and redirects with notice" do
-      expect { post :create }.to change(Wishlist, :count).by(1)
+      expect { post :create, params: { wishlist: { name: "My Wishlist" } } }
+        .to change(Wishlist, :count).by(1)
       expect(response).to redirect_to(wishlists_path)
       expect(flash[:notice]).to eq("Wishlist created!")
     end
