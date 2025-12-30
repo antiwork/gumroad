@@ -264,6 +264,43 @@ describe("Library Scenario", type: :system, js: true) do
     expect(page).to have_status(text: "You have 2 archived purchases. Click here to view")
   end
 
+  it "updates creator counts when toggling archived filter" do
+    creator1 = create(:user, name: "Creator One")
+    creator2 = create(:user, name: "Creator Two")
+
+    product1_active = create(:product, name: "Product 1 Active", user: creator1)
+    product2_active = create(:product, name: "Product 2 Active", user: creator1)
+    product3_archived = create(:product, name: "Product 3 Archived", user: creator1)
+
+    product4_active = create(:product, name: "Product 4 Active", user: creator2)
+    product5_archived = create(:product, name: "Product 5 Archived", user: creator2)
+    product6_archived = create(:product, name: "Product 6 Archived", user: creator2)
+
+    create(:purchase, purchaser: @user, link: product1_active)
+    create(:purchase, purchaser: @user, link: product2_active)
+    create(:purchase, purchaser: @user, link: product3_archived, is_archived: true)
+    create(:purchase, purchaser: @user, link: product4_active)
+    create(:purchase, purchaser: @user, link: product5_archived, is_archived: true)
+    create(:purchase, purchaser: @user, link: product6_archived, is_archived: true)
+
+    Link.import(refresh: true, force: true)
+
+    visit "/library"
+    expect(page).to have_text("Showing 1-3 of 3 products")
+    expect(find("label", text: creator1.name)).to have_text("(2)")
+    expect(find("label", text: creator2.name)).to have_text("(1)")
+
+    find_and_click("label", text: "Show archived only")
+    expect(page).to have_text("Showing 1-3 of 3 products")
+    expect(find("label", text: creator1.name)).to have_text("(1)")
+    expect(find("label", text: creator2.name)).to have_text("(2)")
+
+    find_and_click("label", text: "Show archived only")
+    expect(page).to have_text("Showing 1-3 of 3 products")
+    expect(find("label", text: creator1.name)).to have_text("(2)")
+    expect(find("label", text: creator2.name)).to have_text("(1)")
+  end
+
   it "lists the same product several times if purchased several times" do
     products = create_list(:product, 2, name: "MyProduct")
     category = create(:variant_category, link: products[0])

@@ -171,7 +171,7 @@ export const DeleteProductModal = ({
 
 type Props = {
   results: Result[];
-  creators: { id: string; name: string; count: number }[];
+  creators: { id: string; name: string; count: number; archived_count: number; non_archived_count: number }[];
   bundles: { id: string; label: string }[];
   reviews_page_enabled: boolean;
   following_wishlists_enabled: boolean;
@@ -287,6 +287,18 @@ export default function LibraryPage() {
   const hasParams =
     state.search.showArchivedOnly || state.search.query || state.search.creators.length || state.search.bundles.length;
   const [deleting, setDeleting] = React.useState<Result | null>(null);
+
+  const validCreators = React.useMemo(
+    () =>
+      creators
+        .map((creator) => ({
+          ...creator,
+          count: state.search.showArchivedOnly ? creator.archived_count : creator.non_archived_count,
+        }))
+        .filter((creator) => creator.count > 0)
+        .sort((a, b) => b.count - a.count),
+    [creators, state.search.showArchivedOnly],
+  );
 
   const sortUid = React.useId();
   const bundlesUid = React.useId();
@@ -488,7 +500,7 @@ export default function LibraryPage() {
                           readOnly
                         />
                       </label>
-                      {(showingAllCreators ? creators : creators.slice(0, 5)).map((creator) => (
+                      {(showingAllCreators ? validCreators : validCreators.slice(0, 5)).map((creator) => (
                         <label key={creator.id}>
                           {creator.name}
                           <span className="shrink-0 text-muted">{`(${creator.count})`}</span>
@@ -510,7 +522,7 @@ export default function LibraryPage() {
                         </label>
                       ))}
                       <div>
-                        {creators.length > 5 && !showingAllCreators ? (
+                        {validCreators.length > 5 && !showingAllCreators ? (
                           <button className="underline" onClick={() => setShowingAllCreators(true)}>
                             Show more
                           </button>

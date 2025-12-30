@@ -28,10 +28,21 @@ class LibraryPresenter
       .find_each(batch_size: 3000, order: :desc) # required to avoid full table scans. See https://github.com/gumroad/web/pull/25970
       .to_a
     creators_infos = purchases.flat_map { |purchase| purchase.link.user }.uniq.group_by(&:id).transform_values(&:first)
-    creator_counts = purchases.uniq(&:link_id).filter(&:not_is_bundle_purchase).group_by(&:seller_id).map do |seller_id, item|
+    unique_purchases = purchases.uniq(&:link_id).filter(&:not_is_bundle_purchase)
+    archived_by_seller = unique_purchases.select(&:is_archived).group_by(&:seller_id)
+    non_archived_by_seller = unique_purchases.reject(&:is_archived).group_by(&:seller_id)
+    creator_counts = unique_purchases.map(&:seller_id).uniq.map do |seller_id|
       creator = creators_infos[seller_id]
-      { id: creator.external_id, name: creator.name || creator.username || creator.external_id, count: item.size }
-    end.sort_by { |creator| creator[:count] }.reverse
+      archived_count = archived_by_seller[seller_id]&.size || 0
+      non_archived_count = non_archived_by_seller[seller_id]&.size || 0
+      {
+        id: creator.external_id,
+        name: creator.name || creator.username || creator.external_id,
+        count: archived_count + non_archived_count,
+        archived_count: archived_count,
+        non_archived_count: non_archived_count
+      }
+    end.sort_by { |creator| -creator[:count] }
     bundles = purchases.filter_map do |purchase|
       { id: purchase.link.external_id, label: purchase.link.name } if purchase.is_bundle_purchase?
     end.uniq { _1[:id] }
