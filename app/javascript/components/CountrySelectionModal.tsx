@@ -2,6 +2,7 @@ import { router } from "@inertiajs/react";
 import * as React from "react";
 import { cast } from "ts-safe-cast";
 
+import { classNames } from "$app/utils/classNames";
 import { assertResponseError, request } from "$app/utils/request";
 
 import { Button } from "$app/components/Button";
@@ -67,14 +68,17 @@ export const CountrySelectionModal = ({ country: initialCountry, countries }: Pr
         }
       >
         <div className="flex flex-col gap-4">
-          <fieldset>
+          <fieldset className={classNames("flex flex-col gap-2", !!error && "danger")}>
             <legend className="mb-2">
               <label htmlFor={`${uid}country`}>Country</label>
             </legend>
             <div className="relative">
               <select
                 id={`${uid}country`}
-                className="bg-filled h-12 w-full appearance-none rounded border border-border px-3 pr-8 font-[inherit] text-base focus:border-accent focus:ring-1 focus:ring-accent focus:outline-none disabled:opacity-50"
+                className={classNames(
+                  "bg-filled h-12 w-full appearance-none rounded border px-3 pr-8 font-[inherit] text-base focus:border-accent focus:ring-1 focus:ring-accent focus:outline-none disabled:opacity-50",
+                  error ? "border-danger" : "border-border",
+                )}
                 value={country}
                 onChange={(e) => setCountry(e.target.value)}
                 disabled={saving}
@@ -89,28 +93,24 @@ export const CountrySelectionModal = ({ country: initialCountry, countries }: Pr
                 <Icon name="outline-cheveron-down" className="h-4 w-4 text-muted" />
               </div>
             </div>
-            {error ? <small className="mt-1 block text-danger">{error}</small> : null}
+            {error ? <small className="text-danger">{error}</small> : null}
           </fieldset>
 
           <fieldset className="flex flex-col gap-2">
             <legend className="mb-2 text-base font-bold">To ensure prompt payouts, please check off each item:</legend>
             {checkboxes.map((item, i) => (
-              <label key={item} className="flex cursor-pointer items-start gap-3">
+              <label key={item} className="flex cursor-pointer gap-3">
                 <Checkbox
                   checked={checked.includes(i)}
                   onChange={(e) =>
                     setChecked(e.target.checked ? [...checked, i] : checked.filter((item) => item !== i))
                   }
-                  className="mt-0.5"
-                />
-                <span className="text-base">{item}</span>
+                />{" "}
+                {item}
               </label>
             ))}
           </fieldset>
-
-          <h4>
-            You may have to forfeit your balance if you want to change your country in the future.
-          </h4>
+          <h4>You may have to forfeit your balance if you want to change your country in the future.</h4>
         </div>
       </Modal>
     </div>
