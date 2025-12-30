@@ -16,7 +16,6 @@ export type {
 
 import type { UtmLinksStats } from "$app/types/utm_link";
 
-// Stats API - kept for lazy loading stats on the index page
 export function getUtmLinksStats({ ids }: { ids: string[] }) {
   const abort = new AbortController();
   const response = request({
@@ -34,7 +33,6 @@ export function getUtmLinksStats({ ids }: { ids: string[] }) {
   };
 }
 
-// Unique permalink API - kept for generating new permalinks on the New page
 export async function getUniquePermalink() {
   const response = await request({
     method: "GET",
