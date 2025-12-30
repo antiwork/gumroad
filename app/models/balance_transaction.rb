@@ -77,6 +77,10 @@ class BalanceTransaction < ApplicationRecord
   belongs_to :refund, optional: true
   belongs_to :credit, optional: true
 
+  # Trigger probation recovery check when money moves.
+  # Optimization: Only enqueue if users is already on probation, avoiding overhead for 99.9% of transactions.
+  after_commit :enqueue_probation_recovery_check, on: :create
+
   # The balance_id should never be changed once it's set, but it gets set after the initial BalanceTransaction record is saved and so must be marked as mutable
   # so that it can be set after the initial save.
   attr_mutable :balance_id
@@ -223,5 +227,11 @@ class BalanceTransaction < ApplicationRecord
       def initialize(balance_transaction_id)
         super("A suitable balance for transaction #{balance_transaction_id} could not be found or created.")
       end
+    end
+
+    def enqueue_probation_recovery_check
+      return unless user&.on_probation?
+
+      LowBalanceRecoveryWorker.perform_async(user_id)
     end
 end
