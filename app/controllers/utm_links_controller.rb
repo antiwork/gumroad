@@ -136,6 +136,6 @@ class UtmLinksController < Sellers::BaseController
       redirect_to utm_links_dashboard_index_path, notice: success_message, status: :see_other
     rescue ActiveRecord::RecordInvalid => e
       error = e.record.errors.first
-      redirect_to error_redirect_path, inertia: { errors: { error.attribute => [error.message] } }
+      redirect_to error_redirect_path, inertia: { errors: { "utm_link.#{error.attribute}" => error.message } }
     end
 end

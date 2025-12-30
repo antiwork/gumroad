@@ -182,7 +182,10 @@ export default function UtmLinksEdit() {
               placeholder="Title"
               value={data.utm_link.title}
               ref={titleRef}
-              onChange={(e) => setData("utm_link", { ...data.utm_link, title: e.target.value })}
+              onChange={(e) => {
+                setData("utm_link", { ...data.utm_link, title: e.target.value });
+                form.clearErrors("utm_link.title");
+              }}
             />
             {errors["utm_link.title"] ? <small>{errors["utm_link.title"]}</small> : null}
           </fieldset>
@@ -239,6 +242,7 @@ export default function UtmLinksEdit() {
                 baseOptionValues={context.utm_fields_values.sources}
                 value={data.utm_link.utm_source}
                 onChange={(value) => setData("utm_link", { ...data.utm_link, utm_source: value })}
+                onClearError={() => form.clearErrors("utm_link.utm_source")}
               />
               {errors["utm_link.utm_source"] ? (
                 <small>{errors["utm_link.utm_source"]}</small>
@@ -256,6 +260,7 @@ export default function UtmLinksEdit() {
                 baseOptionValues={context.utm_fields_values.mediums}
                 value={data.utm_link.utm_medium}
                 onChange={(value) => setData("utm_link", { ...data.utm_link, utm_medium: value })}
+                onClearError={() => form.clearErrors("utm_link.utm_medium")}
               />
               {errors["utm_link.utm_medium"] ? (
                 <small>{errors["utm_link.utm_medium"]}</small>
@@ -274,6 +279,7 @@ export default function UtmLinksEdit() {
               baseOptionValues={context.utm_fields_values.campaigns}
               value={data.utm_link.utm_campaign}
               onChange={(value) => setData("utm_link", { ...data.utm_link, utm_campaign: value })}
+              onClearError={() => form.clearErrors("utm_link.utm_campaign")}
             />
             {errors["utm_link.utm_campaign"] ? (
               <small>{errors["utm_link.utm_campaign"]}</small>
@@ -348,12 +354,14 @@ const UtmFieldSelect = ({
   baseOptionValues,
   value,
   onChange,
+  onClearError,
 }: {
   id: string;
   placeholder: string;
   baseOptionValues: string[];
   value: string | null;
   onChange: (value: string | null) => void;
+  onClearError?: () => void;
 }) => {
   const [inputValue, setInputValue] = React.useState<string | null>(null);
   const options = [...new Set([value, inputValue, ...baseOptionValues])]
@@ -370,7 +378,10 @@ const UtmFieldSelect = ({
       escapeClearsValue
       options={options}
       value={value ? (options.find((o) => o.id === value) ?? null) : null}
-      onChange={(option) => onChange(option ? option.id : null)}
+      onChange={(option) => {
+        onChange(option ? option.id : null);
+        onClearError?.();
+      }}
       inputValue={inputValue ?? ""}
       onInputChange={(value) =>
         setInputValue(
