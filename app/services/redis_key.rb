@@ -48,5 +48,6 @@ class RedisKey
     def acme_challenge(token) = "acme_challenge:#{token}"
     def unreviewed_users_data = "admin:unreviewed_users_data"
     def unreviewed_users_cutoff_date = "admin:unreviewed_users_cutoff_date"
+    def audience_export(export_id) = "audience_export:#{export_id}"
   end
 end
