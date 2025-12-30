@@ -1047,7 +1047,6 @@ export const ContentTab = () => {
               headerActions={
                 product.variants.length > 0 ? (
                   <ComboBox<Variant>
-                    className="hidden lg:block"
                     // TODO: Currently needed to get the icon on the selected option even though this is not multiple select. We should fix this in the design system
                     multiple
                     input={(props) => (
