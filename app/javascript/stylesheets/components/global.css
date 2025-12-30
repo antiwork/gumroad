@@ -1,0 +1,300 @@
+@layer base {
+    /*
+   * Global base styles port
+   * Reference: app/javascript/stylesheets/_global.scss
+   */
+
+    :root,
+    :host {
+        color-scheme: light dark;
+        /* @include globals; -> presumably sets vars? Assumed handled by tailwind.css theme config or root vars elsewhere.
+       If globals mixin defined CSS vars, they should be here.
+       However, _definitions.scss defines sass vars.
+       Let's assume standard CSS vars are set in tailwind.css theme or similar. */
+    }
+
+    * {
+        @apply m-0 p-0 min-w-0 max-w-full align-bottom border-solid border-0 bg-origin-padding;
+        box-sizing: border-box;
+
+        /* Variables mapping */
+        --border: 0.0625rem solid var(--color-border);
+        /* $border */
+        --outline: 0.125rem solid var(--color-accent);
+        /* $outline */
+
+        /* Gray loop port */
+        --gray-1: #f3f3f3;
+        /* Example values, strictly should match _definitions.scss $grays */
+        --gray-2: #e7e7e7;
+        --gray-3: #dcdcdc;
+        /* ... assuming grays are available as CSS vars or handled by theme */
+    }
+
+    html,
+    body {
+        @apply h-full w-full overflow-wrap-anywhere;
+    }
+
+    body {
+        @apply text-[length:var(--font-size-2)] leading-[length:var(--line-height-2)];
+        /* font-size(2) */
+        font-family: var(--font-family);
+        font-feature-settings: "ss11", "ss04";
+        background-color: var(--body-bg);
+        -webkit-font-smoothing: antialiased;
+        color: var(--color-foreground);
+        /* full-color(color) */
+
+        &:not(.mac) * {
+            &::-webkit-scrollbar {
+                @apply w-[0.375rem] bg-gray-100;
+                /* size(0.75) / gray(1) */
+            }
+
+            &::-webkit-scrollbar-thumb {
+                @apply bg-gray-300 rounded-[0.25rem];
+                /* gray(3) / border-radius(2) */
+            }
+        }
+    }
+
+    main {
+        @apply flex flex-col;
+    }
+
+    h1 {
+        @apply text-5xl font-normal;
+    }
+
+    /* size(5) approx */
+    h2 {
+        @apply text-4xl font-normal;
+    }
+
+    /* size(4) */
+    h3 {
+        @apply text-3xl font-normal;
+    }
+
+    /* size(3) */
+    h4 {
+        @apply text-2xl font-normal;
+    }
+
+    /* size(2) */
+    h5 {
+        @apply text-xl font-normal;
+    }
+
+    /* size(1) */
+
+    .text-singleline {
+        @apply truncate whitespace-nowrap overflow-hidden;
+    }
+
+    a {
+        color: var(--color-foreground);
+        /* var(--color) */
+        @apply underline cursor-pointer;
+    }
+
+    .link {
+        @apply font-inherit underline cursor-pointer text-current;
+    }
+
+    sub {
+        @apply align-sub;
+    }
+
+    sup {
+        @apply align-super;
+    }
+
+    small {
+        @apply block text-[length:var(--font-size-1)] leading-[length:var(--line-height-1)];
+    }
+
+    hr {
+        @apply border-none border-t border-border;
+    }
+
+    ol,
+    ul {
+        @apply pl-6;
+        /* spacer(6) */
+    }
+
+    ul.inline {
+        @apply p-0 list-none;
+
+        &>li {
+            @apply inline;
+
+            &:not(:last-child)::after {
+                content: " · ";
+            }
+        }
+    }
+
+    menu>li {
+        @apply list-none;
+    }
+
+    details {
+        &>summary {
+            @apply outline-none grid grid-cols-[auto_1fr] cursor-pointer list-none select-none;
+            /* all: inherit -> careful */
+
+            &::marker,
+            &::-webkit-details-marker {
+                @apply hidden;
+            }
+
+            &::before {
+                /* Icon placeholder - typically separate icon class logic but here inline */
+                content: "";
+                @apply inline-block mr-1 w-[1em] h-[1em] bg-current align-bottom;
+                mask-image: url('~images/icons/outline-cheveron-right.svg');
+                /* .icon-outline-cheveron-right */
+                mask-size: 120%;
+                mask-position: center;
+                mask-repeat: no-repeat;
+            }
+        }
+
+        &[open]>summary {
+            @apply mb-2;
+
+            &::before {
+                mask-image: url('~images/icons/outline-cheveron-down.svg');
+            }
+        }
+
+        &.toggle {
+            &>summary {
+                @apply grid-cols-1;
+
+                &::before {
+                    content: none;
+                }
+            }
+
+            &[open]>summary {
+                @apply mb-0;
+            }
+        }
+    }
+
+    .user-avatar {
+        @apply rounded-full w-10 aspect-square shrink-0 border border-border;
+        /* border-radius(3)=50%?, $big-icon-size=size(4) */
+    }
+
+    .application-icon {
+        @apply border border-border rounded shrink-0;
+    }
+
+    [role^="menuitem"] {
+        @apply cursor-pointer;
+    }
+
+    [role="menu"] {
+        @apply bg-white py-2 border border-border rounded shadow-md;
+        /* bg-filled, shadow(1) */
+
+        [role^="menuitem"] {
+            @apply block px-4 py-2 border-none truncate;
+
+            > :not(:last-child) {
+                @apply mr-2;
+            }
+
+            &:hover {
+                background-color: var(--active-bg);
+            }
+
+            &.success {
+                @apply text-success;
+            }
+
+            &.danger {
+                @apply text-danger;
+            }
+
+            /* ... other states */
+        }
+
+        [role="menuitemradio"],
+        [role="menuitemcheckbox"] {
+            &[aria-checked="true"] {
+                @apply font-bold;
+            }
+        }
+    }
+
+    /* Helper utilities that were in global scss */
+    .stretched-link {
+        @apply no-underline;
+
+        &::before {
+            content: "";
+            @apply absolute inset-0 w-full h-full;
+        }
+    }
+
+    .bg-filled {
+        /* mix-blend mode stuff */
+        background: linear-gradient(white, white);
+        background-blend-mode: overlay;
+    }
+
+    dl {
+        @apply grid grid-cols-[max-content_auto] gap-x-3;
+        /* fit-content(40%) approx to max-content for simplicity, or custom */
+
+        dt {
+            @apply col-start-1;
+
+            &::after {
+                content: ":";
+            }
+        }
+
+        dd {
+            @apply col-start-2;
+        }
+    }
+
+    [inert] {
+        @apply cursor-not-allowed opacity-30;
+    }
+
+    [hidden] {
+        display: none !important;
+    }
+
+    [draggable="true"],
+    [aria-grabbed] {
+        @apply cursor-move;
+    }
+
+    meter {
+        @apply h-[1lh] w-full appearance-none bg-none border border-border rounded;
+        --optimum-val-bg: var(--color-accent);
+
+        &::-webkit-meter-optimum-value {
+            background: var(--optimum-val-bg);
+            @apply rounded;
+        }
+
+        &::-moz-meter-bar {
+            background: var(--optimum-val-bg);
+            @apply rounded;
+        }
+    }
+
+    .profiler-results * {
+        max-width: unset;
+    }
+}

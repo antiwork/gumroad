@@ -1,0 +1,210 @@
+@layer components {
+    /*
+   * Forms mixin port
+   * Reference: app/javascript/stylesheets/_forms.scss
+   */
+
+    /* Shared input styles */
+    .input-base {
+        @apply font-inherit px-4 py-3 text-[length:var(--font-size-2)] leading-[length:var(--line-height-2)];
+        @apply border border-solid border-border rounded block w-full bg-white;
+        /* bg-filled */
+
+        &::placeholder {
+            @apply text-muted;
+        }
+
+        &:focus-within {
+            outline: 0.125rem solid var(--color-accent);
+            /* $outline */
+        }
+
+        &:disabled,
+        &.disabled {
+            @apply cursor-not-allowed opacity-30;
+            /* $disabled-opacity */
+        }
+
+        &.read-only,
+        &:read-only {
+            background-color: var(--body-bg);
+        }
+    }
+
+    /* Tag selectors to apply input-base */
+    input:not([type]),
+    input[type="email"],
+    input[type="time"],
+    input[type="date"],
+    input[type="datetime-local"],
+    input[type="number"],
+    input[type="password"],
+    input[type="search"],
+    input[type="tel"],
+    input[type="text"],
+    input[type="url"],
+    textarea,
+    select,
+    .input,
+    .textarea {
+        @apply input-base;
+    }
+
+    label {
+        @apply inline-flex gap-2 text-[length:var(--font-size-2)] leading-[length:var(--line-height-2)] cursor-pointer;
+
+        &:has(input:disabled) {
+            @apply cursor-not-allowed opacity-30;
+        }
+    }
+
+    fieldset {
+        @apply flex flex-col border-none gap-2;
+
+        legend {
+            @apply flex items-center relative font-bold mb-2 w-full text-[length:var(--font-size-2)] leading-[length:var(--line-height-2)];
+
+            label,
+            a {
+                @apply font-normal;
+            }
+
+            &> :last-child:not(:only-child) {
+                @apply float-right ml-auto;
+            }
+        }
+
+        small {
+            @apply text-muted;
+        }
+
+        &[role="group"] label {
+            @apply w-full;
+
+            input {
+                @apply ml-auto;
+            }
+        }
+
+        /* States */
+        &.success {
+            @apply border-success text-success;
+        }
+
+        &.danger {
+            @apply border-danger text-danger;
+        }
+
+        &.warning {
+            @apply border-warning text-warning;
+        }
+
+        &.info {
+            @apply border-info text-info;
+        }
+
+        &.success,
+        &.danger,
+        &.warning,
+        &.info {
+
+            input,
+            select,
+            textarea,
+            .input {
+                @apply border-current;
+            }
+
+            small {
+                @apply text-current;
+            }
+        }
+    }
+
+    /* .input wrapper class from _forms.scss */
+    .input {
+        @apply inline-flex items-center gap-2 relative pt-0 pb-0 min-h-[calc(1rem*1.4+0.75rem*2+2px)];
+        /* $form-element-height approx */
+
+        input:not([type]),
+        input[type="email"],
+        input[type="text"],
+        /* ...add others as needed, reducing specificity for internal inputs */
+        input,
+        textarea,
+        select {
+            @apply border-none flex-1 bg-transparent shadow-none outline-none m-0 mx-[-1rem] max-w-none;
+        }
+
+        .fake-input {
+            @apply flex-1;
+        }
+
+        &.disabled input {
+            @apply opacity-100;
+        }
+
+        /* Reset opacity since wrapper handles it */
+
+        &>.icon {
+            @apply text-muted;
+        }
+    }
+
+    /* Select specific styling */
+    select {
+        @apply appearance-none bg-no-repeat;
+        /* Replicating the linear gradient arrow is complex in utility classes, sticking to custom CSS for this part to ensure parity */
+        background-image: linear-gradient(45deg, transparent 50%, currentColor 50%, white calc(50% + 2px)),
+            linear-gradient(315deg, transparent 50%, currentColor 50%, white calc(50% + 2px));
+        background-position: calc(100% - 1rem - 0.5em) center, calc(100% - 1rem) center;
+        background-size: 0.5em 0.5em;
+        padding-right: calc(1rem + 0.5rem + 1em);
+    }
+
+    /* Checkbox & Radio */
+    input[type="radio"],
+    input[type="checkbox"] {
+        @apply text-current cursor-pointer appearance-none w-[1.25em] h-[1.25em] aspect-square border border-solid border-border bg-white flex-shrink-0 text-[length:var(--font-size-2)];
+
+        &:checked {
+            @apply bg-accent;
+        }
+    }
+
+    input[type="radio"] {
+        @apply rounded-full;
+
+        &:checked {
+            @apply p-[calc(0.5rem-2px)];
+
+            &::after {
+                content: "";
+                @apply bg-foreground rounded-full h-full block;
+            }
+        }
+    }
+
+    input[type="checkbox"]:not([role="switch"]) {
+        @apply rounded;
+
+        &:checked::after {
+            @apply block mx-auto content-[''] w-[1.25em] h-[1.25em] bg-no-repeat bg-contain bg-[url('~images/icons/check.svg')];
+            /* approximating icon mixin */
+            /* Simplified - typically we'd use an SVG background image here */
+        }
+    }
+
+    /* Switch */
+    input[role="switch"] {
+        @apply w-[2.125em] h-[1.25em] rounded-[10rem] relative transition-all;
+
+        &::after {
+            @apply bg-current rounded-[10rem] content-[''] h-[0.875em] w-[0.875em] absolute top-[0.125rem] left-[0.1875rem] transition-all;
+        }
+
+        &:checked::after {
+            @apply left-[calc(100%-1.25em+0.1875rem)] bg-white;
+        }
+    }
+}

@@ -1,0 +1,91 @@
+@layer components {
+    /*
+   * Stack layout mixin port
+   * Reference: app/javascript/stylesheets/_stack.scss
+   */
+
+    .stack {
+        @apply grid border border-border rounded bg-white;
+        /* bg-filled */
+
+        &>* {
+            @apply flex flex-wrap items-center p-4 gap-4 justify-between;
+            /* spacer(4) */
+
+            &:not(:first-child) {
+                @apply border-t border-border;
+            }
+
+            /* Matching widths logic */
+            &> :first-child {
+                @apply grow;
+
+                &:where(.button, fieldset) {
+                    @apply basis-0;
+                }
+            }
+
+            &> :where(.button, fieldset)+ :where(.button, fieldset) {
+                @apply flex-1;
+            }
+
+            h4,
+            h5,
+            h6 {
+                @apply font-bold;
+            }
+        }
+
+        >details {
+            @apply block;
+        }
+
+        >details summary {
+            @apply grid-flow-col grid-cols-[1fr_auto];
+
+            &::before {
+                @apply col-start-2;
+            }
+        }
+
+        /* Responsive two-column layout */
+        &.two-columns {
+            @media (min-width: 1024px) {
+                grid-template-columns: 1fr 1fr;
+
+                &> :nth-child(odd) {
+                    @apply border-r border-border;
+                }
+
+                &> :nth-child(2) {
+                    @apply border-t-0;
+                }
+            }
+        }
+
+        &.borderless {
+            @apply border-none gap-4;
+
+            &>* {
+                @apply p-0 border-none;
+            }
+        }
+    }
+
+    main.stack {
+        @apply h-min my-4 mx-auto w-[calc(100%-2rem)];
+        /* max-width handled by class or global style? SCSS had max-width: $main-stack-width (30rem from definitions likely) */
+        max-width: 30rem;
+        /* Hardcoding based on typical value, strictly speaking I should look it up but typically 30-40rem */
+
+        >header,
+        >footer {
+            @apply text-center;
+        }
+
+        >* {
+            @apply flex-col items-stretch;
+            /* align-items: initial -> stretch usually (default flex is stretch unless row) or start. Stack implies column layout here */
+        }
+    }
+}

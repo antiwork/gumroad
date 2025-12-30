@@ -1,0 +1,91 @@
+@layer components {
+  /*
+   * Global .button class for legacy ERB views (e.g. <a class="button">).
+   * React components should use utilities directly where possible, or use this class if needed.
+   */
+  .button {
+    @apply inline-flex items-center justify-center gap-2;
+    @apply bg-transparent text-[length:var(--font-size-2)] leading-[length:var(--line-height-2)];
+    @apply px-4 py-3;
+    @apply border border-border rounded border-solid;
+    @apply text-current font-inherit no-underline cursor-pointer;
+    @apply transition-transform duration-[0.14s] ease-out;
+
+    &:hover:not(:active):not(:disabled),
+    &[aria-haspopup][aria-expanded="true"] {
+      @apply -translate-x-1 -translate-y-1 shadow-[0.25rem_0.25rem_0_currentColor];
+    }
+
+    &:disabled,
+    &[disabled],
+    &[inert] {
+        @apply opacity-30 pointer-events-none cursor-default;
+    }
+
+    &.small {
+      @apply text-[1rem] leading-[1.4] p-2;
+    }
+
+    /*
+     * Colors from _definitions.scss mapped to Tailwind colors
+     * $bg-colors: list.join($states, primary "black" accent filled);
+     */
+    &.primary,
+    &.outline-primary:hover:not(:disabled) {
+      @apply bg-primary text-primary-foreground border-primary;
+    }
+
+    &.black,
+    &.outline-black:hover:not(:disabled) {
+      @apply bg-black text-white border-black;
+    }
+
+    &.accent,
+    &.outline-accent:hover:not(:disabled) {
+      @apply bg-accent text-accent-foreground border-accent;
+    }
+
+    &.filled,
+    &.outline-filled:hover:not(:disabled) {
+        @apply bg-white text-black border-white;
+    }
+
+    &.success,
+    &.outline-success:hover:not(:disabled) {
+      @apply bg-success text-success-foreground border-success;
+    }
+
+    &.danger,
+    &.outline-danger:hover:not(:disabled) {
+      @apply bg-danger text-danger-foreground border-danger;
+    }
+
+    &.warning,
+    &.outline-warning:hover:not(:disabled) {
+      @apply bg-warning text-warning-foreground border-warning;
+    }
+
+    &.info,
+    &.outline-info:hover:not(:disabled) {
+      @apply bg-info text-info-foreground border-info;
+    }
+  }
+
+  /* Legacy brand buttons (facebook, twitter, etc) - mostly used in auth/share buttons */
+  .button-facebook {
+    @apply bg-[#4267b2] text-white border-[#4267b2];
+    &::before { @apply content-[''] mr-2 w-[1.25em] h-[1.25em] bg-no-repeat bg-contain inline-block align-text-bottom bg-[url('~images/icons/facebook.svg')]; }
+  }
+  .button-twitter {
+    @apply bg-black text-white border-black;
+    &::before { @apply content-[''] mr-2 w-[1.25em] h-[1.25em] bg-no-repeat bg-contain inline-block align-text-bottom bg-[url('~images/icons/twitter.svg')]; }
+  }
+   .button-paypal {
+    @apply bg-[#00457c] text-white border-[#00457c];
+     &::before { @apply content-[''] mr-2 w-[1.25em] h-[1.25em] bg-no-repeat bg-contain inline-block align-text-bottom bg-[url('~images/icons/paypal.svg')]; }
+  }
+  .button-stripe {
+    @apply bg-[#625bf6] text-white border-[#625bf6];
+      &::before { @apply content-[''] mr-2 w-[1.25em] h-[1.25em] bg-no-repeat bg-contain inline-block align-text-bottom bg-[url('~images/icons/stripe.svg')]; }
+  }
+}

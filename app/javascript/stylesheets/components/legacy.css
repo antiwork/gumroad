@@ -1,0 +1,187 @@
+@layer components {
+    /*
+   * Legacy hacks and overrides port
+   * Reference: app/javascript/stylesheets/_legacy.scss
+   */
+
+    .legacy-only {
+        display: none !important;
+    }
+
+    /* Work around a strange Chromium issue where dragging doesn't work due to `all: unset` */
+    button[draggable="true"] {
+        -webkit-user-drag: element;
+    }
+
+    /* quick UX improvement for native select[multiple] while we're migrating to the new design */
+    select[multiple].chosen-fallback {
+        background-image: none;
+        max-height: calc(calc(1rem*1.4+0.75rem*2+2px) * 4);
+        /* $form-element-height * 4 */
+
+        option {
+            white-space: normal;
+        }
+    }
+
+    /* Fix dropdown arrow positioning for post publish date input */
+    .post-letter--create>.popover[open] {
+        &::before {
+            left: 25%;
+        }
+    }
+
+    [role="tab"][aria-selected="true"][draggable="true"]::after {
+        transform: translate(-50%);
+        visibility: hidden;
+    }
+
+    .jwplayer {
+        @apply absolute w-full h-full;
+    }
+
+    [role="tree"] [role="treeitem"].sortable-ghost {
+        background-color: rgb(var(--color) / var(--gray-1));
+        /* gray(1) */
+        @apply border-dashed border border-border grid opacity-30;
+        /* $disabled-opacity */
+        display: grid !important;
+    }
+
+    /* Temporary styles until we have `:has` */
+    /* Porting loop: @each $name, $color in $states */
+    label.success,
+    label.success a {
+        @apply text-success;
+    }
+
+    label.success input[type="checkbox"]:not([role="switch"]) {
+        @apply border-success;
+    }
+
+    label.danger,
+    label.danger a {
+        @apply text-danger;
+    }
+
+    label.danger input[type="checkbox"]:not([role="switch"]) {
+        @apply border-danger;
+    }
+
+    label.warning,
+    label.warning a {
+        @apply text-warning;
+    }
+
+    label.warning input[type="checkbox"]:not([role="switch"]) {
+        @apply border-warning;
+    }
+
+    label.info,
+    label.info a {
+        @apply text-info;
+    }
+
+    label.info input[type="checkbox"]:not([role="switch"]) {
+        @apply border-info;
+    }
+
+
+    body#overlay-page {
+        @apply flex flex-col bg-transparent;
+
+        &:not(.gumroad-minimized) {
+            background: rgba(0, 0, 0, 0.5);
+        }
+
+        .product-display {
+            overflow: auto;
+        }
+    }
+
+    .rich-text {
+        .embed {
+            >.preview {
+                padding: calc(56.25% + 1rem) 0 0 0;
+
+                /* 56.25% + spacer(4) */
+                > :first-child {
+                    &.placeholder {
+                        @apply absolute w-[calc(100%-2rem)];
+                    }
+                }
+            }
+        }
+    }
+
+    /* So that the `jwplayer` time tooltip isn't squished */
+    .jwplayer .jw-time-tip {
+        min-width: max-content;
+    }
+
+    body>header,
+    header.sticky-top,
+    main>header {
+        [role="tablist"] a[role="tab"] {
+            text-decoration: none;
+        }
+    }
+
+    /* Temporary fix for the files view under the "Content" tab on the product edit page */
+    form>main section {
+        @apply grid border-t border-border gap-6 py-7 px-0;
+    }
+
+    form>main section>header {
+        @apply grid gap-3 content-start;
+    }
+
+    form>main section:not(form + form section):first-of-type {
+        @apply pt-0 border-t-0;
+    }
+
+    /* Firefox-specific fix to avoid showing node content as selected text */
+    .rich-text .selected *::selection {
+        background: none;
+    }
+
+    article.product-card {
+        .thumbnails>* {
+            width: 100%;
+        }
+
+        &.horizontal {
+            @media (min-width: 1024px) {
+                @apply flex;
+
+                >figure {
+                    @apply h-full;
+
+                    img {
+                        width: unset;
+                        @apply min-w-full;
+                    }
+                }
+
+                .thumbnails {
+                    flex: 1;
+                }
+
+                section {
+                    flex: 2;
+                }
+            }
+        }
+    }
+
+    /* There is erb files yet to be migrated that use this. */
+    [role="navigation"] {
+        menu {
+            @apply grid gap-3;
+
+            menu {
+                @apply pl-4 mt-3 text-[length:var(--font-size-1)] leading-[length:var(--line-height-1)];
+            }
+        }
+    }
+}

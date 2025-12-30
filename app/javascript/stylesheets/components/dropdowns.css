@@ -1,0 +1,89 @@
+@layer components {
+    /*
+   * Dropdown mixin port
+   * Reference: app/javascript/stylesheets/_dropdown.scss
+   */
+
+    .dropdown {
+        @apply relative border border-solid border-border rounded p-4 bg-white mt-2 max-w-[calc(100vw-2rem)];
+
+        /* Variable re-definitions for context */
+        --tooltip-arrow-size: 0.5rem;
+
+        &::before {
+            content: "";
+            @apply bg-transparent absolute;
+            border-left: solid var(--tooltip-arrow-size) transparent;
+            border-right: solid var(--tooltip-arrow-size) transparent;
+            border-bottom: solid var(--tooltip-arrow-size) var(--color-border);
+            bottom: 100%;
+            left: 0.75rem;
+            /* spacer(3) */
+        }
+
+        >[role="menu"],
+        >.stack {
+            &:only-child {
+                @apply shadow-none m-[-1rem] max-w-[calc(100%+2rem)] border-none;
+            }
+        }
+    }
+
+    .popover {
+        @apply inline-block relative;
+
+        &[open],
+        &.expanded {
+            &::after {
+                content: "";
+                @apply bg-transparent absolute;
+                border-left: solid 0.5rem transparent;
+                border-right: solid 0.5rem transparent;
+                border-bottom: solid 0.5rem var(--color-border);
+                top: 100%;
+                left: 50%;
+                transform: translate(-50%, 0);
+                z-index: 30;
+                /* z-index(tooltip) */
+            }
+        }
+
+        .dropdown {
+            @apply absolute top-[calc(100%-1px)] min-w-full w-max shadow-md z-[30];
+            /* box-shadow(1) -> shadow-md (approx) */
+
+            /* Contrast override from original SCSS */
+            --color: var(--contrast-filled);
+
+            &::before {
+                @apply hidden;
+            }
+        }
+
+        &.top {
+            &::after {
+                @apply bottom-full top-auto border-t-[0.5rem] border-t-border border-b-0;
+            }
+
+            .dropdown {
+                @apply shadow-none bottom-[calc(100%+0.5rem-1px)] top-auto;
+            }
+        }
+
+        &:has(> summary button) {
+            >.dropdown {
+                margin-left: -0.25rem;
+                /* -$button-hover-transform-length */
+            }
+
+            &.top {
+
+                >.dropdown,
+                &::after {
+                    margin-bottom: 0.25rem;
+                    /* $button-hover-transform-length */
+                }
+            }
+        }
+    }
+}

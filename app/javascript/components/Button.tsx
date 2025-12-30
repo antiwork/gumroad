@@ -7,76 +7,79 @@ import { classNames } from "$app/utils/classNames";
 
 import { ButtonColor, buttonColors } from "$app/components/design";
 
-export const buttonVariants = cva("button", {
-  variants: {
-    variant: {
-      default: "",
-      outline: "",
-      secondary: "",
-      destructive: "",
+export const buttonVariants = cva(
+  "inline-flex items-center justify-center gap-2 rounded border border-solid border-transparent font-inherit no-underline transition-transform duration-[0.14s] ease-out disabled:opacity-30 disabled:pointer-events-none disabled:cursor-default hover:not-active:not-disabled:-translate-y-1 hover:not-active:not-disabled:-translate-x-1 hover:not-active:not-disabled:shadow-[0.25rem_0.25rem_0_currentColor]",
+  {
+    variants: {
+      variant: {
+        default: "bg-transparent text-current",
+        outline: "bg-gray text-current border-current", // outline uses background-color: gray(2) per original SCSS mixin bg-bordered
+        secondary: "bg-transparent text-muted", // Assuming secondary was similar to default or muted
+        destructive: "bg-danger text-danger-foreground",
+      },
+      size: {
+        default: "text-[length:var(--font-size-2)] leading-[length:var(--line-height-2)] px-4 py-3",
+        sm: "text-[1rem] leading-[1.4] p-2",
+      },
+      color: {
+        primary: "bg-primary text-primary-foreground border-primary",
+        black: "bg-black text-white border-black",
+        accent: "bg-accent text-accent-foreground border-accent",
+        filled: "bg-white text-black border-white",
+        success: "bg-success text-success-foreground border-success",
+        danger: "bg-danger text-danger-foreground border-danger",
+        warning: "bg-warning text-warning-foreground border-warning",
+        info: "bg-info text-info-foreground border-info",
+      },
     },
-    size: {
-      default: "",
-      sm: "small",
-    },
-    color: {
-      primary: "primary",
-      black: "black",
-      accent: "accent",
-      filled: "filled",
-      success: "success",
-      danger: "danger",
-      warning: "warning",
-      info: "info",
+    compoundVariants: [
+      {
+        variant: "outline",
+        color: "primary",
+        className: "bg-transparent border-primary text-primary hover:bg-primary hover:text-primary-foreground",
+      },
+      {
+        variant: "outline",
+        color: "danger",
+        className: "bg-transparent border-danger text-danger hover:bg-danger hover:text-danger-foreground",
+      },
+      {
+        variant: "outline",
+        color: "success",
+        className: "bg-transparent border-success text-success hover:bg-success hover:text-success-foreground",
+      },
+      {
+        variant: "outline",
+        color: "warning",
+        className: "bg-transparent border-warning text-warning hover:bg-warning hover:text-warning-foreground",
+      },
+      {
+        variant: "outline",
+        color: "info",
+        className: "bg-transparent border-info text-info hover:bg-info hover:text-info-foreground",
+      },
+      {
+        variant: "outline",
+        color: "black",
+        className: "bg-transparent border-black text-black hover:bg-black hover:text-white",
+      },
+      {
+        variant: "outline",
+        color: "accent",
+        className: "bg-transparent border-accent text-accent hover:bg-accent hover:text-accent-foreground",
+      },
+      {
+        variant: "outline",
+        color: "filled",
+        className: "bg-transparent border-white text-white hover:bg-white hover:text-black",
+      },
+    ],
+    defaultVariants: {
+      variant: "default",
+      size: "default",
     },
   },
-  compoundVariants: [
-    {
-      variant: "outline",
-      color: "primary",
-      className: "outline-primary",
-    },
-    {
-      variant: "outline",
-      color: "danger",
-      className: "outline-danger",
-    },
-    {
-      variant: "outline",
-      color: "success",
-      className: "outline-success",
-    },
-    {
-      variant: "outline",
-      color: "warning",
-      className: "outline-warning",
-    },
-    {
-      variant: "outline",
-      color: "info",
-      className: "outline-info",
-    },
-    {
-      variant: "outline",
-      color: "black",
-      className: "outline-black",
-    },
-    {
-      variant: "outline",
-      color: "accent",
-      className: "outline-accent",
-    },
-    {
-      variant: "outline",
-      color: "filled",
-      className: "outline-filled",
-    },
-  ],
-  defaultVariants: {
-    variant: "default",
-    size: "default",
-  },
-});
+);
 
 // Legacy props for backward compatibility
 type ButtonVariation = {

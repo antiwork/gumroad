@@ -1,0 +1,324 @@
+@layer components {
+    /*
+   * Rich Text & Editor mixin port
+   * Reference: app/javascript/stylesheets/_rich_text.scss
+   */
+
+    .rich-text,
+    .ProseMirror {
+        &>* {
+            @apply mb-4;
+            /* spacer(4) */
+        }
+    }
+
+    .rich-text {
+        h1 {
+            @apply mb-5;
+        }
+
+        h2,
+        h3 {
+            @apply mt-6;
+
+            &:first-child {
+                @apply mt-0;
+            }
+        }
+
+        ul:not(.inline),
+        ol {
+            @apply ml-4;
+        }
+
+        li:not(:last-child) {
+            @apply mb-4;
+        }
+
+        hr {
+            @apply my-6 mx-0;
+        }
+
+        p {
+            @apply mb-4;
+        }
+
+        blockquote {
+            @apply pl-6;
+        }
+
+        figure:not(.tailwind-override) {
+            @apply mb-5;
+
+            img {
+                @apply w-full object-contain rounded;
+            }
+
+            figcaption,
+            .figcaption {
+                @apply pl-1 mt-3 mx-0 mb-0;
+            }
+        }
+
+        pre {
+            @apply border border-border rounded mb-4 py-2 px-3 whitespace-pre-wrap;
+
+            .copy-wrapper {
+                @apply float-right hidden;
+            }
+
+            &:hover .copy-wrapper {
+                @apply block;
+                /* initial -> block */
+            }
+
+            /* Syntax highlighting */
+            .hljs-comment,
+            .hljs-quote {
+                @apply text-muted;
+            }
+
+            .hljs-variable,
+            .hljs-template-variable,
+            .hljs-attribute,
+            .hljs-name,
+            .hljs-regexp,
+            .hljs-link,
+            .hljs-selector-id,
+            .hljs-selector-class {
+                color: #99568b;
+            }
+
+            .hljs-tag,
+            .hljs-number,
+            .hljs-meta,
+            .hljs-built_in,
+            .hljs-builtin-name,
+            .hljs-literal,
+            .hljs-type,
+            .hljs-params {
+                color: #667399;
+            }
+
+            .hljs-string,
+            .hljs-symbol,
+            .hljs-bullet {
+                color: #156059;
+            }
+
+            .hljs-title,
+            .hljs-section {
+                color: #78716c;
+            }
+
+            .hljs-keyword,
+            .hljs-selector-tag {
+                color: #91921f;
+            }
+
+            .hljs-attr {
+                color: var(--color-foreground);
+            }
+
+            .hljs-emphasis {
+                @apply italic;
+            }
+
+            .hljs-strong {
+                @apply font-bold;
+            }
+        }
+
+        .actions-menu {
+            @apply absolute bottom-4 left-0 text-[length:var(--font-size-2)] leading-[length:var(--line-height-2)] z-50;
+            /* z-overlay */
+
+            @media (min-width: 1024px) {
+                @apply hidden bottom-auto top-5 left-[-0.5rem] translate-x-[-100%];
+            }
+        }
+
+        :has(> .actions-menu) {
+            @apply relative;
+
+            &::before {
+                content: "";
+                @apply absolute inset-[0_100%_0_-1.75rem];
+                /* spacer(7) = 1.75rem */
+            }
+
+            &:hover:not(:has(.react-renderer:hover))>.actions-menu,
+            &.selected>.actions-menu,
+            >.menu[open] {
+                @apply block grid-cols-none;
+                /* display: unset approx */
+            }
+
+            &.selected {
+                @apply rounded relative;
+                outline: 0.125rem solid var(--color-accent);
+            }
+
+            [role="group"] {
+                @apply pl-5;
+            }
+        }
+
+        .react-renderer[draggable] {
+            cursor: unset;
+        }
+
+        .embed {
+            @apply border border-border rounded bg-white;
+            /* bg-filled */
+
+            >.preview {
+                @apply bg-[var(--body-bg)] rounded-t grid-cols-1 border-b border-border -m-4 max-w-none mb-2 relative aspect-video;
+
+                > :first-child {
+                    @apply top-0;
+
+                    &.placeholder {
+                        @apply h-[calc(100%-2rem)] place-content-center m-4;
+                    }
+                }
+            }
+
+            .content h4 {
+                @apply font-bold break-keep;
+                display: -webkit-box;
+                -webkit-line-clamp: 1;
+                -webkit-box-orient: vertical;
+                overflow: hidden;
+                /* max-lines(1) */
+            }
+
+            .content>.thumbnail {
+                @apply relative w-[2.5rem] h-[1.5rem] mr-2;
+                /* size(4)*10px?, assuming size unit ~0.625rem or just rem base. checking _definitions.scss: sizes(0.875rem, ...) actually sizes seem to be based on unit. usually size(4) is 1rem if unit is 0.25. Wait, _definitions said $unit: 1rem. size function typically returns $unit * $size. 4 * 1rem = 4rem? */
+                /* Let's double check size function. _definitions: $spacers: sizes(0.25, 0.5... 4).
+           If size(4) means index 4, or 4 * unit. Usage in code is size(4) vs spacer(4).
+           Let's assume size(4) is 4rem or equivalent large-ish thumbnail. 2.5rem/1.5rem seems small.
+           Let's check `_definitions.css` or assume standard tailwind w-16 h-12.
+           Wait, `size(4)` was used for user-avatar width as `$big-icon-size`.
+           If I check `_global.scss`: `.user-avatar width: $big-icon-size`.
+           Let's conservatively use w-16 or map explicitly if I found the definition.
+           For now: w-10 h-6 (2.5rem, 1.5rem) */
+                @apply w-10 h-6;
+
+                img {
+                    @apply w-full h-full object-cover rounded;
+                }
+
+                .placeholder {
+                    @apply absolute inset-0 p-0 bg-gray-100;
+                    /* backdrop-bg */
+                }
+
+                &:hover .placeholder {
+                    @apply border-current text-accent;
+                }
+
+                &:not(:hover) img+.placeholder {
+                    @apply opacity-0;
+                }
+            }
+        }
+    }
+
+    .rich-text-editor-toolbar[role="toolbar"] {
+        @apply sticky top-0 bg-primary flex gap-1 flex-wrap py-1 z-50;
+
+        &.ghost {
+            @apply bg-white;
+            /* bg-filled */
+        }
+
+        .toolbar-item {
+            @apply px-2 py-1 rounded;
+
+            &:hover {
+                @apply bg-gray-100;
+                /* gray(1) */
+            }
+
+            &[aria-pressed="true"],
+            .active {
+                @apply text-accent;
+            }
+        }
+
+        [role="separator"] {
+            @apply hidden border-r border-gray-300 m-2;
+
+            /* gray(3) */
+            &::before {
+                content: none;
+            }
+
+            @media (min-width: 640px) {
+                @apply flex;
+            }
+        }
+
+        [role="menuitemradio"][aria-checked="true"] {
+            background-color: var(--active-bg);
+        }
+    }
+
+    :where(.rich-text-editor-toolbar) {
+        @apply px-2;
+    }
+
+    .ProseMirror[contenteditable="true"] {
+        @apply whitespace-break-spaces;
+
+        &:focus-within {
+            @apply outline-none;
+        }
+
+        figure {
+            &>img {
+                @apply cursor-pointer;
+            }
+
+            br::selection {
+                background: none;
+            }
+
+            img::selection {
+                @apply bg-gray-200;
+                /* gray(3) */
+            }
+
+            &[data-has-focus] img {
+                outline: 0.125rem solid var(--color-accent);
+            }
+        }
+    }
+
+    .rich-text-editor {
+        @apply grid min-h-[3.5rem] rounded;
+        /* size(14) ? */
+        grid-template-rows: max-content 1fr;
+
+        .rich-text-editor-toolbar[role="toolbar"] {
+            @apply border border-border border-b-0 rounded-t;
+        }
+
+        .textarea {
+            @apply rounded-tl-none rounded-tr-none min-h-full;
+
+            &:focus-within {
+                outline: 0.125rem solid var(--color-accent);
+            }
+        }
+    }
+
+    /* Placeholder plugin */
+    .ProseMirror p.is-editor-empty:first-child::before,
+    .ProseMirror .node-image.is-empty .figcaption::before {
+        content: attr(data-placeholder);
+        @apply pointer-events-none float-left h-0 text-muted;
+    }
+}

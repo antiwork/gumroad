@@ -1,5 +1,13 @@
 @layer theme, base, components, utilities;
 @import "tailwindcss/theme.css" layer(theme);
+@import "./components/buttons.css" layer(components);
+@import "./components/dropdowns.css" layer(components);
+@import "./components/forms.css" layer(components);
+@import "./components/legacy.css" layer(components);
+@import "./components/rich_text.css" layer(components);
+@import "./components/stack.css" layer(components);
+@import "./components/global.css" layer(base);
+@import "./components/font.css" layer(base);
 @import "tailwindcss/utilities.css" source(none);
 /* Should be layer(utilities) but that conflicts with the legacy non-layer CSS */
 @plugin "@tailwindcss/typography";
