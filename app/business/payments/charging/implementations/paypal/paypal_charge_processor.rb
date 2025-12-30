@@ -573,6 +573,38 @@ class PaypalChargeProcessor
     raise ChargeProcessorUnavailableError, e
   end
 
+  def fight_chargeback(paypal_transaction_id, dispute_evidence, merchant_account:)
+    dispute = dispute_evidence.dispute
+    dispute_id = dispute.charge_processor_dispute_id
+
+    unless dispute_id.present?
+      Rails.logger.error("PayPal fight_chargeback: No dispute_id found for transaction #{paypal_transaction_id}")
+      raise ChargeProcessorInvalidRequestError, "PayPal dispute ID not found for transaction"
+    end
+
+    evidence_data = build_paypal_evidence(dispute_evidence, dispute)
+
+    paypal_rest_api = PaypalRestApi.new
+    api_response = paypal_rest_api.provide_dispute_evidence(
+      dispute_id:,
+      evidence_data:,
+      merchant_account:
+    )
+
+    self.class.log_paypal_api_response("Provide Dispute Evidence", dispute_id, api_response)
+
+    unless paypal_rest_api.successful_response?(api_response)
+      error_message = self.class.build_error_message(
+        "Failed to submit evidence for dispute #{dispute_id}",
+        api_response.result&.message || api_response.result&.details&.first&.description
+      )
+      Rails.logger.error("PayPal fight_chargeback failed: #{error_message}")
+      raise ChargeProcessorInvalidRequestError, error_message
+    end
+
+    Rails.logger.info("PayPal dispute #{dispute_id} evidence submitted successfully")
+  end
+
   def holder_of_funds(_merchant_account)
     HolderOfFunds::GUMROAD
   end
@@ -612,6 +644,134 @@ class PaypalChargeProcessor
   private
     def paypal_api
       PaypalChargeProcessor.paypal_api
+    end
+
+    def build_paypal_evidence(dispute_evidence, dispute)
+      evidences = []
+      purchase = dispute.disputable.purchase_for_dispute_evidence
+
+      if dispute_evidence.shipping_tracking_number.present?
+        carrier_name = normalize_carrier_name(dispute_evidence.shipping_carrier)
+        evidences << {
+          evidence_type: "PROOF_OF_FULFILLMENT",
+          evidence_info: {
+            tracking_info: [{
+              carrier_name:,
+              tracking_number: dispute_evidence.shipping_tracking_number
+            }]
+          }
+        }
+      end
+
+      notes = build_paypal_evidence_notes(dispute_evidence, dispute, purchase)
+      evidences << {
+        evidence_type: "OTHER",
+        notes: notes.truncate(2000)
+      }
+
+      { evidences: }
+    end
+
+    def build_paypal_evidence_notes(dispute_evidence, dispute, purchase)
+      notes_parts = []
+
+      notes_parts << "=== DISPUTE EVIDENCE ==="
+
+      if dispute_evidence.customer_name.present? || dispute_evidence.customer_email.present?
+        customer_info = [dispute_evidence.customer_name, dispute_evidence.customer_email].compact.join(" - ")
+        notes_parts << "Customer: #{customer_info}"
+      end
+      notes_parts << "Purchase IP: #{dispute_evidence.customer_purchase_ip}" if dispute_evidence.customer_purchase_ip.present?
+
+      notes_parts << "Purchase Date: #{dispute_evidence.purchased_at&.strftime('%Y-%m-%d %H:%M UTC')}" if dispute_evidence.purchased_at.present?
+      notes_parts << "Product: #{dispute_evidence.product_description}" if dispute_evidence.product_description.present?
+
+      notes_parts << "Billing Address: #{dispute_evidence.billing_address}" if dispute_evidence.billing_address.present?
+      if dispute_evidence.shipping_address.present?
+        notes_parts << "Shipping Address: #{dispute_evidence.shipping_address}"
+        notes_parts << "Shipped Date: #{dispute_evidence.shipped_at&.strftime('%Y-%m-%d')}" if dispute_evidence.shipped_at.present?
+        if dispute_evidence.shipping_tracking_number.present?
+          notes_parts << "Tracking: #{dispute_evidence.shipping_carrier} #{dispute_evidence.shipping_tracking_number}"
+        end
+      end
+
+      if purchase&.license.present?
+        license = purchase.license
+        notes_parts << ""
+        notes_parts << "=== LICENSE KEY EVIDENCE ==="
+        notes_parts << "License Key: #{license.serial}"
+        notes_parts << "License Activations: #{license.uses}" if license.uses.to_i > 0
+        notes_parts << "This proves the customer received and activated the digital product."
+      end
+
+      if dispute_evidence.access_activity_log.present?
+        notes_parts << ""
+        notes_parts << "=== PRODUCT ACCESS LOG ==="
+        notes_parts << dispute_evidence.access_activity_log
+      end
+
+      if dispute_evidence.refund_policy_disclosure.present?
+        notes_parts << ""
+        notes_parts << "=== REFUND POLICY ==="
+        notes_parts << dispute_evidence.refund_policy_disclosure
+      end
+
+      if dispute_evidence.cancellation_policy_disclosure.present?
+        notes_parts << ""
+        notes_parts << "=== CANCELLATION POLICY ==="
+        notes_parts << dispute_evidence.cancellation_policy_disclosure
+      end
+
+      if dispute_evidence.reason_for_winning.present?
+        notes_parts << ""
+        notes_parts << "=== MERCHANT RESPONSE ==="
+        notes_parts << dispute_evidence.reason_for_winning
+      end
+
+      if dispute_evidence.cancellation_rebuttal.present?
+        notes_parts << ""
+        notes_parts << "=== CANCELLATION REBUTTAL ==="
+        notes_parts << dispute_evidence.cancellation_rebuttal
+      end
+
+      if dispute_evidence.refund_refusal_explanation.present?
+        notes_parts << ""
+        notes_parts << "=== REFUND REFUSAL EXPLANATION ==="
+        notes_parts << dispute_evidence.refund_refusal_explanation
+      end
+
+      if dispute_evidence.uncategorized_text.present?
+        notes_parts << ""
+        notes_parts << "=== ADDITIONAL INFORMATION ==="
+        notes_parts << dispute_evidence.uncategorized_text
+      end
+
+      notes_parts.join("\n")
+    end
+
+    def normalize_carrier_name(carrier)
+      return "OTHER" if carrier.blank?
+
+      normalized = carrier.to_s.upcase.gsub(/[^A-Z0-9]/, "")
+
+      case normalized
+      when /FEDEX/
+        "FEDEX"
+      when /UPS/
+        "UPS"
+      when /USPS|UNITED.*STATES.*POSTAL/
+        "USPS"
+      when /DHL/
+        "DHL"
+      when /ROYAL.*MAIL/
+        "ROYAL_MAIL"
+      when /CANADA.*POST/
+        "CANADA_POST"
+      when /AUSTRALIA.*POST/
+        "AUSTRALIA_POST"
+      else
+        "OTHER"
+      end
     end
 
     def get_charge_for_express_checkout_api(charge_id)

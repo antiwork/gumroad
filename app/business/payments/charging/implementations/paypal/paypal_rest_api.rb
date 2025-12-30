@@ -123,6 +123,15 @@ class PaypalRestApi
     execute_request
   end
 
+  def provide_dispute_evidence(dispute_id:, evidence_data:, merchant_account:)
+    paypal_account_id = merchant_account.charge_processor_merchant_id
+    @request = new_request(path: "/v1/customer/disputes/#{dispute_id}/provide-evidence", verb: "POST")
+    @request.headers["Paypal-Auth-Assertion"] = paypal_auth_assertion_header(paypal_account_id)
+    @request.headers["PayPal-Request-Id"] = "provide-evidence-#{dispute_id}-#{timestamp}"
+    @request.body = evidence_data
+    execute_request
+  end
+
   def successful_response?(api_response)
     (200...300).include?(api_response.status_code)
   end

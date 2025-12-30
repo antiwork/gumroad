@@ -1532,4 +1532,127 @@ describe PaypalChargeProcessor, :vcr do
       expect(PaypalChargeProcessor.formatted_amount_for_paypal(1644, "jpy").class).to eq(Integer)
     end
   end
+
+  describe "#fight_chargeback" do
+    let(:purchase) { create(:purchase) }
+    let(:merchant_account) { create(:merchant_account_paypal) }
+    let(:dispute) { create(:dispute_formalized, purchase:, charge_processor_dispute_id: "PP-D-12345") }
+    let(:dispute_evidence) do
+      create(:dispute_evidence,
+        dispute:,
+        customer_name: "John Doe",
+        customer_email: "john@example.com",
+        customer_purchase_ip: "192.168.1.1",
+        product_description: "Digital Product",
+        purchased_at: 1.day.ago)
+    end
+
+    let(:api_response) { OpenStruct.new(status_code: 200, result: OpenStruct.new(links: [])) }
+
+    before do
+      allow_any_instance_of(PaypalRestApi).to receive(:provide_dispute_evidence).and_return(api_response)
+    end
+
+    it "submits evidence to PayPal" do
+      expect_any_instance_of(PaypalRestApi).to receive(:provide_dispute_evidence).with(
+        dispute_id: "PP-D-12345",
+        evidence_data: hash_including(:evidences),
+        merchant_account:
+      ).and_return(api_response)
+
+      subject.fight_chargeback("capture_123", dispute_evidence, merchant_account:)
+    end
+
+    it "raises an error when dispute_id is missing" do
+      dispute.update!(charge_processor_dispute_id: nil)
+
+      expect {
+        subject.fight_chargeback("capture_123", dispute_evidence, merchant_account:)
+      }.to raise_error(ChargeProcessorInvalidRequestError, /PayPal dispute ID not found/)
+    end
+
+    context "when PayPal API returns an error" do
+      let(:api_response) do
+        OpenStruct.new(
+          status_code: 400,
+          result: OpenStruct.new(message: "DISPUTE_NOT_OPEN", details: nil)
+        )
+      end
+
+      it "raises a ChargeProcessorInvalidRequestError" do
+        expect {
+          subject.fight_chargeback("capture_123", dispute_evidence, merchant_account:)
+        }.to raise_error(ChargeProcessorInvalidRequestError)
+      end
+    end
+
+    context "with shipping tracking information" do
+      before do
+        dispute_evidence.update!(
+          shipping_carrier: "FedEx",
+          shipping_tracking_number: "123456789",
+          shipping_address: "123 Main St",
+          shipped_at: 2.days.ago
+        )
+      end
+
+      it "includes PROOF_OF_FULFILLMENT evidence type" do
+        expect_any_instance_of(PaypalRestApi).to receive(:provide_dispute_evidence) do |_, args|
+          evidences = args[:evidence_data][:evidences]
+          fulfillment_evidence = evidences.find { |e| e[:evidence_type] == "PROOF_OF_FULFILLMENT" }
+
+          expect(fulfillment_evidence).to be_present
+          expect(fulfillment_evidence[:evidence_info][:tracking_info].first[:carrier_name]).to eq("FEDEX")
+          expect(fulfillment_evidence[:evidence_info][:tracking_info].first[:tracking_number]).to eq("123456789")
+
+          api_response
+        end
+
+        subject.fight_chargeback("capture_123", dispute_evidence, merchant_account:)
+      end
+    end
+
+    context "with license key" do
+      let(:link) { create(:product, is_licensed: true) }
+      let(:purchase) { create(:purchase, link:) }
+      let(:license) { create(:license, purchase:, uses: 5) }
+
+      before do
+        license
+      end
+
+      it "includes license information in evidence notes" do
+        expect_any_instance_of(PaypalRestApi).to receive(:provide_dispute_evidence) do |_, args|
+          evidences = args[:evidence_data][:evidences]
+          other_evidence = evidences.find { |e| e[:evidence_type] == "OTHER" }
+
+          expect(other_evidence[:notes]).to include("LICENSE KEY EVIDENCE")
+          expect(other_evidence[:notes]).to include(license.serial)
+
+          api_response
+        end
+
+        subject.fight_chargeback("capture_123", dispute_evidence, merchant_account:)
+      end
+    end
+  end
+
+  describe "#normalize_carrier_name" do
+    it "normalizes common carrier names" do
+      processor = described_class.new
+      expect(processor.send(:normalize_carrier_name, "fedex")).to eq("FEDEX")
+      expect(processor.send(:normalize_carrier_name, "FedEx Ground")).to eq("FEDEX")
+      expect(processor.send(:normalize_carrier_name, "ups")).to eq("UPS")
+      expect(processor.send(:normalize_carrier_name, "UPS Next Day")).to eq("UPS")
+      expect(processor.send(:normalize_carrier_name, "usps")).to eq("USPS")
+      expect(processor.send(:normalize_carrier_name, "United States Postal Service")).to eq("USPS")
+      expect(processor.send(:normalize_carrier_name, "dhl")).to eq("DHL")
+      expect(processor.send(:normalize_carrier_name, "Royal Mail")).to eq("ROYAL_MAIL")
+      expect(processor.send(:normalize_carrier_name, "Canada Post")).to eq("CANADA_POST")
+      expect(processor.send(:normalize_carrier_name, "Australia Post")).to eq("AUSTRALIA_POST")
+      expect(processor.send(:normalize_carrier_name, "Some Unknown Carrier")).to eq("OTHER")
+      expect(processor.send(:normalize_carrier_name, nil)).to eq("OTHER")
+      expect(processor.send(:normalize_carrier_name, "")).to eq("OTHER")
+    end
+  end
 end
