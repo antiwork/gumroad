@@ -28,7 +28,7 @@ class UtmLinksController < Sellers::BaseController
 
     save_utm_link(
       success_message: "Link created!",
-      error_redirect_path: new_utm_links_dashboard_path
+      error_redirect_path: new_utm_links_dashboard_path(copy_from: params[:copy_from])
     )
   end
 

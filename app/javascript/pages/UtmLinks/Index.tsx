@@ -251,8 +251,6 @@ export default function UtmLinksIndex() {
                   <TableCell>
                     <UtmLinkActions
                       link={link}
-                      onEdit={() => router.get(editLinkPath(link))}
-                      onDuplicate={() => router.get(duplicateLinkPath(link))}
                       onDelete={() =>
                         setDeletingUtmLink({ id: link.id, title: link.title, state: "delete-confirmation" })
                       }
@@ -336,17 +334,7 @@ const TruncatedTextWithTooltip = ({ text, maxLength }: { text: string; maxLength
   return <WithTooltip tip={isTruncated ? original : null}>{truncated}</WithTooltip>;
 };
 
-const UtmLinkActions = ({
-  link,
-  onEdit,
-  onDuplicate,
-  onDelete,
-}: {
-  link: SavedUtmLink;
-  onEdit: () => void;
-  onDuplicate: () => void;
-  onDelete: () => void;
-}) => {
+const UtmLinkActions = ({ link, onDelete }: { link: SavedUtmLink; onDelete: () => void }) => {
   const [open, setOpen] = React.useState(false);
 
   return (
@@ -368,14 +356,14 @@ const UtmLinkActions = ({
         }
       >
         <div role="menu">
-          <div role="menuitem" onClick={onEdit}>
+          <Link href={editLinkPath(link)} role="menuitem">
             <Icon name="pencil" />
             &ensp;Edit
-          </div>
-          <div role="menuitem" onClick={onDuplicate}>
+          </Link>
+          <Link href={duplicateLinkPath(link)} role="menuitem">
             <Icon name="outline-duplicate" />
             &ensp;Duplicate
-          </div>
+          </Link>
           <div className="danger" role="menuitem" onClick={onDelete}>
             <Icon name="trash2" />
             &ensp;Delete

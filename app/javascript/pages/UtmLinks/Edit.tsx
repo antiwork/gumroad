@@ -17,6 +17,21 @@ import { UtmLinkDestinationOption, UtmLinkEditProps } from "$app/types/utm_link"
 
 const MAX_UTM_PARAM_LENGTH = 200;
 
+// Helper function to compute target_resource from destination
+const computeTargetResource = (dest: UtmLinkDestinationOption | null) => {
+  if (!dest) return { target_resource_type: null, target_resource_id: null };
+
+  if (["profile_page", "subscribe_page"].includes(dest.id)) {
+    return { target_resource_type: dest.id, target_resource_id: null };
+  }
+
+  const parts = dest.id.split(/-(.*)/u);
+  return {
+    target_resource_type: parts[0] ?? null,
+    target_resource_id: parts[1] ?? null,
+  };
+};
+
 export default function UtmLinksEdit() {
   const { context, utm_link } = usePage<UtmLinkEditProps>().props;
   const uid = React.useId();
@@ -31,6 +46,12 @@ export default function UtmLinksEdit() {
       permalink: currentPermalink,
     };
   });
+
+  // Compute initial destination and target resource before useForm
+  const initialDestination = utm_link.destination_option?.id
+    ? (context.destination_options.find((o) => o.id === assertDefined(utm_link.destination_option).id) ?? null)
+    : null;
+  const initialTargetResource = computeTargetResource(initialDestination);
 
   const form = useForm<{
     utm_link: {
@@ -47,8 +68,8 @@ export default function UtmLinksEdit() {
   }>({
     utm_link: {
       title: utm_link.title,
-      target_resource_type: null,
-      target_resource_id: null,
+      target_resource_type: initialTargetResource.target_resource_type,
+      target_resource_id: initialTargetResource.target_resource_id,
       permalink,
       utm_source: utm_link.source,
       utm_medium: utm_link.medium,
@@ -59,30 +80,7 @@ export default function UtmLinksEdit() {
   });
   const { data, setData, patch, processing, errors } = form;
 
-  // Initialize destination from utm_link
-  const [destination] = React.useState<UtmLinkDestinationOption | null>(() => {
-    if (utm_link.destination_option?.id) {
-      return context.destination_options.find((o) => o.id === assertDefined(utm_link.destination_option).id) ?? null;
-    }
-    return null;
-  });
-
-  // Set initial target resource type/id from destination
-  React.useEffect(() => {
-    if (!destination) return;
-
-    const destinationId = destination.id;
-    if (["profile_page", "subscribe_page"].includes(destinationId)) {
-      setData("utm_link", { ...data.utm_link, target_resource_type: destinationId, target_resource_id: null });
-    } else {
-      const parts = destinationId.split(/-(.*)/u);
-      setData("utm_link", {
-        ...data.utm_link,
-        target_resource_type: parts[0] ?? null,
-        target_resource_id: parts[1] ?? null,
-      });
-    }
-  }, []);
+  const [destination] = React.useState<UtmLinkDestinationOption | null>(initialDestination);
 
   const titleRef = React.useRef<HTMLInputElement>(null);
 

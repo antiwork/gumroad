@@ -22,6 +22,21 @@ const MAX_UTM_PARAM_LENGTH = 200;
 
 const duplicatedTitle = (title?: string) => (title ? `${title} (copy)` : "");
 
+// Helper function to compute target_resource from destination
+const computeTargetResource = (dest: UtmLinkDestinationOption | null) => {
+  if (!dest) return { target_resource_type: null, target_resource_id: null };
+
+  if (["profile_page", "subscribe_page"].includes(dest.id)) {
+    return { target_resource_type: dest.id, target_resource_id: null };
+  }
+
+  const parts = dest.id.split(/-(.*)/u);
+  return {
+    target_resource_type: parts[0] ?? null,
+    target_resource_id: parts[1] ?? null,
+  };
+};
+
 export default function UtmLinksNew() {
   const { context, utm_link } = usePage<UtmLinkFormProps>().props;
   const isDuplicating = utm_link !== null && utm_link.id === undefined;
@@ -39,6 +54,12 @@ export default function UtmLinksNew() {
   });
   const [isLoadingNewPermalink, setIsLoadingNewPermalink] = React.useState(false);
 
+  // Compute initial destination and target resource before useForm
+  const initialDestination = utm_link?.destination_option?.id
+    ? (context.destination_options.find((o) => o.id === assertDefined(utm_link.destination_option).id) ?? null)
+    : null;
+  const initialTargetResource = computeTargetResource(initialDestination);
+
   const form = useForm<{
     utm_link: {
       title: string;
@@ -54,8 +75,8 @@ export default function UtmLinksNew() {
   }>({
     utm_link: {
       title: isDuplicating ? duplicatedTitle(utm_link.title) : (utm_link?.title ?? ""),
-      target_resource_type: null,
-      target_resource_id: null,
+      target_resource_type: initialTargetResource.target_resource_type,
+      target_resource_id: initialTargetResource.target_resource_id,
       permalink,
       utm_source: utm_link?.source ?? null,
       utm_medium: utm_link?.medium ?? null,
@@ -66,38 +87,7 @@ export default function UtmLinksNew() {
   });
   const { data, setData, post, processing, errors } = form;
 
-  // Initialize destination from utm_link if duplicating
-  const [destination, setDestination] = React.useState<UtmLinkDestinationOption | null>(() => {
-    if (utm_link?.destination_option?.id) {
-      return context.destination_options.find((o) => o.id === assertDefined(utm_link.destination_option).id) ?? null;
-    }
-    return null;
-  });
-
-  // Update form data when destination changes
-  React.useEffect(() => {
-    if (!destination) {
-      setData("utm_link", { ...data.utm_link, target_resource_type: null, target_resource_id: null });
-      return;
-    }
-
-    const destinationId = destination.id;
-    if (["profile_page", "subscribe_page"].includes(destinationId)) {
-      setData("utm_link", { ...data.utm_link, target_resource_type: destinationId, target_resource_id: null });
-    } else {
-      const parts = destinationId.split(/-(.*)/u);
-      setData("utm_link", {
-        ...data.utm_link,
-        target_resource_type: parts[0] ?? null,
-        target_resource_id: parts[1] ?? null,
-      });
-    }
-  }, [destination]);
-
-  // Update permalink in form when it changes
-  React.useEffect(() => {
-    setData("utm_link", { ...data.utm_link, permalink });
-  }, [permalink]);
+  const [destination, setDestination] = React.useState<UtmLinkDestinationOption | null>(initialDestination);
 
   const titleRef = React.useRef<HTMLInputElement>(null);
 
@@ -126,6 +116,7 @@ export default function UtmLinksNew() {
     try {
       const { permalink: newPermalink } = await getUniquePermalink();
       setShortUrl((shortUrl) => ({ ...shortUrl, permalink: newPermalink }));
+      setData("utm_link", { ...data.utm_link, permalink: newPermalink });
     } catch {
       showAlert("Sorry, something went wrong. Please try again.", "error");
     } finally {
@@ -169,7 +160,14 @@ export default function UtmLinksNew() {
     e.preventDefault();
     if (!validate()) return;
 
-    post(Routes.utm_links_dashboard_index_path(), {
+    // Preserve copy_from query param for error redirect
+    const url = new URL(window.location.href);
+    const copyFrom = url.searchParams.get("copy_from");
+    const postUrl = copyFrom
+      ? Routes.utm_links_dashboard_index_path({ copy_from: copyFrom })
+      : Routes.utm_links_dashboard_index_path();
+
+    post(postUrl, {
       onError: (errors: Record<string, string | string[]>) => {
         const firstError = Object.values(errors)[0];
         const message = Array.isArray(firstError) ? firstError[0] : firstError;
@@ -235,7 +233,10 @@ export default function UtmLinksNew() {
               value={destination}
               isMulti={false}
               onChange={(option) => {
-                setDestination(option ? (context.destination_options.find((o) => o.id === option.id) ?? null) : null);
+                const newDest = option ? (context.destination_options.find((o) => o.id === option.id) ?? null) : null;
+                setDestination(newDest);
+                const { target_resource_type, target_resource_id } = computeTargetResource(newDest);
+                setData("utm_link", { ...data.utm_link, target_resource_type, target_resource_id });
                 form.clearErrors("utm_link.target_resource_id");
               }}
             />
