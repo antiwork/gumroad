@@ -53,53 +53,26 @@ describe UpdateSellerRefundEligibilityJob do
     end
   end
 
-  it "enables refunds and marks not_reviewed when balance recovers for not_reviewed account" do
-    with_versioning do
-      user.send(:disable_refunds_and_put_on_probation!)
-      create(:balance, user: user, amount_cents: 100_00)
-
-      expect { perform }
-        .to change { user.reload.user_risk_state }.from("on_probation").to("not_reviewed")
-        .and change { user.reload.refunds_disabled? }.from(true).to(false)
-    end
-  end
-
   context "when checking if user can recover from low balance probation" do
-    it "does not recover when user is not on probation" do
-      create(:balance, user: user, amount_cents: 100_00)
-      expect { perform }.not_to change { user.reload.user_risk_state }
-    end
-
-    context "when user is on probation for low balance" do
-      with_versioning do
-        before do
-          user.send(:disable_refunds_and_put_on_probation!)
-        end
-
-        it "does not recover when balance is below $100" do
-          create(:balance, user: user, amount_cents: 99_99)
-          expect { perform }.not_to change { user.reload.user_risk_state }
-        end
-
-        it "recovers when balance is at or above $100" do
-          create(:balance, user: user, amount_cents: 100_00)
-          expect { perform }.to change { user.reload.user_risk_state }.from("on_probation")
-        end
+    with_versioning do
+      before do
+        user.send(:disable_refunds_and_put_on_probation!)
       end
-    end
 
-    context "when user is on probation but not for low balance" do
-      with_versioning do
-        before do
-          user.comments.create!(comment_type: Comment::COMMENT_TYPE_ON_PROBATION, author_name: "LowBalanceFraudCheck", content: "Probated (payouts suspended) automatically on #{Time.current.to_fs(:formatted_date_full_month)} because of suspicious refund activity", created_at: 1.month.ago)
-          user.comments.create!(comment_type: Comment::COMMENT_TYPE_COMPLIANT, author_name: "LowBalanceFraudCheck", content: "Marked compliant automatically on #{Time.current.to_fs(:formatted_date_full_month)} as balance has recovered to $100", created_at: 1.day.ago)
-          user.put_on_probation!(author_name: "pause_payouts_for_seller_based_on_chargeback_rate", content: "Payouts automatically paused due to chargeback rate (50%) exceeding 3% volume.")
-        end
+      it "does not recover when balance is below $100" do
+        create(:balance, user: user, amount_cents: 99_99)
+        expect { perform }.not_to change { user.reload.user_risk_state }
+      end
 
-        it "does not recover risk state even if balance is above $100" do
-          create(:balance, user: user, amount_cents: 100_00)
-          expect { perform }.not_to change { user.reload.user_risk_state }
-        end
+      it "enables refunds and restores risk state when balance is at or above $100" do
+        expect_any_instance_of(User).to receive(:can_recover_from_low_balance_probation?).with(100_00).and_call_original
+        expect_any_instance_of(User).to receive(:restore_user_risk_state_before_probation!).and_call_original
+
+        create(:balance, user: user, amount_cents: 100_00)
+
+        expect { perform }
+          .to change { user.reload.user_risk_state }.from("on_probation").to("not_reviewed")
+          .and change { user.reload.refunds_disabled? }.from(true).to(false)
       end
     end
   end

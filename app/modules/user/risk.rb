@@ -186,7 +186,7 @@ module User::Risk
                    when :compliant
                      Comment::COMMENT_TYPE_COMPLIANT
                    when :not_reviewed
-                     Comment::COMMENT_TYPE_NOTE
+                     Comment::COMMENT_TYPE_NOT_REVIEWED
                    when :on_probation
                      Comment::COMMENT_TYPE_ON_PROBATION
                    when :flagged_for_fraud, :flagged_for_tos_violation

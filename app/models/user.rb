@@ -328,11 +328,11 @@ class User < ApplicationRecord
 
     after_transition any => :compliant, :do => :enable_refunds!
 
-    after_transition %i[suspended_for_fraud suspended_for_tos_violation] => :compliant,
+    after_transition %i[suspended_for_fraud suspended_for_tos_violation] => %i[compliant on_probation],
                      :do => :enable_links_and_tell_chat
-    after_transition %i[suspended_for_fraud suspended_for_tos_violation not_reviewed] => :compliant, :do => :unblock_seller_ip!
+    after_transition %i[suspended_for_fraud suspended_for_tos_violation not_reviewed] => %i[compliant on_probation], :do => :unblock_seller_ip!
     after_transition %i[suspended_for_fraud suspended_for_tos_violation] => :compliant, do: :enable_sellers_other_accounts
-    after_transition %i[suspended_for_fraud suspended_for_tos_violation] => :compliant, :do => :create_updated_stripe_apple_pay_domain
+    after_transition %i[suspended_for_fraud suspended_for_tos_violation] => %i[compliant on_probation], :do => :create_updated_stripe_apple_pay_domain
 
     event :mark_compliant do
       transition all => :compliant
@@ -343,11 +343,11 @@ class User < ApplicationRecord
     end
 
     event :flag_for_tos_violation do
-      transition %i[not_reviewed compliant flagged_for_fraud on_probation] => :flagged_for_tos_violation
+      transition %i[not_reviewed compliant flagged_for_fraud] => :flagged_for_tos_violation
     end
 
     event :flag_for_fraud do
-      transition %i[not_reviewed compliant flagged_for_tos_violation on_probation] => :flagged_for_fraud
+      transition %i[not_reviewed compliant flagged_for_tos_violation] => :flagged_for_fraud
     end
 
     event :suspend_for_fraud do
@@ -359,7 +359,7 @@ class User < ApplicationRecord
     end
 
     event :put_on_probation do
-      transition %i[not_reviewed compliant flagged_for_fraud flagged_for_tos_violation] => :on_probation
+      transition all => :on_probation
     end
   end
 
