@@ -45,11 +45,13 @@ export const PasswordResetPage = ({ reset_password_token }: { reset_password_tok
 
   return (
     <Layout header={<h1>Reset your password</h1>} headerActions={<a href={Routes.login_path()}>Log in</a>}>
-      <form onSubmit={(e) => void handleSubmit(e)}>
-        <section>
-          <fieldset>
+      <form onSubmit={(e) => void handleSubmit(e)} className="flex flex-col gap-12">
+        <section className="flex flex-col gap-8 pb-12">
+          <fieldset className="flex flex-col space-y-2">
             <legend>
-              <label htmlFor={`${uid}-password`}>Enter a new password</label>
+              <label className="cursor-pointer" htmlFor={`${uid}-password`}>
+                Enter a new password
+              </label>
             </legend>
             <PasswordInput
               id={`${uid}-password`}
@@ -61,9 +63,11 @@ export const PasswordResetPage = ({ reset_password_token }: { reset_password_tok
               autoComplete="new-password"
             />
           </fieldset>
-          <fieldset>
+          <fieldset className="flex flex-col space-y-2">
             <legend>
-              <label htmlFor={`${uid}-password-confirmation`}>Enter same password to confirm</label>
+              <label className="cursor-pointer" htmlFor={`${uid}-password-confirmation`}>
+                Enter same password to confirm
+              </label>
             </legend>
             <PasswordInput
               id={`${uid}-password-confirmation`}
