@@ -36,7 +36,7 @@
 The fastest way to run Gumroad locally is via our Docker Compose setup. This single command builds the application, boots all supporting services, and keeps them running:
 
 ```shell
-make LOCAL_DOCKER_COMPOSE_CONFIG=docker-compose-all-in-one.yml local
+make local
 ```
 
 Once the containers are running, visit `https://gumroad.dev` in your browser. The remaining sections of this guide cover installing the application dependencies directly on your machine, which is useful if you need finer control over the stack or want to develop outside of Docker.
@@ -44,7 +44,7 @@ Once the containers are running, visit `https://gumroad.dev` in your browser. Th
 When you're done working, shut everything down with:
 
 ```shell
-make LOCAL_DOCKER_COMPOSE_CONFIG=docker-compose-all-in-one.yml stop_local
+make stop_local
 ```
 
 ### Prerequisites
