@@ -19,6 +19,8 @@ PUSH_ASSETS ?= false
 LOCAL_DETACHED ?= false
 LOCAL_DOCKER_COMPOSE_CONFIG = docker-compose-local.yml
 
+export RUBY_VERSION
+
 build_base:
 	: $${BUNDLE_GEMS__CONTRIBSYS__COM?"Need to set BUNDLE_GEMS__CONTRIBSYS__COM for sidekiq-pro"}
 	rm -f docker/base/Gemfile* docker/base/.ruby-version
