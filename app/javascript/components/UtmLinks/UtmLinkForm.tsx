@@ -55,14 +55,11 @@ export const UtmLinkForm = () => {
   const pageProps = usePage<UtmLinkFormProps | UtmLinkEditProps>().props;
   const { context, utm_link } = pageProps;
 
-  // Determine if we're editing (has id) or creating
   const isEditing = utm_link?.id !== undefined;
-  // Check if we're duplicating (has data but no id)
   const isDuplicating = !isEditing && utm_link !== null;
 
   const uid = React.useId();
 
-  // Parse short URL
   const [{ shortUrlProtocol, shortUrlPrefix, permalink }, setShortUrl] = React.useState(() => {
     const { protocol: shortUrlProtocol, host, pathname } = new URL(utm_link?.short_url ?? context.short_url);
     const currentPermalink = pathname.split("/").pop() ?? "";
@@ -75,13 +72,11 @@ export const UtmLinkForm = () => {
   });
   const [isLoadingNewPermalink, setIsLoadingNewPermalink] = React.useState(false);
 
-  // Initialize destination
   const initialDestination = utm_link?.destination_option?.id
     ? (context.destination_options.find((o) => o.id === assertDefined(utm_link.destination_option).id) ?? null)
     : null;
   const initialTargetResource = computeTargetResource(initialDestination);
 
-  // Form with unique key for state isolation
   const formKey = isEditing ? `EditUtmLink:${utm_link.id}` : "CreateUtmLink";
   const form = useForm<UtmLinkFormData>(formKey, {
     utm_link: {
@@ -102,12 +97,10 @@ export const UtmLinkForm = () => {
 
   const titleRef = React.useRef<HTMLInputElement>(null);
 
-  // Auto-clear errors when user types
   React.useEffect(() => {
     if (Object.keys(errors).length > 0) form.clearErrors();
   }, [data]);
 
-  // Scroll to first error field on validation failure
   React.useLayoutEffect(() => {
     if (Object.keys(errors).length > 0) {
       document.querySelector("fieldset.danger")?.scrollIntoView({
@@ -117,12 +110,10 @@ export const UtmLinkForm = () => {
     }
   }, [errors]);
 
-  // Helper for cleaner error display
   const getFieldError = (attrName: FieldAttrName): string | undefined => {
     const error = errors[`utm_link.${attrName}`];
     if (error) return error;
 
-    // Handle grouped errors for target_resource
     if (attrName === "target_resource_id" || attrName === "target_resource_type") {
       return errors["utm_link.target_resource_id"] || errors["utm_link.target_resource_type"] || undefined;
     }
@@ -484,6 +475,7 @@ const UtmFieldSelect = ({
       value={value ? (options.find((o) => o.id === value) ?? null) : null}
       onChange={(option) => onChange(option ? option.id : null)}
       inputValue={inputValue ?? ""}
+      // Lowercase the value, replace non-alphanumeric characters with dashes, and restrict to 64 characters
       onInputChange={(value) =>
         setInputValue(
           value
