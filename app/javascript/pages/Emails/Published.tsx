@@ -1,110 +1,61 @@
+import { router, usePage } from "@inertiajs/react";
 import React from "react";
-import { useLoaderData } from "react-router-dom";
 import { cast } from "ts-safe-cast";
 
-import { deleteInstallment, getPublishedInstallments, Pagination, PublishedInstallment } from "$app/data/installments";
+import { Pagination, PublishedInstallment } from "$app/data/installments";
 import { assertDefined } from "$app/utils/assert";
-import { classNames } from "$app/utils/classNames";
 import { formatStatNumber } from "$app/utils/formatStatNumber";
-import { AbortError, assertResponseError } from "$app/utils/request";
 
-import { Button, NavigationButton } from "$app/components/Button";
 import { useCurrentSeller } from "$app/components/CurrentSeller";
+import { EmptyStatePlaceholder } from "$app/components/EmailsPage/EmptyStatePlaceholder";
+import { EmailsLayout } from "$app/components/EmailsPage/Layout";
+import { DeleteEmailModal, EmailSheetActions, LoadMoreButton } from "$app/components/EmailsPage/shared";
+import { useEmailSearch } from "$app/components/EmailsPage/useEmailSearch";
 import { Icon } from "$app/components/Icons";
-import { Modal } from "$app/components/Modal";
-import { showAlert } from "$app/components/server-components/Alert";
-import {
-  EditEmailButton,
-  EmptyStatePlaceholder,
-  Layout,
-  NewEmailButton,
-  useSearchContext,
-  ViewEmailButton,
-} from "$app/components/server-components/EmailsPage";
 import { Sheet, SheetHeader } from "$app/components/ui/Sheet";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "$app/components/ui/Table";
-import { useDebouncedCallback } from "$app/components/useDebouncedCallback";
-import { useOnChange } from "$app/components/useOnChange";
 import { useUserAgentInfo } from "$app/components/UserAgent";
 import { WithTooltip } from "$app/components/WithTooltip";
 
 import publishedPlaceholder from "$assets/images/placeholders/published_posts.png";
 
-export const PublishedTab = () => {
-  const data = cast<{ installments: PublishedInstallment[]; pagination: Pagination } | undefined>(useLoaderData());
-  const [installments, setInstallments] = React.useState(data?.installments ?? []);
-  const [pagination, setPagination] = React.useState(data?.pagination ?? { count: 0, next: null });
+type PageProps = {
+  installments: PublishedInstallment[];
+  pagination: Pagination;
+  has_posts: boolean;
+};
+
+export default function EmailsPublished() {
+  const { installments, pagination, has_posts } = cast<PageProps>(usePage().props);
+
   const currentSeller = assertDefined(useCurrentSeller(), "currentSeller is required");
   const [selectedInstallmentId, setSelectedInstallmentId] = React.useState<string | null>(null);
-  const [deletingInstallment, setDeletingInstallment] = React.useState<{
-    id: string;
-    name: string;
-    state: "delete-confirmation" | "deleting";
-  } | null>(null);
-  const [isLoading, setIsLoading] = React.useState(false);
+  const [deletingInstallment, setDeletingInstallment] = React.useState<{ id: string; name: string } | null>(null);
+  const [isLoadingMore, setIsLoadingMore] = React.useState(false);
   const selectedInstallment = selectedInstallmentId
     ? (installments.find((i) => i.external_id === selectedInstallmentId) ?? null)
     : null;
 
-  const [query] = useSearchContext();
-  const activeFetchRequest = React.useRef<{ cancel: () => void } | null>(null);
+  const { query, setQuery } = useEmailSearch();
 
-  const fetchInstallments = async ({ reset }: { reset: boolean }) => {
-    const nextPage = reset ? 1 : pagination.next;
-    if (!nextPage) return;
-    setIsLoading(true);
-    try {
-      activeFetchRequest.current?.cancel();
-      const request = getPublishedInstallments({ page: nextPage, query });
-      activeFetchRequest.current = request;
-      const response = await request.response;
-      setInstallments(reset ? response.installments : [...installments, ...response.installments]);
-      setPagination(response.pagination);
-      activeFetchRequest.current = null;
-      setIsLoading(false);
-    } catch (e) {
-      if (e instanceof AbortError) return;
-      activeFetchRequest.current = null;
-      setIsLoading(false);
-      assertResponseError(e);
-      showAlert("Sorry, something went wrong. Please try again.", "error");
-    }
-  };
-  const debouncedFetchInstallments = useDebouncedCallback(
-    (options: { reset: boolean }) => void fetchInstallments(options),
-    500,
-  );
-
-  useOnChange(() => {
-    debouncedFetchInstallments({ reset: true });
-  }, [query]);
-
-  const handleDelete = async () => {
-    if (!deletingInstallment) return;
-    try {
-      setDeletingInstallment({ ...deletingInstallment, state: "deleting" });
-      await deleteInstallment(deletingInstallment.id);
-      setInstallments(installments.filter((installment) => installment.external_id !== deletingInstallment.id));
-      setDeletingInstallment(null);
-      showAlert("Email deleted!", "success");
-    } catch (e) {
-      assertResponseError(e);
-      showAlert("Sorry, something went wrong. Please try again.", "error");
-    }
+  const handleLoadMore = () => {
+    if (!pagination.next) return;
+    router.reload({
+      data: { page: pagination.next, query: query || undefined },
+      only: ["installments", "pagination"],
+      onStart: () => setIsLoadingMore(true),
+      onFinish: () => setIsLoadingMore(false),
+    });
   };
 
   const userAgentInfo = useUserAgentInfo();
 
   return (
-    <Layout selectedTab="published" hasPosts={!!data?.installments.length}>
+    <EmailsLayout selectedTab="published" hasPosts={has_posts} query={query} onQueryChange={setQuery}>
       <div className="space-y-4 p-4 md:p-8">
         {installments.length > 0 ? (
           <>
-            <Table
-              aria-live="polite"
-              className={classNames(isLoading && "pointer-events-none opacity-50")}
-              aria-label="Published"
-            >
+            <Table aria-live="polite" aria-label="Published">
               <TableHeader>
                 <TableRow>
                   <TableHead>Subject</TableHead>
@@ -183,11 +134,7 @@ export const PublishedTab = () => {
                 ))}
               </TableBody>
             </Table>
-            {pagination.next ? (
-              <Button color="primary" disabled={isLoading} onClick={() => void fetchInstallments({ reset: false })}>
-                Load more
-              </Button>
-            ) : null}
+            {pagination.next ? <LoadMoreButton isLoading={isLoadingMore} onClick={handleLoadMore} /> : null}
             {selectedInstallment ? (
               <Sheet open onOpenChange={() => setSelectedInstallmentId(null)}>
                 <SheetHeader>{selectedInstallment.name}</SheetHeader>
@@ -228,65 +175,22 @@ export const PublishedTab = () => {
                     })}
                   </div>
                 </div>
-                <div className="grid grid-flow-col gap-4">
-                  {selectedInstallment.send_emails ? <ViewEmailButton installment={selectedInstallment} /> : null}
-                  {selectedInstallment.shown_on_profile ? (
-                    <NavigationButton href={selectedInstallment.full_url} target="_blank" rel="noopener noreferrer">
-                      <Icon name="file-earmark-medical-fill"></Icon>
-                      View post
-                    </NavigationButton>
-                  ) : null}
-                </div>
-                <div className="grid grid-flow-col gap-4">
-                  <NewEmailButton copyFrom={selectedInstallment.external_id} />
-                  <EditEmailButton id={selectedInstallment.external_id} />
-                  <Button
-                    color="danger"
-                    onClick={() =>
-                      setDeletingInstallment({
-                        id: selectedInstallment.external_id,
-                        name: selectedInstallment.name,
-                        state: "delete-confirmation",
-                      })
-                    }
-                  >
-                    Delete
-                  </Button>
-                </div>
+                <EmailSheetActions
+                  installment={selectedInstallment}
+                  onDelete={() =>
+                    setDeletingInstallment({
+                      id: selectedInstallment.external_id,
+                      name: selectedInstallment.name,
+                    })
+                  }
+                />
               </Sheet>
             ) : null}
-            {deletingInstallment ? (
-              <Modal
-                open
-                allowClose={deletingInstallment.state === "delete-confirmation"}
-                onClose={() => setDeletingInstallment(null)}
-                title="Delete email?"
-                footer={
-                  <>
-                    <Button
-                      disabled={deletingInstallment.state === "deleting"}
-                      onClick={() => setDeletingInstallment(null)}
-                    >
-                      Cancel
-                    </Button>
-                    {deletingInstallment.state === "deleting" ? (
-                      <Button color="danger" disabled>
-                        Deleting...
-                      </Button>
-                    ) : (
-                      <Button color="danger" onClick={() => void handleDelete()}>
-                        Delete email
-                      </Button>
-                    )}
-                  </>
-                }
-              >
-                <h4>
-                  Are you sure you want to delete the email "{deletingInstallment.name}"? Customers who had access will
-                  no longer be able to see it. This action cannot be undone.
-                </h4>
-              </Modal>
-            ) : null}
+            <DeleteEmailModal
+              installment={deletingInstallment}
+              onClose={() => setDeletingInstallment(null)}
+              warningMessage="Customers who had access will no longer be able to see it. This action cannot be undone."
+            />
           </>
         ) : (
           <EmptyStatePlaceholder
@@ -296,6 +200,6 @@ export const PublishedTab = () => {
           />
         )}
       </div>
-    </Layout>
+    </EmailsLayout>
   );
-};
+}

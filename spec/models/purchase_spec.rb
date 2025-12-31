@@ -4159,7 +4159,7 @@ describe Purchase, :vcr do
 
     context "when purchase record is invalid" do
       before do
-        @purchase_of_product_1.update_column(:merchant_account_id, nil)
+        @purchase_of_product_1.update_column(:price_cents, nil)
         expect(@purchase_of_product_1.valid?).to eq(false) # Ensure that the record currently fails validation
       end
 
