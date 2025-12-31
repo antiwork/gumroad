@@ -12,6 +12,8 @@ import { assertResponseError } from "$app/utils/request";
 import { Button } from "$app/components/Button";
 import { useDomains } from "$app/components/DomainSettings";
 import { Icon } from "$app/components/Icons";
+import { Input } from "$app/components/Input";
+import { Textarea } from "$app/components/Textarea";
 import { useLoggedInUser } from "$app/components/LoggedInUser";
 import { Preview } from "$app/components/Preview";
 import { PreviewSidebar, WithPreviewSidebar } from "$app/components/PreviewSidebar";
@@ -101,15 +103,15 @@ export default function SettingsPage() {
       </Head>
       <WithPreviewSidebar>
         <form>
-          <section className="p-4! md:p-8!">
+          <section className="flex flex-col gap-8 p-4 md:p-8">
             <header>
               <h2>Profile</h2>
             </header>
-            <fieldset>
-              <legend>
+            <fieldset className="flex flex-col gap-2">
+              <legend className="mb-2">
                 <label htmlFor={`${uid}-username`}>Username</label>
               </legend>
-              <input
+              <Input
                 id={`${uid}-username`}
                 type="text"
                 disabled={!loggedInUser?.policies.settings_profile.update_username}
@@ -118,15 +120,15 @@ export default function SettingsPage() {
                   updateProfileSettings({ username: evt.target.value.replace(/[^a-z0-9]/giu, "").toLowerCase() })
                 }
               />
-              <small>
-                View your profile at: <a href={`${scheme}://${subdomain}`}>{subdomain}</a>
+              <small className="text-muted">
+                View your profile at: <a href={`${scheme}://${subdomain}`} className="underline">{subdomain}</a>
               </small>
             </fieldset>
             <fieldset>
-              <legend>
+              <legend className="mb-2">
                 <label htmlFor={`${uid}-name`}>Name</label>
               </legend>
-              <input
+              <Input
                 id={`${uid}-name`}
                 type="text"
                 value={profileSettings.name ?? ""}
@@ -138,13 +140,14 @@ export default function SettingsPage() {
               />
             </fieldset>
             <fieldset>
-              <legend>
+              <legend className="mb-2">
                 <label htmlFor={`${uid}-bio`}>Bio</label>
               </legend>
-              <textarea
+              <Textarea
                 id={`${uid}-bio`}
                 value={profileSettings.bio ?? ""}
                 onChange={(e) => updateProfileSettings({ bio: e.target.value })}
+                disabled={!canUpdate}
               />
             </fieldset>
             <LogoInput
@@ -160,8 +163,8 @@ export default function SettingsPage() {
               disabled={!canUpdate}
             />
             {loggedInUser?.policies.settings_profile.manage_social_connections ? (
-              <fieldset>
-                <legend>Social links</legend>
+              <fieldset className="flex flex-col">
+                <legend className="mb-2 font-bold">Social links</legend>
                 {creatorProfile.twitter_handle ? (
                   <button type="button" className="button button-twitter" onClick={handleUnlinkTwitter}>
                     Disconnect {creatorProfile.twitter_handle} from X
@@ -180,25 +183,27 @@ export default function SettingsPage() {
               </fieldset>
             ) : null}
           </section>
-          <section className="p-4! md:p-8!">
+          <div className="w-full border-b border-[rgb(var(--parent-color)/var(--border-alpha))]" role="separator" />
+          <section className="flex flex-col gap-8 p-4 md:p-8">
             <header>
               <h2>Design</h2>
             </header>
             <fieldset>
-              <legend>Font</legend>
-              <div className="radio-buttons grid-cols-1! sm:grid-cols-2! md:grid-cols-3!" role="radiogroup">
+              <legend className="mb-2 font-bold">Font</legend>
+              <div className="radio-buttons grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4" role="radiogroup">
                 {FONT_CHOICES.map((font) => (
                   <Button
                     role="radio"
                     key={font}
                     aria-checked={font === profileSettings.font}
                     onClick={() => updateProfileSettings({ font })}
+                    className="items-start! justify-start! gap-3 text-left aria-checked:-translate-x-1 aria-checked:-translate-y-1 aria-checked:shadow aria-checked:bg-background aria-checked:transform-none!"
                     style={{ fontFamily: font === "ABC Favorit" ? undefined : font }}
                     disabled={!canUpdate}
                   >
                     <Icon name="file-earmark-font" />
                     <div>
-                      <h4>{font}</h4>
+                      <h4 className="font-bold">{font}</h4>
                       {FONT_DESCRIPTIONS[font]}
                     </div>
                   </Button>
@@ -210,11 +215,12 @@ export default function SettingsPage() {
                 <legend>
                   <label htmlFor={`${uid}-backgroundColor`}>Background color</label>
                 </legend>
-                <div className="color-picker">
+                <div className="relative overflow-hidden p-4 mt-2 border rounded-full w-fit">
                   <input
                     id={`${uid}-backgroundColor`}
                     value={profileSettings.background_color}
                     type="color"
+                    className="tailwind-override absolute w-[200%] h-[200%] max-w-none -left-1/2 -top-1/2 border-none cursor-pointer"
                     onChange={(evt) => updateProfileSettings({ background_color: evt.target.value })}
                     disabled={!canUpdate}
                   />
@@ -224,11 +230,12 @@ export default function SettingsPage() {
                 <legend>
                   <label htmlFor={`${uid}-highlightColor`}>Highlight color</label>
                 </legend>
-                <div className="color-picker">
+                <div className="relative overflow-hidden p-4 mt-2 border rounded-full w-fit">
                   <input
                     id={`${uid}-highlightColor`}
                     value={profileSettings.highlight_color}
                     type="color"
+                    className="tailwind-override absolute w-[200%] h-[200%] max-w-none -left-1/2 -top-1/2 border-none cursor-pointer"
                     onChange={(evt) => updateProfileSettings({ highlight_color: evt.target.value })}
                     disabled={!canUpdate}
                   />
