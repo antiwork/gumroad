@@ -227,9 +227,11 @@ const CollaboratorForm = ({ formData }: { formData: CollaboratorFormData }) => {
                   onChange={(e) => form.setData("email", e.target.value.trim())}
                 />
               </div>
+              {form.errors.email ? <p className="message">{form.errors.email}</p> : null}
             </fieldset>
           ) : null}
-          <fieldset>
+          <fieldset className={cx({ danger: form.errors.products })}>
+            {form.errors.products ? <p className="message">{form.errors.products}</p> : null}
             <Table>
               <TableHeader>
                 <TableRow>
@@ -279,6 +281,7 @@ const CollaboratorForm = ({ formData }: { formData: CollaboratorFormData }) => {
                           </div>
                         )}
                       </NumberInput>
+                      {form.errors.percent_commission ? <p className="message">{form.errors.percent_commission}</p> : null}
                     </fieldset>
                   </TableCell>
                   <TableCell>
