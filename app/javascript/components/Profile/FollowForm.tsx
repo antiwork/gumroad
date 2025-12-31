@@ -8,6 +8,7 @@ import { isValidEmail } from "$app/utils/email";
 
 import { Button } from "$app/components/Button";
 import { ButtonColor } from "$app/components/design";
+import { Input } from "$app/components/Input";
 import { useLoggedInUser } from "$app/components/LoggedInUser";
 import { showAlert } from "$app/components/server-components/Alert";
 
@@ -61,7 +62,7 @@ export const FollowForm = ({
     <form onSubmit={(e) => void submit(e)} style={{ flexGrow: 1 }} noValidate>
       <fieldset className={cx({ danger: formStatus === "invalid" })}>
         <div className="flex gap-2">
-          <input
+          <Input
             ref={emailInputRef}
             type="email"
             value={email}
