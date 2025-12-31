@@ -77,11 +77,17 @@ export type UtmLinksIndexProps = {
   pagination: PaginationProps;
   query: string | null;
   sort: Sort<SortKey> | null;
+  utm_links_stats: UtmLinksStats;
+};
+
+export type UtmLinkFormAdditionalMetadata = {
+  new_permalink: string;
 };
 
 export type UtmLinkFormProps = {
   context: UtmLinkFormContext;
   utm_link: UtmLink | null;
+  additional_metadata?: UtmLinkFormAdditionalMetadata;
 };
 
 export type UtmLinkEditProps = {

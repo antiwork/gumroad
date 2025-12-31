@@ -13,14 +13,18 @@ class UtmLinksController < Sellers::BaseController
     render inertia: "UtmLinks/Index", props: {
       **paginated_utm_links_props,
       query: index_params[:query],
-      sort: index_params[:sort]
+      sort: index_params[:sort],
+      utm_links_stats: InertiaRails.merge { fetch_utm_links_stats(params[:ids]) }
     }
   end
 
   def new
     authorize UtmLink
 
-    render inertia: "UtmLinks/New", props: new_page_props
+    render inertia: "UtmLinks/New", props: {
+      **new_page_props,
+      additional_metadata: InertiaRails.optional { UtmLinkPresenter.new(seller: current_seller).new_additional_metadata_props }
+    }
   end
 
   def create
@@ -56,7 +60,7 @@ class UtmLinksController < Sellers::BaseController
     authorize @utm_link
 
     @utm_link.mark_deleted!
-    redirect_to utm_links_dashboard_index_path, notice: "Link deleted!"
+    redirect_to utm_links_dashboard_index_path(index_route_params.except(:ids).compact), notice: "Link deleted!"
   end
 
   def unique_permalink
@@ -80,6 +84,16 @@ class UtmLinksController < Sellers::BaseController
         query: params[:query],
         page: params[:page],
         sort: extract_sort_params
+      }
+    end
+
+    def index_route_params
+      {
+        query: params[:query],
+        page: params[:page],
+        key: params[:key],
+        direction: params[:direction],
+        ids: params[:ids]
       }
     end
 
@@ -107,6 +121,13 @@ class UtmLinksController < Sellers::BaseController
 
     def edit_page_props
       UtmLinkPresenter.new(seller: current_seller, utm_link: @utm_link).edit_page_react_props
+    end
+
+    def fetch_utm_links_stats(ids)
+      return {} if ids.blank?
+
+      utm_link_ids = current_seller.utm_links.by_external_ids(ids).pluck(:id)
+      UtmLinksStatsPresenter.new(seller: current_seller, utm_link_ids:).props
     end
 
     def permitted_params

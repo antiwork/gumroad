@@ -2,8 +2,7 @@ import { Link, router, usePage } from "@inertiajs/react";
 import cx from "classnames";
 import * as React from "react";
 
-import { getUtmLinksStats, UtmLinksStats } from "$app/data/utm_links";
-import { asyncVoid } from "$app/utils/promise";
+import { SavedUtmLink, SortKey, UtmLinkStats, UtmLinksIndexProps } from "$app/types/utm_link";
 
 import { AnalyticsLayout } from "$app/components/Analytics/AnalyticsLayout";
 import { Button } from "$app/components/Button";
@@ -24,8 +23,6 @@ import { useUserAgentInfo } from "$app/components/UserAgent";
 import useRouteLoading from "$app/components/useRouteLoading";
 import { Sort, useSortingTableDriver } from "$app/components/useSortingTableDriver";
 import { WithTooltip } from "$app/components/WithTooltip";
-
-import { SavedUtmLink, SortKey, UtmLinkStats, UtmLinksIndexProps } from "$app/types/utm_link";
 
 import noLinksYetPlaceholder from "$assets/images/placeholders/utm_links_empty.png";
 import noLinksFoundPlaceholder from "$assets/images/placeholders/utm_links_not_found.png";
@@ -80,10 +77,10 @@ export default function UtmLinksIndex() {
     pagination,
     query: initialQuery,
     sort: initialSort,
+    utm_links_stats: utmLinksStats,
   } = usePage<UtmLinksIndexProps>().props;
   const isNavigating = useRouteLoading();
 
-  const [utmLinksStats, setUtmLinksStats] = React.useState<UtmLinksStats>({});
   const utmLinksWithStats = utmLinks.map((utmLink) => utmLinkWithStats(utmLink, utmLinksStats[utmLink.id]));
   const [selectedUtmLink, setSelectedUtmLink] = React.useState<SavedUtmLink | null>(null);
   const [sort, setSort] = React.useState<Sort<SortKey> | null>(() => initialSort || { key: "date", direction: "desc" });
@@ -93,15 +90,10 @@ export default function UtmLinksIndex() {
     state: "delete-confirmation" | "deleting";
   } | null>(null);
 
-  const activeStatsRequest = React.useRef<{ cancel: () => void } | null>(null);
-  const debouncedGetUtmLinksStats = useDebouncedCallback((ids: string[]) => {
-    activeStatsRequest.current?.cancel();
-    asyncVoid(async () => {
-      const request = getUtmLinksStats({ ids });
-      activeStatsRequest.current = request;
-      const stats = await request.response;
-      setUtmLinksStats((prev) => ({ ...prev, ...stats }));
-    })();
+  const fetchUtmLinksStats = useDebouncedCallback((ids: string[]) => {
+    const url = new URL(window.location.href);
+    url.searchParams.set("ids", ids.join(","));
+    router.get(url.toString(), {}, { only: ["utm_links_stats"], preserveUrl: true, preserveState: true });
   }, 500);
 
   React.useEffect(() => {
@@ -113,7 +105,7 @@ export default function UtmLinksIndex() {
     );
     if (ids.length === 0) return;
 
-    debouncedGetUtmLinksStats(ids);
+    fetchUtmLinksStats(ids);
   }, [utmLinks, sort]);
 
   const query = initialQuery ?? "";

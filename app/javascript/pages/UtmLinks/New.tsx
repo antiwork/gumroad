@@ -1,10 +1,10 @@
-import { useForm, usePage } from "@inertiajs/react";
+import { router, useForm, usePage } from "@inertiajs/react";
 import cx from "classnames";
 import * as React from "react";
+import { cast } from "ts-safe-cast";
 
-import { getUniquePermalink } from "$app/data/utm_links";
+import { UtmLinkDestinationOption, UtmLinkFormAdditionalMetadata, UtmLinkFormProps } from "$app/types/utm_link";
 import { assertDefined } from "$app/utils/assert";
-import { asyncVoid } from "$app/utils/promise";
 
 import { AnalyticsLayout } from "$app/components/Analytics/AnalyticsLayout";
 import { Button } from "$app/components/Button";
@@ -15,8 +15,6 @@ import { Select } from "$app/components/Select";
 import { showAlert } from "$app/components/server-components/Alert";
 import { Pill } from "$app/components/ui/Pill";
 import { WithTooltip } from "$app/components/WithTooltip";
-
-import { UtmLinkDestinationOption, UtmLinkFormProps } from "$app/types/utm_link";
 
 const MAX_UTM_PARAM_LENGTH = 200;
 
@@ -109,18 +107,26 @@ export default function UtmLinksNew() {
     data.utm_link.utm_content,
   ]);
 
-  const generateNewPermalink = asyncVoid(async () => {
+  const generateNewPermalink = () => {
     setIsLoadingNewPermalink(true);
-    try {
-      const { permalink: newPermalink } = await getUniquePermalink();
-      setShortUrl((shortUrl) => ({ ...shortUrl, permalink: newPermalink }));
-      setData("utm_link", { ...data.utm_link, permalink: newPermalink });
-    } catch {
-      showAlert("Sorry, something went wrong. Please try again.", "error");
-    } finally {
-      setIsLoadingNewPermalink(false);
-    }
-  });
+    router.reload({
+      only: ["additional_metadata"],
+      onSuccess: (page) => {
+        const additionalMetadata = cast<UtmLinkFormAdditionalMetadata | undefined>(page.props.additional_metadata);
+        const newPermalink = additionalMetadata?.new_permalink;
+        if (newPermalink) {
+          setShortUrl((shortUrl) => ({ ...shortUrl, permalink: newPermalink }));
+          setData("utm_link", { ...data.utm_link, permalink: newPermalink });
+        }
+      },
+      onError: () => {
+        showAlert("Sorry, something went wrong. Please try again.", "error");
+      },
+      onFinish: () => {
+        setIsLoadingNewPermalink(false);
+      },
+    });
+  };
 
   const validate = () => {
     form.clearErrors();
