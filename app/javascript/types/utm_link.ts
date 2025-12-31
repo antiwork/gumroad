@@ -94,3 +94,17 @@ export type UtmLinkEditProps = {
   context: UtmLinkFormContext;
   utm_link: SavedUtmLink;
 };
+
+export type UtmLinkFormData = {
+  utm_link: {
+    title: string;
+    target_resource_type: string | null;
+    target_resource_id: string | null;
+    permalink: string;
+    utm_source: string | null;
+    utm_medium: string | null;
+    utm_campaign: string | null;
+    utm_term: string | null;
+    utm_content: string | null;
+  };
+};
