@@ -3,9 +3,33 @@ $unit: 16px;
 // Our default body bg looks weird in email clients
 $light-body-bg: #ffffff;
 
+/* Font face declarations (migrated from _font.scss) */
+@font-face {
+  font-family: "ABC Favorit";
+  src: url("~fonts/ABCFavorit-Regular.woff2");
+}
+
+@font-face {
+  font-family: "ABC Favorit";
+  src: url("~fonts/ABCFavorit-RegularItalic.woff2");
+  font-style: italic;
+}
+
+@font-face {
+  font-family: "ABC Favorit";
+  src: url("~fonts/ABCFavorit-Bold.woff2");
+  font-weight: 700;
+}
+
+@font-face {
+  font-family: "ABC Favorit";
+  src: url("~fonts/ABCFavorit-BoldItalic.woff2");
+  font-weight: 700;
+  font-style: italic;
+}
+
 @import "../stylesheets/colors";
 @import "../stylesheets/definitions";
-@import "../stylesheets/font";
 @import "../stylesheets/global";
 @import "../stylesheets/icon_names";
 @import "../stylesheets/icons";
