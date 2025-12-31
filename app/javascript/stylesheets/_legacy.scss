@@ -65,14 +65,6 @@ body#overlay-page {
   min-width: max-content;
 }
 
-body > header,
-header.sticky-top,
-main > header {
-  [role="tablist"] a[role="tab"] {
-    text-decoration: none;
-  }
-}
-
 // Temporary fix for the files view under the "Content" tab on the product edit
 // page when the content editor is disabled. It is needed to enforce the
 // "form > section" styles on the files view which is now wrapped in "form > main".
