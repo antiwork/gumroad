@@ -3,7 +3,7 @@
     <h2>This product belongs to a different Gumroad account.</h2>
     <p>Would you like to change this purchase so that it belongs to you?</p>
   </header>
-  <div class="mini-rule legacy-only"></div>
+  <div class="mini-rule hidden"></div>
   <%= form_tag(url_redirect_change_purchaser_url(@url_redirect.token), method: "post") do %>
     <%= hidden_field_tag :next, params[:next] %>
     <%= label_tag :email, "Email address used to purchase this product:", class: "form-label" %>
