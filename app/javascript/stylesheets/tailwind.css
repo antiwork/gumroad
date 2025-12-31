@@ -116,3 +116,117 @@
     transform: translateX(-50%);
   }
 }
+
+/* Browser workarounds migrated from _legacy.scss */
+
+/* Chromium: Fix dragging not working due to `all: unset` */
+button[draggable="true"] {
+  -webkit-user-drag: element;
+}
+
+/* Hide tab underline when dragging selected tabs */
+[role="tab"][aria-selected="true"][draggable="true"]::after {
+  transform: translate(-50%);
+  visibility: hidden;
+}
+
+/* JWPlayer third-party library styles */
+.jwplayer {
+  position: absolute !important;
+  width: 100% !important;
+  height: 100% !important;
+}
+
+.jwplayer .jw-time-tip {
+  min-width: max-content;
+}
+
+/* Firefox: Prevent selected node content showing as selected text */
+.rich-text .selected *::selection {
+  background: none;
+}
+
+/* Rich text embed preview styles */
+.rich-text .embed > .preview {
+  padding: calc(56.25% + 1rem) 0 0 0;
+}
+
+.rich-text .embed > .preview > :first-child.placeholder {
+  position: absolute;
+  width: calc(100% - 2rem);
+}
+
+/* Product card browser fixes (Firefox/Safari aspect-ratio issues) */
+article.product-card .thumbnails > * {
+  width: 100%;
+}
+
+@media (min-width: 1024px) {
+  article.product-card.horizontal {
+    display: flex;
+  }
+
+  article.product-card.horizontal > figure {
+    height: 100%;
+  }
+
+  article.product-card.horizontal > figure img {
+    width: unset;
+    min-width: 100%;
+  }
+
+  article.product-card.horizontal .thumbnails {
+    flex: 1;
+  }
+
+  article.product-card.horizontal section {
+    flex: 2;
+  }
+}
+
+/* Overlay page styles (legacy widget iframe) */
+body#overlay-page {
+  display: flex;
+  flex-direction: column;
+  background: transparent;
+}
+
+body#overlay-page:not(.gumroad-minimized) {
+  background: rgba(0, 0, 0, 0.5);
+}
+
+body#overlay-page .product-display {
+  overflow: auto;
+}
+
+/* Form section styles for content wrapped in main element */
+form > main section {
+  display: grid;
+  padding: 3rem 0;
+  border-top: solid 0.0625rem rgb(var(--parent-color) / var(--border-alpha));
+  gap: 2rem;
+}
+
+form > main section > header {
+  display: grid;
+  gap: 0.75rem;
+  align-content: start;
+}
+
+form > main section:not(form + form section):first-of-type {
+  padding-top: 0;
+  border-top: none;
+}
+
+/* Navigation menu styles for legacy ERB files */
+[role="navigation"] menu {
+  display: grid;
+  gap: 0.75rem;
+}
+
+[role="navigation"] menu menu {
+  font-size: 0.875rem;
+  line-height: 1.3;
+  padding-left: 1rem;
+  margin-top: 0.75rem;
+}
