@@ -687,16 +687,16 @@ describe PurchasesController, :vcr do
           stub_const("Exports::PurchaseExportService::SYNCHRONOUS_EXPORT_THRESHOLD", 1)
         end
 
-        it "queues sidekiq job and redirects back" do
-          request.env["HTTP_REFERER"] = "/customers"
+        it "queues sidekiq job and redirects to customers path with flash message" do
           get :export
 
           export = SalesExport.last!
           expect(export.recipient).to eq(user_with_role_for_seller)
 
           expect(Exports::Sales::CreateAndEnqueueChunksWorker).to have_enqueued_sidekiq_job(export.id)
-          expect(flash[:warning]).to eq("You will receive an email in your inbox with the data you've requested shortly.")
-          expect(response).to redirect_to("/customers")
+          expect(flash[:notice]).to eq("You will receive an email in your inbox with the data you've requested shortly.")
+          expect(response).to redirect_to(customers_path)
+          expect(response).to have_http_status(:see_other)
         end
 
         context "when running sidekiq jobs" do
@@ -725,8 +725,9 @@ describe PurchasesController, :vcr do
             expect(export.recipient).to eq(@admin_user)
 
             expect(Exports::Sales::CreateAndEnqueueChunksWorker).to have_enqueued_sidekiq_job(export.id)
-            expect(flash[:warning]).to eq("You will receive an email in your inbox with the data you've requested shortly.")
-            expect(response).to redirect_to("/customers")
+            expect(flash[:notice]).to eq("You will receive an email in your inbox with the data you've requested shortly.")
+            expect(response).to redirect_to(customers_path)
+            expect(response).to have_http_status(:see_other)
           end
         end
       end

@@ -28,7 +28,11 @@ const AdminUsersProductsHeader = ({ product, isCurrentUrl }: Props) => (
         <h2 className="flex items-center gap-2">
           {product.price_formatted}
           <span>&bull;</span>
-          {isCurrentUrl ? product.name : <Link href={Routes.admin_product_path(product.id)}>{product.name}</Link>}
+          {isCurrentUrl ? (
+            product.name
+          ) : (
+            <Link href={Routes.admin_product_path(product.external_id)}>{product.name}</Link>
+          )}
           <Link href={product.long_url} target="_blank" rel="noreferrer noopener">
             <Icon name="arrow-up-right-square" />
           </Link>
@@ -42,7 +46,7 @@ const AdminUsersProductsHeader = ({ product, isCurrentUrl }: Props) => (
             <li>
               <Link href={Routes.admin_user_path(product.user.id)}>{product.user.name}</Link>
             </li>
-            <AdminProductStats product_id={product.id} />
+            <AdminProductStats product_external_id={product.external_id} />
           </ul>
         </div>
       </div>
@@ -59,7 +63,7 @@ const AdminUsersProductsHeader = ({ product, isCurrentUrl }: Props) => (
       </a>
       {product.admins_can_generate_url_redirects ? (
         <a
-          href={Routes.generate_url_redirect_admin_product_path(product.id)}
+          href={Routes.generate_url_redirect_admin_product_path(product.external_id)}
           className="button small"
           target="_blank"
           rel="noreferrer noopener"

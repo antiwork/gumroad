@@ -3,8 +3,12 @@
 class AdminSearchService
   class InvalidDateError < StandardError; end
 
-  def search_purchases(query: nil, product_title_query: nil, purchase_status: nil, creator_email: nil, license_key: nil, transaction_date: nil, last_4: nil, card_type: nil, price: nil, expiry_date: nil, limit: nil)
+  def search_purchases(query: nil, email: nil, product_title_query: nil, purchase_status: nil, creator_email: nil, license_key: nil, transaction_date: nil, last_4: nil, card_type: nil, price: nil, expiry_date: nil, limit: nil)
     purchases = Purchase.order(created_at: :desc)
+
+    if email.present?
+      purchases = purchases.where(email: email)
+    end
 
     if query.present?
       unions = [
