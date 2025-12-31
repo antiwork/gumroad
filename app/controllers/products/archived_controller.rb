@@ -71,7 +71,11 @@ class Products::ArchivedController < Sellers::BaseController
   def create
     authorize [:products, :archived, @product]
 
-    @product.update!(archived: true)
+    @product.update!(
+      archived: true,
+      purchase_disabled_at: @product.purchase_disabled_at || Time.current
+    )
+
     render json: { success: true }
   end
 

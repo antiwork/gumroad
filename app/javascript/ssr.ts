@@ -24,9 +24,7 @@ import AdminSuspendForTosForm from "$app/components/server-components/Admin/Susp
 import AdminUserGuids from "$app/components/server-components/Admin/UserGuids";
 import AdminUserStats from "$app/components/server-components/Admin/UserStats";
 import AffiliateRequestPage from "$app/components/server-components/AffiliateRequestPage";
-import AffiliatesPage from "$app/components/server-components/AffiliatesPage";
 import Alert from "$app/components/server-components/Alert";
-import AudiencePage from "$app/components/server-components/AudiencePage";
 import BundleEditPage from "$app/components/server-components/BundleEditPage";
 import CheckoutPage from "$app/components/server-components/CheckoutPage";
 import CommunitiesPage from "$app/components/server-components/CommunitiesPage";
@@ -38,13 +36,11 @@ import DiscoverProductPage from "$app/components/server-components/Discover/Prod
 import DiscoverWishlistPage from "$app/components/server-components/Discover/WishlistPage";
 import DownloadPageWithContent from "$app/components/server-components/DownloadPage/WithContent";
 import DownloadPageWithoutContent from "$app/components/server-components/DownloadPage/WithoutContent";
-import EmailsPage from "$app/components/server-components/EmailsPage";
 import GenerateInvoiceConfirmationPage from "$app/components/server-components/GenerateInvoiceConfirmationPage";
 import GenerateInvoicePage from "$app/components/server-components/GenerateInvoicePage";
 import GumroadBlogIndexPage from "$app/components/server-components/GumroadBlog/IndexPage";
 import GumroadBlogPostPage from "$app/components/server-components/GumroadBlog/PostPage";
 import HelpCenterArticlesIndexPage from "$app/components/server-components/HelpCenter/ArticlesIndexPage";
-import LoginPage from "$app/components/server-components/LoginPage";
 import Nav from "$app/components/server-components/Nav";
 import PasswordResetPage from "$app/components/server-components/PasswordResetPage";
 import PdfReaderPage from "$app/components/server-components/PdfReaderPage";
@@ -63,7 +59,6 @@ import PurchaseProductPage from "$app/components/server-components/Purchase/Prod
 import SubscribeReviewReminders from "$app/components/server-components/ReviewReminders/SubscribeReviewReminders";
 import UnsubscribeReviewReminders from "$app/components/server-components/ReviewReminders/UnsubscribeReviewReminders";
 import SecureRedirectPage from "$app/components/server-components/SecureRedirectPage";
-import SignupPage from "$app/components/server-components/SignupPage";
 import SubscribePage from "$app/components/server-components/SubscribePage";
 import SubscribePreview from "$app/components/server-components/SubscribePreview";
 import SubscriptionManager from "$app/components/server-components/SubscriptionManager";
@@ -98,12 +93,11 @@ ReactOnRails.register({
   AdminUserGuids,
   AdminUserStats,
   AffiliateRequestPage,
-  AffiliatesPage,
+
   Alert,
   AdminAddCreditForm,
   HelpCenterArticlesIndexPage,
   SupportHeader,
-  AudiencePage,
   BundleEditPage,
   CheckoutPage,
   CodeSnippet,
@@ -117,12 +111,10 @@ ReactOnRails.register({
   DisputeEvidencePage,
   DownloadPageWithContent,
   DownloadPageWithoutContent,
-  EmailsPage,
   GenerateInvoiceConfirmationPage,
   GenerateInvoicePage,
   GumroadBlogIndexPage,
   GumroadBlogPostPage,
-  LoginPage,
   Nav,
   PasswordResetPage,
   PdfReaderPage,
@@ -139,7 +131,6 @@ ReactOnRails.register({
   PublicChargePage,
   PublicLicenseKeyPage,
   SecureRedirectPage,
-  SignupPage,
   SubscribePage,
   SubscribePreview,
   SubscribeReviewReminders,

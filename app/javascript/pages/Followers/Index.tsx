@@ -39,15 +39,15 @@ const Layout = ({
     <div>
       <PageHeader title={title} actions={actions}>
         <Tabs>
-          <Tab href={`${Routes.emails_path()}/published`} isSelected={false}>
+          <Tab href={Routes.published_emails_path()} isSelected={false}>
             Published
           </Tab>
           {loggedInUser?.policies.installment.create ? (
             <>
-              <Tab href={`${Routes.emails_path()}/scheduled`} isSelected={false}>
+              <Tab href={Routes.scheduled_emails_path()} isSelected={false}>
                 Scheduled
               </Tab>
-              <Tab href={`${Routes.emails_path()}/drafts`} isSelected={false}>
+              <Tab href={Routes.drafts_emails_path()} isSelected={false}>
                 Drafts
               </Tab>
             </>
