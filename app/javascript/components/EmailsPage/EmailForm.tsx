@@ -1,19 +1,13 @@
+import { Link, router, useForm, usePage } from "@inertiajs/react";
 import { DirectUpload } from "@rails/activestorage";
-import { Content, Editor, JSONContent } from "@tiptap/core";
+import { Editor, JSONContent } from "@tiptap/core";
 import cx from "classnames";
 import { addHours, format, startOfDay, startOfHour } from "date-fns";
 import React from "react";
-import { Link, Location, useLoaderData, useLocation, useNavigate, useSearchParams } from "react-router-dom";
 import { cast } from "ts-safe-cast";
 
-import {
-  AudienceType,
-  getRecipientCount,
-  InstallmentFormContext,
-  Installment,
-  createInstallment,
-  updateInstallment,
-} from "$app/data/installments";
+import { AudienceType, getRecipientCount, InstallmentFormContext, Installment } from "$app/data/installments";
+import { type EmailTab, TYPE_TO_TAB } from "$app/data/installments";
 import { assertDefined } from "$app/utils/assert";
 import Countdown from "$app/utils/countdown";
 import { ALLOWED_EXTENSIONS } from "$app/utils/file";
@@ -41,7 +35,6 @@ import { ImageUploadSettingsContext, RichTextEditor } from "$app/components/Rich
 import { S3UploadConfigProvider } from "$app/components/S3UploadConfig";
 import { Separator } from "$app/components/Separator";
 import { showAlert } from "$app/components/server-components/Alert";
-import { editEmailPath, emailTabPath, newEmailPath } from "$app/components/server-components/EmailsPage";
 import { InvalidNameForEmailDeliveryWarning } from "$app/components/server-components/InvalidNameForEmailDeliveryWarning";
 import { TagInput } from "$app/components/TagInput";
 import { UpsellCard } from "$app/components/TiptapExtensions/UpsellCard";
@@ -87,7 +80,7 @@ const getRecipientType = (audienceType: AudienceType, boughtItems: ProductOrVari
 const selectableProductOptions = (options: ProductOrVariantOption[], alwaysIncludeIds: string[]) =>
   options.filter((option) => alwaysIncludeIds.includes(option.id) || !option.archived);
 
-const getBundleMarketingMessage = (searchParams: URLSearchParams) => {
+const getBundleMarketingMessage = (searchParams: URLSearchParams, host: string, protocol: string) => {
   const bundleName = searchParams.get("bundle_name");
   const bundlePermalink = searchParams.get("bundle_permalink");
   if (!bundleName || !bundlePermalink) return [];
@@ -133,7 +126,7 @@ I've put together a bundle of my products that I think you'll love.`.split("\n")
                       {
                         type: "link",
                         attrs: {
-                          href: Routes.short_link_url(assertDefined(permalinks[index])),
+                          href: Routes.short_link_url(assertDefined(permalinks[index]), { host, protocol }),
                           rel: "noopener noreferrer nofollow",
                           target: "_blank",
                         },
@@ -150,7 +143,7 @@ I've put together a bundle of my products that I think you'll love.`.split("\n")
   messageContent.push({
     type: "button",
     attrs: {
-      href: Routes.short_link_url(bundlePermalink),
+      href: Routes.short_link_url(bundlePermalink, { host, protocol }),
       rel: "noopener noreferrer nofollow",
       target: "_blank",
     },
@@ -176,12 +169,39 @@ const toISODateString = (date: Date | string | undefined | null) => (date ? form
 
 const DEFAULT_SECONDS_LEFT_TO_PUBLISH = 5;
 
-export const EmailForm = () => {
+type EmailFormProps = {
+  context: InstallmentFormContext;
+  installment: Installment | null;
+};
+
+const isJSONContent = (value: unknown): value is JSONContent =>
+  value !== null && typeof value === "object" && "type" in value;
+
+const parseInitialValue = (value: string): string | JSONContent => {
+  try {
+    let parsed: unknown = JSON.parse(value);
+    if (typeof parsed === "string" && (parsed.trim().startsWith("{") || parsed.trim().startsWith("["))) {
+      try {
+        parsed = JSON.parse(parsed);
+      } catch {}
+    }
+    if (isJSONContent(parsed)) {
+      return parsed;
+    }
+  } catch {}
+  return value;
+};
+
+const TAB_TO_PATH: Record<EmailTab, string> = {
+  published: Routes.published_emails_path(),
+  scheduled: Routes.scheduled_emails_path(),
+  drafts: Routes.drafts_emails_path(),
+  subscribers: Routes.followers_path(),
+};
+
+export const EmailForm = ({ context, installment }: EmailFormProps) => {
   const uid = React.useId();
   const currentSeller = assertDefined(useCurrentSeller());
-  const { context, installment } = cast<{ context: InstallmentFormContext; installment: Installment | null }>(
-    useLoaderData(),
-  );
   const hasAudience = context.audience_types.length > 0;
   const [audienceType, setAudienceType] = React.useState<AudienceType>(
     installment ? getAudienceType(installment.installment_type) : "everyone",
@@ -200,8 +220,21 @@ export const EmailForm = () => {
     loading: boolean;
   }>({ count: 0, total: 0, loading: false });
   const activeRecipientCountRequest = React.useRef<{ cancel: () => void } | null>(null);
-  const [searchParams] = useSearchParams();
-  const routerLocation = cast<Location<{ from?: string | undefined } | null>>(useLocation());
+  // Use browser APIs for URL params
+  const searchParams = new URLSearchParams(window.location.search);
+  const currentPathname = window.location.pathname;
+  const pageUrl = usePage().url;
+
+  React.useEffect(() => {
+    const urlParams = new URLSearchParams(window.location.search);
+    const fullUrl = installment?.full_url;
+    if (urlParams.get("preview_post") === "true" && fullUrl) {
+      window.open(fullUrl, "_blank");
+      urlParams.delete("preview_post");
+      const newUrl = window.location.pathname + (urlParams.toString() ? `?${urlParams.toString()}` : "");
+      router.replace({ url: newUrl, preserveState: true, preserveScroll: true });
+    }
+  }, [pageUrl, installment?.full_url]);
   const [bought, setBought] = React.useState<string[]>(() => {
     if (!installment) return [];
     return installment.installment_type === "variant" && installment.variant_external_id
@@ -225,16 +258,27 @@ export const EmailForm = () => {
   const [allowComments, setAllowComments] = React.useState(
     installment?.allow_comments ?? context.allow_comments_by_default,
   );
-  const [title, setTitle] = React.useState(installment?.name ?? "");
   const [publishDate, setPublishDate] = React.useState(toISODateString(installment?.published_at));
   React.useEffect(() => setPublishDate(toISODateString(installment?.published_at)), [installment]);
-  const [message, setMessage] = React.useState(installment?.message ?? "");
-  const [initialMessage, setInitialMessage] = React.useState<Content>(message);
-  const handleMessageChange = useDebouncedCallback(setMessage, 500);
+
+  const form = useForm({
+    installment: {
+      name: installment?.name ?? "",
+      message: installment?.message ?? "",
+    },
+  });
+
+  const handleMessageChange = useDebouncedCallback((newMessage: string) => {
+    form.setData("installment.message", newMessage);
+  }, 500);
+
   const [messageEditor, setMessageEditor] = React.useState<Editor | null>(null);
   React.useEffect(() => {
-    if (initialMessage !== "" && messageEditor?.isEmpty) {
-      queueMicrotask(() => messageEditor.commands.setContent(initialMessage, true));
+    if (form.data.installment.message !== "" && messageEditor?.isEmpty) {
+      queueMicrotask(() => {
+        const parsed = parseInitialValue(form.data.installment.message);
+        messageEditor.commands.setContent(parsed, true);
+      });
     }
   }, [messageEditor]);
   const [scheduleDate, setScheduleDate] = React.useState<Date | null>(startOfHour(addHours(new Date(), 1)));
@@ -314,7 +358,7 @@ export const EmailForm = () => {
   );
 
   useRunOnce(() => {
-    if (routerLocation.pathname !== newEmailPath || searchParams.size === 0) return;
+    if (currentPathname !== Routes.new_email_path() || searchParams.size === 0) return;
 
     const tier = searchParams.get("tier");
     const permalink = searchParams.get("product");
@@ -325,51 +369,55 @@ export const EmailForm = () => {
 
     if (template === "content_updates" && permalink) {
       const bought = searchParams.getAll("bought[]");
-      setTitle(`New content added to ${productName}`);
+      form.setData("installment.name", `New content added to ${productName}`);
       setBought(bought);
       setAudienceType("customers");
       setChannel({ profile: false, email: true });
-      setInitialMessage({
-        type: "doc",
-        content: [
-          {
-            type: "paragraph",
-            content: [
-              {
-                type: "text",
-                text: "New content has been added to ",
-              },
-              {
-                type: "text",
-                marks: [
-                  {
-                    type: "link",
-                    attrs: {
-                      href: Routes.short_link_url(permalink, {
-                        host: currentSeller.subdomain ?? appDomain,
-                      }),
+      form.setData(
+        "installment.message",
+        JSON.stringify({
+          type: "doc",
+          content: [
+            {
+              type: "paragraph",
+              content: [
+                {
+                  type: "text",
+                  text: "New content has been added to ",
+                },
+                {
+                  type: "text",
+                  marks: [
+                    {
+                      type: "link",
+                      attrs: {
+                        href: Routes.short_link_url(permalink, {
+                          host: currentSeller.subdomain || appDomain,
+                          protocol: window.location.protocol.replace(":", ""),
+                        }),
+                      },
                     },
-                  },
-                ],
-                text: productName ?? "your product",
-              },
-              {
-                type: "text",
-                text: ".",
-              },
-            ],
-          },
-          {
-            type: "paragraph",
-            content: [
-              {
-                type: "text",
-                text: "You can access it by visiting your Gumroad Library or through the link in your email receipt.",
-              },
-            ],
-          },
-        ],
-      });
+                  ],
+                  text: productName ?? "your product",
+                },
+                {
+                  type: "text",
+                  text: ".",
+                },
+              ],
+            },
+            {
+              type: "paragraph",
+              content: [
+                {
+                  type: "text",
+                  text: "You can access it by visiting your Gumroad Library or through the link in your email receipt.",
+                },
+              ],
+            },
+          ],
+        }),
+      );
 
       return;
     }
@@ -382,21 +430,24 @@ export const EmailForm = () => {
         setAudienceType("customers");
         setBought([permalink]);
       }
-      setTitle(`${productName} - updated!`);
-      setInitialMessage({
-        type: "doc",
-        content: [
-          {
-            type: "paragraph",
-            content: [
-              {
-                type: "text",
-                text: `I have recently updated some files associated with ${productName}. They're yours for free.`,
-              },
-            ],
-          },
-        ],
-      });
+      form.setData("installment.name", `${productName} - updated!`);
+      form.setData(
+        "installment.message",
+        JSON.stringify({
+          type: "doc",
+          content: [
+            {
+              type: "paragraph",
+              content: [
+                {
+                  type: "text",
+                  text: `I have recently updated some files associated with ${productName}. They're yours for free.`,
+                },
+              ],
+            },
+          ],
+        }),
+      );
     } else if (isBundleMarketing) {
       if (canSendToCustomers) {
         const permalinks = searchParams
@@ -409,8 +460,18 @@ export const EmailForm = () => {
       const bundleName = searchParams.get("bundle_name");
       const bundlePermalink = searchParams.get("bundle_permalink");
       if (bundleName && bundlePermalink) {
-        setTitle(`Introducing ${bundleName}`);
-        setInitialMessage({ type: "doc", content: getBundleMarketingMessage(searchParams) });
+        form.setData("installment.name", `Introducing ${bundleName}`);
+        form.setData(
+          "installment.message",
+          JSON.stringify({
+            type: "doc",
+            content: getBundleMarketingMessage(
+              searchParams,
+              window.location.host,
+              window.location.protocol.replace(":", ""),
+            ),
+          }),
+        );
       }
     }
   });
@@ -486,7 +547,7 @@ export const EmailForm = () => {
     const invalidFieldRefsAndErrors: [React.RefObject<HTMLElement> | null, string][] = [];
     const invalidFieldNames = new Set<InvalidFieldName>();
 
-    if (title.trim() === "") {
+    if (form.data.installment.name.trim() === "") {
       invalidFieldNames.add("title");
       invalidFieldRefsAndErrors.push([titleRef, "Please set a title."]);
     }
@@ -548,15 +609,22 @@ export const EmailForm = () => {
       });
     }
   };
-  const navigate = useNavigate();
-  const [isSaving, setIsSaving] = React.useState(false);
+
+  const [isPublishing, setIsPublishing] = React.useState(false);
+
+  const finishPublishing = React.useCallback(() => {
+    setIsPublishing(false);
+    setSecondsLeftToPublish(0);
+  }, []);
+
   const save = asyncVoid(async (action: SaveAction = "save") => {
+    await Promise.resolve();
     if (!validate(action)) return;
 
     const payload = {
       installment: {
-        name: title,
-        message,
+        name: form.data.installment.name,
+        message: form.data.installment.message,
         files: files.map((file, position) => ({
           external_id: file.id,
           position,
@@ -579,55 +647,28 @@ export const EmailForm = () => {
       send_preview_email: action === "save_and_preview_email",
       to_be_published_at: action === "save_and_schedule" ? scheduleDate : null,
       publish: action === "save_and_publish",
+      save_action_name: action,
     };
 
-    try {
-      setIsSaving(true);
-      const response = installment?.external_id
-        ? await updateInstallment(installment.external_id, payload)
-        : await createInstallment(payload);
-      showAlert(
-        action === "save_and_preview_email"
-          ? "A preview has been sent to your email."
-          : action === "save_and_preview_post"
-            ? "Preview link opened."
-            : action === "save_and_schedule"
-              ? "Email successfully scheduled!"
-              : action === "save_and_publish"
-                ? `Email successfully ${channel.profile ? "published" : "sent"}!`
-                : installment?.external_id
-                  ? "Changes saved!"
-                  : "Email created!",
-        "success",
-      );
-      if (action === "save_and_preview_post") {
-        window.open(response.full_url, "_blank");
-      }
+    form.transform(() => payload);
 
-      if (action === "save_and_schedule") {
-        navigate(emailTabPath("scheduled"));
-      } else if (action === "save_and_publish") {
-        navigate(emailTabPath("published"));
-      } else {
-        navigate(editEmailPath(response.installment_id), {
-          replace: true,
-          state: { from: routerLocation.state?.from },
-        });
-      }
-    } catch (e) {
-      assertResponseError(e);
-      showAlert(e.message, "error", { html: true });
-    } finally {
-      setIsSaving(false);
+    if (installment?.external_id) {
+      form.put(Routes.email_path(installment.external_id), { onFinish: () => finishPublishing() });
+    } else {
+      form.post(Routes.emails_path(), { onFinish: () => finishPublishing() });
     }
   });
+
   const isBusy =
-    isSaving ||
+    form.processing ||
+    isPublishing ||
     imagesUploading.size > 0 ||
     files.some((file) => isFileUploading(file) || file.subtitle_files.some(isFileUploading));
 
-  const cancelPath =
-    routerLocation.state?.from ?? emailTabPath(context.has_scheduled_emails ? "scheduled" : "published");
+  const getCancelPath = () => {
+    const tab = TYPE_TO_TAB[installment?.display_type ?? ""] ?? context.from_tab ?? "drafts";
+    return TAB_TO_PATH[tab];
+  };
 
   return (
     <div>
@@ -665,7 +706,7 @@ export const EmailForm = () => {
                 Preview
               </Button>
             )}
-            <Link to={cancelPath} className="button" inert={isBusy}>
+            <Link href={getCancelPath()} className="button" inert={isBusy ? true : undefined}>
               <Icon name="x-square" />
               Cancel
             </Link>
@@ -679,7 +720,7 @@ export const EmailForm = () => {
             >
               <div className="grid gap-3">
                 <div style={{ display: "grid", gridTemplateColumns: "1fr max-content" }}>
-                  {isSaving && secondsLeftToPublish > 0 ? (
+                  {isPublishing && secondsLeftToPublish > 0 ? (
                     <>
                       <Button color="accent" disabled>
                         {channel.profile ? "Publishing" : "Sending"} in {secondsLeftToPublish}...
@@ -691,8 +732,7 @@ export const EmailForm = () => {
                             publishCountdownRef.current.abort();
                             publishCountdownRef.current = null;
                           }
-                          setIsSaving(false);
-                          setSecondsLeftToPublish(0);
+                          finishPublishing();
                         }}
                       >
                         <Icon name="x" />
@@ -704,7 +744,7 @@ export const EmailForm = () => {
                       onClick={() => {
                         if (!validate("save_and_publish")) return;
 
-                        setIsSaving(true);
+                        setIsPublishing(true);
                         publishCountdownRef.current = new Countdown(
                           DEFAULT_SECONDS_LEFT_TO_PUBLISH,
                           (secondsLeft) => {
@@ -1097,9 +1137,9 @@ export const EmailForm = () => {
                     type="text"
                     placeholder="Title"
                     maxLength={255}
-                    value={title}
+                    value={form.data.installment.name}
                     onChange={(e) => {
-                      setTitle(e.target.value);
+                      form.setData("installment.name", e.target.value);
                       markFieldAsValid("title");
                     }}
                   />
@@ -1125,7 +1165,7 @@ export const EmailForm = () => {
                     className="textarea"
                     ariaLabel="Email message"
                     placeholder="Write a personalized message..."
-                    initialValue={initialMessage}
+                    initialValue={parseInitialValue(form.data.installment.message)}
                     onChange={handleMessageChange}
                     onCreate={setMessageEditor}
                     extensions={[UpsellCard]}
