@@ -1,18 +1,19 @@
 import { usePage } from "@inertiajs/react";
 import * as React from "react";
 
-import { type AlertPayload } from "$app/components/server-components/Alert";
 import { Alert } from "$app/components/ui/Alert";
 
-type PageProps = {
-  flash?: AlertPayload;
+type FlashData = {
+  warning?: string;
 };
 
 export const WarningFlash: React.FC = () => {
-  const { flash } = usePage<PageProps>().props;
+  const page = usePage();
+  // Access flash from page.flash (not page.props.flash) - this data does NOT persist in history state
+  const flash = (page as unknown as { flash: FlashData }).flash;
 
-  if (flash?.status === "warning" && flash.message) {
-    return <Alert variant="danger">{flash.message}</Alert>;
+  if (flash?.warning) {
+    return <Alert variant="danger">{flash.warning}</Alert>;
   }
 
   return null;
