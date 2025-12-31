@@ -1,4 +1,4 @@
-import { findChildren, generateJSON, Node as TiptapNode } from "@tiptap/core";
+import { Editor, findChildren, generateJSON, Node as TiptapNode } from "@tiptap/core";
 import { DOMSerializer } from "@tiptap/pm/model";
 import { EditorContent } from "@tiptap/react";
 import { parseISO } from "date-fns";
@@ -63,7 +63,6 @@ import { Tabs, Tab } from "$app/components/ui/Tabs";
 import { UpsellSelectModal, Product, ProductOption } from "$app/components/UpsellSelectModal";
 import { useConfigureEvaporate } from "$app/components/useConfigureEvaporate";
 import { useIsAboveBreakpoint } from "$app/components/useIsAboveBreakpoint";
-import { useNav } from "$app/components/Nav";
 import { useRefToLatest } from "$app/components/useRefToLatest";
 import { WithTooltip } from "$app/components/WithTooltip";
 
@@ -262,6 +261,8 @@ const ContentTabContent = ({ selectedVariantId }: { selectedVariantId: string | 
     setRenamingPageId((pages.length > 1 || selectedPage?.title ? addPage() : (selectedPage ?? addPage())).id);
   };
   React.useEffect(() => {
+    // console.log()
+    console.log("editor", editor);
     if (!editor) return;
 
     const updateContent = () => updateContentRef.current();
@@ -274,35 +275,41 @@ const ContentTabContent = ({ selectedVariantId }: { selectedVariantId: string | 
   }, [editor]);
 
   // Mobile editing state for hiding nav and repositioning toolbar
-  const nav = useNav();
+  // Note: We use CustomEvent because Nav/Layout and ProductEditPage are separate React roots
+  // and cannot share React context
   const [isMobileEditing, setIsMobileEditing] = React.useState(false);
+  const setNavHidden = React.useCallback((hidden: boolean) => {
+    window.dispatchEvent(new CustomEvent("nav:setHidden", { detail: { hidden } }));
+  }, []);
+  const setLayoutMobileEditing = React.useCallback((editing: boolean, onExit?: () => void) => {
+    window.dispatchEvent(new CustomEvent("layout:mobileEditing", { detail: { editing, onExit } }));
+  }, []);
+
+  const exitMobileEditing = React.useCallback(() => {
+    setIsMobileEditing(false);
+    setNavHidden(false);
+    setLayoutMobileEditing(false);
+    editor?.commands.blur();
+  }, [editor, setNavHidden, setLayoutMobileEditing]);
 
   React.useEffect(() => {
     if (!editor || isDesktop) return;
 
     const handleFocus = () => {
       setIsMobileEditing(true);
-      nav?.setHidden(true);
-    };
-    const handleBlur = () => {
-      // Small delay to prevent flicker when clicking toolbar buttons
-      setTimeout(() => {
-        if (!editor.isFocused) {
-          setIsMobileEditing(false);
-          nav?.setHidden(false);
-        }
-      }, 100);
+      setNavHidden(true);
+      setLayoutMobileEditing(true, exitMobileEditing);
     };
 
     editor.on("focus", handleFocus);
-    editor.on("blur", handleBlur);
 
     return () => {
       editor.off("focus", handleFocus);
-      editor.off("blur", handleBlur);
-      nav?.setHidden(false);
+      setIsMobileEditing(false);
+      setNavHidden(false);
+      setLayoutMobileEditing(false);
     };
-  }, [editor, isDesktop, nav]);
+  }, [editor, isDesktop, setNavHidden, setLayoutMobileEditing, exitMobileEditing]);
 
   const pageIcons = React.useMemo(
     () =>
@@ -514,6 +521,280 @@ const ContentTabContent = ({ selectedVariantId }: { selectedVariantId: string | 
     setAddingButton(null);
   };
 
+  const Toolbar = ({ editor }: { editor: Editor }) => {
+    return (
+    <>
+      <RichTextEditorToolbar
+        color="ghost"
+        className={classNames(
+          "border-b border-border px-8",
+          // Mobile: fixed at bottom during editing, horizontally scrollable
+          !isDesktop && isMobileEditing && "fixed bottom-0 left-0 right-0 z-20 border-t border-b-0 bg-white dark:bg-black",
+          !isDesktop && isMobileEditing && "overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden",
+          // Hide toolbar on mobile when not editing
+          !isDesktop && !isMobileEditing && "hidden",
+        )}
+        editor={editor}
+        productId={id}
+        custom={
+          <>
+            <LinkMenuItem editor={editor} />
+            <PopoverMenuItem name="Upload files" icon="upload-fill">
+              {(close) => (
+                <div role="menu" aria-label="Image and file uploader" onClick={close}>
+                  <div role="menuitem" onClick={() => setShowEmbedModal(true)}>
+                    <Icon name="media" />
+                    <span>Embed media</span>
+                  </div>
+                  <label role="menuitem">
+                    <input type="file" name="file" multiple onChange={(e) => uploadFileInput(e.target)} />
+                    <Icon name="paperclip" />
+                    <span>Computer files</span>
+                  </label>
+                  {existingFiles.length > 0 ? (
+                    <div
+                      role="menuitem"
+                      onClick={() => {
+                        setSelectingExistingFiles({ selected: [], query: "", isLoading: true });
+                        void fetchLatestExistingFiles();
+                      }}
+                    >
+                      <Icon name="files-earmark" />
+                      <span>Existing product files</span>
+                    </div>
+                  ) : null}
+                  <div role="menuitem" onClick={uploadFromDropbox}>
+                    <Icon name="dropbox" />
+                    <span>Dropbox files</span>
+                  </div>
+                </div>
+              )}
+            </PopoverMenuItem>
+            {selectingExistingFiles ? (
+              <Modal
+                open
+                onClose={() => setSelectingExistingFiles(null)}
+                title="Select existing product files"
+                footer={
+                  <>
+                    <Button onClick={() => setSelectingExistingFiles(null)}>Cancel</Button>
+                    <Button
+                      color="primary"
+                      onClick={() => {
+                        updateProduct({ files: [...product.files, ...selectingExistingFiles.selected] });
+                        onSelectFiles(selectingExistingFiles.selected.map((file) => file.id));
+                        setSelectingExistingFiles(null);
+                      }}
+                    >
+                      Select
+                    </Button>
+                  </>
+                }
+              >
+                <div className="flex flex-col gap-4">
+                  <input
+                    type="text"
+                    placeholder="Find your files"
+                    value={selectingExistingFiles.query}
+                    onChange={(evt) =>
+                      setSelectingExistingFiles({ ...selectingExistingFiles, query: evt.target.value })
+                    }
+                  />
+                  <Rows
+                    className="overflow-auto"
+                    role="listbox"
+                    style={{ maxHeight: "20rem", textAlign: "initial" }}
+                  >
+                    {selectingExistingFiles.isLoading ? (
+                      <div className="flex min-h-40 justify-center">
+                        <LoadingSpinner className="size-8" />
+                      </div>
+                    ) : (
+                      filteredExistingFiles.map((file) => (
+                        <Row key={file.id} role="option" className="cursor-pointer" asChild>
+                          <label>
+                            <RowContent>
+                              <FileKindIcon extension={file.extension} />
+                              <div>
+                                <h4>{file.display_name}</h4>
+                                <span>{`${file.attached_product_name || "N/A"} (${FileUtils.getFullFileSizeString(file.file_size ?? 0)})`}</span>
+                              </div>
+                              <input
+                                type="checkbox"
+                                checked={selectingExistingFiles.selected.includes(file)}
+                                onChange={() => {
+                                  setSelectingExistingFiles({
+                                    ...selectingExistingFiles,
+                                    selected: selectingExistingFiles.selected.includes(file)
+                                      ? selectingExistingFiles.selected.filter((id) => id !== file)
+                                      : [...selectingExistingFiles.selected, file],
+                                  });
+                                }}
+                                style={{ marginLeft: "auto" }}
+                              />
+                            </RowContent>
+                          </label>
+                        </Row>
+                      ))
+                    )}
+                  </Rows>
+                </div>
+              </Modal>
+            ) : null}
+
+            <Modal open={showEmbedModal} onClose={() => setShowEmbedModal(false)} title="Embed media">
+              <p>Paste a video link or upload images or videos.</p>
+              <Tabs variant="buttons">
+                <Tab isSelected aria-controls={`${uid}-embed-tab`} asChild>
+                  <button type="button">
+                    <Icon name="link" />
+                    <h4>Embed link</h4>
+                  </button>
+                </Tab>
+                <Tab isSelected={false} asChild>
+                  <label>
+                    <input
+                      className="sr-only"
+                      type="file"
+                      accept="image/*,video/*"
+                      multiple
+                      onChange={(e) => {
+                        if (!e.target.files) return;
+                        const [images, nonImages] = partition([...e.target.files], (file) =>
+                          file.type.startsWith("image"),
+                        );
+                        uploadImages({ view: editor.view, files: images, imageSettings });
+                        uploadFiles(nonImages);
+                        e.target.value = "";
+                        setShowEmbedModal(false);
+                      }}
+                    />
+                    <Icon name="upload-fill" />
+                    <h4>Upload</h4>
+                  </label>
+                </Tab>
+              </Tabs>
+              <div id={`${uid}-embed-tab`}>
+                <EmbedMediaForm
+                  type="embed"
+                  onClose={() => setShowEmbedModal(false)}
+                  onEmbedReceived={(embed) => {
+                    insertMediaEmbed(editor, embed);
+                    setShowEmbedModal(false);
+                  }}
+                />
+              </div>
+            </Modal>
+            <Separator aria-orientation="vertical" />
+            <Popover
+              trigger={
+                <div className="toolbar-item">
+                  Insert <Icon name="outline-cheveron-down" />
+                </div>
+              }
+              open={insertMenuState != null}
+              onToggle={(open) => setInsertMenuState(open ? "open" : null)}
+            >
+              <div role="menu" onClick={() => setInsertMenuState(null)}>
+                {insertMenuState === "inputs" ? (
+                  <>
+                    <div
+                      role="menuitem"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setInsertMenuState("open");
+                      }}
+                    >
+                      <Icon name="outline-cheveron-left" />
+                      <span>Back</span>
+                    </div>
+                    <div role="menuitem" onClick={() => editor.chain().focus().insertShortAnswer({}).run()}>
+                      <Icon name="card-text" />
+                      <span>Short answer</span>
+                    </div>
+                    <div role="menuitem" onClick={() => editor.chain().focus().insertLongAnswer({}).run()}>
+                      <Icon name="file-text" />
+                      <span>Long answer</span>
+                    </div>
+                    <div role="menuitem" onClick={() => editor.chain().focus().insertFileUpload({}).run()}>
+                      <Icon name="folder-plus" />
+                      <span>Upload file</span>
+                    </div>
+                  </>
+                ) : (
+                  <>
+                    <div role="menuitem" onClick={() => setAddingButton({ label: "", url: "" })}>
+                      <Icon name="button" />
+                      <span>Button</span>
+                    </div>
+                    <div role="menuitem" onClick={() => editor.chain().focus().setHorizontalRule().run()}>
+                      <Icon name="horizontal-rule" />
+                      <span>Divider</span>
+                    </div>
+                    <div
+                      role="menuitem"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setInsertMenuState("inputs");
+                      }}
+                      className="flex items-center"
+                    >
+                      <Icon name="input-cursor-text" />
+                      <span>Input</span>
+                      <Icon name="outline-cheveron-right" className="ml-auto" />
+                    </div>
+                    <div role="menuitem" onClick={onInsertMoreLikeThis}>
+                      <Icon name="grid" />
+                      <span>More like this</span>
+                    </div>
+                    <div role="menuitem" onClick={onInsertPosts}>
+                      <Icon name="file-earmark-medical" />
+                      <span>List of posts</span>
+                    </div>
+                    <div role="menuitem" onClick={onInsertLicense}>
+                      <Icon name="outline-key" />
+                      <span>License key</span>
+                    </div>
+                    <div role="menuitem" onClick={() => setShowInsertPostModal(true)}>
+                      <Icon name="twitter" />
+                      <span>Twitter post</span>
+                    </div>
+                    <div
+                      role="menuitem"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setShowUpsellModal(true);
+                      }}
+                    >
+                      <Icon name="cart-plus" />
+                      <span>Upsell</span>
+                    </div>
+                    <div
+                      role="menuitem"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setShowReviewModal(true);
+                      }}
+                    >
+                      <Icon name="solid-star" />
+                      <span>Review</span>
+                    </div>
+                  </>
+                )}
+              </div>
+            </Popover>
+            <>
+              <Separator aria-orientation="vertical" />
+              <button className="toolbar-item" onClick={handleCreatePageClick}>
+                <Icon name="plus" /> Page
+              </button>
+            </>
+          </>
+        }
+      />
+    </>)
+  }
+
   return (
     <>
       <div
@@ -522,275 +803,8 @@ const ContentTabContent = ({ selectedVariantId }: { selectedVariantId: string | 
           !isDesktop && isMobileEditing && "pb-16",
         )}
       >
-        {editor ? (
-          <RichTextEditorToolbar
-            color="ghost"
-            className={classNames(
-              "border-b border-border px-8",
-              // Mobile: fixed at bottom during editing, horizontally scrollable
-              !isDesktop && isMobileEditing && "fixed bottom-0 left-0 right-0 z-20 border-t border-b-0 bg-white dark:bg-black",
-              !isDesktop && isMobileEditing && "overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden",
-              // Hide toolbar on mobile when not editing
-              !isDesktop && !isMobileEditing && "hidden",
-            )}
-            editor={editor}
-            productId={id}
-            custom={
-              <>
-                <LinkMenuItem editor={editor} />
-                <PopoverMenuItem name="Upload files" icon="upload-fill">
-                  {(close) => (
-                    <div role="menu" aria-label="Image and file uploader" onClick={close}>
-                      <div role="menuitem" onClick={() => setShowEmbedModal(true)}>
-                        <Icon name="media" />
-                        <span>Embed media</span>
-                      </div>
-                      <label role="menuitem">
-                        <input type="file" name="file" multiple onChange={(e) => uploadFileInput(e.target)} />
-                        <Icon name="paperclip" />
-                        <span>Computer files</span>
-                      </label>
-                      {existingFiles.length > 0 ? (
-                        <div
-                          role="menuitem"
-                          onClick={() => {
-                            setSelectingExistingFiles({ selected: [], query: "", isLoading: true });
-                            void fetchLatestExistingFiles();
-                          }}
-                        >
-                          <Icon name="files-earmark" />
-                          <span>Existing product files</span>
-                        </div>
-                      ) : null}
-                      <div role="menuitem" onClick={uploadFromDropbox}>
-                        <Icon name="dropbox" />
-                        <span>Dropbox files</span>
-                      </div>
-                    </div>
-                  )}
-                </PopoverMenuItem>
-                {selectingExistingFiles ? (
-                  <Modal
-                    open
-                    onClose={() => setSelectingExistingFiles(null)}
-                    title="Select existing product files"
-                    footer={
-                      <>
-                        <Button onClick={() => setSelectingExistingFiles(null)}>Cancel</Button>
-                        <Button
-                          color="primary"
-                          onClick={() => {
-                            updateProduct({ files: [...product.files, ...selectingExistingFiles.selected] });
-                            onSelectFiles(selectingExistingFiles.selected.map((file) => file.id));
-                            setSelectingExistingFiles(null);
-                          }}
-                        >
-                          Select
-                        </Button>
-                      </>
-                    }
-                  >
-                    <div className="flex flex-col gap-4">
-                      <input
-                        type="text"
-                        placeholder="Find your files"
-                        value={selectingExistingFiles.query}
-                        onChange={(evt) =>
-                          setSelectingExistingFiles({ ...selectingExistingFiles, query: evt.target.value })
-                        }
-                      />
-                      <Rows
-                        className="overflow-auto"
-                        role="listbox"
-                        style={{ maxHeight: "20rem", textAlign: "initial" }}
-                      >
-                        {selectingExistingFiles.isLoading ? (
-                          <div className="flex min-h-40 justify-center">
-                            <LoadingSpinner className="size-8" />
-                          </div>
-                        ) : (
-                          filteredExistingFiles.map((file) => (
-                            <Row key={file.id} role="option" className="cursor-pointer" asChild>
-                              <label>
-                                <RowContent>
-                                  <FileKindIcon extension={file.extension} />
-                                  <div>
-                                    <h4>{file.display_name}</h4>
-                                    <span>{`${file.attached_product_name || "N/A"} (${FileUtils.getFullFileSizeString(file.file_size ?? 0)})`}</span>
-                                  </div>
-                                  <input
-                                    type="checkbox"
-                                    checked={selectingExistingFiles.selected.includes(file)}
-                                    onChange={() => {
-                                      setSelectingExistingFiles({
-                                        ...selectingExistingFiles,
-                                        selected: selectingExistingFiles.selected.includes(file)
-                                          ? selectingExistingFiles.selected.filter((id) => id !== file)
-                                          : [...selectingExistingFiles.selected, file],
-                                      });
-                                    }}
-                                    style={{ marginLeft: "auto" }}
-                                  />
-                                </RowContent>
-                              </label>
-                            </Row>
-                          ))
-                        )}
-                      </Rows>
-                    </div>
-                  </Modal>
-                ) : null}
-
-                <Modal open={showEmbedModal} onClose={() => setShowEmbedModal(false)} title="Embed media">
-                  <p>Paste a video link or upload images or videos.</p>
-                  <Tabs variant="buttons">
-                    <Tab isSelected aria-controls={`${uid}-embed-tab`} asChild>
-                      <button type="button">
-                        <Icon name="link" />
-                        <h4>Embed link</h4>
-                      </button>
-                    </Tab>
-                    <Tab isSelected={false} asChild>
-                      <label>
-                        <input
-                          className="sr-only"
-                          type="file"
-                          accept="image/*,video/*"
-                          multiple
-                          onChange={(e) => {
-                            if (!e.target.files) return;
-                            const [images, nonImages] = partition([...e.target.files], (file) =>
-                              file.type.startsWith("image"),
-                            );
-                            uploadImages({ view: editor.view, files: images, imageSettings });
-                            uploadFiles(nonImages);
-                            e.target.value = "";
-                            setShowEmbedModal(false);
-                          }}
-                        />
-                        <Icon name="upload-fill" />
-                        <h4>Upload</h4>
-                      </label>
-                    </Tab>
-                  </Tabs>
-                  <div id={`${uid}-embed-tab`}>
-                    <EmbedMediaForm
-                      type="embed"
-                      onClose={() => setShowEmbedModal(false)}
-                      onEmbedReceived={(embed) => {
-                        insertMediaEmbed(editor, embed);
-                        setShowEmbedModal(false);
-                      }}
-                    />
-                  </div>
-                </Modal>
-                <Separator aria-orientation="vertical" />
-                <Popover
-                  trigger={
-                    <div className="toolbar-item">
-                      Insert <Icon name="outline-cheveron-down" />
-                    </div>
-                  }
-                  open={insertMenuState != null}
-                  onToggle={(open) => setInsertMenuState(open ? "open" : null)}
-                >
-                  <div role="menu" onClick={() => setInsertMenuState(null)}>
-                    {insertMenuState === "inputs" ? (
-                      <>
-                        <div
-                          role="menuitem"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            setInsertMenuState("open");
-                          }}
-                        >
-                          <Icon name="outline-cheveron-left" />
-                          <span>Back</span>
-                        </div>
-                        <div role="menuitem" onClick={() => editor.chain().focus().insertShortAnswer({}).run()}>
-                          <Icon name="card-text" />
-                          <span>Short answer</span>
-                        </div>
-                        <div role="menuitem" onClick={() => editor.chain().focus().insertLongAnswer({}).run()}>
-                          <Icon name="file-text" />
-                          <span>Long answer</span>
-                        </div>
-                        <div role="menuitem" onClick={() => editor.chain().focus().insertFileUpload({}).run()}>
-                          <Icon name="folder-plus" />
-                          <span>Upload file</span>
-                        </div>
-                      </>
-                    ) : (
-                      <>
-                        <div role="menuitem" onClick={() => setAddingButton({ label: "", url: "" })}>
-                          <Icon name="button" />
-                          <span>Button</span>
-                        </div>
-                        <div role="menuitem" onClick={() => editor.chain().focus().setHorizontalRule().run()}>
-                          <Icon name="horizontal-rule" />
-                          <span>Divider</span>
-                        </div>
-                        <div
-                          role="menuitem"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            setInsertMenuState("inputs");
-                          }}
-                          className="flex items-center"
-                        >
-                          <Icon name="input-cursor-text" />
-                          <span>Input</span>
-                          <Icon name="outline-cheveron-right" className="ml-auto" />
-                        </div>
-                        <div role="menuitem" onClick={onInsertMoreLikeThis}>
-                          <Icon name="grid" />
-                          <span>More like this</span>
-                        </div>
-                        <div role="menuitem" onClick={onInsertPosts}>
-                          <Icon name="file-earmark-medical" />
-                          <span>List of posts</span>
-                        </div>
-                        <div role="menuitem" onClick={onInsertLicense}>
-                          <Icon name="outline-key" />
-                          <span>License key</span>
-                        </div>
-                        <div role="menuitem" onClick={() => setShowInsertPostModal(true)}>
-                          <Icon name="twitter" />
-                          <span>Twitter post</span>
-                        </div>
-                        <div
-                          role="menuitem"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            setShowUpsellModal(true);
-                          }}
-                        >
-                          <Icon name="cart-plus" />
-                          <span>Upsell</span>
-                        </div>
-                        <div
-                          role="menuitem"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            setShowReviewModal(true);
-                          }}
-                        >
-                          <Icon name="solid-star" />
-                          <span>Review</span>
-                        </div>
-                      </>
-                    )}
-                  </div>
-                </Popover>
-                <>
-                  <Separator aria-orientation="vertical" />
-                  <button className="toolbar-item" onClick={handleCreatePageClick}>
-                    <Icon name="plus" /> Page
-                  </button>
-                </>
-              </>
-            }
-          />
+        {editor && !isMobileEditing ? (
+          <Toolbar editor={editor} />
         ) : null}
         <PageListLayout
           className="md:h-auto! md:flex-1"
@@ -998,6 +1012,10 @@ const ContentTabContent = ({ selectedVariantId }: { selectedVariantId: string | 
           productId={id}
         />
       ) : null}
+
+      {editor && isMobileEditing ? (
+        <Toolbar editor={editor} />
+        ) : null}
     </>
   );
 };

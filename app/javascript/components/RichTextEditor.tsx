@@ -384,6 +384,7 @@ export const RichTextEditorToolbar = ({
         role="toolbar"
         className={cx("rich-text-editor-toolbar", color, className)}
         onMouseLeave={() => setShowTooltip(false)}
+        onMouseDown={(e) => e.preventDefault()}
       >
         <Popover
           aria-label="Text formats"

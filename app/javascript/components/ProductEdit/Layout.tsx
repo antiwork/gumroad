@@ -129,6 +129,7 @@ const MobileActionsMenu = ({
   isPublishing,
   onUnpublish,
   isPublished,
+  small,
 }: {
   url: string;
   checkoutUrl: string;
@@ -136,6 +137,7 @@ const MobileActionsMenu = ({
   isPublishing: boolean;
   onUnpublish: () => void;
   isPublished: boolean;
+  small?: boolean;
 }) => {
   const [open, setOpen] = React.useState(false);
 
@@ -145,7 +147,7 @@ const MobileActionsMenu = ({
       onToggle={setOpen}
       aria-label="More actions"
       trigger={
-        <Button aria-label="More options">
+        <Button small={small} aria-label="More options">
           <Icon name="three-dots" />
         </Button>
       }
@@ -208,6 +210,23 @@ export const Layout = ({
   const tab = match?.handle ?? "product";
 
   const navigate = useRefToLatest(useNavigate());
+
+  // Mobile editing mode - controlled via custom events from ContentTabContent
+  const [mobileEditingMode, setMobileEditingMode] = React.useState(false);
+  const exitMobileEditingRef = React.useRef<(() => void) | null>(null);
+
+  React.useEffect(() => {
+    const handleMobileEditing = (e: CustomEvent<{ editing: boolean; onExit?: () => void }>) => {
+      setMobileEditingMode(e.detail.editing);
+      if (e.detail.onExit) {
+        exitMobileEditingRef.current = e.detail.onExit;
+      }
+    };
+    window.addEventListener("layout:mobileEditing", handleMobileEditing as EventListener);
+    return () => {
+      window.removeEventListener("layout:mobileEditing", handleMobileEditing as EventListener);
+    };
+  }, []);
 
   const [isPublishing, setIsPublishing] = React.useState(false);
   const setPublished = async (published: boolean) => {
@@ -282,13 +301,81 @@ export const Layout = ({
 
   const isCoffee = product.native_type === "coffee";
 
+  // Mobile editing header - shown when user is editing content on mobile
+  const mobileEditingHeader = mobileEditingMode ? (
+    <div className="sticky top-0 z-10 bg-canvas lg:hidden">
+      <header className="flex items-center justify-between gap-2 p-3">
+        <button
+          type="button"
+          aria-label="Exit editing"
+          className="flex items-center justify-center p-1"
+          onClick={() => exitMobileEditingRef.current?.()}
+        >
+          <Icon name="outline-cheveron-left" />
+        </button>
+        <h1 className="flex-1 truncate text-center text-base font-bold">{product.name || "Untitled"}</h1>
+        <div className="flex items-center gap-2">
+          <Button color="primary" small disabled={isBusy} onClick={() => void save()}>
+            {saving ? "Saving..." : "Save"}
+          </Button>
+          <MobileActionsMenu
+            url={url}
+            checkoutUrl={checkoutUrl}
+            isBusy={isBusy}
+            isPublishing={isPublishing}
+            onUnpublish={() => void setPublished(false)}
+            isPublished={product.is_published}
+            small
+          />
+        </div>
+      </header>
+      <div className="border-b border-border px-4 py-2">
+        <Tabs>
+          <Tab asChild isSelected={tab === "product"}>
+            <Link to={rootPath} onClick={onTabClick}>
+              Product
+            </Link>
+          </Tab>
+          {!isCoffee ? (
+            <Tab asChild isSelected={tab === "content"}>
+              <Link to={`${rootPath}/content`} onClick={onTabClick}>
+                Content
+              </Link>
+            </Tab>
+          ) : null}
+          <Tab asChild isSelected={tab === "share"}>
+            <Link
+              to={`${rootPath}/share`}
+              onClick={(evt) => {
+                onTabClick(evt, () => {
+                  if (!product.is_published) {
+                    evt.preventDefault();
+                    showAlert(
+                      "Not yet! You've got to publish your awesome product before you can share it with your audience and the world.",
+                      "warning",
+                    );
+                  }
+                });
+              }}
+            >
+              Share
+            </Link>
+          </Tab>
+        </Tabs>
+      </div>
+      {headerActions ? <div className="border-b border-border px-4 py-2">{headerActions}</div> : null}
+    </div>
+  ) : null;
+
   return (
     <>
       <NotifyAboutProductUpdatesAlert />
       {/* TODO: remove this legacy uploader stuff */}
       <form hidden data-id={uniquePermalink} id="edit-link-basic-form" />
+      {/* Mobile editing header - replaces PageHeader when editing on mobile */}
+      {mobileEditingHeader}
       <PageHeader
-        className="sticky-top"
+        className={classNames("sticky-top", mobileEditingMode && "hidden lg:flex lg:flex-col")}
         title={product.name || "Untitled"}
         actions={
           product.is_published ? (

@@ -125,6 +125,18 @@ export const Nav = ({ title, children, footer }: Props) => {
     [open, close, hidden],
   );
 
+  // Listen for custom events from other React roots (e.g., ProductEditPage)
+  // that need to control nav visibility
+  React.useEffect(() => {
+    const handleNavVisibility = (e: CustomEvent<{ hidden: boolean }>) => {
+      setHidden(e.detail.hidden);
+    };
+    window.addEventListener("nav:setHidden", handleNavVisibility as EventListener);
+    return () => {
+      window.removeEventListener("nav:setHidden", handleNavVisibility as EventListener);
+    };
+  }, []);
+
   return (
     <NavContext.Provider value={contextValue}>
       <nav
