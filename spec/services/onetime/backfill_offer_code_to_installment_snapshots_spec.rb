@@ -109,15 +109,12 @@ describe Onetime::BackfillOfferCodeToInstallmentSnapshots do
 
         snapshot = create(:installment_plan_snapshot, payment_option: payment_option)
 
-        # Delete the offer code after the purchase was made
         offer_code.destroy!
 
         result = described_class.perform
 
         snapshot.reload
-        # The purchase still has the offer_code_id, even though the code is deleted
-        # This test verifies we handle the deletion gracefully
-        expect(result[:skipped]).to eq(1)  # Can't backfill deleted codes
+        expect(result[:skipped]).to eq(1)
       end
     end
 

@@ -171,8 +171,8 @@ describe InstallmentPlanSnapshot do
         snapshot = create(:installment_plan_snapshot, payment_option: payment_option)
         snapshot.snapshot_offer_code!(offer_code)
 
-        expect(snapshot.locked_discount_amount_off(10000)).to eq(2000)  # 20% of 10000
-        expect(snapshot.locked_discount_amount_off(5000)).to eq(1000)   # 20% of 5000
+        expect(snapshot.locked_discount_amount_off(10000)).to eq(2000)
+        expect(snapshot.locked_discount_amount_off(5000)).to eq(1000)
       end
 
       it "returns fixed amount for fixed discounts" do
@@ -212,7 +212,7 @@ describe InstallmentPlanSnapshot do
         offer_code.update!(amount_percentage: 50)
 
         snapshot.reload
-        expect(snapshot.locked_discount_percentage).to eq(20)  # Original value preserved
+        expect(snapshot.locked_discount_percentage).to eq(20)
       end
     end
   end

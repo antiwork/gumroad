@@ -159,7 +159,6 @@ describe Onetime::BackfillPaymentOptionInstallmentSnapshots do
         purchase2_2 = build(:purchase, link: product, subscription: subscription2, is_installment_payment: true, price_cents: 4900, installment_plan: installment_plan)
         purchase2_2.save!(validate: false)
 
-        # Mock the first save to fail
         call_count = 0
         allow_any_instance_of(InstallmentPlanSnapshot).to receive(:save!) do |snapshot|
           call_count += 1
