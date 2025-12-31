@@ -3,8 +3,9 @@
 require "spec_helper"
 require "shared_examples/sellers_base_controller_concern"
 require "shared_examples/authorize_called"
+require "inertia_rails/rspec"
 
-describe Settings::ThirdPartyAnalyticsController do
+describe Settings::ThirdPartyAnalyticsController, type: :controller, inertia: true do
   let(:seller) { create(:named_seller) }
 
   include_context "with user signed in as admin for seller"
@@ -14,13 +15,18 @@ describe Settings::ThirdPartyAnalyticsController do
   end
 
   describe "GET show" do
-    it "returns http success and assigns correct instance variables" do
+    it "returns http success and renders Inertia component" do
       get :show
       expect(response).to be_successful
-      expect(assigns[:title]).to eq("Settings")
-
-      settings_presenter = assigns[:settings_presenter]
-      expect(settings_presenter.pundit_user).to eq(controller.pundit_user)
+      expect(inertia.component).to eq("Settings/ThirdPartyAnalytics/Show")
+      settings_presenter = SettingsPresenter.new(pundit_user: controller.pundit_user)
+      expected_props = {
+        third_party_analytics: settings_presenter.third_party_analytics_props,
+        products: seller.links.alive.map { |product| { permalink: product.unique_permalink, name: product.name } },
+      }
+      # Compare only the expected props from inertia.props (ignore shared props)
+      actual_props = inertia.props.slice(*expected_props.keys)
+      expect(actual_props).to eq(expected_props)
     end
   end
 
@@ -31,7 +37,7 @@ describe Settings::ThirdPartyAnalyticsController do
 
     context "when all of the fields are valid" do
       it "returns a successful response" do
-        put :update, as: :json, params: {
+        put :update, params: {
           user: {
             disable_third_party_analytics: false,
             google_analytics_id:,
@@ -41,7 +47,9 @@ describe Settings::ThirdPartyAnalyticsController do
             facebook_meta_tag:,
           }
         }
-        expect(response.parsed_body["success"]).to eq(true)
+        expect(response).to redirect_to(settings_third_party_analytics_path)
+        expect(response).to have_http_status :see_other
+        expect(flash[:notice]).to eq("Changes saved!")
         seller.reload
         expect(seller.disable_third_party_analytics).to eq(false)
         expect(seller.google_analytics_id).to eq(google_analytics_id)
@@ -54,7 +62,7 @@ describe Settings::ThirdPartyAnalyticsController do
 
     context "when a field is invalid" do
       it "returns an error response and doesn't persist changes" do
-        put :update, as: :json, params: {
+        put :update, params: {
           user: {
             disable_third_party_analytics: false,
             google_analytics_id: "bad",
@@ -65,8 +73,9 @@ describe Settings::ThirdPartyAnalyticsController do
           }
         }
 
-        expect(response.parsed_body["success"]).to eq(false)
-        expect(response.parsed_body["error_message"]).to eq("Please enter a valid Google Analytics ID")
+        expect(response).to redirect_to(settings_third_party_analytics_path)
+        expect(response).to have_http_status :found
+        expect(flash[:alert]).to eq("Please enter a valid Google Analytics ID")
 
         seller.reload
         expect(seller.disable_third_party_analytics).to eq(false)
@@ -81,10 +90,11 @@ describe Settings::ThirdPartyAnalyticsController do
     context "when updating throws an error" do
       it "returns an error response" do
         allow_any_instance_of(User).to receive(:update).and_raise(StandardError)
-        put :update, as: :json, params: {}
+        put :update, params: {}
 
-        expect(response.parsed_body["success"]).to eq(false)
-        expect(response.parsed_body["error_message"]).to eq("Something broke. We're looking into what happened. Sorry about this!")
+        expect(response).to redirect_to(settings_third_party_analytics_path)
+        expect(response).to have_http_status :found
+        expect(flash[:alert]).to eq("Something broke. We're looking into what happened. Sorry about this!")
       end
     end
   end

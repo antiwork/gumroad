@@ -146,4 +146,76 @@ describe AffiliatesPresenter do
       })
     end
   end
+
+  describe "#new_affiliate_props" do
+    let(:seller) { create(:named_user) }
+    let(:admin_for_seller) { create(:user, username: "adminforseller") }
+    let(:pundit_user) { SellerContext.new(user: admin_for_seller, seller:) }
+
+    before do
+      create(:team_membership, user: admin_for_seller, seller:, role: TeamMembership::ROLE_ADMIN)
+    end
+
+    let!(:product) { create(:product, name: "Test Product", user: seller) }
+
+    it "returns products with enabled: false and default values" do
+      props = described_class.new(pundit_user).new_affiliate_props
+
+      expect(props[:products]).to be_an(Array)
+      expect(props[:products].first).to include(
+        enabled: false,
+        fee_percent: nil,
+        referral_url: "",
+        destination_url: nil
+      )
+      expect(props[:affiliates_disabled_reason]).to be_nil
+    end
+
+    context "when seller has Brazilian Stripe account" do
+      before do
+        allow(seller).to receive(:has_brazilian_stripe_connect_account?).and_return(true)
+      end
+
+      it "returns the disabled reason" do
+        props = described_class.new(pundit_user).new_affiliate_props
+
+        expect(props[:affiliates_disabled_reason]).to eq("Affiliates with Brazilian Stripe accounts are not supported.")
+      end
+    end
+  end
+
+  describe "#edit_affiliate_props" do
+    let(:seller) { create(:named_user) }
+    let(:admin_for_seller) { create(:user, username: "adminforseller") }
+    let(:pundit_user) { SellerContext.new(user: admin_for_seller, seller:) }
+    let(:affiliate_user) { create(:affiliate_user) }
+    let(:product) { create(:product, user: seller) }
+    let!(:affiliate) { create(:direct_affiliate, seller:, affiliate_user:, products: [product]) }
+
+    before do
+      create(:team_membership, user: admin_for_seller, seller:, role: TeamMembership::ROLE_ADMIN)
+    end
+
+    it "returns affiliate data with products" do
+      props = described_class.new(pundit_user).edit_affiliate_props(affiliate)
+
+      expect(props[:affiliate]).to be_a(Hash)
+      expect(props[:affiliate][:id]).to eq(affiliate.external_id)
+      expect(props[:affiliate][:email]).to eq(affiliate_user.email)
+      expect(props[:affiliate][:products]).to be_an(Array)
+      expect(props[:affiliates_disabled_reason]).to be_nil
+    end
+
+    context "when seller has Brazilian Stripe account" do
+      before do
+        allow(seller).to receive(:has_brazilian_stripe_connect_account?).and_return(true)
+      end
+
+      it "returns the disabled reason" do
+        props = described_class.new(pundit_user).edit_affiliate_props(affiliate)
+
+        expect(props[:affiliates_disabled_reason]).to eq("Affiliates with Brazilian Stripe accounts are not supported.")
+      end
+    end
+  end
 end

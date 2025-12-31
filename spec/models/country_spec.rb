@@ -378,6 +378,7 @@ describe Country do
       expect(Country.new("MO").default_currency).to eq nil
       expect(Country.new("BJ").default_currency).to eq nil
       expect(Country.new("CI").default_currency).to eq nil
+      expect(Country.new("BG").default_currency).to eq nil
     end
   end
 
@@ -473,6 +474,7 @@ describe Country do
       expect(Country.new("MO").payout_currency).to eq Currency::MOP
       expect(Country.new("BJ").payout_currency).to eq Currency::XOF
       expect(Country.new("CI").payout_currency).to eq Currency::XOF
+      expect(Country.new("BG").payout_currency).to eq Currency::EUR
     end
   end
 

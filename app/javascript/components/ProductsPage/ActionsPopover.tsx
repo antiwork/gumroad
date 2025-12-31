@@ -62,7 +62,11 @@ const ActionsPopover = ({
     setIsArchiving(true);
     try {
       await archiveProduct(product.permalink);
-      showAlert("Product was archived successfully", "success");
+      const message =
+        product.status === "published"
+          ? "Product was archived and unpublished successfully"
+          : "Product was archived successfully";
+      showAlert(message, "success");
       onArchive();
     } catch (e) {
       assertResponseError(e);
