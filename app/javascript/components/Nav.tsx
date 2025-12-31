@@ -14,6 +14,8 @@ import { useOriginalLocation } from "$app/components/useOriginalLocation";
 type NavContextValue = {
   open: boolean;
   close: () => void;
+  hidden: boolean;
+  setHidden: (hidden: boolean) => void;
 };
 
 const NavContext = React.createContext<NavContextValue | undefined>(undefined);
@@ -115,9 +117,13 @@ type Props = {
 
 export const Nav = ({ title, children, footer }: Props) => {
   const [open, setOpen] = React.useState(false);
+  const [hidden, setHidden] = React.useState(false);
   const close = React.useCallback((): void => setOpen(false), []);
   const toggle = React.useCallback((): void => setOpen((prev) => !prev), []);
-  const contextValue = React.useMemo<NavContextValue>(() => ({ open, close }), [open, close]);
+  const contextValue = React.useMemo<NavContextValue>(
+    () => ({ open, close, hidden, setHidden }),
+    [open, close, hidden],
+  );
 
   return (
     <NavContext.Provider value={contextValue}>
@@ -126,6 +132,7 @@ export const Nav = ({ title, children, footer }: Props) => {
         className={classNames(
           "flex flex-col overflow-x-hidden overflow-y-auto bg-black text-white lg:static lg:w-52 dark:text-foreground",
           { "fixed z-10 size-full": open },
+          { "hidden! lg:flex": hidden },
         )}
       >
         <div className="override grid grid-cols-[auto_1fr_auto] items-center gap-3 p-4 text-lg leading-6 lg:hidden">

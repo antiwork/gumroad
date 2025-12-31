@@ -10,6 +10,7 @@ import { cast } from "ts-safe-cast";
 import { fetchDropboxFiles, ResponseDropboxFile, uploadDropboxFile } from "$app/data/dropbox_upload";
 import { type Post } from "$app/types/workflow";
 import { escapeRegExp } from "$app/utils";
+import { classNames } from "$app/utils/classNames";
 import { assertDefined } from "$app/utils/assert";
 import { formatDate } from "$app/utils/date";
 import FileUtils from "$app/utils/file";
@@ -62,6 +63,7 @@ import { Tabs, Tab } from "$app/components/ui/Tabs";
 import { UpsellSelectModal, Product, ProductOption } from "$app/components/UpsellSelectModal";
 import { useConfigureEvaporate } from "$app/components/useConfigureEvaporate";
 import { useIsAboveBreakpoint } from "$app/components/useIsAboveBreakpoint";
+import { useNav } from "$app/components/Nav";
 import { useRefToLatest } from "$app/components/useRefToLatest";
 import { WithTooltip } from "$app/components/WithTooltip";
 
@@ -270,6 +272,37 @@ const ContentTabContent = ({ selectedVariantId }: { selectedVariantId: string | 
       editor.off("blur", updateContent);
     };
   }, [editor]);
+
+  // Mobile editing state for hiding nav and repositioning toolbar
+  const nav = useNav();
+  const [isMobileEditing, setIsMobileEditing] = React.useState(false);
+
+  React.useEffect(() => {
+    if (!editor || isDesktop) return;
+
+    const handleFocus = () => {
+      setIsMobileEditing(true);
+      nav?.setHidden(true);
+    };
+    const handleBlur = () => {
+      // Small delay to prevent flicker when clicking toolbar buttons
+      setTimeout(() => {
+        if (!editor.isFocused) {
+          setIsMobileEditing(false);
+          nav?.setHidden(false);
+        }
+      }, 100);
+    };
+
+    editor.on("focus", handleFocus);
+    editor.on("blur", handleBlur);
+
+    return () => {
+      editor.off("focus", handleFocus);
+      editor.off("blur", handleBlur);
+      nav?.setHidden(false);
+    };
+  }, [editor, isDesktop, nav]);
 
   const pageIcons = React.useMemo(
     () =>
@@ -483,11 +516,23 @@ const ContentTabContent = ({ selectedVariantId }: { selectedVariantId: string | 
 
   return (
     <>
-      <div className="h-screen sm:h-full md:flex md:flex-col">
+      <div
+        className={classNames(
+          "h-screen sm:h-full md:flex md:flex-col",
+          !isDesktop && isMobileEditing && "pb-16",
+        )}
+      >
         {editor ? (
           <RichTextEditorToolbar
             color="ghost"
-            className="border-b border-border px-8"
+            className={classNames(
+              "border-b border-border px-8",
+              // Mobile: fixed at bottom during editing, horizontally scrollable
+              !isDesktop && isMobileEditing && "fixed bottom-0 left-0 right-0 z-20 border-t border-b-0 bg-white dark:bg-black",
+              !isDesktop && isMobileEditing && "overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden",
+              // Hide toolbar on mobile when not editing
+              !isDesktop && !isMobileEditing && "hidden",
+            )}
             editor={editor}
             productId={id}
             custom={
@@ -1047,7 +1092,7 @@ export const ContentTab = () => {
               headerActions={
                 product.variants.length > 0 ? (
                   <ComboBox<Variant>
-                    className="hidden lg:block"
+                    className="w-full lg:w-auto"
                     // TODO: Currently needed to get the icon on the selected option even though this is not multiple select. We should fix this in the design system
                     multiple
                     input={(props) => (

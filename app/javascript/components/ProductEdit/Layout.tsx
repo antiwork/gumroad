@@ -10,6 +10,7 @@ import { paramsToQueryString } from "$app/utils/url";
 
 import { Button, NavigationButton } from "$app/components/Button";
 import { CopyToClipboard } from "$app/components/CopyToClipboard";
+import { Popover } from "$app/components/Popover";
 import { useCurrentSeller } from "$app/components/CurrentSeller";
 import { useDomains } from "$app/components/DomainSettings";
 import { Icon } from "$app/components/Icons";
@@ -121,6 +122,71 @@ const NotifyAboutProductUpdatesAlert = () => {
   );
 };
 
+const MobileActionsMenu = ({
+  url,
+  checkoutUrl,
+  isBusy,
+  isPublishing,
+  onUnpublish,
+  isPublished,
+}: {
+  url: string;
+  checkoutUrl: string;
+  isBusy: boolean;
+  isPublishing: boolean;
+  onUnpublish: () => void;
+  isPublished: boolean;
+}) => {
+  const [open, setOpen] = React.useState(false);
+
+  return (
+    <Popover
+      open={open}
+      onToggle={setOpen}
+      aria-label="More actions"
+      trigger={
+        <Button aria-label="More options">
+          <Icon name="three-dots" />
+        </Button>
+      }
+    >
+      <div role="menu" className="flex flex-col">
+        {isPublished && (
+          <button
+            role="menuitem"
+            className="flex items-center gap-3 px-4 py-3 text-left hover:bg-black/5 disabled:opacity-50"
+            disabled={isBusy}
+            onClick={() => {
+              onUnpublish();
+              setOpen(false);
+            }}
+          >
+            {isPublishing ? "Unpublishing..." : "Unpublish"}
+          </button>
+        )}
+        <CopyToClipboard text={url} copyTooltip="Copied!">
+          <button
+            role="menuitem"
+            className="flex items-center gap-3 px-4 py-3 text-left hover:bg-black/5"
+            onClick={() => setOpen(false)}
+          >
+            <Icon name="link" /> Copy product URL
+          </button>
+        </CopyToClipboard>
+        <CopyToClipboard text={checkoutUrl} copyTooltip="Copied!">
+          <button
+            role="menuitem"
+            className="flex items-center gap-3 px-4 py-3 text-left hover:bg-black/5"
+            onClick={() => setOpen(false)}
+          >
+            <Icon name="cart-plus" /> Copy checkout URL
+          </button>
+        </CopyToClipboard>
+      </div>
+    </Popover>
+  );
+};
+
 export const Layout = ({
   children,
   preview,
@@ -227,20 +293,35 @@ export const Layout = ({
         actions={
           product.is_published ? (
             <>
-              <Button disabled={isBusy} onClick={() => void setPublished(false)}>
-                {isPublishing ? "Unpublishing..." : "Unpublish"}
-              </Button>
-              {saveButton}
-              <CopyToClipboard text={url} copyTooltip="Copy product URL">
-                <Button>
-                  <Icon name="link" />
+              {/* Desktop: All buttons */}
+              <div className="hidden lg:contents">
+                <Button disabled={isBusy} onClick={() => void setPublished(false)}>
+                  {isPublishing ? "Unpublishing..." : "Unpublish"}
                 </Button>
-              </CopyToClipboard>
-              <CopyToClipboard text={checkoutUrl} copyTooltip="Copy checkout URL" tooltipPosition="left">
-                <Button>
-                  <Icon name="cart-plus" />
-                </Button>
-              </CopyToClipboard>
+                {saveButton}
+                <CopyToClipboard text={url} copyTooltip="Copy product URL">
+                  <Button>
+                    <Icon name="link" />
+                  </Button>
+                </CopyToClipboard>
+                <CopyToClipboard text={checkoutUrl} copyTooltip="Copy checkout URL" tooltipPosition="left">
+                  <Button>
+                    <Icon name="cart-plus" />
+                  </Button>
+                </CopyToClipboard>
+              </div>
+              {/* Mobile: Save + overflow menu */}
+              <div className="contents lg:hidden">
+                {saveButton}
+                <MobileActionsMenu
+                  url={url}
+                  checkoutUrl={checkoutUrl}
+                  isBusy={isBusy}
+                  isPublishing={isPublishing}
+                  onUnpublish={() => void setPublished(false)}
+                  isPublished={true}
+                />
+              </div>
             </>
           ) : tab === "product" && !isCoffee ? (
             <Button
@@ -252,12 +333,24 @@ export const Layout = ({
             </Button>
           ) : (
             <>
-              {saveButton}
-              <WithTooltip tip={saveButtonTooltip}>
-                <Button color="accent" disabled={isBusy} onClick={() => void setPublished(true)}>
-                  {isPublishing ? "Publishing..." : "Publish and continue"}
-                </Button>
-              </WithTooltip>
+              {/* Desktop: All buttons */}
+              <div className="hidden lg:contents">
+                {saveButton}
+                <WithTooltip tip={saveButtonTooltip}>
+                  <Button color="accent" disabled={isBusy} onClick={() => void setPublished(true)}>
+                    {isPublishing ? "Publishing..." : "Publish and continue"}
+                  </Button>
+                </WithTooltip>
+              </div>
+              {/* Mobile: Save + Publish + overflow menu */}
+              <div className="contents lg:hidden">
+                {saveButton}
+                <WithTooltip tip={saveButtonTooltip}>
+                  <Button color="accent" disabled={isBusy} onClick={() => void setPublished(true)}>
+                    {isPublishing ? "Publishing..." : "Publish"}
+                  </Button>
+                </WithTooltip>
+              </div>
             </>
           )
         }
@@ -300,7 +393,7 @@ export const Layout = ({
               </Link>
             </Tab>
           </Tabs>
-          {headerActions}
+          {headerActions ? <div className="w-full lg:w-auto">{headerActions}</div> : null}
         </div>
       </PageHeader>
       {preview ? (
