@@ -39,7 +39,7 @@ describe UtmLinksController, inertia: true do
       get :index
 
       expect(response).to be_successful
-      expect(inertia).to render_component("Analytics/UtmLinks/Index")
+      expect(inertia).to render_component("UtmLinks/Index")
       props = inertia.props[:utm_links_props]
       expect(props).to match(PaginatedUtmLinksPresenter.new(seller:).props)
       expect(props[:utm_links]).to match_array([UtmLinkPresenter.new(seller:, utm_link: utm_link1).utm_link_props])
@@ -135,10 +135,10 @@ describe UtmLinksController, inertia: true do
       expect(props[:utm_links].map { _1[:id] }).to match_array([utm_link1.external_id, utm_link2.external_id])
     end
 
-    context "with only=[\"utm_links_stats\"] partial loading" do
+    context "with only=[\"utm_links_stats\"] partial request" do
       before do
         request.headers["X-Inertia"] = "true"
-        request.headers["X-Inertia-Partial-Component"] = "Analytics/UtmLinks/Index"
+        request.headers["X-Inertia-Partial-Component"] = "UtmLinks/Index"
         request.headers["X-Inertia-Partial-Data"] = "utm_links_stats"
       end
 
@@ -185,11 +185,11 @@ describe UtmLinksController, inertia: true do
       let(:record) { UtmLink }
     end
 
-    it "renders Analytics/UtmLinks/New with Inertia and correct props" do
+    it "renders UtmLinks/New with Inertia and correct props" do
       get :new
 
       expect(response).to be_successful
-      expect(inertia).to render_component("Analytics/UtmLinks/New")
+      expect(inertia).to render_component("UtmLinks/New")
       expect(inertia.props[:context]).to be_present
       expect(inertia.props[:context][:destination_options]).to be_an(Array)
       expect(inertia.props[:context][:short_url]).to be_present
@@ -200,7 +200,7 @@ describe UtmLinksController, inertia: true do
     context "with only=[\"additional_metadata\"] partial loading" do
       before do
         request.headers["X-Inertia"] = "true"
-        request.headers["X-Inertia-Partial-Component"] = "Analytics/UtmLinks/New"
+        request.headers["X-Inertia-Partial-Component"] = "UtmLinks/New"
         request.headers["X-Inertia-Partial-Data"] = "additional_metadata"
       end
 
@@ -219,7 +219,7 @@ describe UtmLinksController, inertia: true do
         get :new, params: { copy_from: source_link.external_id }
 
         expect(response).to be_successful
-        expect(inertia).to render_component("Analytics/UtmLinks/New")
+        expect(inertia).to render_component("UtmLinks/New")
         expect(inertia.props[:utm_link]).to be_present
         expect(inertia.props[:utm_link][:title]).to eq("#{source_link.title} (copy)")
         expect(inertia.props[:utm_link][:id]).to be_nil
@@ -239,11 +239,11 @@ describe UtmLinksController, inertia: true do
       let(:request_params) { { id: utm_link.external_id } }
     end
 
-    it "renders Analytics/UtmLinks/Edit with Inertia and correct props" do
+    it "renders UtmLinks/Edit with Inertia and correct props" do
       get :edit, params: { id: utm_link.external_id }
 
       expect(response).to be_successful
-      expect(inertia).to render_component("Analytics/UtmLinks/Edit")
+      expect(inertia).to render_component("UtmLinks/Edit")
       expect(inertia.props[:context]).to be_present
       expect(inertia.props[:context][:destination_options]).to be_an(Array)
       expect(inertia.props[:utm_link]).to be_present
@@ -281,7 +281,7 @@ describe UtmLinksController, inertia: true do
         post :create, params: params
       end.to change { seller.utm_links.count }.by(1)
 
-      expect(response).to redirect_to(utm_links_dashboard_path)
+      expect(response).to redirect_to(dashboard_utm_links_path)
       expect(flash[:notice]).to eq("Link created!")
 
       utm_link = seller.utm_links.last
@@ -337,7 +337,7 @@ describe UtmLinksController, inertia: true do
 
       post :create, params: params
 
-      expect(response).to redirect_to(utm_links_dashboard_path)
+      expect(response).to redirect_to(dashboard_utm_links_path)
       expect(UtmLink.count).to eq(2)
       created_utm_link = UtmLink.last
       expect(created_utm_link.utm_source).to eq(existing_utm_link.utm_source)
@@ -394,7 +394,7 @@ describe UtmLinksController, inertia: true do
 
       patch :update, params: params
 
-      expect(response).to redirect_to(utm_links_dashboard_path)
+      expect(response).to redirect_to(dashboard_utm_links_path)
       expect(flash[:notice]).to eq("Link updated!")
       expect(utm_link.reload.title).to eq("Updated Title")
       expect(utm_link.target_resource_id).to be_nil
@@ -471,7 +471,7 @@ describe UtmLinksController, inertia: true do
         delete :destroy, params: { id: utm_link.external_id }
       end.to change { utm_link.reload.deleted_at }.from(nil).to(be_within(5.seconds).of(DateTime.current))
 
-      expect(response).to redirect_to(utm_links_dashboard_path)
+      expect(response).to redirect_to(dashboard_utm_links_path)
       expect(flash[:notice]).to eq("Link deleted!")
       expect(utm_link.reload).to be_deleted
     end
@@ -486,7 +486,7 @@ describe UtmLinksController, inertia: true do
       }
 
       expect(response).to redirect_to(
-        utm_links_dashboard_path(
+        dashboard_utm_links_path(
           query: "facebook",
           page: 3,
           key: "date",

@@ -41,7 +41,9 @@ function Audience() {
 
   return (
     <AnalyticsLayout
+      title="Analytics"
       selectedTab="following"
+      showTabs
       actions={
         hasContent ? (
           <>

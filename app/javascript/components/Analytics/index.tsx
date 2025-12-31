@@ -146,7 +146,9 @@ const Analytics = ({ products: initialProducts, country_codes, state_names }: An
 
   return (
     <AnalyticsLayout
+      title="Analytics"
       selectedTab="sales"
+      showTabs
       actions={
         hasContent ? (
           <>

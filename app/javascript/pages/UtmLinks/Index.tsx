@@ -73,15 +73,13 @@ const UtmLinksIndex = () => {
   } | null>(null);
 
   const debouncedGetUtmLinksStats = useDebouncedCallback((ids: string[]) => {
-    router.get(
-      Routes.utm_links_dashboard_path({ ids }),
-      {},
-      {
-        only: ["utm_links_stats"],
-        preserveUrl: true,
-        preserveState: true,
+    router.reload({
+      data: {
+        ids,
       },
-    );
+      only: ["utm_links_stats"],
+      preserveUrl: true,
+    });
   }, 500);
   React.useEffect(() => {
     if (utmLinks.length === 0) return;
@@ -120,12 +118,15 @@ const UtmLinksIndex = () => {
     onSearch.cancel();
 
     const routeParams = buildRouteParams(params);
-    router.visit(Routes.utm_links_dashboard_path(routeParams), {
-      preserveState,
-      preserveScroll: true,
-      viewTransition: true,
-      only: ["utm_links_props"],
-    });
+    router.get(
+      Routes.dashboard_utm_links_path(routeParams),
+      {},
+      {
+        preserveState,
+        preserveScroll: true,
+        only: ["utm_links_props"],
+      },
+    );
   };
 
   const onChangePage = (newPage: number) => {

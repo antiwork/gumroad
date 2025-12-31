@@ -182,7 +182,7 @@ export const UtmLinkForm = () => {
       selectedTab="utm_links"
       actions={
         <>
-          <Link href={Routes.utm_links_dashboard_path()} className="button">
+          <Link href={Routes.dashboard_utm_links_path()} className="button">
             <Icon name="x-square" />
             Cancel
           </Link>
