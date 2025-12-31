@@ -116,3 +116,100 @@
     transform: translateX(-50%);
   }
 }
+
+/* Dropdown/Popover styles (migrated from _dropdown.scss) */
+.dropdown {
+  position: relative;
+  border: solid 0.0625rem rgb(var(--parent-color) / var(--border-alpha));
+  padding: 1rem; /* spacer(4) */
+  border-radius: 0.25rem; /* border-radius(1) */
+  background-color: rgb(var(--filled));
+  --color: var(--contrast-filled);
+  --parent-color: inherit;
+  color: rgb(var(--color));
+  --active-bg: rgb(var(--color) / 0.1);
+  margin-top: 0.5rem; /* $tooltip-arrow-size */
+  max-width: calc(100vw - 2rem); /* 100vw - spacer(4) * 2 */
+
+  &::before {
+    content: "";
+    border-left: solid 0.5rem transparent;
+    border-right: solid 0.5rem transparent;
+    border-bottom: solid 0.5rem rgb(var(--parent-color) / var(--border-alpha));
+    position: absolute;
+    bottom: 100%;
+    left: 0.75rem; /* spacer(3) */
+  }
+
+  > [role="menu"],
+  > .stack {
+    &:only-child {
+      box-shadow: none;
+      margin: -1rem; /* -(spacer(4)) */
+      max-width: calc(100% + 2rem); /* spacer(4) * 2 */
+      border: none;
+    }
+  }
+}
+
+.popover {
+  display: inline-block;
+  position: relative;
+
+  &[open],
+  &.expanded {
+    &::after {
+      content: "";
+      border-left: solid 0.5rem transparent;
+      border-right: solid 0.5rem transparent;
+      border-bottom: solid 0.5rem rgb(var(--parent-color) / var(--border-alpha));
+      position: absolute;
+      top: 100%;
+      left: 50%;
+      transform: translate(-50%, 0);
+      z-index: 30; /* z-index(tooltip) */
+    }
+  }
+
+  .dropdown {
+    position: absolute;
+    top: calc(100% - 0.0625rem); /* 100% - $border-width */
+    min-width: 100%;
+    width: max-content;
+    box-shadow: 0.25rem 0.25rem 0 rgb(var(--color)); /* box-shadow(1) */
+    z-index: 30; /* z-index(tooltip) */
+    --color: var(--contrast-filled);
+
+    &::before {
+      display: none;
+    }
+  }
+
+  &.top {
+    &::after {
+      bottom: 100%;
+      top: unset;
+      border-top: solid 0.5rem rgb(var(--parent-color) / var(--border-alpha));
+      border-bottom: unset;
+    }
+
+    .dropdown {
+      box-shadow: none;
+      bottom: calc(100% + 0.5rem - 0.0625rem); /* 100% + tooltip-arrow-size - border-width */
+      top: unset;
+    }
+  }
+
+  &:has(> summary button) {
+    > .dropdown {
+      margin-left: -0.25rem; /* -$button-hover-transform-length */
+    }
+
+    &.top {
+      > .dropdown,
+      &::after {
+        margin-bottom: 0.25rem; /* $button-hover-transform-length */
+      }
+    }
+  }
+}
