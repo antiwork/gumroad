@@ -583,12 +583,17 @@ class PaypalChargeProcessor
 
     return if paypal_dispute_id.blank?
 
+    # Retrieve merchant account if not provided - needed for PayPal-Auth-Assertion header
+    merchant_account ||= dispute.purchase&.merchant_account || dispute.charge&.merchant_account
+    seller_merchant_id = merchant_account&.charge_processor_merchant_id
+
     paypal_rest_api = PaypalRestApi.new
     evidences = build_paypal_evidences(dispute_evidence, dispute)
 
     api_response = paypal_rest_api.provide_evidence(
       dispute_id: paypal_dispute_id,
-      evidences: evidences
+      evidences: evidences,
+      seller_merchant_id: seller_merchant_id
     )
 
     PaypalChargeProcessor.log_paypal_api_response("Provide Dispute Evidence", paypal_dispute_id, api_response)
@@ -632,7 +637,7 @@ class PaypalChargeProcessor
     primary_evidence = build_primary_evidence(dispute_evidence, dispute)
     evidences << primary_evidence if primary_evidence
 
-    supporting_notes = build_comprehensive_notes(dispute_evidence)
+    supporting_notes = build_comprehensive_notes(dispute_evidence, dispute)
     if supporting_notes.present?
       evidences << { evidence_type: "OTHER", notes: supporting_notes.truncate(2000) }
     end
@@ -705,11 +710,20 @@ class PaypalChargeProcessor
     normalized || "OTHER"
   end
 
-  def build_comprehensive_notes(dispute_evidence)
+  def build_comprehensive_notes(dispute_evidence, dispute = nil)
     sections = []
 
+    # Transaction metadata - critical for establishing the purchase timeline
+    if dispute.present?
+      transaction_info = collect_transaction_metadata(dispute)
+      if transaction_info.present?
+        sections << "TRANSACTION DETAILS:"
+        transaction_info.each { |info| sections << info }
+      end
+    end
+
     if dispute_evidence.customer_name.present? || dispute_evidence.customer_email.present?
-      sections << "CUSTOMER INFORMATION:"
+      sections << "\nCUSTOMER INFORMATION:"
       sections << "Name: #{dispute_evidence.customer_name}" if dispute_evidence.customer_name.present?
       sections << "Email: #{dispute_evidence.customer_email}" if dispute_evidence.customer_email.present?
       sections << "Purchase IP: #{dispute_evidence.customer_purchase_ip}" if dispute_evidence.customer_purchase_ip.present?
@@ -718,6 +732,16 @@ class PaypalChargeProcessor
     if dispute_evidence.product_description.present?
       sections << "\nPRODUCT/SERVICE:"
       sections << dispute_evidence.product_description
+    end
+
+    # Include license key evidence for digital products - proves delivery
+    if dispute.present?
+      license_keys = collect_license_keys(dispute)
+      if license_keys.present?
+        sections << "\nLICENSE KEY EVIDENCE:"
+        sections << "The following license keys were issued to the customer, proving digital product delivery:"
+        license_keys.each { |key| sections << "- #{key}" }
+      end
     end
 
     if dispute_evidence.billing_address.present?
@@ -764,6 +788,34 @@ class PaypalChargeProcessor
     end
 
     sections.join("\n")
+  end
+
+  def collect_license_keys(dispute)
+    return [] unless dispute.present?
+
+    dispute.purchases.filter_map do |purchase|
+      purchase.license_key if purchase.license_key.present?
+    end
+  end
+
+  def collect_transaction_metadata(dispute)
+    return [] unless dispute.present?
+
+    info = []
+    purchases = dispute.purchases.compact
+
+    purchases.each_with_index do |purchase, index|
+      prefix = purchases.size > 1 ? "Purchase #{index + 1}: " : ""
+      info << "#{prefix}Transaction ID: #{purchase.stripe_transaction_id}" if purchase.stripe_transaction_id.present?
+      info << "#{prefix}Purchase Date: #{purchase.created_at.strftime('%Y-%m-%d %H:%M:%S UTC')}" if purchase.created_at.present?
+      info << "#{prefix}Amount: #{purchase.formatted_total_transaction_amount}" if purchase.respond_to?(:formatted_total_transaction_amount)
+      info << "#{prefix}Product: #{purchase.link&.name}" if purchase.link&.name.present?
+    end
+
+    # Add dispute creation date for timeline context
+    info << "Dispute Filed: #{dispute.event_created_at.strftime('%Y-%m-%d %H:%M:%S UTC')}" if dispute.event_created_at.present?
+
+    info
   end
 
   def transaction_url(charge_id)

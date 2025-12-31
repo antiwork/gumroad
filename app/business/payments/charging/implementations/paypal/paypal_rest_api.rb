@@ -135,9 +135,12 @@ class PaypalRestApi
     execute_request
   end
 
-  def provide_evidence(dispute_id:, evidences:)
+  def provide_evidence(dispute_id:, evidences:, seller_merchant_id: nil)
     @request = new_request(path: "/v1/customer/disputes/#{dispute_id}/provide-evidence", verb: "POST")
     @request.headers["PayPal-Request-Id"] = "provide-evidence-#{dispute_id}-#{timestamp}"
+    # PayPal-Auth-Assertion header is required for platform/partner transactions
+    # to identify the seller on whose behalf we're submitting evidence
+    @request.headers["PayPal-Auth-Assertion"] = paypal_auth_assertion_header(seller_merchant_id) if seller_merchant_id.present?
     @request.body = { evidences: evidences }
     execute_request
   end

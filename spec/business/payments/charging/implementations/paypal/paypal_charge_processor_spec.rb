@@ -1589,12 +1589,13 @@ describe PaypalChargeProcessor, :vcr do
         allow(paypal_rest_api).to receive(:provide_evidence).and_return(success_response)
       end
 
-      it "submits evidence to PayPal" do
+      it "submits evidence to PayPal with seller merchant ID" do
         expect(paypal_rest_api).to receive(:provide_evidence).with(
           dispute_id: "PP-D-12345",
           evidences: array_including(
             hash_including(evidence_type: "PROOF_OF_FULFILLMENT")
-          )
+          ),
+          seller_merchant_id: anything
         )
 
         processor.fight_chargeback("capture_123", dispute_evidence)

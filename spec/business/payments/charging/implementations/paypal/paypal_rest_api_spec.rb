@@ -442,5 +442,53 @@ describe PaypalRestApi, :vcr do
       request = api_object.instance_variable_get(:@request)
       expect(request.path).to eq("/v1/customer/disputes/#{dispute_id}/provide-evidence")
     end
+
+    context "when seller_merchant_id is provided" do
+      let(:seller_merchant_id) { "SELLER123456" }
+
+      it "includes PayPal-Auth-Assertion header for platform transactions" do
+        allow(api_object).to receive(:execute_request)
+
+        api_object.provide_evidence(
+          dispute_id: dispute_id,
+          evidences: evidences,
+          seller_merchant_id: seller_merchant_id
+        )
+
+        request = api_object.instance_variable_get(:@request)
+        expect(request.headers["PayPal-Auth-Assertion"]).to be_present
+      end
+
+      it "generates valid JWT-like auth assertion header format" do
+        allow(api_object).to receive(:execute_request)
+
+        api_object.provide_evidence(
+          dispute_id: dispute_id,
+          evidences: evidences,
+          seller_merchant_id: seller_merchant_id
+        )
+
+        request = api_object.instance_variable_get(:@request)
+        header = request.headers["PayPal-Auth-Assertion"]
+
+        # Header should have format: base64.base64. (ending with a dot for alg: none)
+        expect(header).to end_with(".")
+        # Split with limit -1 preserves trailing empty strings
+        parts = header.split(".", -1)
+        expect(parts.length).to eq(3)
+        expect(parts[2]).to eq("") # Third part is empty for alg: none
+      end
+    end
+
+    context "when seller_merchant_id is not provided" do
+      it "does not include PayPal-Auth-Assertion header" do
+        allow(api_object).to receive(:execute_request)
+
+        api_object.provide_evidence(dispute_id: dispute_id, evidences: evidences)
+
+        request = api_object.instance_variable_get(:@request)
+        expect(request.headers["PayPal-Auth-Assertion"]).to be_nil
+      end
+    end
   end
 end
