@@ -15,11 +15,6 @@ Issue: #
 <!-- For UI/CSS changes, include screenshots or videos showing both states -->
 <!-- Include: Desktop (light + dark) and Mobile (light + dark) -->
 
-| | Light | Dark |
-|---|---|---|
-| **Desktop** | | |
-| **Mobile** | | |
-
 ---
 
 # Test Results
@@ -32,7 +27,7 @@ Issue: #
 
 - [ ] I have read the [contributing guidelines](CONTRIBUTING.md)
 - [ ] I have watched [Gumroad PR review livestreams](https://www.youtube.com/@anti-work)
-- [ ] I have performed a self-review and left comments on my PR
+- [ ] I have performed a self-review and left review comments on my PR
 - [ ] I have added/updated tests for my changes
 
 ---

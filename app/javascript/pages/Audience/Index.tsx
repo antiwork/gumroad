@@ -3,7 +3,7 @@ import { lightFormat } from "date-fns";
 import * as React from "react";
 import { cast } from "ts-safe-cast";
 
-import { AudienceIndexPageProps } from "$app/data/audience";
+import { type AudienceDataByDate } from "$app/data/audience";
 
 import { AnalyticsLayout } from "$app/components/Analytics/AnalyticsLayout";
 import { useAnalyticsDateRange } from "$app/components/Analytics/useAnalyticsDateRange";
@@ -21,13 +21,18 @@ import { WithTooltip } from "$app/components/WithTooltip";
 
 import placeholder from "$assets/images/placeholders/audience.png";
 
-export default function Audience() {
-  const { total_follower_count, audience_data } = cast<AudienceIndexPageProps>(usePage().props);
-  const dateRange = useAnalyticsDateRange();
-  const hasContent = total_follower_count > 0;
+interface AudiencePageProps {
+  total_follower_count: number;
+  audience_data?: AudienceDataByDate | null;
+}
 
+function Audience() {
+  const { total_follower_count, audience_data } = cast<AudiencePageProps>(usePage().props);
+  const dateRange = useAnalyticsDateRange();
   const startTime = lightFormat(dateRange.from, "yyyy-MM-dd");
   const endTime = lightFormat(dateRange.to, "yyyy-MM-dd");
+
+  const hasContent = total_follower_count > 0;
 
   useOnChange(() => {
     if (!hasContent) return;
@@ -36,9 +41,7 @@ export default function Audience() {
 
   return (
     <AnalyticsLayout
-      title="Analytics"
       selectedTab="following"
-      showTabs
       actions={
         hasContent ? (
           <>
@@ -66,7 +69,7 @@ export default function Audience() {
             newFollowers={audience_data?.new_followers ?? null}
           />
           <Deferred
-            data="audience_data"
+            data={["audience_data"]}
             fallback={
               <div className="input">
                 <LoadingSpinner />
@@ -97,3 +100,5 @@ export default function Audience() {
     </AnalyticsLayout>
   );
 }
+
+export default Audience;
