@@ -147,7 +147,7 @@ const MobileActionsMenu = ({
       onToggle={setOpen}
       aria-label="More actions"
       trigger={
-        <Button small={small} aria-label="More options">
+        <Button small={small ?? false} aria-label="More options">
           <Icon name="three-dots" />
         </Button>
       }
