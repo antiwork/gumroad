@@ -60,7 +60,7 @@ export const PasswordInput = React.forwardRef<HTMLInputElement, PasswordInputPro
       <input
         ref={ref}
         type={showPassword ? "text" : "password"}
-        className={classNames("flex-1 bg-transparent font-[inherit] text-base outline-none", className)}
+        className={classNames("flex-1 bg-transparent font-[inherit] text-foreground text-base outline-none", className)}
         {...props}
       />
       <IconComponent
