@@ -767,7 +767,14 @@ class StripeChargeProcessor
         when "charge.dispute.funds_reinstated"
           handle_stripe_event_charge_dispute_for_charge_with_destination_funds_reinstated(stripe_dispute, stripe_charge, event)
         when "charge.dispute.closed"
-          event.type = stripe_dispute.status == "lost" ? ChargeEvent::TYPE_DISPUTE_LOST : ChargeEvent::TYPE_INFORMATIONAL
+          case stripe_dispute.status
+          when "won", "warning_closed"
+            event.type = ChargeEvent::TYPE_DISPUTE_WON
+          when "lost"
+            event.type = ChargeEvent::TYPE_DISPUTE_LOST
+          else
+            event.type = ChargeEvent::TYPE_INFORMATIONAL
+          end
         else
           event.type = ChargeEvent::TYPE_INFORMATIONAL
         end

@@ -2656,11 +2656,11 @@ describe StripeChargeProcessor, :vcr do
               let(:stripe_charge_destination) { stripe_managed_account.id }
               let(:stripe_charge_application_fee) { 1_00 }
 
-              it "tells the charge processor about the informational event" do
+              it "tells the charge processor that the dispute was won" do
                 original_handle_event = ChargeProcessor.method(:handle_event)
                 expect(ChargeProcessor).to(receive(:handle_event)) do |charge_event|
                   expect(charge_event).to be_a(ChargeEvent)
-                  expect(charge_event.type).to eq(ChargeEvent::TYPE_INFORMATIONAL)
+                  expect(charge_event.type).to eq(ChargeEvent::TYPE_DISPUTE_WON)
                   expect(charge_event.extras[:charge_processor_dispute_id]).to eq(stripe_dispute.id)
                   expect(charge_event.flow_of_funds).to eq(nil)
                   original_handle_event.call(charge_event)
@@ -2700,11 +2700,11 @@ describe StripeChargeProcessor, :vcr do
               let(:stripe_charge_destination) { stripe_managed_account.id }
               let(:stripe_charge_application_fee) { 1_00 }
 
-              it "tells the charge processor about the informational event" do
+              it "tells the charge processor that the dispute was won" do
                 original_handle_event = ChargeProcessor.method(:handle_event)
                 expect(ChargeProcessor).to(receive(:handle_event)) do |charge_event|
                   expect(charge_event).to be_a(ChargeEvent)
-                  expect(charge_event.type).to eq(ChargeEvent::TYPE_INFORMATIONAL)
+                  expect(charge_event.type).to eq(ChargeEvent::TYPE_DISPUTE_WON)
                   expect(charge_event.extras[:charge_processor_dispute_id]).to eq(stripe_dispute.id)
                   expect(charge_event.flow_of_funds).to eq(nil)
                   original_handle_event.call(charge_event)
