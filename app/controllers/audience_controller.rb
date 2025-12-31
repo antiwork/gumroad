@@ -13,7 +13,7 @@ class AudienceController < Sellers::BaseController
 
     total_follower_count = current_seller.audience_members.where(follower: true).count
 
-    render inertia: "Analytics/Audience/Index", props: {
+    render inertia: "Audience/Index", props: {
       total_follower_count:,
       audience_data: InertiaRails.defer do
         if total_follower_count.zero?

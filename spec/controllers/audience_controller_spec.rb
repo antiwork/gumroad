@@ -23,7 +23,7 @@ describe AudienceController, inertia: true do
       expect(inertia.props[:audience_data]).to be_nil
     end
 
-    it "renders Inertia component with correct follower count" do
+    it "renders Inertia component with correct follower count and deferred audience data" do
       create(:active_follower, user: seller)
 
       get :index
@@ -31,10 +31,10 @@ describe AudienceController, inertia: true do
       expect(response).to be_successful
       expect_inertia.to render_component("Audience/Index")
       expect(inertia.props[:total_follower_count]).to eq(1)
-      expect(inertia.props[:audience_data]).to be_present
+      expect(inertia.props[:audience_data]).to be_nil
     end
 
-    context "with date range parameters" do
+    context "when fetching the deferred audience data prop" do
       before do
         seller.update!(timezone: "UTC")
 
@@ -44,13 +44,17 @@ describe AudienceController, inertia: true do
           follower.confirm!
           follower.mark_deleted!
         end
+
+        request.headers["X-Inertia"] = "true"
+        request.headers["X-Inertia-Partial-Component"] = "Audience/Index"
+        request.headers["X-Inertia-Partial-Data"] = "audience_data"
       end
 
       it "returns audience_data with expected structure", :sidekiq_inline, :elasticsearch_wait_for_refresh do
         get :index, params: { from: Time.utc(2021, 1, 1), to: Time.utc(2021, 1, 3) }
 
         expect(response).to be_successful
-        expect(inertia.props[:audience_data]).to eq(
+        expect(inertia.props.deep_symbolize_keys[:audience_data]).to eq(
           dates: ["Friday, January 1st", "Saturday, January 2nd", "Sunday, January 3rd"],
           start_date: "Jan  1, 2021",
           end_date: "Jan  3, 2021",
@@ -76,7 +80,7 @@ describe AudienceController, inertia: true do
         get :index, params: { from: start_time, to: end_time }
 
         expect(response).to be_successful
-        expect(inertia.props[:audience_data]).to include(
+        expect(inertia.props.deep_symbolize_keys[:audience_data]).to include(
           start_date: "Apr  1, 2024",
           end_date: "Apr 30, 2024",
         )
