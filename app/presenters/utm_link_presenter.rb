@@ -14,6 +14,7 @@ class UtmLinkPresenter
 
     if reference_utm_link.present?
       utm_link_props = self.class.new(seller:, utm_link: reference_utm_link).utm_link_props.except(:id)
+      utm_link_props[:title] = "#{utm_link_props[:title]} (copy)"
       utm_link_props[:short_url] = context_props[:short_url]
     end
 
@@ -22,6 +23,10 @@ class UtmLinkPresenter
 
   def edit_page_react_props
     { context: utm_link_form_context_props, utm_link: utm_link_props }
+  end
+
+  def new_additional_metadata_props
+    { new_permalink: UtmLink.generate_permalink }
   end
 
   def utm_link_props

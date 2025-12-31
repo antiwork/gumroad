@@ -120,6 +120,7 @@ describe UtmLinkPresenter do
       props = described_class.new(seller:).new_page_react_props(copy_from: utm_link.external_id)
 
       expected_utm_link_props = described_class.new(seller:, utm_link:).utm_link_props.except(:id)
+      expected_utm_link_props[:title] = "#{expected_utm_link_props[:title]} (copy)"
       expected_utm_link_props[:short_url] = props[:context][:short_url]
       expect(props[:utm_link]).to eq(expected_utm_link_props)
     end
@@ -164,6 +165,17 @@ describe UtmLinkPresenter do
                             },
                             utm_link: described_class.new(seller:, utm_link:).utm_link_props
                           })
+    end
+  end
+
+  describe "#new_additional_metadata_props" do
+    it "returns a new unique permalink" do
+      allow(SecureRandom).to receive(:alphanumeric).and_return("unique01", "unique02")
+
+      create(:utm_link, seller:, permalink: "unique01")
+
+      props = described_class.new(seller:).new_additional_metadata_props
+      expect(props).to eq({ new_permalink: "unique02" })
     end
   end
 end
