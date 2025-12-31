@@ -116,3 +116,100 @@
     transform: translateX(-50%);
   }
 }
+
+/* Stack component styles (migrated from _stack.scss) */
+.stack {
+  display: grid;
+  background-color: rgb(var(--filled));
+  --color: var(--contrast-filled);
+  --parent-color: inherit;
+  color: rgb(var(--color));
+  --active-bg: rgb(var(--color) / 0.1);
+  border: solid 0.0625rem rgb(var(--parent-color) / var(--border-alpha));
+  border-radius: 0.25rem; /* border-radius(1) */
+
+  & > * {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    padding: 1rem; /* spacer(4) */
+    gap: 1rem; /* spacer(4) */
+    justify-content: space-between;
+
+    &:not(:first-child) {
+      border-top: solid 0.0625rem rgb(var(--parent-color) / var(--border-alpha));
+    }
+
+    > :first-child {
+      flex-grow: 1;
+
+      &:where(.button, fieldset) {
+        flex-basis: 0;
+      }
+    }
+
+    > :where(.button, fieldset) + :where(.button, fieldset) {
+      flex: 1;
+    }
+
+    h4,
+    h5,
+    h6 {
+      font-weight: bold;
+    }
+  }
+
+  > details {
+    display: block;
+  }
+
+  > details summary {
+    grid-auto-flow: column;
+    grid-template-columns: 1fr auto;
+    &::before {
+      grid-column: 2;
+    }
+  }
+
+  /* Container query emulation at lg breakpoint */
+  @media (min-width: 1024px) {
+    &.two-columns:not(.squished &) {
+      grid-template-columns: 1fr 1fr;
+
+      & > :nth-child(odd) {
+        border-right: solid 0.0625rem rgb(var(--parent-color) / var(--border-alpha));
+      }
+
+      & > :nth-child(2) {
+        border-top: none;
+      }
+    }
+  }
+
+  &.borderless {
+    border: none;
+    gap: 1rem; /* spacer(4) */
+
+    & > * {
+      padding: 0;
+      border: none;
+    }
+  }
+}
+
+main.stack {
+  height: min-content;
+  margin: 1rem auto; /* spacer(4) */
+  max-width: 28rem; /* $main-stack-width */
+  width: calc(100% - 2rem); /* 2 * spacer(4) */
+
+  > header,
+  > footer {
+    text-align: center;
+  }
+
+  > * {
+    flex-direction: column;
+    align-items: initial;
+  }
+}
