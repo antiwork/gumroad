@@ -1747,16 +1747,17 @@ describe Link, :vcr do
     end
   end
 
-  describe "#save_custom_view_content_button_text" do
+  describe "#custom_view_content_button_text" do
     it "saves successfully" do
-      link.save_custom_view_content_button_text("Custom Name")
+      link.custom_view_content_button_text = "Custom Name"
+      link.save!
       expect(link.custom_view_content_button_text).to eq "Custom Name"
     end
 
     it "errors if text is longer than 26 characters" do
       product = create(:product)
       text = "This text is over 26 characters and it can't be saved."
-      product.save_custom_view_content_button_text(text)
+      product.custom_view_content_button_text = text
       expect do
         product.save!
       end.to raise_error(ActiveRecord::RecordInvalid)

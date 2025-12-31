@@ -125,11 +125,17 @@ export const Layout = ({
   preview,
   isLoading = false,
   headerActions,
+  previewScaleFactor = 0.4,
+  showBorder = true,
+  showNavigationButton = true,
 }: {
   children: React.ReactNode;
   preview?: React.ReactNode;
   isLoading?: boolean;
   headerActions?: React.ReactNode;
+  previewScaleFactor?: number;
+  showBorder?: boolean;
+  showNavigationButton?: boolean;
 }) => {
   const { id, product, updateProduct, uniquePermalink, saving, save, currencyType } = useProductEditContext();
   const rootPath = `/products/${uniquePermalink}/edit`;
@@ -280,6 +286,11 @@ export const Layout = ({
                 </Link>
               </Tab>
             ) : null}
+            <Tab asChild isSelected={tab === "receipt"}>
+              <Link to={`${rootPath}/receipt`} onClick={onTabClick}>
+                Receipt
+              </Link>
+            </Tab>
             <Tab asChild isSelected={tab === "share"}>
               <Link
                 to={`${rootPath}/share`}
@@ -306,25 +317,31 @@ export const Layout = ({
         <WithPreviewSidebar className="flex-1">
           {children}
           <PreviewSidebar
-            previewLink={(props) => (
-              <NavigationButton
-                {...props}
-                disabled={isBusy}
-                href={url}
-                onClick={(evt) => {
-                  evt.preventDefault();
-                  void save().then(() => window.open(url, "_blank"));
-                }}
-              />
-            )}
+            {...(showNavigationButton && {
+              previewLink: (props) => (
+                <NavigationButton
+                  {...props}
+                  disabled={isBusy}
+                  href={url}
+                  onClick={(evt) => {
+                    evt.preventDefault();
+                    void save().then(() => window.open(url, "_blank"));
+                  }}
+                />
+              ),
+            })}
           >
             <Preview
-              scaleFactor={0.4}
-              style={{
-                border: "var(--border)",
-                backgroundColor: "rgb(var(--filled))",
-                borderRadius: "var(--border-radius-2)",
-              }}
+              scaleFactor={previewScaleFactor}
+              style={
+                showBorder
+                  ? {
+                      border: "var(--border)",
+                      backgroundColor: "rgb(var(--filled))",
+                      borderRadius: "var(--border-radius-2)",
+                    }
+                  : {}
+              }
             >
               {preview}
             </Preview>
