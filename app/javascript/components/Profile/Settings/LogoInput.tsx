@@ -21,7 +21,7 @@ export const LogoInput = ({
 
   return (
     <fieldset>
-      <legend>
+      <legend className="mb-2">
         <label htmlFor={id}>Logo</label>
       </legend>
       <ImageUploader
