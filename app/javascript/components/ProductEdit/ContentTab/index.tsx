@@ -132,6 +132,7 @@ const ContentTabContent = ({ selectedVariantId }: { selectedVariantId: string | 
   const showPageList =
     pages.length > 1 || selectedPage?.title || renamingPageId != null || product.native_type === "commission";
   const [insertMenuState, setInsertMenuState] = React.useState<"open" | "inputs" | null>(null);
+  const [isToolbarPopoverOpen, setIsToolbarPopoverOpen] = React.useState(false);
   const initialValue = React.useMemo(() => selectedPage?.description ?? "", [selectedPageId]);
 
   const onSelectFiles = (ids: string[]) => {
@@ -278,6 +279,7 @@ const ContentTabContent = ({ selectedVariantId }: { selectedVariantId: string | 
   // Note: We use CustomEvent because Nav/Layout and ProductEditPage are separate React roots
   // and cannot share React context
   const [isMobileEditing, setIsMobileEditing] = React.useState(false);
+  const [keyboardHeight, setKeyboardHeight] = React.useState(0);
   const setNavHidden = React.useCallback((hidden: boolean) => {
     window.dispatchEvent(new CustomEvent("nav:setHidden", { detail: { hidden } }));
   }, []);
@@ -310,6 +312,32 @@ const ContentTabContent = ({ selectedVariantId }: { selectedVariantId: string | 
       setLayoutMobileEditing(false);
     };
   }, [editor, isDesktop, setNavHidden, setLayoutMobileEditing, exitMobileEditing]);
+
+  // Track keyboard height using Visual Viewport API to position toolbar above keyboard
+  React.useEffect(() => {
+    if (isDesktop || !isMobileEditing) {
+      setKeyboardHeight(0);
+      return;
+    }
+
+    const updateKeyboardHeight = () => {
+      if (window.visualViewport) {
+        const vv = window.visualViewport;
+        const height = window.innerHeight - vv.height - vv.offsetTop;
+        // Add extra 8px offset for safety margin above keyboard
+        setKeyboardHeight(Math.max(0, height));
+      }
+    };
+
+    updateKeyboardHeight();
+    window.visualViewport?.addEventListener("resize", updateKeyboardHeight);
+    window.visualViewport?.addEventListener("scroll", updateKeyboardHeight);
+
+    return () => {
+      window.visualViewport?.removeEventListener("resize", updateKeyboardHeight);
+      window.visualViewport?.removeEventListener("scroll", updateKeyboardHeight);
+    };
+  }, [isDesktop, isMobileEditing]);
 
   const pageIcons = React.useMemo(
     () =>
@@ -527,19 +555,47 @@ const ContentTabContent = ({ selectedVariantId }: { selectedVariantId: string | 
       <RichTextEditorToolbar
         color="ghost"
         className={classNames(
-          "border-b border-border px-8",
-          // Mobile: fixed at bottom during editing, horizontally scrollable
-          !isDesktop && isMobileEditing && "fixed bottom-0 left-0 right-0 z-20 border-t border-b-0 bg-white dark:bg-black",
-          !isDesktop && isMobileEditing && "overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden",
+          "border-b border-border px-4",
+          // Mobile: single row horizontally scrollable with styling
+          !isDesktop && isMobileEditing && "border-t border-b-0 bg-white dark:bg-black",
+          !isDesktop && isMobileEditing && `flex-nowrap! ${isToolbarPopoverOpen ? "overflow-y-visible overflow-x-visible" : "overflow-x-auto"} py-2 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden`,
+          !isDesktop && isMobileEditing && "[&_.ml-auto]:hidden [&_[role=separator]]:hidden [&_.toolbar-item]:shrink-0 [&_.toolbar-item]:whitespace-nowrap [&>*]:shrink-0",
           // Hide toolbar on mobile when not editing
           !isDesktop && !isMobileEditing && "hidden",
         )}
         editor={editor}
         productId={id}
+        {...(!isDesktop && isMobileEditing ? { popoverPosition: "top" as const } : {})}
+        onDropdownOpen={() => {
+          // Blur editor to hide keyboard when dropdown opens on mobile
+          if (!isDesktop && isMobileEditing) {
+            setIsToolbarPopoverOpen(true);
+            (document.activeElement as HTMLElement)?.blur?.();
+          }
+        }}
+        onDropdownClose={() => {
+          if (!isDesktop && isMobileEditing) {
+            setIsToolbarPopoverOpen(false);
+          }
+        }}
         custom={
           <>
             <LinkMenuItem editor={editor} />
-            <PopoverMenuItem name="Upload files" icon="upload-fill">
+            <PopoverMenuItem
+              name="Upload files"
+              icon="upload-fill"
+              {...(!isDesktop && isMobileEditing ? { position: "top" as const } : {})}
+              onToggle={(open) => {
+                if (!isDesktop && isMobileEditing) {
+                  if (open) {
+                    setIsToolbarPopoverOpen(true);
+                    (document.activeElement as HTMLElement)?.blur?.();
+                  } else {
+                    setIsToolbarPopoverOpen(false);
+                  }
+                }
+              }}
+            >
               {(close) => (
                 <div role="menu" aria-label="Image and file uploader" onClick={close}>
                   <div role="menuitem" onClick={() => setShowEmbedModal(true)}>
@@ -693,7 +749,18 @@ const ContentTabContent = ({ selectedVariantId }: { selectedVariantId: string | 
                 </div>
               }
               open={insertMenuState != null}
-              onToggle={(open) => setInsertMenuState(open ? "open" : null)}
+              onToggle={(open) => {
+                setInsertMenuState(open ? "open" : null);
+                if (!isDesktop && isMobileEditing) {
+                  if (open) {
+                    setIsToolbarPopoverOpen(true);
+                    (document.activeElement as HTMLElement)?.blur?.();
+                  } else {
+                    setIsToolbarPopoverOpen(false);
+                  }
+                }
+              }}
+              {...(!isDesktop && isMobileEditing ? { position: "top" as const } : {})}
             >
               <div role="menu" onClick={() => setInsertMenuState(null)}>
                 {insertMenuState === "inputs" ? (
@@ -799,15 +866,17 @@ const ContentTabContent = ({ selectedVariantId }: { selectedVariantId: string | 
     <>
       <div
         className={classNames(
-          "h-screen sm:h-full md:flex md:flex-col",
-          !isDesktop && isMobileEditing && "pb-16",
+          "sm:h-full md:flex md:flex-col",
+          !isDesktop && isMobileEditing && "flex flex-1 flex-col overflow-hidden",
         )}
+        style={!isDesktop && isMobileEditing ? { paddingBottom: keyboardHeight + 56 } : {}}
       >
-        {editor && !isMobileEditing ? (
-          <Toolbar editor={editor} />
-        ) : null}
+        {editor && isDesktop ? <Toolbar editor={editor} /> : null}
         <PageListLayout
-          className="md:h-auto! md:flex-1"
+          className={classNames(
+            "md:h-auto! md:flex-1",
+            !isDesktop && isMobileEditing && "flex-1 overflow-hidden",
+          )}
           pageList={
             !isDesktop && !showPageList ? null : (
               <div className="flex flex-col gap-4">
@@ -928,7 +997,14 @@ const ContentTabContent = ({ selectedVariantId }: { selectedVariantId: string | 
             )
           }
         >
-          <EditorContent className="rich-text grid h-full flex-1" editor={editor} data-gumroad-ignore />
+          <EditorContent
+            className={classNames(
+              "rich-text grid h-full flex-1",
+              !isDesktop && isMobileEditing && "overflow-y-auto",
+            )}
+            editor={editor}
+            data-gumroad-ignore
+          />
         </PageListLayout>
       </div>
       {confirmingDeletePage !== null ? (
@@ -1012,10 +1088,11 @@ const ContentTabContent = ({ selectedVariantId }: { selectedVariantId: string | 
           productId={id}
         />
       ) : null}
-
       {editor && isMobileEditing ? (
-        <Toolbar editor={editor} />
-        ) : null}
+        <div className="fixed left-0 right-0 z-20" style={{ bottom: keyboardHeight }}>
+          <Toolbar editor={editor} />
+        </div>
+      ) : null}
     </>
   );
 };

@@ -305,12 +305,20 @@ export const RichTextEditorToolbar = ({
   productId,
   color = "primary",
   className,
+  style,
+  popoverPosition,
+  onDropdownOpen,
+  onDropdownClose,
 }: {
   custom?: React.ReactNode;
   editor: Editor;
   productId?: string;
   color?: "primary" | "ghost";
   className?: string;
+  style?: React.CSSProperties;
+  popoverPosition?: "top" | "bottom" | undefined;
+  onDropdownOpen?: () => void;
+  onDropdownClose?: () => void;
 }) => {
   const showTooltipState = React.useState(false);
   const [_, setShowTooltip] = showTooltipState;
@@ -383,6 +391,7 @@ export const RichTextEditorToolbar = ({
       <div
         role="toolbar"
         className={cx("rich-text-editor-toolbar", color, className)}
+        style={style}
         onMouseLeave={() => setShowTooltip(false)}
         onMouseDown={(e) => e.preventDefault()}
       >
@@ -393,6 +402,11 @@ export const RichTextEditorToolbar = ({
               {activeFormatOption?.name ?? "Text"} <Icon name="outline-cheveron-down" />
             </div>
           }
+          position={popoverPosition}
+          onToggle={(open) => {
+            if (open) onDropdownOpen?.();
+            else onDropdownClose?.();
+          }}
         >
           {(close) => (
             <ul role="menu">
@@ -474,6 +488,11 @@ export const RichTextEditorToolbar = ({
                       Insert <Icon name="outline-cheveron-down" />
                     </div>
                   }
+                  position={popoverPosition}
+                  onToggle={(open) => {
+            if (open) onDropdownOpen?.();
+            else onDropdownClose?.();
+          }}
                 >
                   {(close) => (
                     <div role="menu" onClick={close}>

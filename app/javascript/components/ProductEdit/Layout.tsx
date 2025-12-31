@@ -512,7 +512,7 @@ export const Layout = ({
           </PreviewSidebar>
         </WithPreviewSidebar>
       ) : (
-        <div className="flex-1">{children}</div>
+        <div className="flex flex-1 flex-col">{children}</div>
       )}
     </>
   );
