@@ -1,7 +1,7 @@
 import React from "react";
 
 import { NewEmailButton } from "$app/components/EmailsPage/Layout";
-import Placeholder from "$app/components/ui/Placeholder";
+import { Placeholder, PlaceholderImage } from "$app/components/ui/Placeholder";
 
 export const EmptyStatePlaceholder = ({
   title,
@@ -13,9 +13,7 @@ export const EmptyStatePlaceholder = ({
   placeholderImage: string;
 }) => (
   <Placeholder>
-    <figure>
-      <img src={placeholderImage} />
-    </figure>
+    <PlaceholderImage src={placeholderImage} />
     <h2>{title}</h2>
     <p>{description}</p>
     <NewEmailButton />

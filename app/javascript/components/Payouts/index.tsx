@@ -17,7 +17,7 @@ import { showAlert } from "$app/components/server-components/Alert";
 import { Alert } from "$app/components/ui/Alert";
 import { PageHeader } from "$app/components/ui/PageHeader";
 import { Pill } from "$app/components/ui/Pill";
-import Placeholder from "$app/components/ui/Placeholder";
+import { Placeholder, PlaceholderImage } from "$app/components/ui/Placeholder";
 import { Tabs, Tab } from "$app/components/ui/Tabs";
 import { useUserAgentInfo } from "$app/components/UserAgent";
 import { WithTooltip } from "$app/components/WithTooltip";
@@ -530,9 +530,7 @@ const Period = ({ payoutPeriodData }: { payoutPeriodData: PayoutPeriodData }) =>
 const PeriodEmpty = ({ minimumPayoutAmountCents }: { minimumPayoutAmountCents: number }) => (
   <div className="period period-empty full column">
     <Placeholder>
-      <figure>
-        <img src={placeholder} />
-      </figure>
+      <PlaceholderImage src={placeholder} />
       <h2>Let's get you paid.</h2>
       Reach a balance of at least{" "}
       {formatPriceCentsWithCurrencySymbol("usd", minimumPayoutAmountCents, {

@@ -399,9 +399,6 @@ Rails.application.routes.draw do
     get "/collaborators/incomings", to: "collaborators#index"
     get "/collaborators/*other", to: "collaborators#index"
 
-
-    get "/affiliates/*other", to: "affiliates#index" # route handled by react-router
-    get "/emails/*other", to: "emails#index" # route handled by react-router
     get "/communities/*other", to: "communities#index" # route handled by react-router
 
     get "/a/:affiliate_id", to: "affiliate_redirect#set_cookie_and_redirect", as: :affiliate_redirect
