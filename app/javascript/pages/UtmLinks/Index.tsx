@@ -35,9 +35,6 @@ type UtmLinksIndexProps = {
   utm_links_stats: UtmLinksStats;
 };
 
-const duplicateLinkPath = (link: SavedUtmLink) => Routes.new_dashboard_utm_link_path({ copy_from: link.id });
-const editLinkPath = (link: SavedUtmLink) => Routes.edit_dashboard_utm_link_path(link.id);
-
 const truncateText = (text: string, maxLength: number) => {
   const truncated = text.length > maxLength ? `${text.slice(0, maxLength)}...` : text;
   return {
@@ -356,11 +353,11 @@ const UtmLinkActions = ({ link, onDelete }: { link: SavedUtmLink; onDelete: () =
         }
       >
         <div role="menu">
-          <Link href={editLinkPath(link)} role="menuitem">
+          <Link href={Routes.edit_dashboard_utm_link_path(link.id)} role="menuitem">
             <Icon name="pencil" />
             &ensp;Edit
           </Link>
-          <Link href={duplicateLinkPath(link)} role="menuitem">
+          <Link href={Routes.new_dashboard_utm_link_path({ copy_from: link.id })} role="menuitem">
             <Icon name="outline-duplicate" />
             &ensp;Duplicate
           </Link>
@@ -534,10 +531,10 @@ const UtmLinkDetails = ({
         </div>
       </section>
       <div style={{ display: "grid", gridAutoFlow: "column", gap: "var(--spacer-4)" }}>
-        <Link href={duplicateLinkPath(utmLink)} className="button">
+        <Link href={Routes.new_dashboard_utm_link_path({ copy_from: utmLink.id })} className="button">
           Duplicate
         </Link>
-        <NavigationButtonInertia href={editLinkPath(utmLink)} disabled={isNavigating}>
+        <NavigationButtonInertia href={Routes.edit_dashboard_utm_link_path(utmLink.id)} disabled={isNavigating}>
           Edit
         </NavigationButtonInertia>
         <Button color="danger" onClick={onDelete}>
