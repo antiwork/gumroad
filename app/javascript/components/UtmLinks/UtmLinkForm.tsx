@@ -3,13 +3,7 @@ import cx from "classnames";
 import * as React from "react";
 import { cast } from "ts-safe-cast";
 
-import {
-  UtmLinkDestinationOption,
-  UtmLinkFormAdditionalMetadata,
-  UtmLinkFormProps,
-  UtmLinkEditProps,
-  UtmLinkFormData,
-} from "$app/types/utm_link";
+import { UtmLink, UtmLinkDestinationOption, SavedUtmLink } from "$app/types/utm_link";
 import { assertDefined } from "$app/utils/assert";
 
 import { AnalyticsLayout } from "$app/components/Analytics/AnalyticsLayout";
@@ -21,6 +15,47 @@ import { Select } from "$app/components/Select";
 import { showAlert } from "$app/components/server-components/Alert";
 import { Pill } from "$app/components/ui/Pill";
 import { WithTooltip } from "$app/components/WithTooltip";
+
+type UtmLinkFormData = {
+  utm_link: {
+    title: string;
+    target_resource_type: string | null;
+    target_resource_id: string | null;
+    permalink: string;
+    utm_source: string | null;
+    utm_medium: string | null;
+    utm_campaign: string | null;
+    utm_term: string | null;
+    utm_content: string | null;
+  };
+};
+
+type UtmLinkFormContext = {
+  destination_options: UtmLinkDestinationOption[];
+  short_url: string;
+  utm_fields_values: {
+    campaigns: string[];
+    mediums: string[];
+    sources: string[];
+    terms: string[];
+    contents: string[];
+  };
+};
+
+type UtmLinkFormAdditionalMetadata = {
+  new_permalink: string;
+};
+
+type UtmLinkFormProps = {
+  context: UtmLinkFormContext;
+  utm_link: UtmLink | null;
+  additional_metadata?: UtmLinkFormAdditionalMetadata;
+};
+
+type UtmLinkEditProps = {
+  context: UtmLinkFormContext;
+  utm_link: SavedUtmLink;
+};
 
 const MAX_UTM_PARAM_LENGTH = 200;
 

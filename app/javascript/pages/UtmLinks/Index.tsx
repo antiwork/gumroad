@@ -2,7 +2,7 @@ import { Link, router, usePage } from "@inertiajs/react";
 import cx from "classnames";
 import * as React from "react";
 
-import { SavedUtmLink, SortKey, UtmLinkStats, UtmLinksIndexProps } from "$app/types/utm_link";
+import { SavedUtmLink, SortKey, UtmLinkStats, UtmLinksStats } from "$app/types/utm_link";
 
 import { AnalyticsLayout } from "$app/components/Analytics/AnalyticsLayout";
 import { Button } from "$app/components/Button";
@@ -11,7 +11,7 @@ import { Icon } from "$app/components/Icons";
 import { LoadingSpinner } from "$app/components/LoadingSpinner";
 import { Modal } from "$app/components/Modal";
 import { NavigationButtonInertia } from "$app/components/NavigationButton";
-import { Pagination } from "$app/components/Pagination";
+import { Pagination, PaginationProps } from "$app/components/Pagination";
 import { Popover } from "$app/components/Popover";
 import { showAlert } from "$app/components/server-components/Alert";
 import { Skeleton } from "$app/components/Skeleton";
@@ -26,6 +26,14 @@ import { WithTooltip } from "$app/components/WithTooltip";
 
 import noLinksYetPlaceholder from "$assets/images/placeholders/utm_links_empty.png";
 import noLinksFoundPlaceholder from "$assets/images/placeholders/utm_links_not_found.png";
+
+type UtmLinksIndexProps = {
+  utm_links: SavedUtmLink[];
+  pagination: PaginationProps;
+  query: string | null;
+  sort: Sort<SortKey> | null;
+  utm_links_stats: UtmLinksStats;
+};
 
 const duplicateLinkPath = (link: SavedUtmLink) => Routes.new_dashboard_utm_link_path({ copy_from: link.id });
 const editLinkPath = (link: SavedUtmLink) => Routes.edit_dashboard_utm_link_path(link.id);

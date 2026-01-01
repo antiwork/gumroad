@@ -1,6 +1,3 @@
-import { PaginationProps } from "$app/components/Pagination";
-import { Sort } from "$app/components/useSortingTableDriver";
-
 export type UtmLinkDestinationOption = {
   id: string;
   label: string;
@@ -37,30 +34,6 @@ export type UtmLinkStats = {
 
 export type UtmLinksStats = Record<string, UtmLinkStats>;
 
-export type UtmLinkFormContext = {
-  destination_options: UtmLinkDestinationOption[];
-  short_url: string;
-  utm_fields_values: {
-    campaigns: string[];
-    mediums: string[];
-    sources: string[];
-    terms: string[];
-    contents: string[];
-  };
-};
-
-export type UtmLinkRequestPayload = {
-  title: string;
-  target_resource_type: string;
-  target_resource_id: string | null;
-  permalink: string;
-  utm_source: string;
-  utm_medium: string;
-  utm_campaign: string;
-  utm_term: string | null;
-  utm_content: string | null;
-};
-
 export type SortKey =
   | "link"
   | "date"
@@ -71,40 +44,3 @@ export type SortKey =
   | "sales_count"
   | "revenue_cents"
   | "conversion_rate";
-
-export type UtmLinksIndexProps = {
-  utm_links: SavedUtmLink[];
-  pagination: PaginationProps;
-  query: string | null;
-  sort: Sort<SortKey> | null;
-  utm_links_stats: UtmLinksStats;
-};
-
-export type UtmLinkFormAdditionalMetadata = {
-  new_permalink: string;
-};
-
-export type UtmLinkFormProps = {
-  context: UtmLinkFormContext;
-  utm_link: UtmLink | null;
-  additional_metadata?: UtmLinkFormAdditionalMetadata;
-};
-
-export type UtmLinkEditProps = {
-  context: UtmLinkFormContext;
-  utm_link: SavedUtmLink;
-};
-
-export type UtmLinkFormData = {
-  utm_link: {
-    title: string;
-    target_resource_type: string | null;
-    target_resource_id: string | null;
-    permalink: string;
-    utm_source: string | null;
-    utm_medium: string | null;
-    utm_campaign: string | null;
-    utm_term: string | null;
-    utm_content: string | null;
-  };
-};
