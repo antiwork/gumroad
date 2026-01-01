@@ -8,9 +8,14 @@ export function useFlashMessage(flash?: AlertPayload) {
     if (flash?.message) {
       showAlert(flash.message, flash.status === "danger" ? "error" : flash.status);
 
-      // Clear the flash from the current page's cached props to prevent it from
-      // reappearing when navigating back via browser history
-      router.reload({ only: ['flash'] });
+      // Clear the flash from Inertia's cache by updating props client-side
+      // This does NOT make a server request - it only updates the local cache
+      router.replace({
+        props: (currentProps) => ({
+          ...currentProps,
+          flash: null,
+        }),
+      });
     }
   }, [flash]);
 }
