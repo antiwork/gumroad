@@ -1,5 +1,5 @@
 import { Link, router, usePage } from "@inertiajs/react";
-import cx from "classnames";
+import { classNames } from "$app/utils/classNames";
 import * as React from "react";
 
 import { SavedUtmLink, SortKey, UtmLinkStats, UtmLinksStats } from "$app/types/utm_link";
@@ -190,7 +190,7 @@ export default function UtmLinksIndex() {
         </div>
       ) : utmLinks.length > 0 ? (
         <section className="p-4 md:p-8">
-          <Table aria-live="polite" className={cx(isNavigating && "pointer-events-none opacity-50")}>
+          <Table aria-live="polite" className={classNames(isNavigating && "pointer-events-none opacity-50")}>
             <TableHeader>
               <TableRow>
                 <TableHead {...thProps("link")} style={{ width: "30%" }}>
