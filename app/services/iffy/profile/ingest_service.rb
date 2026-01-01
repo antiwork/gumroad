@@ -21,7 +21,8 @@ class Iffy::Profile::IngestService
     def iffy_api_request
       user_data = {
         clientId: user.external_id,
-        protected: user.vip_creator?
+        protected: user.vip_creator?,
+        suspended_by_admin: user.suspended_by_admin?
       }
       user_data[:email] = user.email if user.email.present?
       user_data[:username] = user.username if user.username.present?
