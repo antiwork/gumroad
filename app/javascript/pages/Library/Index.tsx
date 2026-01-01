@@ -295,6 +295,7 @@ export default function LibraryPage() {
           ...creator,
           count: state.search.showArchivedOnly ? creator.archived_count : creator.non_archived_count,
         }))
+        .filter((creator) => creator.count > 0)
         .sort((a, b) => b.count - a.count),
     [creators, state.search.showArchivedOnly],
   );
