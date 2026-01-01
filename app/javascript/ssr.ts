@@ -30,7 +30,6 @@ import CheckoutPage from "$app/components/server-components/CheckoutPage";
 import CommunitiesPage from "$app/components/server-components/CommunitiesPage";
 import CustomersDownloadPopover from "$app/components/server-components/CustomersPage/DownloadPopover";
 import CustomersFilterPopover from "$app/components/server-components/CustomersPage/FilterPopover";
-import DeveloperWidgetsPage from "$app/components/server-components/Developer/WidgetsPage";
 import Discover from "$app/components/server-components/Discover";
 import DiscoverProductPage from "$app/components/server-components/Discover/ProductPage";
 import DiscoverWishlistPage from "$app/components/server-components/Discover/WishlistPage";
@@ -104,7 +103,6 @@ ReactOnRails.register({
   CommunitiesPage,
   CustomersDownloadPopover,
   CustomersFilterPopover,
-  DeveloperWidgetsPage,
   Discover,
   DiscoverProductPage,
   DiscoverWishlistPage,
