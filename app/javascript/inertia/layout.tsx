@@ -7,7 +7,8 @@ import { Nav } from "$app/components/client-components/Nav";
 import { CurrentSellerProvider, parseCurrentSeller } from "$app/components/CurrentSeller";
 import LoadingSkeleton from "$app/components/LoadingSkeleton";
 import { type LoggedInUser, LoggedInUserProvider, parseLoggedInUser } from "$app/components/LoggedInUser";
-import Alert, { showAlert, type AlertPayload } from "$app/components/server-components/Alert";
+import Alert, { type AlertPayload } from "$app/components/server-components/Alert";
+import { useFlashMessage } from "$app/components/useFlashMessage";
 import useRouteLoading from "$app/components/useRouteLoading";
 
 type PageProps = {
@@ -33,11 +34,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
   const { title, flash, logged_in_user, current_seller } = usePage<PageProps>().props;
   const isRouteLoading = useRouteLoading();
 
-  React.useEffect(() => {
-    if (flash?.message) {
-      showAlert(flash.message, flash.status === "danger" ? "error" : flash.status);
-    }
-  }, [flash]);
+  useFlashMessage(flash);
 
   return (
     <LoggedInUserProvider value={parseLoggedInUser(logged_in_user)}>
@@ -57,11 +54,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
 export function LoggedInUserLayout({ children }: { children: React.ReactNode }) {
   const { title, flash, logged_in_user, current_seller } = usePage<PageProps>().props;
 
-  React.useEffect(() => {
-    if (flash?.message) {
-      showAlert(flash.message, flash.status === "danger" ? "error" : flash.status);
-    }
-  }, [flash]);
+  useFlashMessage(flash);
 
   return (
     <LoggedInUserProvider value={parseLoggedInUser(logged_in_user)}>
