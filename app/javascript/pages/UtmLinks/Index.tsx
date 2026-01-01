@@ -96,9 +96,11 @@ export default function UtmLinksIndex() {
   } | null>(null);
 
   const fetchUtmLinksStats = useDebouncedCallback((ids: string[]) => {
-    const url = new URL(window.location.href);
-    url.searchParams.set("ids", ids.join(","));
-    router.get(url.toString(), {}, { only: ["utm_links_stats"], preserveUrl: true, preserveState: true });
+    router.reload({
+      data: { ids: ids.join(",") },
+      only: ["utm_links_stats"],
+      preserveUrl: true,
+    });
   }, 500);
 
   React.useEffect(() => {
@@ -116,11 +118,7 @@ export default function UtmLinksIndex() {
   const query = initialQuery ?? "";
 
   const onChangePage = (newPage: number) => {
-    const params = new URLSearchParams(window.location.search);
-    params.set("page", newPage.toString());
-    const url = new URL(window.location.href);
-    url.search = params.toString();
-    router.get(url.toString(), {}, { preserveState: true });
+    router.reload({ data: { page: newPage } });
   };
 
   const onSetSort = (newSort: Sort<SortKey> | null) => {
