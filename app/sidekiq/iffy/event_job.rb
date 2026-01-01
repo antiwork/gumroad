@@ -19,7 +19,7 @@ class Iffy::EventJob
 
     case event
     when "user.banned", "user.suspended", "user.compliant"
-      return if user_suspended_by_admin?(user)
+      return if user_suspended_by_admin?(id)
 
       case event
       when "user.banned"
@@ -49,7 +49,10 @@ class Iffy::EventJob
       user&.dig("protected") == true
     end
 
-    def user_suspended_by_admin?(user)
-      user&.dig("suspended_by_admin") == true
+    def user_suspended_by_admin?(user_external_id)
+      user = User.find_by_external_id(user_external_id)
+      return false unless user
+
+      user.suspended_by_admin?
     end
 end
