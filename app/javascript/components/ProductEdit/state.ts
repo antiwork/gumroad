@@ -1,5 +1,6 @@
 import * as React from "react";
 
+import { ResponseDropboxFile } from "$app/data/dropbox_upload";
 import { OtherRefundPolicy } from "$app/data/products/other_refund_policies";
 import { Thumbnail } from "$app/data/thumbnails";
 import {
@@ -203,7 +204,7 @@ type UploadProgress = { percent: number; bitrate: number };
 type FileStatus =
   | { type: "saved" }
   | { type: "existing" }
-  | { type: "dropbox"; externalId: string; uploadState: string }
+  | { type: "dropbox"; externalId: string; uploadState: ResponseDropboxFile["state"] }
   | {
       type: "unsaved";
       uploadStatus: { type: "uploaded" } | { type: "uploading"; progress: UploadProgress };
