@@ -412,13 +412,20 @@ const ContentTabContent = ({ selectedVariantId }: { selectedVariantId: string | 
     }
     window.Dropbox.choose({ linkType: "direct", multiselect: true, success: (files) => void uploadFiles(files) });
   };
+
+  const hasPendingDropboxFiles = React.useMemo(
+    () => product.files.some((f) => f.status.type === "dropbox" && f.status.uploadState === "in_progress"),
+    [product.files],
+  );
   React.useEffect(() => {
+    if (!hasPendingDropboxFiles) return;
+
     const interval = setInterval(
       () => void fetchDropboxFiles(uniquePermalink).then(({ dropbox_files }) => addDropboxFiles(dropbox_files)),
       10000,
     );
     return () => clearInterval(interval);
-  }, [editor]);
+  }, [hasPendingDropboxFiles, uniquePermalink]);
 
   const [showUpsellModal, setShowUpsellModal] = React.useState(false);
   const [showReviewModal, setShowReviewModal] = React.useState(false);
