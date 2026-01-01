@@ -7,7 +7,7 @@ import { Button } from "$app/components/Button";
 import { FileInput } from "$app/components/Download/CustomField/FileInput";
 import { Icon } from "$app/components/Icons";
 import { createInsertCommand } from "$app/components/TiptapExtensions/utils";
-import Placeholder from "$app/components/ui/Placeholder";
+import { Placeholder } from "$app/components/ui/Placeholder";
 
 declare module "@tiptap/core" {
   interface Commands<ReturnType> {

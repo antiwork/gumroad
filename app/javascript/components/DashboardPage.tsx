@@ -23,7 +23,7 @@ import { DownloadTaxFormsPopover } from "$app/components/server-components/Dashb
 import { Stats } from "$app/components/Stats";
 import { Alert } from "$app/components/ui/Alert";
 import { PageHeader } from "$app/components/ui/PageHeader";
-import Placeholder from "$app/components/ui/Placeholder";
+import { Placeholder, PlaceholderImage } from "$app/components/ui/Placeholder";
 import { Table, TableBody, TableCaption, TableCell, TableHead, TableHeader, TableRow } from "$app/components/ui/Table";
 import { useUserAgentInfo } from "$app/components/UserAgent";
 import { useRunOnce } from "$app/components/useRunOnce";
@@ -148,9 +148,7 @@ type GettingStartedItemProps = {
 
 const Greeter = () => (
   <Placeholder>
-    <figure>
-      <img src={placeholderImage} />
-    </figure>
+    <PlaceholderImage src={placeholderImage} />
     <h2>We're here to help you get paid for your work.</h2>
     <NavigationButton href={Routes.new_product_path()} color="accent">
       Create your first product

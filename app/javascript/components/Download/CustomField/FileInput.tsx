@@ -9,7 +9,7 @@ import { FileKindIcon } from "$app/components/FileRowContent";
 import { Icon } from "$app/components/Icons";
 import { showAlert } from "$app/components/server-components/Alert";
 import { usePurchaseCustomFields, usePurchaseInfo } from "$app/components/server-components/DownloadPage/WithContent";
-import Placeholder from "$app/components/ui/Placeholder";
+import { Placeholder } from "$app/components/ui/Placeholder";
 import { Row, RowContent, Rows } from "$app/components/ui/Rows";
 
 const MAX_FILE_SIZE = 10 * 1024 * 1024;
