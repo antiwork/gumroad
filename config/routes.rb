@@ -936,11 +936,6 @@ Rails.application.routes.draw do
           resources :existing_product_files, only: [:index]
           resource :receipt_preview, only: [:show]
         end
-        resources :utm_links, only: [] do
-          collection do
-            resources :stats, only: [:index], controller: "utm_links/stats", as: :utm_links_stats
-          end
-        end
         resources :product_public_files, only: [:create]
         resources :communities, only: [:index] do
           resources :chat_messages, only: [:index, :create, :update, :destroy], controller: "communities/chat_messages", as: "chat_messages"
