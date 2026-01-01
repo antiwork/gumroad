@@ -205,13 +205,13 @@ export const UtmLinkForm = () => {
     };
 
     if (isEditing && utm_link.id) {
-      patch(Routes.utm_links_dashboard_path(utm_link.id), { onError });
+      patch(Routes.dashboard_utm_link_path(utm_link.id), { onError });
     } else {
       const url = new URL(window.location.href);
       const copyFrom = url.searchParams.get("copy_from");
       const postUrl = copyFrom
-        ? Routes.utm_links_dashboard_index_path({ copy_from: copyFrom })
-        : Routes.utm_links_dashboard_index_path();
+        ? Routes.dashboard_utm_links_path({ copy_from: copyFrom })
+        : Routes.dashboard_utm_links_path();
 
       post(postUrl, { onError });
     }
@@ -224,7 +224,7 @@ export const UtmLinkForm = () => {
       title={isEditing ? "Edit link" : "Create link"}
       actions={
         <>
-          <NavigationButtonInertia href={Routes.utm_links_dashboard_index_path()} disabled={processing}>
+          <NavigationButtonInertia href={Routes.dashboard_utm_links_path()} disabled={processing}>
             <Icon name="x-square" />
             Cancel
           </NavigationButtonInertia>

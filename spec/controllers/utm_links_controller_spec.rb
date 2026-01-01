@@ -149,7 +149,7 @@ describe UtmLinksController, type: :controller, inertia: true do
         post :create, params: params
       end.to change { seller.utm_links.count }.by(1)
 
-      expect(response).to redirect_to(utm_links_dashboard_index_path)
+      expect(response).to redirect_to(dashboard_utm_links_path)
       expect(flash[:notice]).to eq("Link created!")
 
       utm_link = seller.utm_links.last
@@ -171,7 +171,7 @@ describe UtmLinksController, type: :controller, inertia: true do
         post :create, params: params
       end.not_to change { UtmLink.count }
 
-      expect(response).to redirect_to(new_utm_links_dashboard_path)
+      expect(response).to redirect_to(new_dashboard_utm_link_path)
     end
   end
 
@@ -230,7 +230,7 @@ describe UtmLinksController, type: :controller, inertia: true do
 
       patch :update, params: params
 
-      expect(response).to redirect_to(utm_links_dashboard_index_path)
+      expect(response).to redirect_to(dashboard_utm_links_path)
       expect(flash[:notice]).to eq("Link updated!")
       expect(utm_link.reload.title).to eq("Updated Title")
       expect(utm_link.target_resource_id).to be_nil
@@ -248,7 +248,7 @@ describe UtmLinksController, type: :controller, inertia: true do
 
       patch :update, params: params
 
-      expect(response).to redirect_to(edit_utm_links_dashboard_path(utm_link))
+      expect(response).to redirect_to(edit_dashboard_utm_link_path(utm_link))
     end
 
     it "returns 404 if the UTM link does not exist" do
@@ -268,7 +268,7 @@ describe UtmLinksController, type: :controller, inertia: true do
 
       patch :update, params: params
 
-      expect(response).to redirect_to(utm_links_dashboard_index_path)
+      expect(response).to redirect_to(dashboard_utm_links_path)
       expect(flash[:alert]).to eq("Link not found")
     end
   end
@@ -296,7 +296,7 @@ describe UtmLinksController, type: :controller, inertia: true do
         delete :destroy, params: { id: utm_link.external_id }
       end.to change { utm_link.reload.deleted_at }.from(nil).to(be_within(5.seconds).of(DateTime.current))
 
-      expect(response).to redirect_to(utm_links_dashboard_index_path)
+      expect(response).to redirect_to(dashboard_utm_links_path)
       expect(flash[:notice]).to eq("Link deleted!")
       expect(utm_link.reload).to be_deleted
     end

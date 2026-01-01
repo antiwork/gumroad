@@ -32,7 +32,7 @@ class UtmLinksController < Sellers::BaseController
 
     save_utm_link(
       success_message: "Link created!",
-      error_redirect_path: new_utm_links_dashboard_path(copy_from: params[:copy_from])
+      error_redirect_path: new_dashboard_utm_link_path(copy_from: params[:copy_from])
     )
   end
 
@@ -46,13 +46,13 @@ class UtmLinksController < Sellers::BaseController
     authorize @utm_link
 
     if @utm_link.deleted?
-      redirect_to utm_links_dashboard_index_path, alert: "Link not found"
+      redirect_to dashboard_utm_links_path, alert: "Link not found"
       return
     end
 
     save_utm_link(
       success_message: "Link updated!",
-      error_redirect_path: edit_utm_links_dashboard_path(@utm_link)
+      error_redirect_path: edit_dashboard_utm_link_path(@utm_link)
     )
   end
 
@@ -60,7 +60,7 @@ class UtmLinksController < Sellers::BaseController
     authorize @utm_link
 
     @utm_link.mark_deleted!
-    redirect_to utm_links_dashboard_index_path(index_route_params.except(:ids).compact), notice: "Link deleted!"
+    redirect_to dashboard_utm_links_path(index_route_params.except(:ids).compact), notice: "Link deleted!"
   end
 
   def unique_permalink
@@ -154,7 +154,7 @@ class UtmLinksController < Sellers::BaseController
         utm_link: @utm_link
       ).perform
 
-      redirect_to utm_links_dashboard_index_path, notice: success_message, status: :see_other
+      redirect_to dashboard_utm_links_path, notice: success_message, status: :see_other
     rescue ActiveRecord::RecordInvalid => e
       error = e.record.errors.first
       redirect_to error_redirect_path, inertia: { errors: { "utm_link.#{error.attribute}" => error.message } }
