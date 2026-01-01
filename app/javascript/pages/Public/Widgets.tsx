@@ -1,8 +1,9 @@
-import * as React from "react";
+import { usePage } from "@inertiajs/react";
+import React from "react";
 import ReactDOMServer from "react-dom/server";
-import { createCast } from "ts-safe-cast";
+import { cast } from "ts-safe-cast";
 
-import { register } from "$app/utils/serverComponentUtil";
+import { usePersistentExternalScript } from "$app/hooks/usePersistentExternalScript";
 import { buildOverlayCodeToCopy, buildEmbedCodeToCopy } from "$app/utils/widgetCodeToCopyBuilders";
 
 import { Button } from "$app/components/Button";
@@ -17,14 +18,19 @@ import { useHasChanged } from "$app/components/Developer/useHasChanged";
 import { DomainSettingsProvider, useDomains } from "$app/components/DomainSettings";
 import { Icon } from "$app/components/Icons";
 
-type Props = {
+type WidgetsPageProps = {
   default_product: Product;
   display_product_select: boolean;
   products: Product[];
   affiliated_products: Product[];
 };
 
-export const WidgetsPage = ({ display_product_select, products, affiliated_products, default_product }: Props) => {
+export default function PublicWidgets() {
+  const props = cast<WidgetsPageProps>(usePage().props);
+
+  usePersistentExternalScript("/js/gumroad.js");
+  usePersistentExternalScript("/js/gumroad-embed.js");
+
   const currentSeller = useCurrentSeller();
   const domains = useDomains();
 
@@ -61,10 +67,10 @@ export const WidgetsPage = ({ display_product_select, products, affiliated_produ
           </header>
           <div>
             <Widgets
-              display_product_select={display_product_select}
-              products={products}
-              affiliated_products={affiliated_products}
-              default_product={default_product}
+              display_product_select={props.display_product_select}
+              products={props.products}
+              affiliated_products={props.affiliated_products}
+              default_product={props.default_product}
             />
           </div>
         </section>
@@ -116,9 +122,9 @@ export const WidgetsPage = ({ display_product_select, products, affiliated_produ
       </form>
     </Layout>
   );
-};
+}
 
-const Widgets = ({ display_product_select, products, affiliated_products, default_product }: Props) => {
+const Widgets = ({ display_product_select, products, affiliated_products, default_product }: WidgetsPageProps) => {
   const [selectedProduct, setSelectedProduct] = React.useState(default_product);
   const [selectedTab, setSelectedTab] = React.useState<Tab>("overlay");
   const overlayTabpanelUID = React.useId();
@@ -261,5 +267,3 @@ const EmbedPanel = ({ selectedProduct }: PanelProps) => {
     </>
   );
 };
-
-export default register({ component: WidgetsPage, propParser: createCast() });
