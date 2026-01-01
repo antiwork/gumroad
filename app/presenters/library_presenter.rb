@@ -42,7 +42,7 @@ class LibraryPresenter
         archived_count: archived_count,
         non_archived_count: non_archived_count
       }
-    end.sort_by { |creator| -creator[:count] }
+    end.sort_by { |creator| creator[:count] }.reverse
     bundles = purchases.filter_map do |purchase|
       { id: purchase.link.external_id, label: purchase.link.name } if purchase.is_bundle_purchase?
     end.uniq { _1[:id] }

@@ -288,12 +288,14 @@ export default function LibraryPage() {
     state.search.showArchivedOnly || state.search.query || state.search.creators.length || state.search.bundles.length;
   const [deleting, setDeleting] = React.useState<Result | null>(null);
 
-  const validCreators = React.useMemo(
+  const filteredCreators = React.useMemo(
     () =>
-      creators.map((creator) => ({
-        ...creator,
-        count: state.search.showArchivedOnly ? creator.archived_count : creator.non_archived_count,
-      })),
+      creators
+        .map((creator) => ({
+          ...creator,
+          count: state.search.showArchivedOnly ? creator.archived_count : creator.non_archived_count,
+        }))
+        .sort((a, b) => b.count - a.count),
     [creators, state.search.showArchivedOnly],
   );
 
@@ -497,7 +499,7 @@ export default function LibraryPage() {
                           readOnly
                         />
                       </label>
-                      {(showingAllCreators ? validCreators : validCreators.slice(0, 5)).map((creator) => (
+                      {(showingAllCreators ? filteredCreators : filteredCreators.slice(0, 5)).map((creator) => (
                         <label key={creator.id}>
                           {creator.name}
                           <span className="shrink-0 text-muted">{`(${creator.count})`}</span>
@@ -519,7 +521,7 @@ export default function LibraryPage() {
                         </label>
                       ))}
                       <div>
-                        {validCreators.length > 5 && !showingAllCreators ? (
+                        {filteredCreators.length > 5 && !showingAllCreators ? (
                           <button className="underline" onClick={() => setShowingAllCreators(true)}>
                             Show more
                           </button>
