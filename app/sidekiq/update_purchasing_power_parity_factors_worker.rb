@@ -19,7 +19,7 @@ class UpdatePurchasingPowerParityFactorsWorker
         # The first four lines include irrelevant metadata that break the parsing
         csv = CSV.new(io.readlines[4..].join, headers: true)
         year = Integer(csv.read.headers.second_to_last, exception: false)
-        raise "Couldn't determine correct year" if year.nil? || (year - Date.current.year).abs > 2
+        raise "Couldn't determine correct year" if year.nil? || (year - Date.current.year).abs > 3
         csv.rewind
 
         csv.each do |ppp_data|
