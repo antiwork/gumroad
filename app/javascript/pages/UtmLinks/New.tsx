@@ -1,7 +1,9 @@
+import { usePage } from "@inertiajs/react";
 import * as React from "react";
 
-import { UtmLinkForm } from "$app/components/UtmLinks/UtmLinkForm";
+import { UtmLinkForm, type UtmLinkFormProps } from "$app/components/UtmLinks/UtmLinkForm";
 
 export default function UtmLinksNew() {
-  return <UtmLinkForm />;
+  const props = usePage<UtmLinkFormProps>().props;
+  return <UtmLinkForm {...props} />;
 }

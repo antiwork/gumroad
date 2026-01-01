@@ -1,4 +1,4 @@
-import { router, useForm, usePage } from "@inertiajs/react";
+import { router, useForm } from "@inertiajs/react";
 import cx from "classnames";
 import * as React from "react";
 import { cast } from "ts-safe-cast";
@@ -46,13 +46,13 @@ type UtmLinkFormAdditionalMetadata = {
   new_permalink: string;
 };
 
-type UtmLinkFormProps = {
+export type UtmLinkFormProps = {
   context: UtmLinkFormContext;
   utm_link: UtmLink | null;
   additional_metadata?: UtmLinkFormAdditionalMetadata;
 };
 
-type UtmLinkEditProps = {
+export type UtmLinkEditProps = {
   context: UtmLinkFormContext;
   utm_link: SavedUtmLink;
 };
@@ -86,8 +86,7 @@ const computeTargetResource = (dest: UtmLinkDestinationOption | null) => {
 
 const duplicatedTitle = (title?: string) => (title ? `${title} (copy)` : "");
 
-export const UtmLinkForm = () => {
-  const pageProps = usePage<UtmLinkFormProps | UtmLinkEditProps>().props;
+export const UtmLinkForm = (pageProps: UtmLinkFormProps | UtmLinkEditProps) => {
   const { context, utm_link } = pageProps;
 
   const isEditing = utm_link?.id !== undefined;
