@@ -129,9 +129,7 @@ export default function UtmLinksIndex() {
       params.set("direction", newSort.direction);
     }
     setSort(newSort);
-    const url = new URL(window.location.href);
-    url.search = params.toString();
-    router.get(url.toString(), {}, { preserveState: true });
+    router.reload({ data: Object.fromEntries(params) });
   };
 
   const thProps = useSortingTableDriver<SortKey>(sort, onSetSort);
@@ -146,9 +144,7 @@ export default function UtmLinksIndex() {
       params.delete("query");
     }
     params.delete("page");
-    const url = new URL(window.location.href);
-    url.search = params.toString();
-    router.get(url.toString(), {}, { preserveState: true });
+    router.reload({ data: Object.fromEntries(params) });
   }, 500);
 
   const handleDelete = (id: string) => {
