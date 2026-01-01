@@ -122,6 +122,20 @@ describe ProfileSectionsPresenter do
     end
   end
 
+  describe "product count display" do
+    it "returns all products when more than 9 are selected in a section" do
+      extra_products = create_list(:product, 10, user: seller)
+      all_products = products + extra_products
+      products_section.update!(json_data: products_section.json_data.merge("shown_products" => all_products.map(&:id)))
+      Link.import(force: true, refresh: true)
+
+      result = subject.cached_sections.find { _1[:type] == "SellerProfileProductsSection" }
+
+      expect(result[:search_results][:products].size).to eq(12)
+      expect(result[:search_results][:total]).to eq(12)
+    end
+  end
+
   describe "compute_description parameter" do
     it "passes compute_description: false to ProductPresenter.card_for_web for search results" do
       request.query_parameters[:sort] = "recent"

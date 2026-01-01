@@ -127,6 +127,7 @@ class ProfileSectionsPresenter
             section:,
             is_alive_on_profile: true,
             user_id: seller.id,
+            size: section.shown_products.size,
           }
         )
       )
