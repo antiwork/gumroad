@@ -148,18 +148,12 @@ export default function UtmLinksIndex() {
   }, 500);
 
   const handleDelete = (id: string) => {
-    setDeletingUtmLink((prev) => prev && { ...prev, state: "deleting" });
     router.delete(Routes.dashboard_utm_link_path(id), {
       preserveScroll: true,
-      onSuccess: () => {
-        showAlert("Link deleted!", "success");
-        setDeletingUtmLink(null);
-        setSelectedUtmLink(null);
-      },
-      onError: () => {
-        showAlert("Failed to delete link. Please try again.", "error");
-        setDeletingUtmLink(null);
-      },
+      onStart: () => setDeletingUtmLink((prev) => prev && { ...prev, state: "deleting" }),
+      onSuccess: () => setSelectedUtmLink(null),
+      onError: () => showAlert("Failed to delete link. Please try again.", "error"),
+      onFinish: () => setDeletingUtmLink(null),
     });
   };
 
