@@ -225,7 +225,7 @@ describe User::LowBalanceFraudCheck do
   describe "#can_recover_from_low_balance_probation?" do
     context "when user is not on probation" do
       it "returns false" do
-        expect(@creator.can_recover_from_low_balance_probation?(50_00)).to eq(false)
+        expect(@creator.can_recover_from_low_balance_probation?(100_00)).to eq(false)
       end
     end
 
