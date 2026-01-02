@@ -176,6 +176,8 @@ module User::Risk
     content = case transition.to_name
               when :compliant
                 "Marked compliant by #{author_name} on #{date}"
+              when :not_reviewed
+                "Marked not reviewed by #{author_name} on #{date}"
               when :on_probation
                 "Probated (payouts suspended) by #{author_name} on #{date}"
               when :flagged_for_tos_violation
@@ -192,7 +194,7 @@ module User::Risk
                 transition.to_name.to_s.humanize
     end
     comment_type = case transition.to_name
-                   when :compliant
+                   when :compliant, :not_reviewed
                      Comment::COMMENT_TYPE_COMPLIANT
                    when :on_probation
                      Comment::COMMENT_TYPE_ON_PROBATION
