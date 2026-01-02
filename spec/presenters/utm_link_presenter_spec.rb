@@ -78,7 +78,7 @@ describe UtmLinkPresenter do
   end
 
   describe "#new_page_react_props" do
-    it "returns the form context props and the UTM link props" do
+    it "returns the form props for a new UTM link" do
       allow(SecureRandom).to receive(:alphanumeric).and_return("unique01")
 
       props = described_class.new(seller:).new_page_react_props.deep_symbolize_keys
@@ -135,7 +135,7 @@ describe UtmLinkPresenter do
   end
 
   describe "#edit_page_react_props" do
-    it "returns the UTM link form props" do
+    it "returns the form props for an existing UTM link" do
       props = described_class.new(seller:, utm_link:).edit_page_react_props.deep_symbolize_keys
 
       expect(props).to eq({
@@ -167,7 +167,7 @@ describe UtmLinkPresenter do
   end
 
   describe "#utm_link_form_context_props" do
-    it "returns the context form props" do
+    it "returns the props with destination options, short URL prefix, short URL protocol, and UTM fields values" do
       props = described_class.new(seller:).utm_link_form_context_props.deep_symbolize_keys
 
       expect(props).to eq({

@@ -166,9 +166,12 @@ describe UtmLinksController, inertia: true do
         create(:utm_link_driven_sale, utm_link: utm_link2, purchase: test_purchase)
         create(:utm_link_driven_sale, utm_link: utm_link2, purchase: failed_purchase)
 
+        expect_any_instance_of(PaginatedUtmLinksPresenter).not_to receive(:props)
+
         get :index, params: { ids: [utm_link1.external_id, utm_link2.external_id, utm_link3.external_id, another_seller_utm_link.external_id] }
 
         expect(response).to be_successful
+        expect(inertia.props[:utm_links_props]).not_to be_present
         stats = inertia.props["utm_links_stats"]
         expect(stats).to eq({
                               utm_link1.external_id => { "sales_count" => 2, "revenue_cents" => 3000, "conversion_rate" => 0.6667 },
@@ -444,7 +447,7 @@ describe UtmLinksController, inertia: true do
       expect(utm_link.reload.attributes).to eq(original_attributes)
     end
 
-    it "redirects to index page" do
+    it "redirects to index page when the UTM link is deleted" do
       utm_link.mark_deleted!
 
       expect do
