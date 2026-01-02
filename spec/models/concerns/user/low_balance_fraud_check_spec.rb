@@ -353,12 +353,12 @@ describe User::LowBalanceFraudCheck do
       expect(previous_state).to eq("compliant")
     end
 
-    it "returns compliant when no probation version is found" do
+    it "returns not_reviewed when no probation version is found" do
       creator = create(:user)
 
       previous_state = creator.send(:previous_risk_state_from_paper_trail)
 
-      expect(previous_state).to eq("compliant")
+      expect(previous_state).to eq("not_reviewed")
     end
   end
 end

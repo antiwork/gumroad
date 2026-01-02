@@ -34,9 +34,9 @@ module User::LowBalanceFraudCheck
   end
 
   def check_for_high_balance_and_remove_low_balance_probation!
-    return if unpaid_balance_cents <= HIGH_BALANCE_THRESHOLD
-    return if !on_probation?
-    return if !should_auto_remove_probation?
+    return unless unpaid_balance_cents > HIGH_BALANCE_THRESHOLD
+    return unless on_probation?
+    return unless should_auto_remove_probation?
 
     revert_to_previous_risk_state!
   end
@@ -83,24 +83,23 @@ module User::LowBalanceFraudCheck
       content = "Probation removed automatically on #{Time.current.to_fs(:formatted_date_full_month)} because balance exceeded $100"
 
       case previous_state
-      when "not_reviewed"
+      when "compliant"
+        mark_compliant!(author_name: LOW_BALANCE_FRAUD_CHECK_AUTHOR_NAME, content:)
+      else
         mark_not_reviewed!(author_name: LOW_BALANCE_FRAUD_CHECK_AUTHOR_NAME, content:)
         enable_refunds!
-      else
-        mark_compliant!(author_name: LOW_BALANCE_FRAUD_CHECK_AUTHOR_NAME, content:)
       end
     end
 
     def previous_risk_state_from_paper_trail
-      probation_version = versions.where("object_changes LIKE ?", "%user_risk_state%")
-                                  .where("object_changes LIKE ?", "%on_probation%")
+      probation_version = versions.where("JSON_CONTAINS(object_changes, ?)", '"on_probation"')
                                   .order(created_at: :desc)
                                   .first
-      return "compliant" if probation_version.nil?
+      return "not_reviewed" if probation_version.nil?
 
       changeset = probation_version.changeset
-      return "compliant" if changeset.nil? || !changeset.key?("user_risk_state")
+      return "not_reviewed" if changeset.nil? || !changeset.key?("user_risk_state")
 
-      changeset["user_risk_state"].first || "compliant"
+      changeset["user_risk_state"].first || "not_reviewed"
     end
 end
