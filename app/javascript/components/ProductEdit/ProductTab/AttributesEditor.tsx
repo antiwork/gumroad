@@ -2,7 +2,7 @@ import * as React from "react";
 
 import { Button } from "$app/components/Button";
 import { Icon } from "$app/components/Icons";
-import Placeholder from "$app/components/ui/Placeholder";
+import { Placeholder } from "$app/components/ui/Placeholder";
 
 export type Attribute = { name: string; value: string };
 

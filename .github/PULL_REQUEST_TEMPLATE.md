@@ -35,5 +35,3 @@ Issue: #
 # AI Disclosure
 
 <!-- State whether AI was used and for what purpose, or "No AI was used for any part of this contribution." -->
-
-

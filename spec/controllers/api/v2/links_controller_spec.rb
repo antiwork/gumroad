@@ -98,6 +98,8 @@ describe Api::V2::LinksController do
 
       describe "purchasing power parity", :vcr do
         before do
+          # The VCR cassette for PPP data is from 2025, so this prevents the worker complaining it's out of date
+          travel_to Date.new(2025, 1, 1)
           UpdatePurchasingPowerParityFactorsWorker.new.perform
           @product.update!(price_cents: 1000)
           @user.update!(purchasing_power_parity_enabled: true)

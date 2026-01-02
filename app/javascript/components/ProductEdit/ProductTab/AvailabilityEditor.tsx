@@ -6,7 +6,7 @@ import { useCurrentSeller } from "$app/components/CurrentSeller";
 import { DateInput } from "$app/components/DateInput";
 import { Icon } from "$app/components/Icons";
 import { Availability } from "$app/components/ProductEdit/state";
-import Placeholder from "$app/components/ui/Placeholder";
+import { Placeholder } from "$app/components/ui/Placeholder";
 
 const DEFAULT_INTERVAL_START_HOURS = 9;
 const DEFAULT_INTERVAL_LENGTH = 8;
