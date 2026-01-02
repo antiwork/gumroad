@@ -147,4 +147,20 @@ describe ProfileSectionsPresenter do
       subject.props(request:, pundit_user:, seller_custom_domain_url: nil)
     end
   end
+
+  describe "#section_search_results" do
+    context "when section has more than 9 products" do
+      it "returns all selected products" do
+        many_products = create_list(:product, 10, user: seller)
+        section_with_many_products = create(:seller_profile_products_section, seller:, shown_products: many_products.map(&:id))
+        Link.import(force: true, refresh: true)
+
+        presenter = described_class.new(seller:, query: seller.seller_profile_sections.where(id: section_with_many_products.id))
+        cached_sections = presenter.cached_sections
+
+        expect(cached_sections.first[:search_results][:total]).to eq(10)
+        expect(cached_sections.first[:search_results][:products].length).to eq(10)
+      end
+    end
+  end
 end
