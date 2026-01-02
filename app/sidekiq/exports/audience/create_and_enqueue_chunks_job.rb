@@ -8,6 +8,7 @@ class Exports::Audience::CreateAndEnqueueChunksJob
 
   def perform(export_id)
     @export = AudienceExport.find(export_id)
+    validate_options!
     create_chunks
     enqueue_chunks
   end
@@ -41,5 +42,12 @@ class Exports::Audience::CreateAndEnqueueChunksJob
       conditions << "customer = true" if options[:customers]
       conditions << "affiliate = true" if options[:affiliates]
       query.where(conditions.join(" OR "))
+    end
+
+    def validate_options!
+      options = @export.audience_options.with_indifferent_access
+      return if options[:followers] || options[:customers] || options[:affiliates]
+
+      raise ArgumentError, "At least one audience type (followers, customers, or affiliates) must be selected"
     end
 end

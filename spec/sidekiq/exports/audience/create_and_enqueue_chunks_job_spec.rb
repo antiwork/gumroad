@@ -56,6 +56,16 @@ describe Exports::Audience::CreateAndEnqueueChunksJob do
       end
     end
 
+    context "with invalid options" do
+      it "raises error when all audience types are false" do
+        export.update!(audience_options: { "followers" => false, "customers" => false, "affiliates" => false })
+
+        expect {
+          described_class.new.perform(export.id)
+        }.to raise_error(ArgumentError, "At least one audience type (followers, customers, or affiliates) must be selected")
+      end
+    end
+
     context "with different audience types" do
       before do
         create(:audience_member, seller: seller, email: "follower@example.com",
