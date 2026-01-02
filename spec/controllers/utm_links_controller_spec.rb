@@ -185,30 +185,34 @@ describe UtmLinksController, inertia: true do
       let(:record) { UtmLink }
     end
 
-    it "renders UtmLinks/New with Inertia and correct props" do
+    it "renders Inertia component with correct props" do
+      allow(SecureRandom).to receive(:alphanumeric).and_return("unique01")
       get :new
 
       expect(response).to be_successful
       expect(inertia).to render_component("UtmLinks/New")
       expect(inertia.props[:context]).to be_present
       expect(inertia.props[:context][:destination_options]).to be_an(Array)
-      expect(inertia.props[:context][:short_url]).to be_present
       expect(inertia.props[:context][:utm_fields_values]).to be_present
-      expect(inertia.props[:additional_metadata]).to be_nil
+      expect(inertia.props[:context][:short_url_prefix]).to eq(UtmLink.short_url_prefix)
+      expect(inertia.props[:context][:short_url_protocol]).to eq(PROTOCOL)
+      expect(inertia.props.deep_symbolize_keys[:utm_link][:permalink]).to eq("unique01")
     end
 
-    context "with only=[\"additional_metadata\"] partial loading" do
+    context "with partial request" do
       before do
         request.headers["X-Inertia"] = "true"
         request.headers["X-Inertia-Partial-Component"] = "UtmLinks/New"
-        request.headers["X-Inertia-Partial-Data"] = "additional_metadata"
+        request.headers["X-Inertia-Partial-Data"] = "utm_link"
       end
 
       it "returns a new unique permalink" do
+        expect_any_instance_of(UtmLinkPresenter).not_to receive(:utm_link_form_context_props)
+
         get :new
 
         expect(response).to be_successful
-        expect(inertia.props["additional_metadata"]["new_permalink"]).to be_present
+        expect(inertia.props.deep_symbolize_keys[:utm_link][:permalink]).to be_present
       end
     end
 
@@ -223,6 +227,7 @@ describe UtmLinksController, inertia: true do
         expect(inertia.props[:utm_link]).to be_present
         expect(inertia.props[:utm_link][:title]).to eq("#{source_link.title} (copy)")
         expect(inertia.props[:utm_link][:id]).to be_nil
+        expect(inertia.props.deep_symbolize_keys[:utm_link][:permalink]).not_to eq(source_link.permalink)
       end
     end
   end
@@ -239,7 +244,7 @@ describe UtmLinksController, inertia: true do
       let(:request_params) { { id: utm_link.external_id } }
     end
 
-    it "renders UtmLinks/Edit with Inertia and correct props" do
+    it "renders Inertia component with correct props" do
       get :edit, params: { id: utm_link.external_id }
 
       expect(response).to be_successful
@@ -247,8 +252,10 @@ describe UtmLinksController, inertia: true do
       expect(inertia.props[:context]).to be_present
       expect(inertia.props[:context][:destination_options]).to be_an(Array)
       expect(inertia.props[:utm_link]).to be_present
+      expect(inertia.props[:context][:short_url_prefix]).to eq(UtmLink.short_url_prefix)
+      expect(inertia.props[:context][:short_url_protocol]).to eq(PROTOCOL)
       expect(inertia.props[:utm_link][:id]).to eq(utm_link.external_id)
-      expect(inertia.props[:utm_link][:title]).to eq(utm_link.title)
+      expect(inertia.props[:utm_link][:permalink]).to eq(utm_link.permalink)
     end
   end
 
@@ -417,22 +424,24 @@ describe UtmLinksController, inertia: true do
 
     it "returns an error if the UTM link does not exist" do
       params[:id] = "does-not-exist"
+      original_attributes = utm_link.attributes
 
       expect do
         patch :update, params: params
-      end.not_to change { utm_link.reload }
+      end.to raise_error(ActionController::RoutingError)
 
-      expect(response).to have_http_status(:not_found)
+      expect(utm_link.reload.attributes).to eq(original_attributes)
     end
 
     it "returns an error if the UTM link does not belong to the seller" do
       utm_link.update!(seller: create(:user))
+      original_attributes = utm_link.attributes
 
       expect do
         patch :update, params: params
-      end.not_to change { utm_link.reload }
+      end.to raise_error(ActionController::RoutingError)
 
-      expect(response).to have_http_status(:not_found)
+      expect(utm_link.reload.attributes).to eq(original_attributes)
     end
 
     it "redirects to index page" do
@@ -496,22 +505,25 @@ describe UtmLinksController, inertia: true do
     end
 
     it "returns not found if the UTM link does not exist" do
+      original_count = UtmLink.alive.count
+
       expect do
         delete :destroy, params: { id: "does-not-exist" }
-      end.not_to change { UtmLink.alive.count }
+      end.to raise_error(ActionController::RoutingError)
 
-      expect(response).to have_http_status(:not_found)
+      expect(UtmLink.alive.count).to eq(original_count)
     end
 
     it "returns not found if the UTM link does not belong to the seller" do
       other_seller = create(:user)
       other_utm_link = create(:utm_link, seller: other_seller)
+      original_deleted_at = other_utm_link.deleted_at
 
       expect do
         delete :destroy, params: { id: other_utm_link.external_id }
-      end.not_to change { other_utm_link.reload.deleted_at }
+      end.to raise_error(ActionController::RoutingError)
 
-      expect(response).to have_http_status(:not_found)
+      expect(other_utm_link.reload.deleted_at).to eq(original_deleted_at)
     end
   end
 end

@@ -54,8 +54,12 @@ class UtmLink < ApplicationRecord
     update!(disabled_at: nil)
   end
 
+  def self.short_url_prefix
+    "#{UrlService.short_domain_with_protocol}/u/"
+  end
+
   def short_url
-    "#{UrlService.short_domain_with_protocol}/u/#{permalink}"
+    "#{self.class.short_url_prefix}#{permalink}"
   end
 
   def utm_url

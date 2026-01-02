@@ -351,6 +351,13 @@ describe UtmLink do
     end
   end
 
+  describe "#short_url_prefix" do
+    it "returns the short URL prefix" do
+      utm_link = create(:utm_link)
+      expect(utm_link.short_url_prefix).to eq("#{UrlService.short_domain_with_protocol}/u/")
+    end
+  end
+
   describe "#short_url" do
     it "returns the short URL" do
       utm_link = create(:utm_link)

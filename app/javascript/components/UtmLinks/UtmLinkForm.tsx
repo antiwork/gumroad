@@ -1,20 +1,16 @@
-import { useForm, Link, usePage, router } from "@inertiajs/react";
+import { useForm, router } from "@inertiajs/react";
 import cx from "classnames";
 import * as React from "react";
 import { cast } from "ts-safe-cast";
 
-import {
-  UtmLinkNewPageProps,
-  UtmLinkEditPageProps,
-  UtmLinkDestinationOption,
-  UtmLinkFormData,
-} from "$app/data/utm_links";
+import { UtmLinkNewPageProps, UtmLinkEditPageProps, UtmLinkFormData } from "$app/data/utm_links";
 import { assertDefined } from "$app/utils/assert";
 
 import { AnalyticsLayout } from "$app/components/Analytics/AnalyticsLayout";
 import { Button } from "$app/components/Button";
 import { CopyToClipboard } from "$app/components/CopyToClipboard";
 import { Icon } from "$app/components/Icons";
+import { NavigationButtonInertia } from "$app/components/NavigationButton";
 import { Select } from "$app/components/Select";
 import { Pill } from "$app/components/ui/Pill";
 import { useOriginalLocation } from "$app/components/useOriginalLocation";
@@ -22,43 +18,10 @@ import { WithTooltip } from "$app/components/WithTooltip";
 
 const MAX_UTM_PARAM_LENGTH = 200;
 
-type FieldAttrName =
-  | "title"
-  | "target_resource_id"
-  | "target_resource_type"
-  | "permalink"
-  | "utm_source"
-  | "utm_medium"
-  | "utm_campaign"
-  | "utm_term"
-  | "utm_content";
-
-export const UtmLinkForm = () => {
-  const { context, utm_link } = cast<UtmLinkNewPageProps | UtmLinkEditPageProps>(usePage().props);
-  const isEditing = utm_link?.id !== undefined;
+export const UtmLinkForm = ({ context, utm_link }: UtmLinkNewPageProps | UtmLinkEditPageProps) => {
+  const isEditing = "id" in utm_link;
   const uid = React.useId();
-
-  const initialDestination = utm_link?.destination_option?.id
-    ? (context.destination_options.find((o) => o.id === assertDefined(utm_link.destination_option).id) ?? null)
-    : null;
-
-  const { protocol: shortUrlProtocol, host, pathname } = new URL(utm_link?.short_url ?? context.short_url);
-  const initialPermalink = pathname.split("/").pop() ?? "";
-  const shortUrlPrefix = host + pathname.slice(0, -initialPermalink.length);
-
-  const form = useForm<UtmLinkFormData>(isEditing ? `EditUtmLink:${utm_link.id}` : "CreateUtmLink", {
-    title: utm_link?.title ?? "",
-    target_resource_type: "",
-    target_resource_id: null,
-    permalink: initialPermalink,
-    utm_source: utm_link?.source ?? "",
-    utm_medium: utm_link?.medium ?? "",
-    utm_campaign: utm_link?.campaign ?? "",
-    utm_term: utm_link?.term ?? null,
-    utm_content: utm_link?.content ?? null,
-  });
-
-  const [destination, setDestination] = React.useState<UtmLinkDestinationOption | null>(initialDestination);
+  const form = useForm<UtmLinkFormData>(utm_link);
   const [isLoadingNewPermalink, setIsLoadingNewPermalink] = React.useState(false);
   const searchParams = new URL(useOriginalLocation()).searchParams;
 
@@ -74,7 +37,7 @@ export const UtmLinkForm = () => {
   }, [form.errors]);
 
   const finalUrl = React.useMemo(() => {
-    if (destination && form.data.utm_source && form.data.utm_medium && form.data.utm_campaign) {
+    if (form.data.destination_option && form.data.utm_source && form.data.utm_medium && form.data.utm_campaign) {
       const params = new URLSearchParams();
       params.set("utm_source", form.data.utm_source);
       params.set("utm_medium", form.data.utm_medium);
@@ -82,12 +45,12 @@ export const UtmLinkForm = () => {
       if (form.data.utm_term) params.set("utm_term", form.data.utm_term);
       if (form.data.utm_content) params.set("utm_content", form.data.utm_content);
 
-      return [destination.url, params.toString()].filter(Boolean).join("?");
+      return [form.data.destination_option.url, params.toString()].filter(Boolean).join("?");
     }
 
     return null;
   }, [
-    destination,
+    form.data.destination_option,
     form.data.utm_source,
     form.data.utm_medium,
     form.data.utm_campaign,
@@ -97,17 +60,16 @@ export const UtmLinkForm = () => {
 
   const generateNewPermalink = () => {
     router.reload({
-      only: ["additional_metadata"],
+      only: ["utm_link"],
       onStart: () => setIsLoadingNewPermalink(true),
       onSuccess: (data) => {
-        const props = cast<UtmLinkNewPageProps>(data.props);
-        form.setData("permalink", assertDefined(props.additional_metadata?.new_permalink));
+        form.setData("permalink", cast<{ utm_link: UtmLinkFormData }>(data.props).utm_link.permalink);
       },
       onFinish: () => setIsLoadingNewPermalink(false),
     });
   };
 
-  const getFieldError = (attrName: FieldAttrName) => {
+  const getFieldError = (attrName: keyof UtmLinkFormData) => {
     const error = form.errors[attrName];
     if (error) return error;
 
@@ -118,6 +80,14 @@ export const UtmLinkForm = () => {
     return null;
   };
 
+  const validateUtmParam = (field: keyof Pick<UtmLinkFormData, "utm_source" | "utm_medium" | "utm_campaign">) => {
+    if (!form.data[field] || form.data[field].trim().length === 0) {
+      form.setError(field, "Must be present");
+      return false;
+    }
+    return true;
+  };
+
   const validate = () => {
     if (form.data.title.trim().length === 0) {
       form.setError("title", "Must be present");
@@ -125,25 +95,13 @@ export const UtmLinkForm = () => {
       return false;
     }
 
-    if (!destination) {
+    if (!form.data.destination_option) {
       form.setError("target_resource_id", "Must be present");
       return false;
     }
 
-    if (!form.data.utm_source || form.data.utm_source.trim().length === 0) {
-      form.setError("utm_source", "Must be present");
+    if (!validateUtmParam("utm_source") || !validateUtmParam("utm_medium") || !validateUtmParam("utm_campaign"))
       return false;
-    }
-
-    if (!form.data.utm_medium || form.data.utm_medium.trim().length === 0) {
-      form.setError("utm_medium", "Must be present");
-      return false;
-    }
-
-    if (!form.data.utm_campaign || form.data.utm_campaign.trim().length === 0) {
-      form.setError("utm_campaign", "Must be present");
-      return false;
-    }
 
     return true;
   };
@@ -152,22 +110,23 @@ export const UtmLinkForm = () => {
     e.preventDefault();
     if (!validate()) return;
 
-    form.transform((data) => {
-      if (!destination) return data;
-
-      const destinationId = destination.id;
-      const isSpecialPage = ["profile_page", "subscribe_page"].includes(destinationId);
-
-      return {
-        ...data,
-        target_resource_type: isSpecialPage ? destinationId : destinationId.split(/-(.*)/u)[0],
-        target_resource_id: isSpecialPage ? null : destinationId.split(/-(.*)/u)[1] || null,
-      };
-    });
-
     if (isEditing) {
       form.patch(Routes.dashboard_utm_link_path(assertDefined(utm_link.id)));
     } else {
+      form.transform((data) => {
+        if (!data.destination_option) return data;
+
+        const [targetResourceType, targetResourceId] = data.destination_option.id.split(/-(.*)/u);
+
+        return {
+          ...data,
+          target_resource_type: ["profile_page", "subscribe_page"].includes(targetResourceType)
+            ? data.destination_option.id
+            : targetResourceType,
+          target_resource_id: targetResourceId,
+        };
+      });
+
       form.post(
         Routes.dashboard_utm_links_path({
           copy_from: searchParams.get("copy_from"),
@@ -176,17 +135,28 @@ export const UtmLinkForm = () => {
     }
   };
 
+  const whenProcessingOrLoadingNewPermalink = form.processing || isLoadingNewPermalink;
+
   return (
     <AnalyticsLayout
       title={isEditing ? "Edit link" : "Create link"}
       selectedTab="utm_links"
       actions={
         <>
-          <Link href={Routes.dashboard_utm_links_path()} className="button">
+          <NavigationButtonInertia
+            disabled={whenProcessingOrLoadingNewPermalink}
+            href={Routes.dashboard_utm_links_path()}
+          >
             <Icon name="x-square" />
             Cancel
-          </Link>
-          <Button color="accent" onClick={submit} disabled={form.processing} type="submit" form="utm-link-form">
+          </NavigationButtonInertia>
+          <Button
+            color="accent"
+            onClick={submit}
+            disabled={whenProcessingOrLoadingNewPermalink}
+            type="submit"
+            form="utm-link-form"
+          >
             {form.processing ? "Saving..." : isEditing ? "Save changes" : "Add link"}
           </Button>
         </>
@@ -228,11 +198,14 @@ export const UtmLinkForm = () => {
               instanceId={`destination-${uid}`}
               placeholder="Select where you want to send your audience"
               options={context.destination_options}
-              value={destination}
+              value={form.data.destination_option}
               isMulti={false}
               isDisabled={isEditing}
               onChange={(option) => {
-                setDestination(option ? (context.destination_options.find((o) => o.id === option.id) ?? null) : null);
+                form.setData(
+                  "destination_option",
+                  option ? (context.destination_options.find((o) => o.id === option.id) ?? null) : null,
+                );
                 form.clearErrors();
               }}
             />
@@ -246,13 +219,13 @@ export const UtmLinkForm = () => {
             </legend>
             <div style={{ display: "grid", gridTemplateColumns: "1fr auto", gap: "var(--spacer-2)" }}>
               <div className={cx("input", { disabled: isEditing })}>
-                <Pill className="-ml-2 shrink-0">{shortUrlPrefix}</Pill>
+                <Pill className="-ml-2 shrink-0">{context.short_url_prefix}</Pill>
                 <input type="text" id={`${uid}-link-text`} value={form.data.permalink} readOnly disabled={isEditing} />
               </div>
               <div className="flex gap-2">
                 <CopyToClipboard
                   copyTooltip="Copy short link"
-                  text={`${shortUrlProtocol}//${shortUrlPrefix}${form.data.permalink}`}
+                  text={`${context.short_url_protocol}://${context.short_url_prefix}${form.data.permalink}`}
                 >
                   <Button type="button" aria-label="Copy short link">
                     <Icon name="link" />
@@ -262,7 +235,7 @@ export const UtmLinkForm = () => {
                   <WithTooltip tip="Generate new short link">
                     <Button
                       onClick={generateNewPermalink}
-                      disabled={isLoadingNewPermalink}
+                      disabled={whenProcessingOrLoadingNewPermalink}
                       aria-label="Generate new short link"
                       type="button"
                     >

@@ -2,7 +2,7 @@ import { Link, router, usePage } from "@inertiajs/react";
 import React from "react";
 import { cast } from "ts-safe-cast";
 
-import { SortKey, SavedUtmLink, UtmLinkIndexPageProps, UtmLinkStats } from "$app/data/utm_links";
+import { UtmLinkDestinationOption } from "$app/data/utm_links";
 
 import { AnalyticsLayout } from "$app/components/Analytics/AnalyticsLayout";
 import { Button } from "$app/components/Button";
@@ -10,20 +10,70 @@ import { CopyToClipboard } from "$app/components/CopyToClipboard";
 import { Icon } from "$app/components/Icons";
 import { LoadingSpinner } from "$app/components/LoadingSpinner";
 import { Modal } from "$app/components/Modal";
-import { Pagination } from "$app/components/Pagination";
+import { Pagination, PaginationProps } from "$app/components/Pagination";
 import { Popover } from "$app/components/Popover";
 import { showAlert } from "$app/components/server-components/Alert";
 import { Skeleton } from "$app/components/Skeleton";
-import Placeholder from "$app/components/ui/Placeholder";
+import { Placeholder, PlaceholderImage } from "$app/components/ui/Placeholder";
 import { Sheet, SheetHeader } from "$app/components/ui/Sheet";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "$app/components/ui/Table";
 import { useDebouncedCallback } from "$app/components/useDebouncedCallback";
 import { useUserAgentInfo } from "$app/components/UserAgent";
+import useRouteLoading from "$app/components/useRouteLoading";
 import { Sort, useSortingTableDriver } from "$app/components/useSortingTableDriver";
 import { WithTooltip } from "$app/components/WithTooltip";
 
 import noLinksYetPlaceholder from "$assets/images/placeholders/utm_links_empty.png";
 import noLinksFoundPlaceholder from "$assets/images/placeholders/utm_links_not_found.png";
+
+type SortKey =
+  | "link"
+  | "date"
+  | "source"
+  | "medium"
+  | "campaign"
+  | "clicks"
+  | "sales_count"
+  | "revenue_cents"
+  | "conversion_rate";
+
+type SavedUtmLink = {
+  id: string;
+  destination_option?: UtmLinkDestinationOption;
+  title: string;
+  short_url: string;
+  utm_url: string;
+  created_at: string;
+  source: string;
+  medium: string;
+  campaign: string;
+  term: string | null;
+  content: string | null;
+  clicks: number;
+  sales_count: number | null;
+  revenue_cents: number | null;
+  conversion_rate: number | null;
+};
+
+type UtmLinkStats = {
+  sales_count: number | null;
+  revenue_cents: number | null;
+  conversion_rate: number | null;
+};
+
+type UtmLinksIndexRouteQueryParams = {
+  query?: string;
+  page?: number;
+  sort?: Sort<SortKey> | null;
+};
+
+export type UtmLinkIndexPageProps = {
+  utm_links_props: {
+    utm_links: SavedUtmLink[];
+    pagination: PaginationProps;
+  };
+  utm_links_stats?: Record<string, UtmLinkStats>;
+};
 
 const fixedDecimalPointNumber = (value: number) => +value.toFixed(2);
 
@@ -62,6 +112,7 @@ const UtmLinksIndex = () => {
     utm_links_props: { utm_links: utmLinks, pagination },
     utm_links_stats: utmLinksStats,
   } = cast<UtmLinkIndexPageProps>(usePage().props);
+  const isNavigating = useRouteLoading();
   const utmLinksWithStats = utmLinks.map((utmLink) => utmLinkWithStats(utmLink, utmLinksStats?.[utmLink.id]));
   const [selectedUtmLink, setSelectedUtmLink] = React.useState<SavedUtmLink | null>(null);
   const searchParams = new URL(window.location.href).searchParams;
@@ -74,9 +125,7 @@ const UtmLinksIndex = () => {
 
   const debouncedGetUtmLinksStats = useDebouncedCallback((ids: string[]) => {
     router.reload({
-      data: {
-        ids,
-      },
+      data: { ids },
       only: ["utm_links_stats"],
       preserveUrl: true,
     });
@@ -93,11 +142,9 @@ const UtmLinksIndex = () => {
     debouncedGetUtmLinksStats(ids);
   }, [utmLinks, sort.key]);
 
-  const buildRouteParams = (params: {
-    query?: string;
-    page?: number;
-    sort?: Sort<SortKey> | null;
-  }): { query?: string; page?: number; direction?: string; key?: string } => ({
+  const buildRouteParams = (
+    params: UtmLinksIndexRouteQueryParams,
+  ): { query?: string; page?: number; direction?: string; key?: string } => ({
     ...(params.sort && { key: params.sort.key, direction: params.sort.direction }),
     ...(params.page !== undefined && params.page > 1 && { page: params.page }),
     ...(params.query && params.query.length > 0 && { query: params.query }),
@@ -107,19 +154,13 @@ const UtmLinksIndex = () => {
     params,
     preserveState = true,
   }: {
-    params: {
-      query?: string;
-      page?: number;
-      sort?: Sort<SortKey> | null;
-    };
+    params: UtmLinksIndexRouteQueryParams;
     preserveState?: boolean;
   }) => {
     debouncedGetUtmLinksStats.cancel();
     onSearch.cancel();
-
-    const routeParams = buildRouteParams(params);
     router.get(
-      Routes.dashboard_utm_links_path(routeParams),
+      Routes.dashboard_utm_links_path(buildRouteParams(params)),
       {},
       {
         preserveState,
@@ -173,7 +214,11 @@ const UtmLinksIndex = () => {
         </>
       }
     >
-      {utmLinks.length > 0 ? (
+      {isNavigating && utmLinks.length === 0 ? (
+        <div style={{ justifySelf: "center" }}>
+          <LoadingSpinner className="size-20" />
+        </div>
+      ) : utmLinks.length > 0 ? (
         <section className="flex flex-col gap-4 p-4 md:p-8">
           <Table>
             <TableHeader>
@@ -299,13 +344,11 @@ const UtmLinksIndex = () => {
                           preserveUrl: true,
                           preserveScroll: true,
                           only: ["utm_links_props", "flash"],
-                          onSuccess: () => {
+                          onStart: () => setDeletingUtmLink({ ...deletingUtmLink, state: "deleting" }),
+                          onError: () => showAlert("Failed to delete link. Please try again.", "error"),
+                          onFinish: () => {
                             setDeletingUtmLink(null);
                             setSelectedUtmLink(null);
-                          },
-                          onError: () => {
-                            showAlert("Failed to delete link. Please try again.", "error");
-                            setDeletingUtmLink({ ...deletingUtmLink, state: "delete-confirmation" });
                           },
                         });
                       }}
@@ -323,18 +366,14 @@ const UtmLinksIndex = () => {
       ) : query ? (
         <div className="p-4 md:p-8">
           <Placeholder>
-            <figure>
-              <img src={noLinksFoundPlaceholder} />
-            </figure>
+            <PlaceholderImage src={noLinksFoundPlaceholder} />
             <h4>No links found for "{query}"</h4>
           </Placeholder>
         </div>
       ) : (
         <div className="p-4 md:p-8">
           <Placeholder>
-            <figure>
-              <img src={noLinksYetPlaceholder} />
-            </figure>
+            <PlaceholderImage src={noLinksYetPlaceholder} />
             <h2>No links yet</h2>
             <h4>Use UTM links to track which sources are driving the most conversions and revenue</h4>
 

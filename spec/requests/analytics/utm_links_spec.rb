@@ -339,7 +339,7 @@ describe "UTM links", :js, type: :system do
         click_on "Next"
         expect(page).to have_table_row({ "Link" => utm_link2.title })
         expect(page).to_not have_table_row({ "Link" => utm_link1.title })
-        within find(:table_row, { "Link" => utm_link2.title, "Revenue" => "$0" }) do
+        within find(:table_row, { "Link" => utm_link2.title }) do
           select_disclosure "Open action menu"  do
             click_on "Delete"
           end
@@ -383,7 +383,7 @@ describe "UTM links", :js, type: :system do
       it "renders the create link form" do
         allow(SecureRandom).to receive(:alphanumeric).and_return("unique01")
 
-        visit "#{dashboard_utm_links_path}/new"
+        visit new_dashboard_utm_link_path
 
         expect(page).to have_text("Create link")
         expect(page).to have_link("Cancel", href: dashboard_utm_links_path)
@@ -455,7 +455,7 @@ describe "UTM links", :js, type: :system do
 
       it "generates a new permalink when clicking the refresh button" do
         allow(SecureRandom).to receive(:alphanumeric).and_return("initial1", "newlink2")
-        visit "#{dashboard_utm_links_path}/new"
+        visit new_dashboard_utm_link_path
 
         within :fieldset, "Link" do
           expect(page).to have_text(%Q(#{UrlService.short_domain_with_protocol.sub("#{PROTOCOL}://", '')}/u/))
@@ -471,7 +471,7 @@ describe "UTM links", :js, type: :system do
         record.valid?
         allow_any_instance_of(SaveUtmLinkService).to receive(:perform).and_raise(ActiveRecord::RecordInvalid.new(record))
 
-        visit "#{dashboard_utm_links_path}/new"
+        visit new_dashboard_utm_link_path
 
         click_on "Add link"
         expect(find_field("Title")).to have_ancestor("fieldset.danger")
@@ -521,11 +521,11 @@ describe "UTM links", :js, type: :system do
           expect(page).to have_text("is invalid")
         end
         expect(page).to_not have_alert(text: "Link created!")
-        expect(page).to have_current_path("#{dashboard_utm_links_path}/new")
+        expect(page).to have_current_path(new_dashboard_utm_link_path)
       end
 
       it "creates a UTM link" do
-        visit "#{dashboard_utm_links_path}/new"
+        visit new_dashboard_utm_link_path
 
         fill_in "Title", with: "Test Link"
         expect(page).to_not have_field("Generated URL with UTM tags")
@@ -577,7 +577,7 @@ describe "UTM links", :js, type: :system do
         existing_utm_link = create(:utm_link, seller:, title: "Existing UTM Link", target_resource_type: :product_page, target_resource_id: product.id, utm_source: "newsletter", utm_medium: "email", utm_campaign: "summer-sale", utm_term: "sale", utm_content: "banner")
         visit dashboard_utm_links_path
 
-        within(:table_row, { "Link" => "Existing UTM Link", "Revenue" => "$0" }) do
+        within(:table_row, { "Link" => "Existing UTM Link" }) do
           select_disclosure "Open action menu"  do
             click_on "Duplicate"
           end
@@ -637,13 +637,13 @@ describe "UTM links", :js, type: :system do
         old_permalink = utm_link.permalink
 
         visit dashboard_utm_links_path
-        within(:table_row, { "Link" => utm_link.title, "Revenue" => "$0" }) do
+        within(:table_row, { "Link" => utm_link.title }) do
           select_disclosure "Open action menu"  do
             click_on "Edit"
           end
         end
 
-        expect(page).to have_current_path("#{dashboard_utm_links_path}/#{utm_link.external_id}/edit")
+        expect(page).to have_current_path(edit_dashboard_utm_link_path(utm_link.external_id))
         expect(page).to have_text("Edit link")
         expect(page).to have_link("Cancel", href: dashboard_utm_links_path)
         expect(find("a", text: "Learn more")["href"]).to include("/help/")
