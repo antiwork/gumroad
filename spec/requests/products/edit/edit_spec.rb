@@ -473,9 +473,9 @@ describe("Product Edit Scenario", type: :system, js: true) do
     visit edit_link_path(product.unique_permalink) + "/content"
 
     click_on "Publish and continue"
-    wait_for_ajax
 
-    within :alert, text: "To publish a product, we need you to have an email. Set an email to continue." do
+    alert = find(:alert, text: "To publish a product, we need you to have an email. Set an email to continue.")
+    within(alert) do
       expect(page).to have_link("Set an email", href: settings_main_url(host: UrlService.domain_with_protocol))
     end
     expect(page).to have_current_path(edit_link_path(product.unique_permalink) + "/content")
