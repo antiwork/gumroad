@@ -92,7 +92,7 @@ module User::LowBalanceFraudCheck
     end
 
     def previous_risk_state_from_paper_trail
-      probation_version = versions.where("JSON_CONTAINS(object_changes, ?)", '"on_probation"')
+      probation_version = versions.where("JSON_CONTAINS(object_changes, ?, '$.user_risk_state')", '"on_probation"')
                                   .order(created_at: :desc)
                                   .first
       return "not_reviewed" if probation_version.nil?
