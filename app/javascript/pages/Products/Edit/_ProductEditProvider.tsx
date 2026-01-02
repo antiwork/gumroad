@@ -1,9 +1,7 @@
 import { DirectUpload } from "@rails/activestorage";
 import isEqual from "lodash/isEqual";
 import * as React from "react";
-import { createBrowserRouter, RouteObject, RouterProvider } from "react-router-dom";
-import { StaticRouterProvider } from "react-router-dom/server";
-import { cast, createCast } from "ts-safe-cast";
+import { cast } from "ts-safe-cast";
 
 import { saveProduct } from "$app/data/product_edit";
 import { OtherRefundPolicy } from "$app/data/products/other_refund_policies";
@@ -13,16 +11,11 @@ import { CurrencyCode } from "$app/utils/currency";
 import { Taxonomy } from "$app/utils/discover";
 import { ALLOWED_EXTENSIONS } from "$app/utils/file";
 import { assertResponseError, request } from "$app/utils/request";
-import { buildStaticRouter, GlobalProps, register } from "$app/utils/serverComponentUtil";
 
 import { Seller } from "$app/components/Product";
-import { ContentTab } from "$app/components/ProductEdit/ContentTab";
 import { getDownloadUrl } from "$app/components/ProductEdit/ContentTab/FileEmbed";
 import { Page } from "$app/components/ProductEdit/ContentTab/PageTab";
-import { ProductTab } from "$app/components/ProductEdit/ProductTab";
-import { ReceiptTab } from "$app/components/ProductEdit/ReceiptTab";
 import { RefundPolicy } from "$app/components/ProductEdit/RefundPolicy";
-import { ShareTab } from "$app/components/ProductEdit/ShareTab";
 import {
   ProductEditContext,
   Product,
@@ -30,34 +23,12 @@ import {
   ExistingFileEntry,
   ShippingCountry,
   ContentUpdates,
+  EditRoutes,
 } from "$app/components/ProductEdit/state";
 import { ImageUploadSettingsContext } from "$app/components/RichTextEditor";
 import { showAlert } from "$app/components/server-components/Alert";
 
-const routes: RouteObject[] = [
-  {
-    path: "/products/:id/edit",
-    element: <ProductTab />,
-    handle: "product",
-  },
-  {
-    path: "/products/:id/edit/content",
-    element: <ContentTab />,
-    handle: "content",
-  },
-  {
-    path: "/products/:id/edit/share",
-    element: <ShareTab />,
-    handle: "share",
-  },
-  {
-    path: "/products/:id/edit/receipt",
-    element: <ReceiptTab />,
-    handle: "receipt",
-  },
-];
-
-type Props = {
+export type EditPageProps = {
   product: Product;
   id: string;
   unique_permalink: string;
@@ -84,9 +55,11 @@ type Props = {
   seller_refund_policy_enabled: boolean;
   seller_refund_policy: Pick<RefundPolicy, "title" | "fine_print">;
   cancellation_discounts_enabled: boolean;
+  current_tab: string;
+  routes: EditRoutes;
 };
 
-const createContextValue = (props: Props) => ({
+const createContextValue = (props: EditPageProps) => ({
   id: props.id,
   product: props.product,
   updateProduct: () => {},
@@ -120,6 +93,8 @@ const createContextValue = (props: Props) => ({
   contentUpdates: null,
   setContentUpdates: () => {},
   filesById: new Map(props.product.files.map((file) => [file.id, { ...file, url: getDownloadUrl(props.id, file) }])),
+  routes: props.routes,
+  currentTab: props.current_tab,
 });
 
 const pagesHaveSameContent = (pages1: Page[], pages2: Page[]): boolean => isEqual(pages1, pages2);
@@ -140,11 +115,16 @@ const findUpdatedContent = (product: Product, lastSavedProduct: Product) => {
   };
 };
 
-const ProductEditPage = (props: Props) => {
-  const [product, setProduct] = React.useState(props.product);
+interface ProductEditProviderProps {
+  children: React.ReactNode;
+  initialProps: EditPageProps;
+}
+
+export const ProductEditProvider: React.FC<ProductEditProviderProps> = ({ children, initialProps }) => {
+  const [product, setProduct] = React.useState(initialProps.product);
   const [contentUpdates, setContentUpdates] = React.useState<ContentUpdates>(null);
-  const [currencyType, setCurrencyType] = React.useState<CurrencyCode>(props.currency_type);
-  const lastSavedProductRef = React.useRef<Product>(structuredClone(props.product));
+  const [currencyType, setCurrencyType] = React.useState<CurrencyCode>(initialProps.currency_type);
+  const lastSavedProductRef = React.useRef<Product>(structuredClone(initialProps.product));
 
   const updateProduct = (update: Partial<Product> | ((product: Product) => void)) =>
     setProduct((prevProduct) => {
@@ -153,15 +133,15 @@ const ProductEditPage = (props: Props) => {
       else Object.assign(updated, update);
       return updated;
     });
-  const [existingFiles, setExistingFiles] = React.useState(props.existing_files);
-  const router = createBrowserRouter(routes);
+  const [existingFiles, setExistingFiles] = React.useState(initialProps.existing_files);
 
   const [saving, setSaving] = React.useState(false);
   const [imagesUploading, setImagesUploading] = React.useState<Set<File>>(new Set());
+
   const save = async () => {
     try {
       setSaving(true);
-      const response = await saveProduct(props.unique_permalink, props.id, product, currencyType);
+      const response = await saveProduct(initialProps.unique_permalink, initialProps.id, product, currencyType);
       if (response.warning_message) showAlert(response.warning_message, "warning");
       else {
         const { contentUpdatedVariantIds, sharedContentUpdated } = findUpdatedContent(
@@ -170,9 +150,9 @@ const ProductEditPage = (props: Props) => {
         );
         const contentUpdated = sharedContentUpdated || contentUpdatedVariantIds.length > 0;
 
-        if (props.successful_sales_count > 0 && contentUpdated) {
+        if (initialProps.successful_sales_count > 0 && contentUpdated) {
           const uniquePermalinkOrVariantIds = product.has_same_rich_content_for_all_variants
-            ? [props.unique_permalink]
+            ? [initialProps.unique_permalink]
             : contentUpdatedVariantIds;
 
           setContentUpdates({
@@ -192,7 +172,7 @@ const ProductEditPage = (props: Props) => {
 
   const contextValue = React.useMemo(
     () => ({
-      ...createContextValue({ ...props, product }),
+      ...createContextValue({ ...initialProps, product }),
       setCurrencyType,
       currencyType,
       existingFiles,
@@ -203,7 +183,7 @@ const ProductEditPage = (props: Props) => {
       contentUpdates,
       setContentUpdates,
     }),
-    [product, updateProduct, existingFiles, setExistingFiles],
+    [product, updateProduct, existingFiles, setExistingFiles, currencyType, saving, contentUpdates],
   );
 
   const imageSettings = React.useMemo(
@@ -243,27 +223,7 @@ const ProductEditPage = (props: Props) => {
 
   return (
     <ProductEditContext.Provider value={contextValue}>
-      <ImageUploadSettingsContext.Provider value={imageSettings}>
-        <RouterProvider router={router} />
-      </ImageUploadSettingsContext.Provider>
+      <ImageUploadSettingsContext.Provider value={imageSettings}>{children}</ImageUploadSettingsContext.Provider>
     </ProductEditContext.Provider>
   );
 };
-
-const ProductEditRouter = async (global: GlobalProps) => {
-  const { router, context } = await buildStaticRouter(global, routes);
-  const component = (props: Props) => (
-    <ProductEditContext.Provider
-      value={{
-        ...createContextValue(props),
-        setCurrencyType: (_currency) => {}, // no-op
-      }}
-    >
-      <StaticRouterProvider router={router} context={context} nonce={global.csp_nonce} />
-    </ProductEditContext.Provider>
-  );
-  component.displayName = "ProductEditRouter";
-  return component;
-};
-
-export default register({ component: ProductEditPage, ssrComponent: ProductEditRouter, propParser: createCast() });

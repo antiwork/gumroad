@@ -1,6 +1,6 @@
+import { Link, router } from "@inertiajs/react";
 import cx from "classnames";
 import * as React from "react";
-import { Link, useMatches, useNavigate } from "react-router-dom";
 
 import { saveProduct } from "$app/data/product_edit";
 import { setProductPublished } from "$app/data/publish_product";
@@ -20,7 +20,6 @@ import { SubtitleFile } from "$app/components/SubtitleList/Row";
 import { Alert } from "$app/components/ui/Alert";
 import { PageHeader } from "$app/components/ui/PageHeader";
 import { Tabs, Tab } from "$app/components/ui/Tabs";
-import { useRefToLatest } from "$app/components/useRefToLatest";
 import { WithTooltip } from "$app/components/WithTooltip";
 
 import { FileEntry, useProductEditContext } from "./state";
@@ -137,16 +136,13 @@ export const Layout = ({
   showBorder?: boolean;
   showNavigationButton?: boolean;
 }) => {
-  const { id, product, updateProduct, uniquePermalink, saving, save, currencyType } = useProductEditContext();
-  const rootPath = `/products/${uniquePermalink}/edit`;
+  const { id, product, updateProduct, uniquePermalink, saving, save, currencyType, routes, currentTab } =
+    useProductEditContext();
 
   const url = useProductUrl();
   const checkoutUrl = useProductUrl({ wanted: true });
 
-  const [match] = useMatches();
-  const tab = match?.handle ?? "product";
-
-  const navigate = useRefToLatest(useNavigate());
+  const tab = currentTab;
 
   const [isPublishing, setIsPublishing] = React.useState(false);
   const setPublished = async (published: boolean) => {
@@ -157,10 +153,10 @@ export const Layout = ({
       updateProduct({ is_published: published });
       showAlert(published ? "Published!" : "Unpublished!", "success");
       if (tab === "share") {
-        if (product.native_type === "coffee") navigate.current(rootPath);
-        else navigate.current(`${rootPath}/content`);
+        if (product.native_type === "coffee") router.visit(routes.product, { preserveState: true });
+        else router.visit(routes.content, { preserveState: true });
       } else if (published) {
-        navigate.current(`${rootPath}/share`);
+        router.visit(routes.share, { preserveState: true });
       }
     } catch (e) {
       assertResponseError(e);
@@ -203,7 +199,7 @@ export const Layout = ({
     </WithTooltip>
   );
 
-  const onTabClick = (e: React.MouseEvent<HTMLAnchorElement>, callback?: () => void) => {
+  const onTabClick = (e: React.MouseEvent, callback?: () => void) => {
     const message = isUploadingFiles
       ? "Some files are still uploading, please wait..."
       : isUploadingFilesOrImages
@@ -251,7 +247,7 @@ export const Layout = ({
             <Button
               color="primary"
               disabled={isBusy}
-              onClick={() => void save().then(() => navigate.current(`${rootPath}/content`))}
+              onClick={() => void save().then(() => router.visit(routes.content, { preserveState: true }))}
             >
               {saving ? "Saving changes..." : "Save and continue"}
             </Button>
@@ -275,25 +271,26 @@ export const Layout = ({
         >
           <Tabs style={{ gridColumn: 1 }}>
             <Tab asChild isSelected={tab === "product"}>
-              <Link to={rootPath} onClick={onTabClick}>
+              <Link href={routes.product} preserveState onClick={onTabClick}>
                 Product
               </Link>
             </Tab>
             {!isCoffee ? (
               <Tab asChild isSelected={tab === "content"}>
-                <Link to={`${rootPath}/content`} onClick={onTabClick}>
+                <Link href={routes.content} preserveState onClick={onTabClick}>
                   Content
                 </Link>
               </Tab>
             ) : null}
             <Tab asChild isSelected={tab === "receipt"}>
-              <Link to={`${rootPath}/receipt`} onClick={onTabClick}>
+              <Link href={routes.receipt} preserveState onClick={onTabClick}>
                 Receipt
               </Link>
             </Tab>
             <Tab asChild isSelected={tab === "share"}>
               <Link
-                to={`${rootPath}/share`}
+                href={routes.share}
+                preserveState
                 onClick={(evt) => {
                   onTabClick(evt, () => {
                     if (!product.is_published) {

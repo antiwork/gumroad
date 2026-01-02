@@ -24,6 +24,18 @@ class LinkPolicy < ApplicationPolicy
     update?
   end
 
+  def edit_content?
+    edit?
+  end
+
+  def edit_share?
+    edit?
+  end
+
+  def edit_receipt?
+    edit?
+  end
+
   def show?
     new?
   end

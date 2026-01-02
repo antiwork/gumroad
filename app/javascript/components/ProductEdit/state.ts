@@ -161,6 +161,16 @@ export type ContentUpdates = {
   uniquePermalinkOrVariantIds: string[];
 } | null;
 
+export type EditRoutes = {
+  product: string;
+  content: string;
+  share: string;
+  receipt: string;
+  save: string;
+  publish: string;
+  unpublish: string;
+};
+
 export const ProductEditContext = React.createContext<{
   id: string;
   product: Product;
@@ -195,6 +205,8 @@ export const ProductEditContext = React.createContext<{
   contentUpdates: ContentUpdates;
   setContentUpdates: React.Dispatch<React.SetStateAction<ContentUpdates>>;
   filesById: Map<string, FileEntry>;
+  routes: EditRoutes;
+  currentTab: string;
 } | null>(null);
 export const useProductEditContext = () => assertDefined(React.useContext(ProductEditContext));
 

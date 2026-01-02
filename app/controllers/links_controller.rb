@@ -31,7 +31,7 @@ class LinksController < ApplicationController
   before_action :fetch_product_and_enforce_ownership, only: %i[destroy]
   before_action :fetch_product_and_enforce_access, only: %i[update publish unpublish release_preorder update_sections]
 
-  layout "inertia", only: [:index, :new]
+  layout "inertia", only: [:index, :new, :edit, :edit_content, :edit_share, :edit_receipt]
 
   def index
     authorize Link
@@ -325,11 +325,38 @@ class LinksController < ApplicationController
     fetch_product_by_unique_permalink
     authorize @product
 
-    redirect_to bundle_path(@product.external_id) if @product.is_bundle?
+    return redirect_to bundle_path(@product.external_id) if @product.is_bundle?
 
     @title = @product.name
 
-    @presenter = ProductPresenter.new(product: @product, pundit_user:)
+    render inertia: "Products/Edit/ProductTab", props: build_edit_props("product")
+  end
+
+  def edit_content
+    fetch_product_by_unique_permalink
+    authorize @product
+
+    @title = @product.name
+
+    render inertia: "Products/Edit/ContentTab", props: build_edit_props("content")
+  end
+
+  def edit_share
+    fetch_product_by_unique_permalink
+    authorize @product
+
+    @title = @product.name
+
+    render inertia: "Products/Edit/ShareTab", props: build_edit_props("share")
+  end
+
+  def edit_receipt
+    fetch_product_by_unique_permalink
+    authorize @product
+
+    @title = @product.name
+
+    render inertia: "Products/Edit/ReceiptTab", props: build_edit_props("receipt")
   end
 
   def update
@@ -538,6 +565,23 @@ class LinksController < ApplicationController
   end
 
   private
+    def build_edit_props(current_tab)
+      presenter = ProductPresenter.new(product: @product, pundit_user:)
+      {
+        **presenter.edit_props,
+        current_tab:,
+        routes: {
+          product: edit_link_path(@product),
+          content: edit_link_content_path(@product),
+          share: edit_link_share_path(@product),
+          receipt: edit_link_receipt_path(@product),
+          save: link_path(@product.unique_permalink),
+          publish: publish_link_path(@product.unique_permalink),
+          unpublish: unpublish_link_path(@product.unique_permalink),
+        }
+      }
+    end
+
     def fetch_product_for_show
       fetch_product_by_custom_domain || fetch_product_by_general_permalink
     end

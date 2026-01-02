@@ -1,4 +1,4 @@
-import { router } from "@inertiajs/react";
+import { Link, router } from "@inertiajs/react";
 import * as React from "react";
 
 import { getPagedProducts, Product, SortKey } from "$app/data/products";
@@ -123,13 +123,20 @@ export const ProductsPageProductsTable = (props: {
               <ProductIconCell
                 href={product.can_edit ? product.edit_url : product.url}
                 thumbnail={product.thumbnail?.url ?? null}
+                useInertiaLink={product.can_edit}
               />
               <TableCell className="w-full" hideLabel>
                 <div>
                   {/* Safari currently doesn't support position: relative on <tr>, so we can't make the whole row a link here */}
-                  <a href={product.can_edit ? product.edit_url : product.url} style={{ textDecoration: "none" }}>
-                    <h4 className="font-bold">{product.name}</h4>
-                  </a>
+                  {product.can_edit ? (
+                    <Link href={product.edit_url} style={{ textDecoration: "none" }}>
+                      <h4 className="font-bold">{product.name}</h4>
+                    </Link>
+                  ) : (
+                    <a href={product.url} style={{ textDecoration: "none" }}>
+                      <h4 className="font-bold">{product.name}</h4>
+                    </a>
+                  )}
 
                   <a href={product.url} title={product.url} target="_blank" rel="noreferrer">
                     <small>{product.url_without_protocol}</small>
