@@ -151,17 +151,16 @@ describe("Email Creation Flow", :js, type: :system) do
     end
     expect(page).to have_attachment(name: "thing")
     within find_attachment("test") do
+      click_on "Edit"
       expect(page).to have_attachment(name: "sample")
     end
     expect(page).to have_checked_field("Disable file downloads (stream only)")
 
-    # On cancel, it redirects back to the tab from which "New email" was clicked
+    # On cancel, it redirects back to the drafts tab since the email is a draft
     click_on "Cancel"
-    expect(page).to have_current_path("#{emails_path}/published")
+    expect(page).to have_current_path("#{emails_path}/drafts")
 
     # Ensures that the just-created email is shown in the "Drafts" tab
-    select_tab "Drafts"
-    wait_for_ajax
     expect(page).to have_table_row({ "Subject" => "Hello", "Sent to" => "Customers of Sample product", "Audience" => "0" })
 
     find(:table_row, { "Subject" => "Hello" }).click
@@ -224,10 +223,7 @@ describe("Email Creation Flow", :js, type: :system) do
 
     expect(page).to have_current_path("#{emails_path}/#{installment.external_id}/edit")
     click_on "Cancel"
-    expect(page).to have_current_path("#{emails_path}/published")
-
-    select_tab "Drafts"
-    wait_for_ajax
+    expect(page).to have_current_path("#{emails_path}/drafts")
     expect(page).to have_table_row({ "Subject" => "Hello", "Sent to" => "Customers of Sample product - V1", "Audience" => "1" })
   end
 
@@ -288,10 +284,7 @@ describe("Email Creation Flow", :js, type: :system) do
 
     expect(page).to have_current_path("#{emails_path}/#{installment.external_id}/edit")
     click_on "Cancel"
-    expect(page).to have_current_path("#{emails_path}/published")
-
-    select_tab "Drafts"
-    wait_for_ajax
+    expect(page).to have_current_path("#{emails_path}/drafts")
     expect(page).to have_table_row({ "Subject" => "Hello", "Sent to" => "Your customers and followers", "Audience" => "3" })
   end
 
@@ -314,7 +307,6 @@ describe("Email Creation Flow", :js, type: :system) do
     set_rich_text_editor_input(find("[aria-label='Email message']"), to_text: "Hello, world!")
     sleep 0.5 # wait for the message editor to update
     click_on "Save"
-    wait_for_ajax
     expect(page).to have_alert(text: "Email created!")
 
     installment = Installment.last
@@ -324,10 +316,7 @@ describe("Email Creation Flow", :js, type: :system) do
 
     expect(page).to have_current_path("#{emails_path}/#{installment.external_id}/edit")
     click_on "Cancel"
-    expect(page).to have_current_path("#{emails_path}/published")
-
-    select_tab "Drafts"
-    wait_for_ajax
+    expect(page).to have_current_path("#{emails_path}/drafts")
     expect(page).to have_table_row({ "Subject" => "Hello", "Sent to" => "Your followers", "Audience" => "2" })
   end
 
@@ -418,10 +407,7 @@ describe("Email Creation Flow", :js, type: :system) do
 
     expect(page).to have_current_path("#{emails_path}/#{installment.external_id}/edit")
     click_on "Cancel"
-    expect(page).to have_current_path("#{emails_path}/published")
-
-    select_tab "Drafts"
-    wait_for_ajax
+    expect(page).to have_current_path("#{emails_path}/drafts")
     expect(page).to have_table_row({ "Subject" => "Hello", "Sent to" => "Your affiliates", "Audience" => "1" })
   end
 
@@ -554,7 +540,20 @@ describe("Email Creation Flow", :js, type: :system) do
 
       installment = Installment.last
       expect(installment.name).to eq("Introducing Bundle")
-      expect(installment.message).to eq(%Q(<p>Hey there,</p><p>I've put together a bundle of my products that I think you'll love.</p><hr><p><strong>Bundle</strong></p><p><s>$2</s> $1</p><p>Included in this bundle</p><ul>\n<li><a target="_blank" rel="noopener noreferrer nofollow" href="#{short_link_url(product.bundle_products.first.product, host: DOMAIN)}">Bundle Product 1</a></li>\n<li><a target="_blank" rel="noopener noreferrer nofollow" href="#{short_link_url(product.bundle_products.last.product, host: DOMAIN)}">Bundle Product 2</a></li>\n</ul><a href="#{short_link_url(product, host: DOMAIN)}" class="tiptap__button button primary" target="_blank" rel="noopener noreferrer nofollow">Get your bundle</a><hr><p>Thanks for your support!</p>))
+      message = Capybara.string(installment.message)
+      expect(message).to have_css("p", text: "Hey there,")
+      expect(message).to have_css("p", text: "I've put together a bundle of my products that I think you'll love.")
+      expect(message).to have_css("hr", count: 2)
+      expect(message).to have_css("p strong", text: "Bundle")
+      expect(message).to have_css("p s", text: "$2")
+      expect(message).to have_text("$1")
+      expect(message).to have_text("Included in this bundle")
+      expect(message).to have_css("ul li", count: 2)
+      expect(message).to have_link("Bundle Product 1", href: short_link_url(product.bundle_products.first.product, host: DOMAIN))
+      expect(message).to have_link("Bundle Product 2", href: short_link_url(product.bundle_products.last.product, host: DOMAIN))
+      expect(message).to have_css("a.tiptap__button.button.primary", text: "Get your bundle")
+      expect(message).to have_link("Get your bundle", href: short_link_url(product, host: DOMAIN))
+      expect(message).to have_css("p", text: "Thanks for your support!")
       expect(installment.link).to be_nil
       expect(installment.seller).to eq(seller)
       expect(installment.seller_type?).to be(true)
@@ -629,19 +628,17 @@ describe("Email Creation Flow", :js, type: :system) do
     select_disclosure "Publish" do
       click_on "Publish now"
     end
-    wait_for_ajax
     expect(page).to have_alert(text: "Please include a message as part of the update.")
     expect(Installment.count).to eq(0)
 
     # Creates and publishes an email if all required fields are present and valid
     set_rich_text_editor_input(find("[aria-label='Email message']"), to_text: "Hello, world!")
-    sleep 0.5 # wait for the message editor to update
+    sleep 1 # wait for the message editor to update
 
     select_disclosure "Publish" do
       click_on "Publish now"
     end
-    wait_for_ajax
-    expect(page).to have_alert(text: "Email successfully published!")
+    expect(page).to have_alert(text: "Email successfully sent!")
     expect(Installment.count).to eq(1)
 
     installment = Installment.last
@@ -855,8 +852,7 @@ describe("Email Creation Flow", :js, type: :system) do
     select_disclosure "Publish" do
       click_on "Publish now"
     end
-    wait_for_ajax
-    expect(page).to have_alert(text: "Email successfully published!")
+    expect(page).to have_alert(text: "Email successfully sent!")
 
     # Duplicate the email
     find(:table_row, text: "Hello").click
@@ -957,14 +953,16 @@ describe("Email Creation Flow", :js, type: :system) do
     expect(upsell.offer_code.product_ids).to eq([product.id])
 
     installment = Installment.last
-    expect(installment.message).to eq(%Q(<p>Hi there!</p><upsell-card productid="#{product.external_id}" discount='{"type":"fixed","cents":100}' id="#{upsell.external_id}"></upsell-card>))
+    expect(installment.message).to eq("<p><br></p><upsell-card productid=\"#{product.external_id}\" discount='{\"type\":\"fixed\",\"cents\":100}' id=\"#{upsell.external_id}\"></upsell-card><p>Hi there!</p>")
 
     set_rich_text_editor_input(find("[aria-label='Email message']"), to_text: "")
+    sleep 0.5 # wait for the message editor to update
+    set_rich_text_editor_input(find("[aria-label='Email message']"), to_text: "Hello, world!")
+    sleep 0.5 # wait for the message editor to update
     click_on "Save"
-    wait_for_ajax
     expect(page).to have_alert(text: "Changes saved!")
 
-    upsell.reload
+    wait_until_true { upsell.reload.deleted? }
     expect(upsell.deleted?).to be(true)
     expect(upsell.offer_code.deleted?).to be(true)
   end

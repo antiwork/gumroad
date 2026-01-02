@@ -6,7 +6,8 @@ describe ProductsHelper do
   describe "#view_content_button_text" do
     it "shows the custom button text when available" do
       product = create(:product)
-      product.save_custom_view_content_button_text("Custom Text")
+      product.custom_view_content_button_text = "Custom Text"
+      product.save!
       expect(product.custom_view_content_button_text).not_to be_nil
       expect(helper.view_content_button_text(product)).to eq "Custom Text"
     end

@@ -11,7 +11,7 @@ class Admin::ProductPresenter::Card
   def props
     link_policy = Admin::Products::StaffPicked::LinkPolicy.new(pundit_user, product)
     {
-      id: product.id,
+      external_id: product.external_id,
       name: product.name,
       long_url: product.long_url,
       price_cents: product.price_cents,
@@ -46,7 +46,6 @@ class Admin::ProductPresenter::Card
     def alive_product_files_props
       product.ordered_alive_product_files.map do |file|
         {
-          id: file.id,
           external_id: file.external_id,
           s3_filename: file.s3_filename
         }

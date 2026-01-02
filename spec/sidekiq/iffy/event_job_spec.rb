@@ -69,5 +69,37 @@ describe Iffy::EventJob do
         described_class.new.perform(event, id, entity, non_protected_user)
       end
     end
+
+    context "when user was suspended by an admin" do
+      let(:admin_user) { create(:admin_user) }
+      let(:user) { create(:user) }
+
+      before do
+        user.flag_for_tos_violation!(author_id: admin_user.id, bulk: true)
+        user.suspend_for_tos_violation!(author_id: admin_user.id, bulk: true)
+      end
+
+      it "does not call MarkCompliantService for admin-suspended users" do
+        expect(Iffy::User::MarkCompliantService).not_to receive(:new)
+        described_class.new.perform("user.compliant", user.external_id, entity)
+      end
+    end
+
+    context "when user was suspended by Iffy" do
+      let(:user) { create(:user) }
+
+      before do
+        user.flag_for_tos_violation!(author_name: "Iffy", bulk: true)
+        user.suspend_for_tos_violation!(author_name: "Iffy", bulk: true)
+      end
+
+      it "call MarkCompliantService for Iffy-suspended users" do
+        service = double(perform: true)
+        expect(Iffy::User::MarkCompliantService).to receive(:new).with(user.external_id).and_return(service)
+        expect(service).to receive(:perform)
+
+        described_class.new.perform("user.compliant", user.external_id, entity)
+      end
+    end
   end
 end
