@@ -281,14 +281,21 @@ const UtmLinksIndex = () => {
                   <TableCell>
                     <UtmLinkActions link={link}>
                       <div role="menu">
-                        <Link role="menuitem" href={Routes.edit_dashboard_utm_link_path(link.id)}>
-                          <Icon name="pencil" />
-                          &ensp;Edit
-                        </Link>
-                        <Link role="menuitem" href={Routes.new_dashboard_utm_link_path({ copy_from: link.id })}>
-                          <Icon name="outline-duplicate" />
-                          &ensp;Duplicate
-                        </Link>
+                        <div role="menuitem">
+                          <Link className="no-underline" href={Routes.edit_dashboard_utm_link_path(link.id)}>
+                            <Icon name="pencil" />
+                            &ensp;Edit
+                          </Link>
+                        </div>
+                        <div role="menuitem">
+                          <Link
+                            className="no-underline"
+                            href={Routes.new_dashboard_utm_link_path({ copy_from: link.id })}
+                          >
+                            <Icon name="outline-duplicate" />
+                            &ensp;Duplicate
+                          </Link>
+                        </div>
                         <div
                           className="danger"
                           role="menuitem"
