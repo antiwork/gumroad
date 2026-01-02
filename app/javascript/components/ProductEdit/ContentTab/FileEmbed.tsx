@@ -53,6 +53,8 @@ export const getDraggedFileEmbed = (editor: Editor) => {
 };
 
 const FileEmbedNodeView = ({ node, editor, getPos, updateAttributes }: NodeViewProps) => {
+  if (!node.attrs.id) return;
+
   const { id, updateProduct, filesById } = useProductEditContext();
   const uid = React.useId();
   const ref = React.useRef<HTMLDivElement>(null);
