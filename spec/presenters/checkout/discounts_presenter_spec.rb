@@ -43,6 +43,8 @@ describe Checkout::DiscountsPresenter do
                      minimum_quantity: 1,
                      duration_in_billing_cycles: 1,
                      minimum_amount_cents: 1000,
+                     required_product_id: nil,
+                     required_product_days_threshold: nil,
                      products: [
                        {
                          id: product1.external_id,
@@ -75,6 +77,8 @@ describe Checkout::DiscountsPresenter do
                      minimum_quantity: nil,
                      duration_in_billing_cycles: nil,
                      minimum_amount_cents: nil,
+                     required_product_id: nil,
+                     required_product_days_threshold: nil,
                      products: [
                        {
                          id: product2.external_id,
@@ -99,6 +103,8 @@ describe Checkout::DiscountsPresenter do
                      minimum_quantity: nil,
                      duration_in_billing_cycles: nil,
                      minimum_amount_cents: nil,
+                     required_product_id: nil,
+                     required_product_days_threshold: nil,
                      products: nil,
                    },
                  ],
@@ -156,6 +162,8 @@ describe Checkout::DiscountsPresenter do
             minimum_quantity: 1,
             duration_in_billing_cycles: 1,
             minimum_amount_cents: 1000,
+            required_product_id: nil,
+            required_product_days_threshold: nil,
             products: [
               {
                 id: product1.external_id,

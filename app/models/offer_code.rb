@@ -20,6 +20,7 @@ class OfferCode < ApplicationRecord
 
   has_and_belongs_to_many :products, class_name: "Link", join_table: "offer_codes_products", association_foreign_key: "product_id"
   belongs_to :user
+  belongs_to :required_product, class_name: "Link", optional: true
   has_many :purchases
   has_many :purchases_that_count_towards_offer_code_uses, -> { counts_towards_offer_code_uses }, class_name: "Purchase"
   has_one :upsell
@@ -33,6 +34,7 @@ class OfferCode < ApplicationRecord
   validate :price_validation
   validate :validate_cancellation_discount_uniqueness
   validate :validate_cancellation_discount_product_type
+  validate :validate_required_product
 
   before_save :to_mongo
 
@@ -195,6 +197,51 @@ class OfferCode < ApplicationRecord
     end
   end
 
+  def requires_product_ownership?
+    required_product_id.present?
+  end
+
+  def buyer_owns_required_product?(buyer)
+    return true if required_product.blank?
+    return false if buyer.blank?
+
+    buyer.purchases.successful.where(link_id: required_product_id).exists?
+  end
+
+  def buyer_required_product_purchase(buyer)
+    return nil if required_product.blank? || buyer.blank?
+
+    buyer.purchases.successful.where(link_id: required_product_id).order(:created_at).first
+  end
+
+  def discount_percentage_for_buyer(buyer)
+    return amount_percentage if is_percent? && !requires_product_ownership?
+    return nil if required_product.blank? || !is_percent?
+
+    purchase = buyer_required_product_purchase(buyer)
+    return nil if purchase.blank?
+
+    days_owned = ((Time.current - purchase.created_at) / 1.day).to_i
+    threshold_days = required_product_days_threshold || 0
+
+    if threshold_days > 0 && days_owned >= threshold_days
+      (amount_percentage / 2.0).round
+    else
+      amount_percentage
+    end
+  end
+
+  def amount_off_for_buyer(price_cents, buyer)
+    return amount_off(price_cents) if required_product.blank?
+    return 0 if buyer.blank?
+    return amount_cents if is_cents?
+
+    percentage = discount_percentage_for_buyer(buyer)
+    return 0 if percentage.blank?
+
+    (price_cents * (percentage / 100.0)).round
+  end
+
   def self.human_attribute_name(attr, _)
     attr == "code" ? "Discount code" : super
   end
@@ -300,5 +347,17 @@ class OfferCode < ApplicationRecord
 
     def reindex_captured_products
       reindex_associated_products(products_to_reindex: Link.where(id: @product_ids_to_reindex)) if @product_ids_to_reindex.present?
+    end
+
+    def validate_required_product
+      return if required_product.blank?
+
+      if required_product.user_id != user_id
+        errors.add(:required_product, "must belong to you")
+      end
+
+      if required_product_days_threshold.present? && required_product_days_threshold < 0
+        errors.add(:required_product_days_threshold, "must be zero or positive")
+      end
     end
 end

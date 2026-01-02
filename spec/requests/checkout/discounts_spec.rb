@@ -450,6 +450,35 @@ describe("Checkout discounts page", type: :system, js: true) do
         expect(page).to have_select("Discount duration for memberships", options: ["Once (first billing period only)", "Forever"], selected: "Forever")
       end
     end
+
+    context "when requiring product ownership" do
+      let!(:required_product) { create(:product, name: "Required Product", user: seller, price_cents: 500) }
+
+      it "creates the offer code with required product ownership" do
+        visit checkout_discounts_path
+        click_on "New discount"
+
+        fill_in "Name", with: "Upgrade Discount"
+        fill_in "Discount code", with: "UPGRADE"
+        fill_in "Percentage", with: "50"
+
+        select_combo_box_option search: "Product 1", from: "Products"
+
+        check "Require buyers to own another product"
+        select_combo_box_option search: "Required Product", from: "Required product"
+        fill_in "Ownership threshold (months)", with: "6"
+
+        click_on "Add discount"
+
+        expect(page).to have_alert(text: "Successfully created discount!")
+
+        offer_code = OfferCode.last
+        expect(offer_code.name).to eq("Upgrade Discount")
+        expect(offer_code.code).to eq("UPGRADE")
+        expect(offer_code.required_product).to eq(required_product)
+        expect(offer_code.required_product_days_threshold).to eq(180)
+      end
+    end
   end
 
   describe "editing offer codes" do
@@ -657,6 +686,41 @@ describe("Checkout discounts page", type: :system, js: true) do
         click_on "Save changes"
 
         expect(offer_code1.reload.products).to eq([product1, product2, membership])
+      end
+    end
+
+    context "when editing required product ownership" do
+      let!(:required_product) { create(:product, name: "Required Product", user: seller, price_cents: 500) }
+      let!(:offer_code_with_requirement) do
+        create(:percentage_offer_code,
+          name: "Upgrade Discount",
+          code: "upgrade",
+          user: seller,
+          products: [product1],
+          required_product: required_product,
+          required_product_days_threshold: 180)
+      end
+
+      it "displays and updates the required product settings" do
+        visit checkout_discounts_path
+
+        find(:table_row, { "Discount" => "Upgrade Discount" }).click
+        within_modal "Upgrade Discount" do
+          click_on "Edit"
+        end
+
+        expect(page).to have_checked_field("Require buyers to own another product")
+        expect(page).to have_field("Ownership threshold (months)", with: "6")
+
+        fill_in "Ownership threshold (months)", with: "12"
+
+        click_on "Save changes"
+
+        expect(page).to have_alert(text: "Successfully updated discount!")
+
+        offer_code_with_requirement.reload
+        expect(offer_code_with_requirement.required_product).to eq(required_product)
+        expect(offer_code_with_requirement.required_product_days_threshold).to eq(360)
       end
     end
   end

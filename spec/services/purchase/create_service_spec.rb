@@ -518,6 +518,59 @@ describe Purchase::CreateService, :vcr do
     end
   end
 
+  context "when the discount code requires product ownership" do
+    let(:seller) { create(:named_seller) }
+    let(:product) { create(:product, name: "Product", user: seller, price_cents: 1000) }
+    let(:required_product) { create(:product, name: "Required Product", user: seller, price_cents: 500) }
+    let(:offer_code) { create(:offer_code, user: seller, products: [product], required_product: required_product) }
+
+    before do
+      params[:purchase][:perceived_price_cents] = 500
+      params[:purchase][:discount_code] = offer_code.code
+    end
+
+    context "when the buyer owns the required product" do
+      before do
+        create(:purchase, :successful, link: required_product, purchaser: buyer)
+      end
+
+      it "allows the purchase" do
+        purchase, error = Purchase::CreateService.new(
+          product: product,
+          params:,
+          buyer: buyer
+        ).perform
+
+        expect(error).to be_nil
+        expect(purchase.offer_code).to eq(offer_code)
+      end
+    end
+
+    context "when the buyer does not own the required product" do
+      it "rejects the purchase" do
+        _, error = Purchase::CreateService.new(
+          product: product,
+          params:,
+          buyer: buyer
+        ).perform
+
+        expect(error).to eq("Sorry, this discount code requires you to own \"Required Product\" to use it.")
+      end
+    end
+
+    context "when there is no buyer" do
+      it "rejects the purchase" do
+        _, error = Purchase::CreateService.new(
+          product: product,
+          params:,
+          buyer: nil
+        ).perform
+
+        expect(error).to eq("Sorry, this discount code requires you to own \"Required Product\" to use it.")
+      end
+    end
+  end
+
   context "for failed purchase" do
     it "creates a purchase and sets the proper state" do
       params[:purchase][:chargeable] = failed_chargeable

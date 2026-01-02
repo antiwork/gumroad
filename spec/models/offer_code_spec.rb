@@ -750,4 +750,120 @@ describe OfferCode do
       end
     end
   end
+
+  describe "required product ownership" do
+    let(:seller) { create(:user) }
+    let(:product) { create(:product, user: seller, price_cents: 2000) }
+    let(:required_product) { create(:product, user: seller, price_cents: 1000) }
+    let(:buyer) { create(:user) }
+
+    describe "#requires_product_ownership?" do
+      it "returns true when required_product is set" do
+        offer_code = create(:offer_code, user: seller, products: [product], required_product: required_product)
+
+        expect(offer_code.requires_product_ownership?).to be true
+      end
+
+      it "returns false when required_product is not set" do
+        offer_code = create(:offer_code, user: seller, products: [product])
+
+        expect(offer_code.requires_product_ownership?).to be false
+      end
+    end
+
+    describe "#buyer_owns_required_product?" do
+      let(:offer_code) { create(:offer_code, user: seller, products: [product], required_product: required_product) }
+
+      it "returns true when buyer has purchased the required product" do
+        create(:purchase, :successful, link: required_product, purchaser: buyer)
+
+        expect(offer_code.buyer_owns_required_product?(buyer)).to be true
+      end
+
+      it "returns false when buyer has not purchased the required product" do
+        expect(offer_code.buyer_owns_required_product?(buyer)).to be false
+      end
+
+      it "returns false when buyer is nil" do
+        expect(offer_code.buyer_owns_required_product?(nil)).to be false
+      end
+
+      it "returns true when required_product is nil" do
+        offer_code_without_requirement = create(:offer_code, user: seller, products: [product])
+
+        expect(offer_code_without_requirement.buyer_owns_required_product?(buyer)).to be true
+      end
+    end
+
+    describe "#discount_percentage_for_buyer" do
+      let(:offer_code) do
+        create(:offer_code,
+               user: seller,
+               products: [product],
+               required_product: required_product,
+               amount_percentage: 100,
+               required_product_days_threshold: 180)
+      end
+
+      it "returns full discount when buyer owned required product for less than threshold" do
+        create(:purchase, :successful, link: required_product, purchaser: buyer, created_at: 30.days.ago)
+
+        expect(offer_code.discount_percentage_for_buyer(buyer)).to eq(100)
+      end
+
+      it "returns half discount when buyer owned required product for longer than threshold" do
+        create(:purchase, :successful, link: required_product, purchaser: buyer, created_at: 200.days.ago)
+
+        expect(offer_code.discount_percentage_for_buyer(buyer)).to eq(50)
+      end
+
+      it "returns nil when buyer does not own required product" do
+        expect(offer_code.discount_percentage_for_buyer(buyer)).to be_nil
+      end
+    end
+
+    describe "validation" do
+      it "allows required_product from the same seller" do
+        offer_code = build(:offer_code,
+                           user: seller,
+                           products: [product],
+                           required_product: required_product)
+
+        expect(offer_code).to be_valid
+      end
+
+      it "rejects required_product from a different seller" do
+        other_seller = create(:user)
+        other_product = create(:product, user: other_seller)
+        offer_code = build(:offer_code,
+                           user: seller,
+                           products: [product],
+                           required_product: other_product)
+
+        expect(offer_code).not_to be_valid
+        expect(offer_code.errors[:required_product]).to include("must belong to you")
+      end
+
+      it "rejects negative required_product_days_threshold" do
+        offer_code = build(:offer_code,
+                           user: seller,
+                           products: [product],
+                           required_product: required_product,
+                           required_product_days_threshold: -10)
+
+        expect(offer_code).not_to be_valid
+        expect(offer_code.errors[:required_product_days_threshold]).to include("must be zero or positive")
+      end
+
+      it "allows zero required_product_days_threshold" do
+        offer_code = build(:offer_code,
+                           user: seller,
+                           products: [product],
+                           required_product: required_product,
+                           required_product_days_threshold: 0)
+
+        expect(offer_code).to be_valid
+      end
+    end
+  end
 end

@@ -73,6 +73,8 @@ export type OfferCode = {
   duration_in_billing_cycles: Duration | null;
   minimum_quantity: number | null;
   minimum_amount_cents: number | null;
+  required_product_id: string | null;
+  required_product_days_threshold: number | null;
 };
 
 export type SortKey = "name" | "revenue" | "uses" | "term";
@@ -657,6 +659,8 @@ const DiscountsPage = ({
             minimumQuantity: offerCode.minimum_quantity,
             durationInBillingCycles: offerCode.duration_in_billing_cycles,
             minimumAmount: offerCode.minimum_amount_cents,
+            requiredProductId: offerCode.required_product_id,
+            requiredProductDaysThreshold: offerCode.required_product_days_threshold,
           });
           resetQueryState();
           setState({ offerCodes, pagination });
@@ -700,6 +704,8 @@ const DiscountsPage = ({
             minimumQuantity: offerCode.minimum_quantity,
             durationInBillingCycles: offerCode.duration_in_billing_cycles,
             minimumAmount: offerCode.minimum_amount_cents,
+            requiredProductId: offerCode.required_product_id,
+            requiredProductDaysThreshold: offerCode.required_product_days_threshold,
           });
           resetQueryState();
           setState({ offerCodes, pagination });
@@ -802,6 +808,19 @@ const Form = ({
   );
   const [durationInBillingCycles, setDurationInMonths] = React.useState(offerCode?.duration_in_billing_cycles ?? null);
 
+  const [requireProductOwnership, setRequireProductOwnership] = React.useState(!!offerCode?.required_product_id);
+  const [requiredProductId, setRequiredProductId] = React.useState<string | null>(
+    offerCode?.required_product_id ?? null,
+  );
+  const daysToMonths = (days: number | null) => (days !== null ? Math.round(days / 30) : null);
+  const monthsToDays = (months: number | null) => (months !== null ? months * 30 : null);
+  const [requiredProductMonthsThreshold, setRequiredProductMonthsThreshold] = React.useState<{
+    value: number | null;
+    error?: boolean;
+  }>({
+    value: daysToMonths(offerCode?.required_product_days_threshold ?? null),
+  });
+
   const uid = React.useId();
 
   const handleSubmit = () => {
@@ -859,6 +878,10 @@ const Form = ({
       minimum_quantity: hasMinimumQuantity ? minimumQuantity.value : null,
       duration_in_billing_cycles: canSetDuration ? durationInBillingCycles : null,
       minimum_amount_cents: hasMinimumAmount ? minimumAmount.value : null,
+      required_product_id: requireProductOwnership ? requiredProductId : null,
+      required_product_days_threshold: requireProductOwnership
+        ? monthsToDays(requiredProductMonthsThreshold.value)
+        : null,
     });
   };
 
@@ -1186,6 +1209,70 @@ const Form = ({
                       />
                     )}
                   </NumberInput>
+                </fieldset>
+              </div>
+            </Details>
+            <Details
+              className="toggle"
+              open={requireProductOwnership}
+              summary={
+                <label>
+                  <input
+                    type="checkbox"
+                    role="switch"
+                    checked={requireProductOwnership}
+                    onChange={(evt) => {
+                      setRequireProductOwnership(evt.target.checked);
+                      if (!evt.target.checked) {
+                        setRequiredProductId(null);
+                        setRequiredProductMonthsThreshold({ value: null });
+                      }
+                    }}
+                  />
+                  Require buyers to own another product
+                </label>
+              }
+            >
+              <div className="dropdown">
+                <fieldset>
+                  <legend>
+                    <label htmlFor={`${uid}requiredProduct`}>Required product</label>
+                  </legend>
+                  <TypeSafeOptionSelect
+                    id={`${uid}requiredProduct`}
+                    value={requiredProductId ?? ""}
+                    onChange={(id) => setRequiredProductId(id || null)}
+                    options={products
+                      .filter((product) => !product.archived)
+                      .map((product) => ({
+                        id: product.id,
+                        label: product.name,
+                      }))}
+                  />
+                </fieldset>
+                <fieldset className={cx({ danger: requiredProductMonthsThreshold.error })}>
+                  <legend>
+                    <label htmlFor={`${uid}ownershipThreshold`}>Ownership threshold (months)</label>
+                  </legend>
+                  <NumberInput
+                    value={requiredProductMonthsThreshold.value}
+                    onChange={(value) => {
+                      if (value === null || value >= 0) setRequiredProductMonthsThreshold({ value });
+                    }}
+                  >
+                    {(props) => (
+                      <input
+                        id={`${uid}ownershipThreshold`}
+                        placeholder="6"
+                        aria-invalid={requiredProductMonthsThreshold.error}
+                        {...props}
+                      />
+                    )}
+                  </NumberInput>
+                  <small>
+                    Buyers who owned the required product for less than this many months will receive a 100% discount.
+                    Buyers who owned it for this many months or more will receive a 50% discount.
+                  </small>
                 </fieldset>
               </div>
             </Details>

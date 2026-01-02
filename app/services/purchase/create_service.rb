@@ -87,6 +87,13 @@ class Purchase::CreateService < Purchase::BaseService
         end
       end
 
+      if purchase.offer_code&.requires_product_ownership?
+        if buyer.blank? || !purchase.offer_code.buyer_owns_required_product?(buyer)
+          required_product_name = purchase.offer_code.required_product&.name || "the required product"
+          raise Purchase::PurchaseInvalid, "Sorry, this discount code requires you to own \"#{required_product_name}\" to use it."
+        end
+      end
+
       if params[:accepted_offer].present?
         upsell = Upsell.available_to_customers.find_by_external_id(params[:accepted_offer][:id])
         raise Purchase::PurchaseInvalid, "Sorry, this offer is no longer available." unless upsell.present?

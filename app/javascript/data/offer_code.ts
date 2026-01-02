@@ -59,6 +59,8 @@ type DiscountPayload = {
   minimumQuantity: number | null;
   durationInBillingCycles: Duration | null;
   minimumAmount: number | null;
+  requiredProductId: string | null;
+  requiredProductDaysThreshold: number | null;
 };
 
 export const getPagedDiscounts = (page: number, query: string | null, sort: Sort<SortKey> | null) => {
@@ -91,6 +93,8 @@ export const createDiscount = async ({
   minimumQuantity,
   durationInBillingCycles,
   minimumAmount,
+  requiredProductId,
+  requiredProductDaysThreshold,
 }: DiscountPayload) => {
   const response = await request({
     method: "POST",
@@ -110,6 +114,8 @@ export const createDiscount = async ({
       minimum_quantity: minimumQuantity,
       duration_in_billing_cycles: durationInBillingCycles,
       minimum_amount_cents: minimumAmount,
+      required_product_id: requiredProductId,
+      required_product_days_threshold: requiredProductDaysThreshold,
     },
   });
   const responseData = cast<
@@ -134,6 +140,8 @@ export const updateDiscount = async (
     minimumQuantity,
     durationInBillingCycles,
     minimumAmount,
+    requiredProductId,
+    requiredProductDaysThreshold,
   }: DiscountPayload,
 ) => {
   const response = await request({
@@ -154,6 +162,8 @@ export const updateDiscount = async (
       minimum_quantity: minimumQuantity,
       duration_in_billing_cycles: durationInBillingCycles,
       minimum_amount_cents: minimumAmount,
+      required_product_id: requiredProductId,
+      required_product_days_threshold: requiredProductDaysThreshold,
     },
   });
   const responseData = cast<
