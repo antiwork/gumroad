@@ -2396,14 +2396,13 @@ class Purchase < ApplicationRecord
   end
 
   def original_offer_code(include_deleted: false)
-    return nil if offer_code&.deleted? && !include_deleted
-
     if has_cached_offer_code?
-      code = purchase_offer_code_discount.offer_code.code
+      code = purchase_offer_code_discount.offer_code&.code || purchase_offer_code_discount.offer_code_id.to_s
       purchase_offer_code_discount.offer_code_is_percent ?
         OfferCode.new(amount_percentage: purchase_offer_code_discount.offer_code_amount, code:) :
         OfferCode.new(amount_cents: purchase_offer_code_discount.offer_code_amount, code:)
     else
+      return nil if offer_code&.deleted? && !include_deleted
       offer_code
     end
   end
