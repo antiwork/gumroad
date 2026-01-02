@@ -2,6 +2,7 @@ import * as React from "react";
 
 import { CopyToClipboard } from "$app/components/CopyToClipboard";
 import { useCurrentSeller } from "$app/components/CurrentSeller";
+import { Input } from "$app/components/ui/Input";
 import { Pill } from "$app/components/ui/Pill";
 
 export const CustomPermalinkInput = ({
@@ -30,7 +31,7 @@ export const CustomPermalinkInput = ({
           </button>
         </CopyToClipboard>
       </legend>
-      <div className="input">
+      <Input>
         <Pill className="-ml-2 shrink-0">{`${currentSeller.subdomain}/l/`}</Pill>
         <input
           id={uid}
@@ -39,7 +40,7 @@ export const CustomPermalinkInput = ({
           value={value ?? ""}
           onChange={(evt) => onChange(evt.target.value.replace(/\s/gu, "") || null)}
         />
-      </div>
+      </Input>
     </fieldset>
   );
 };

@@ -4,6 +4,7 @@ import { type Product } from "$app/components/Analytics";
 import { Button } from "$app/components/Button";
 import { Icon } from "$app/components/Icons";
 import { Popover } from "$app/components/Popover";
+import { Input } from "$app/components/ui/Input";
 
 export type ProductOption = Product & { selected: boolean };
 
@@ -16,10 +17,12 @@ export const ProductsPopover = ({
 }) => (
   <Popover
     trigger={
-      <span className="input">
-        <div className="fake-input">Select products...</div>
-        <Icon name="outline-cheveron-down" />
-      </span>
+      <Input asChild>
+        <span>
+          <div className="fake-input">Select products...</div>
+          <Icon name="outline-cheveron-down" />
+        </span>
+      </Input>
     }
   >
     <div className="stack">

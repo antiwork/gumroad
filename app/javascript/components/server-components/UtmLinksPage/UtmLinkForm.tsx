@@ -21,6 +21,7 @@ import { Icon } from "$app/components/Icons";
 import { Select } from "$app/components/Select";
 import { showAlert } from "$app/components/server-components/Alert";
 import { UtmLinkLayout } from "$app/components/server-components/UtmLinksPage";
+import { Input } from "$app/components/ui/Input";
 import { Pill } from "$app/components/ui/Pill";
 import { WithTooltip } from "$app/components/WithTooltip";
 
@@ -298,7 +299,7 @@ export const UtmLinkForm = () => {
               <label htmlFor={`${uid}-link-text`}>Link</label>
             </legend>
             <div style={{ display: "grid", gridTemplateColumns: "1fr auto", gap: "var(--spacer-2)" }}>
-              <div className={cx("input", { disabled: isEditing })}>
+              <Input disabled={isEditing}>
                 <Pill className="-ml-2 shrink-0">{shortUrlPrefix}</Pill>
                 <input
                   type="text"
@@ -308,7 +309,7 @@ export const UtmLinkForm = () => {
                   disabled={isEditing}
                   ref={permalinkRef}
                 />
-              </div>
+              </Input>
               <div className="flex gap-2">
                 <CopyToClipboard
                   copyTooltip="Copy short link"
@@ -435,7 +436,7 @@ export const UtmLinkForm = () => {
               <legend>
                 <label htmlFor={`${uid}-utm-url`}>Generated URL with UTM tags</label>
               </legend>
-              <div className="input">
+              <Input>
                 <ResizableTextarea
                   id={`${uid}-utm-url`}
                   className="resize-none"
@@ -448,7 +449,7 @@ export const UtmLinkForm = () => {
                     <Icon name="link" />
                   </Button>
                 </CopyToClipboard>
-              </div>
+              </Input>
             </fieldset>
           ) : null}
         </section>

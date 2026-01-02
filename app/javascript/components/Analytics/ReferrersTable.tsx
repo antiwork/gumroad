@@ -4,6 +4,7 @@ import { formatPriceCentsWithCurrencySymbol } from "$app/utils/currency";
 
 import { type AnalyticsReferrerTotals } from "$app/components/Analytics";
 import { Button } from "$app/components/Button";
+import { Input } from "$app/components/ui/Input";
 import { Table, TableBody, TableCaption, TableCell, TableHead, TableHeader, TableRow } from "$app/components/ui/Table";
 import { useClientSortingTableDriver } from "$app/components/useSortingTableDriver";
 
@@ -69,7 +70,7 @@ export const ReferrersTable = ({ data }: { data: AnalyticsReferrerTotals }) => {
           Show more
         </Button>
       )}
-      {items.length ? null : <div className="input">Nothing yet</div>}
+      {items.length ? null : <Input>Nothing yet</Input>}
     </section>
   );
 };

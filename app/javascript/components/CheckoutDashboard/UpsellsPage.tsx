@@ -37,6 +37,7 @@ import { Select } from "$app/components/Select";
 import { showAlert } from "$app/components/server-components/Alert";
 import { CrossSellModal, UpsellModal } from "$app/components/server-components/CheckoutPage";
 import { Skeleton } from "$app/components/Skeleton";
+import { Input } from "$app/components/ui/Input";
 import { PageHeader } from "$app/components/ui/PageHeader";
 import { Placeholder, PlaceholderImage } from "$app/components/ui/Placeholder";
 import { Sheet, SheetHeader } from "$app/components/ui/Sheet";
@@ -242,7 +243,7 @@ const UpsellsPage = (props: UpsellsPageProps) => {
                 </div>
               }
             >
-              <div className="input">
+              <Input>
                 <Icon name="solid-search" />
                 <input
                   ref={searchInputRef}
@@ -254,7 +255,7 @@ const UpsellsPage = (props: UpsellsPageProps) => {
                     debouncedLoadUpsells();
                   }}
                 />
-              </div>
+              </Input>
             </Popover>
           )}
           <Button color="accent" onClick={() => setView("create")} disabled={isReadOnly}>

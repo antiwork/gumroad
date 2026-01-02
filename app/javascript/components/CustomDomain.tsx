@@ -1,4 +1,3 @@
-import cx from "classnames";
 import * as React from "react";
 import { cast } from "ts-safe-cast";
 
@@ -6,6 +5,8 @@ import { asyncVoid } from "$app/utils/promise";
 import { assertResponseError, request, ResponseError } from "$app/utils/request";
 
 import { Button } from "$app/components/Button";
+import { Fieldset } from "$app/components/ui/Fieldset";
+import { Input } from "$app/components/ui/Input";
 import { Pill } from "$app/components/ui/Pill";
 
 type VerificationState = "initial" | "verifying" | "success" | "failure";
@@ -66,13 +67,11 @@ const CustomDomain = ({
     }
   });
 
+  const state =
+    verificationInfo.state === "success" ? "success" : verificationInfo.state === "failure" ? "danger" : undefined;
+
   return (
-    <fieldset
-      className={cx({
-        success: verificationInfo.state === "success",
-        danger: verificationInfo.state === "failure",
-      })}
-    >
+    <Fieldset state={state}>
       <legend>
         <label htmlFor={uid}>{label}</label>
         {includeLearnMoreLink ? (
@@ -81,7 +80,7 @@ const CustomDomain = ({
           </a>
         ) : null}
       </legend>
-      <div className="input input-wrapper">
+      <Input>
         <input
           id={uid}
           placeholder="yourdomain.com"
@@ -112,9 +111,9 @@ const CustomDomain = ({
             </Button>
           </Pill>
         ) : null}
-      </div>
+      </Input>
       <small>{verificationInfo.message}</small>
-    </fieldset>
+    </Fieldset>
   );
 };
 

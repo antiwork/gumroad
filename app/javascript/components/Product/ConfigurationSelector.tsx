@@ -40,6 +40,7 @@ import { TypeSafeOptionSelect } from "$app/components/TypeSafeOptionSelect";
 import { Alert } from "$app/components/ui/Alert";
 import { Calendar } from "$app/components/ui/Calendar";
 import { Pill } from "$app/components/ui/Pill";
+import { RadioButtonGroup } from "$app/components/ui/RadioButtonGroup";
 import { useRunOnce } from "$app/components/useRunOnce";
 
 const PWYWInput = React.forwardRef<
@@ -443,7 +444,7 @@ const CallDateAndTimeSelector = ({
               {clientTimeZone.shortFormattedName}
             </span>
           </h4>
-          <div role="radiogroup" className="radio-buttons" style={{ gridTemplateColumns: "repeat(2, 1fr)" }}>
+          <RadioButtonGroup style={{ gridTemplateColumns: "repeat(2, 1fr)" }}>
             {getAvailableStartTimesByDate(selectedStartTime).map((time) => (
               <Button
                 role="radio"
@@ -455,7 +456,7 @@ const CallDateAndTimeSelector = ({
                 <div>{formatCallDate(time, { date: { hidden: true }, timeZone: { hidden: true } })}</div>
               </Button>
             ))}
-          </div>
+          </RadioButtonGroup>
         </section>
       ) : null}
       {selectedStartTime ? (
@@ -488,7 +489,7 @@ const PaymentOptionSelector = ({
   return (
     <section>
       <h4 className="mb-2">Payment option</h4>
-      <div role="radiogroup" className="radio-buttons">
+      <RadioButtonGroup>
         <Button
           role="radio"
           aria-checked={!selection.payInInstallments}
@@ -516,7 +517,7 @@ const PaymentOptionSelector = ({
             </p>
           </div>
         </Button>
-      </div>
+      </RadioButtonGroup>
     </section>
   );
 };
@@ -589,11 +590,7 @@ export const ConfigurationSelector = React.forwardRef<
     if (product.options.length === 1) return pwywInput;
     return (
       <>
-        <div
-          role="radiogroup"
-          className="radio-buttons"
-          style={{ gridTemplateColumns: "repeat(auto-fit, minmax(min(6rem, 100%), 1fr))" }}
-        >
+        <RadioButtonGroup style={{ gridTemplateColumns: "repeat(auto-fit, minmax(min(6rem, 100%), 1fr))" }}>
           {product.options.map((option) => (
             <Button
               role="radio"
@@ -621,7 +618,7 @@ export const ConfigurationSelector = React.forwardRef<
           >
             Other
           </Button>
-        </div>
+        </RadioButtonGroup>
         {selection.optionId === null ? pwywInput : null}
       </>
     );
@@ -641,19 +638,13 @@ export const ConfigurationSelector = React.forwardRef<
         />
       ) : null}
       {hasRentOption && product.rental ? (
-        <div
-          className="radio-buttons"
-          role="radiogroup"
-          itemProp="offers"
-          itemType="https://schema.org/AggregateOffer"
-          itemScope
-        >
+        <RadioButtonGroup itemProp="offers" itemType="https://schema.org/AggregateOffer" itemScope>
           <OptionRadioButton
             selected={selection.rent}
             onClick={() => update({ rent: true })}
             priceCents={hasOptions ? null : product.rental.price_cents}
             name="Rent"
-            description="Your rental will be available for 30 days. Once started, you’ll have 72 hours to watch it as much as you’d like!"
+            description="Your rental will be available for 30 days. Once started, you'll have 72 hours to watch it as much as you'd like!"
             currencyCode={product.currency_code}
             isPWYW={!!product.pwyw}
             discount={discount}
@@ -672,17 +663,11 @@ export const ConfigurationSelector = React.forwardRef<
             product={product}
             hidePrice={hidePrices}
           />
-        </div>
+        </RadioButtonGroup>
       ) : null}
       {hasOptions && hasRentOption ? <hr /> : null}
       {hasOptions ? (
-        <div
-          className="radio-buttons"
-          role="radiogroup"
-          itemProp="offers"
-          itemType="https://schema.org/AggregateOffer"
-          itemScope
-        >
+        <RadioButtonGroup itemProp="offers" itemType="https://schema.org/AggregateOffer" itemScope>
           {product.options
             .filter((option) => !(product.hide_sold_out_variants && option.quantity_left === 0))
             .map((option) => (
@@ -726,7 +711,7 @@ export const ConfigurationSelector = React.forwardRef<
           <div itemProp="priceCurrency" hidden>
             {product.currency_code}
           </div>
-        </div>
+        </RadioButtonGroup>
       ) : null}
       {isPWYW ? pwywInput : null}
       {product.native_type === "call" && selectedOption ? (

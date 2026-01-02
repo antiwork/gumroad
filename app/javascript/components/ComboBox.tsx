@@ -1,5 +1,6 @@
-import cx from "classnames";
 import * as React from "react";
+
+import { classNames } from "$app/utils/classNames";
 
 import { useGlobalEventListener } from "$app/components/useGlobalEventListener";
 import { useOnOutsideClick } from "$app/components/useOnOutsideClick";
@@ -93,7 +94,16 @@ export const ComboBox = <Option extends unknown>({
   });
 
   return (
-    <div ref={selfRef} className={cx("combobox", className)} {...rest}>
+    <div
+      ref={selfRef}
+      className={classNames(
+        "relative",
+        "[&_input[aria-expanded='true']]:rounded-b-none",
+        "[&_.input:has(input[aria-expanded='true'])]:rounded-b-none",
+        className,
+      )}
+      {...rest}
+    >
       {input({
         role: "combobox",
         "aria-expanded": open,
@@ -113,7 +123,12 @@ export const ComboBox = <Option extends unknown>({
             }),
       })}
       <div hidden={!open} onMouseDown={(e) => e.preventDefault()}>
-        <datalist id={uid} onMouseOut={() => setFocusedOptionIndex(null)} aria-multiselectable={multiple}>
+        <datalist
+          id={uid}
+          onMouseOut={() => setFocusedOptionIndex(null)}
+          aria-multiselectable={multiple}
+          className="absolute top-full left-0 z-[20] block w-full overflow-auto rounded-b border border-border bg-background py-2 shadow"
+        >
           {options.map((item, index) => (
             <React.Fragment key={index}>
               {option(
@@ -122,7 +137,10 @@ export const ComboBox = <Option extends unknown>({
                   ref: (node) => (itemRefs[index] = node),
                   role: "option",
                   id: `${uid}-${index}`,
-                  className: cx({ focused: focusedOptionIndex === index }),
+                  className: classNames(
+                    "flex cursor-pointer items-center px-4 py-2",
+                    focusedOptionIndex === index && "bg-primary text-primary-foreground",
+                  ),
                   onMouseOver: () => setFocusedOptionIndex(index),
                   onClick: () => {
                     setFocusedOptionIndex(null);

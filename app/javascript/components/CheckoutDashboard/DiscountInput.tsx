@@ -5,6 +5,7 @@ import { CurrencyCode } from "$app/utils/currency";
 
 import { NumberInput } from "$app/components/NumberInput";
 import { PriceInput } from "$app/components/PriceInput";
+import { Input } from "$app/components/ui/Input";
 import { Pill } from "$app/components/ui/Pill";
 import { WithTooltip } from "$app/components/WithTooltip";
 
@@ -73,7 +74,7 @@ export const DiscountInput = ({
             />
             Percentage
           </label>
-          <div className={cx("input", { disabled: discount.type !== "percent" })}>
+          <Input disabled={discount.type !== "percent"}>
             <NumberInput
               value={discount.type === "percent" ? discount.value : null}
               onChange={(value) => {
@@ -92,7 +93,7 @@ export const DiscountInput = ({
               )}
             </NumberInput>
             <Pill className="-mr-2 shrink-0">%</Pill>
-          </div>
+          </Input>
         </div>
       </fieldset>
       {disableFixedAmount ? (

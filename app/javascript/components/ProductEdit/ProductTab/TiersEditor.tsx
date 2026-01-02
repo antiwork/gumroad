@@ -28,6 +28,7 @@ import { showAlert } from "$app/components/server-components/Alert";
 import { Drawer, ReorderingHandle, SortableList } from "$app/components/SortableList";
 import { Toggle } from "$app/components/Toggle";
 import { Alert } from "$app/components/ui/Alert";
+import { Input } from "$app/components/ui/Input";
 import { Placeholder } from "$app/components/ui/Placeholder";
 import { Row, RowActions, RowContent, RowDetails, Rows } from "$app/components/ui/Rows";
 import { useDebouncedCallback } from "$app/components/useDebouncedCallback";
@@ -219,7 +220,7 @@ const TierEditor = ({
           <Drawer className="grid gap-6">
             <fieldset>
               <label htmlFor={`${uid}-name`}>Name</label>
-              <div className="input">
+              <Input>
                 <input
                   id={`${uid}-name`}
                   type="text"
@@ -229,7 +230,7 @@ const TierEditor = ({
                 <a href={url} target="_blank" rel="noreferrer">
                   Share
                 </a>
-              </div>
+              </Input>
             </fieldset>
             <fieldset>
               <label htmlFor={`${uid}-description`}>Description</label>

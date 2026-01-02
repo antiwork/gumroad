@@ -9,6 +9,7 @@ import { useProductUrl } from "$app/components/ProductEdit/Layout";
 import { Version, useProductEditContext } from "$app/components/ProductEdit/state";
 import { Drawer, ReorderingHandle, SortableList } from "$app/components/SortableList";
 import { Toggle } from "$app/components/Toggle";
+import { Input } from "$app/components/ui/Input";
 import { Placeholder } from "$app/components/ui/Placeholder";
 import { Row, RowActions, RowContent, RowDetails, Rows } from "$app/components/ui/Rows";
 import { WithTooltip } from "$app/components/WithTooltip";
@@ -152,7 +153,7 @@ const VersionEditor = ({
           <Drawer className="grid gap-6">
             <fieldset>
               <label htmlFor={`${uid}-name`}>Name</label>
-              <div className="input">
+              <Input>
                 <input
                   id={`${uid}-name`}
                   type="text"
@@ -163,7 +164,7 @@ const VersionEditor = ({
                 <a href={url} target="_blank" rel="noreferrer">
                   Share
                 </a>
-              </div>
+              </Input>
             </fieldset>
             <fieldset>
               <label htmlFor={`${uid}-description`}>Description</label>

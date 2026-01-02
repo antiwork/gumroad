@@ -7,6 +7,7 @@ import { Button } from "$app/components/Button";
 import { Icon } from "$app/components/Icons";
 import { Popover } from "$app/components/Popover";
 import { Separator } from "$app/components/Separator";
+import { Input } from "$app/components/ui/Input";
 import { Pill } from "$app/components/ui/Pill";
 import { useOriginalLocation } from "$app/components/useOriginalLocation";
 import { WithTooltip } from "$app/components/WithTooltip";
@@ -31,7 +32,7 @@ export const SearchPopover = ({ card_types }: Props) => {
     >
       <div style={{ width: "23rem", maxWidth: "100%", display: "grid", gap: "var(--spacer-3)" }}>
         <form action={Routes.admin_search_users_path()} method="get" className="input-with-button">
-          <div className="input">
+          <Input>
             <Icon name="person" />
             <input
               autoFocus
@@ -40,13 +41,13 @@ export const SearchPopover = ({ card_types }: Props) => {
               type="text"
               defaultValue={searchParams.get("query") || ""}
             />
-          </div>
+          </Input>
           <Button color="primary" type="submit">
             <Icon name="solid-search" />
           </Button>
         </form>
         <form action={Routes.admin_search_purchases_path()} method="get" className="input-with-button">
-          <div className="input">
+          <Input>
             <Icon name="solid-currency-dollar" />
             <input
               name="query"
@@ -54,13 +55,13 @@ export const SearchPopover = ({ card_types }: Props) => {
               type="text"
               defaultValue={searchParams.get("query") || ""}
             />
-          </div>
+          </Input>
           <Button color="primary" type="submit">
             <Icon name="solid-search" />
           </Button>
         </form>
         <form action={Routes.admin_affiliates_path()} method="get" className="input-with-button">
-          <div className="input">
+          <Input>
             <Icon name="people-fill" />
             <input
               name="query"
@@ -68,7 +69,7 @@ export const SearchPopover = ({ card_types }: Props) => {
               type="text"
               defaultValue={searchParams.get("query") || ""}
             />
-          </div>
+          </Input>
           <Button color="primary" type="submit">
             <Icon name="solid-search" />
           </Button>
@@ -83,7 +84,7 @@ export const SearchPopover = ({ card_types }: Props) => {
               </option>
             ))}
           </select>
-          <div className="input">
+          <Input>
             <Icon name="calendar-all" />
             <input
               name="transaction_date"
@@ -91,8 +92,8 @@ export const SearchPopover = ({ card_types }: Props) => {
               type="text"
               defaultValue={searchParams.get("transaction_date") || ""}
             />
-          </div>
-          <div className="input">
+          </Input>
+          <Input>
             <Icon name="lock-fill" />
             <input
               name="last_4"
@@ -104,8 +105,8 @@ export const SearchPopover = ({ card_types }: Props) => {
               inputMode="numeric"
               defaultValue={searchParams.get("last_4") || ""}
             />
-          </div>
-          <div className="input">
+          </Input>
+          <Input>
             <Icon name="outline-credit-card" />
             <input
               name="expiry_date"
@@ -113,8 +114,8 @@ export const SearchPopover = ({ card_types }: Props) => {
               type="text"
               defaultValue={searchParams.get("expiry_date") || ""}
             />
-          </div>
-          <div className="input">
+          </Input>
+          <Input>
             <Pill className="-ml-2 shrink-0">$</Pill>
             <input
               name="price"
@@ -124,7 +125,7 @@ export const SearchPopover = ({ card_types }: Props) => {
               step="0.01"
               defaultValue={searchParams.get("price") || ""}
             />
-          </div>
+          </Input>
           <Button color="primary" type="submit">
             Search
           </Button>

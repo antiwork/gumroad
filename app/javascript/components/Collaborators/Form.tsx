@@ -19,6 +19,7 @@ import { Icon } from "$app/components/Icons";
 import { Modal } from "$app/components/Modal";
 import { NumberInput } from "$app/components/NumberInput";
 import { showAlert } from "$app/components/server-components/Alert";
+import { Input } from "$app/components/ui/Input";
 import { Pill } from "$app/components/ui/Pill";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "$app/components/ui/Table";
 import { WithTooltip } from "$app/components/WithTooltip";
@@ -231,7 +232,7 @@ const CollaboratorForm = () => {
                 <label htmlFor="email">Email</label>
               </legend>
 
-              <div className="input">
+              <Input>
                 <input
                   ref={emailInputRef}
                   id="email"
@@ -240,7 +241,7 @@ const CollaboratorForm = () => {
                   placeholder="Collaborator's Gumroad account email"
                   onChange={(e) => setCollaboratorEmail({ value: e.target.value.trim() })}
                 />
-              </div>
+              </Input>
             </fieldset>
           ) : null}
           <fieldset>
@@ -278,7 +279,7 @@ const CollaboratorForm = () => {
                     <fieldset className={cx({ danger: defaultPercentCommission.hasError })}>
                       <NumberInput value={defaultPercentCommission.value} onChange={handleDefaultCommissionChange}>
                         {(inputProps) => (
-                          <div className={cx("input", { disabled: !applyToAllProducts })}>
+                          <Input disabled={!applyToAllProducts}>
                             <input
                               type="text"
                               disabled={!applyToAllProducts}
@@ -287,7 +288,7 @@ const CollaboratorForm = () => {
                               {...inputProps}
                             />
                             <Pill className="-mr-2 shrink-0">%</Pill>
-                          </div>
+                          </Input>
                         )}
                       </NumberInput>
                     </fieldset>
@@ -343,7 +344,7 @@ const CollaboratorForm = () => {
                             onChange={(value) => handleProductChange(product.id, { percent_commission: value })}
                           >
                             {(inputProps) => (
-                              <div className={cx("input", { disabled })}>
+                              <Input disabled={disabled}>
                                 <input
                                   disabled={disabled}
                                   type="text"
@@ -352,7 +353,7 @@ const CollaboratorForm = () => {
                                   {...inputProps}
                                 />
                                 <Pill className="-mr-2 shrink-0">%</Pill>
-                              </div>
+                              </Input>
                             )}
                           </NumberInput>
                         </fieldset>

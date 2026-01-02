@@ -20,6 +20,7 @@ import { showAlert } from "$app/components/server-components/Alert";
 import { Profile, Props as ProfileProps } from "$app/components/server-components/Profile";
 import { Layout as SettingsLayout } from "$app/components/Settings/Layout";
 import { SocialAuthButton } from "$app/components/SocialAuthButton";
+import { RadioButtonGroup } from "$app/components/ui/RadioButtonGroup";
 
 type ProfilePageProps = {
   profile_settings: ProfileSettings;
@@ -186,7 +187,7 @@ export default function SettingsPage() {
             </header>
             <fieldset>
               <legend>Font</legend>
-              <div className="radio-buttons grid-cols-1! sm:grid-cols-2! md:grid-cols-3!" role="radiogroup">
+              <RadioButtonGroup className="grid-cols-1! sm:grid-cols-2! md:grid-cols-3!">
                 {FONT_CHOICES.map((font) => (
                   <Button
                     role="radio"
@@ -203,7 +204,7 @@ export default function SettingsPage() {
                     </div>
                   </Button>
                 ))}
-              </div>
+              </RadioButtonGroup>
             </fieldset>
             <div className="flex gap-4">
               <fieldset>

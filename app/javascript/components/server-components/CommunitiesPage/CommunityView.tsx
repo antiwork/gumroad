@@ -30,6 +30,7 @@ import { Popover } from "$app/components/Popover";
 import { showAlert } from "$app/components/server-components/Alert";
 import { ToggleSettingRow } from "$app/components/SettingRow";
 import { Placeholder, PlaceholderImage } from "$app/components/ui/Placeholder";
+import { RadioButtonGroup } from "$app/components/ui/RadioButtonGroup";
 import { useDebouncedCallback } from "$app/components/useDebouncedCallback";
 import { useIsAboveBreakpoint } from "$app/components/useIsAboveBreakpoint";
 import { useRunOnce } from "$app/components/useRunOnce";
@@ -783,7 +784,7 @@ const NotificationsSettingsModal = ({
         value={updatedSettings.recap_frequency !== null}
         onChange={(newValue) => setUpdatedSettings({ ...updatedSettings, recap_frequency: newValue ? "weekly" : null })}
         dropdown={
-          <div className="radio-buttons flex! flex-col!" role="radiogroup">
+          <RadioButtonGroup className="flex! flex-col!">
             <Button
               role="radio"
               aria-checked={updatedSettings.recap_frequency === "daily"}
@@ -804,7 +805,7 @@ const NotificationsSettingsModal = ({
                 <p>Receive a weekly summary every Sunday</p>
               </div>
             </Button>
-          </div>
+          </RadioButtonGroup>
         }
       />
     </Modal>

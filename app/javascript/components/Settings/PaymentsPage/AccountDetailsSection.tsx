@@ -7,6 +7,7 @@ import type { ComplianceInfo, FormFieldName, User } from "$app/types/payments";
 
 import { Button } from "$app/components/Button";
 import { Icon } from "$app/components/Icons";
+import { RadioButtonGroup } from "$app/components/ui/RadioButtonGroup";
 
 const AccountDetailsSection = ({
   user,
@@ -58,7 +59,7 @@ const AccountDetailsSection = ({
               <a href="/help/article/260-your-payout-settings-page">What type of account should I choose?</a>
             </legend>
           </fieldset>
-          <div className="radio-buttons" role="radiogroup">
+          <RadioButtonGroup>
             <Button
               role="radio"
               key="individual"
@@ -90,7 +91,7 @@ const AccountDetailsSection = ({
                 When you are selling as a business
               </div>
             </Button>
-          </div>
+          </RadioButtonGroup>
         </section>
       ) : null}
       {complianceInfo.is_business ? (

@@ -76,6 +76,7 @@ import { Select } from "$app/components/Select";
 import { showAlert } from "$app/components/server-components/Alert";
 import { Toggle } from "$app/components/Toggle";
 import { Alert } from "$app/components/ui/Alert";
+import { Input } from "$app/components/ui/Input";
 import { PageHeader } from "$app/components/ui/PageHeader";
 import { Pill } from "$app/components/ui/Pill";
 import { Placeholder, PlaceholderImage } from "$app/components/ui/Placeholder";
@@ -268,7 +269,7 @@ const CustomersPage = ({
                 </WithTooltip>
               }
             >
-              <div className="input">
+              <Input>
                 <Icon name="solid-search" />
                 <input
                   ref={searchInputRef}
@@ -278,7 +279,7 @@ const CustomersPage = ({
                   onChange={(evt) => updateQuery({ query: evt.target.value })}
                   autoFocus
                 />
-              </div>
+              </Input>
             </Popover>
             <Popover
               aria-label="Filter"

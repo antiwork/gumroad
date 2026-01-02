@@ -1,4 +1,3 @@
-import cx from "classnames";
 import * as React from "react";
 
 import { searchGlobalAffiliatesProductEligibility, Product } from "$app/data/global_affiliates";
@@ -11,6 +10,8 @@ import { useDomains, useDiscoverUrl } from "$app/components/DomainSettings";
 import { Icon } from "$app/components/Icons";
 import { LoadingSpinner } from "$app/components/LoadingSpinner";
 import { Alert } from "$app/components/ui/Alert";
+import { Fieldset } from "$app/components/ui/Fieldset";
+import { Input } from "$app/components/ui/Input";
 import { Pill } from "$app/components/ui/Pill";
 
 const DiscoverLinkSection = ({
@@ -35,16 +36,16 @@ const DiscoverLinkSection = ({
           Learn more
         </a>
       </header>
-      <fieldset>
+      <Fieldset>
         <legend>Your Discover affiliate link</legend>
-        <div className="input">
-          <div className="input">{discoverUrl}</div>
+        <Input>
+          <Input readOnly>{discoverUrl}</Input>
           <CopyToClipboard text={discoverUrl} tooltipPosition="bottom">
             <Pill asChild>
               <Button className="rounded-full! px-3! py-2!">Copy link</Button>
             </Pill>
           </CopyToClipboard>
-        </div>
+        </Input>
         <small>
           You will be attributed any sales you referred within {cookieExpiryDays} days, even if they're for different
           products you linked to.
@@ -52,7 +53,7 @@ const DiscoverLinkSection = ({
         <small>
           To date, you have made <strong>{totalSales}</strong> from Gumroad referrals.
         </small>
-      </fieldset>
+      </Fieldset>
     </section>
   );
 };
@@ -81,9 +82,9 @@ const LinkGenerationSection = ({
           to the end of any link or use the generator to automatically add it for you.
         </p>
       </header>
-      <fieldset className={cx({ danger: hasError })}>
+      <Fieldset state={hasError ? "danger" : undefined}>
         <legend>Destination page URL</legend>
-        <div className="input">
+        <Input>
           <input
             placeholder="Paste a destination page URL"
             value={inputLink}
@@ -111,25 +112,25 @@ const LinkGenerationSection = ({
               Generate link
             </Button>
           </Pill>
-        </div>
+        </Input>
         {hasError ? (
           <Alert variant="danger">
             Invalid URL. Make sure your URL is a Gumroad URL and starts with "http" or "https".
           </Alert>
         ) : null}
-      </fieldset>
-      <fieldset>
+      </Fieldset>
+      <Fieldset>
         <legend>Your affiliate link</legend>
-        <div className="input">
-          <div className="input">{generatedLink}</div>
+        <Input>
+          <Input readOnly>{generatedLink}</Input>
           <CopyToClipboard text={generatedLink} tooltipPosition="bottom">
             <Pill asChild>
               <Button className="rounded-full! px-3! py-2!">Copy link</Button>
             </Pill>
           </CopyToClipboard>
-        </div>
+        </Input>
         <small>Copy this affiliate link and share it with your audience</small>
-      </fieldset>
+      </Fieldset>
     </section>
   );
 };
@@ -163,9 +164,9 @@ const ProductEligibilitySection = ({
           Discover by entering the product URL here.
         </p>
       </header>
-      <fieldset>
+      <Fieldset>
         <legend>Product URL</legend>
-        <div className="input">
+        <Input>
           <input
             placeholder="Paste a product URL"
             value={query}
@@ -227,8 +228,8 @@ const ProductEligibilitySection = ({
             })}
           />
           <Icon name="solid-search" />
-        </div>
-      </fieldset>
+        </Input>
+      </Fieldset>
       {result.isLoading ? <LoadingSpinner /> : null}
       {result.product ? (
         <div className="stack">

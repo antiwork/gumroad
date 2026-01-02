@@ -1,5 +1,4 @@
 import { Link } from "@inertiajs/react";
-import cx from "classnames";
 import hands from "images/illustrations/hands.png";
 import * as React from "react";
 import { useState } from "react";
@@ -22,8 +21,11 @@ import { Popover } from "$app/components/Popover";
 import { showAlert } from "$app/components/server-components/Alert";
 import { TypeSafeOptionSelect } from "$app/components/TypeSafeOptionSelect";
 import { Alert } from "$app/components/ui/Alert";
+import { Fieldset } from "$app/components/ui/Fieldset";
+import { Input } from "$app/components/ui/Input";
 import { PageHeader } from "$app/components/ui/PageHeader";
 import { Pill } from "$app/components/ui/Pill";
+import { RadioButtonGroup } from "$app/components/ui/RadioButtonGroup";
 import { WithTooltip } from "$app/components/WithTooltip";
 
 const nativeTypeIcons = require.context("$assets/images/native_types/");
@@ -314,7 +316,7 @@ const NewProductPage = ({
                 </Alert>
               ) : null}
 
-              <fieldset className={cx({ danger: errors.has("name") })}>
+              <Fieldset state={errors.has("name") ? "danger" : undefined}>
                 <legend>
                   <label htmlFor={`name-${formUID}`}>Name</label>
                 </legend>
@@ -331,7 +333,7 @@ const NewProductPage = ({
                   }}
                   aria-invalid={errors.has("name")}
                 />
-              </fieldset>
+              </Fieldset>
 
               <fieldset>
                 <legend>Products</legend>
@@ -353,12 +355,12 @@ const NewProductPage = ({
                 </fieldset>
               ) : null}
 
-              <fieldset className={cx({ danger: errors.has("price") })}>
+              <Fieldset state={errors.has("price") ? "danger" : undefined}>
                 <legend>
                   <label htmlFor={`price-${formUID}`}>{productType === "coffee" ? "Suggested amount" : "Price"}</label>
                 </legend>
 
-                <div className="input">
+                <Input>
                   <Pill asChild className="relative -ml-2 shrink-0 cursor-pointer">
                     <label>
                       <span>{selectedCurrency.longSymbol}</span>
@@ -420,8 +422,8 @@ const NewProductPage = ({
                       </label>
                     </Pill>
                   ) : null}
-                </div>
-              </fieldset>
+                </Input>
+              </Fieldset>
             </section>
           </form>
         </div>
@@ -494,7 +496,7 @@ const ProductTypeSelector = ({
   onChange: (type: ProductNativeType) => void;
   disabled?: boolean;
 }) => (
-  <div className="radio-buttons grid-cols-1! sm:grid-cols-2! md:grid-cols-3! 2xl:grid-cols-5!" role="radiogroup">
+  <RadioButtonGroup className="grid-cols-1! sm:grid-cols-2! md:grid-cols-3! 2xl:grid-cols-5!">
     {types.map((type) => {
       const typeButton = (
         <Button
@@ -528,5 +530,5 @@ const ProductTypeSelector = ({
     })}
     {types.length < 2 ? <div /> : null}
     {types.length < 3 ? <div /> : null}
-  </div>
+  </RadioButtonGroup>
 );

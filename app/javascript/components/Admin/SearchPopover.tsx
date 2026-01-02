@@ -4,6 +4,7 @@ import * as React from "react";
 import { Button } from "$app/components/Button";
 import { Icon } from "$app/components/Icons";
 import { Popover } from "$app/components/Popover";
+import { Input } from "$app/components/ui/Input";
 import { Pill } from "$app/components/ui/Pill";
 import { useOriginalLocation } from "$app/components/useOriginalLocation";
 import { WithTooltip } from "$app/components/WithTooltip";
@@ -101,7 +102,7 @@ const SearchPopover = () => {
     >
       <div className="grid w-96 max-w-full gap-3">
         <form onSubmit={(e) => submitForm(e, Routes.admin_search_users_path(), "user_query")} className="flex gap-2">
-          <div className="input">
+          <Input>
             <Icon name="person" />
             <input
               autoFocus
@@ -111,7 +112,7 @@ const SearchPopover = () => {
               value={data.user_query}
               onChange={(e) => setData("user_query", e.target.value)}
             />
-          </div>
+          </Input>
           <Button color="primary" type="submit">
             <Icon name="solid-search" />
           </Button>
@@ -121,7 +122,7 @@ const SearchPopover = () => {
           onSubmit={(e) => submitForm(e, Routes.admin_search_purchases_path(), "purchase_query")}
           className="flex gap-2"
         >
-          <div className="input">
+          <Input>
             <Icon name="solid-currency-dollar" />
             <input
               name="query"
@@ -130,14 +131,14 @@ const SearchPopover = () => {
               value={data.purchase_query}
               onChange={(e) => setData("purchase_query", e.target.value)}
             />
-          </div>
+          </Input>
           <Button color="primary" type="submit">
             <Icon name="solid-search" />
           </Button>
         </form>
 
         <form onSubmit={(e) => submitForm(e, Routes.admin_affiliates_path(), "affiliate_query")} className="flex gap-2">
-          <div className="input">
+          <Input>
             <Icon name="people-fill" />
             <input
               name="query"
@@ -146,7 +147,7 @@ const SearchPopover = () => {
               value={data.affiliate_query}
               onChange={(e) => setData("affiliate_query", e.target.value)}
             />
-          </div>
+          </Input>
           <Button color="primary" type="submit">
             <Icon name="solid-search" />
           </Button>
@@ -166,7 +167,7 @@ const SearchPopover = () => {
               </option>
             ))}
           </select>
-          <div className="input">
+          <Input>
             <Icon name="calendar-all" />
             <input
               name="transaction_date"
@@ -175,8 +176,8 @@ const SearchPopover = () => {
               value={data.transaction_date}
               onChange={(e) => setData("transaction_date", e.target.value)}
             />
-          </div>
-          <div className="input">
+          </Input>
+          <Input>
             <Icon name="lock-fill" />
             <input
               name="last_4"
@@ -187,8 +188,8 @@ const SearchPopover = () => {
               maxLength={4}
               onChange={(e) => setData("last_4", e.target.value)}
             />
-          </div>
-          <div className="input">
+          </Input>
+          <Input>
             <Icon name="outline-credit-card" />
             <input
               name="expiry_date"
@@ -197,8 +198,8 @@ const SearchPopover = () => {
               value={data.expiry_date}
               onChange={(e) => setData("expiry_date", e.target.value)}
             />
-          </div>
-          <div className="input">
+          </Input>
+          <Input>
             <Pill className="-ml-2 shrink-0">$</Pill>
             <input
               name="price"
@@ -208,7 +209,7 @@ const SearchPopover = () => {
               value={data.price}
               onChange={(e) => setData("price", e.target.value)}
             />
-          </div>
+          </Input>
           <Button color="primary" type="submit">
             Search
           </Button>

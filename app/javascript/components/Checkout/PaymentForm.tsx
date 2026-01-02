@@ -55,6 +55,7 @@ import { useLoggedInUser } from "$app/components/LoggedInUser";
 import { PriceInput } from "$app/components/PriceInput";
 import { showAlert } from "$app/components/server-components/Alert";
 import { Alert } from "$app/components/ui/Alert";
+import { RadioButtonGroup } from "$app/components/ui/RadioButtonGroup";
 import { Tab, Tabs } from "$app/components/ui/Tabs";
 import { useIsDarkTheme } from "$app/components/useIsDarkTheme";
 import { useOnChangeSync } from "$app/components/useOnChange";
@@ -740,11 +741,7 @@ const TipSelector = () => {
       <div className="flex flex-col gap-4">
         <h4>Add a tip</h4>
         {showPercentageOptions ? (
-          <div
-            role="radiogroup"
-            className="radio-buttons"
-            style={{ gridTemplateColumns: "repeat(auto-fit, minmax(min(5rem, 100%), 1fr))" }}
-          >
+          <RadioButtonGroup style={{ gridTemplateColumns: "repeat(auto-fit, minmax(min(5rem, 100%), 1fr))" }}>
             {state.tipOptions.map((tip) => (
               <Button
                 key={tip}
@@ -782,7 +779,7 @@ const TipSelector = () => {
             >
               Other
             </Button>
-          </div>
+          </RadioButtonGroup>
         ) : null}
         {state.tip.type === "fixed" ? (
           <fieldset className={cx({ danger: errors.has("tip") })}>

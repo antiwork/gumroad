@@ -16,7 +16,9 @@ import { Button } from "$app/components/Button";
 import { Icon } from "$app/components/Icons";
 import { NumberInput } from "$app/components/NumberInput";
 import { TagInput } from "$app/components/TagInput";
+import { Input } from "$app/components/ui/Input";
 import { Pill } from "$app/components/ui/Pill";
+import { RadioButtonGroup } from "$app/components/ui/RadioButtonGroup";
 import { WithTooltip } from "$app/components/WithTooltip";
 import {
   Layout,
@@ -332,9 +334,7 @@ const WorkflowForm = ({ context, workflow }: WorkflowFormProps) => {
             <legend>
               <label htmlFor="trigger">Trigger</label>
             </legend>
-            <div
-              className="radio-buttons"
-              role="radiogroup"
+            <RadioButtonGroup
               style={{
                 gridTemplateColumns: "repeat(auto-fit, minmax(13rem, 1fr))",
               }}
@@ -408,7 +408,7 @@ const WorkflowForm = ({ context, workflow }: WorkflowFormProps) => {
                   {abandonedCartButton}
                 </WithTooltip>
               )}
-            </div>
+            </RadioButtonGroup>
             {wasPublishedPreviously || formState.trigger === "abandoned_cart" ? null : (
               <label>
                 <input
@@ -525,7 +525,7 @@ const WorkflowForm = ({ context, workflow }: WorkflowFormProps) => {
                   value={formState.paidMoreThan}
                 >
                   {(inputProps) => (
-                    <div className={cx("input", { disabled: wasPublishedPreviously })}>
+                    <Input disabled={wasPublishedPreviously}>
                       <Pill className="-ml-2 shrink-0">{context.currency_symbol}</Pill>
                       <input
                         id="paid_more_than"
@@ -536,7 +536,7 @@ const WorkflowForm = ({ context, workflow }: WorkflowFormProps) => {
                         placeholder="0"
                         {...inputProps}
                       />
-                    </div>
+                    </Input>
                   )}
                 </NumberInput>
               </fieldset>
@@ -549,7 +549,7 @@ const WorkflowForm = ({ context, workflow }: WorkflowFormProps) => {
                   value={formState.paidLessThan}
                 >
                   {(inputProps) => (
-                    <div className={cx("input", { disabled: wasPublishedPreviously })}>
+                    <Input disabled={wasPublishedPreviously}>
                       <Pill className="-ml-2 shrink-0">{context.currency_symbol}</Pill>
                       <input
                         id="paid_less_than"
@@ -559,7 +559,7 @@ const WorkflowForm = ({ context, workflow }: WorkflowFormProps) => {
                         placeholder="∞"
                         {...inputProps}
                       />
-                    </div>
+                    </Input>
                   )}
                 </NumberInput>
               </fieldset>

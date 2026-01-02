@@ -7,6 +7,7 @@ import { NumberInput } from "$app/components/NumberInput";
 import { PriceInput } from "$app/components/PriceInput";
 import { Duration, useProductEditContext } from "$app/components/ProductEdit/state";
 import { Drawer, ReorderingHandle, SortableList } from "$app/components/SortableList";
+import { Input } from "$app/components/ui/Input";
 import { Pill } from "$app/components/ui/Pill";
 import { Placeholder } from "$app/components/ui/Placeholder";
 import { Row, RowActions, RowContent, RowDetails, Rows } from "$app/components/ui/Rows";
@@ -148,7 +149,7 @@ const DurationEditor = ({
               <legend>
                 <label htmlFor={`${uid}-duration`}>Duration</label>
               </legend>
-              <div className="input">
+              <Input>
                 <NumberInput
                   value={duration.duration_in_minutes}
                   onChange={(duration_in_minutes) =>
@@ -163,7 +164,7 @@ const DurationEditor = ({
                   {(props) => <input id={`${uid}-duration`} {...props} />}
                 </NumberInput>
                 <Pill className="-mr-2 shrink-0">minutes</Pill>
-              </div>
+              </Input>
             </fieldset>
             <fieldset>
               <label htmlFor={`${uid}-description`}>Description</label>

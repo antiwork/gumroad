@@ -14,6 +14,7 @@ import { Icon } from "$app/components/Icons";
 import { LoadingSpinner } from "$app/components/LoadingSpinner";
 import { Card } from "$app/components/Product/Card";
 import { showAlert } from "$app/components/server-components/Alert";
+import { Input } from "$app/components/ui/Input";
 import { Placeholder } from "$app/components/ui/Placeholder";
 import { ProductCardGrid } from "$app/components/ui/ProductCardGrid";
 import { useDebouncedCallback } from "$app/components/useDebouncedCallback";
@@ -140,7 +141,7 @@ export const ContentTab = () => {
                 className="grid gap-4 rounded-sm border border-border bg-background p-4"
                 aria-label="Product selector"
               >
-                <div className="input">
+                <Input>
                   <Icon name="solid-search" />
                   <input
                     type="text"
@@ -148,7 +149,7 @@ export const ContentTab = () => {
                     onChange={(evt) => setQuery(evt.target.value)}
                     placeholder="Search products"
                   />
-                </div>
+                </Input>
                 {isLoading && results.length === 0 ? (
                   <div style={{ justifySelf: "center" }}>
                     <LoadingSpinner />

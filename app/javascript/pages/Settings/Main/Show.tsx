@@ -1,5 +1,4 @@
 import { useForm, usePage } from "@inertiajs/react";
-import cx from "classnames";
 import * as React from "react";
 import { cast } from "ts-safe-cast";
 
@@ -16,6 +15,7 @@ import { ProductLevelSupportEmailsForm } from "$app/components/Settings/Advanced
 import { Layout } from "$app/components/Settings/Layout";
 import { TagInput } from "$app/components/TagInput";
 import { Toggle } from "$app/components/Toggle";
+import { Input } from "$app/components/ui/Input";
 import { Pill } from "$app/components/ui/Pill";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "$app/components/ui/Table";
 
@@ -423,7 +423,7 @@ export default function MainPage() {
                     <legend>
                       <label htmlFor={`${uid}-ppp-discount-percentage`}>Maximum PPP discount</label>
                     </legend>
-                    <div className={cx("input", { disabled: props.is_form_disabled })}>
+                    <Input disabled={props.is_form_disabled}>
                       <NumberInput
                         value={form.data.user.purchasing_power_parity_limit}
                         onChange={(value) => {
@@ -444,7 +444,7 @@ export default function MainPage() {
                         )}
                       </NumberInput>
                       <Pill className="-mr-2 shrink-0">%</Pill>
-                    </div>
+                    </Input>
                   </fieldset>
                   <Toggle
                     value={!form.data.user.purchasing_power_parity_payment_verification_disabled}

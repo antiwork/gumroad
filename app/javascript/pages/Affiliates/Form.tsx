@@ -2,6 +2,7 @@ import cx from "classnames";
 import * as React from "react";
 
 import { NumberInput } from "$app/components/NumberInput";
+import { Input } from "$app/components/ui/Input";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "$app/components/ui/Table";
 
 export type AffiliateProduct = {
@@ -87,7 +88,7 @@ export const AffiliateForm = ({
             <fieldset className={cx({ danger: errors["affiliate.fee_percent"] })}>
               <NumberInput onChange={(value) => onUpdateFeePercent(value)} value={data.fee_percent}>
                 {(inputProps) => (
-                  <div className={cx("input", { disabled: processing || !applyToAllProducts })}>
+                  <Input disabled={processing || !applyToAllProducts}>
                     <input
                       type="text"
                       autoComplete="off"
@@ -96,7 +97,7 @@ export const AffiliateForm = ({
                       {...inputProps}
                     />
                     <div className="pill">%</div>
-                  </div>
+                  </Input>
                 )}
               </NumberInput>
             </fieldset>
@@ -132,7 +133,7 @@ export const AffiliateForm = ({
                 value={product.fee_percent}
               >
                 {(inputProps) => (
-                  <div className={cx("input", { disabled: processing || !product.enabled })}>
+                  <Input disabled={processing || !product.enabled}>
                     <input
                       type="text"
                       autoComplete="off"
@@ -141,7 +142,7 @@ export const AffiliateForm = ({
                       {...inputProps}
                     />
                     <div className="pill">%</div>
-                  </div>
+                  </Input>
                 )}
               </NumberInput>
             </TableCell>

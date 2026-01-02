@@ -4,6 +4,7 @@ import { Icon } from "$app/components/Icons";
 import { NumberInput } from "$app/components/NumberInput";
 import { CallLimitationInfo } from "$app/components/ProductEdit/state";
 import { TypeSafeOptionSelect } from "$app/components/TypeSafeOptionSelect";
+import { Input } from "$app/components/ui/Input";
 import { Pill } from "$app/components/ui/Pill";
 import { useOnChange } from "$app/components/useOnChange";
 import { useOnOutsideClick } from "$app/components/useOnOutsideClick";
@@ -61,7 +62,7 @@ export const CallLimitationsEditor = ({
         <label htmlFor={`${uid}-notice-period`}>Notice period</label>
         <NumberInput value={minimumNotice.value} onChange={(value) => setMinimumNotice({ ...minimumNotice, value })}>
           {(props) => (
-            <div className="input" ref={inputRef}>
+            <Input ref={inputRef}>
               <input id={`${uid}-notice-period`} placeholder="15" {...props} />
               <Pill asChild className="relative -mr-2 shrink-0 cursor-pointer">
                 <label>
@@ -76,7 +77,7 @@ export const CallLimitationsEditor = ({
                   <Icon name="outline-cheveron-down" className="ml-auto" />
                 </label>
               </Pill>
-            </div>
+            </Input>
           )}
         </NumberInput>
         <small>Minimum notice time required when booking a call</small>

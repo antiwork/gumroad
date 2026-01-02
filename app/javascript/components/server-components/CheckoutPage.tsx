@@ -53,6 +53,7 @@ import { computeOptionPrice, OptionRadioButton, Option } from "$app/components/P
 import { PriceTag } from "$app/components/Product/PriceTag";
 import { showAlert } from "$app/components/server-components/Alert";
 import { ProductCard, ProductCardFigure, ProductCardHeader, ProductCardFooter } from "$app/components/ui/ProductCard";
+import { RadioButtonGroup } from "$app/components/ui/RadioButtonGroup";
 import { useAddThirdPartyAnalytics } from "$app/components/useAddThirdPartyAnalytics";
 import { useDebouncedCallback } from "$app/components/useDebouncedCallback";
 import { useOnChange, useOnChangeSync } from "$app/components/useOnChange";
@@ -752,7 +753,7 @@ export const UpsellModal = ({
     <>
       <div className="flex flex-col gap-4">
         <h4 dangerouslySetInnerHTML={{ __html: upsell.description }} />
-        <div className="radio-buttons" role="radiogroup">
+        <RadioButtonGroup>
           <OptionRadioButton
             selected
             priceCents={product.price_cents + computeOptionPrice(offeredOption, item.recurrence)}
@@ -764,7 +765,7 @@ export const UpsellModal = ({
             recurrence={item.recurrence}
             product={product}
           />
-        </div>
+        </RadioButtonGroup>
       </div>
       <footer style={{ display: "grid", gap: "var(--spacer-4)", gridTemplateColumns: "1fr 1fr" }}>
         <Button onClick={decline}>Don't upgrade</Button>

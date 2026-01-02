@@ -32,6 +32,7 @@ import StripeConnectSection, { StripeConnect } from "$app/components/Settings/Pa
 import { Toggle } from "$app/components/Toggle";
 import { TypeSafeOptionSelect } from "$app/components/TypeSafeOptionSelect";
 import { Alert } from "$app/components/ui/Alert";
+import { RadioButtonGroup } from "$app/components/ui/RadioButtonGroup";
 import { UpdateCountryConfirmationModal } from "$app/components/UpdateCountryConfirmationModal";
 import { useUserAgentInfo } from "$app/components/UserAgent";
 import { WithTooltip } from "$app/components/WithTooltip";
@@ -936,7 +937,7 @@ export default function PaymentsPage() {
             </div>
           </header>
           <section className="grid gap-8">
-            <div className="radio-buttons" role="radiogroup">
+            <RadioButtonGroup>
               {props.bank_account_details.show_bank_account ? (
                 <>
                   <Button
@@ -997,7 +998,7 @@ export default function PaymentsPage() {
                   </div>
                 </Button>
               ) : null}
-            </div>
+            </RadioButtonGroup>
             {selectedPayoutMethod === "bank" ? (
               <BankAccountSection
                 bankAccountDetails={props.bank_account_details}

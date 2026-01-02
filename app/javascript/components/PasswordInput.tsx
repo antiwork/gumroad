@@ -1,5 +1,7 @@
 import * as React from "react";
 
+import { Input } from "$app/components/ui/Input";
+
 type PasswordInputProps = Omit<React.ComponentPropsWithoutRef<"input">, "type"> & {
   value: string;
   onChange: (e: React.ChangeEvent<HTMLInputElement>) => void;
@@ -50,7 +52,7 @@ export const PasswordInput = React.forwardRef<HTMLInputElement, PasswordInputPro
   const IconComponent = showPassword ? EyeSlashIcon : EyeIcon;
 
   return (
-    <div className="input">
+    <Input>
       <input ref={ref} type={showPassword ? "text" : "password"} className={className} {...props} />
       <IconComponent
         onClick={togglePasswordVisibility}
@@ -64,7 +66,7 @@ export const PasswordInput = React.forwardRef<HTMLInputElement, PasswordInputPro
           }
         }}
       />
-    </div>
+    </Input>
   );
 });
 

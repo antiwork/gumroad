@@ -24,6 +24,7 @@ import { Popover } from "$app/components/Popover";
 import { showAlert } from "$app/components/server-components/Alert";
 import { extractSortParam } from "$app/components/server-components/UtmLinksPage";
 import { Skeleton } from "$app/components/Skeleton";
+import { Input } from "$app/components/ui/Input";
 import { Placeholder, PlaceholderImage } from "$app/components/ui/Placeholder";
 import { Sheet, SheetHeader } from "$app/components/ui/Sheet";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "$app/components/ui/Table";
@@ -378,7 +379,7 @@ const SearchBoxPopover = ({ initialQuery, onSearch }: { initialQuery: string; on
         </WithTooltip>
       }
     >
-      <div className="input">
+      <Input>
         <Icon name="solid-search" />
         <input
           ref={searchInputRef}
@@ -391,7 +392,7 @@ const SearchBoxPopover = ({ initialQuery, onSearch }: { initialQuery: string; on
             onSearch(newQuery);
           }}
         />
-      </div>
+      </Input>
     </Popover>
   );
 };

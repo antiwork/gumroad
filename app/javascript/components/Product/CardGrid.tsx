@@ -10,6 +10,7 @@ import { AbortError, assertResponseError } from "$app/utils/request";
 import { Icon } from "$app/components/Icons";
 import { NumberInput } from "$app/components/NumberInput";
 import { showAlert } from "$app/components/server-components/Alert";
+import { Input } from "$app/components/ui/Input";
 import { Pill } from "$app/components/ui/Pill";
 import { Placeholder } from "$app/components/ui/Placeholder";
 import { ProductCardGrid } from "$app/components/ui/ProductCardGrid";
@@ -317,7 +318,7 @@ export const CardGrid = ({
                 <legend>
                   <label htmlFor={minPriceUid}>Minimum price</label>
                 </legend>
-                <div className="input">
+                <Input>
                   <Pill className="-ml-2 shrink-0">{currencySymbol}</Pill>
                   <NumberInput
                     onChange={(value) => {
@@ -328,13 +329,13 @@ export const CardGrid = ({
                   >
                     {(props) => <input id={minPriceUid} placeholder="0" disabled={disableFilters} {...props} />}
                   </NumberInput>
-                </div>
+                </Input>
               </fieldset>
               <fieldset>
                 <legend>
                   <label htmlFor={maxPriceUid}>Maximum price</label>
                 </legend>
-                <div className="input">
+                <Input>
                   <Pill className="-ml-2 shrink-0">{currencySymbol}</Pill>
                   <NumberInput
                     onChange={(value) => {
@@ -345,7 +346,7 @@ export const CardGrid = ({
                   >
                     {(props) => <input id={maxPriceUid} placeholder="∞" disabled={disableFilters} {...props} />}
                   </NumberInput>
-                </div>
+                </Input>
               </fieldset>
             </div>
           </details>

@@ -1,14 +1,15 @@
-import cx from "classnames";
 import * as React from "react";
 
 import { getAutocompleteSearchResults, AutocompleteSearchResults, deleteAutocompleteSearch } from "$app/data/discover";
 import { escapeRegExp } from "$app/utils";
+import { classNames } from "$app/utils/classNames";
 import { asyncVoid } from "$app/utils/promise";
 import { assertResponseError } from "$app/utils/request";
 
 import { ComboBox } from "$app/components/ComboBox";
 import { Icon } from "$app/components/Icons";
 import { showAlert } from "$app/components/server-components/Alert";
+import { Input } from "$app/components/ui/Input";
 import { useDebouncedCallback } from "$app/components/useDebouncedCallback";
 import { useOnChange } from "$app/components/useOnChange";
 
@@ -66,10 +67,9 @@ export const Search = ({ query, setQuery }: { query?: string | undefined; setQue
       onToggle={setAutocompleteOpen}
       editable
       input={(props) => (
-        <div className="input">
+        <Input {...props}>
           <Icon name="solid-search" />
           <input
-            {...props}
             type="search"
             className="cursor-text!"
             placeholder="Search products"
@@ -88,7 +88,7 @@ export const Search = ({ query, setQuery }: { query?: string | undefined; setQue
             }}
             aria-autocomplete="list"
           />
-        </div>
+        </Input>
       )}
       options={options}
       option={(item, props, index) => (
@@ -107,7 +107,11 @@ export const Search = ({ query, setQuery }: { query?: string | undefined; setQue
               </button>
             </div>
           ) : (
-            <a {...props} href={item.url} className={cx("flex items-center gap-4 no-underline", props.className)}>
+            <a
+              {...props}
+              href={item.url}
+              className={classNames("flex items-center gap-4 no-underline", props.className)}
+            >
               <img src={item.thumbnail_url ?? thumbnailPlaceholder} alt={item.name} />
               <div>
                 {highlightQuery(item.name)}

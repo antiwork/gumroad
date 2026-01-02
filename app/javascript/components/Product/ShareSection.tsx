@@ -16,6 +16,7 @@ import { PriceSelection } from "$app/components/Product/ConfigurationSelector";
 import { showAlert } from "$app/components/server-components/Alert";
 import { TwitterShareButton } from "$app/components/TwitterShareButton";
 import { Alert } from "$app/components/ui/Alert";
+import { Input } from "$app/components/ui/Input";
 import { WithTooltip } from "$app/components/WithTooltip";
 
 type SuccessState = { newlyCreated: boolean; wishlist: Wishlist };
@@ -96,9 +97,9 @@ export const ShareSection = ({
       <div className="grid grid-cols-[1fr_auto] gap-2">
         <ComboBox
           input={(props) => (
-            <div
+            <Input
               {...props}
-              className={`input ${dropdownState.state !== "closed" ? "!rounded-b-none" : ""}`}
+              className={dropdownState.state !== "closed" ? "!rounded-b-none" : undefined}
               aria-label="Add to wishlist"
             >
               <span className="fake-input text-singleline">
@@ -109,7 +110,7 @@ export const ShareSection = ({
                     : "Add to wishlist"}
               </span>
               <Icon name="outline-cheveron-down" />
-            </div>
+            </Input>
           )}
           disabled={saveState.type === "saving"}
           options={[...wishlists, { id: null }]}
@@ -140,15 +141,16 @@ export const ShareSection = ({
                   void addProduct(newWishlist(dropdownState.newWishlistName));
                 }}
               >
-                <input
-                  type="text"
-                  autoFocus
-                  placeholder="Wishlist name"
-                  value={dropdownState.newWishlistName}
-                  onChange={(e) => setDropdownState({ state: "creating", newWishlistName: e.target.value })}
-                  className="input"
-                  aria-label="Wishlist name"
-                />
+                <Input>
+                  <input
+                    type="text"
+                    autoFocus
+                    placeholder="Wishlist name"
+                    value={dropdownState.newWishlistName}
+                    onChange={(e) => setDropdownState({ state: "creating", newWishlistName: e.target.value })}
+                    aria-label="Wishlist name"
+                  />
+                </Input>
                 <Button type="submit" aria-label="Create wishlist" color="primary">
                   <Icon name="outline-check" />
                 </Button>

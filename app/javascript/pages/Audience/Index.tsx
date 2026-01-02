@@ -15,6 +15,7 @@ import { ExportSubscribersPopover } from "$app/components/Followers/ExportSubscr
 import { Icon } from "$app/components/Icons";
 import { LoadingSpinner } from "$app/components/LoadingSpinner";
 import { Popover } from "$app/components/Popover";
+import { Input } from "$app/components/ui/Input";
 import { Placeholder, PlaceholderImage } from "$app/components/ui/Placeholder";
 import { useOnChange } from "$app/components/useOnChange";
 import { WithTooltip } from "$app/components/WithTooltip";
@@ -71,10 +72,10 @@ function Audience() {
           <Deferred
             data={["audience_data"]}
             fallback={
-              <div className="input">
+              <Input>
                 <LoadingSpinner />
                 Loading charts...
-              </div>
+              </Input>
             }
           >
             {audience_data ? <AudienceChart data={audience_data} /> : null}

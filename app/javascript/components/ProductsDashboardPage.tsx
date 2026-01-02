@@ -7,6 +7,7 @@ import { NavigationButtonInertia } from "$app/components/NavigationButton";
 import { PaginationProps } from "$app/components/Pagination";
 import { Popover } from "$app/components/Popover";
 import { ProductsLayout } from "$app/components/ProductsLayout";
+import { Input } from "$app/components/ui/Input";
 import { Placeholder, PlaceholderImage } from "$app/components/ui/Placeholder";
 import { WithTooltip } from "$app/components/WithTooltip";
 
@@ -60,7 +61,7 @@ export const ProductsDashboardPage = ({
                 </WithTooltip>
               }
             >
-              <div className="input">
+              <Input>
                 <Icon name="solid-search" />
                 <input
                   ref={searchInputRef}
@@ -69,7 +70,7 @@ export const ProductsDashboardPage = ({
                   value={query ?? ""}
                   onChange={(evt) => setQuery(evt.target.value)}
                 />
-              </div>
+              </Input>
             </Popover>
           ) : null}
 

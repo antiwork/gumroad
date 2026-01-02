@@ -13,6 +13,7 @@ import { NavigationButtonInertia } from "$app/components/NavigationButton";
 import { NumberInput } from "$app/components/NumberInput";
 import { showAlert } from "$app/components/server-components/Alert";
 import { ToggleSettingRow } from "$app/components/SettingRow";
+import { Input } from "$app/components/ui/Input";
 import { PageHeader } from "$app/components/ui/PageHeader";
 import { Placeholder, PlaceholderImage } from "$app/components/ui/Placeholder";
 import { Table, TableBody, TableCaption, TableCell, TableHead, TableHeader, TableRow } from "$app/components/ui/Table";
@@ -154,7 +155,7 @@ export default function AffiliatesOnboarding() {
               <legend>
                 <label htmlFor="affiliate-link">Your affiliate link</label>
               </legend>
-              <div className="input input-wrapper">
+              <Input className="input-wrapper">
                 <input
                   type="text"
                   id="affiliate-link"
@@ -170,7 +171,7 @@ export default function AffiliatesOnboarding() {
                     </button>
                   </CopyToClipboard>
                 ) : null}
-              </div>
+              </Input>
               {enableAffiliateLink ? null : (
                 <div role="alert" className="warning">
                   You must enable and set up the commission for at least one product before sharing your affiliate link.
@@ -260,7 +261,7 @@ const ProductRow = ({ product, disabled, onChange }: ProductRowProps) => {
         <fieldset className={cx({ danger: invalidAttrs.has("commission") })}>
           <NumberInput onChange={(value) => onChange({ fee_percent: value ?? 0 })} value={product.fee_percent}>
             {(inputProps) => (
-              <div className={cx("input", { disabled: disabled || !product.enabled })}>
+              <Input disabled={disabled || !product.enabled}>
                 <input
                   type="text"
                   autoComplete="off"
@@ -269,7 +270,7 @@ const ProductRow = ({ product, disabled, onChange }: ProductRowProps) => {
                   {...inputProps}
                 />
                 <div className="pill">%</div>
-              </div>
+              </Input>
             )}
           </NumberInput>
         </fieldset>

@@ -1,4 +1,3 @@
-import cx from "classnames";
 import * as React from "react";
 
 import {
@@ -10,6 +9,7 @@ import {
 
 import { Icon } from "$app/components/Icons";
 import { TypeSafeOptionSelect } from "$app/components/TypeSafeOptionSelect";
+import { Input } from "$app/components/ui/Input";
 import { Pill } from "$app/components/ui/Pill";
 
 export const PriceInput = React.forwardRef<
@@ -61,7 +61,7 @@ export const PriceInput = React.forwardRef<
     };
 
     return (
-      <div className={cx("input", { disabled })}>
+      <Input disabled={disabled}>
         {currencyCodeSelector ? (
           <Pill className="relative -ml-2 shrink-0 cursor-pointer">
             {getLongCurrencySymbol(currencyCode)}
@@ -96,7 +96,7 @@ export const PriceInput = React.forwardRef<
           ref={ref}
         />
         {suffix}
-      </div>
+      </Input>
     );
   },
 );

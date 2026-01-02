@@ -3,6 +3,7 @@ import { formatInTimeZone, fromZonedTime } from "date-fns-tz";
 import * as React from "react";
 
 import { useCurrentSeller } from "$app/components/CurrentSeller";
+import { Input } from "$app/components/ui/Input";
 import { Pill } from "$app/components/ui/Pill";
 
 type Props = {
@@ -51,11 +52,11 @@ export const DateInput = ({
     />
   );
   return withTime && seller ? (
-    <div className="input">
+    <Input>
       {input}
       <Pill className="-mr-2 shrink-0">{formatInTimeZone(value ?? new Date(), seller.timeZone.name, "z")}</Pill>
-    </div>
+    </Input>
   ) : (
-    <div className="input">{input}</div>
+    <Input>{input}</Input>
   );
 };

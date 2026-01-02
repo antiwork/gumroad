@@ -1,4 +1,3 @@
-import cx from "classnames";
 import * as React from "react";
 import ReactSelect, {
   components,
@@ -15,6 +14,7 @@ import ReactSelect, {
 } from "react-select";
 
 import { escapeRegExp } from "$app/utils";
+import { classNames } from "$app/utils/classNames";
 
 import { Icon } from "$app/components/Icons";
 import { Pill } from "$app/components/ui/Pill";
@@ -89,7 +89,7 @@ const SelectInner = <IsMulti extends boolean>(
         ref={ref}
         isOptionDisabled={(option) => option.disabled ?? false}
         instanceId={props.inputId ?? menuListId}
-        className={cx("combobox", props.className)}
+        className={classNames("relative [&_input[aria-expanded='true']]:rounded-b-none", props.className)}
         components={{
           ClearIndicator,
           Control,
@@ -191,7 +191,13 @@ const DropdownIndicator = <IsMulti extends boolean>(props: DropdownIndicatorProp
   );
 
 const Control = <IsMulti extends boolean>(props: ControlProps<Option, IsMulti>) => (
-  <components.Control className={cx("input", props.isDisabled ? "disabled" : null)} {...props}>
+  <components.Control
+    className={classNames(
+      "inline-flex min-h-[--form-element-height] w-full items-center gap-2 rounded border border-border bg-background px-4 text-base focus-within:outline focus-within:outline-[0.125rem] focus-within:outline-accent",
+      props.isDisabled && "cursor-not-allowed opacity-[--disabled-opacity]",
+    )}
+    {...props}
+  >
     {props.children}
   </components.Control>
 );
@@ -205,6 +211,7 @@ const MenuList = <IsMulti extends boolean>(props: MenuListProps<Option, IsMulti>
       ref={props.innerRef as React.Ref<HTMLDataListElement>}
       style={{ maxHeight: props.maxHeight }}
       id={menuListId ?? undefined}
+      className="absolute top-full left-0 z-[20] block w-full overflow-auto rounded-b border border-border bg-background py-2 shadow"
     >
       {props.children}
     </datalist>
@@ -248,7 +255,10 @@ const Option = <IsMulti extends boolean>(props: OptionProps<Option, IsMulti>) =>
 
   return (
     <div
-      className={cx({ focused: props.isFocused })}
+      className={classNames(
+        "flex cursor-pointer items-center px-4 py-2",
+        props.isFocused && "bg-primary text-primary-foreground",
+      )}
       ref={props.innerRef}
       id={innerProps.id}
       key={innerProps.key}

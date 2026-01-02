@@ -16,6 +16,7 @@ import { VideoState, ReviewVideoRecorderUiState } from "$app/components/ReviewFo
 import { useReviewVideoUploader } from "$app/components/ReviewForm/useReviewVideoUploader";
 import { showAlert } from "$app/components/server-components/Alert";
 import { Alert } from "$app/components/ui/Alert";
+import { RadioButtonGroup } from "$app/components/ui/RadioButtonGroup";
 
 export type Review = {
   rating: number;
@@ -238,7 +239,7 @@ export const ReviewForm = React.forwardRef<
   };
 
   const reviewModeRadioButtons = (
-    <div role="radiogroup" className="radio-buttons grid-cols-2!">
+    <RadioButtonGroup className="grid-cols-2!">
       <Button
         role="radio"
         aria-checked={reviewMode === "text"}
@@ -255,7 +256,7 @@ export const ReviewForm = React.forwardRef<
       >
         <div className="w-full text-center">Video review</div>
       </Button>
-    </div>
+    </RadioButtonGroup>
   );
 
   const textReview = viewing ? (

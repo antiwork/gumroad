@@ -34,6 +34,7 @@ import { showAlert } from "$app/components/server-components/Alert";
 import { Skeleton } from "$app/components/Skeleton";
 import { TypeSafeOptionSelect } from "$app/components/TypeSafeOptionSelect";
 import { Alert } from "$app/components/ui/Alert";
+import { Input } from "$app/components/ui/Input";
 import { PageHeader } from "$app/components/ui/PageHeader";
 import { Pill } from "$app/components/ui/Pill";
 import { Placeholder, PlaceholderImage } from "$app/components/ui/Placeholder";
@@ -310,7 +311,7 @@ const DiscountsPage = ({
                 </div>
               }
             >
-              <div className="input">
+              <Input>
                 <Icon name="solid-search" />
                 <input
                   ref={searchInputRef}
@@ -322,7 +323,7 @@ const DiscountsPage = ({
                     debouncedLoadDiscounts();
                   }}
                 />
-              </div>
+              </Input>
             </Popover>
           ) : null}
 
