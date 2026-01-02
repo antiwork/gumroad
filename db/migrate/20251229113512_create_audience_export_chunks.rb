@@ -7,6 +7,7 @@ class CreateAudienceExportChunks < ActiveRecord::Migration[7.1]
       t.longtext :member_ids
       t.longtext :members_data
       t.boolean :processed, default: false, null: false
+      t.string :revision
       t.timestamps
     end
   end

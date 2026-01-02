@@ -38,6 +38,7 @@ RSpec.describe AudienceExport do
       export.save!
       expect(export.external_id).to eq("custom123456")
     end
+
   end
 
   describe "associations" do

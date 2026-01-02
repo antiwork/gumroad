@@ -12,21 +12,27 @@ class AudienceExport < ApplicationRecord
 
   before_validation :set_external_id, on: :create
 
+  def save(**options, &block)
+    retries = 0
+    begin
+      super
+    rescue ActiveRecord::RecordNotUnique => e
+      if e.message.include?("external_id") && retries < 10
+        retries += 1
+        self.external_id = self.class.generate_external_id
+        retry
+      else
+        raise
+      end
+    end
+  end
+
   private
     def set_external_id
       self.external_id ||= self.class.generate_external_id
     end
 
-    def self.generate_external_id(max_retries: 10)
-      retries = 0
-      candidate = SecureRandom.alphanumeric(12).downcase
-
-      while exists?(external_id: candidate)
-        retries += 1
-        raise "Failed to generate unique external_id after #{max_retries} attempts" if retries >= max_retries
-        candidate = SecureRandom.alphanumeric(12).downcase
-      end
-
-      candidate
+    def self.generate_external_id
+      SecureRandom.alphanumeric(12).downcase
     end
 end
