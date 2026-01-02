@@ -9,7 +9,7 @@ class Admin::ProductPresenter::MultipleMatches
 
   def props
     {
-      id: product.id,
+      external_id: product.external_id,
       name: product.name,
       created_at: product.created_at,
       long_url: product.long_url,

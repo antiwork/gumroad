@@ -18,7 +18,7 @@ describe Admin::PurchasePresenter do
             formatted_display_price: purchase.formatted_display_price,
             formatted_gumroad_tax_amount: nil,
             gumroad_responsible_for_tax: purchase.gumroad_responsible_for_tax?,
-            product: { id: product.id, name: product.name, long_url: product.long_url },
+            product: { external_id: product.external_id, name: product.name, long_url: product.long_url },
             seller: { email: seller.email, support_email: seller.support_email },
             email: purchase.email,
             created_at: purchase.created_at,

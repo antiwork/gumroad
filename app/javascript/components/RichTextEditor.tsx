@@ -223,7 +223,8 @@ export const useRichTextEditor = ({
       walk(child, /^(p|h\d)$/iu.test(child.tagName) ? { target: node, before: child.nextSibling } : undefined);
     }
   }
-  const content = React.useMemo(() => {
+
+  const content: Content = React.useMemo(() => {
     if (!SSR && typeof initialValue === "string") {
       const dom = document.createElement("div");
       dom.innerHTML = initialValue;
