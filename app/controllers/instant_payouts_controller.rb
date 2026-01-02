@@ -7,9 +7,9 @@ class InstantPayoutsController < Sellers::BaseController
     result = InstantPayoutsService.new(current_seller, date: Date.parse(params.require(:date))).perform
 
     if result[:success]
-      render json: { success: true }
+      redirect_to balance_path, notice: "Instant payout initiated successfully"
     else
-      render json: { success: false, error: result[:error] }, status: :unprocessable_entity
+      redirect_to balance_path, alert: result[:error]
     end
   end
 end

@@ -18,7 +18,7 @@ describe "Admin::LinksController Scenario", type: :system, js: true do
     recreate_model_index(ProductPageView)
     2.times { add_page_view(product) }
     25.times { create(:purchase_event, purchase: create(:purchase, link: product, price_cents: 200)) }
-    visit admin_link_path(product.unique_permalink)
+    visit admin_product_path(product.external_id)
     expect(page).to have_text(product.name)
     expect(page).to have_text("2 views")
     expect(page).to have_text("25 sales")
@@ -41,7 +41,7 @@ describe "Admin::LinksController Scenario", type: :system, js: true do
 
     # It marks the product as staff-picked
     product = create(:product, :recommendable)
-    visit admin_link_path(product.unique_permalink)
+    visit admin_product_path(product.external_id)
     within_section(product.name, section_element: :article) do
       accept_confirm do
         click_on("Mark as staff-picked")
@@ -136,7 +136,7 @@ describe "Admin::LinksController Scenario", type: :system, js: true do
     let!(:purchase2) { create(:purchase, link: product) }
 
     it "allows selecting purchases and refunding for fraud" do
-      visit admin_link_path(product.unique_permalink)
+      visit admin_product_path(product.external_id)
 
       toggle_disclosure("Purchases")
       expect(page).to have_text("Select purchases to refund for fraud")
@@ -151,7 +151,7 @@ describe "Admin::LinksController Scenario", type: :system, js: true do
     end
 
     it "allows selecting all purchases" do
-      visit admin_link_path(product.unique_permalink)
+      visit admin_product_path(product.external_id)
 
       toggle_disclosure("Purchases")
       expect(page).to have_text("Select purchases to refund for fraud")
@@ -164,7 +164,7 @@ describe "Admin::LinksController Scenario", type: :system, js: true do
     end
 
     it "clears selection when clicking clear selection" do
-      visit admin_link_path(product.unique_permalink)
+      visit admin_product_path(product.external_id)
 
       toggle_disclosure("Purchases")
       expect(page).to have_text("Select purchases to refund for fraud")
@@ -179,7 +179,7 @@ describe "Admin::LinksController Scenario", type: :system, js: true do
     end
 
     it "enqueues mass refund job when confirmed" do
-      visit admin_link_path(product.unique_permalink)
+      visit admin_product_path(product.external_id)
 
       toggle_disclosure("Purchases")
       expect(page).to have_text("Select purchases to refund for fraud")

@@ -14,7 +14,6 @@ import AdminProductInfo from "$app/components/Admin/Products/Info";
 import AdminProductPurchases from "$app/components/Admin/Products/Purchases";
 
 type ProductFile = {
-  id: number;
   external_id: string;
   s3_filename: string | null;
 };
@@ -31,7 +30,7 @@ export type ProductUser = {
 };
 
 export type Product = {
-  id: number;
+  external_id: string;
   name: string;
   long_url: string;
   price_cents: number;
@@ -64,17 +63,24 @@ type AdminUsersProductsProductProps = {
 const AdminUsersProductsProduct = ({ product, isAffiliateUser = false }: AdminUsersProductsProductProps) => {
   const { url, props } = usePage();
   const compliance: Compliance = cast<Compliance>(props.compliance);
-  const isCurrentUrl = url === Routes.admin_product_path(product.id);
+  const isCurrentUrl = url === Routes.admin_product_path(product.external_id);
 
   return (
-    <article className="grid gap-4 rounded border border-border bg-background p-4" data-product-id={product.id}>
+    <article
+      className="grid gap-4 rounded border border-border bg-background p-4"
+      data-product-id={product.external_id}
+    >
       <AdminProductHeader product={product} isCurrentUrl={isCurrentUrl} />
       <AdminProductDescription product={product} />
       <AdminProductDetails product={product} />
       <AdminProductInfo product={product} />
       <AdminProductActions product={product} />
       <AdminFlagForTosViolations product={product} compliance={compliance} />
-      <AdminProductPurchases productId={product.id} isAffiliateUser={isAffiliateUser} userId={product.user.id} />
+      <AdminProductPurchases
+        productExternalId={product.external_id}
+        isAffiliateUser={isAffiliateUser}
+        userId={product.user.id}
+      />
       <AdminProductComments product={product} />
       <AdminProductFooter product={product} />
     </article>

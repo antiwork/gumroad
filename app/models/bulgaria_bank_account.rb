@@ -14,7 +14,7 @@ class BulgariaBankAccount < BankAccount
   end
 
   def currency
-    Currency::BGN
+    Currency::EUR
   end
 
   def account_number_visual
