@@ -18,17 +18,12 @@ class Iffy::EventJob
     return unless event.in?(EVENTS)
 
     case event
-    when "user.banned", "user.suspended", "user.compliant"
-      return if user_suspended_by_admin?(id)
-
-      case event
-      when "user.banned"
-        Iffy::User::BanService.new(id).perform
-      when "user.suspended"
-        Iffy::User::SuspendService.new(id).perform
-      when "user.compliant"
-        Iffy::User::MarkCompliantService.new(id).perform
-      end
+    when "user.banned"
+      Iffy::User::BanService.new(id).perform
+    when "user.suspended"
+      Iffy::User::SuspendService.new(id).perform
+    when "user.compliant"
+      Iffy::User::MarkCompliantService.new(id).perform unless user_suspended_by_admin?(id)
     when "record.flagged"
       if entity == "Product" && !user_protected?(user)
         Iffy::Product::FlagService.new(id).perform

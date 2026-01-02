@@ -79,16 +79,6 @@ describe Iffy::EventJob do
         user.suspend_for_tos_violation!(author_id: admin_user.id, bulk: true)
       end
 
-      it "does not call BanService for admin-suspended users" do
-        expect(Iffy::User::BanService).not_to receive(:new)
-        described_class.new.perform("user.banned", user.external_id, entity)
-      end
-
-      it "does not call SuspendService for admin-suspended users" do
-        expect(Iffy::User::SuspendService).not_to receive(:new)
-        described_class.new.perform("user.suspended", user.external_id, entity)
-      end
-
       it "does not call MarkCompliantService for admin-suspended users" do
         expect(Iffy::User::MarkCompliantService).not_to receive(:new)
         described_class.new.perform("user.compliant", user.external_id, entity)

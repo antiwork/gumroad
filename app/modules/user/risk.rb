@@ -161,8 +161,8 @@ module User::Risk
 
     last_suspension_comment = comments
       .where(comment_type: Comment::COMMENT_TYPE_SUSPENDED)
-      .order(created_at: :desc)
-      .first
+      .order(:created_at)
+      .last
 
     last_suspension_comment&.author_id.present?
   end
