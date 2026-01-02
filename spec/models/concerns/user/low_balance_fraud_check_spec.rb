@@ -5,7 +5,6 @@ require "spec_helper"
 describe User::LowBalanceFraudCheck do
   before do
     @creator = create(:user)
-    @purchase = create(:refunded_purchase, link: create(:product, user: @creator))
   end
 
   describe "#enable_refunds!" do
@@ -39,7 +38,43 @@ describe User::LowBalanceFraudCheck do
     end
   end
 
+  describe "#mark_not_reviewed!" do
+    context "when user is on probation" do
+      before do
+        @creator.put_on_probation(author_name: "admin", content: "test probation")
+      end
+
+      it "transitions from on_probation to not_reviewed" do
+        @creator.mark_not_reviewed!(author_name: "LowBalanceFraudCheck", content: "auto removed")
+
+        expect(@creator.reload.user_risk_state).to eq("not_reviewed")
+      end
+    end
+
+    context "when user is not on probation" do
+      it "raises an error when transitioning from not_reviewed" do
+        expect(@creator.user_risk_state).to eq("not_reviewed")
+
+        expect do
+          @creator.mark_not_reviewed!(author_name: "test", content: "test")
+        end.to raise_error(StateMachines::InvalidTransition)
+      end
+
+      it "raises an error when transitioning from compliant" do
+        @creator.mark_compliant!(author_name: "admin", content: "test")
+
+        expect do
+          @creator.mark_not_reviewed!(author_name: "test", content: "test")
+        end.to raise_error(StateMachines::InvalidTransition)
+      end
+    end
+  end
+
   describe "#check_for_low_balance_and_probate" do
+    before do
+      @purchase = create(:refunded_purchase, link: create(:product, user: @creator))
+    end
+
     context "when the unpaid balance is above threshold" do
       before do
         allow(@creator).to receive(:unpaid_balance_cents).and_return(-40_00)
@@ -140,6 +175,133 @@ describe User::LowBalanceFraudCheck do
             end
           end
         end
+      end
+    end
+  end
+
+  describe "#disable_refunds_and_put_on_probation!" do
+    it "stores the previous risk state in the probation comment" do
+      expect(@creator.user_risk_state).to eq("not_reviewed")
+
+      @creator.send(:disable_refunds_and_put_on_probation!)
+
+      probation_comment = @creator.comments.with_type_on_probation.order(created_at: :desc).first
+      expect(probation_comment.json_data["previous_risk_state"]).to eq("not_reviewed")
+    end
+
+    it "stores compliant state when user was compliant before probation" do
+      @creator.mark_compliant!(author_name: "admin", content: "cleared")
+      expect(@creator.user_risk_state).to eq("compliant")
+
+      @creator.send(:disable_refunds_and_put_on_probation!)
+
+      probation_comment = @creator.comments.with_type_on_probation.order(created_at: :desc).first
+      expect(probation_comment.json_data["previous_risk_state"]).to eq("compliant")
+    end
+  end
+
+  describe "#check_for_high_balance_and_remove_low_balance_probation" do
+    context "when user is on LowBalanceFraudCheck probation" do
+      before do
+        @creator.send(:disable_refunds_and_put_on_probation!)
+        @creator.reload
+      end
+
+      context "when balance exceeds $100" do
+        before do
+          allow(@creator).to receive(:unpaid_balance_cents).and_return(101_00)
+        end
+
+        it "reverts to not_reviewed when previous state was not_reviewed" do
+          @creator.check_for_high_balance_and_remove_low_balance_probation
+
+          expect(@creator.reload.user_risk_state).to eq("not_reviewed")
+          expect(@creator.refunds_disabled?).to eq(false)
+        end
+
+        it "reverts to compliant when previous state was compliant" do
+          probation_comment = @creator.comments.with_type_on_probation.order(created_at: :desc).first
+          probation_comment.update!(json_data: probation_comment.json_data.merge("previous_risk_state" => "compliant"))
+
+          @creator.check_for_high_balance_and_remove_low_balance_probation
+
+          expect(@creator.reload.user_risk_state).to eq("compliant")
+          expect(@creator.refunds_disabled?).to eq(false)
+        end
+
+        it "defaults to compliant for legacy comments without previous_risk_state" do
+          probation_comment = @creator.comments.with_type_on_probation.order(created_at: :desc).first
+          probation_comment.update!(json_data: {})
+
+          @creator.check_for_high_balance_and_remove_low_balance_probation
+
+          expect(@creator.reload.user_risk_state).to eq("compliant")
+          expect(@creator.refunds_disabled?).to eq(false)
+        end
+
+        it "creates a comment explaining the removal" do
+          @creator.check_for_high_balance_and_remove_low_balance_probation
+
+          latest_comment = @creator.reload.comments.order(id: :desc).first
+          expect(latest_comment.content).to eq("Probation removed automatically on #{Time.current.to_fs(:formatted_date_full_month)} because balance exceeded $100")
+        end
+
+        it "enables refunds" do
+          @creator.check_for_high_balance_and_remove_low_balance_probation
+
+          expect(@creator.reload.refunds_disabled?).to eq(false)
+        end
+      end
+
+      context "when balance is exactly $100" do
+        before do
+          allow(@creator).to receive(:unpaid_balance_cents).and_return(100_00)
+        end
+
+        it "does not remove probation" do
+          @creator.check_for_high_balance_and_remove_low_balance_probation
+
+          expect(@creator.reload.on_probation?).to eq(true)
+        end
+      end
+
+      context "when balance is below $100" do
+        before do
+          allow(@creator).to receive(:unpaid_balance_cents).and_return(50_00)
+        end
+
+        it "does not remove probation" do
+          @creator.check_for_high_balance_and_remove_low_balance_probation
+
+          expect(@creator.reload.on_probation?).to eq(true)
+        end
+      end
+    end
+
+    context "when user is manually probated (not by LowBalanceFraudCheck)" do
+      before do
+        @creator.put_on_probation(author_name: "admin", content: "manual probation")
+        allow(@creator).to receive(:unpaid_balance_cents).and_return(101_00)
+      end
+
+      it "does not remove probation" do
+        @creator.check_for_high_balance_and_remove_low_balance_probation
+
+        expect(@creator.reload.on_probation?).to eq(true)
+      end
+    end
+
+    context "when user is not on probation" do
+      before do
+        allow(@creator).to receive(:unpaid_balance_cents).and_return(101_00)
+      end
+
+      it "does nothing" do
+        expect(@creator.on_probation?).to eq(false)
+
+        @creator.check_for_high_balance_and_remove_low_balance_probation
+
+        expect(@creator.reload.user_risk_state).to eq("not_reviewed")
       end
     end
   end

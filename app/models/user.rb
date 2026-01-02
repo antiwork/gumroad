@@ -317,7 +317,7 @@ class User < ApplicationRecord
                       :do => :not_verified?
     after_transition any => %i[suspended_for_fraud suspended_for_tos_violation], :do => :invalidate_active_sessions!
     after_transition any => %i[suspended_for_fraud suspended_for_tos_violation], :do => :disable_links_and_tell_chat
-    after_transition any => %i[on_probation compliant flagged_for_tos_violation flagged_for_fraud suspended_for_tos_violation suspended_for_fraud],
+    after_transition any => %i[on_probation compliant not_reviewed flagged_for_tos_violation flagged_for_fraud suspended_for_tos_violation suspended_for_fraud],
                      :do => :add_user_comment
     after_transition any => [:flagged_for_tos_violation], :do => :add_product_comment
 
@@ -356,6 +356,10 @@ class User < ApplicationRecord
 
     event :put_on_probation do
       transition all => :on_probation
+    end
+
+    event :mark_not_reviewed do
+      transition on_probation: :not_reviewed
     end
   end
 
