@@ -21,7 +21,7 @@ const MAX_UTM_PARAM_LENGTH = 200;
 export const UtmLinkForm = ({ context, utm_link }: UtmLinkNewPageProps | UtmLinkEditPageProps) => {
   const isEditing = "id" in utm_link;
   const uid = React.useId();
-  const form = useForm<UtmLinkFormData>(utm_link);
+  const form = useForm<UtmLinkFormData>(isEditing ? `EditUtmLink:${utm_link.id}` : "CreateUtmLink", utm_link);
   const [isLoadingNewPermalink, setIsLoadingNewPermalink] = React.useState(false);
   const searchParams = new URL(useOriginalLocation()).searchParams;
 
