@@ -29,7 +29,7 @@ import { Modal } from "$app/components/Modal";
 import { Popover } from "$app/components/Popover";
 import { showAlert } from "$app/components/server-components/Alert";
 import { ToggleSettingRow } from "$app/components/SettingRow";
-import Placeholder from "$app/components/ui/Placeholder";
+import { Placeholder, PlaceholderImage } from "$app/components/ui/Placeholder";
 import { useDebouncedCallback } from "$app/components/useDebouncedCallback";
 import { useIsAboveBreakpoint } from "$app/components/useIsAboveBreakpoint";
 import { useRunOnce } from "$app/components/useRunOnce";
@@ -862,9 +862,7 @@ const EmptyCommunitiesPlaceholder = ({ hasProducts }: { hasProducts: boolean }) 
   <div>
     <section>
       <Placeholder>
-        <figure>
-          <img src={placeholderImage} />
-        </figure>
+        <PlaceholderImage src={placeholderImage} />
         <h2>Build your community, one product at a time!</h2>
         <p className="max-w-prose">
           When you publish a product, we automatically create a dedicated community chat—your own space to connect with

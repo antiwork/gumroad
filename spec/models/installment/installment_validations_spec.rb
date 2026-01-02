@@ -73,6 +73,19 @@ describe "InstallmentValidations" do
       installment = build(:installment, name: "installment1", message: nil, url: "#{AWS_S3_ENDPOINT}/#{S3_BUCKET}/myfile.jpeg", link: create(:product))
       expect(installment).to_not be_valid
     end
+
+    it "disallows records with empty HTML-only message content" do
+      installment = build(
+        :installment,
+        name: "installment1",
+        message: "<p><br></p>",
+        link: create(:product),
+        send_emails: true
+      )
+
+      expect(installment).not_to be_valid
+      expect(installment.errors.full_messages).to include("Please include a message as part of the update.")
+    end
   end
 
   describe "#shown_on_profile_only_for_confirmed_users" do
