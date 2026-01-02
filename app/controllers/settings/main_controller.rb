@@ -1,13 +1,13 @@
 # frozen_string_literal: true
 
-class Settings::MainController < Sellers::BaseController
+class Settings::MainController < Settings::BaseController
   include ActiveSupport::NumberHelper
 
   before_action :authorize
 
   def show
     @title = "Settings"
-    @react_component_props = SettingsPresenter.new(pundit_user:).main_props
+    render inertia: "Settings/Main/Show", props: settings_presenter.main_props
   end
 
   def update
@@ -27,20 +27,20 @@ class Settings::MainController < Sellers::BaseController
     current_seller.update_purchasing_power_parity_excluded_products!(params[:user][:purchasing_power_parity_excluded_product_ids])
     current_seller.update_product_level_support_emails!(params[:user][:product_level_support_emails])
 
-    render json: { success: true }
+    redirect_to settings_main_path, status: :see_other, notice: "Your account has been updated!"
   rescue StandardError => e
     Bugsnag.notify(e)
     error_message = current_seller.errors.full_messages.to_sentence.presence ||
       "Something broke. We're looking into what happened. Sorry about this!"
-    render json: { success: false, error_message: }
+    redirect_to settings_main_path, alert: error_message
   end
 
   def resend_confirmation_email
     if current_seller.unconfirmed_email.present? || !current_seller.confirmed?
       current_seller.send_confirmation_instructions
-      return render json: { success: true }
+      return redirect_to settings_main_path, status: :see_other, notice: "Confirmation email resent!"
     end
-    render json: { success: false }
+    redirect_to settings_main_path, alert: "Sorry, something went wrong. Please try again."
   end
 
   private

@@ -49,7 +49,7 @@ export type Purchase = PurchaseStatesInfo & {
   formatted_affiliate_credit_amount: string | null;
   gumroad_responsible_for_tax: boolean;
   product: {
-    id: number;
+    external_id: string;
     name: string;
     long_url: string;
   };
@@ -126,7 +126,7 @@ const Header = ({ purchase }: { purchase: Purchase }) => (
     <h2>
       <Link href={Routes.admin_purchase_path(purchase.external_id)}>{purchase.formatted_display_price}</Link>
       {purchase.gumroad_responsible_for_tax ? ` + ${purchase.formatted_gumroad_tax_amount} VAT` : null} for{" "}
-      <Link href={Routes.admin_product_path(purchase.product.id)} title={purchase.product.id.toString()}>
+      <Link href={Routes.admin_product_path(purchase.product.external_id)} title={purchase.product.external_id}>
         {purchase.product.name}
       </Link>{" "}
       {purchase.variants_list}{" "}

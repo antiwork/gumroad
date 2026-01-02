@@ -9,7 +9,7 @@ import { Icon } from "$app/components/Icons";
 import { useLoggedInUser } from "$app/components/LoggedInUser";
 import { Modal } from "$app/components/Modal";
 import { showAlert } from "$app/components/server-components/Alert";
-import Placeholder from "$app/components/ui/Placeholder";
+import { Placeholder, PlaceholderImage } from "$app/components/ui/Placeholder";
 import { Table, TableBody, TableCaption, TableCell, TableHead, TableHeader, TableRow } from "$app/components/ui/Table";
 import { Layout } from "$app/components/WorkflowsPage";
 
@@ -96,9 +96,7 @@ const WorkflowList = ({ workflows }: WorkflowListProps) => {
       ) : (
         <div className="p-4 md:p-8">
           <Placeholder>
-            <figure>
-              <img src={placeholder} />
-            </figure>
+            <PlaceholderImage src={placeholder} />
             <h2>Automate emails with ease.</h2>
             <h4>Workflows allow you to send scheduled emails to a subset of your audience based on a trigger.</h4>
             {newWorkflowButton}

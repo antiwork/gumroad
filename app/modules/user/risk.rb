@@ -156,6 +156,17 @@ module User::Risk
     flagged_for_tos_violation? || flagged_for_fraud?
   end
 
+  def suspended_by_admin?
+    return false unless suspended?
+
+    last_suspension_comment = comments
+      .where(comment_type: Comment::COMMENT_TYPE_SUSPENDED)
+      .order(:created_at)
+      .last
+
+    last_suspension_comment&.author_id.present?
+  end
+
   def add_user_comment(transition)
     params = transition.args.first
     raise ArgumentError, "first transition argument must include an author_id or author_name" if !params || (!params[:author_id] && !params[:author_name])

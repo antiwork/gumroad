@@ -65,7 +65,7 @@ import { useIsAboveBreakpoint } from "$app/components/useIsAboveBreakpoint";
 import { useRefToLatest } from "$app/components/useRefToLatest";
 import { WithTooltip } from "$app/components/WithTooltip";
 
-import { FileEmbed, FileEmbedConfig, getDownloadUrl } from "./FileEmbed";
+import { FileEmbed, FileEmbedConfig } from "./FileEmbed";
 import { Page, PageTab, titleWithFallback } from "./PageTab";
 
 declare global {
@@ -92,7 +92,7 @@ export const extensions = (productId: string, extraExtensions: TiptapNode[] = []
 ];
 
 const ContentTabContent = ({ selectedVariantId }: { selectedVariantId: string | null }) => {
-  const { id, product, updateProduct, seller, save, existingFiles, setExistingFiles, uniquePermalink } =
+  const { id, product, updateProduct, seller, save, existingFiles, setExistingFiles, uniquePermalink, filesById } =
     useProductEditContext();
   const uid = React.useId();
   const isDesktop = useIsAboveBreakpoint("lg");
@@ -210,9 +210,9 @@ const ContentTabContent = ({ selectedVariantId }: { selectedVariantId: string | 
     productId: id,
     variantId: selectedVariantId,
     prepareDownload: save,
-    files: product.files.map((file) => ({ ...file, url: getDownloadUrl(id, file) })),
+    filesById,
   });
-  const fileEmbedConfig = useRefToLatest<FileEmbedConfig>({ files: product.files });
+  const fileEmbedConfig = useRefToLatest<FileEmbedConfig>({ filesById });
   const uploadFilesRef = useRefToLatest(uploadFiles);
   const contentEditorExtensions = extensions(id, [
     FileEmbedGroup.configure({ getConfig: () => fileEmbedGroupConfig.current }),
@@ -363,10 +363,13 @@ const ContentTabContent = ({ selectedVariantId }: { selectedVariantId: string | 
 
   const addDropboxFiles = (files: ResponseDropboxFile[]) => {
     updateProduct((product) => {
+      const [updatedFiles, nonModifiedFiles] = partition(product.files, (file) =>
+        files.some(({ external_id }) => file.id === external_id),
+      );
       product.files = [
-        ...product.files.filter((file) => !files.some(({ external_id }) => file.id === external_id)),
+        ...nonModifiedFiles,
         ...files.map((file) => {
-          const existing = product.files.find(({ id }) => id === file.external_id);
+          const existing = updatedFiles.find(({ id }) => id === file.external_id);
           const extension = FileUtils.getFileExtension(file.name).toUpperCase();
           return {
             display_name: existing?.display_name ?? FileUtils.getFileNameWithoutExtension(file.name),
@@ -1043,73 +1046,75 @@ export const ContentTab = () => {
             <Layout
               headerActions={
                 product.variants.length > 0 ? (
-                  <ComboBox<Variant>
-                    className="hidden lg:block"
-                    // TODO: Currently needed to get the icon on the selected option even though this is not multiple select. We should fix this in the design system
-                    multiple
-                    input={(props) => (
-                      <div {...props} className="input h-full min-h-auto" aria-label="Select a version">
-                        <span className="fake-input text-singleline">
-                          {selectedVariant && !product.has_same_rich_content_for_all_variants
-                            ? `Editing: ${selectedVariant.name || "Untitled"}`
-                            : "Editing: All versions"}
-                        </span>
-                        <Icon name="outline-cheveron-down" />
-                      </div>
-                    )}
-                    options={product.variants}
-                    option={(item, props, index) => (
-                      <>
-                        <div
-                          {...props}
-                          onClick={(e) => {
-                            props.onClick?.(e);
-                            setSelectedVariantId(item.id);
-                          }}
-                          aria-selected={item.id === selectedVariantId}
-                          inert={product.has_same_rich_content_for_all_variants}
-                        >
-                          <div>
-                            <h4>{item.name || "Untitled"}</h4>
-                            {item.id === selectedVariant?.id ? (
-                              <small>Editing</small>
-                            ) : product.has_same_rich_content_for_all_variants || item.rich_content.length ? (
-                              <small>
-                                Last edited on{" "}
-                                {formatDate(
-                                  (product.has_same_rich_content_for_all_variants
-                                    ? product.rich_content
-                                    : item.rich_content
-                                  ).reduce<Date | null>((acc, item) => {
-                                    const date = parseISO(item.updated_at);
-                                    return acc && acc > date ? acc : date;
-                                  }, null) ?? new Date(),
-                                )}
-                              </small>
-                            ) : (
-                              <small className="text-muted">No content yet</small>
-                            )}
-                          </div>
+                  <>
+                    <hr className="relative left-1/2 my-2 w-screen max-w-none -translate-x-1/2 border-border lg:hidden" />
+                    <ComboBox<Variant>
+                      // TODO: Currently needed to get the icon on the selected option even though this is not multiple select. We should fix this in the design system
+                      multiple
+                      input={(props) => (
+                        <div {...props} className="input h-full min-h-auto" aria-label="Select a version">
+                          <span className="fake-input text-singleline">
+                            {selectedVariant && !product.has_same_rich_content_for_all_variants
+                              ? `Editing: ${selectedVariant.name || "Untitled"}`
+                              : "Editing: All versions"}
+                          </span>
+                          <Icon name="outline-cheveron-down" />
                         </div>
-                        {index === product.variants.length - 1 ? (
-                          <div className="option">
-                            <label style={{ alignItems: "center" }}>
-                              <input
-                                type="checkbox"
-                                checked={product.has_same_rich_content_for_all_variants}
-                                onChange={() => {
-                                  if (!product.has_same_rich_content_for_all_variants && product.variants.length > 1)
-                                    return setConfirmingDiscardVariantContent(true);
-                                  setHasSameRichContent(!product.has_same_rich_content_for_all_variants);
-                                }}
-                              />
-                              <small>Use the same content for all versions</small>
-                            </label>
+                      )}
+                      options={product.variants}
+                      option={(item, props, index) => (
+                        <>
+                          <div
+                            {...props}
+                            onClick={(e) => {
+                              props.onClick?.(e);
+                              setSelectedVariantId(item.id);
+                            }}
+                            aria-selected={item.id === selectedVariantId}
+                            inert={product.has_same_rich_content_for_all_variants}
+                          >
+                            <div>
+                              <h4>{item.name || "Untitled"}</h4>
+                              {item.id === selectedVariant?.id ? (
+                                <small>Editing</small>
+                              ) : product.has_same_rich_content_for_all_variants || item.rich_content.length ? (
+                                <small>
+                                  Last edited on{" "}
+                                  {formatDate(
+                                    (product.has_same_rich_content_for_all_variants
+                                      ? product.rich_content
+                                      : item.rich_content
+                                    ).reduce<Date | null>((acc, item) => {
+                                      const date = parseISO(item.updated_at);
+                                      return acc && acc > date ? acc : date;
+                                    }, null) ?? new Date(),
+                                  )}
+                                </small>
+                              ) : (
+                                <small className="text-muted">No content yet</small>
+                              )}
+                            </div>
                           </div>
-                        ) : null}
-                      </>
-                    )}
-                  />
+                          {index === product.variants.length - 1 ? (
+                            <div className="option">
+                              <label style={{ alignItems: "center" }}>
+                                <input
+                                  type="checkbox"
+                                  checked={product.has_same_rich_content_for_all_variants}
+                                  onChange={() => {
+                                    if (!product.has_same_rich_content_for_all_variants && product.variants.length > 1)
+                                      return setConfirmingDiscardVariantContent(true);
+                                    setHasSameRichContent(!product.has_same_rich_content_for_all_variants);
+                                  }}
+                                />
+                                <small>Use the same content for all versions</small>
+                              </label>
+                            </div>
+                          ) : null}
+                        </>
+                      )}
+                    />
+                  </>
                 ) : null
               }
             >

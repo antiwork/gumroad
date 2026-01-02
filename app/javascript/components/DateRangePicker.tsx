@@ -12,6 +12,8 @@ import {
 } from "date-fns";
 import * as React from "react";
 
+import { classNames } from "$app/utils/classNames";
+
 import { DateInput } from "$app/components/DateInput";
 import { Icon } from "$app/components/Icons";
 import { Popover } from "$app/components/Popover";
@@ -66,7 +68,7 @@ export const DateRangePicker = ({
               }}
             />
           </fieldset>
-          <fieldset>
+          <fieldset className={classNames({ danger: to < from })}>
             <legend>
               <label htmlFor={`${uid}-to`}>To (including)</label>
             </legend>
@@ -76,7 +78,9 @@ export const DateRangePicker = ({
               onChange={(date) => {
                 if (date) setTo(date);
               }}
+              aria-invalid={to < from}
             />
+            {to < from ? <small>Must be after from date</small> : null}
           </fieldset>
         </div>
       ) : (

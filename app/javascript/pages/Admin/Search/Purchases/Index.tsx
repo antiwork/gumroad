@@ -16,7 +16,7 @@ type Purchase = {
   formatted_display_price: string;
   formatted_gumroad_tax_amount: string | null;
   gumroad_responsible_for_tax: boolean;
-  product: { id: number; name: string; long_url: string };
+  product: { external_id: string; name: string; long_url: string };
   variants_list: string;
   refund_policy: RefundPolicy | null;
   product_refund_policy: string | null;
@@ -95,7 +95,7 @@ export default function Purchases() {
                       {purchase.formatted_display_price}
                       {purchase.gumroad_responsible_for_tax ? ` + ${purchase.formatted_gumroad_tax_amount} VAT` : null}
                     </Link>{" "}
-                    <Link href={Routes.admin_product_url(purchase.product.id)}>{purchase.product.name}</Link>{" "}
+                    <Link href={Routes.admin_product_url(purchase.product.external_id)}>{purchase.product.name}</Link>{" "}
                     {purchase.variants_list}{" "}
                     <Link href={purchase.product.long_url} target="_blank" rel="noopener noreferrer nofollow">
                       <Icon name="arrow-up-right-square" />

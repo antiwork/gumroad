@@ -239,6 +239,9 @@ describe ProductPresenter do
       product.save_custom_button_text_option("pay_prompt")
       product.save_custom_summary("To summarize, I am a product.")
       product.save_custom_attributes({ "Detail 1" => "Value 1" })
+      product.custom_view_content_button_text = "Download Files"
+      product.custom_receipt_text = "Thank you for purchasing! Feel free to contact us any time for support."
+      product.save
       product.user.reload
     end
 
@@ -255,6 +258,10 @@ describe ProductPresenter do
             suggested_price_cents: 200,
             custom_button_text_option: "pay_prompt",
             custom_summary: "To summarize, I am a product.",
+            custom_view_content_button_text: "Download Files",
+            custom_view_content_button_text_max_length: 26,
+            custom_receipt_text: "Thank you for purchasing! Feel free to contact us any time for support.",
+            custom_receipt_text_max_length: 500,
             custom_attributes: { "Detail 1" => "Value 1" },
             file_attributes: [
               {
@@ -477,6 +484,10 @@ describe ProductPresenter do
               suggested_price_cents: nil,
               custom_button_text_option: nil,
               custom_summary: nil,
+              custom_view_content_button_text: nil,
+              custom_view_content_button_text_max_length: 26,
+              custom_receipt_text: nil,
+              custom_receipt_text_max_length: 500,
               custom_attributes: [],
               file_attributes: [],
               max_purchase_count: nil,
@@ -725,6 +736,10 @@ describe ProductPresenter do
               suggested_price_cents: nil,
               custom_button_text_option: nil,
               custom_summary: nil,
+              custom_view_content_button_text: nil,
+              custom_view_content_button_text_max_length: 26,
+              custom_receipt_text: nil,
+              custom_receipt_text_max_length: 500,
               custom_attributes: [],
               file_attributes: [],
               max_purchase_count: nil,

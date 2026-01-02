@@ -23,7 +23,7 @@ describe "OauthApplicationsPages", type: :system, js: true do
           expect(page).to have_selector("img[src*='s3_utility/cdn_url_for_blob?key=#{ActiveStorage::Blob.last.key}']")
           click_button("Create application")
         end
-        wait_for_ajax
+        expect(page).to have_current_path(/\/oauth\/applications\/.*\/edit/)
       end.to change { OauthApplication.count }.by(1)
 
       OauthApplication.last.tap do |app|
@@ -63,7 +63,7 @@ describe "OauthApplicationsPages", type: :system, js: true do
           expect(page).to have_selector("img[src*='s3_utility/cdn_url_for_blob?key=#{ActiveStorage::Blob.last.key}']")
           click_button("Create application")
         end
-        wait_for_ajax
+        expect(page).to have_current_path(/\/oauth\/applications\/.*\/edit/)
       end.to change { OauthApplication.count }.by(1)
     end
   end
@@ -126,6 +126,7 @@ describe "OauthApplicationsPages", type: :system, js: true do
       expect(page).to have_text("Are you sure you want to revoke access to #{app_names.first}?")
       click_on "Yes, revoke access"
     end
+    expect(page).to have_current_path(settings_authorized_applications_path)
     expect(page).to(have_alert(text: "Authorized application revoked"))
     expect(page).not_to(have_content(app_names.first))
     app_names.drop(1).each { |app_name| expect(page).to(have_content(app_name)) }
