@@ -158,12 +158,11 @@ describe("Email Editing Flow", :js, :elasticsearch_wait_for_refresh, type: :syst
       fill_in "Schedule date", with: "01/01/#{Date.today.year.next}\t04:00PM"
       click_on "Schedule"
     end
-    wait_for_ajax
     expect(page).to have_alert("Email successfully scheduled!")
-
-    expect(installment.reload.ready_to_publish?).to be(true)
+    wait_until_true { installment.reload.ready_to_publish? }
+    expect(installment.ready_to_publish?).to be(true)
     expect(installment.installment_rule.to_be_published_at.to_date.to_s).to eq("#{Date.today.year.next}-01-01")
-    expect(installment.name).to eq("Updated email")
+    wait_until_true { installment.name == "Updated email" }
     expect(installment.send_emails).to be(true)
     expect(installment.shown_on_profile).to be(true)
     expect(installment.published?).to be(false)
@@ -238,9 +237,10 @@ describe("Email Editing Flow", :js, :elasticsearch_wait_for_refresh, type: :syst
       expect(page).to have_button("Schedule")
       click_on "Publish now"
     end
-    expect(page).to have_alert(text: "Email successfully published!")
+    expect(page).to have_alert(text: "Email successfully sent!")
+    wait_until_true { installment.reload.name == "Updated email" }
 
-    expect(installment.reload.name).to eq("Updated email")
+    expect(installment.name).to eq("Updated email")
     expect(installment.published?).to be(true)
     expect(installment.has_been_blasted?).to be(true)
     expect(installment.ready_to_publish?).to be(false)
@@ -348,7 +348,7 @@ describe("Email Editing Flow", :js, :elasticsearch_wait_for_refresh, type: :syst
       expect(page).to have_button("Schedule", disabled: true)
       click_on "Publish now"
     end
-    expect(page).to have_alert(text: "Email successfully published!")
+    expect(page).to have_alert(text: "Email successfully sent!")
 
     published_installment.reload
     expect(published_installment.published_at).to be_within(5.second).of(DateTime.current)
@@ -376,7 +376,7 @@ describe("Email Editing Flow", :js, :elasticsearch_wait_for_refresh, type: :syst
     click_on "Edit"
 
     # Ensure that it saves the edited fields and sends a preview email
-    fill_in "Title", with: "Updated original email"
+    fill_in "Title", with: "Updated original email", fill_options: { clear: :backspace }
     expect(page).to have_checked_field("Send email")
     expect(page).to have_unchecked_field("Post to profile")
     # When only one channel (either "Send email" or "Post to profile") is checked, the "Preview" button is not disclousre
@@ -393,7 +393,7 @@ describe("Email Editing Flow", :js, :elasticsearch_wait_for_refresh, type: :syst
     expect(installment.ready_to_publish?).to be(false)
 
     # When both channels are unchecked, it does not allow saving and previewing
-    fill_in "Title", with: "Updated original email - edit 2"
+    fill_in "Title", with: "Updated original email - edit 2", fill_options: { clear: :backspace }
     uncheck "Send email"
     click_on "Preview"
     wait_for_ajax
@@ -424,12 +424,14 @@ describe("Email Editing Flow", :js, :elasticsearch_wait_for_refresh, type: :syst
     expect(installment.ready_to_publish?).to be(false)
 
     click_on "Cancel"
+    wait_until_true { find(:table_row, { "Subject" => "Updated original email - edit 2" }).present? }
     find(:table_row, { "Subject" => "Updated original email - edit 2" }).click
     click_on "Edit"
-    wait_for_ajax
+
+    wait_until_true { find_field("Title").present? }
 
     # Schedule the email
-    fill_in "Title", with: "Updated original email - scheduled"
+    fill_in "Title", with: "Updated original email - scheduled", fill_options: { clear: :backspace }
     set_rich_text_editor_input(find("[aria-label='Email message']"), to_text: "Scheduled message")
     sleep 0.5 # Wait for the title editor to update
     select_disclosure "Publish" do
@@ -456,13 +458,13 @@ describe("Email Editing Flow", :js, :elasticsearch_wait_for_refresh, type: :syst
     expect(installment.reload.name).to eq("Updated original email - scheduled - edit 2")
 
     # Publish the email
-    fill_in "Title", with: "Updated original email - published"
+    fill_in "Title", with: "Updated original email - published", fill_options: { clear: :backspace }
     set_rich_text_editor_input(find("[aria-label='Email message']"), to_text: "Published message")
     sleep 0.5 # Wait for the message editor to update
     select_disclosure "Publish" do
       click_on "Publish now"
     end
-    expect(page).to have_alert(text: "Email successfully published!")
+    expect(page).to have_alert(text: "Email successfully sent!")
 
     expect(installment.reload.name).to eq("Updated original email - published")
     expect(installment.message).to eq("<p>Published message</p>")
@@ -479,7 +481,7 @@ describe("Email Editing Flow", :js, :elasticsearch_wait_for_refresh, type: :syst
     expect(page).to have_checked_field("Send email", disabled: true)
     expect(page).to have_checked_field("Post to profile", disabled: false)
     expect(page).to have_field("Publish date", with: installment.published_at.to_date.to_s)
-    fill_in "Title", with: "Updated original email - published - edit 2"
+    fill_in "Title", with: "Updated original email - published - edit 2", fill_options: { clear: :backspace }
     set_rich_text_editor_input(find("[aria-label='Email message']"), to_text: "Published message 2")
     sleep 0.5 # Wait for the message editor to update
     new_window = window_opened_by do
@@ -503,10 +505,9 @@ describe("Email Editing Flow", :js, :elasticsearch_wait_for_refresh, type: :syst
     visit "#{emails_path}/#{follower_installment.external_id}/edit"
 
     expect(page).to have_radio_button("Followers only", checked: true)
-    fill_in "Title", with: "Updated Follower Post"
+    fill_in "Title", with: "Updated Follower Post", fill_options: { clear: :backspace }
     click_on "Save"
-    wait_for_ajax
-
+    wait_until_true { follower_installment.reload.product_files_archives.alive.any? }
     expect(follower_installment.reload.product_files_archives.alive.sole.url.split("/").last).to eq("Updated_Follower_Post.zip")
   end
 
@@ -550,7 +551,7 @@ describe("Email Editing Flow", :js, :elasticsearch_wait_for_refresh, type: :syst
       click_on "Publish now"
     end
     wait_for_ajax
-    expect(page).to have_alert(text: "Email successfully published!")
+    expect(page).to have_alert(text: "Email successfully sent!")
 
     expect(section1.reload.shown_posts).to be_empty
     expect(section2.reload.shown_posts).to eq([installment.id])

@@ -15,7 +15,7 @@ import { useLoggedInUser } from "$app/components/LoggedInUser";
 import { Popover } from "$app/components/Popover";
 import { showAlert } from "$app/components/server-components/Alert";
 import { PageHeader } from "$app/components/ui/PageHeader";
-import Placeholder from "$app/components/ui/Placeholder";
+import { Placeholder, PlaceholderImage } from "$app/components/ui/Placeholder";
 import { Sheet, SheetHeader } from "$app/components/ui/Sheet";
 import { Table, TableBody, TableCaption, TableCell, TableHead, TableHeader, TableRow } from "$app/components/ui/Table";
 import { Tabs, Tab } from "$app/components/ui/Tabs";
@@ -39,15 +39,15 @@ const Layout = ({
     <div>
       <PageHeader title={title} actions={actions}>
         <Tabs>
-          <Tab href={`${Routes.emails_path()}/published`} isSelected={false}>
+          <Tab href={Routes.published_emails_path()} isSelected={false}>
             Published
           </Tab>
           {loggedInUser?.policies.installment.create ? (
             <>
-              <Tab href={`${Routes.emails_path()}/scheduled`} isSelected={false}>
+              <Tab href={Routes.scheduled_emails_path()} isSelected={false}>
                 Scheduled
               </Tab>
-              <Tab href={`${Routes.emails_path()}/drafts`} isSelected={false}>
+              <Tab href={Routes.drafts_emails_path()} isSelected={false}>
                 Drafts
               </Tab>
             </>
@@ -235,9 +235,7 @@ export default function FollowersPage() {
           </div>
         ) : (
           <Placeholder>
-            <figure>
-              <img src={placeholder} />
-            </figure>
+            <PlaceholderImage src={placeholder} />
             {searchQuery.length === 0 ? (
               <>
                 <h2>Manage all of your followers in one place.</h2>

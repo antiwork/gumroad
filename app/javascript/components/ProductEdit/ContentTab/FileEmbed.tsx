@@ -36,7 +36,7 @@ import { SubtitleList } from "$app/components/SubtitleList";
 import { SubtitleFile } from "$app/components/SubtitleList/Row";
 import { SubtitleUploadBox } from "$app/components/SubtitleUploadBox";
 import { NodeActionsMenu } from "$app/components/TiptapExtensions/NodeActionsMenu";
-import Placeholder from "$app/components/ui/Placeholder";
+import { Placeholder } from "$app/components/ui/Placeholder";
 import { Row, RowActions, RowContent, RowDetails } from "$app/components/ui/Rows";
 import { WithTooltip } from "$app/components/WithTooltip";
 
@@ -53,6 +53,8 @@ export const getDraggedFileEmbed = (editor: Editor) => {
 };
 
 const FileEmbedNodeView = ({ node, editor, getPos, updateAttributes }: NodeViewProps) => {
+  if (!node.attrs.id) return;
+
   const { id, updateProduct, filesById } = useProductEditContext();
   const uid = React.useId();
   const ref = React.useRef<HTMLDivElement>(null);
