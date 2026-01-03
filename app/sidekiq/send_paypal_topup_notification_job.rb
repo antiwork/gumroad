@@ -5,7 +5,7 @@ class SendPaypalTopupNotificationJob
   include CurrencyHelper
   sidekiq_options retry: 1, queue: :default, lock: :until_executed, on_conflict: :replace
 
-  def perform(notify_only_if_topup_needed: false)
+  def perform(notify_only_if_topup_needed = false)
     return unless Rails.env.production?
 
     payout_amount_cents = Balance
