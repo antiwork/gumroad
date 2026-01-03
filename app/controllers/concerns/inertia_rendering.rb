@@ -19,9 +19,6 @@ module InertiaRendering
   end
 
   private
-    # Convert Rails flash to Inertia-compatible format with unique ID.
-    # The ID allows frontend to track shown flashes and prevent duplicates
-    # when navigating back in browser history.
     def inertia_flash_props
       return if (flash_message = flash[:alert] || flash[:warning] || flash[:notice]).blank?
 
