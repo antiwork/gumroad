@@ -6,7 +6,6 @@ import { LoggedInUser, Seller, CurrentUser } from "$app/types/user";
 import { DesignContextProvider, DesignSettings } from "$app/components/DesignSettings";
 import { DomainSettingsProvider } from "$app/components/DomainSettings";
 import { LoggedInUserProvider, parseLoggedInUser } from "$app/components/LoggedInUser";
-import { type AlertPayload } from "$app/components/server-components/Alert";
 import { SSRLocationProvider } from "$app/components/useOriginalLocation";
 import { UserAgentProvider } from "$app/components/UserAgent";
 
@@ -28,7 +27,6 @@ export type GlobalProps = {
   title: string;
   current_user: CurrentUser;
   card_types: CardType[];
-  flash: AlertPayload | null;
 };
 
 const AdminAppWrapper = ({ children, global }: { children: React.ReactNode; global: GlobalProps }) => (

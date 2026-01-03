@@ -7,12 +7,12 @@ import { Nav } from "$app/components/client-components/Nav";
 import { CurrentSellerProvider, parseCurrentSeller } from "$app/components/CurrentSeller";
 import LoadingSkeleton from "$app/components/LoadingSkeleton";
 import { type LoggedInUser, LoggedInUserProvider, parseLoggedInUser } from "$app/components/LoggedInUser";
-import Alert, { showAlert, type AlertPayload } from "$app/components/server-components/Alert";
+import Alert from "$app/components/server-components/Alert";
+import { useFlash } from "$app/components/useFlash";
 import useRouteLoading from "$app/components/useRouteLoading";
 
 type PageProps = {
   title: string;
-  flash?: AlertPayload;
   logged_in_user: LoggedInUser;
   current_seller: {
     id: number;
@@ -30,20 +30,15 @@ type PageProps = {
 };
 
 export default function Layout({ children }: { children: React.ReactNode }) {
-  const { title, flash, logged_in_user, current_seller } = usePage<PageProps>().props;
+  const { title, logged_in_user, current_seller } = usePage<PageProps>().props;
+  const flash = useFlash();
   const isRouteLoading = useRouteLoading();
-
-  React.useEffect(() => {
-    if (flash?.message) {
-      showAlert(flash.message, flash.status === "danger" ? "error" : flash.status);
-    }
-  }, [flash]);
 
   return (
     <LoggedInUserProvider value={parseLoggedInUser(logged_in_user)}>
       <CurrentSellerProvider value={parseCurrentSeller(current_seller)}>
         <Head title={title} />
-        <Alert initial={flash ?? null} />
+        <Alert initial={flash} />
         <div id="inertia-shell" className="flex h-screen flex-col lg:flex-row">
           <Nav title="Dashboard" />
           {isRouteLoading ? <LoadingSkeleton /> : null}
@@ -55,19 +50,14 @@ export default function Layout({ children }: { children: React.ReactNode }) {
 }
 
 export function LoggedInUserLayout({ children }: { children: React.ReactNode }) {
-  const { title, flash, logged_in_user, current_seller } = usePage<PageProps>().props;
-
-  React.useEffect(() => {
-    if (flash?.message) {
-      showAlert(flash.message, flash.status === "danger" ? "error" : flash.status);
-    }
-  }, [flash]);
+  const { title, logged_in_user, current_seller } = usePage<PageProps>().props;
+  const flash = useFlash();
 
   return (
     <LoggedInUserProvider value={parseLoggedInUser(logged_in_user)}>
       <CurrentSellerProvider value={parseCurrentSeller(current_seller)}>
         <Head title={title} />
-        <Alert initial={flash ?? null} />
+        <Alert initial={flash} />
         {children}
       </CurrentSellerProvider>
     </LoggedInUserProvider>
