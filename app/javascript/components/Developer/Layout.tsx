@@ -1,3 +1,4 @@
+import { Link } from "@inertiajs/react";
 import * as React from "react";
 
 import { PageHeader } from "$app/components/ui/PageHeader";
@@ -19,11 +20,15 @@ export const Layout = ({
   <div>
     <PageHeader title={pageNames[currentPage]}>
       <Tabs>
-        {Object.entries(pageNames).map(([page, name]) => (
-          <Tab key={page} isSelected={page === currentPage} href={Routes[`${page}_path`]()}>
-            {name}
-          </Tab>
-        ))}
+        <Tab isSelected={currentPage === "widgets"} asChild>
+          <Link href={Routes.widgets_path()}>Widgets</Link>
+        </Tab>
+        <Tab isSelected={currentPage === "ping"} asChild>
+          <Link href={Routes.ping_path()}>Ping</Link>
+        </Tab>
+        <Tab isSelected={currentPage === "api"} href={Routes.api_path()}>
+          API
+        </Tab>
       </Tabs>
     </PageHeader>
     {children}

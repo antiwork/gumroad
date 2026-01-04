@@ -15,7 +15,7 @@ import { ExportSubscribersPopover } from "$app/components/Followers/ExportSubscr
 import { Icon } from "$app/components/Icons";
 import { LoadingSpinner } from "$app/components/LoadingSpinner";
 import { Popover } from "$app/components/Popover";
-import Placeholder from "$app/components/ui/Placeholder";
+import { Placeholder, PlaceholderImage } from "$app/components/ui/Placeholder";
 import { useOnChange } from "$app/components/useOnChange";
 import { WithTooltip } from "$app/components/WithTooltip";
 
@@ -83,9 +83,7 @@ function Audience() {
       ) : (
         <div className="p-4 md:p-8">
           <Placeholder>
-            <figure>
-              <img src={placeholder} />
-            </figure>
+            <PlaceholderImage src={placeholder} />
             <h2>It's quiet. Too quiet.</h2>
             <p>
               You don't have any followers yet. Once you do, you'll see them here, along with powerful data that can
