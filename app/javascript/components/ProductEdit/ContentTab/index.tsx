@@ -25,6 +25,7 @@ import { PageList, PageListItem, PageListLayout } from "$app/components/Download
 import { EvaporateUploaderProvider, useEvaporateUploader } from "$app/components/EvaporateUploader";
 import { FileKindIcon } from "$app/components/FileRowContent";
 import { Icon } from "$app/components/Icons";
+import { InsertReviewMenuItem } from "$app/components/InsertReviewMenuItem";
 import { LoadingSpinner } from "$app/components/LoadingSpinner";
 import { Modal } from "$app/components/Modal";
 import { Popover, PopoverContent, PopoverTrigger } from "$app/components/Popover";
@@ -45,7 +46,6 @@ import { S3UploadConfigProvider, useS3UploadConfig } from "$app/components/S3Upl
 import { Separator } from "$app/components/Separator";
 import { showAlert } from "$app/components/server-components/Alert";
 import { EntityInfo } from "$app/components/server-components/DownloadPage/Layout";
-import { TestimonialSelectModal } from "$app/components/TestimonialSelectModal";
 import { FileUpload } from "$app/components/TiptapExtensions/FileUpload";
 import { uploadImages } from "$app/components/TiptapExtensions/Image";
 import { LicenseKey, LicenseProvider } from "$app/components/TiptapExtensions/LicenseKey";
@@ -427,7 +427,6 @@ const ContentTabContent = ({ selectedVariantId }: { selectedVariantId: string | 
   }, [editor]);
 
   const [showUpsellModal, setShowUpsellModal] = React.useState(false);
-  const [showReviewModal, setShowReviewModal] = React.useState(false);
 
   const onInsertUpsell = (product: Product, variant: ProductOption | null, discount: InputtedDiscount | null) => {
     if (!editor) return;
@@ -446,14 +445,6 @@ const ContentTabContent = ({ selectedVariantId }: { selectedVariantId: string | 
       })
       .run();
     setShowUpsellModal(false);
-  };
-
-  const onInsertReviews = (reviewIds: string[]) => {
-    if (!editor) return;
-    for (const reviewId of reviewIds) {
-      editor.chain().focus().insertReviewCard({ reviewId }).run();
-    }
-    setShowReviewModal(false);
   };
 
   const onInsertMoreLikeThis = () => {
@@ -726,16 +717,8 @@ const ContentTabContent = ({ selectedVariantId }: { selectedVariantId: string | 
                             <Icon name="cart-plus" />
                             <span>Upsell</span>
                           </div>
-                          <div
-                            role="menuitem"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              setShowReviewModal(true);
-                            }}
-                          >
-                            <Icon name="solid-star" />
-                            <span>Review</span>
-                          </div>
+
+                          <InsertReviewMenuItem editor={editor} productId={id} />
                         </>
                       )}
                     </div>
@@ -965,14 +948,6 @@ const ContentTabContent = ({ selectedVariantId }: { selectedVariantId: string | 
         </>
       ) : null}
       <UpsellSelectModal isOpen={showUpsellModal} onClose={() => setShowUpsellModal(false)} onInsert={onInsertUpsell} />
-      {id ? (
-        <TestimonialSelectModal
-          isOpen={showReviewModal}
-          onClose={() => setShowReviewModal(false)}
-          onInsert={onInsertReviews}
-          productId={id}
-        />
-      ) : null}
     </>
   );
 };

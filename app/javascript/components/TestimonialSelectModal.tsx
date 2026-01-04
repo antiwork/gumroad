@@ -10,7 +10,7 @@ import { PaginationProps } from "$app/components/Pagination";
 import { Review } from "$app/components/Review";
 import { showAlert } from "$app/components/server-components/Alert";
 
-export const TestimonialSelectModal = ({
+const TestimonialSelectModal = ({
   isOpen,
   onClose,
   onInsert,
@@ -153,6 +153,8 @@ export const TestimonialSelectModal = ({
     </Modal>
   );
 };
+
+export default TestimonialSelectModal;
 
 const SelectableReviewCard = ({
   review,

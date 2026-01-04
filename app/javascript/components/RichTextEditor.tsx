@@ -15,9 +15,9 @@ import { assertDefined } from "$app/utils/assert";
 
 import { InputtedDiscount } from "$app/components/CheckoutDashboard/DiscountInput";
 import { Icon } from "$app/components/Icons";
+import { InsertReviewMenuItem } from "$app/components/InsertReviewMenuItem";
 import { Popover, PopoverClose, PopoverContent, PopoverTrigger } from "$app/components/Popover";
 import { Separator } from "$app/components/Separator";
-import { TestimonialSelectModal } from "$app/components/TestimonialSelectModal";
 import { CodeBlock } from "$app/components/TiptapExtensions/CodeBlock";
 import { Image, uploadImages } from "$app/components/TiptapExtensions/Image";
 import { Link, Button as TiptapButton } from "$app/components/TiptapExtensions/Link";
@@ -332,7 +332,6 @@ export const RichTextEditorToolbar = ({
   const [_renderedAt, setRenderedAt] = React.useState(Date.now());
 
   const [isUpsellModalOpen, setIsUpsellModalOpen] = React.useState(false);
-  const [isReviewModalOpen, setIsReviewModalOpen] = React.useState(false);
 
   const handleUpsellInsert = (product: Product, variant: ProductOption | null, discount: InputtedDiscount | null) => {
     editor
@@ -353,13 +352,6 @@ export const RichTextEditorToolbar = ({
       .run();
     setIsUpsellModalOpen(false);
   };
-
-  function handleReviewInsert(reviewIds: string[]) {
-    for (const reviewId of reviewIds) {
-      editor.chain().focus().insertReviewCard({ reviewId }).run();
-    }
-    setIsReviewModalOpen(false);
-  }
 
   React.useEffect(() => {
     // This component is only reliably re-rendered when the content changes,
@@ -508,10 +500,7 @@ export const RichTextEditorToolbar = ({
                       </PopoverClose>
                       {productId ? (
                         <PopoverClose asChild>
-                          <div role="menuitem" onClick={() => setIsReviewModalOpen(true)}>
-                            <Icon name="solid-star" />
-                            <span>Reviews</span>
-                          </div>
+                          <InsertReviewMenuItem editor={editor} productId={productId} />
                         </PopoverClose>
                       ) : null}
                     </div>
@@ -544,14 +533,6 @@ export const RichTextEditorToolbar = ({
         onClose={() => setIsUpsellModalOpen(false)}
         onInsert={handleUpsellInsert}
       />
-      {productId ? (
-        <TestimonialSelectModal
-          isOpen={isReviewModalOpen}
-          onClose={() => setIsReviewModalOpen(false)}
-          onInsert={handleReviewInsert}
-          productId={productId}
-        />
-      ) : null}
     </ToolbarTooltipContext.Provider>
   );
 };
