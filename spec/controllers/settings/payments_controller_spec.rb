@@ -1036,6 +1036,52 @@ describe Settings::PaymentsController, :vcr, type: :controller, inertia: true do
           end
         end
       end
+
+      describe "gibraltar bank account" do
+        let(:user) { create(:user) }
+
+        before do
+          user.alive_user_compliance_info.update_columns(country: "Gibraltar")
+          sign_in user
+        end
+
+        describe "success" do
+          let(:params) do
+            {
+              bank_account: {
+                type: GibraltarBankAccount.name,
+                account_number: "01234567",
+                account_number_confirmation: "01234567",
+                sort_code: "12-34-56",
+                account_holder_full_name: "gumbot"
+              }
+            }
+          end
+
+          let(:request) do
+            create(:user_compliance_info_request, user:, field_needed: UserComplianceInfoFields::BANK_ACCOUNT)
+          end
+
+          before do
+            request
+          end
+
+          it "creates the gibraltar bank account" do
+            put(:update, params:)
+            bank_account = GibraltarBankAccount.last
+            expect(bank_account.account_number.decrypt("1234")).to eq "01234567"
+            expect(bank_account.account_number_last_four).to eq "4567"
+            expect(bank_account.routing_number).to eq "12-34-56"
+            expect(bank_account.account_holder_full_name).to eq "gumbot"
+          end
+
+          it "clears the request for the bank account" do
+            put(:update, params:)
+            request.reload
+            expect(request.state).to eq("provided")
+          end
+        end
+      end
     end
 
     context "when setting the PayPal payout address" do

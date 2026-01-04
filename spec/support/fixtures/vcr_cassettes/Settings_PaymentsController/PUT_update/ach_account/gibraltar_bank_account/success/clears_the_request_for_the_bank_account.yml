@@ -1,0 +1,94 @@
+---
+http_interactions:
+- request:
+    method: post
+    uri: https://api.stripe.com/v1/accounts
+    body:
+      encoding: UTF-8
+      string: type=custom&requested_capabilities[0]=card_payments&requested_capabilities[1]=transfers&country=GI&default_currency=gbp&metadata[user_id]=6&metadata[tos_agreement_id]=Y7QsiGAUyP9tmCy675T-oQ%3D%3D&metadata[user_compliance_info_id]=exAa43cnKGvc0NgwMnbxiA%3D%3D&metadata[bank_account_id]=S-PuSL3fquHFtHLH6qxCtQ%3D%3D&tos_acceptance[date]=1767529580&tos_acceptance[ip]=0.0.0.0&business_type=individual&business_profile[name]=&business_profile[url]=https%3A%2F%2Fvipul.gumroad.com%2F&business_profile[product_description]=&individual[email]=edgar880d5d9e_53%40gumroad.com&individual[address][country]=GI&bank_account[country]=GI&bank_account[currency]=gbp&bank_account[account_number]=0<STRONGBOX_GENERAL_PASSWORD>567&bank_account[routing_number]=12-34-56&settings[payouts][schedule][interval]=manual&settings[payouts][debit_negative_balances]=true
+    headers:
+      User-Agent:
+      - Stripe/v1 RubyBindings/12.5.0
+      Authorization:
+      - Bearer <STRIPE_API_KEY>
+      Content-Type:
+      - application/x-www-form-urlencoded
+      X-Stripe-Client-Telemetry:
+      - '{"last_request_metrics":{"request_id":"req_L3dnCviXIhYuvT","request_duration_ms":1}}'
+      Idempotency-Key:
+      - 61d9a3dc-b9f7-40da-aa46-eae184a4ef74
+      Stripe-Version:
+      - '2023-10-16'
+      X-Stripe-Client-User-Agent:
+      - '{"bindings_version":"12.5.0","lang":"ruby","lang_version":"3.4.3 p32 (2025-04-14)","platform":"arm64-darwin25","engine":"ruby","publisher":"stripe","uname":"Darwin
+        gpianaMacBook-Pro 25.2.0 Darwin Kernel Version 25.2.0: Tue Nov 18 21:07:05
+        PST 2025; root:xnu-12377.61.12~1/RELEASE_ARM64_T6020 arm64","hostname":"gpianaMacBook-Pro"}'
+      Accept-Encoding:
+      - gzip;q=1.0,deflate;q=0.6,identity;q=0.3
+      Accept:
+      - "*/*"
+  response:
+    status:
+      code: 400
+      message: Bad Request
+    headers:
+      Server:
+      - nginx
+      Date:
+      - Sun, 04 Jan 2026 12:26:20 GMT
+      Content-Type:
+      - application/json
+      Content-Length:
+      - '428'
+      Connection:
+      - keep-alive
+      Access-Control-Allow-Credentials:
+      - 'true'
+      Access-Control-Allow-Methods:
+      - GET, HEAD, PUT, PATCH, POST, DELETE
+      Access-Control-Allow-Origin:
+      - "*"
+      Access-Control-Expose-Headers:
+      - Request-Id, Stripe-Manage-Version, Stripe-Should-Retry, X-Stripe-External-Auth-Required,
+        X-Stripe-Privileged-Session-Required
+      Access-Control-Max-Age:
+      - '300'
+      Cache-Control:
+      - no-cache, no-store
+      Content-Security-Policy:
+      - base-uri 'none'; default-src 'none'; form-action 'none'; frame-ancestors 'none';
+        img-src 'self'; script-src 'self' 'report-sample'; style-src 'self'; worker-src
+        'none'; upgrade-insecure-requests; report-uri https://q.stripe.com/csp-violation?q=9ONZBs6-iAGtGUGJ_flzKIYcPHKwrK1BPAcJFx72JMoun8VYyIH0U9qq3GwyqB98wvehbrvAVrZ5Ig8_
+      Idempotency-Key:
+      - 61d9a3dc-b9f7-40da-aa46-eae184a4ef74
+      Original-Request:
+      - req_pqiYRKJ7ZhXrXk
+      Request-Id:
+      - req_pqiYRKJ7ZhXrXk
+      Stripe-Should-Retry:
+      - 'false'
+      Stripe-Version:
+      - '2023-10-16'
+      Vary:
+      - Origin
+      X-Stripe-Priority-Routing-Enabled:
+      - 'true'
+      X-Stripe-Routing-Context-Priority-Tier:
+      - api-testmode
+      X-Wc:
+      - ABGHIJ
+      Strict-Transport-Security:
+      - max-age=63072000; includeSubDomains; preload
+    body:
+      encoding: UTF-8
+      string: |
+        {
+          "error": {
+            "message": "The routing number 12-34-56 does not correspond with a recognized bank. A valid routing number is required in test mode. Consider using a test number from https://stripe.com/docs/connect/testing#account-numbers",
+            "param": "bank_account[routing_number]",
+            "request_log_url": "https://dashboard.stripe.com/test/logs/req_pqiYRKJ7ZhXrXk?t=1767529580",
+            "type": "invalid_request_error"
+          }
+        }
+  recorded_at: Sun, 04 Jan 2026 12:26:20 GMT
+recorded_with: VCR 6.2.0
