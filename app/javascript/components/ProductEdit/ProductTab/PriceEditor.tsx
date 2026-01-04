@@ -4,6 +4,7 @@ import { CurrencyCode, formatPriceCentsWithoutCurrencySymbol } from "$app/utils/
 
 import { Details } from "$app/components/Details";
 import { PriceInput } from "$app/components/PriceInput";
+import { ApplyDiscountSelector } from "$app/components/ProductEdit/ProductTab/ApplyDiscountSelector";
 import { InstallmentPlanEditor } from "$app/components/ProductEdit/ProductTab/InstallmentPlanEditor";
 import { Toggle } from "$app/components/Toggle";
 
@@ -99,6 +100,7 @@ export const PriceEditor = ({
           onNumberOfInstallmentsChange={onNumberOfInstallmentsChange}
         />
       ) : null}
+      <ApplyDiscountSelector />
     </fieldset>
   );
 };

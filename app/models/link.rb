@@ -113,6 +113,7 @@ class Link < ApplicationRecord
   has_many :installments
   has_many :subscriptions
   has_and_belongs_to_many :offer_codes, join_table: "offer_codes_products", foreign_key: "product_id"
+  belongs_to :default_offer_code, class_name: "OfferCode", optional: true
   has_many :transcoded_videos
   has_many :imported_customers
   has_many :licenses
@@ -206,6 +207,7 @@ class Link < ApplicationRecord
   validate :commission_price_is_valid, if: -> { native_type == Link::NATIVE_TYPE_COMMISSION }
   validate :one_coffee_per_user, on: :create, if: -> { native_type == Link::NATIVE_TYPE_COFFEE }
   validate :quantity_enabled_state_is_allowed
+  validate :default_offer_code_must_be_associated_with_product
 
   validates_associated :installment_plan, message: -> (link, _) { link.installment_plan.errors.full_messages.first }
 
@@ -823,6 +825,10 @@ class Link < ApplicationRecord
     (offer_codes.alive + user.offer_codes.universal_with_matching_currency(price_currency_type).alive).sort_by(&:created_at)
   end
 
+  def default_discount_code
+    default_offer_code&.code
+  end
+
   def purchase_info_for_product_page(requested_user, browser_guid)
     return nil unless requested_user || browser_guid
 
@@ -1315,6 +1321,17 @@ class Link < ApplicationRecord
     def quantity_enabled_state_is_allowed
       if quantity_enabled && !can_enable_quantity?
         errors.add(:base, "Customers cannot be allowed to choose a quantity for this product.")
+      end
+    end
+
+    def default_offer_code_must_be_associated_with_product
+      return if default_offer_code_id.blank?
+
+      valid_offer_code = offer_codes.alive.exists?(id: default_offer_code_id) ||
+        user&.offer_codes&.universal_with_matching_currency(price_currency_type)&.alive&.exists?(id: default_offer_code_id)
+
+      if !valid_offer_code
+        errors.add(:default_offer_code, "must be associated with this product")
       end
     end
 

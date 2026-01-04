@@ -4800,4 +4800,78 @@ describe Link, :vcr do
       end
     end
   end
+
+  describe "#default_offer_code" do
+    let(:product) { create(:product) }
+
+    context "when product has a default offer code" do
+      let(:offer_code) { create(:offer_code, user: product.user, products: [product]) }
+
+      before do
+        product.update!(default_offer_code: offer_code)
+      end
+
+      it "returns the offer code" do
+        expect(product.default_offer_code).to eq(offer_code)
+      end
+    end
+
+    context "when product does not have a default offer code" do
+      it "returns nil" do
+        expect(product.default_offer_code).to be_nil
+      end
+    end
+  end
+
+  describe "#default_discount_code" do
+    let(:product) { create(:product) }
+
+    context "when product has a default offer code" do
+      let(:offer_code) { create(:offer_code, user: product.user, products: [product], code: "SUMMER20") }
+
+      before do
+        product.update!(default_offer_code: offer_code)
+      end
+
+      it "returns the code string" do
+        expect(product.default_discount_code).to eq("SUMMER20")
+      end
+    end
+
+    context "when product does not have a default offer code" do
+      it "returns nil" do
+        expect(product.default_discount_code).to be_nil
+      end
+    end
+  end
+
+  describe "default_offer_code validation" do
+    let(:product) { create(:product) }
+    let(:other_product) { create(:product) }
+    let(:product_offer_code) { create(:offer_code, user: product.user, products: [product]) }
+    let(:other_offer_code) { create(:offer_code, user: other_product.user, products: [other_product]) }
+    let(:universal_offer_code) { create(:offer_code, user: product.user, universal: true) }
+
+    it "allows setting a product-specific offer code as default" do
+      product.default_offer_code = product_offer_code
+      expect(product).to be_valid
+    end
+
+    it "allows setting a universal offer code as default" do
+      product.default_offer_code = universal_offer_code
+      expect(product).to be_valid
+    end
+
+    it "does not allow setting an unassociated offer code as default" do
+      product.default_offer_code = other_offer_code
+      expect(product).not_to be_valid
+      expect(product.errors[:default_offer_code]).to include("must be associated with this product")
+    end
+
+    it "allows clearing the default offer code" do
+      product.update!(default_offer_code: product_offer_code)
+      product.default_offer_code = nil
+      expect(product).to be_valid
+    end
+  end
 end

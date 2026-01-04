@@ -78,6 +78,7 @@ class LinkPolicy < ApplicationPolicy
       :is_adult,
       :discover_fee_per_thousand,
       :taxonomy_id,
+      :default_offer_code_id,
       :product_refund_policy_enabled,
       :seller_refund_policy_enabled,
       :custom_domain,

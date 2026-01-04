@@ -196,6 +196,15 @@ class ProductPresenter
             { type: "percent", percents: cancellation_discount.amount_percentage },
           duration_in_billing_cycles: cancellation_discount.duration_in_billing_cycles,
         } : nil,
+        default_offer_code_id: product.default_offer_code&.external_id,
+        available_offer_codes: product.product_and_universal_offer_codes.reject(&:is_cancellation_discount?).map do |offer_code|
+          {
+            id: offer_code.external_id,
+            code: offer_code.code,
+            display_amount: offer_code.displayed_amount_off(product.price_currency_type, with_symbol: true),
+            is_percent: offer_code.is_percent?,
+          }
+        end,
         public_files: product.alive_public_files.attached.map { PublicFilePresenter.new(public_file: _1).props },
         audio_previews_enabled: Feature.active?(:audio_previews, product.user),
         community_chat_enabled: Feature.active?(:communities, product.user) ? product.community_chat_enabled? : nil,

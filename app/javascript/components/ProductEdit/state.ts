@@ -143,6 +143,13 @@ export type Product = {
   call_limitation_info: CallLimitationInfo | null;
   require_shipping: boolean;
   cancellation_discount: CancellationDiscount | null;
+  default_offer_code_id: string | null;
+  available_offer_codes: {
+    id: string;
+    code: string;
+    display_amount: string;
+    is_percent: boolean;
+  }[];
   public_files: PublicFileWithStatus[];
   audio_previews_enabled: boolean;
   community_chat_enabled: boolean | null;

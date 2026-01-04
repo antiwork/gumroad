@@ -191,7 +191,10 @@ class LinksController < ApplicationController
                                   ChargeProcessor::DEFAULT_CURRENCY_CODE
     @pay_with_card_enabled = @product.user.pay_with_card_enabled?
     presenter = ProductPresenter.new(pundit_user:, product: @product, request:)
-    presenter_props = { recommended_by: params[:recommended_by], discount_code: params[:offer_code] || params[:code], quantity: (params[:quantity] || 1).to_i, layout: params[:layout], seller_custom_domain_url: }
+    url_discount_code = params[:offer_code] || params[:code]
+    effective_discount_code = url_discount_code.presence || @product.default_discount_code
+    is_default_discount = url_discount_code.blank? && effective_discount_code.present?
+    presenter_props = { recommended_by: params[:recommended_by], discount_code: effective_discount_code, is_default_discount:, quantity: (params[:quantity] || 1).to_i, layout: params[:layout], seller_custom_domain_url: }
     @product_props = params[:embed] || params[:overlay] ? presenter.product_props(**presenter_props) : presenter.product_page_props(**presenter_props)
     @body_class = "iframe" if params[:overlay] || params[:embed]
 
