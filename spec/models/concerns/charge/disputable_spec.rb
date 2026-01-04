@@ -1137,8 +1137,8 @@ describe Charge::Disputable, :vcr do
     context "when processor is PayPal" do
       before { purchase.update!(charge_processor_id: PaypalChargeProcessor.charge_processor_id) }
 
-      it "returns false" do
-        expect(purchase.eligible_for_dispute_evidence?).to be(false)
+      it "returns true for PayPal disputes" do
+        expect(purchase.eligible_for_dispute_evidence?).to be(true)
       end
     end
 

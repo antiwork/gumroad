@@ -127,6 +127,19 @@ class PaypalRestApi
     (200...300).include?(api_response.status_code)
   end
 
+  def get_dispute(dispute_id:)
+    @request = new_request(path: "/v1/customer/disputes/#{dispute_id}", verb: "GET")
+    execute_request
+  end
+
+  def provide_evidence(dispute_id:, evidences:, seller_merchant_id: nil)
+    @request = new_request(path: "/v1/customer/disputes/#{dispute_id}/provide-evidence", verb: "POST")
+    @request.headers["PayPal-Request-Id"] = "provide-evidence-#{dispute_id}-#{timestamp}"
+    @request.headers["PayPal-Auth-Assertion"] = paypal_auth_assertion_header(seller_merchant_id) if seller_merchant_id.present?
+    @request.body = { evidences: evidences }
+    execute_request
+  end
+
   private
     def purchase_unit(purchase_unit_info)
       currency = purchase_unit_info[:currency]

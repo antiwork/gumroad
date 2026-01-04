@@ -1532,4 +1532,179 @@ describe PaypalChargeProcessor, :vcr do
       expect(PaypalChargeProcessor.formatted_amount_for_paypal(1644, "jpy").class).to eq(Integer)
     end
   end
+
+  describe "#fight_chargeback" do
+    let(:processor) { described_class.new }
+    let(:dispute_evidence) { create(:dispute_evidence) }
+    let(:dispute) { dispute_evidence.dispute }
+    let(:paypal_rest_api) { instance_double(PaypalRestApi) }
+
+    before do
+      dispute.update!(charge_processor_dispute_id: "PP-D-12345", reason: Dispute::REASON_PRODUCT_NOT_RECEIVED)
+      allow(PaypalRestApi).to receive(:new).and_return(paypal_rest_api)
+    end
+
+    context "when dispute has no charge_processor_dispute_id" do
+      before do
+        dispute.update!(charge_processor_dispute_id: nil)
+      end
+
+      it "returns early without submitting evidence" do
+        expect(paypal_rest_api).not_to receive(:provide_evidence)
+        processor.fight_chargeback("capture_123", dispute_evidence)
+      end
+    end
+
+    context "when evidence submission succeeds" do
+      let(:success_response) do
+        OpenStruct.new(
+          status_code: 200,
+          result: OpenStruct.new(links: []),
+          headers: {}
+        )
+      end
+
+      before do
+        allow(paypal_rest_api).to receive(:successful_response?).and_return(true)
+        allow(paypal_rest_api).to receive(:provide_evidence).and_return(success_response)
+      end
+
+      it "submits evidence to PayPal" do
+        expect(paypal_rest_api).to receive(:provide_evidence).with(
+          dispute_id: "PP-D-12345",
+          evidences: kind_of(Array),
+          seller_merchant_id: anything
+        )
+
+        processor.fight_chargeback("capture_123", dispute_evidence)
+      end
+
+      it "returns the API response" do
+        result = processor.fight_chargeback("capture_123", dispute_evidence)
+        expect(result).to eq(success_response)
+      end
+    end
+
+    context "when evidence submission fails" do
+      let(:error_response) do
+        OpenStruct.new(
+          status_code: 400,
+          result: OpenStruct.new(message: "Invalid evidence format"),
+          headers: {}
+        )
+      end
+
+      before do
+        allow(paypal_rest_api).to receive(:successful_response?).and_return(false)
+        allow(paypal_rest_api).to receive(:provide_evidence).and_return(error_response)
+      end
+
+      it "raises ChargeProcessorInvalidRequestError" do
+        expect {
+          processor.fight_chargeback("capture_123", dispute_evidence)
+        }.to raise_error(ChargeProcessorInvalidRequestError)
+      end
+    end
+  end
+
+  describe "#build_paypal_evidences" do
+    let(:processor) { described_class.new }
+    let(:dispute_evidence) { create(:dispute_evidence) }
+    let(:dispute) { dispute_evidence.dispute }
+
+    before do
+      dispute.update!(reason: Dispute::REASON_PRODUCT_NOT_RECEIVED)
+    end
+
+    it "returns an array of evidence hashes" do
+      evidences = processor.send(:build_paypal_evidences, dispute_evidence, dispute)
+
+      expect(evidences).to be_an(Array)
+      expect(evidences.first).to be_a(Hash)
+      expect(evidences.first[:evidence_type]).to be_present
+    end
+
+    it "uses correct evidence type based on dispute reason" do
+      dispute.update!(reason: Dispute::REASON_PRODUCT_NOT_RECEIVED)
+      evidences = processor.send(:build_paypal_evidences, dispute_evidence, dispute)
+      expect(evidences.first[:evidence_type]).to eq("PROOF_OF_FULFILLMENT")
+
+      dispute.update!(reason: Dispute::REASON_CREDIT_NOT_PROCESSED)
+      evidences = processor.send(:build_paypal_evidences, dispute_evidence, dispute)
+      expect(evidences.first[:evidence_type]).to eq("PROOF_OF_REFUND")
+
+      dispute.update!(reason: Dispute::REASON_FRAUDULENT)
+      evidences = processor.send(:build_paypal_evidences, dispute_evidence, dispute)
+      expect(evidences.first[:evidence_type]).to eq("OTHER")
+    end
+
+    it "includes tracking info when available" do
+      dispute_evidence.update!(
+        shipping_carrier: "fedex",
+        shipping_tracking_number: "123456789"
+      )
+
+      evidences = processor.send(:build_paypal_evidences, dispute_evidence, dispute)
+      primary = evidences.first
+
+      expect(primary[:evidence_info][:tracking_info]).to be_present
+      expect(primary[:evidence_info][:tracking_info].first[:carrier_name]).to eq("FEDEX")
+      expect(primary[:evidence_info][:tracking_info].first[:tracking_number]).to eq("123456789")
+    end
+  end
+
+  describe "#normalize_carrier_name" do
+    let(:processor) { described_class.new }
+
+    it "normalizes known carriers to PayPal format" do
+      expect(processor.send(:normalize_carrier_name, "ups")).to eq("UPS")
+      expect(processor.send(:normalize_carrier_name, "fedex")).to eq("FEDEX")
+      expect(processor.send(:normalize_carrier_name, "usps")).to eq("USPS")
+      expect(processor.send(:normalize_carrier_name, "dhl")).to eq("DHL")
+      expect(processor.send(:normalize_carrier_name, "dhl_express")).to eq("DHL")
+    end
+
+    it "returns OTHER for unknown carriers" do
+      expect(processor.send(:normalize_carrier_name, "random_carrier")).to eq("OTHER")
+      expect(processor.send(:normalize_carrier_name, nil)).to eq("OTHER")
+      expect(processor.send(:normalize_carrier_name, "")).to eq("OTHER")
+    end
+  end
+
+  describe "#build_comprehensive_notes" do
+    let(:processor) { described_class.new }
+    let(:dispute_evidence) { create(:dispute_evidence) }
+
+    before do
+      dispute_evidence.update!(
+        customer_name: "John Doe",
+        customer_email: "john@example.com",
+        customer_purchase_ip: "192.168.1.1",
+        product_description: "Online Course",
+        reason_for_winning: "Customer used the product"
+      )
+    end
+
+    it "builds comprehensive notes with customer information" do
+      notes = processor.send(:build_comprehensive_notes, dispute_evidence)
+
+      expect(notes).to include("CUSTOMER INFORMATION:")
+      expect(notes).to include("John Doe")
+      expect(notes).to include("john@example.com")
+    end
+
+    it "includes product description" do
+      notes = processor.send(:build_comprehensive_notes, dispute_evidence)
+
+      expect(notes).to include("PRODUCT/SERVICE:")
+      expect(notes).to include("Online Course")
+    end
+
+    it "includes merchant statement" do
+      notes = processor.send(:build_comprehensive_notes, dispute_evidence)
+
+      expect(notes).to include("MERCHANT STATEMENT:")
+      expect(notes).to include("Customer used the product")
+    end
+  end
 end
