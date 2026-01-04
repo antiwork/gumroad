@@ -49,5 +49,27 @@ describe SendPaypalTopupNotificationJob do
 
       expect(SlackMessageWorker).to have_enqueued_sidekiq_job("payments", "PayPal Top-up", notification_msg, "green")
     end
+
+    context "when notify_only_if_topup_needed is true" do
+      it "sends notification when topup is needed" do
+        allow(PaypalPayoutProcessor).to receive(:topup_amount_in_transit).and_return(0)
+
+        notification_msg = "PayPal balance needs to be $367,425.18 by Friday to payout all creators.\n"\
+                         "Current PayPal balance is $125,000.\n"\
+                         "A top-up of $242,425.18 is needed."
+
+        described_class.new.perform(true)
+
+        expect(SlackMessageWorker).to have_enqueued_sidekiq_job("payments", "PayPal Top-up", notification_msg, "red")
+      end
+
+      it "does not send notification when topup is not needed" do
+        allow(PaypalPayoutProcessor).to receive(:topup_amount_in_transit).and_return(300_000)
+
+        described_class.new.perform(true)
+
+        expect(SlackMessageWorker).not_to have_enqueued_sidekiq_job
+      end
+    end
   end
 end
