@@ -92,13 +92,10 @@ class User::OmniauthCallbacksController < Devise::OmniauthCallbacksController
     end
 
     if logged_in_user.blank?
-      existing_merchant_account = MerchantAccount.where(charge_processor_merchant_id: auth.uid).alive
-                                    .find { |ma| ma.is_a_stripe_connect_account? }
-      existing_user = existing_merchant_account&.user
+      user = MerchantAccount.where(charge_processor_merchant_id: auth.uid).alive
+                            .find { |ma| ma.is_a_stripe_connect_account? }&.user
 
-      if existing_user.present?
-        user = existing_user
-      else
+      if user.nil?
         stripe_email = auth.dig("info", "email")
         user = User.find_by(email: stripe_email) if stripe_email.present?
 
