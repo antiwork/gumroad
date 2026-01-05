@@ -4,6 +4,8 @@ import { lightFormat, subMonths } from "date-fns";
 import { format } from "date-fns-tz";
 import * as React from "react";
 
+import { NavigationButtonInertia } from "$app/components/NavigationButton";
+
 import {
   Address,
   Customer,
@@ -412,32 +414,38 @@ const CustomersPage = ({
                 </WithTooltip>
               }
             >
-              <div className="flex flex-col gap-4">
-                <h3>Download sales as CSV</h3>
-                <div>
-                  {exportNames
-                    ? `This will download sales of '${exportNames}' as a CSV, with each purchase on its own row.`
-                    : "This will download a CSV with each purchase on its own row."}
-                </div>
-                <DateRangePicker from={from} to={to} setFrom={setFrom} setTo={setTo} />
-                <NavigationButton
-                  color="primary"
-                  href={Routes.export_purchases_path({
-                    format: "csv",
-                    start_time: lightFormat(from, "yyyy-MM-dd"),
-                    end_time: lightFormat(to, "yyyy-MM-dd"),
-                    product_ids: includedProductIds,
-                    variant_ids: includedVariantIds,
-                  })}
-                >
-                  Download
-                </NavigationButton>
-                {count > 2000 && (
-                  <div className="mt-2 text-sm text-gray-600">
-                    Exports over 2,000 rows will be processed in the background and emailed to you.
+              {(close) => (
+                <div className="flex flex-col gap-4">
+                  <h3>Download sales as CSV</h3>
+                  <div>
+                    {exportNames
+                      ? `This will download sales of '${exportNames}' as a CSV, with each purchase on its own row.`
+                      : "This will download a CSV with each purchase on its own row."}
                   </div>
-                )}
-              </div>
+                  <DateRangePicker from={from} to={to} setFrom={setFrom} setTo={setTo} />
+                  <NavigationButtonInertia
+                    color="primary"
+                    href={Routes.export_purchases_path()}
+                    method="post"
+                    preserveScroll={true}
+                    data={{
+                      format: "csv",
+                      start_time: lightFormat(from, "yyyy-MM-dd"),
+                      end_time: lightFormat(to, "yyyy-MM-dd"),
+                      product_ids: includedProductIds,
+                      variant_ids: includedVariantIds,
+                    }}
+                    onSuccess={() => close()}
+                  >
+                    Download
+                  </NavigationButtonInertia>
+                  {count > 2000 && (
+                    <div className="mt-2 text-sm text-gray-600">
+                      Exports over 2,000 rows will be processed in the background and emailed to you.
+                    </div>
+                  )}
+                </div>
+              )}
             </Popover>
           </>
         }
