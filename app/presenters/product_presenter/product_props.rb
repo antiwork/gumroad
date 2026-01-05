@@ -81,7 +81,16 @@ class ProductPresenter::ProductProps
     attr_reader :product, :seller
 
     def discount_code_props(discount_code, quantity)
-      return if discount_code.blank?
+      # Priority: URL-provided code > default offer code > none
+      is_default_discount = false
+
+      if discount_code.blank?
+        effective_offer_code = product.effective_default_offer_code
+        return if effective_offer_code.nil?
+
+        discount_code = effective_offer_code.code
+        is_default_discount = true
+      end
 
       offer_code_response = OfferCodeDiscountComputingService.new(
         discount_code,
@@ -96,7 +105,7 @@ class ProductPresenter::ProductProps
       if offer_code_response[:error_code].present?
         { valid: false, error_code: offer_code_response[:error_code] }
       else
-        { valid: true, code: discount_code, **offer_code_response[:products_data][product.unique_permalink] }
+        { valid: true, code: discount_code, is_default_discount:, **offer_code_response[:products_data][product.unique_permalink] }
       end
     end
 

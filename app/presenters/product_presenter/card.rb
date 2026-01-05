@@ -21,6 +21,12 @@ class ProductPresenter::Card
 
   def for_web(request: nil, recommended_by: nil, recommender_model_name: nil, target: nil, show_seller: true, affiliate_id: nil, query: nil, offer_code: nil, compute_description: true)
     default_recurrence = product.default_price_recurrence
+    effective_offer_code = offer_code || product.effective_default_offer_code
+    original_price_cents = product.display_price_cents(for_default_duration: true)
+    display_price_cents = effective_offer_code ?
+      [original_price_cents - effective_offer_code.amount_off(original_price_cents), 0].max :
+      original_price_cents
+
     props = {
       id: product.external_id,
       permalink: product.unique_permalink,
@@ -34,7 +40,8 @@ class ProductPresenter::Card
       native_type: product.native_type,
       quantity_remaining: product.remaining_for_sale_count,
       is_sales_limited: product.max_purchase_count?,
-      price_cents: product.display_price_cents(for_default_duration: true),
+      price_cents: display_price_cents,
+      original_price_cents: effective_offer_code ? original_price_cents : nil,
       currency_code: product.price_currency_type.downcase,
       is_pay_what_you_want: product.has_customizable_price_option?,
       url: url_for_product_page(product, request:, recommended_by:, recommender_model_name:, layout: target, affiliate_id:, query:, offer_code:),
