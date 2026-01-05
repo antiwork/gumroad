@@ -1,6 +1,6 @@
 import * as React from "react";
 
-import { formatPriceCentsWithCurrencySymbol } from "$app/utils/currency";
+import { CurrencyCode, formatPriceCentsWithCurrencySymbol } from "$app/utils/currency";
 
 import { Details } from "$app/components/Details";
 import { Toggle } from "$app/components/Toggle";
@@ -11,7 +11,7 @@ const formatDiscount = (offerCode: AvailableOfferCode): string => {
   if (offerCode.discount.type === "percent") {
     return `${offerCode.discount.percents}% off`;
   }
-  return `${formatPriceCentsWithCurrencySymbol(offerCode.discount.currency, offerCode.discount.cents)} off`;
+  return `${formatPriceCentsWithCurrencySymbol(offerCode.discount.currency as CurrencyCode, offerCode.discount.cents, { symbolFormat: "short" })} off`;
 };
 
 export const DefaultOfferCodeSelector = () => {
@@ -26,7 +26,7 @@ export const DefaultOfferCodeSelector = () => {
   const handleToggle = (enabled: boolean) => {
     updateProduct({
       default_offer_code_enabled: enabled,
-      default_offer_code_id: enabled && activeOfferCodes.length > 0 ? activeOfferCodes[0].id : null,
+      default_offer_code_id: enabled && activeOfferCodes.length > 0 ? (activeOfferCodes[0]?.id ?? null) : null,
     });
   };
 

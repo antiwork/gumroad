@@ -1165,6 +1165,23 @@ class Link < ApplicationRecord
     support_email || user.support_or_form_email
   end
 
+  # Returns the effective default offer code if enabled and valid, otherwise nil
+  def effective_default_offer_code
+    return nil unless default_offer_code_enabled && default_offer_code.present?
+    return nil if default_offer_code.inactive?
+    return nil unless default_offer_code.is_valid_for_purchase?
+
+    default_offer_code
+  end
+
+  # Returns the discounted price when using the default offer code
+  def default_discounted_price_cents
+    offer_code = effective_default_offer_code
+    return nil unless offer_code
+
+    display_price_cents - offer_code.amount_off(display_price_cents)
+  end
+
   protected
     def downcase_filetype
       self.filetype = filetype.downcase if filetype.present?
@@ -1266,23 +1283,6 @@ class Link < ApplicationRecord
 
     def self.short_url_base
       SHORT_DOMAIN.to_s
-    end
-
-    # Returns the effective default offer code if enabled and valid, otherwise nil
-    def effective_default_offer_code
-      return nil unless default_offer_code_enabled && default_offer_code.present?
-      return nil if default_offer_code.inactive?
-      return nil unless default_offer_code.is_valid_for_purchase?
-
-      default_offer_code
-    end
-
-    # Returns the discounted price when using the default offer code
-    def default_discounted_price_cents
-      offer_code = effective_default_offer_code
-      return nil unless offer_code
-
-      display_price_cents - offer_code.amount_off(display_price_cents)
     end
 
   private

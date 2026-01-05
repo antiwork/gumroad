@@ -243,7 +243,7 @@ class ProductPresenter
         fine_print: product.user.refund_policy.fine_print,
       },
       cancellation_discounts_enabled: Feature.active?(:cancellation_discounts, product.user),
-      available_offer_codes: product.product_and_universal_offer_codes.alive.map do |offer_code|
+      available_offer_codes: product.product_and_universal_offer_codes.map do |offer_code|
         {
           id: offer_code.external_id,
           code: offer_code.code,
