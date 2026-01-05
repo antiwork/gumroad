@@ -190,6 +190,10 @@ class LinksController < ApplicationController
                                   @product.user.merchant_account_currency(PaypalChargeProcessor.charge_processor_id) :
                                   ChargeProcessor::DEFAULT_CURRENCY_CODE
     @pay_with_card_enabled = @product.user.pay_with_card_enabled?
+    
+    # Check for restartable subscription to prevent accidental re-purchases
+    @restartable_subscription = pundit_user&.user ? @product.restartable_subscription_for(pundit_user.user) : nil
+    
     presenter = ProductPresenter.new(pundit_user:, product: @product, request:)
     presenter_props = { recommended_by: params[:recommended_by], discount_code: params[:offer_code] || params[:code], quantity: (params[:quantity] || 1).to_i, layout: params[:layout], seller_custom_domain_url: }
     @product_props = params[:embed] || params[:overlay] ? presenter.product_props(**presenter_props) : presenter.product_page_props(**presenter_props)
