@@ -96,6 +96,7 @@ const TestimonialSelectModal = ({
       open={isOpen}
       onClose={onClose}
       title="Insert reviews"
+      usePortal
       footer={
         <>
           <Button onClick={onClose}>Cancel</Button>
