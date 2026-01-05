@@ -78,16 +78,16 @@ describe HealthcheckController do
       end
     end
 
-    context "when PayPal topup is not needed (Redis key is not set)" do
+    context "when Redis key is not set" do
       before do
         $redis.del(RedisKey.paypal_topup_needed)
       end
 
-      it "returns HTTP success" do
+      it "returns HTTP service_unavailable" do
         get :paypal_balance
 
-        expect(response.status).to eq(200)
-        expect(response.body).to eq("PayPal balance: topup not required")
+        expect(response.status).to eq(503)
+        expect(response.body).to eq("PayPal balance: topup required")
       end
     end
 

@@ -19,9 +19,9 @@ class HealthcheckController < ApplicationController
   end
 
   def paypal_balance
-    topup_needed = $redis.get(RedisKey.paypal_topup_needed) == "true"
-    status = topup_needed ? :service_unavailable : :ok
-    message = topup_needed ? "topup required" : "topup not required"
+    topup_not_needed = $redis.get(RedisKey.paypal_topup_needed) == "false"
+    status = topup_not_needed ? :ok : :service_unavailable
+    message = topup_not_needed ? "topup not required" : "topup required"
 
     render plain: "PayPal balance: #{message}", status:
   end
