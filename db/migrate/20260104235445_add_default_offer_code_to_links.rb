@@ -2,6 +2,9 @@
 
 class AddDefaultOfferCodeToLinks < ActiveRecord::Migration[7.1]
   def change
-    add_reference :links, :default_offer_code, foreign_key: { to_table: :offer_codes }, index: true
+    # Note: Not using foreign_key constraint per project guidelines
+    # The offer_codes table uses int for id, so we specify integer type
+    add_column :links, :default_offer_code_id, :integer
+    add_index :links, :default_offer_code_id
   end
 end

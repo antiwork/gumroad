@@ -1,0 +1,17 @@
+<h2>Your auto-applied discount code has reached its usage limit</h2>
+
+<p>Hi <%= @seller.display_name %>,</p>
+
+<p>The discount code "<%= @offer_code.code %>" that was automatically applied to your product "<%= @product.name %>" has reached its maximum number of uses (<%= @offer_code.max_purchase_count %>).</p>
+
+<p>Your product is now being sold at the regular price. If you'd like to continue offering a discount:</p>
+
+<ol>
+  <li>Go to your product's edit page</li>
+  <li>Navigate to the Pricing section</li>
+  <li>Select a different active discount code, or increase the usage limit of the current code in your Discounts settings</li>
+</ol>
+
+<p><%= link_to "Edit your product", Routes.edit_link_url(@product) %></p>
+
+<p>Best,<br />The Gumroad Team</p>
