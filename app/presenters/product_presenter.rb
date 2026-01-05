@@ -91,6 +91,8 @@ class ProductPresenter
         price_cents: product.price_cents,
         customizable_price: !!product.customizable_price,
         suggested_price_cents: product.suggested_price_cents,
+        default_offer_code_enabled: !!product.default_offer_code_enabled,
+        default_offer_code_id: product.default_offer_code&.external_id,
         **ProductPresenter::InstallmentPlanProps.new(product:).props,
         custom_button_text_option: product.custom_button_text_option.presence,
         custom_summary: product.custom_summary,
@@ -241,6 +243,18 @@ class ProductPresenter
         fine_print: product.user.refund_policy.fine_print,
       },
       cancellation_discounts_enabled: Feature.active?(:cancellation_discounts, product.user),
+      available_offer_codes: product.product_and_universal_offer_codes.map do |offer_code|
+        {
+          id: offer_code.external_id,
+          code: offer_code.code,
+          discount: offer_code.is_cents? ?
+            { type: "fixed", cents: offer_code.amount_cents, currency: offer_code.currency_type } :
+            { type: "percent", percents: offer_code.amount_percentage },
+          is_active: !offer_code.inactive?,
+          times_used: offer_code.times_used,
+          max_purchase_count: offer_code.max_purchase_count,
+        }
+      end,
     }
   end
 

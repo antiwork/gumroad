@@ -566,9 +566,7 @@ class LinksController < ApplicationController
     def preload_product
       @product = Link.includes(
         :variant_categories_alive,
-        :alive_prices,
-        { display_asset_previews: [:file_attachment, :file_blob] },
-        :alive_third_party_analytics
+        { display_asset_previews: [:file_attachment, :file_blob] }
       ).find(@product.id)
     end
 

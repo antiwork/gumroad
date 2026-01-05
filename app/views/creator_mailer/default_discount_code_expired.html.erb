@@ -1,0 +1,17 @@
+<h2>Your auto-applied discount code has expired</h2>
+
+<p>Hi <%= @seller.display_name %>,</p>
+
+<p>The discount code "<%= @offer_code.code %>" that was automatically applied to your product "<%= @product.name %>" has expired.</p>
+
+<p>Your product is now being sold at the regular price. If you'd like to set up a new auto-applied discount:</p>
+
+<ol>
+  <li>Go to your product's edit page</li>
+  <li>Navigate to the Pricing section</li>
+  <li>Enable "Auto-apply discount code" and select an active discount code</li>
+</ol>
+
+<p><%= link_to "Edit your product", Routes.edit_link_url(@product) %></p>
+
+<p>Best,<br />The Gumroad Team</p>

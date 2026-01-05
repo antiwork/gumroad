@@ -118,6 +118,7 @@ class Link < ApplicationRecord
   has_many :licenses
   has_one :preorder_link
   belongs_to :affiliate_application, class_name: "OauthApplication", optional: true
+  belongs_to :default_offer_code, class_name: "OfferCode", optional: true
   has_many :affiliate_credits
   has_many :comments, as: :commentable
   has_many :workflows
@@ -206,6 +207,7 @@ class Link < ApplicationRecord
   validate :commission_price_is_valid, if: -> { native_type == Link::NATIVE_TYPE_COMMISSION }
   validate :one_coffee_per_user, on: :create, if: -> { native_type == Link::NATIVE_TYPE_COFFEE }
   validate :quantity_enabled_state_is_allowed
+  validate :default_offer_code_belongs_to_seller_and_product
 
   validates_associated :installment_plan, message: -> (link, _) { link.installment_plan.errors.full_messages.first }
 
@@ -228,6 +230,7 @@ class Link < ApplicationRecord
   attr_json_data_accessor :main_section_index, default: -> { 0 }
   attr_json_data_accessor :custom_view_content_button_text
   attr_json_data_accessor :custom_receipt_text
+  attr_json_data_accessor :default_offer_code_enabled, default: -> { false }
 
   scope :alive,                           -> { where(purchase_disabled_at: nil, banned_at: nil, deleted_at: nil) }
   scope :visible,                         -> { where(deleted_at: nil) }
@@ -1162,6 +1165,23 @@ class Link < ApplicationRecord
     support_email || user.support_or_form_email
   end
 
+  # Returns the effective default offer code if enabled and valid, otherwise nil
+  def effective_default_offer_code
+    return nil unless default_offer_code_enabled && default_offer_code.present?
+    return nil if default_offer_code.inactive?
+    return nil unless default_offer_code.is_valid_for_purchase?
+
+    default_offer_code
+  end
+
+  # Returns the discounted price when using the default offer code
+  def default_discounted_price_cents
+    offer_code = effective_default_offer_code
+    return nil unless offer_code
+
+    display_price_cents - offer_code.amount_off(display_price_cents)
+  end
+
   protected
     def downcase_filetype
       self.filetype = filetype.downcase if filetype.present?
@@ -1266,6 +1286,24 @@ class Link < ApplicationRecord
     end
 
   private
+    def default_offer_code_belongs_to_seller_and_product
+      return if default_offer_code.nil?
+
+      if default_offer_code.user_id != user_id
+        errors.add(:default_offer_code, "must belong to the same seller")
+        return
+      end
+
+      unless default_offer_code.applicable?(self)
+        errors.add(:default_offer_code, "must be applicable to this product")
+        return
+      end
+
+      if default_offer_code.inactive?
+        errors.add(:default_offer_code, "must be an active discount code")
+      end
+    end
+
     def compute_ppp_prices(price_cents, factors, currency)
       factors.keys.index_with do |country_code|
         price_cents == 0 ? 0 : [factors[country_code] * price_cents, currency["min_price"]].max.round

@@ -95,6 +95,7 @@ export const PLACEHOLDER_CARD_PRODUCT: CardProduct = {
   seller: { id: "", name: "Gumroadian", profile_url: "", avatar_url: "" },
   ratings: null,
   price_cents: 100,
+  original_price_cents: null,
   currency_code: "usd",
   thumbnail_url: null,
   native_type: "digital",

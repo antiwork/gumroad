@@ -81,6 +81,15 @@ export type CancellationDiscount = {
   duration_in_billing_cycles: number | null;
 };
 
+export type AvailableOfferCode = {
+  id: string;
+  code: string;
+  discount: { type: "fixed"; cents: number; currency: string } | { type: "percent"; percents: number };
+  is_active: boolean;
+  times_used: number;
+  max_purchase_count: number | null;
+};
+
 export type InstallmentPlan = {
   number_of_installments: number;
 };
@@ -92,6 +101,8 @@ export type Product = {
   price_cents: number;
   suggested_price_cents: number | null;
   customizable_price: boolean;
+  default_offer_code_enabled: boolean;
+  default_offer_code_id: string | null;
   eligible_for_installment_plans: boolean;
   allow_installment_plan: boolean;
   installment_plan: InstallmentPlan | null;
@@ -191,6 +202,7 @@ export const ProductEditContext = React.createContext<{
   seller_refund_policy_enabled: boolean;
   seller_refund_policy: Pick<RefundPolicy, "title" | "fine_print">;
   cancellationDiscountsEnabled: boolean;
+  availableOfferCodes: AvailableOfferCode[];
   contentUpdates: ContentUpdates;
   setContentUpdates: React.Dispatch<React.SetStateAction<ContentUpdates>>;
   filesById: Map<string, FileEntry>;

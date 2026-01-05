@@ -58,7 +58,10 @@ export function useTabs(initial: Tab[]) {
 
 const PublicProfile = (props: Props) => {
   const { tabs, selectedTab, setSelectedTab } = useTabs(props.tabs);
-  const sections = selectedTab?.sections.flatMap((id) => props.sections.find((section) => section.id === id) ?? []);
+  // When no tabs are configured, show all sections directly
+  const sections = tabs.length === 0
+    ? props.sections
+    : selectedTab?.sections.flatMap((id) => props.sections.find((section) => section.id === id) ?? []);
 
   return (
     <>

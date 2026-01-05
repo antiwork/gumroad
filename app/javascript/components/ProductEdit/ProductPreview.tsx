@@ -3,7 +3,7 @@ import * as React from "react";
 import { recurrenceIds } from "$app/utils/recurringPricing";
 
 import { useCurrentSeller } from "$app/components/CurrentSeller";
-import { Product } from "$app/components/Product";
+import { Product, ProductDiscount } from "$app/components/Product";
 import { useProductUrl } from "$app/components/ProductEdit/Layout";
 import { RefundPolicyModalPreview } from "$app/components/ProductEdit/RefundPolicy";
 import { useProductEditContext } from "$app/components/ProductEdit/state";
@@ -21,6 +21,7 @@ export const ProductPreview = ({ showRefundPolicyModal }: { showRefundPolicyModa
     ratings,
     seller_refund_policy_enabled,
     seller_refund_policy,
+    availableOfferCodes,
   } = useProductEditContext();
 
   const url = useProductUrl();
@@ -29,6 +30,40 @@ export const ProductPreview = ({ showRefundPolicyModal }: { showRefundPolicyModa
 
   const defaultRecurrence =
     product.native_type === "membership" ? (product.subscription_duration ?? recurrenceIds[0]) : null;
+
+  // Build discount code for preview if default offer code is enabled
+  const selectedOfferCode = product.default_offer_code_enabled
+    ? availableOfferCodes.find((code) => code.id === product.default_offer_code_id)
+    : null;
+
+  const previewDiscountCode: ProductDiscount | null =
+    selectedOfferCode && selectedOfferCode.is_active
+      ? {
+          valid: true,
+          code: selectedOfferCode.code,
+          discount:
+            selectedOfferCode.discount.type === "percent"
+              ? {
+                  type: "percent" as const,
+                  percents: selectedOfferCode.discount.percents,
+                  product_ids: null,
+                  expires_at: null,
+                  minimum_quantity: null,
+                  duration_in_billing_cycles: null,
+                  minimum_amount_cents: null,
+                }
+              : {
+                  type: "fixed" as const,
+                  cents: selectedOfferCode.discount.cents,
+                  product_ids: null,
+                  expires_at: null,
+                  minimum_quantity: null,
+                  duration_in_billing_cycles: null,
+                  minimum_amount_cents: null,
+                },
+        }
+      : null;
+
   const serializedProduct: Product = {
     id,
     name: product.name,
@@ -49,7 +84,7 @@ export const ProductPreview = ({ showRefundPolicyModal }: { showRefundPolicyModa
     is_sales_limited: product.max_purchase_count !== null,
     price_cents: product.price_cents,
     pwyw: product.customizable_price ? { suggested_price_cents: product.suggested_price_cents } : null,
-    installment_plan: product.installment_plan,
+    installment_plan: product.allow_installment_plan ? product.installment_plan : null,
     ratings: product.display_product_reviews ? ratings : null,
     is_legacy_subscription: false,
     is_tiered_membership: false,
@@ -161,7 +196,7 @@ export const ProductPreview = ({ showRefundPolicyModal }: { showRefundPolicyModa
         twitter_handle: "",
       }}
       purchase={null}
-      discount_code={null}
+      discount_code={previewDiscountCode}
       wishlists={[]}
       selection={{
         optionId: null,
@@ -180,6 +215,7 @@ export const ProductPreview = ({ showRefundPolicyModal }: { showRefundPolicyModa
       <Product
         product={serializedProduct}
         purchase={null}
+        discountCode={previewDiscountCode}
         selection={{
           quantity: 1,
           optionId: serializedProduct.options[0]?.id ?? null,

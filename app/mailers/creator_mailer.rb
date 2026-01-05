@@ -34,4 +34,20 @@ class CreatorMailer < ApplicationMailer
     @bundles = bundles
     mail to: seller.form_email, subject: "Join top creators who have sold over $300,000 of bundles"
   end
+
+  def default_discount_code_expired(product_id:, offer_code_id:)
+    @product = Link.find(product_id)
+    @offer_code = OfferCode.find(offer_code_id)
+    @seller = @product.user
+
+    mail to: @seller.form_email, subject: "Your auto-applied discount code has expired"
+  end
+
+  def default_discount_code_exhausted(product_id:, offer_code_id:)
+    @product = Link.find(product_id)
+    @offer_code = OfferCode.find(offer_code_id)
+    @seller = @product.user
+
+    mail to: @seller.form_email, subject: "Your auto-applied discount code has reached its usage limit"
+  end
 end
