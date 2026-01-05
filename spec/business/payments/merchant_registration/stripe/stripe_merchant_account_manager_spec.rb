@@ -4930,7 +4930,8 @@ describe StripeMerchantAccountManager, :vcr do
           bank_account: {
             country: "GI",
             currency: "gbp",
-            account_number: "GI75NWBK000000007099453",
+            account_number: "01234567",
+            routing_number: "12-34-56",
           },
           settings: {
             payouts: {
