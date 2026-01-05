@@ -262,9 +262,10 @@ describe DisputeEvidence::CreateFromDisputeService, :vcr, :versioning do
         dispute_evidence = DisputeEvidence.create_from_dispute!(disputed_purchase.dispute)
 
         expect(dispute_evidence.refund_policy_disclosure).to eq(
-        "The refund policy modal has been viewed by the customer 1 time before the purchase was made at #{disputed_purchase.created_at}.\n" \
-        "Timestamp information of the view: #{event.created_at}\n\n" \
-        "Internal browser GUID for reference: #{disputed_purchase.browser_guid}"
+          "The refund policy modal has been viewed by the customer 1 time before the purchase was made at #{disputed_purchase.created_at}.\n" \
+          "Timestamp information of the view: #{event.created_at}\n\n" \
+          "Internal browser GUID for reference: #{disputed_purchase.browser_guid}\n\n" \
+          "This is the fine print."
         )
       end
     end

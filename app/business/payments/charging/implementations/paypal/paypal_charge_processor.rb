@@ -609,6 +609,26 @@ class PaypalChargeProcessor
     Rails.logger.info("#{api_label} (#{resource_id}) body => #{api_response.inspect}")
   end
 
+  def fight_chargeback(paypal_dispute_id, dispute_evidence, merchant_account: nil)
+    raise ChargeProcessorInvalidRequestError, "PayPal dispute id is required" if paypal_dispute_id.blank?
+    if merchant_account&.charge_processor_merchant_id.blank?
+      raise ChargeProcessorInvalidRequestError, "PayPal merchant account is required"
+    end
+
+    evidence_payload = build_paypal_evidence(dispute_evidence)
+    api_response = PaypalRestApi.new.provide_dispute_evidence(
+      dispute_id: paypal_dispute_id,
+      evidence: evidence_payload,
+      merchant_account:
+    )
+
+    if api_response.status_code.in?(400...500)
+      raise ChargeProcessorInvalidRequestError, api_response.result.to_json
+    elsif !PaypalRestApi.new.successful_response?(api_response)
+      raise ChargeProcessorError, "Failed to submit PayPal dispute evidence: #{api_response.result.inspect}"
+    end
+  end
+
   private
     def paypal_api
       PaypalChargeProcessor.paypal_api
@@ -732,5 +752,131 @@ class PaypalChargeProcessor
 
     def self.sanitize_for_paypal(string, max_length)
       string.gsub(PAYPAL_VALID_CHARACTERS_REGEX, "").to_s.strip[0...max_length]
+    end
+
+    def build_paypal_evidence(dispute_evidence)
+      evidence = {
+        evidence_type: evidence_type_for(dispute_evidence)
+      }
+
+      notes = build_evidence_notes(dispute_evidence)
+      evidence[:notes] = notes if notes.present?
+
+      evidence_info = build_evidence_info(dispute_evidence)
+      evidence[:evidence_info] = evidence_info if evidence_info.present?
+
+      { evidences: [evidence] }
+    end
+
+    def build_evidence_info(dispute_evidence)
+      tracking_info = build_tracking_info(dispute_evidence)
+      return nil if tracking_info.blank?
+
+      { tracking_info: [tracking_info] }
+    end
+
+    def evidence_type_for(dispute_evidence)
+      return "PROOF_OF_FULFILLMENT" if dispute_evidence.shipping_tracking_number.present?
+
+      "ITEM_DESCRIPTION"
+    end
+
+    def build_evidence_notes(dispute_evidence)
+      notes_parts = []
+
+      if dispute_evidence.reason_for_winning.present?
+        notes_parts << "Reason for winning:\n#{dispute_evidence.reason_for_winning}"
+      end
+
+      if dispute_evidence.customer_name.present? || dispute_evidence.customer_email.present?
+        customer_info = "Customer information:\n"
+        customer_info += "Name: #{dispute_evidence.customer_name}\n" if dispute_evidence.customer_name.present?
+        customer_info += "Email: #{dispute_evidence.customer_email}\n" if dispute_evidence.customer_email.present?
+        customer_info += "IP: #{dispute_evidence.customer_purchase_ip}" if dispute_evidence.customer_purchase_ip.present?
+        notes_parts << customer_info
+      end
+
+      if dispute_evidence.product_description.present?
+        notes_parts << "Product: #{dispute_evidence.product_description}"
+      end
+
+      if dispute_evidence.purchased_at.present?
+        notes_parts << "Purchase date: #{dispute_evidence.purchased_at.to_fs(:formatted_date_full_month)}"
+      end
+
+      if dispute_evidence.access_activity_log.present?
+        notes_parts << "Access activity:\n#{dispute_evidence.access_activity_log}"
+      end
+
+      if dispute_evidence.refund_policy_disclosure.present?
+        notes_parts << "Refund policy:\n#{dispute_evidence.refund_policy_disclosure}"
+      end
+
+      if dispute_evidence.cancellation_policy_disclosure.present?
+        notes_parts << "Cancellation policy:\n#{dispute_evidence.cancellation_policy_disclosure}"
+      end
+
+      if dispute_evidence.refund_refusal_explanation.present?
+        notes_parts << "Refund refusal explanation:\n#{dispute_evidence.refund_refusal_explanation}"
+      end
+
+      if dispute_evidence.cancellation_rebuttal.present?
+        notes_parts << "Cancellation rebuttal:\n#{dispute_evidence.cancellation_rebuttal}"
+      end
+
+      if dispute_evidence.uncategorized_text.present?
+        notes_parts << dispute_evidence.uncategorized_text
+      end
+
+      notes = notes_parts.join("\n\n")
+      notes.present? ? notes[0...2000] : nil
+    end
+
+    def build_tracking_info(dispute_evidence)
+      return nil if dispute_evidence.shipping_tracking_number.blank?
+
+      tracking = { tracking_number: dispute_evidence.shipping_tracking_number }
+
+      carrier = dispute_evidence.shipping_carrier.to_s.strip
+      carrier_name = normalize_carrier_name(carrier)
+      tracking[:carrier_name] = carrier_name
+      if carrier_name == "OTHER"
+        tracking[:carrier_name_other] = carrier.presence || "Unknown"
+      end
+
+      tracking_url = tracking_url_for(carrier, dispute_evidence.shipping_tracking_number)
+      tracking[:tracking_url] = tracking_url if tracking_url.present?
+
+      tracking
+    end
+
+    def normalize_carrier_name(carrier)
+      carrier_mapping = {
+        "USPS" => "USPS",
+        "UPS" => "UPS",
+        "FEDEX" => "FEDEX",
+        "DHL" => "DHL",
+        "DHL GLOBAL MAIL" => "DHL",
+        "AIRBORNE" => "AIRBORNE_EXPRESS",
+        "AIRSURE" => "AIRSURE",
+        "ROYAL MAIL" => "ROYAL_MAIL",
+        "PARCELFORCE" => "PARCELFORCE",
+        "SWIFT AIR" => "SWIFTAIR",
+        "SWIFTAIR" => "SWIFTAIR"
+      }
+
+      carrier_upcase = carrier.to_s.upcase
+      carrier_mapping.each do |key, value|
+        return value if carrier_upcase.include?(key)
+      end
+
+      "OTHER"
+    end
+
+    def tracking_url_for(carrier, tracking_number)
+      return nil if carrier.blank? || tracking_number.blank?
+
+      base_url = Shipment::CARRIER_TRACKING_URL_MAPPING[carrier]
+      base_url ? "#{base_url}#{tracking_number}" : nil
     end
 end

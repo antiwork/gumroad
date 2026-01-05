@@ -47,7 +47,7 @@ describe PaypalChargeProcessor, :vcr do
 
     describe "payment event" do
       before do
-        @purchase = create(:purchase_with_balance, id: 1001)
+        @purchase = create(:purchase_with_balance)
         allow_any_instance_of(Purchase).to receive(:fight_chargeback).and_return(true)
         allow_any_instance_of(Purchase).to receive(:secure_external_id).and_return("sample-secure-id")
         allow(Purchase).to receive(:find_by_external_id).and_return(@purchase)
@@ -262,8 +262,12 @@ describe PaypalChargeProcessor, :vcr do
   describe ".handle_order_events" do
     context "when event type is CUSTOMER.DISPUTE.CREATED" do
       it "sets chargeback details on purchase" do
+        sample_image = File.read(Rails.root.join("spec", "support", "fixtures", "test-small.jpg"))
+        allow(DisputeEvidence::GenerateReceiptImageService).to receive(:perform).and_return(sample_image)
+        allow(DisputeEvidence::GenerateRefundPolicyImageService).to receive(:perform).and_return(sample_image)
+
         event_info = { "id" => "WH-3TW20315YE525782H-3BD552601T418134F", "event_version" => "1.0", "create_time" => "2017-10-10T14:09:01.129Z", "resource_type" => "dispute", "event_type" => "CUSTOMER.DISPUTE.CREATED", "summary" => "A new dispute opened with Case # PP-D-4805PP-D-4805", "resource" => { "dispute_id" => "PP-D-4805", "create_time" => "2017-10-10T14:07:23.000Z", "update_time" => "2017-10-10T14:08:06.000Z", "disputed_transactions" => [{ "seller_transaction_id" => "6Y199803HH2987814", "seller" => { "name" => "facilitator account's Test Store" }, "items" => [{ "item_id" => "uF" }], "seller_protection_eligible" => true }], "reason" => "CREDIT_NOT_PROCESSED", "status" => "UNDER_REVIEW", "dispute_amount" => { "currency_code" => "[FILTERED]", "value" => "6.43" }, "offer" => { "buyer_requested_amount" => { "currency_code" => "[FILTERED]", "value" => "6.43" } }, "links" => [{ "href" => "https://api.sandbox.paypal.com/v1/customer/disputes/PP-D-4805", "rel" => "self", "method" => "GET" }] }, "links" => [{ "href" => "https://api.sandbox.paypal.com/v1/notifications/webhooks-events/WH-3TW20315YE525782H-3BD552601T418134F", "rel" => "self", "method" => "GET" }, { "href" => "https://api.sandbox.paypal.com/v1/notifications/webhooks-events/WH-3TW20315YE525782H-3BD552601T418134F/resend", "rel" => "resend", "method" => "POST" }], "foreign_webhook" => { "id" => "WH-3TW20315YE525782H-3BD552601T418134F", "event_version" => "1.0", "create_time" => "2017-10-10T14:09:01.129Z", "resource_type" => "dispute", "event_type" => "CUSTOMER.DISPUTE.CREATED", "summary" => "A new dispute opened with Case # PP-D-4805PP-D-4805", "resource" => { "dispute_id" => "PP-D-4805", "create_time" => "2017-10-10T14:07:23.000Z", "update_time" => "2017-10-10T14:08:06.000Z", "disputed_transactions" => [{ "seller_transaction_id" => "6Y199803HH2987814", "seller" => { "name" => "facilitator account's Test Store" }, "items" => [{ "item_id" => "uF" }], "seller_protection_eligible" => true }], "reason" => "CREDIT_NOT_PROCESSED", "status" => "UNDER_REVIEW", "dispute_amount" => { "currency_code" => "[FILTERED]", "value" => "6.43" }, "offer" => { "buyer_requested_amount" => { "currency_code" => "[FILTERED]", "value" => "6.43" } }, "links" => [{ "href" => "https://api.sandbox.paypal.com/v1/customer/disputes/PP-D-4805", "rel" => "self", "method" => "GET" }] }, "links" => [{ "href" => "https://api.sandbox.paypal.com/v1/notifications/webhooks-events/WH-3TW20315YE525782H-3BD552601T418134F", "rel" => "self", "method" => "GET" }, { "href" => "https://api.sandbox.paypal.com/v1/notifications/webhooks-events/WH-3TW20315YE525782H-3BD552601T418134F/resend", "rel" => "resend", "method" => "POST" }] } }
-        purchase = create(:purchase_with_balance, id: 1001, stripe_transaction_id: "6Y199803HH2987814")
+        purchase = create(:purchase_with_balance, stripe_transaction_id: "6Y199803HH2987814")
         allow_any_instance_of(Purchase).to receive(:fight_chargeback).and_return(true)
 
         expect(purchase.chargeback_date).to be(nil)
@@ -278,7 +282,7 @@ describe PaypalChargeProcessor, :vcr do
 
       it "raises `ChargeProcessorError` on error" do
         event_info = { "event_type" => "CUSTOMER.DISPUTE.CREATED" }
-        create(:purchase_with_balance, id: 1001, stripe_transaction_id: "6Y199803HH2987814")
+        create(:purchase_with_balance, stripe_transaction_id: "6Y199803HH2987814")
 
         expect do
           described_class.handle_order_events(event_info)
@@ -1530,6 +1534,165 @@ describe PaypalChargeProcessor, :vcr do
       expect(PaypalChargeProcessor.formatted_amount_for_paypal(1644, "huf").class).to eq(Integer)
       expect(PaypalChargeProcessor.formatted_amount_for_paypal(1644, "jpy")).to eq(1644) # unit to subunit is 1
       expect(PaypalChargeProcessor.formatted_amount_for_paypal(1644, "jpy").class).to eq(Integer)
+    end
+  end
+
+  describe "#fight_chargeback" do
+    let(:merchant_account) { create(:merchant_account_paypal) }
+    let(:dispute_id) { "PP-D-12345" }
+
+    let(:disputed_purchase) do
+      create(
+        :disputed_purchase,
+        full_name: "John Doe",
+        email: "buyer@example.com",
+        ip_address: "192.168.1.1",
+        street_address: "123 Example St",
+        city: "San Francisco",
+        state: "CA",
+        zip_code: "94105",
+        country: "United States",
+        link: create(:physical_product)
+      )
+    end
+
+    let!(:shipment) do
+      create(
+        :shipment,
+        carrier: "UPS",
+        tracking_number: "1Z999AA10123456784",
+        purchase: disputed_purchase,
+        ship_state: "shipped",
+        shipped_at: DateTime.parse("2023-02-10 14:55:32")
+      )
+    end
+
+    let(:sample_image) { File.read(Rails.root.join("spec", "support", "fixtures", "test-small.jpg")) }
+
+    before do
+      dispute = create(:dispute_formalized, purchase: disputed_purchase)
+      disputed_purchase.create_purchase_refund_policy!(
+        title: ProductRefundPolicy::ALLOWED_REFUND_PERIODS_IN_DAYS[30],
+        max_refund_period_in_days: 30,
+        fine_print: "All sales are final after 30 days."
+      )
+
+      allow(DisputeEvidence::GenerateReceiptImageService).to receive(:perform).with(disputed_purchase).and_return(sample_image)
+      allow(DisputeEvidence::GenerateRefundPolicyImageService).to receive(:perform).and_return(sample_image)
+
+      DisputeEvidence.create_from_dispute!(dispute)
+    end
+
+    it "calls provide_dispute_evidence on PaypalRestApi with formatted evidence" do
+      dispute_evidence = disputed_purchase.dispute.dispute_evidence
+
+      expect_any_instance_of(PaypalRestApi).to receive(:provide_dispute_evidence).with(
+        dispute_id:,
+        evidence: hash_including(:evidences),
+        merchant_account:
+      ).and_return(OpenStruct.new(status_code: 200))
+
+      subject.fight_chargeback(dispute_id, dispute_evidence, merchant_account:)
+    end
+
+    it "includes tracking information in evidence when tracking number is present" do
+      dispute_evidence = disputed_purchase.dispute.dispute_evidence
+      allow_any_instance_of(PaypalRestApi).to receive(:provide_dispute_evidence) do |_instance, **kwargs|
+        evidences = kwargs[:evidence][:evidences]
+        expect(evidences).to be_an(Array)
+        expect(evidences.first[:evidence_type]).to eq("PROOF_OF_FULFILLMENT")
+        tracking_info = evidences.first[:evidence_info][:tracking_info].first
+        expect(tracking_info[:tracking_number]).to eq("1Z999AA10123456784")
+        expect(tracking_info[:carrier_name]).to eq("UPS")
+        OpenStruct.new(status_code: 200)
+      end
+
+      subject.fight_chargeback(dispute_id, dispute_evidence, merchant_account:)
+    end
+
+    it "includes detailed notes with customer information and policies" do
+      dispute_evidence = disputed_purchase.dispute.dispute_evidence
+      dispute_evidence.update!(reason_for_winning: "Customer received the product")
+
+      allow_any_instance_of(PaypalRestApi).to receive(:provide_dispute_evidence) do |_instance, **kwargs|
+        notes = kwargs[:evidence][:evidences].first[:notes]
+        expect(notes).to include("Customer received the product")
+        expect(notes).to include("buyer@example.com")
+        expect(notes).to include("All sales are final after 30 days")
+        OpenStruct.new(status_code: 200)
+      end
+
+      subject.fight_chargeback(dispute_id, dispute_evidence, merchant_account:)
+    end
+
+    it "truncates notes to 2000 characters maximum" do
+      dispute_evidence = disputed_purchase.dispute.dispute_evidence
+      long_text = "a" * 15000
+      dispute_evidence.update!(uncategorized_text: long_text)
+
+      allow_any_instance_of(PaypalRestApi).to receive(:provide_dispute_evidence) do |_instance, **kwargs|
+        expect(kwargs[:evidence][:evidences].first[:notes].length).to be <= 2000
+        OpenStruct.new(status_code: 200)
+      end
+
+      subject.fight_chargeback(dispute_id, dispute_evidence, merchant_account:)
+    end
+
+    it "raises ChargeProcessorInvalidRequestError when API returns 400-499 status" do
+      dispute_evidence = disputed_purchase.dispute.dispute_evidence
+      error_response = OpenStruct.new(
+        status_code: 400,
+        result: { error: "Invalid dispute ID" }
+      )
+
+      allow_any_instance_of(PaypalRestApi).to receive(:provide_dispute_evidence).and_return(error_response)
+
+      expect do
+        subject.fight_chargeback(dispute_id, dispute_evidence, merchant_account:)
+      end.to raise_error(ChargeProcessorInvalidRequestError)
+    end
+
+    it "raises ChargeProcessorError when API returns 500+ status" do
+      dispute_evidence = disputed_purchase.dispute.dispute_evidence
+      error_response = OpenStruct.new(
+        status_code: 500,
+        result: { error: "Internal server error" }
+      )
+
+      allow_any_instance_of(PaypalRestApi).to receive(:provide_dispute_evidence).and_return(error_response)
+
+      expect do
+        subject.fight_chargeback(dispute_id, dispute_evidence, merchant_account:)
+      end.to raise_error(ChargeProcessorError)
+    end
+
+    it "handles disputes without shipping information" do
+      dispute_evidence = disputed_purchase.dispute.dispute_evidence
+      shipment.destroy
+      dispute_evidence.update!(shipping_tracking_number: nil, shipping_carrier: nil, shipping_address: nil)
+
+      allow_any_instance_of(PaypalRestApi).to receive(:provide_dispute_evidence) do |_instance, **kwargs|
+        evidence = kwargs[:evidence][:evidences].first
+        expect(evidence[:evidence_type]).to eq("ITEM_DESCRIPTION")
+        expect(evidence[:evidence_info]).to be_nil
+        OpenStruct.new(status_code: 200)
+      end
+
+      subject.fight_chargeback(dispute_id, dispute_evidence, merchant_account:)
+    end
+
+    it "normalizes carrier names to PayPal format" do
+      dispute_evidence = disputed_purchase.dispute.dispute_evidence
+      shipment.update!(carrier: "FedEx Express")
+      dispute_evidence.update!(shipping_carrier: "FedEx Express")
+
+      allow_any_instance_of(PaypalRestApi).to receive(:provide_dispute_evidence) do |_instance, **kwargs|
+        tracking_info = kwargs[:evidence][:evidences].first[:evidence_info][:tracking_info].first
+        expect(tracking_info[:carrier_name]).to eq("FEDEX")
+        OpenStruct.new(status_code: 200)
+      end
+
+      subject.fight_chargeback(dispute_id, dispute_evidence, merchant_account:)
     end
   end
 end

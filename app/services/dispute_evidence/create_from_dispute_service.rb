@@ -87,12 +87,22 @@ class DisputeEvidence::CreateFromDisputeService
     end
 
     def generate_refund_policy_disclosure(purchase, events)
-      return if events.none?
+      return if purchase.purchase_refund_policy.blank?
 
-      "The refund policy modal has been viewed by the customer #{events.count} #{"time".pluralize(events.count)}" \
-      " before the purchase was made at #{purchase.created_at}.\n" \
-      "Timestamp information of the #{"view".pluralize(events.count)}: #{events.map(&:created_at).join(", ")}\n\n" \
-      "Internal browser GUID for reference: #{purchase.browser_guid}"
+      parts = []
+
+      if events.any?
+        parts << "The refund policy modal has been viewed by the customer #{events.count} #{"time".pluralize(events.count)}" \
+          " before the purchase was made at #{purchase.created_at}.\n" \
+          "Timestamp information of the #{"view".pluralize(events.count)}: #{events.map(&:created_at).join(", ")}\n\n" \
+          "Internal browser GUID for reference: #{purchase.browser_guid}"
+      end
+
+      if purchase.purchase_refund_policy.fine_print.present?
+        parts << purchase.purchase_refund_policy.fine_print
+      end
+
+      parts.join("\n\n").presence
     end
 
     def attach_refund_policy_image(dispute_evidence, purchase, open_fine_print_modal:)

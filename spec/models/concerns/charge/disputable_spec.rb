@@ -577,6 +577,13 @@ describe Charge::Disputable, :vcr do
           let(:link) { @l }
           let(:affiliate_user) { create(:affiliate_user) }
           let(:direct_affiliate) { create(:direct_affiliate, affiliate_user:, seller: user, affiliate_basis_points: 2000, products: [link]) }
+
+          before do
+            sample_image = File.read(Rails.root.join("spec", "support", "fixtures", "test-small.jpg"))
+            allow(DisputeEvidence::GenerateReceiptImageService).to receive(:perform).and_return(sample_image)
+            allow(DisputeEvidence::GenerateRefundPolicyImageService).to receive(:perform).and_return(sample_image)
+          end
+
           let(:purchase) do
             issued_amount = FlowOfFunds::Amount.new(currency: Currency::USD, cents: 100)
             settled_amount = FlowOfFunds::Amount.new(currency: Currency::CAD, cents: 110)
@@ -1067,6 +1074,9 @@ describe Charge::Disputable, :vcr do
       let!(:purchase) { create(:purchase, link: create(:product, :bundle), stripe_transaction_id: "ch_12345") }
 
       before do
+        sample_image = File.read(Rails.root.join("spec", "support", "fixtures", "test-small.jpg"))
+        allow(DisputeEvidence::GenerateReceiptImageService).to receive(:perform).and_return(sample_image)
+        allow(DisputeEvidence::GenerateRefundPolicyImageService).to receive(:perform).and_return(sample_image)
         purchase.create_artifacts_and_send_receipt!
       end
 
@@ -1096,10 +1106,12 @@ describe Charge::Disputable, :vcr do
                                                           url_redirect: create(:url_redirect)) end
     let!(:shipment) do create(:shipment, carrier: "UPS", tracking_number: "123456", purchase: disputed_purchase,
                                          ship_state: "shipped", shipped_at: DateTime.parse("2023-02-10 14:55:32")) end
+    let(:sample_image) { File.read(Rails.root.join("spec", "support", "fixtures", "test-small.jpg")) }
 
     before do
       create_list(:purchase, 2, email: disputed_purchase.email)
       create(:dispute_formalized, purchase: disputed_purchase)
+      allow(DisputeEvidence::GenerateReceiptImageService).to receive(:perform).with(disputed_purchase).and_return(sample_image)
     end
 
     context "when purchase is not eligible" do
@@ -1137,8 +1149,8 @@ describe Charge::Disputable, :vcr do
     context "when processor is PayPal" do
       before { purchase.update!(charge_processor_id: PaypalChargeProcessor.charge_processor_id) }
 
-      it "returns false" do
-        expect(purchase.eligible_for_dispute_evidence?).to be(false)
+      it "returns true" do
+        expect(purchase.eligible_for_dispute_evidence?).to be(true)
       end
     end
 
@@ -1188,7 +1200,7 @@ describe Charge::Disputable, :vcr do
       allow(DisputeEvidence::GenerateReceiptImageService).to receive(:perform).with(disputed_purchase).and_return(sample_image)
       disputed_purchase.create_dispute_evidence_if_needed!
 
-      expect(ChargeProcessor).to receive(:fight_chargeback) do |charge_processor_id, stripe_transaction_id, dispute_evidence|
+      expect(ChargeProcessor).to receive(:fight_chargeback) do |charge_processor_id, stripe_transaction_id, dispute_evidence, merchant_account:, dispute_id:|
         expect(charge_processor_id).to eq disputed_purchase.charge_processor_id
         expect(stripe_transaction_id).to eq disputed_purchase.stripe_transaction_id
         expect(dispute_evidence.customer_purchase_ip).to eq disputed_purchase.ip_address
@@ -1201,14 +1213,52 @@ describe Charge::Disputable, :vcr do
         expect(dispute_evidence.shipping_carrier).to eq "UPS"
         expect(dispute_evidence.shipped_at).to eq shipment.shipped_at
         expect(dispute_evidence.shipping_tracking_number).to eq shipment.tracking_number
+        expect(merchant_account).to eq disputed_purchase.merchant_account
+        expect(dispute_id).to be_nil
       end
 
       disputed_purchase.fight_chargeback
+    end
+
+    context "when processor is PayPal" do
+      let(:paypal_merchant_account) { create(:merchant_account_paypal) }
+      let(:paypal_purchase) do
+        create(:purchase,
+               charge_processor_id: PaypalChargeProcessor.charge_processor_id,
+               stripe_transaction_id: "pp_12345",
+               merchant_account: paypal_merchant_account,
+               chargeback_date: Time.current)
+      end
+
+      before do
+        create(:dispute_formalized, purchase: paypal_purchase, charge_processor_dispute_id: "PP-D-123")
+        sample_image = File.read(Rails.root.join("spec", "support", "fixtures", "test-small.jpg"))
+        allow(DisputeEvidence::GenerateReceiptImageService).to receive(:perform).with(paypal_purchase).and_return(sample_image)
+        allow(DisputeEvidence::GenerateRefundPolicyImageService).to receive(:perform).and_return(sample_image)
+        allow(DisputeEvidence::GenerateUncategorizedTextService).to receive(:perform).with(paypal_purchase).and_return("Sample uncategorized text")
+        paypal_purchase.create_dispute_evidence_if_needed!
+      end
+
+      it "passes the PayPal dispute id and merchant account" do
+        expect(ChargeProcessor).to receive(:fight_chargeback) do |charge_processor_id, charge_id, dispute_evidence, merchant_account:, dispute_id:|
+          expect(charge_processor_id).to eq "paypal"
+          expect(charge_id).to eq "pp_12345"
+          expect(dispute_id).to eq "PP-D-123"
+          expect(merchant_account).to eq paypal_merchant_account
+          expect(dispute_evidence).to be_a(DisputeEvidence)
+        end
+
+        paypal_purchase.fight_chargeback
+      end
     end
   end
 
   describe "fighting chargeback during dispute formalized" do
     it "fights chargeback via stripe" do
+      sample_image = File.read(Rails.root.join("spec", "support", "fixtures", "test-small.jpg"))
+      allow(DisputeEvidence::GenerateReceiptImageService).to receive(:perform).and_return(sample_image)
+      allow(DisputeEvidence::GenerateRefundPolicyImageService).to receive(:perform).and_return(sample_image)
+
       user = create(:user, unpaid_balance_cents: 200)
       link = create(:product, user:)
       purchase = create(:purchase, link:, seller: user, stripe_transaction_id: "ch_zitkxbhds3zqlt", price_cents: 100,

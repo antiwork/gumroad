@@ -114,6 +114,17 @@ def prepare_mysql
   ActiveRecord::Base.connection.execute("SET SESSION information_schema_stats_expiry = 0")
 end
 
+def ensure_gumroad_merchant_accounts
+  ChargeProcessor.charge_processor_ids.each do |charge_processor_id|
+    account = MerchantAccount.find_or_initialize_by(user_id: nil, charge_processor_id: charge_processor_id)
+    next if account.persisted?
+
+    account.charge_processor_merchant_id = "gumroad-#{charge_processor_id}"
+    account.charge_processor_alive_at = Time.current
+    account.save!
+  end
+end
+
 RSpec.configure do |config|
   config.include Capybara::DSL
   config.include ErrorResponses
@@ -145,6 +156,7 @@ RSpec.configure do |config|
       Thread.new { prepare_mysql },
       Thread.new { ElasticsearchSetup.prepare_test_environment }
     ].each(&:join)
+    ensure_gumroad_merchant_accounts
   end
 
   # Stub SsrfFilter globally to allow localhost/minio in tests
