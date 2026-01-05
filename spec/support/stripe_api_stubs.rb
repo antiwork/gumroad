@@ -394,4 +394,3 @@ module StripeApiStubs
     }
   end
 end
-
