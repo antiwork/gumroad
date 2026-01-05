@@ -29,4 +29,3 @@ class PaypalBalanceCheckService
         .sum(:amount_cents)
     end
 end
-

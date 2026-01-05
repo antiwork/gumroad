@@ -107,4 +107,3 @@ describe PaypalBalanceCheckService do
     end
   end
 end
-
