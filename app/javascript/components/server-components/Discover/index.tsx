@@ -143,7 +143,7 @@ const BlackFridayBanner = ({
 
 // Featured products and search results overlap when there are no filters, so we skip over the featured products in the search request
 // See DiscoverController::RECOMMENDED_PRODUCTS_COUNT
-const recommendedProductsCount = 8;
+const recommendedProductsCount = 10;
 const addInitialOffset = (params: SearchRequest) =>
   Object.entries(params).every(([key, value]) => !value || ["taxonomy", "curated_product_ids"].includes(key))
     ? { ...params, from: recommendedProductsCount + 1 }

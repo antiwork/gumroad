@@ -1,7 +1,7 @@
 # frozen_string_literal: true
 
 class DiscoverController < ApplicationController
-  RECOMMENDED_PRODUCTS_COUNT = 8
+  RECOMMENDED_PRODUCTS_COUNT = 10
   INITIAL_PRODUCTS_COUNT = 36
 
   include ActionView::Helpers::NumberHelper, RecommendationType, CreateDiscoverSearch,
