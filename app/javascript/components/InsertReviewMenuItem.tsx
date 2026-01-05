@@ -17,13 +17,7 @@ export const InsertReviewMenuItem = ({ editor, productId }: { editor: Editor; pr
 
   return (
     <>
-      <div
-        role="menuitem"
-        onClick={(e) => {
-          e.stopPropagation();
-          setShowReviewModal(true);
-        }}
-      >
+      <div role="menuitem" onClick={() => setShowReviewModal(true)}>
         <Icon name="solid-star" />
         <span>Review</span>
       </div>
