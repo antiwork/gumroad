@@ -15,7 +15,7 @@ import { Popover } from "$app/components/Popover";
 import { ProductsLayout } from "$app/components/ProductsLayout";
 import { showAlert } from "$app/components/server-components/Alert";
 import { Stats as StatsComponent } from "$app/components/Stats";
-import Placeholder from "$app/components/ui/Placeholder";
+import { Placeholder, PlaceholderImage } from "$app/components/ui/Placeholder";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "$app/components/ui/Table";
 import { useDebouncedCallback } from "$app/components/useDebouncedCallback";
 import { useGlobalEventListener } from "$app/components/useGlobalEventListener";
@@ -312,9 +312,7 @@ const AffiliatedPage = ({
         <section className="p-4 md:p-8">
           {initialAffiliatedProducts.length === 0 ? (
             <Placeholder>
-              <figure>
-                <img src={placeholder} />
-              </figure>
+              <PlaceholderImage src={placeholder} />
               <h2>Become an affiliate and earn!</h2>
               Gumroad is a great place for you to make some side income, even if you're not actively creating your own
               products.
@@ -335,9 +333,7 @@ const AffiliatedPage = ({
               <StatsSection {...stats} />
               {state.affiliatedProducts.length === 0 ? (
                 <Placeholder>
-                  <figure>
-                    <img src={placeholder} />
-                  </figure>
+                  <PlaceholderImage src={placeholder} />
                   <h2>No affiliated products found.</h2>
                 </Placeholder>
               ) : (
