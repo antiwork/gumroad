@@ -162,7 +162,7 @@ describe User::OmniauthCallbacksController do
       it "does not allow new users to sign up via Stripe" do
         expect { post :stripe_connect }.not_to change { User.count }
 
-        expect(flash[:alert]).to eq "Signing up with Stripe is currently disabled. Please sign up with email first."
+        expect(flash[:alert]).to eq "Sorry, we could not find an account associated with that Stripe account."
         expect(response).to redirect_to signup_url
       end
 
