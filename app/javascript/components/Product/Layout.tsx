@@ -140,7 +140,16 @@ export const Layout = (
     hasHero?: boolean;
   },
 ) => {
-  const { product, purchase, discount_code: discountCode, cart, hasHero, wishlists, main_section_index } = props;
+  const {
+    product,
+    purchase,
+    discount_code: discountCode,
+    restartable_subscription: restartableSubscription,
+    cart,
+    hasHero,
+    wishlists,
+    main_section_index,
+  } = props;
   const [selection, setSelection] = useSelectionFromUrl(product);
   const ctaButtonRef = React.useRef<HTMLAnchorElement>(null);
   const ctaLabel = cart ? "Add to cart" : undefined;
@@ -160,6 +169,7 @@ export const Layout = (
         ctaButtonRef={ctaButtonRef}
         configurationSelectorRef={configurationSelectorRef}
         wishlists={wishlists}
+        restartableSubscription={restartableSubscription || null}
       />
     </>
   );
@@ -188,6 +198,7 @@ export const Layout = (
         ctaButtonRef={ctaButtonRef}
         configurationSelectorRef={configurationSelectorRef}
         hasHero={!!hasHero}
+        restartableSubscription={restartableSubscription || null}
       />
       {"products" in props ? (
         <SectionEditor props={props}>{productView}</SectionEditor>
@@ -215,6 +226,7 @@ const CtaBar = ({
   ctaLabel,
   selection,
   hasHero,
+  restartableSubscription,
 }: {
   product: Product;
   purchase: Purchase | null;
@@ -224,6 +236,12 @@ const CtaBar = ({
   ctaLabel?: string | undefined;
   selection: PriceSelection;
   hasHero: boolean;
+  restartableSubscription?: {
+    id: string;
+    price: unknown;
+    recurrence: string;
+    manage_url: string;
+  } | null;
 }) => {
   const selectionAttributes = applySelection(product, discountCode?.valid ? discountCode.discount : null, selection);
   let { priceCents } = selectionAttributes;
@@ -309,6 +327,7 @@ const CtaBar = ({
           discountCode={discountCode ?? null}
           selection={selection}
           label={ctaLabel}
+          restartableSubscription={restartableSubscription || null}
           onClick={(evt) => {
             if (
               isPWYW ||

@@ -229,6 +229,12 @@ export type Props = {
   purchase: Purchase | null;
   discount_code: ProductDiscount | null;
   wishlists: WishlistForProduct[];
+  restartable_subscription?: {
+    id: string;
+    price: unknown;
+    recurrence: string;
+    manage_url: string;
+  } | null;
 };
 
 export const Product = ({
@@ -241,6 +247,7 @@ export const Product = ({
   ctaButtonRef,
   configurationSelectorRef,
   wishlists = [],
+  restartableSubscription = null,
   disableAnalytics,
 }: {
   product: Product;
@@ -252,6 +259,12 @@ export const Product = ({
   ctaButtonRef?: React.MutableRefObject<HTMLAnchorElement | null>;
   configurationSelectorRef?: React.MutableRefObject<ConfigurationSelectorHandle | null>;
   wishlists?: WishlistForProduct[];
+  restartableSubscription?: {
+    id: string;
+    price: unknown;
+    recurrence: string;
+    manage_url: string;
+  } | null;
   disableAnalytics?: boolean;
 }) => {
   const [pageLoaded, setPageLoaded] = React.useState(false);
@@ -565,6 +578,7 @@ export const Product = ({
             selection={selection}
             label={ctaLabel}
             showInstallmentPlanNotes
+            restartableSubscription={restartableSubscription}
             onClick={(e) => {
               if (!validate()) e.preventDefault();
             }}

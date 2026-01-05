@@ -197,6 +197,17 @@ class LinksController < ApplicationController
     presenter = ProductPresenter.new(pundit_user:, product: @product, request:)
     presenter_props = { recommended_by: params[:recommended_by], discount_code: params[:offer_code] || params[:code], quantity: (params[:quantity] || 1).to_i, layout: params[:layout], seller_custom_domain_url: }
     @product_props = params[:embed] || params[:overlay] ? presenter.product_props(**presenter_props) : presenter.product_page_props(**presenter_props)
+    
+    # Add restartable subscription data to props
+    if @restartable_subscription
+      @restartable_subscription.refresh_token unless @restartable_subscription.token.present?
+      @product_props[:restartable_subscription] = {
+        id: @restartable_subscription.external_id,
+        price: @restartable_subscription.price,
+        recurrence: @restartable_subscription.recurrence,
+        manage_url: "/subscriptions/#{@restartable_subscription.external_id}/manage?token=#{@restartable_subscription.token}"
+      }
+    end
     @body_class = "iframe" if params[:overlay] || params[:embed]
 
     if ["search", "discover"].include?(params[:recommended_by])
