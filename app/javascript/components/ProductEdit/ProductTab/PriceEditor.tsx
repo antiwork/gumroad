@@ -5,8 +5,8 @@ import { CurrencyCode, formatPriceCentsWithoutCurrencySymbol } from "$app/utils/
 import { Details } from "$app/components/Details";
 import { PriceInput } from "$app/components/PriceInput";
 import { InstallmentPlanEditor } from "$app/components/ProductEdit/ProductTab/InstallmentPlanEditor";
-import { Dropdown } from "$app/components/ui/Dropdown";
 import { Toggle } from "$app/components/Toggle";
+import { Dropdown } from "$app/components/ui/Dropdown";
 
 export const PriceEditor = ({
   priceCents,
