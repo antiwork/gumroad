@@ -384,6 +384,8 @@ def setup_js(val = false)
     VCR.turn_off!
     # See also https://github.com/teamcapybara/capybara#gotchas
     WebMock.allow_net_connect!(net_http_connect_on_start: true)
+    # Stub Stripe API even when allowing net connect, since we use placeholder keys
+    StripeApiStubs.stub_all_stripe_requests
   else
     VCR.turn_on!
     WebMock.disable_net_connect!(allow_localhost: true, allow: ["api.knapsackpro.com"])
