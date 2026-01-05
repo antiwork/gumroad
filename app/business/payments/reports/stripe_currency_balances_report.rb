@@ -15,7 +15,7 @@ module StripeCurrencyBalancesReport
       currency_balances[balance["currency"]] += balance["amount"] if currency_balances[balance["currency"]].abs != balance["amount"].abs
     end
 
-    CSV.generate do |csv|
+    CsvSafe.generate do |csv|
       csv << %w(Currency Balance)
       currency_balances.each do |currency, balance|
         csv << [currency, is_currency_type_single_unit?(currency) ? balance : (balance / 100.0).round(2)]
