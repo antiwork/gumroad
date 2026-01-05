@@ -14,8 +14,8 @@ concurrency:
   cancel-in-progress: ${{ github.event_name == 'pull_request_target' || github.ref != 'refs/heads/main' }}
 
 jobs:
-  approve_fork_ci:
-    name: Approve fork CI
+  ci_gate:
+    name: CI Gate
     runs-on: ubicloud-standard-2
     environment: ${{ github.event_name == 'pull_request_target' && github.event.pull_request.head.repo.full_name != github.repository && 'ci-protected' || '' }}
     steps:
@@ -24,7 +24,7 @@ jobs:
   build_base:
     name: Build base image
     runs-on: hetzner
-    needs: approve_fork_ci
+    needs: ci_gate
     steps:
       - uses: actions/checkout@v4
         with:
