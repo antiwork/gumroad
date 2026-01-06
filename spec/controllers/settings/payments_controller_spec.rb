@@ -1050,9 +1050,9 @@ describe Settings::PaymentsController, :vcr, type: :controller, inertia: true do
             {
               bank_account: {
                 type: GibraltarBankAccount.name,
-                account_number: "01234567",
-                account_number_confirmation: "01234567",
-                sort_code: "12-34-56",
+                account_number: "00012345",
+                account_number_confirmation: "00012345",
+                sort_code: "10-88-00",
                 account_holder_full_name: "gumbot"
               }
             }
@@ -1069,9 +1069,9 @@ describe Settings::PaymentsController, :vcr, type: :controller, inertia: true do
           it "creates the gibraltar bank account" do
             put(:update, params:)
             bank_account = GibraltarBankAccount.last
-            expect(bank_account.account_number.decrypt("1234")).to eq "01234567"
-            expect(bank_account.account_number_last_four).to eq "4567"
-            expect(bank_account.routing_number).to eq "12-34-56"
+            expect(bank_account.account_number.decrypt("1234")).to eq "00012345"
+            expect(bank_account.account_number_last_four).to eq "2345"
+            expect(bank_account.routing_number).to eq "10-88-00"
             expect(bank_account.account_holder_full_name).to eq "gumbot"
           end
 
