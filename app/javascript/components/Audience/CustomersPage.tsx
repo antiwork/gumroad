@@ -1893,7 +1893,7 @@ const UtmLinkStack = ({ link, showHeader }: { link: Customer["utm_link"]; showHe
       ) : null}
       <div>
         <h5>Title</h5>
-        <a href={Routes.utm_links_dashboard_path({ query: link.title })} target="_blank" rel="noreferrer">
+        <a href={Routes.dashboard_utm_links_path({ query: link.title })} target="_blank" rel="noreferrer">
           {link.title}
         </a>
       </div>
