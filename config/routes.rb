@@ -18,6 +18,7 @@ end
 Rails.application.routes.draw do
   get "/healthcheck" => "healthcheck#index"
   get "/healthcheck/sidekiq" => "healthcheck#sidekiq"
+  get "/healthcheck/paypal_balance" => "healthcheck#paypal_balance"
 
   use_doorkeeper do
     controllers applications: "oauth/applications"

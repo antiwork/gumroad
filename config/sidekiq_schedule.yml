@@ -295,12 +295,12 @@ calculate_payout_numbers_worker:
   class: CalculatePayoutNumbersWorker
   description: Update payout numbers for the home page
 send_paypal_topup_notification_daily:
-  cron: "0 15 * * 2,3,4,5,6,0" # UTC 15:00 TUE-SUN
+  cron: "0 14 * * 2,3,4,5,6,0" # UTC 14:00 (9am ET) TUE-SUN
   class: SendPaypalTopupNotificationJob
   args: true
   description: Send a slack notification if PayPal top-up is needed (daily check)
 send_paypal_topup_notification_weekly:
-  cron: "0 15 * * 1" # UTC 15:00 MON
+  cron: "0 14 * * 1" # UTC 14:00 (9am ET) MON
   class: SendPaypalTopupNotificationJob
   description: Send a slack notification for the weekly PayPal topup status
 sync_all_paypal_payouts:
