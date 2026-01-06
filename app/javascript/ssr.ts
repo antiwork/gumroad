@@ -25,7 +25,6 @@ import AdminUserGuids from "$app/components/server-components/Admin/UserGuids";
 import AdminUserStats from "$app/components/server-components/Admin/UserStats";
 import AffiliateRequestPage from "$app/components/server-components/AffiliateRequestPage";
 import Alert from "$app/components/server-components/Alert";
-import BundleEditPage from "$app/components/server-components/BundleEditPage";
 import CheckoutPage from "$app/components/server-components/CheckoutPage";
 import CommunitiesPage from "$app/components/server-components/CommunitiesPage";
 import CustomersDownloadPopover from "$app/components/server-components/CustomersPage/DownloadPopover";
@@ -97,7 +96,6 @@ ReactOnRails.register({
   AdminAddCreditForm,
   HelpCenterArticlesIndexPage,
   SupportHeader,
-  BundleEditPage,
   CheckoutPage,
   CodeSnippet,
   CommunitiesPage,
