@@ -429,7 +429,6 @@ const CustomersPage = ({
                     method="post"
                     preserveScroll={true}
                     data={{
-                      format: "csv",
                       start_time: lightFormat(from, "yyyy-MM-dd"),
                       end_time: lightFormat(to, "yyyy-MM-dd"),
                       product_ids: includedProductIds,
