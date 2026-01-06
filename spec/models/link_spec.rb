@@ -4800,4 +4800,77 @@ describe Link, :vcr do
       end
     end
   end
+
+  describe "#restartable_subscription_for" do
+    let(:buyer) { create(:user) }
+    let(:membership_product) { create(:subscription_product) }
+    let(:regular_product) { create(:product) }
+
+    context "when product is not a membership" do
+      it "returns nil for regular products" do
+        expect(regular_product.restartable_subscription_for(buyer)).to be_nil
+      end
+    end
+
+    context "when buyer is nil" do
+      it "returns nil" do
+        expect(membership_product.restartable_subscription_for(nil)).to be_nil
+      end
+    end
+
+    context "when product is a membership" do
+      it "returns nil when buyer has no subscriptions" do
+        expect(membership_product.restartable_subscription_for(buyer)).to be_nil
+      end
+
+      it "returns nil when buyer has an active subscription" do
+        create(:subscription, link: membership_product, user: buyer, deactivated_at: nil)
+        expect(membership_product.restartable_subscription_for(buyer)).to be_nil
+      end
+
+      it "returns the canceled subscription when buyer has a deactivated subscription" do
+        subscription = create(:subscription, link: membership_product, user: buyer, deactivated_at: 1.day.ago)
+        expect(membership_product.restartable_subscription_for(buyer)).to eq(subscription)
+      end
+
+      it "excludes test subscriptions" do
+        create(:subscription, link: membership_product, user: buyer, deactivated_at: 1.day.ago, is_test_subscription: true)
+        expect(membership_product.restartable_subscription_for(buyer)).to be_nil
+      end
+
+      it "excludes seller-cancelled subscriptions to prevent showing restart modal" do
+        create(:subscription, link: membership_product, user: buyer, deactivated_at: 1.day.ago, cancelled_by_admin: true)
+        expect(membership_product.restartable_subscription_for(buyer)).to be_nil
+      end
+
+      it "excludes ended subscriptions" do
+        create(:subscription, link: membership_product, user: buyer, deactivated_at: 1.day.ago, ended_at: 1.hour.ago)
+        expect(membership_product.restartable_subscription_for(buyer)).to be_nil
+      end
+
+      it "returns the most recent restartable subscription when multiple exist" do
+        old_subscription = create(:subscription, link: membership_product, user: buyer, deactivated_at: 1.week.ago)
+        recent_subscription = create(:subscription, link: membership_product, user: buyer, deactivated_at: 1.day.ago)
+
+        expect(membership_product.restartable_subscription_for(buyer)).to eq(recent_subscription)
+      end
+
+      it "returns subscription when buyer has a subscription with pending cancellation" do
+        subscription = create(:subscription, link: membership_product, user: buyer, cancelled_at: Time.current, deactivated_at: nil)
+        expect(membership_product.restartable_subscription_for(buyer)).to eq(subscription)
+      end
+
+      context "with buyer without account (email-based subscription)" do
+        let(:email) { "test@example.com" }
+
+        it "returns the canceled subscription for email-based subscriptions" do
+          subscription = create(:subscription_without_user, link: membership_product, email: email)
+          subscription.update!(deactivated_at: 1.day.ago)
+
+          result = membership_product.restartable_subscription_for(nil, email: email)
+          expect(result).to eq(subscription)
+        end
+      end
+    end
+  end
 end
