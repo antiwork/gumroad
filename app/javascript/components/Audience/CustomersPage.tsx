@@ -4,8 +4,6 @@ import { lightFormat, subMonths } from "date-fns";
 import { format } from "date-fns-tz";
 import * as React from "react";
 
-import { NavigationButtonInertia } from "$app/components/NavigationButton";
-
 import {
   Address,
   Customer,
@@ -67,6 +65,7 @@ import { FileKindIcon } from "$app/components/FileRowContent";
 import { Icon } from "$app/components/Icons";
 import { LoadingSpinner } from "$app/components/LoadingSpinner";
 import { Modal } from "$app/components/Modal";
+import { NavigationButtonInertia } from "$app/components/NavigationButton";
 import { NumberInput } from "$app/components/NumberInput";
 import { Pagination, PaginationProps } from "$app/components/Pagination";
 import { Popover } from "$app/components/Popover";
@@ -427,7 +426,7 @@ const CustomersPage = ({
                     color="primary"
                     href={Routes.export_purchases_path()}
                     method="post"
-                    preserveScroll={true}
+                    preserveScroll
                     data={{
                       start_time: lightFormat(from, "yyyy-MM-dd"),
                       end_time: lightFormat(to, "yyyy-MM-dd"),
