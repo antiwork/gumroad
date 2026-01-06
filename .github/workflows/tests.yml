@@ -3,7 +3,9 @@ name: Tests
 on:
   push:
     branches:
-      - main
+      - "**"
+    tags-ignore:
+      - "production-*"
   pull_request_target:
 
 permissions:
@@ -15,16 +17,17 @@ concurrency:
 
 jobs:
   ci_gate:
-    name: CI Gate
+    name: CI Gate${{ github.event_name == 'pull_request_target' && github.event.pull_request.head.repo.full_name == github.repository && ' (internal PR noop)' || '' }}
     runs-on: ubicloud-standard-2
     environment: ${{ github.event_name == 'pull_request_target' && github.event.pull_request.head.repo.full_name != github.repository && 'ci-protected' || '' }}
     steps:
       - run: true
 
   build_base:
-    name: Build base image
+    name: Build base image${{ github.event_name == 'pull_request_target' && github.event.pull_request.head.repo.full_name == github.repository && ' (internal PR noop)' || '' }}
     runs-on: hetzner
     needs: ci_gate
+    if: ${{ github.event_name != 'pull_request_target' || github.event.pull_request.head.repo.full_name != github.repository }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -75,7 +78,7 @@ jobs:
 
   build_test:
     runs-on: hetzner
-    name: Build test image
+    name: Build test image${{ github.event_name == 'pull_request_target' && github.event.pull_request.head.repo.full_name == github.repository && ' (internal PR noop)' || '' }}
     needs: build_base
     steps:
       - uses: actions/checkout@v4
@@ -165,7 +168,7 @@ jobs:
           build_and_push $WEB_REPO test-$REVISION build_test
 
   test_fast:
-    name: Test Fast ${{ matrix.ci_node_index }}
+    name: Test Fast ${{ matrix.ci_node_index }}${{ github.event_name == 'pull_request_target' && github.event.pull_request.head.repo.full_name == github.repository && ' (internal PR noop)' || '' }}
     env:
       COMPOSE_PROJECT_NAME: web_${{ github.run_id }}_${{ github.run_attempt }}_fast_${{ matrix.ci_node_index }}
     runs-on: hetzner
@@ -248,7 +251,7 @@ jobs:
           docker network rm ${{ env.COMPOSE_PROJECT_NAME }}_default 2>/dev/null || true
 
   test_slow:
-    name: Test Slow ${{ matrix.ci_node_index }}
+    name: Test Slow ${{ matrix.ci_node_index }}${{ github.event_name == 'pull_request_target' && github.event.pull_request.head.repo.full_name == github.repository && ' (internal PR noop)' || '' }}
     env:
       COMPOSE_PROJECT_NAME: web_${{ github.run_id }}_${{ github.run_attempt }}_slow_${{ matrix.ci_node_index }}
       WEB_REPO: quay.io/gumroad/web
@@ -417,7 +420,7 @@ jobs:
           docker network rm ${{ env.COMPOSE_PROJECT_NAME }}_default 2>/dev/null || true
 
   unblock_deployment_from_buildkite:
-    name: Unblock deployment from Buildkite
+    name: Unblock deployment from Buildkite${{ github.event_name == 'pull_request_target' && github.event.pull_request.head.repo.full_name == github.repository && ' (internal PR noop)' || '' }}
     runs-on: ubicloud-standard-4
     needs: [test_fast, test_slow]
     if: success() && github.event_name == 'push' && github.ref == 'refs/heads/main'
