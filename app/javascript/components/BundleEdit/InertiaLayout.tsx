@@ -20,16 +20,14 @@ import { Tab, Tabs } from "$app/components/ui/Tabs";
 import { useIsAboveBreakpoint } from "$app/components/useIsAboveBreakpoint";
 import { WithTooltip } from "$app/components/WithTooltip";
 
+import { useBundleEditProvider } from "$app/pages/Bundles/_BundleEditProvider";
+
 export type BundleTab = "product" | "content" | "share";
 
 type Props = {
   children: React.ReactNode;
   preview: React.ReactNode;
   currentTab: BundleTab;
-  bundle: Bundle;
-  id: string;
-  uniquePermalink: string;
-  onBundleChange: (update: Partial<Bundle>) => void;
   isLoading?: boolean;
 };
 
@@ -42,16 +40,9 @@ export const useProductUrl = (bundle: Bundle, uniquePermalink: string, params = 
   });
 };
 
-export const InertiaLayout = ({
-  children,
-  preview,
-  currentTab,
-  bundle,
-  id,
-  uniquePermalink,
-  onBundleChange,
-  isLoading = false,
-}: Props) => {
+export const InertiaLayout = ({ children, preview, currentTab, isLoading = false }: Props) => {
+  const { bundle, updateBundle, id, uniquePermalink, routes } = useBundleEditProvider();
+
   const url = useProductUrl(bundle, uniquePermalink);
 
   const isDesktop = useIsAboveBreakpoint("lg");
@@ -75,12 +66,12 @@ export const InertiaLayout = ({
       setIsPublishing(true);
       await saveBundle(id, bundle);
       await setProductPublished(uniquePermalink, published);
-      onBundleChange({ is_published: published });
+      updateBundle({ is_published: published });
       showAlert(published ? "Published!" : "Unpublished!", "success");
       if (currentTab === "share") {
-        router.visit(Routes.content_bundle_path(id));
+        router.visit(routes.content);
       } else if (published) {
-        router.visit(Routes.share_bundle_path(id));
+        router.visit(routes.share);
       }
     } catch (e) {
       assertResponseError(e);
@@ -152,7 +143,7 @@ export const InertiaLayout = ({
             <Button
               color="primary"
               disabled={isBusy}
-              onClick={() => void handleSave().then(() => router.visit(Routes.content_bundle_path(id)))}
+              onClick={() => void handleSave().then(() => router.visit(routes.content))}
             >
               {isSaving ? "Saving changes..." : "Save and continue"}
             </Button>
@@ -170,18 +161,18 @@ export const InertiaLayout = ({
       >
         <Tabs style={{ gridColumn: 1 }}>
           <Tab asChild isSelected={currentTab === "product"}>
-            <Link href={Routes.bundle_path(id)} onClick={onTabClick}>
+            <Link href={routes.product} onClick={onTabClick}>
               Product
             </Link>
           </Tab>
           <Tab asChild isSelected={currentTab === "content"}>
-            <Link href={Routes.content_bundle_path(id)} onClick={onTabClick}>
+            <Link href={routes.content} onClick={onTabClick}>
               Content
             </Link>
           </Tab>
           <Tab asChild isSelected={currentTab === "share"}>
             <Link
-              href={Routes.share_bundle_path(id)}
+              href={routes.share}
               onClick={(evt: React.MouseEvent) => {
                 onTabClick(evt, () => {
                   if (!bundle.is_published) {

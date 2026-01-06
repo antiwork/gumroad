@@ -85,6 +85,11 @@ class BundlePresenter
         title: bundle.user.refund_policy.title,
         fine_print: bundle.user.refund_policy.fine_print,
       },
+      routes: {
+        product: bundle_path(bundle.external_id),
+        content: content_bundle_path(bundle.external_id),
+        share: share_bundle_path(bundle.external_id),
+      },
     }
   end
 
