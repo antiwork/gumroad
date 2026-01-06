@@ -219,7 +219,7 @@ class ContactingCreatorMailerPreview < ActionMailer::Preview
   private
     def sample_csv_file
       tempfile = Tempfile.new
-      CSV.open(tempfile, "wb") { |csv| 100.times { csv << ["Some", "CSV", "Data"] } }
+      CsvSafe.open(tempfile, "wb") { |csv| 100.times { csv << ["Some", "CSV", "Data"] } }
       tempfile.rewind
       tempfile
     end
