@@ -3,7 +3,6 @@
 class Wishlist < ApplicationRecord
   include ExternalId, Deletable, FlagShihTzu
 
-  DEFAULT_NAME_PREFIX = "Wishlist"
   DEFAULT_NAME_MATCHER = /\AWishlist \d+\z/
 
   belongs_to :user
@@ -17,8 +16,6 @@ class Wishlist < ApplicationRecord
 
   validates :name, presence: true
   validates :description, length: { maximum: 3_000 }
-
-  before_validation :set_default_name
 
   before_save -> { update_recommendable(save: false) }
 
@@ -42,9 +39,4 @@ class Wishlist < ApplicationRecord
     self.recommendable = !discover_opted_out? && name !~ DEFAULT_NAME_MATCHER && !AdultKeywordDetector.adult?(name) && !AdultKeywordDetector.adult?(description) && alive_wishlist_products.any?
     self.save if save
   end
-
-  private
-    def set_default_name
-      self.name ||= "#{DEFAULT_NAME_PREFIX} #{user.wishlists.count + 1}"
-    end
 end

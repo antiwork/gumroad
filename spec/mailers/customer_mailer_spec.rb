@@ -523,7 +523,8 @@ describe CustomerMailer do
 
     it "shows the custom view content text in the receipt" do
       product = create(:product_with_pdf_file)
-      product.save_custom_view_content_button_text("Custom Text")
+      product.custom_view_content_button_text = "Custom Text"
+      product.save!
       purchase = create(:purchase, link: product, purchaser: @user)
       create(:url_redirect, purchase:)
       mail = CustomerMailer.receipt(purchase.id)

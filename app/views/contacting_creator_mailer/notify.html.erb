@@ -129,7 +129,7 @@
           <tr>
             <td><h4><%= link_to "UTM link", @purchase.utm_link.utm_url, rel: "noopener noreferrer nofollow", target: "_blank" %> driven sale</h4></td>
             <td>
-              <span style="font-weight: bold">Link</span>: <%= link_to @purchase.utm_link.title, utm_links_dashboard_url(query: @purchase.utm_link.title), target: "_blank" %>
+              <span style="font-weight: bold">Link</span>: <%= link_to @purchase.utm_link.title, dashboard_utm_links_url(query: @purchase.utm_link.title), target: "_blank" %>
               <br>
               <span style="font-weight: bold">Source</span>: <%= @purchase.utm_link.utm_source %>
               <br>
