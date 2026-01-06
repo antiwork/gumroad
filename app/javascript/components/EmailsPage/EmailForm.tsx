@@ -261,6 +261,8 @@ export const EmailForm = ({ context, installment }: EmailFormProps) => {
   const [publishDate, setPublishDate] = React.useState(toISODateString(installment?.published_at));
   React.useEffect(() => setPublishDate(toISODateString(installment?.published_at)), [installment]);
 
+  const [initialMessage] = React.useState(() => parseInitialValue(installment?.message ?? ""));
+
   const form = useForm({
     installment: {
       name: installment?.name ?? "",
@@ -1165,7 +1167,7 @@ export const EmailForm = ({ context, installment }: EmailFormProps) => {
                     className="textarea"
                     ariaLabel="Email message"
                     placeholder="Write a personalized message..."
-                    initialValue={parseInitialValue(form.data.installment.message)}
+                    initialValue={initialMessage}
                     onChange={handleMessageChange}
                     onCreate={setMessageEditor}
                     extensions={[UpsellCard]}
