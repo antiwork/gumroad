@@ -423,7 +423,6 @@ const CustomersPage = ({
                 <NavigationButton
                   color="primary"
                   href={Routes.export_purchases_path({
-                    format: "csv",
                     start_time: lightFormat(from, "yyyy-MM-dd"),
                     end_time: lightFormat(to, "yyyy-MM-dd"),
                     product_ids: includedProductIds,
