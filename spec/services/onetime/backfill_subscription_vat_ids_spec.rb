@@ -74,9 +74,15 @@ describe Onetime::BackfillSubscriptionVatIds do
                                                   subscription: subscription2)
       original_purchase2.create_purchase_sales_tax_info!(business_vat_id: "DE123456789", country_code: "DE")
 
-      allow(subscription1).to receive(:update!).and_raise(StandardError.new("Test error"))
+      call_count = 0
+      allow_any_instance_of(Subscription).to receive(:update!).and_wrap_original do |method, *args|
+        call_count += 1
+        raise StandardError.new("Test error") if call_count == 1
+        method.call(*args)
+      end
 
       expect { described_class.process }.not_to raise_error
+      expect(subscription2.reload.business_vat_id).to eq "DE123456789"
     end
   end
 end
