@@ -420,7 +420,7 @@ jobs:
           docker network rm ${{ env.COMPOSE_PROJECT_NAME }}_default 2>/dev/null || true
 
   unblock_deployment_from_buildkite:
-    name: Unblock deployment from Buildkite${{ github.event_name == 'pull_request_target' && github.event.pull_request.head.repo.full_name == github.repository && ' (internal PR noop)' || '' }}
+    name: Unblock deployment from Buildkite
     runs-on: ubicloud-standard-4
     needs: [test_fast, test_slow]
     if: success() && github.event_name == 'push' && github.ref == 'refs/heads/main'
