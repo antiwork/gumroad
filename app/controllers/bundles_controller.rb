@@ -3,6 +3,8 @@
 class BundlesController < Sellers::BaseController
   include SearchProducts, Product::BundlesMarketing
 
+  layout "inertia"
+
   PER_PAGE = 10
 
   def show
@@ -12,7 +14,32 @@ class BundlesController < Sellers::BaseController
 
     @title = bundle.name
 
-    @props = BundlePresenter.new(bundle:).bundle_props
+    render inertia: "Bundles/Edit", props: BundlePresenter.new(bundle:).bundle_props
+  end
+
+  def content
+    bundle = Link.can_be_bundle.find_by_external_id!(params[:id])
+
+    authorize bundle, :show?
+
+    @title = bundle.name
+
+    render inertia: "Bundles/Content", props: BundlePresenter.new(bundle:).bundle_props
+  end
+
+  def share
+    bundle = Link.can_be_bundle.find_by_external_id!(params[:id])
+
+    authorize bundle, :show?
+
+    # Redirect to content if bundle is not published
+    unless bundle.published?
+      return redirect_to content_bundle_path(bundle.external_id)
+    end
+
+    @title = bundle.name
+
+    render inertia: "Bundles/Share", props: BundlePresenter.new(bundle:).bundle_props
   end
 
   def create_from_email

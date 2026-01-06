@@ -609,7 +609,8 @@ Rails.application.routes.draw do
 
     resources :bundles, only: [:show, :update] do
       member do
-        get "*other", to: "bundles#show"
+        get :content
+        get :share
         post :update_purchases_content
       end
 
