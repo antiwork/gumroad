@@ -127,6 +127,7 @@ export const Layout = ({
   previewScaleFactor = 0.4,
   showBorder = true,
   showNavigationButton = true,
+  currentTab,
 }: {
   children: React.ReactNode;
   preview?: React.ReactNode;
@@ -135,14 +136,12 @@ export const Layout = ({
   previewScaleFactor?: number;
   showBorder?: boolean;
   showNavigationButton?: boolean;
+  currentTab: "product" | "content" | "share" | "receipt";
 }) => {
-  const { id, product, updateProduct, uniquePermalink, saving, save, currencyType, routes, currentTab } =
-    useProductEditContext();
+  const { id, product, updateProduct, uniquePermalink, saving, save, currencyType } = useProductEditContext();
 
   const url = useProductUrl();
   const checkoutUrl = useProductUrl({ wanted: true });
-
-  const tab = currentTab;
 
   const [isPublishing, setIsPublishing] = React.useState(false);
   const setPublished = async (published: boolean) => {
@@ -152,11 +151,12 @@ export const Layout = ({
       await setProductPublished(uniquePermalink, published);
       updateProduct({ is_published: published });
       showAlert(published ? "Published!" : "Unpublished!", "success");
-      if (tab === "share") {
-        if (product.native_type === "coffee") router.visit(routes.product, { preserveState: true });
-        else router.visit(routes.content, { preserveState: true });
+      if (currentTab === "share") {
+        if (product.native_type === "coffee")
+          router.visit(Routes.edit_link_path(uniquePermalink), { preserveState: true });
+        else router.visit(Routes.edit_link_content_path(uniquePermalink), { preserveState: true });
       } else if (published) {
-        router.visit(routes.share, { preserveState: true });
+        router.visit(Routes.edit_link_share_path(uniquePermalink), { preserveState: true });
       }
     } catch (e) {
       assertResponseError(e);
@@ -243,11 +243,15 @@ export const Layout = ({
                 </Button>
               </CopyToClipboard>
             </>
-          ) : tab === "product" && !isCoffee ? (
+          ) : currentTab === "product" && !isCoffee ? (
             <Button
               color="primary"
               disabled={isBusy}
-              onClick={() => void save().then(() => router.visit(routes.content, { preserveState: true }))}
+              onClick={() =>
+                void save().then(() =>
+                  router.visit(Routes.edit_link_content_path(uniquePermalink), { preserveState: true }),
+                )
+              }
             >
               {saving ? "Saving changes..." : "Save and continue"}
             </Button>
@@ -270,26 +274,26 @@ export const Layout = ({
           )}
         >
           <Tabs style={{ gridColumn: 1 }}>
-            <Tab asChild isSelected={tab === "product"}>
-              <Link href={routes.product} preserveState onClick={onTabClick}>
+            <Tab asChild isSelected={currentTab === "product"}>
+              <Link href={Routes.edit_link_path(uniquePermalink)} preserveState onClick={onTabClick}>
                 Product
               </Link>
             </Tab>
             {!isCoffee ? (
-              <Tab asChild isSelected={tab === "content"}>
-                <Link href={routes.content} preserveState onClick={onTabClick}>
+              <Tab asChild isSelected={currentTab === "content"}>
+                <Link href={Routes.edit_link_content_path(uniquePermalink)} preserveState onClick={onTabClick}>
                   Content
                 </Link>
               </Tab>
             ) : null}
-            <Tab asChild isSelected={tab === "receipt"}>
-              <Link href={routes.receipt} preserveState onClick={onTabClick}>
+            <Tab asChild isSelected={currentTab === "receipt"}>
+              <Link href={Routes.edit_link_receipt_path(uniquePermalink)} preserveState onClick={onTabClick}>
                 Receipt
               </Link>
             </Tab>
-            <Tab asChild isSelected={tab === "share"}>
+            <Tab asChild isSelected={currentTab === "share"}>
               <Link
-                href={routes.share}
+                href={Routes.edit_link_share_path(uniquePermalink)}
                 preserveState
                 onClick={(evt) => {
                   onTabClick(evt, () => {

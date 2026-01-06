@@ -123,7 +123,7 @@ export const ProductsPageProductsTable = (props: {
               <ProductIconCell
                 href={product.can_edit ? product.edit_url : product.url}
                 thumbnail={product.thumbnail?.url ?? null}
-                useInertiaLink={product.can_edit}
+                canEdit={product.can_edit}
               />
               <TableCell className="w-full" hideLabel>
                 <div>

@@ -8,12 +8,12 @@ export const ProductIconCell = ({
   href,
   thumbnail,
   placeholder = <Icon name="card-image-fill" />,
-  useInertiaLink = false,
+  canEdit = false,
 }: {
   href: string;
   thumbnail: string | null;
   placeholder?: React.ReactNode;
-  useInertiaLink?: boolean;
+  canEdit?: boolean;
 }) => {
   const content = thumbnail ? (
     <img
@@ -27,7 +27,7 @@ export const ProductIconCell = ({
 
   return (
     <TableCell hideLabel className="relative text-center text-xl lg:w-20 lg:min-w-20 lg:border-r lg:border-border">
-      {useInertiaLink ? <Link href={href}>{content}</Link> : <a href={href}>{content}</a>}
+      {canEdit ? <Link href={href}>{content}</Link> : <a href={href}>{content}</a>}
     </TableCell>
   );
 };

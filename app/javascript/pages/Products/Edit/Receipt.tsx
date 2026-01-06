@@ -1,16 +1,16 @@
 import { usePage } from "@inertiajs/react";
 import * as React from "react";
 
-import { ProductTab as ProductTabContent } from "$app/components/ProductEdit/ProductTab";
+import { ReceiptTab as ReceiptTabContent } from "$app/components/ProductEdit/ReceiptTab";
 
 import { ProductEditProvider, EditPageProps } from "./_ProductEditProvider";
 
-export default function ProductTab() {
+export default function Receipt() {
   const props = usePage<EditPageProps>().props;
 
   return (
     <ProductEditProvider initialProps={props}>
-      <ProductTabContent />
+      <ReceiptTabContent />
     </ProductEditProvider>
   );
 }

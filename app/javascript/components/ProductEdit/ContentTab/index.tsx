@@ -1051,6 +1051,7 @@ export const ContentTab = () => {
         <EvaporateUploaderProvider value={evaporateUploader}>
           <S3UploadConfigProvider value={s3UploadConfig}>
             <Layout
+              currentTab="content"
               headerActions={
                 product.variants.length > 0 ? (
                   <ComboBox<Variant>

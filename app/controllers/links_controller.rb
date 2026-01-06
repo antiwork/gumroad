@@ -329,34 +329,40 @@ class LinksController < ApplicationController
 
     @title = @product.name
 
-    render inertia: "Products/Edit/ProductTab", props: build_edit_props("product")
+    render inertia: "Products/Edit/Product", props: build_edit_props
   end
 
   def edit_content
     fetch_product_by_unique_permalink
-    authorize @product
+    authorize @product, :edit?
+
+    return redirect_to bundle_path(@product.external_id) if @product.is_bundle?
 
     @title = @product.name
 
-    render inertia: "Products/Edit/ContentTab", props: build_edit_props("content")
+    render inertia: "Products/Edit/Content", props: build_edit_props
   end
 
   def edit_share
     fetch_product_by_unique_permalink
-    authorize @product
+    authorize @product, :edit?
+
+    return redirect_to bundle_path(@product.external_id) if @product.is_bundle?
 
     @title = @product.name
 
-    render inertia: "Products/Edit/ShareTab", props: build_edit_props("share")
+    render inertia: "Products/Edit/Share", props: build_edit_props
   end
 
   def edit_receipt
     fetch_product_by_unique_permalink
-    authorize @product
+    authorize @product, :edit?
+
+    return redirect_to bundle_path(@product.external_id) if @product.is_bundle?
 
     @title = @product.name
 
-    render inertia: "Products/Edit/ReceiptTab", props: build_edit_props("receipt")
+    render inertia: "Products/Edit/Receipt", props: build_edit_props
   end
 
   def update
@@ -565,21 +571,9 @@ class LinksController < ApplicationController
   end
 
   private
-    def build_edit_props(current_tab)
+    def build_edit_props
       presenter = ProductPresenter.new(product: @product, pundit_user:)
-      {
-        **presenter.edit_props,
-        current_tab:,
-        routes: {
-          product: edit_link_path(@product),
-          content: edit_link_content_path(@product),
-          share: edit_link_share_path(@product),
-          receipt: edit_link_receipt_path(@product),
-          save: link_path(@product.unique_permalink),
-          publish: publish_link_path(@product.unique_permalink),
-          unpublish: unpublish_link_path(@product.unique_permalink),
-        }
-      }
+      presenter.edit_props
     end
 
     def fetch_product_for_show

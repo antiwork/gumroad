@@ -5,7 +5,7 @@ import { ContentTab as ContentTabContent } from "$app/components/ProductEdit/Con
 
 import { ProductEditProvider, EditPageProps } from "./_ProductEditProvider";
 
-export default function ContentTab() {
+export default function Content() {
   const props = usePage<EditPageProps>().props;
 
   return (

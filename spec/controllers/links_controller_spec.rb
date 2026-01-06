@@ -518,8 +518,7 @@ describe LinksController, :vcr, inertia: true do
       it "renders the correct Inertia component with props" do
         get :edit, params: { id: product.unique_permalink }
         expect(response).to be_successful
-        expect(inertia).to render_component("Products/Edit/ProductTab")
-        expect(inertia.props[:current_tab]).to eq("product")
+        expect(inertia).to render_component("Products/Edit/Product")
         expect(inertia.props[:id]).to eq(product.external_id)
       end
 
@@ -555,6 +554,66 @@ describe LinksController, :vcr, inertia: true do
         it "redirects to the bundle edit page" do
           sign_in bundle.user
           get :edit, params: { id: bundle.unique_permalink }
+          expect(response).to redirect_to(bundle_path(bundle.external_id))
+        end
+      end
+    end
+
+    describe "GET edit_content" do
+      let(:product) { create(:product, user: seller) }
+
+      it "renders the correct Inertia component" do
+        get :edit_content, params: { id: product.unique_permalink }
+        expect(response).to be_successful
+        expect(inertia).to render_component("Products/Edit/Content")
+      end
+
+      context "when the product is a bundle" do
+        let(:bundle) { create(:product, :bundle) }
+
+        it "redirects to the bundle edit page" do
+          sign_in bundle.user
+          get :edit_content, params: { id: bundle.unique_permalink }
+          expect(response).to redirect_to(bundle_path(bundle.external_id))
+        end
+      end
+    end
+
+    describe "GET edit_share" do
+      let(:product) { create(:product, user: seller) }
+
+      it "renders the correct Inertia component" do
+        get :edit_share, params: { id: product.unique_permalink }
+        expect(response).to be_successful
+        expect(inertia).to render_component("Products/Edit/Share")
+      end
+
+      context "when the product is a bundle" do
+        let(:bundle) { create(:product, :bundle) }
+
+        it "redirects to the bundle edit page" do
+          sign_in bundle.user
+          get :edit_share, params: { id: bundle.unique_permalink }
+          expect(response).to redirect_to(bundle_path(bundle.external_id))
+        end
+      end
+    end
+
+    describe "GET edit_receipt" do
+      let(:product) { create(:product, user: seller) }
+
+      it "renders the correct Inertia component" do
+        get :edit_receipt, params: { id: product.unique_permalink }
+        expect(response).to be_successful
+        expect(inertia).to render_component("Products/Edit/Receipt")
+      end
+
+      context "when the product is a bundle" do
+        let(:bundle) { create(:product, :bundle) }
+
+        it "redirects to the bundle edit page" do
+          sign_in bundle.user
+          get :edit_receipt, params: { id: bundle.unique_permalink }
           expect(response).to redirect_to(bundle_path(bundle.external_id))
         end
       end

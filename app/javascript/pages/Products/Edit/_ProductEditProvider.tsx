@@ -23,7 +23,6 @@ import {
   ExistingFileEntry,
   ShippingCountry,
   ContentUpdates,
-  EditRoutes,
 } from "$app/components/ProductEdit/state";
 import { ImageUploadSettingsContext } from "$app/components/RichTextEditor";
 import { showAlert } from "$app/components/server-components/Alert";
@@ -55,8 +54,6 @@ export type EditPageProps = {
   seller_refund_policy_enabled: boolean;
   seller_refund_policy: Pick<RefundPolicy, "title" | "fine_print">;
   cancellation_discounts_enabled: boolean;
-  current_tab: string;
-  routes: EditRoutes;
 };
 
 const createContextValue = (props: EditPageProps) => ({
@@ -93,8 +90,6 @@ const createContextValue = (props: EditPageProps) => ({
   contentUpdates: null,
   setContentUpdates: () => {},
   filesById: new Map(props.product.files.map((file) => [file.id, { ...file, url: getDownloadUrl(props.id, file) }])),
-  routes: props.routes,
-  currentTab: props.current_tab,
 });
 
 const pagesHaveSameContent = (pages1: Page[], pages2: Page[]): boolean => isEqual(pages1, pages2);
@@ -183,7 +178,7 @@ export const ProductEditProvider: React.FC<ProductEditProviderProps> = ({ childr
       contentUpdates,
       setContentUpdates,
     }),
-    [product, updateProduct, existingFiles, setExistingFiles, currencyType, saving, contentUpdates],
+    [product, updateProduct, existingFiles, setExistingFiles],
   );
 
   const imageSettings = React.useMemo(
