@@ -71,6 +71,7 @@ class ProductPresenter::ProductProps
       },
       discount_code: discount_code_props(discount_code, quantity),
       purchase: purchase_props(product.purchase_info_for_product_page(pundit_user&.user, request.cookie_jar[:_gumroad_guid])),
+      restartable_subscription: restartable_subscription_props(pundit_user&.user),
       wishlists: pundit_user&.seller.present? ? (
         pundit_user.seller.wishlists.alive.includes(:alive_wishlist_products).map { |wishlist| WishlistPresenter.new(wishlist:).listing_props(product:) }
       ) : [],
@@ -171,5 +172,19 @@ class ProductPresenter::ProductProps
       else
         nil
       end
+    end
+
+    def restartable_subscription_props(user)
+      return nil unless user.present?
+
+      subscription = product.restartable_subscription_for(user)
+      return nil unless subscription
+
+      {
+        id: subscription.external_id,
+        price: subscription.price,
+        recurrence: subscription.recurrence,
+        manage_url: manage_subscription_url(subscription.external_id, token: subscription.token, host: "#{PROTOCOL}://#{DOMAIN}"),
+      }
     end
 end
