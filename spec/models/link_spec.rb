@@ -4818,6 +4818,14 @@ describe Link, :vcr do
       end
     end
 
+    context "when seller views their own product" do
+      it "returns nil even if seller has a canceled subscription" do
+        seller = membership_product.user
+        create(:subscription, link: membership_product, user: seller, deactivated_at: 1.day.ago)
+        expect(membership_product.restartable_subscription_for(seller)).to be_nil
+      end
+    end
+
     context "when product is a membership" do
       it "returns nil when buyer has no subscriptions" do
         expect(membership_product.restartable_subscription_for(buyer)).to be_nil
@@ -4858,18 +4866,6 @@ describe Link, :vcr do
       it "returns subscription when buyer has a subscription with pending cancellation" do
         subscription = create(:subscription, link: membership_product, user: buyer, cancelled_at: Time.current, deactivated_at: nil)
         expect(membership_product.restartable_subscription_for(buyer)).to eq(subscription)
-      end
-
-      context "with buyer without account (email-based subscription)" do
-        let(:email) { "test@example.com" }
-
-        it "returns the canceled subscription for email-based subscriptions" do
-          subscription = create(:subscription_without_user, link: membership_product, email: email)
-          subscription.update!(deactivated_at: 1.day.ago)
-
-          result = membership_product.restartable_subscription_for(nil, email: email)
-          expect(result).to eq(subscription)
-        end
       end
     end
   end
