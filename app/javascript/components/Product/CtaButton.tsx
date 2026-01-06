@@ -102,6 +102,7 @@ export const CtaButton = React.forwardRef<HTMLAnchorElement, Props>(
 
     const [referrer, setReferrer] = React.useState("");
     const [showRestartModal, setShowRestartModal] = React.useState(false);
+    const checkoutUrlRef = React.useRef<string>("");
     useRunOnce(() => setReferrer(document.referrer));
 
     const handleResumeSubscription = () => {
@@ -112,7 +113,12 @@ export const CtaButton = React.forwardRef<HTMLAnchorElement, Props>(
 
     const handleStartNewSubscription = () => {
       setShowRestartModal(false);
-      // Continue with normal checkout flow
+      trackCtaClick({
+        sellerId: product.seller?.id,
+        name: product.name,
+        permalink: product.permalink,
+      });
+      window.open(checkoutUrlRef.current, "_top");
     };
 
     const { selectedOption, pppDiscounted, discountedPriceCents } = applySelection(
@@ -167,6 +173,7 @@ export const CtaButton = React.forwardRef<HTMLAnchorElement, Props>(
         // Check for restartable subscription before allowing checkout
         if (restartableSubscription && product.recurrences && !purchase) {
           evt.preventDefault();
+          checkoutUrlRef.current = evt.currentTarget.href;
           setShowRestartModal(true);
           return;
         }

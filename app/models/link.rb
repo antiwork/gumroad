@@ -1162,6 +1162,17 @@ class Link < ApplicationRecord
     support_email || user.support_or_form_email
   end
 
+  def restartable_subscription_for(requested_user)
+    return nil unless requested_user && is_recurring_billing?
+
+    subscriptions
+      .where(user: requested_user)
+      .not_is_test_subscription
+      .where.not(deactivated_at: nil)
+      .order(deactivated_at: :desc)
+      .find { |subscription| subscription.alive_or_restartable? }
+  end
+
   protected
     def downcase_filetype
       self.filetype = filetype.downcase if filetype.present?
@@ -1380,16 +1391,4 @@ class Link < ApplicationRecord
       Iffy::Product::IngestJob.perform_async(id)
     end
 
-  def restartable_subscription_for(requested_user)
-    return nil unless requested_user && is_recurring_billing?
-
-    subscriptions
-      .where(user: requested_user)
-      .where("subscriptions.flags & ? = 0", Subscription.flag_mapping["flags"][:is_test_subscription])
-      .where.not(deactivated_at: nil)
-      .where(ended_at: nil)
-      .where.not(cancelled_by_admin: true)
-      .order(deactivated_at: :desc)
-      .first
-  end
 end
