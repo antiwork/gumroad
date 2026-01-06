@@ -1,10 +1,14 @@
 #!/bin/bash
 set -euo pipefail
 
-# Check if SSL certificates exist FIRST
-if [ ! -f "docker/local-nginx/certs/gumroad_dev.crt" ] || [ ! -f "docker/local-nginx/certs/gumroad_dev.key" ]; then
-  echo "SSL certificates not found. Please generate them by running:"
-  echo "  bin/generate_ssl_certificates"
+# Check if mkcert CA exists on host (required for trusted SSL in Docker)
+MKCERT_CA_MACOS="$HOME/Library/Application Support/mkcert/rootCA.pem"
+MKCERT_CA_LINUX="$HOME/.local/share/mkcert/rootCA.pem"
+
+if [ ! -f "$MKCERT_CA_MACOS" ] && [ ! -f "$MKCERT_CA_LINUX" ]; then
+  echo "mkcert CA not found. Please install mkcert and run:"
+  echo "  brew install mkcert  # or equivalent for your OS"
+  echo "  mkcert -install"
   exit 1
 fi
 
