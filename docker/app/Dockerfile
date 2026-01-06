@@ -53,6 +53,11 @@ RUN apt-get update -y -qq \
     && corepack enable \
     && npm install -g npm@${NPM_VERSION} \
     \
+    # Install mkcert for SSL certificate generation
+    && export MKCERT_VERSION=1.4.4 \
+    && wget -qO /usr/local/bin/mkcert "https://github.com/FiloSottile/mkcert/releases/download/v${MKCERT_VERSION}/mkcert-v${MKCERT_VERSION}-linux-amd64" \
+    && chmod +x /usr/local/bin/mkcert \
+    \
     # Cleanup
     && apt-get clean autoclean \
     && apt-get autoremove -y \

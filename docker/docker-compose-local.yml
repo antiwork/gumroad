@@ -5,12 +5,14 @@ x-app-common: &app-common
     - bundle_path:/usr/local/bundle
     - node_modules:/workspace/node_modules
     - /workspace/bin/dist # Mask host's bin/dist - container downloads its own platform-specific binary
-    - ~/.local/share/mkcert:/root/.local/share/mkcert:ro # Mount mkcert CA for SSL trust (Linux)
-    - ~/Library/Application Support/mkcert:/root/mkcert-macos:ro # Mount mkcert CA for SSL trust (macOS)
+    - ssl_certs:/shared-ssl-certs
+    - ~/.local/share/mkcert:/mkcert-ca-linux:ro # Mount host's mkcert CA (Linux)
+    - ~/Library/Application Support/mkcert:/mkcert-ca-macos:ro # Mount host's mkcert CA (macOS)
   env_file:
     - ../.env
   # Override only Docker networking values - everything else comes from .env
   environment: &app-env
+    RAILS_ENV: development
     DATABASE_HOST: db
     REDIS_HOST: redis:6379/0
     SIDEKIQ_REDIS_HOST: redis:6379/1
@@ -27,8 +29,6 @@ services:
     image: mysql:8.0.32
     volumes:
       - mysql_data:/var/lib/mysql
-    ports:
-      - "3306:3306"
     environment:
       - MYSQL_ROOT_PASSWORD=password
     command:
@@ -40,15 +40,11 @@ services:
   redis:
     image: redis:7.0.7
     command: ["redis-server", "--appendonly", "yes"]
-    ports:
-      - "6379:6379"
     volumes:
       - redis_data:/data
 
   mongo:
     image: mongo:3.6.16
-    ports:
-      - "27017:27017"
     volumes:
       - mongo_data:/data/db
     command: "mongod --smallfiles"
@@ -141,51 +137,12 @@ services:
       sh -c "
         echo '=== Docker Init ===' &&
 
-        mkdir -p tmp/pids &&
-
-        if [ ! -f tmp/combined_ca_certs.pem ]; then
-          echo 'Creating SSL cert file...' &&
-          default_cert='/etc/ssl/certs/ca-certificates.crt' &&
-          if [ ! -f \"$$default_cert\" ]; then
-            default_cert=$$(ruby -ropenssl -e 'puts OpenSSL::X509::DEFAULT_CERT_FILE')
-          fi &&
-          mkcert_ca='' &&
-          if [ -f '/root/.local/share/mkcert/rootCA.pem' ]; then
-            mkcert_ca='/root/.local/share/mkcert/rootCA.pem' &&
-            echo 'Found mkcert CA at Linux path'
-          elif [ -f '/root/mkcert-macos/rootCA.pem' ]; then
-            mkcert_ca='/root/mkcert-macos/rootCA.pem' &&
-            echo 'Found mkcert CA at macOS path'
-          fi &&
-          if [ -f \"$$default_cert\" ] && [ -n \"$$mkcert_ca\" ]; then
-            cat \"$$default_cert\" \"$$mkcert_ca\" > tmp/combined_ca_certs.pem &&
-            cp \"$$mkcert_ca\" tmp/mkcert_ca.pem &&
-            echo 'SSL cert files created'
-          else
-            echo 'ERROR: Could not create SSL cert file.' &&
-            echo 'Make sure mkcert is installed and run: mkcert -install' &&
-            echo 'Expected mkcert CA at ~/.local/share/mkcert (Linux) or ~/Library/Application Support/mkcert (macOS)' &&
-            exit 1
-          fi
-        else
-          echo 'SSL cert file already exists'
-        fi &&
-
-        if [ ! -f tmp/.docker_initialized ]; then
-          echo 'First run - waiting for database...' &&
-          until bin/rails runner \"ActiveRecord::Base.connection.execute('SELECT 1')\" 2>/dev/null; do
-            echo 'Waiting for database...' &&
-            sleep 2
-          done &&
-          echo 'Running db:prepare...' &&
-          bin/rails db:prepare &&
-          echo 'Reindexing Elasticsearch...' &&
-          bin/rails runner 'DevTools.delete_all_indices_and_reindex_all' || echo 'Warning: reindex failed' &&
-          touch tmp/.docker_initialized &&
-          echo 'First-time setup complete!'
-        else
-          echo 'Already initialized, skipping setup'
-        fi &&
+        echo 'Waiting for database...' &&
+        echo 'Running db:prepare...' &&
+        bin/rails db:prepare &&
+        echo 'Reindexing Elasticsearch...' &&
+        bin/rails runner 'DevTools.delete_all_indices_and_reindex_all' || echo 'Warning: reindex failed' &&
+        echo 'First-time setup complete!' &&
 
         echo '=== Init Complete ==='
       "
@@ -264,6 +221,7 @@ services:
     ports:
       - "8080:8080"
     environment:
+      <<: *app-env
       ANYCABLE_HOST: 0.0.0.0
       ANYCABLE_PORT: 8080
       ANYCABLE_RPC_HOST: anycable_rpc:50051
@@ -284,7 +242,7 @@ services:
     volumes:
       - ./local-nginx/gumroad_dev.conf:/etc/nginx/conf.d/default.conf:Z
       - ./local-nginx/helperai_dev.conf:/etc/nginx/conf.d/helperai_dev.conf:Z
-      - ./local-nginx/certs:/etc/ssl/certs/:Z
+      - ssl_certs:/etc/ssl/certs:ro
     ports:
       - 80:80
       - 8081:8081
@@ -294,6 +252,8 @@ services:
     labels:
       com.antiwork.helper.proxy: "true"
     depends_on:
+      init:
+        condition: service_completed_successfully
       web:
         condition: service_started
       anycable_ws:
@@ -307,3 +267,4 @@ volumes:
   minio_data:
   bundle_path:
   node_modules:
+  ssl_certs:
