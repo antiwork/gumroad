@@ -66,7 +66,7 @@ class Exports::PurchaseExportService
     tempfile = Tempfile.new(["Sales", ".csv"], "tmp", encoding: "UTF-8")
     totals = Hash.new(0)
 
-    CSV.open(tempfile, "wb") do |csv|
+    CsvSafe.open(tempfile, "wb") do |csv|
       csv << fields
       purchases_data_enumerator.each do |(purchase_fields_data, custom_fields_data)|
         row = Array.new(fields.size)

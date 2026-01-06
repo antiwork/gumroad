@@ -12,7 +12,7 @@ describe SendPaypalTopupNotificationJob do
       allow(PaypalPayoutProcessor).to receive(:current_paypal_balance_cents).and_return(125_000_00)
     end
 
-    it "sends a notification to slack with the required topup amount" do
+    it "sends a notification to slack with the required topup amount and sets redis key to true" do
       allow(PaypalPayoutProcessor).to receive(:topup_amount_in_transit).and_return(0)
 
       notification_msg = "PayPal balance needs to be $367,425.18 by Friday to payout all creators.\n"\
@@ -22,6 +22,7 @@ describe SendPaypalTopupNotificationJob do
       described_class.new.perform
 
       expect(SlackMessageWorker).to have_enqueued_sidekiq_job("payments", "PayPal Top-up", notification_msg, "red")
+      expect($redis.get(RedisKey.paypal_topup_needed)).to eq("true")
     end
 
     it "includes details of payout amount in transit in the slack notification" do
@@ -37,7 +38,7 @@ describe SendPaypalTopupNotificationJob do
       expect(SlackMessageWorker).to have_enqueued_sidekiq_job("payments", "PayPal Top-up", notification_msg, "red")
     end
 
-    it "sends no more topup required green notification if there's sufficient amount in PayPal" do
+    it "sends no more topup required green notification and sets redis key to false if there's sufficient amount in PayPal" do
       allow(PaypalPayoutProcessor).to receive(:topup_amount_in_transit).and_return(300_000)
 
       notification_msg = "PayPal balance needs to be $367,425.18 by Friday to payout all creators.\n"\
@@ -48,6 +49,7 @@ describe SendPaypalTopupNotificationJob do
       described_class.new.perform
 
       expect(SlackMessageWorker).to have_enqueued_sidekiq_job("payments", "PayPal Top-up", notification_msg, "green")
+      expect($redis.get(RedisKey.paypal_topup_needed)).to eq("false")
     end
 
     context "when notify_only_if_topup_needed is true" do
@@ -63,12 +65,13 @@ describe SendPaypalTopupNotificationJob do
         expect(SlackMessageWorker).to have_enqueued_sidekiq_job("payments", "PayPal Top-up", notification_msg, "red")
       end
 
-      it "does not send notification when topup is not needed" do
+      it "does not send notification when topup is not needed and sets redis key to false" do
         allow(PaypalPayoutProcessor).to receive(:topup_amount_in_transit).and_return(300_000)
 
         described_class.new.perform(true)
 
-        expect(SlackMessageWorker).not_to have_enqueued_sidekiq_job
+        expect(SlackMessageWorker.jobs.size).to eq(0)
+        expect($redis.get(RedisKey.paypal_topup_needed)).to eq("false")
       end
     end
   end
