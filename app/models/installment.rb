@@ -130,7 +130,9 @@ class Installment < ApplicationRecord
   }
 
   scope :missed_for_purchase, -> (purchase) {
-    product_installment_ids = purchase.link.installments.where(seller_id: purchase.seller_id).alive.published.pluck(:id)
+    product_installment_ids = purchase.link.installments.where(seller_id: purchase.seller_id).alive.published.filter_map do |post|
+      post.id if post.purchase_passes_filters(purchase)
+    end
     seller_installment_ids = purchase.seller.installments.alive.published.filter_map do |post|
       post.id if post.purchase_passes_filters(purchase)
     end
