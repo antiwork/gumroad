@@ -25,19 +25,16 @@ import AdminUserGuids from "$app/components/server-components/Admin/UserGuids";
 import AdminUserStats from "$app/components/server-components/Admin/UserStats";
 import AffiliateRequestPage from "$app/components/server-components/AffiliateRequestPage";
 import Alert from "$app/components/server-components/Alert";
-import AudiencePage from "$app/components/server-components/AudiencePage";
 import BundleEditPage from "$app/components/server-components/BundleEditPage";
 import CheckoutPage from "$app/components/server-components/CheckoutPage";
 import CommunitiesPage from "$app/components/server-components/CommunitiesPage";
 import CustomersDownloadPopover from "$app/components/server-components/CustomersPage/DownloadPopover";
 import CustomersFilterPopover from "$app/components/server-components/CustomersPage/FilterPopover";
-import DeveloperWidgetsPage from "$app/components/server-components/Developer/WidgetsPage";
 import Discover from "$app/components/server-components/Discover";
 import DiscoverProductPage from "$app/components/server-components/Discover/ProductPage";
 import DiscoverWishlistPage from "$app/components/server-components/Discover/WishlistPage";
 import DownloadPageWithContent from "$app/components/server-components/DownloadPage/WithContent";
 import DownloadPageWithoutContent from "$app/components/server-components/DownloadPage/WithoutContent";
-import EmailsPage from "$app/components/server-components/EmailsPage";
 import GenerateInvoiceConfirmationPage from "$app/components/server-components/GenerateInvoiceConfirmationPage";
 import GenerateInvoicePage from "$app/components/server-components/GenerateInvoicePage";
 import GumroadBlogIndexPage from "$app/components/server-components/GumroadBlog/IndexPage";
@@ -68,7 +65,6 @@ import SubscriptionManagerMagicLink from "$app/components/server-components/Subs
 import SupportHeader from "$app/components/server-components/support/Header";
 import TaxesCollectionModal from "$app/components/server-components/TaxesCollectionModal";
 import TwoFactorAuthenticationPage from "$app/components/server-components/TwoFactorAuthenticationPage";
-import UtmLinksPage from "$app/components/server-components/UtmLinksPage";
 import VideoStreamPlayer from "$app/components/server-components/VideoStreamPlayer";
 import WishlistPage from "$app/components/server-components/WishlistPage";
 import CodeSnippet from "$app/components/ui/CodeSnippet";
@@ -100,21 +96,18 @@ ReactOnRails.register({
   AdminAddCreditForm,
   HelpCenterArticlesIndexPage,
   SupportHeader,
-  AudiencePage,
   BundleEditPage,
   CheckoutPage,
   CodeSnippet,
   CommunitiesPage,
   CustomersDownloadPopover,
   CustomersFilterPopover,
-  DeveloperWidgetsPage,
   Discover,
   DiscoverProductPage,
   DiscoverWishlistPage,
   DisputeEvidencePage,
   DownloadPageWithContent,
   DownloadPageWithoutContent,
-  EmailsPage,
   GenerateInvoiceConfirmationPage,
   GenerateInvoicePage,
   GumroadBlogIndexPage,
@@ -145,5 +138,4 @@ ReactOnRails.register({
   TwoFactorAuthenticationPage,
   VideoStreamPlayer,
   WishlistPage,
-  UtmLinksPage,
 });

@@ -14,7 +14,7 @@ import { NumberInput } from "$app/components/NumberInput";
 import { showAlert } from "$app/components/server-components/Alert";
 import { ToggleSettingRow } from "$app/components/SettingRow";
 import { PageHeader } from "$app/components/ui/PageHeader";
-import Placeholder from "$app/components/ui/Placeholder";
+import { Placeholder, PlaceholderImage } from "$app/components/ui/Placeholder";
 import { Table, TableBody, TableCaption, TableCell, TableHead, TableHeader, TableRow } from "$app/components/ui/Table";
 import { Tabs, Tab } from "$app/components/ui/Tabs";
 import { WithTooltip } from "$app/components/WithTooltip";
@@ -125,9 +125,7 @@ export default function AffiliatesOnboarding() {
       {data.products.length === 0 ? (
         <section className="p-4! md:p-8!">
           <Placeholder>
-            <figure>
-              <img src={placeholderImage} />
-            </figure>
+            <PlaceholderImage src={placeholderImage} />
             <h2>Almost there!</h2>
             You need a published product to add affiliates.
             <NavigationButtonInertia

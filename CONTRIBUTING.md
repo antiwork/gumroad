@@ -12,6 +12,8 @@ Generally: Include an AI disclosure, self-review (comment) on your code, break u
 - Keep tests independent and isolated
 - For API endpoints, test response status, format, and content
 - Use factories for test data instead of creating objects directly
+- Tests must fail when the fix is reverted. If the test passes without the application code change, it is invalid.
+- Scope VCR cassettes to specific test files. Sharing cassettes across tests causes collisions where tests read incorrect cached responses.
 
 ## Pull Request
 
@@ -19,15 +21,18 @@ Generally: Include an AI disclosure, self-review (comment) on your code, break u
 2. Add or update tests for your changes
 3. Provide before & after screenshots/videos for UI changes
 4. Include screenshots of your test suite passing locally
-5. Use native-sounding English in all communication with no excessive capitalization (e.g HOW IS THIS GOING), multiple question marks (how's this going???), grammatical errors (how's dis going), or typos (thnx fr update).
+5. Don't comment on the parent issue when opening a PR; instead, link to the issue in your PR description.
+6. Use native-sounding English in all communication with no excessive capitalization (e.g HOW IS THIS GOING), multiple question marks (how's this going???), grammatical errors (how's dis going), or typos (thnx fr update).
    - ❌ Before: "is this still open ?? I am happy to work on it ??"
    - ✅ After: "Is this actively being worked on? I've started work on it here…"
-6. Make sure all tests pass
-7. Request a review from maintainers
-8. After reviews begin, avoid force-pushing to your branch
-   - Force-pushing rewrites history and makes review threads hard to follow
-   - Don't worry about messy commits - we squash everything when merging to main
-9. The PR will be merged once you have the sign-off of at least one other developer
+7. Explain the reasoning behind your change, not just the change itself. Describe the architectural decision or the specific problem being solved.
+8. For bug fixes, identify the root cause. Don't apply a fix without explaining how the invalid state occurred.
+9. Make sure all tests pass
+10. Request a review from maintainers
+11. After reviews begin, avoid force-pushing to your branch
+    - Force-pushing rewrites history and makes review threads hard to follow
+    - Don't worry about messy commits - we squash everything when merging to main
+12. The PR will be merged once you have the sign-off of at least one other developer
 
 ## Style Guide
 
@@ -44,6 +49,9 @@ Generally: Include an AI disclosure, self-review (comment) on your code, break u
 - Don't leave comments in the code
 - No explanatory comments please
 - Don't apologize for errors, fix them
+- Business logic (pricing, calculations, discount application) belongs in Rails, not the frontend. The frontend renders state provided by the backend. Enforce all constraints on the server.
+- Assign raw numbers to named constants (e.g., `MAX_CHARACTER_LIMIT` instead of `500`) to clarify their purpose.
+- Avoid abstracting code into shared components if the duplication is coincidental. If two interfaces look similar but serve different purposes (e.g., Checkout vs. Settings), keep them separate to allow independent evolution.
 
 ### Sidekiq Job Guidelines
 
@@ -54,6 +62,9 @@ Generally: Include an AI disclosure, self-review (comment) on your code, break u
 
 ### Code Patterns and Conventions
 
+- When creating financial records (receipts, sales), copy the specific values (amount, currency, percentage) at the time of purchase instead of referencing mutable data like a `DiscountCode` ID. This ensures historical records remain accurate if the original object is edited or deleted.
+- Do not use database-level foreign key constraints (`add_foreign_key`). Avoiding hard constraints simplifies data migration and sharding operations at scale.
+- Do not use dynamic string interpolation for Tailwind class names (e.g., `` `text-${color}` ``). Tailwind scanners cannot detect these during build. Use full class names or a lookup map.
 - Prefer re-using deprecated boolean flags (https://github.com/pboling/flag_shih_tzu) instead of creating new ones. Deprecated flags are named `DEPRECATED_<something>`. To re-use this flag you'll first need to reset the values for it on staging and production and then rename the flag to the new name. You can reset the flag like this:
   ```ruby
   # flag to reset - `Link.DEPRECATED_stream_only`

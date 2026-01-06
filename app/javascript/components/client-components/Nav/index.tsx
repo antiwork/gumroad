@@ -123,7 +123,7 @@ export const Nav = (props: Props) => {
           href={Routes.checkout_discounts_url(routeParams)}
           additionalPatterns={[Routes.checkout_form_url(routeParams), Routes.checkout_upsells_url(routeParams)]}
         />
-        <NavLink
+        <ClientNavLink
           text="Emails"
           icon="envelope-fill"
           href={Routes.emails_url(routeParams)}
@@ -135,7 +135,7 @@ export const Nav = (props: Props) => {
           text="Analytics"
           icon="bar-chart-fill"
           href={Routes.sales_dashboard_url(routeParams)}
-          additionalPatterns={[Routes.audience_dashboard_url(routeParams), Routes.utm_links_dashboard_url(routeParams)]}
+          additionalPatterns={[Routes.audience_dashboard_url(routeParams), Routes.dashboard_utm_links_url(routeParams)]}
         />
         {loggedInUser?.policies.balance.index ? (
           <ClientNavLink text="Payouts" icon="bank" href={Routes.balance_url(routeParams)} />
