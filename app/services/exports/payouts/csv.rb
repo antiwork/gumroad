@@ -11,7 +11,7 @@ class Exports::Payouts::Csv < Exports::Payouts::Base
 
   def perform
     data = payout_data
-    CSV.generate do |csv|
+    CsvSafe.generate do |csv|
       csv << HEADERS
       data.each do |row|
         csv << row

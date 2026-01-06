@@ -10,7 +10,7 @@ class Exports::TaxSummary::Annual
   def perform
     tempfile = Tempfile.new(File.join(Rails.root, "tmp", tempfile_name),
                             encoding: "UTF-8")
-    CSV.open(tempfile, "wb") do |csv|
+    CsvSafe.open(tempfile, "wb") do |csv|
       headers_added = false
       User.alive.find_each(start: @start, finish: @finish) do |user|
         if user.eligible_for_1099?(@year)

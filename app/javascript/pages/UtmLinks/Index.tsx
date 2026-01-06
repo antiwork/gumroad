@@ -1,42 +1,40 @@
+import { Link, router, usePage } from "@inertiajs/react";
 import * as React from "react";
-import { Link, useLoaderData, useNavigate, useNavigation, useRevalidator, useSearchParams } from "react-router-dom";
-import { cast } from "ts-safe-cast";
 
-import {
-  deleteUtmLink,
-  SortKey,
-  SavedUtmLink,
-  UtmLinkStats,
-  getUtmLinksStats,
-  UtmLinksStats,
-} from "$app/data/utm_links";
-import { asyncVoid } from "$app/utils/promise";
-import { assertResponseError } from "$app/utils/request";
+import { SavedUtmLink, SortKey, UtmLinkStats, UtmLinksStats } from "$app/types/utm_link";
+import { classNames } from "$app/utils/classNames";
 
 import { AnalyticsLayout } from "$app/components/Analytics/AnalyticsLayout";
-import { Button, NavigationButton } from "$app/components/Button";
+import { Button } from "$app/components/Button";
 import { CopyToClipboard } from "$app/components/CopyToClipboard";
 import { Icon } from "$app/components/Icons";
 import { LoadingSpinner } from "$app/components/LoadingSpinner";
 import { Modal } from "$app/components/Modal";
+import { NavigationButtonInertia } from "$app/components/NavigationButton";
 import { Pagination, PaginationProps } from "$app/components/Pagination";
 import { Popover } from "$app/components/Popover";
 import { showAlert } from "$app/components/server-components/Alert";
-import { extractSortParam } from "$app/components/server-components/UtmLinksPage";
 import { Skeleton } from "$app/components/Skeleton";
 import { Placeholder, PlaceholderImage } from "$app/components/ui/Placeholder";
 import { Sheet, SheetHeader } from "$app/components/ui/Sheet";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "$app/components/ui/Table";
 import { useDebouncedCallback } from "$app/components/useDebouncedCallback";
 import { useUserAgentInfo } from "$app/components/UserAgent";
+import useRouteLoading from "$app/components/useRouteLoading";
 import { Sort, useSortingTableDriver } from "$app/components/useSortingTableDriver";
 import { WithTooltip } from "$app/components/WithTooltip";
 
 import noLinksYetPlaceholder from "$assets/images/placeholders/utm_links_empty.png";
 import noLinksFoundPlaceholder from "$assets/images/placeholders/utm_links_not_found.png";
 
-const duplicateLinkPath = (link: SavedUtmLink) => `/dashboard/utm_links/new?copy_from=${link.id}`;
-const editLinkPath = (link: SavedUtmLink) => `/dashboard/utm_links/${link.id}/edit`;
+type UtmLinksIndexProps = {
+  utm_links: SavedUtmLink[];
+  pagination: PaginationProps;
+  query: string | null;
+  sort: Sort<SortKey> | null;
+  utm_links_stats: UtmLinksStats;
+};
+
 const truncateText = (text: string, maxLength: number) => {
   const truncated = text.length > maxLength ? `${text.slice(0, maxLength)}...` : text;
   return {
@@ -57,87 +55,104 @@ const utmLinkWithStats = (utmLink: SavedUtmLink, stats?: UtmLinkStats) => {
   return link;
 };
 
-const UtmLinkList = () => {
-  const navigation = useNavigation();
-  const navigate = useNavigate();
-  const revalidator = useRevalidator();
-  const { utm_links: utmLinks, pagination } = cast<{ utm_links: SavedUtmLink[]; pagination: PaginationProps }>(
-    useLoaderData(),
-  );
-  const [utmLinksStats, setUtmLinksStats] = React.useState<UtmLinksStats>({});
+export const extractSortParam = (searchParams: URLSearchParams): Sort<SortKey> | null => {
+  const column = searchParams.get("key");
+  switch (column) {
+    case "link":
+    case "date":
+    case "source":
+    case "medium":
+    case "campaign":
+    case "clicks":
+    case "sales_count":
+    case "revenue_cents":
+    case "conversion_rate":
+      return {
+        key: column,
+        direction: searchParams.get("direction") === "desc" ? "desc" : "asc",
+      };
+    default:
+      return null;
+  }
+};
+
+export default function UtmLinksIndex() {
+  const {
+    utm_links: utmLinks,
+    pagination,
+    query: initialQuery,
+    sort: initialSort,
+    utm_links_stats: utmLinksStats,
+  } = usePage<UtmLinksIndexProps>().props;
+  const isNavigating = useRouteLoading();
+
   const utmLinksWithStats = utmLinks.map((utmLink) => utmLinkWithStats(utmLink, utmLinksStats[utmLink.id]));
   const [selectedUtmLink, setSelectedUtmLink] = React.useState<SavedUtmLink | null>(null);
-  const [searchParams, setSearchParams] = useSearchParams();
-  const [sort, setSort] = React.useState<Sort<SortKey> | null>(
-    () => extractSortParam(searchParams) || { key: "date", direction: "desc" },
-  );
+  const [sort, setSort] = React.useState<Sort<SortKey> | null>(() => initialSort || { key: "date", direction: "desc" });
   const [deletingUtmLink, setDeletingUtmLink] = React.useState<{
     id: string;
     title: string;
     state: "delete-confirmation" | "deleting";
   } | null>(null);
 
-  const activeStatsRequest = React.useRef<{ cancel: () => void } | null>(null);
-  const debouncedGetUtmLinksStats = useDebouncedCallback((ids: string[]) => {
-    activeStatsRequest.current?.cancel();
-    asyncVoid(async () => {
-      const request = getUtmLinksStats({ ids });
-      activeStatsRequest.current = request;
-      const stats = await request.response;
-      setUtmLinksStats((prev) => ({ ...prev, ...stats }));
-    })();
+  const fetchUtmLinksStats = useDebouncedCallback((ids: string[]) => {
+    router.reload({
+      data: { ids },
+      only: ["utm_links_stats"],
+      preserveUrl: true,
+    });
   }, 500);
+
   React.useEffect(() => {
     if (utmLinks.length === 0) return;
-    const sortKey = extractSortParam(searchParams)?.key;
+    const sortKey = sort?.key;
     if (sortKey === "sales_count" || sortKey === "revenue_cents" || sortKey === "conversion_rate") return;
     const ids = utmLinks.flatMap((link) =>
       utmLinkWithStats(link, utmLinksStats[link.id]).sales_count === null ? [link.id] : [],
     );
     if (ids.length === 0) return;
 
-    debouncedGetUtmLinksStats(ids);
-  }, [utmLinks, searchParams]);
+    fetchUtmLinksStats(ids);
+  }, [utmLinks, sort]);
+
+  const query = initialQuery ?? "";
 
   const onChangePage = (newPage: number) => {
-    setSearchParams((prevState) => {
-      const params = new URLSearchParams(prevState);
-      params.set("page", newPage.toString());
-      return params;
-    });
+    router.reload({ data: { page: newPage } });
   };
 
   const onSetSort = (newSort: Sort<SortKey> | null) => {
-    setSearchParams((prevState) => {
-      const params = new URLSearchParams(prevState);
-      if (pagination.pages >= 1) params.delete("page");
-      if (newSort) {
-        params.set("key", newSort.key);
-        params.set("direction", newSort.direction);
-      }
-      return params;
-    });
     setSort(newSort);
+    router.reload({
+      data: {
+        key: newSort?.key,
+        direction: newSort?.direction,
+        page: undefined,
+      },
+      only: ["utm_links", "pagination", "sort"],
+    });
   };
 
   const thProps = useSortingTableDriver<SortKey>(sort, onSetSort);
 
-  const query = searchParams.get("query") ?? "";
-
   const onSearch = useDebouncedCallback((newQuery: string) => {
     if (query === newQuery) return;
 
-    setSearchParams((prevState) => {
-      const params = new URLSearchParams(prevState);
-      if (newQuery.length > 0) {
-        params.set("query", newQuery);
-      } else {
-        params.delete("query");
-      }
-      params.delete("page");
-      return params;
+    router.reload({
+      data: { query: newQuery.length > 0 ? newQuery : undefined, page: undefined },
+      only: ["utm_links", "pagination", "query"],
     });
   }, 500);
+
+  const handleDelete = (id: string) => {
+    router.delete(Routes.dashboard_utm_link_path(id), {
+      preserveScroll: true,
+      onStart: () => setDeletingUtmLink((prev) => prev && { ...prev, state: "deleting" }),
+      onSuccess: () => setSelectedUtmLink(null),
+      onError: () => showAlert("Failed to delete link. Please try again.", "error"),
+      onFinish: () => setDeletingUtmLink(null),
+    });
+  };
 
   return (
     <AnalyticsLayout
@@ -145,19 +160,19 @@ const UtmLinkList = () => {
       actions={
         <>
           <SearchBoxPopover initialQuery={query} onSearch={onSearch} />
-          <Link to="/dashboard/utm_links/new" className="button accent">
+          <NavigationButtonInertia href={Routes.new_dashboard_utm_link_path()} color="accent">
             Create link
-          </Link>
+          </NavigationButtonInertia>
         </>
       }
     >
-      {navigation.state === "loading" && utmLinks.length === 0 ? (
+      {isNavigating && utmLinks.length === 0 ? (
         <div style={{ justifySelf: "center" }}>
           <LoadingSpinner className="size-20" />
         </div>
       ) : utmLinks.length > 0 ? (
         <section className="p-4 md:p-8">
-          <Table>
+          <Table aria-live="polite" className={classNames(isNavigating && "pointer-events-none opacity-50")}>
             <TableHeader>
               <TableRow>
                 <TableHead {...thProps("link")} style={{ width: "30%" }}>
@@ -216,28 +231,12 @@ const UtmLinkList = () => {
                     )}
                   </TableCell>
                   <TableCell>
-                    <UtmLinkActions link={link}>
-                      <div role="menu">
-                        <div role="menuitem" onClick={() => navigate(editLinkPath(link))}>
-                          <Icon name="pencil" />
-                          &ensp;Edit
-                        </div>
-                        <div role="menuitem" onClick={() => navigate(duplicateLinkPath(link))}>
-                          <Icon name="outline-duplicate" />
-                          &ensp;Duplicate
-                        </div>
-                        <div
-                          className="danger"
-                          role="menuitem"
-                          onClick={() =>
-                            setDeletingUtmLink({ id: link.id, title: link.title, state: "delete-confirmation" })
-                          }
-                        >
-                          <Icon name="trash2" />
-                          &ensp;Delete
-                        </div>
-                      </div>
-                    </UtmLinkActions>
+                    <UtmLinkActions
+                      link={link}
+                      onDelete={() =>
+                        setDeletingUtmLink({ id: link.id, title: link.title, state: "delete-confirmation" })
+                      }
+                    />
                   </TableCell>
                 </TableRow>
               ))}
@@ -273,23 +272,7 @@ const UtmLinkList = () => {
                       Deleting...
                     </Button>
                   ) : (
-                    <Button
-                      color="danger"
-                      onClick={asyncVoid(async () => {
-                        try {
-                          setDeletingUtmLink({ ...deletingUtmLink, state: "deleting" });
-                          await deleteUtmLink(deletingUtmLink.id);
-                          revalidator.revalidate();
-                          showAlert("Link deleted!", "success");
-                        } catch (e) {
-                          assertResponseError(e);
-                          showAlert("Failed to delete link. Please try again.", "error");
-                        } finally {
-                          setDeletingUtmLink(null);
-                          setSelectedUtmLink(null);
-                        }
-                      })}
-                    >
+                    <Button color="danger" onClick={() => handleDelete(deletingUtmLink.id)}>
                       Delete
                     </Button>
                   )}
@@ -322,14 +305,14 @@ const UtmLinkList = () => {
       )}
     </AnalyticsLayout>
   );
-};
+}
 
 const TruncatedTextWithTooltip = ({ text, maxLength }: { text: string; maxLength: number }) => {
   const { truncated, original, isTruncated } = truncateText(text, maxLength);
   return <WithTooltip tip={isTruncated ? original : null}>{truncated}</WithTooltip>;
 };
 
-const UtmLinkActions = ({ link, children }: { link: SavedUtmLink; children: React.ReactNode }) => {
+const UtmLinkActions = ({ link, onDelete }: { link: SavedUtmLink; onDelete: () => void }) => {
   const [open, setOpen] = React.useState(false);
 
   return (
@@ -350,7 +333,24 @@ const UtmLinkActions = ({ link, children }: { link: SavedUtmLink; children: Reac
           </Button>
         }
       >
-        {children}
+        <div role="menu">
+          <Link href={Routes.edit_dashboard_utm_link_path(link.id)} role="menuitem" className="no-underline">
+            <Icon name="pencil" />
+            &ensp;Edit
+          </Link>
+          <Link
+            href={Routes.new_dashboard_utm_link_path({ copy_from: link.id })}
+            role="menuitem"
+            className="no-underline"
+          >
+            <Icon name="outline-duplicate" />
+            &ensp;Duplicate
+          </Link>
+          <div className="danger" role="menuitem" onClick={onDelete}>
+            <Icon name="trash2" />
+            &ensp;Delete
+          </div>
+        </div>
       </Popover>
     </div>
   );
@@ -406,6 +406,7 @@ const UtmLinkDetails = ({
   onDelete: () => void;
 }) => {
   const userAgentInfo = useUserAgentInfo();
+  const isNavigating = useRouteLoading();
 
   return (
     <Sheet open onOpenChange={onClose}>
@@ -515,11 +516,12 @@ const UtmLinkDetails = ({
         </div>
       </section>
       <div style={{ display: "grid", gridAutoFlow: "column", gap: "var(--spacer-4)" }}>
-        <Link to={duplicateLinkPath(utmLink)} className="button">
-          {" "}
+        <Link href={Routes.new_dashboard_utm_link_path({ copy_from: utmLink.id })} className="button">
           Duplicate
         </Link>
-        <NavigationButton href={editLinkPath(utmLink)}> Edit</NavigationButton>
+        <NavigationButtonInertia href={Routes.edit_dashboard_utm_link_path(utmLink.id)} disabled={isNavigating}>
+          Edit
+        </NavigationButtonInertia>
         <Button color="danger" onClick={onDelete}>
           Delete
         </Button>
@@ -527,4 +529,3 @@ const UtmLinkDetails = ({
     </Sheet>
   );
 };
-export default UtmLinkList;
