@@ -139,7 +139,7 @@ export const Nav = (props: Props) => {
           href={Routes.sales_dashboard_url(routeParams)}
           additionalPatterns={[
             Routes.audience_dashboard_url(routeParams),
-            Routes.utm_links_dashboard_url(routeParams),
+            Routes.dashboard_utm_links_url(routeParams),
             Routes.churn_dashboard_url(routeParams),
           ]}
         />

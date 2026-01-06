@@ -178,7 +178,7 @@ class Api::Internal::Helper::PurchasesController < Api::Internal::Helper::BaseCo
 
   SEARCH_PURCHASE_OPENAPI = {
     summary: "Search purchase",
-    description: "Search purchase by email, seller, license key, or card details. At least one of the parameters is required.",
+    description: "Search purchase by query (order ID, email, IP, or card fingerprint), seller, license key, or card details. At least one parameter is required.",
     requestBody: {
       required: true,
       content: {
@@ -186,6 +186,7 @@ class Api::Internal::Helper::PurchasesController < Api::Internal::Helper::BaseCo
           schema: {
             type: "object",
             properties: {
+              query: { type: "string", description: "Search by order ID, card fingerprint, or IP address" },
               email: { type: "string", description: "Email address of the customer/buyer" },
               creator_email: { type: "string", description: "Email address of the creator/seller" },
               license_key: { type: "string", description: "Product license key (4 groups of alphanumeric characters separated by dashes)" },
@@ -259,7 +260,8 @@ class Api::Internal::Helper::PurchasesController < Api::Internal::Helper::BaseCo
   }.freeze
   def search
     search_params = {
-      query: params[:email],
+      query: params[:query],
+      email: params[:email],
       creator_email: params[:creator_email],
       license_key: params[:license_key],
       transaction_date: params[:purchase_date],

@@ -413,8 +413,7 @@ class PurchasesController < ApplicationController
     if tempfile
       send_file tempfile.path
     else
-      flash[:warning] = "You will receive an email in your inbox with the data you've requested shortly."
-      redirect_to customers_path, status: :see_other
+      redirect_to customers_path, notice: "You will receive an email in your inbox with the data you've requested shortly.", status: :see_other
     end
   end
 

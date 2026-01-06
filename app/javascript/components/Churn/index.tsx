@@ -9,7 +9,7 @@ import { ChurnChart, type DataPoint as ChurnChartDataPoint } from "$app/componen
 import ChurnQuickStats, { type ChurnSummary } from "$app/components/Churn/ChurnQuickStats";
 import { DateRangePicker } from "$app/components/DateRangePicker";
 import { LoadingSpinner } from "$app/components/LoadingSpinner";
-import Placeholder from "$app/components/ui/Placeholder";
+import { Placeholder } from "$app/components/ui/Placeholder";
 
 import placeholder from "$assets/images/placeholders/sales.png";
 

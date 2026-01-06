@@ -10,7 +10,7 @@ import { Icon } from "$app/components/Icons";
 import { useLoggedInUser } from "$app/components/LoggedInUser";
 import { showAlert } from "$app/components/server-components/Alert";
 import { PageHeader } from "$app/components/ui/PageHeader";
-import Placeholder from "$app/components/ui/Placeholder";
+import { Placeholder, PlaceholderImage } from "$app/components/ui/Placeholder";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "$app/components/ui/Table";
 import { Tab, Tabs } from "$app/components/ui/Tabs";
 
@@ -212,9 +212,7 @@ const TaxCenterIndex = () => {
           </div>
         ) : (
           <Placeholder>
-            <figure>
-              <img src={taxesPlaceholder} />
-            </figure>
+            <PlaceholderImage src={taxesPlaceholder} />
             <h2>Let's get your tax info ready.</h2>
             <p>Your 1099-K will appear here once it's available.</p>
           </Placeholder>
