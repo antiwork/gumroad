@@ -3043,6 +3043,59 @@ describe User, :vcr do
     end
   end
 
+  describe "#sync_cart_email" do
+    let(:user) { create(:user, email: "old@example.com") }
+
+    context "when user has an alive cart with the old email" do
+      let!(:cart) { create(:cart, user:, email: "old@example.com") }
+
+      it "clears cart email when user email changes" do
+        user.update!(email: "new@example.com")
+        user.confirm
+
+        expect(cart.reload.email).to be_nil
+      end
+    end
+
+    context "when user has an alive cart with a different email" do
+      let!(:cart) { create(:cart, user:, email: "other@example.com") }
+
+      it "does not clear cart email" do
+        user.update!(email: "new@example.com")
+        user.confirm
+
+        expect(cart.reload.email).to eq("other@example.com")
+      end
+    end
+
+    context "when user has an alive cart with nil email" do
+      let!(:cart) { create(:cart, user:, email: nil) }
+
+      it "does not update cart" do
+        user.update!(email: "new@example.com")
+        user.confirm
+
+        expect(cart.reload.email).to be_nil
+      end
+    end
+
+    context "when user has no alive cart" do
+      it "does not raise an error" do
+        expect { user.update!(email: "new@example.com") }.not_to raise_error
+      end
+    end
+
+    context "when user has an unconfirmed email" do
+      let!(:cart) { create(:cart, user:, email: "old@example.com") }
+
+      it "does not clear cart email" do
+        user.update!(email: "new@example.com")
+
+        expect(cart.reload.email).to eq("old@example.com")
+      end
+    end
+  end
+
   describe "#update_audience_members_affiliates" do
     it "changing email updates members records" do
       user = create(:user, email: "original@example.com")
