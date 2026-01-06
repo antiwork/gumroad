@@ -105,21 +105,6 @@ def configure_vcr
     config.filter_sensitive_data("<RPUSH_CONSUMER_FCM_FIREBASE_PROJECT_ID>") { GlobalConfig.get("RPUSH_CONSUMER_FCM_FIREBASE_PROJECT_ID") }
     config.filter_sensitive_data("<SLACK_WEBHOOK_URL>") { GlobalConfig.get("SLACK_WEBHOOK_URL") }
     config.filter_sensitive_data("<CLOUDFRONT_KEYPAIR_ID>") { GlobalConfig.get("CLOUDFRONT_KEYPAIR_ID") }
-
-    # Sanitize Basic Auth headers (base64-encoded API keys) before recording cassettes
-    config.before_record do |interaction|
-      if interaction.request.headers["Authorization"]
-        interaction.request.headers["Authorization"] = interaction.request.headers["Authorization"].map do |auth|
-          if auth.start_with?("Basic ")
-            "Basic <EASYPOST_API_KEY_BASE64>"
-          elsif auth.start_with?("Bearer ")
-            "Bearer <API_KEY>"
-          else
-            auth
-          end
-        end
-      end
-    end
   end
 end
 

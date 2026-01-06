@@ -1546,6 +1546,18 @@ class Purchase < ApplicationRecord
     giftee_purchase.save!
   end
 
+  def mark_product_purchases_as_refunded!(is_partially_refunded:)
+    return unless is_bundle_purchase?
+
+    product_purchases.each do |product_purchase|
+      if is_partially_refunded
+        product_purchase.update!(stripe_partially_refunded: true)
+      else
+        product_purchase.update!(stripe_refunded: true)
+      end
+    end
+  end
+
   def mark_giftee_purchase_as_chargeback
     giftee_purchase = gift_given.present? ? gift_given.giftee_purchase : nil
     return if giftee_purchase.nil?
