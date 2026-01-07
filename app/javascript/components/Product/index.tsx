@@ -3,6 +3,7 @@ import { differenceInYears, parseISO } from "date-fns";
 import * as React from "react";
 
 import { getReviews, Review } from "$app/data/product_reviews";
+import { RestartableSubscription } from "$app/data/subscription";
 import { trackUserProductAction } from "$app/data/user_action_event";
 import { incrementProductViews } from "$app/data/view_event";
 import { Wishlist } from "$app/data/wishlists";
@@ -229,12 +230,7 @@ export type Props = {
   purchase: Purchase | null;
   discount_code: ProductDiscount | null;
   wishlists: WishlistForProduct[];
-  restartable_subscription?: {
-    id: string;
-    price: unknown;
-    recurrence: string;
-    manage_url: string;
-  } | null;
+  restartable_subscription?: RestartableSubscription | null;
 };
 
 export const Product = ({
@@ -259,12 +255,7 @@ export const Product = ({
   ctaButtonRef?: React.MutableRefObject<HTMLAnchorElement | null>;
   configurationSelectorRef?: React.MutableRefObject<ConfigurationSelectorHandle | null>;
   wishlists?: WishlistForProduct[];
-  restartableSubscription?: {
-    id: string;
-    price: unknown;
-    recurrence: string;
-    manage_url: string;
-  } | null;
+  restartableSubscription?: RestartableSubscription | null;
   disableAnalytics?: boolean;
 }) => {
   const [pageLoaded, setPageLoaded] = React.useState(false);

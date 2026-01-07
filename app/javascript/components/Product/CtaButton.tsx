@@ -1,5 +1,6 @@
 import * as React from "react";
 
+import { RestartableSubscription } from "$app/data/subscription";
 import { trackUserProductAction } from "$app/data/user_action_event";
 import { CustomButtonTextOption } from "$app/parsers/product";
 import { formatInstallmentPaymentSchedule } from "$app/utils/price";
@@ -25,12 +26,7 @@ type Props = {
   label: string | undefined;
   showInstallmentPlanNotes?: boolean;
   onClick?: React.MouseEventHandler<HTMLAnchorElement>;
-  restartableSubscription?: {
-    id: string;
-    price: unknown;
-    recurrence: string;
-    manage_url: string;
-  } | null;
+  restartableSubscription?: RestartableSubscription | null;
 };
 
 export const trackCtaClick = ({

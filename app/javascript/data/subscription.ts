@@ -7,6 +7,13 @@ import {
 } from "$app/data/payment_method_params";
 import { request, ResponseError } from "$app/utils/request";
 
+export type RestartableSubscription = {
+  id: string;
+  price: unknown;
+  recurrence: string;
+  manage_url: string;
+};
+
 export const cancelSubscriptionByUser = async (subscriptionId: string): Promise<void> => {
   const response = await request({
     url: Routes.unsubscribe_by_user_subscription_path(subscriptionId),

@@ -1,5 +1,6 @@
 import * as React from "react";
 
+import { RestartableSubscription } from "$app/data/subscription";
 import { assertDefined } from "$app/utils/assert";
 import { classNames } from "$app/utils/classNames";
 import { assertResponseError, request, ResponseError } from "$app/utils/request";
@@ -236,12 +237,7 @@ const CtaBar = ({
   ctaLabel?: string | undefined;
   selection: PriceSelection;
   hasHero: boolean;
-  restartableSubscription?: {
-    id: string;
-    price: unknown;
-    recurrence: string;
-    manage_url: string;
-  } | null;
+  restartableSubscription?: RestartableSubscription | null;
 }) => {
   const selectionAttributes = applySelection(product, discountCode?.valid ? discountCode.discount : null, selection);
   let { priceCents } = selectionAttributes;
