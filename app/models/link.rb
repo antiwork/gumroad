@@ -1398,5 +1398,4 @@ class Link < ApplicationRecord
 
       Iffy::Product::IngestJob.perform_async(id)
     end
-
 end
