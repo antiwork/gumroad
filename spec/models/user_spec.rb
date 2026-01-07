@@ -2528,6 +2528,46 @@ describe User, :vcr do
     end
   end
 
+  describe "#sync_cart_email_to_account_email" do
+    it "updates cart email when user email is confirmed" do
+      user = create(:user, email: "old@example.com")
+      cart = create(:cart, user:, email: "old@example.com")
+
+      user.update!(email: "new@example.com")
+      user.confirm
+
+      expect(cart.reload.email).to eq("new@example.com")
+    end
+
+    it "does not update cart email if email is not yet confirmed" do
+      user = create(:user, email: "old@example.com")
+      cart = create(:cart, user:, email: "old@example.com")
+
+      user.update!(email: "new@example.com")
+
+      expect(cart.reload.email).to eq("old@example.com")
+    end
+
+    it "does not raise error if user has no alive cart" do
+      user = create(:user, email: "old@example.com")
+
+      expect do
+        user.update!(email: "new@example.com")
+        user.confirm
+      end.not_to raise_error
+    end
+
+    it "does not update deleted cart" do
+      user = create(:user, email: "old@example.com")
+      cart = create(:cart, user:, email: "old@example.com", deleted_at: 1.hour.ago)
+
+      user.update!(email: "new@example.com")
+      user.confirm
+
+      expect(cart.reload.email).to eq("old@example.com")
+    end
+  end
+
   describe "#make_affiliate_of_the_matching_approved_affiliate_requests" do
     let(:requester_email) { "requester@example.com" }
     let!(:approved_affiliate_request_one) { create(:affiliate_request, email: requester_email, state: :approved) }

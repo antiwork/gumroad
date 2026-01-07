@@ -294,6 +294,7 @@ class User < ApplicationRecord
   after_update :update_audience_members_affiliates
   after_update :update_product_search_index!
   after_commit :move_purchases_to_new_email, on: :update, if: :email_previously_changed?
+  after_commit :sync_cart_email_to_account_email, on: :update, if: :email_previously_changed?
   after_commit :make_affiliate_of_the_matching_approved_affiliate_requests, on: [:create, :update], if: ->(user) { user.confirmed_at_previously_changed? && user.confirmed? }
   after_commit :generate_subscribe_preview, on: [:create, :update], if: :should_subscribe_preview_be_regenerated?
   after_create :insert_null_chargeback_state
@@ -1070,6 +1071,13 @@ class User < ApplicationRecord
       if unconfirmed_email.blank? && purchases.exists?
         UpdatePurchaseEmailToMatchAccountWorker.perform_in(10.seconds, id)
       end
+    end
+
+    def sync_cart_email_to_account_email
+      return if unconfirmed_email.present?
+      return unless alive_cart.present?
+
+      alive_cart.update!(email: email)
     end
 
     def products_recommendable_conditions_changed?
