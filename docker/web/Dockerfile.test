@@ -66,6 +66,7 @@ ENV DATABASE_HOST=db_test \
     AWS_S3_ENDPOINT=http://minio:9000 \
     MEMCACHE_SERVERS=memcached \
     RAILS_LOG_LEVEL=info \
+    MAILER_HEADERS_ENCRYPTION_KEY_V1=test_encryption_key \
     IN_DOCKER=true
 
 WORKDIR $APP_DIR
