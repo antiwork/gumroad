@@ -1,6 +1,6 @@
 import { Channel } from "@anycable/web";
 import cx from "classnames";
-import debounce from "lodash/debounce";
+import { debounce } from "lodash-es";
 import * as React from "react";
 import { useNavigate, useLocation } from "react-router-dom";
 import { is } from "ts-safe-cast";
