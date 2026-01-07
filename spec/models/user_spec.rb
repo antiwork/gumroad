@@ -3043,6 +3043,41 @@ describe User, :vcr do
     end
   end
 
+  describe "#sync_cart_email_with_account_email" do
+    let(:user) { create(:user, email: "old@example.com") }
+
+    it "updates the cart email when the user confirms their new email" do
+      cart = create(:cart, user:, email: "old@example.com")
+
+      user.update!(email: "new@example.com")
+      user.confirm
+
+      expect(cart.reload.email).to eq("new@example.com")
+    end
+
+    it "does not update the cart email before the new email is confirmed" do
+      cart = create(:cart, user:, email: "old@example.com")
+
+      user.update!(email: "new@example.com")
+
+      expect(cart.reload.email).to eq("old@example.com")
+    end
+
+    it "does not fail if the user has no cart" do
+      user.update!(email: "new@example.com")
+      expect { user.confirm }.not_to raise_error
+    end
+
+    it "sets cart email to user email when cart email was nil" do
+      cart = create(:cart, user:, email: nil)
+
+      user.update!(email: "new@example.com")
+      user.confirm
+
+      expect(cart.reload.email).to eq("new@example.com")
+    end
+  end
+
   describe "#update_audience_members_affiliates" do
     it "changing email updates members records" do
       user = create(:user, email: "original@example.com")
