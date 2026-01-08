@@ -13,7 +13,7 @@ import useRouteLoading from "$app/components/useRouteLoading";
 type PageProps = {
   title: string;
   flash?: AlertPayload;
-  logged_in_user: LoggedInUser;
+  logged_in_user: LoggedInUser | null;
   current_seller: {
     id: number;
     email: string;
@@ -45,7 +45,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
         <Head title={title} />
         <Alert initial={flash ?? null} />
         <div id="inertia-shell" className="flex h-screen flex-col lg:flex-row">
-          <Nav title="Dashboard" />
+          {logged_in_user ? <Nav title="Dashboard" /> : null}
           {isRouteLoading ? <LoadingSkeleton /> : null}
           <main className={classNames("flex-1 overflow-y-auto", { hidden: isRouteLoading })}>{children}</main>
         </div>
