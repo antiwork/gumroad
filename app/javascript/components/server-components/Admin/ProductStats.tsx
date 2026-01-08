@@ -7,7 +7,7 @@ import { register } from "$app/utils/serverComponentUtil";
 import { LoadingSpinner } from "$app/components/LoadingSpinner";
 import { showAlert } from "$app/components/server-components/Alert";
 
-const AdminProductStats = ({ product_id }: { product_id: number }) => {
+const AdminProductStats = ({ product_external_id }: { product_external_id: string }) => {
   const [viewsCountHtml, setViewsCountHtml] = React.useState<string>("");
   const [salesStatsHtml, setSalesStatsHtml] = React.useState<string>("");
 
@@ -16,7 +16,7 @@ const AdminProductStats = ({ product_id }: { product_id: number }) => {
       try {
         const viewsCountResponse = await request({
           method: "GET",
-          url: Routes.views_count_admin_product_path(product_id),
+          url: Routes.views_count_admin_product_path(product_external_id),
           accept: "html",
         });
         if (!viewsCountResponse.ok) throw new ResponseError("Server returned error response");
@@ -30,7 +30,7 @@ const AdminProductStats = ({ product_id }: { product_id: number }) => {
       try {
         const salesStatsResponse = await request({
           method: "GET",
-          url: Routes.sales_stats_admin_product_path(product_id),
+          url: Routes.sales_stats_admin_product_path(product_external_id),
           accept: "html",
         });
         if (!salesStatsResponse.ok) throw new ResponseError("Server returned error response");

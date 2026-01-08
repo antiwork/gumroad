@@ -197,6 +197,7 @@ class Link < ApplicationRecord
   validate :alive_category_variants_presence, on: :update
   validate :content_has_no_adult_keywords, if: -> { description_changed? || name_changed? }
   validate :custom_view_content_button_text_length
+  validates :custom_receipt_text, length: { maximum: Product::Validations::MAX_CUSTOM_RECEIPT_TEXT_LENGTH }
   validates_presence_of :filetype
   validates_presence_of :filegroup
   validate :bundle_is_not_in_bundle, if: :is_bundle_changed?
@@ -225,6 +226,8 @@ class Link < ApplicationRecord
   attr_json_data_accessor :excluded_sales_tax_regions, default: -> { [] }
   attr_json_data_accessor :sections, default: -> { [] }
   attr_json_data_accessor :main_section_index, default: -> { 0 }
+  attr_json_data_accessor :custom_view_content_button_text
+  attr_json_data_accessor :custom_receipt_text
 
   scope :alive,                           -> { where(purchase_disabled_at: nil, banned_at: nil, deleted_at: nil) }
   scope :visible,                         -> { where(deleted_at: nil) }
@@ -903,7 +906,7 @@ class Link < ApplicationRecord
     end
   end
 
-  %w[custom_summary custom_button_text_option custom_view_content_button_text custom_attributes purchase_terms].each do |method_name|
+  %w[custom_summary custom_button_text_option custom_attributes purchase_terms].each do |method_name|
     define_method "save_#{method_name}" do |argument|
       self.json_data ||= {}
       self.json_data[method_name] = argument
@@ -911,7 +914,7 @@ class Link < ApplicationRecord
     end
   end
 
-  %w[custom_summary custom_button_text_option custom_view_content_button_text purchase_terms].each do |method_name|
+  %w[custom_summary custom_button_text_option purchase_terms].each do |method_name|
     define_method method_name do
       self.json_data.present? ? self.json_data[method_name] : nil
     end

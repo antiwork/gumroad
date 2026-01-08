@@ -4,19 +4,17 @@ require "spec_helper"
 require "shared_examples/authorize_called"
 require "inertia_rails/rspec"
 
-describe PublicController do
+describe PublicController, type: :controller, inertia: true do
   render_views
 
   let!(:demo_product) { create(:product, unique_permalink: "demo") }
 
-  { api: "API",
-    widgets: "Widgets" }.each do |url, title|
-    describe "GET '#{url}'" do
-      it "succeeds and set instance variable" do
-        get(url)
-        expect(assigns(:title)).to eq(title)
-        expect(assigns(:"on_#{url}_page")).to be(true)
-      end
+  describe "GET api", inertia: true do
+    it "succeeds and renders with Inertia" do
+      get :api
+      expect(response).to be_successful
+      expect(assigns(:title)).to eq("API")
+      expect(inertia).to render_component("Public/Api")
     end
   end
 
@@ -57,11 +55,12 @@ describe PublicController do
 
       include_context "with user signed in as admin for seller"
 
-      it "initializes WidgetPresenter with seller" do
+      it "renders the inertia page with correct component and title" do
         get :widgets
 
         expect(response).to be_successful
-        expect(assigns[:widget_presenter].seller).to eq(seller)
+        expect(inertia).to render_component("Public/Widgets")
+        expect(assigns(:title)).to eq("Widgets")
       end
     end
   end

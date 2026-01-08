@@ -29,7 +29,7 @@ const AdminUsersProductsContent = ({
   return (
     <div className="space-y-4">
       {products.map((product) => (
-        <AdminUsersProductsProduct key={product.id} product={product} isAffiliateUser={isAffiliateUser} />
+        <AdminUsersProductsProduct key={product.external_id} product={product} isAffiliateUser={isAffiliateUser} />
       ))}
     </div>
   );

@@ -1546,6 +1546,18 @@ class Purchase < ApplicationRecord
     giftee_purchase.save!
   end
 
+  def mark_product_purchases_as_refunded!(is_partially_refunded:)
+    return unless is_bundle_purchase?
+
+    product_purchases.each do |product_purchase|
+      if is_partially_refunded
+        product_purchase.update!(stripe_partially_refunded: true)
+      else
+        product_purchase.update!(stripe_refunded: true)
+      end
+    end
+  end
+
   def mark_giftee_purchase_as_chargeback
     giftee_purchase = gift_given.present? ? gift_given.giftee_purchase : nil
     return if giftee_purchase.nil?
@@ -3075,7 +3087,7 @@ class Purchase < ApplicationRecord
 
     # Private: validator that guarantees that the right transaction information is present for paid purchases.
     def financial_transaction_validation
-      return if self.price_cents > 0 &&
+      return if self.price_cents.to_i > 0 &&
                 stripe_transaction_id.present? &&
                 merchant_account.present? &&
                 (stripe_fingerprint.present? || paypal_order_id) &&

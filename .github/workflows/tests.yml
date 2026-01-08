@@ -209,7 +209,7 @@ jobs:
             -e KNAPSACK_PRO_TEST_FILE_PATTERN="spec/**/*_spec.rb" \
             -e KNAPSACK_PRO_TEST_FILE_EXCLUDE_PATTERN="spec/requests/**/*_spec.rb" \
             -e KNAPSACK_PRO_COMMIT_HASH=${{ github.sha }} \
-            -e KNAPSACK_PRO_BRANCH=${{ github.ref_name }} \
+            -e KNAPSACK_PRO_BRANCH="${{ github.ref_name }}" \
             -e KNAPSACK_PRO_CI_NODE_BUILD_ID=${{ github.run_id }} \
             -e KNAPSACK_PRO_CI_NODE_RETRY_COUNT=${{ github.run_attempt }} \
             -e KNAPSACK_PRO_PROJECT_DIR=/app \
