@@ -1,9 +1,9 @@
 <% if attributes.present? %>
-  <table class="table-stack">
+  <table class="table-stack" style="width: 100%;">
     <tbody>
       <% attributes.each do |attribute| %>
-        <tr>
-          <td>
+        <tr style="width: 100%;">
+          <td style="width: 100%; padding: 16px; box-sizing: border-box;">
             <% if attribute[:label].present? %>
               <span style="font-weight: bold"><%= attribute[:label] %></span>
               <br>
