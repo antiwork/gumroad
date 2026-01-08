@@ -30,7 +30,7 @@ class TwoFactorAuthenticationController < ApplicationController
 
   private
     def redirect_to_login_path
-      redirect_to login_url(next: request.fullpath)
+      redirect_to login_path(next: request.fullpath)
     end
 
     def verify_auth_token_and_redirect(token)

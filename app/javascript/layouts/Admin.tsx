@@ -7,7 +7,8 @@ import AdminNav from "$app/components/Admin/Nav";
 import AdminNewSalesReportPopover from "$app/components/Admin/SalesReports/NewSalesReportPopover";
 import AdminSearchPopover from "$app/components/Admin/SearchPopover";
 import LoadingSkeleton from "$app/components/LoadingSkeleton";
-import Alert, { showAlert, type AlertPayload } from "$app/components/server-components/Alert";
+import Alert, { type AlertPayload } from "$app/components/server-components/Alert";
+import { useFlashMessage } from "$app/components/useFlashMessage";
 import useRouteLoading from "$app/components/useRouteLoading";
 
 type PageProps = {
@@ -19,11 +20,7 @@ const Admin = ({ children }: { children: React.ReactNode }) => {
   const { title, flash } = usePage<PageProps>().props;
   const isRouteLoading = useRouteLoading();
 
-  React.useEffect(() => {
-    if (flash?.message) {
-      showAlert(flash.message, flash.status === "danger" ? "error" : flash.status);
-    }
-  }, [flash]);
+  useFlashMessage(flash);
 
   return (
     <div id="inertia-shell" className="flex h-screen flex-col lg:flex-row">
