@@ -638,6 +638,7 @@ export type BankAccount =
   | {
       type: "GibraltarBankAccount";
       account_holder_full_name: string;
+      sort_code: string;
       account_number: string;
       account_number_confirmation: string;
     }
@@ -783,6 +784,14 @@ const BankAccountSection = ({
     "TZ",
     "ZA",
   ];
+
+  const isGibraltar = user.country_code === "GI";
+  const nonIbanAccountNumberInputProps: Pick<
+    React.ComponentPropsWithoutRef<"input">,
+    "placeholder" | "maxLength" | "pattern" | "inputMode"
+  > = isGibraltar
+    ? { placeholder: "01234567", maxLength: 8, pattern: "[0-9]{8}", inputMode: "numeric" }
+    : { placeholder: "1234567890" };
 
   const getRoutingNumberLabel = (countryCode: string) => {
     switch (true) {
@@ -991,6 +1000,22 @@ const BankAccountSection = ({
                   />
                 </fieldset>
               ) : user.country_code === "GB" ? (
+                <fieldset className={cx({ danger: errorFieldNames.has("sort_code") })}>
+                  <legend>
+                    <label htmlFor={`${uid}-sort-code`}>Sort code</label>
+                  </legend>
+                  <input
+                    type="text"
+                    id={`${uid}-sort-code`}
+                    placeholder="12-34-56"
+                    maxLength={8}
+                    required
+                    disabled={isFormDisabled}
+                    aria-invalid={errorFieldNames.has("sort_code")}
+                    onChange={(evt) => updateBankAccount({ sort_code: evt.target.value })}
+                  />
+                </fieldset>
+              ) : user.country_code === "GI" ? (
                 <fieldset className={cx({ danger: errorFieldNames.has("sort_code") })}>
                   <legend>
                     <label htmlFor={`${uid}-sort-code`}>Sort code</label>
@@ -2369,7 +2394,7 @@ const BankAccountSection = ({
                     <input
                       type="text"
                       id={`${uid}-account-number`}
-                      placeholder="1234567890"
+                      {...nonIbanAccountNumberInputProps}
                       required
                       disabled={isFormDisabled}
                       aria-invalid={errorFieldNames.has("account_number")}
@@ -2387,7 +2412,7 @@ const BankAccountSection = ({
                     <input
                       type="text"
                       id={`${uid}-confirm-account-number`}
-                      placeholder="1234567890"
+                      {...nonIbanAccountNumberInputProps}
                       required
                       disabled={isFormDisabled}
                       aria-invalid={errorFieldNames.has("account_number_confirmation")}
