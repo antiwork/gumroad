@@ -12,11 +12,11 @@ export const CustomReceiptTextInput = ({
   const uid = React.useId();
   return (
     <fieldset>
-      <label htmlFor={uid}>Custom message</label>
+      <label htmlFor={uid}>Message from the creator</label>
       <textarea
         id={uid}
         maxLength={maxLength}
-        placeholder="Add any additional information you'd like to include on the receipt."
+        placeholder="Shown to buyers on the receipt."
         value={value ?? ""}
         onChange={(evt) => onChange(evt.target.value)}
         rows={3}

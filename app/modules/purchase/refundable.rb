@@ -37,6 +37,8 @@ class Purchase
         return false
       end
 
+      refund_coverage_charge_intent = nil
+      refund_coverage_charge_amount_cents = nil
       if refunding_user_id.blank? || !User.find(refunding_user_id)&.is_team_member?
         if seller.refunds_disabled?
           errors.add :base, "Refunds are temporarily disabled in your account."
@@ -44,9 +46,23 @@ class Purchase
         end
 
         amount_cents_to_refund = amount_cents.presence || amount_refundable_cents
-        if amount_cents_to_refund > seller.unpaid_balance_cents && charged_using_gumroad_merchant_account?
-          errors.add :base, "Your balance is insufficient to process this refund."
-          return false
+        if charged_using_gumroad_merchant_account?
+          refund_fee_cents = refund_fee_cents_for_amount(amount_cents_to_refund)
+          adjustments = refund_balance_adjustments(refund_amount_cents: amount_cents_to_refund, refund_fee_cents:)
+          shortfall_cents = adjustments[:seller_refund_cents] - seller.unpaid_balance_cents
+          if shortfall_cents.positive?
+            refund_coverage_result = RefundCoverageChargeService.new(
+              user: seller,
+              purchase: self,
+              amount_cents: shortfall_cents
+            ).perform
+            unless refund_coverage_result.success?
+              errors.add :base, refund_coverage_result.error_message.presence || "Your balance is insufficient to process this refund."
+              return false
+            end
+            refund_coverage_charge_intent = refund_coverage_result.charge_intent
+            refund_coverage_charge_amount_cents = shortfall_cents
+          end
         end
       end
 
@@ -94,20 +110,52 @@ class Purchase
         if charge_refund.flow_of_funds.nil? && StripeChargeProcessor.charge_processor_id != charge_processor_id
           charge_refund.flow_of_funds = FlowOfFunds.build_simple_flow_of_funds(Currency::USD, -(gross_amount_cents.presence || gross_amount_refundable_cents))
         end
-        refund_purchase!(charge_refund.flow_of_funds, refunding_user_id, charge_refund.refund, is_for_fraud)
+        refund_success = refund_purchase!(charge_refund.flow_of_funds, refunding_user_id, charge_refund.refund, is_for_fraud)
+        unless refund_success
+          refund_refund_coverage_charge!(refund_coverage_charge_intent, refund_coverage_charge_amount_cents)
+          return false
+        end
+
+        if refund_coverage_charge_intent.present?
+          refund = refunds.last
+          refund_coverage_charge = RefundCoverageCharge.create!(
+            user: seller,
+            purchase: self,
+            refund:,
+            credit_card: seller.refund_credit_card,
+            charge_cents: refund_coverage_charge_amount_cents,
+            charge_cents_currency: Currency::USD,
+            charge_processor_id: refund_coverage_charge_intent.charge.charge_processor_id,
+            processor_payment_intent_id: refund_coverage_charge_intent.id,
+            charge_processor_transaction_id: refund_coverage_charge_intent.charge.id,
+            charge_processor_fee_cents: refund_coverage_charge_intent.charge.fee,
+            charge_processor_fee_cents_currency: refund_coverage_charge_intent.charge.fee_currency || Currency::USD
+          )
+          Credit.create_for_refund_coverage!(
+            user: seller,
+            amount_cents: refund_coverage_charge_amount_cents,
+            refund_coverage_charge:
+          )
+        end
+
+        true
       rescue ChargeProcessorAlreadyRefundedError => e
         logger.error "Charge was already refunded in purchase: #{external_id}. Response: #{e.message}"
+        refund_refund_coverage_charge!(refund_coverage_charge_intent, refund_coverage_charge_amount_cents)
         false
       rescue ChargeProcessorInsufficientFundsError => e
         logger.error "Creator's PayPal account does not have sufficient funds to refund purchase: #{external_id}. Response: #{e.message}"
         errors.add :base, "Your PayPal account does not have sufficient funds to make this refund."
+        refund_refund_coverage_charge!(refund_coverage_charge_intent, refund_coverage_charge_amount_cents)
         false
       rescue ChargeProcessorInvalidRequestError => e
         logger.error "Charge refund encountered an invalid request error in purchase: #{external_id}. Response: #{e.message}. #{e.backtrace_locations}"
+        refund_refund_coverage_charge!(refund_coverage_charge_intent, refund_coverage_charge_amount_cents)
         false
       rescue ChargeProcessorUnavailableError => e
         logger.error "Charge processor unavailable in purchase: #{external_id}. Response: #{e.message}"
         errors.add :base, "There is a temporary problem. Try to refund later."
+        refund_refund_coverage_charge!(refund_coverage_charge_intent, refund_coverage_charge_amount_cents)
         false
       end
     end
@@ -390,5 +438,22 @@ class Purchase
       Credit.create_for_partial_refund_transfer_reversal!(amount_cents_usd: -reversal_amount_cents_usd,
                                                           amount_cents_holding_currency: -destination_balance_transaction.net.abs,
                                                           merchant_account: refund.purchase.merchant_account)
+    end
+
+    def refund_refund_coverage_charge!(charge_intent, amount_cents)
+      return if charge_intent.blank? || amount_cents.blank?
+
+      charge = charge_intent.charge
+      return if charge.blank?
+
+      ChargeProcessor.refund!(
+        charge.charge_processor_id,
+        charge.id,
+        amount_cents:,
+        merchant_account: MerchantAccount.gumroad(StripeChargeProcessor.charge_processor_id),
+        reverse_transfer: false
+      )
+    rescue => e
+      logger.error "Failed to refund coverage charge for purchase #{external_id}: #{e.message}"
     end
 end

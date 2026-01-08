@@ -1802,19 +1802,36 @@ class Purchase < ApplicationRecord
 
   def decrement_balance_for_refund_or_chargeback!(flow_of_funds, refund: nil, dispute: nil)
     return unless seller_balance_update_eligible?
-    if (dispute && !stripe_partially_refunded) || [price_cents, total_transaction_cents].include?(refund&.amount_cents)
+    adjustments = refund_balance_adjustments(
+      refund_amount_cents: refund&.amount_cents,
+      refund_fee_cents: refund&.fee_cents,
+      dispute:
+    )
+
+    seller_refund_cents = adjustments[:seller_refund_cents]
+    affiliate_refund_cents = adjustments[:affiliate_refund_cents]
+    affiliate_refund_fee_cents = adjustments[:affiliate_refund_fee_cents]
+
+    process_refund_or_chargeback_for_affiliate_credit_balance(flow_of_funds, refund:, dispute:, refund_cents: affiliate_refund_cents, fee_cents: affiliate_refund_fee_cents)
+    process_refund_or_chargeback_for_purchase_balance(flow_of_funds, refund:, dispute:, refund_cents: seller_refund_cents)
+  end
+
+  def refund_balance_adjustments(refund_amount_cents:, refund_fee_cents:, dispute: nil)
+    return { seller_refund_cents: 0, affiliate_refund_cents: 0, affiliate_refund_fee_cents: 0 } if refund_amount_cents.blank? && dispute.blank?
+
+    if (dispute && !stripe_partially_refunded) || [price_cents, total_transaction_cents].include?(refund_amount_cents)
       # Short circuit for full refund, or dispute
       seller_refund_cents = payment_cents - affiliate_credit_cents
       affiliate_refund_cents = affiliate_credit_cents
       affiliate_refund_fee_cents = affiliate_credit&.fee_cents || 0
     else
-      # refund.amount_cents = all inclusive, seller, affiliate, fee_cent, etc. Separate them out
+      # refund_amount_cents = all inclusive, seller, affiliate, fee_cent, etc. Separate them out
       if dispute
         decrement_amount_cents = amount_refundable_cents
-        refunded_fee_cents = ((fee_cents.to_f / price_cents.to_f) * decrement_amount_cents).floor
+        refunded_fee_cents = refund_fee_cents_for_amount(decrement_amount_cents)
       else
-        decrement_amount_cents = refund.amount_cents
-        refunded_fee_cents = refund.fee_cents
+        decrement_amount_cents = refund_amount_cents
+        refunded_fee_cents = refund_fee_cents.to_i
       end
       seller_refund_cents = decrement_amount_cents - refunded_fee_cents
       if affiliate_credit_cents == 0
@@ -1830,8 +1847,17 @@ class Purchase < ApplicationRecord
       end
     end
 
-    process_refund_or_chargeback_for_affiliate_credit_balance(flow_of_funds, refund:, dispute:, refund_cents: affiliate_refund_cents, fee_cents: affiliate_refund_fee_cents)
-    process_refund_or_chargeback_for_purchase_balance(flow_of_funds, refund:, dispute:, refund_cents: seller_refund_cents)
+    {
+      seller_refund_cents:,
+      affiliate_refund_cents:,
+      affiliate_refund_fee_cents:
+    }
+  end
+
+  def refund_fee_cents_for_amount(refund_amount_cents)
+    return 0 if refund_amount_cents.blank? || price_cents.to_i <= 0 || fee_cents.to_i <= 0
+
+    ((fee_cents.to_f / price_cents.to_f) * refund_amount_cents).floor
   end
 
   def variant_extra_cost

@@ -50,6 +50,7 @@ class User < ApplicationRecord
   has_many :devices
 
   belongs_to :credit_card, optional: true
+  belongs_to :refund_credit_card, class_name: "CreditCard", optional: true
 
   # Associate with CustomDomain.alive objects
   has_one :custom_domain, -> { alive }
@@ -83,6 +84,7 @@ class User < ApplicationRecord
   has_many :third_party_analytics
   has_many :zip_tax_rates
   has_many :service_charges
+  has_many :refund_coverage_charges
   has_many :recurring_services
   has_many :direct_affiliate_accounts, foreign_key: :affiliate_user_id, class_name: DirectAffiliate.name
   has_many :affiliate_accounts, foreign_key: :affiliate_user_id, class_name: Affiliate.name
@@ -800,6 +802,11 @@ class User < ApplicationRecord
   def remove_credit_card
     return false if requires_credit_card?
     self.credit_card_id = nil
+    save
+  end
+
+  def remove_refund_credit_card
+    self.refund_credit_card_id = nil
     save
   end
 

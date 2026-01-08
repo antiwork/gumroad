@@ -13,6 +13,7 @@ export type User = {
   requires_credit_card: boolean;
   can_connect_stripe: boolean;
   is_charged_paypal_payout_fee: boolean;
+  email: string;
   joined_at: string;
 };
 

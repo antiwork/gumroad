@@ -37,6 +37,14 @@ class Settings::Payments::UserPolicy < ApplicationPolicy
     update?
   end
 
+  def refund_credit_card?
+    update?
+  end
+
+  def remove_refund_credit_card?
+    update?
+  end
+
   def remediation?
     update?
   end

@@ -5,6 +5,7 @@ class CreditCard < ApplicationRecord
   include ChargeProcessable
 
   has_many :users
+  has_many :refund_coverage_charges
   has_one :purchase
   has_one :subscription
 

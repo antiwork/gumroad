@@ -73,6 +73,7 @@ describe("Viewing a purchase receipt", type: :system, js: true) do
         click_button "View receipt"
 
         expect(page).to have_text("Access Your Purchase")
+        expect(page).to have_text("Message from the creator")
         expect(page).to have_text("Welcome! Your purchase includes lifetime updates.")
         expect(page).not_to have_text("View content")
       end

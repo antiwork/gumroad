@@ -888,7 +888,7 @@ describe "PurchaseRefunds", :vcr do
 
           expect(ChargeProcessor).to_not receive(:refund!)
           purchase.reload.refund_and_save!(@user.id)
-          expect(purchase.errors[:base].first).to eq "Your balance is insufficient to process this refund."
+          expect(purchase.errors[:base].first).to eq "Your balance is insufficient to process this refund. Add a refund coverage card in Settings > Payments to continue."
           expect(purchase.reload.stripe_refunded).to be false
           expect(purchase.refunds.last).to be nil
         end
@@ -902,9 +902,46 @@ describe "PurchaseRefunds", :vcr do
 
           expect(ChargeProcessor).to_not receive(:refund!)
           purchase.reload.refund_and_save!(@user.id)
-          expect(purchase.errors[:base].first).to eq "Your balance is insufficient to process this refund."
+          expect(purchase.errors[:base].first).to eq "Your balance is insufficient to process this refund. Add a refund coverage card in Settings > Payments to continue."
           expect(purchase.reload.stripe_refunded).to be false
           expect(purchase.refunds.last).to be nil
+        end
+
+        it "charges the refund coverage card and issues a refund when the balance is short" do
+          purchase.update_balance_and_mark_successful!
+          expect(purchase.merchant_account).to eq(MerchantAccount.gumroad(StripeChargeProcessor.charge_processor_id))
+          refund_credit_card = CreditCard.create!(
+            charge_processor_id: StripeChargeProcessor.charge_processor_id,
+            stripe_fingerprint: "ref_coverage_fingerprint",
+            stripe_customer_id: "cus_refund_coverage",
+            visual: "**** **** **** 4242",
+            card_type: "visa",
+            expiry_month: 1,
+            expiry_year: 2027
+          )
+          purchase.seller.update!(refund_credit_card: refund_credit_card)
+
+          refund_charge = OpenStruct.new(charge_processor_id: "stripe", id: "ch_refund_coverage", fee: 50, fee_currency: "usd")
+          refund_intent = OpenStruct.new(id: "pi_refund_coverage", charge: refund_charge)
+          refund_result = RefundCoverageChargeService::Result.new(charge_intent: refund_intent)
+          allow(RefundCoverageChargeService).to receive(:new).and_return(instance_double(RefundCoverageChargeService, perform: refund_result))
+
+          charge_refund = ChargeRefund.new
+          charge_refund.charge_processor_id = purchase.charge_processor_id
+          charge_refund.id = "re_refund_coverage"
+          charge_refund.flow_of_funds = FlowOfFunds.build_simple_flow_of_funds(Currency::USD, -purchase.total_transaction_cents)
+          charge_refund.instance_variable_set(:@refund, OpenStruct.new(id: "re_refund_coverage", status: "succeeded"))
+          expect(ChargeProcessor).to receive(:refund!).with(purchase.charge_processor_id, purchase.stripe_transaction_id, anything).and_return(charge_refund)
+          purchase.reload.refund_and_save!(@user.id)
+
+          refund_fee_cents = purchase.refund_fee_cents_for_amount(purchase.price_cents)
+          seller_refund_cents = purchase.refund_balance_adjustments(refund_amount_cents: purchase.price_cents, refund_fee_cents: refund_fee_cents)[:seller_refund_cents]
+          shortfall_cents = seller_refund_cents - 10_00
+
+          expect(purchase.errors[:base].first).to be nil
+          expect(purchase.reload.stripe_refunded).to be true
+          expect(RefundCoverageCharge.last.charge_cents).to eq(shortfall_cents)
+          expect(Credit.find_by(refund_coverage_charge: RefundCoverageCharge.last)).to be_present
         end
 
         it "issues a refund if the purchase was made on creator's Stripe Connect account" do

@@ -211,6 +211,8 @@ class SettingsPresenter
       canada_business_types: UserComplianceInfo::BusinessTypes::BUSINESS_TYPES_CANADA.map { |code, name| { code:, name: } },
       states:,
       saved_card: CheckoutPresenter.saved_card(seller.credit_card),
+      refund_credit_card: CheckoutPresenter.saved_card(seller.refund_credit_card),
+      refund_coverage_max_amount_cents: seller.max_product_price || User::MAX_PRICE_USD_CENTS_UNLESS_VERIFIED,
       formatted_balance_to_forfeit_on_country_change: seller.formatted_balance_to_forfeit(:country_change),
       formatted_balance_to_forfeit_on_payout_method_change: seller.formatted_balance_to_forfeit(:payout_method_change),
       payouts_paused_internally: seller.payouts_paused_internally?,
@@ -273,6 +275,7 @@ class SettingsPresenter
         requires_credit_card: seller.requires_credit_card?,
         can_connect_stripe: seller.can_connect_stripe?,
         is_charged_paypal_payout_fee: seller.charge_paypal_payout_fee?,
+        email: seller.email,
         joined_at: seller.created_at.iso8601
       }
     end

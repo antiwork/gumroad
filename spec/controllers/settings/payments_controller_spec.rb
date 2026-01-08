@@ -1452,6 +1452,62 @@ describe Settings::PaymentsController, :vcr, type: :controller, inertia: true do
     end
   end
 
+  describe "POST refund_credit_card" do
+    it "saves the refund coverage card and returns it" do
+      credit_card = CreditCard.new(
+        card_type: "visa",
+        visual: "**** **** **** 4242",
+        expiry_month: 12,
+        expiry_year: 2030,
+        stripe_fingerprint: "fp_refund_coverage",
+        stripe_customer_id: "cus_refund_coverage",
+        charge_processor_id: StripeChargeProcessor.charge_processor_id
+      )
+      credit_card.save!(validate: false)
+
+      allow(CreditCard).to receive(:create).and_return(credit_card)
+
+      post :refund_credit_card, params: {
+        stripe_payment_method_id: "pm_refund_coverage",
+        stripe_customer_id: "cus_refund_coverage",
+        stripe_setup_intent_id: "seti_refund_coverage",
+        card_data_handling_mode: CardDataHandlingMode::TOKENIZE_VIA_STRIPEJS
+      }
+
+      expect(response).to be_successful
+      response_data = JSON.parse(response.body)
+      expect(response_data["success"]).to be(true)
+      expect(response_data["refund_credit_card"]).to include(
+        "number" => credit_card.visual,
+        "expiration_date" => credit_card.expiry_visual
+      )
+      expect(seller.reload.refund_credit_card_id).to eq(credit_card.id)
+    end
+  end
+
+  describe "POST remove_refund_credit_card" do
+    it "removes the refund coverage card and returns success" do
+      user_with_credit_card = create(:user)
+      credit_card = CreditCard.new(
+        card_type: "visa",
+        visual: "**** **** **** 5555",
+        expiry_month: 10,
+        expiry_year: 2029,
+        stripe_fingerprint: "fp_refund_coverage_remove",
+        stripe_customer_id: "cus_refund_coverage_remove",
+        charge_processor_id: StripeChargeProcessor.charge_processor_id
+      )
+      credit_card.save!(validate: false)
+      user_with_credit_card.update!(refund_credit_card: credit_card)
+      sign_in user_with_credit_card
+
+      post :remove_refund_credit_card
+
+      expect(response).to be_successful
+      expect(user_with_credit_card.reload.refund_credit_card).to be(nil)
+    end
+  end
+
   describe "GET remediation" do
     let!(:user) { create(:user) }
     let!(:user_compliance_info) { create(:user_compliance_info, user:) }

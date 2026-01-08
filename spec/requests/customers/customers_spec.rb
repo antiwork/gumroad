@@ -458,8 +458,8 @@ describe "Sales page", type: :system, js: true do
 
     describe "missed posts" do
       let!(:posts) do
-        create_list(:installment, 11, link: product1, published_at: Time.current) do |post, i|
-          post.update!(name: "Post #{i}")
+        (0..10).map do |i|
+          create(:installment, link: product1, published_at: Time.current, name: "Post #{i}")
         end
       end
 
@@ -1565,7 +1565,7 @@ describe "Sales page", type: :system, js: true do
           within_modal "Purchase refund" do
             click_on "Confirm refund"
           end
-          expect(page).to have_alert(text: "Your balance is insufficient to process this refund.")
+          expect(page).to have_alert(text: "Your balance is insufficient to process this refund. Add a refund coverage card in Settings > Payments to continue.")
 
           purchase1.reload
           expect(purchase1.stripe_partially_refunded?).to eq(false)

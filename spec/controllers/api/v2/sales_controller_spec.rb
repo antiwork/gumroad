@@ -522,7 +522,7 @@ describe Api::V2::SalesController do
         end
 
         it "does nothing if refund amount is more than the available balance" do
-          allow_any_instance_of(User).to receive(:unpaid_balance_cents).and_return(99_99)
+          allow_any_instance_of(User).to receive(:unpaid_balance_cents).and_return(10_00)
 
           expect(@purchase.price_cents).to eq 100_00
           expect(@purchase.refunded?).to be false
@@ -536,7 +536,7 @@ describe Api::V2::SalesController do
 
           expect(response.parsed_body).to eq({
             success: false,
-            message: "Your balance is insufficient to process this refund."
+            message: "Your balance is insufficient to process this refund. Add a refund coverage card in Settings > Payments to continue."
           }.as_json)
         end
       end

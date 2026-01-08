@@ -21,6 +21,7 @@
   <% end %>
 
   <% if item_props[:custom_receipt_note].present? %>
+    <h4>Message from the creator</h4>
     <%= simple_format(item_props[:custom_receipt_note]) %>
   <% end %>
 

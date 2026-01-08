@@ -143,6 +143,37 @@ class Settings::PaymentsController < Settings::BaseController
     end
   end
 
+  def refund_credit_card
+    card_data_handling_error = CardParamsHelper.check_for_errors(params)
+    if card_data_handling_error.present?
+      error_message = card_data_handling_error.is_card_error? ? PurchaseErrorCode.customer_error_message(card_data_handling_error.error_message) :
+        "There is a temporary problem, please try again (your card was not charged)."
+      return render json: { success: false, error_message: }, status: :unprocessable_entity
+    end
+
+    chargeable = CardParamsHelper.build_chargeable(params)
+    if chargeable.nil?
+      return render json: { success: false, error_message: "Please check your card information and try again." }, status: :unprocessable_entity
+    end
+
+    credit_card = CreditCard.create(chargeable, CardParamsHelper.get_card_data_handling_mode(params), current_seller)
+    if credit_card.errors.present?
+      return render json: { success: false, error_message: credit_card.errors.full_messages.to_sentence }, status: :unprocessable_entity
+    end
+
+    current_seller.update!(refund_credit_card: credit_card)
+
+    render json: { success: true, refund_credit_card: CheckoutPresenter.saved_card(credit_card) }
+  end
+
+  def remove_refund_credit_card
+    if current_seller.remove_refund_credit_card
+      head :no_content
+    else
+      render json: { error: current_seller.errors.full_messages.join(",") }, status: :bad_request
+    end
+  end
+
   def remediation
     authorize
 

@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[7.1].define(version: 2025_11_24_133549) do
+ActiveRecord::Schema[7.1].define(version: 2026_01_08_013025) do
   create_table "active_storage_attachments", charset: "utf8mb4", collation: "utf8mb4_unicode_ci", force: :cascade do |t|
     t.string "name", limit: 191, null: false
     t.string "record_type", limit: 191, null: false
@@ -654,8 +654,10 @@ ActiveRecord::Schema[7.1].define(version: 2025_11_24_133549) do
     t.integer "fee_retention_refund_id"
     t.bigint "backtax_agreement_id"
     t.text "json_data"
+    t.integer "refund_coverage_charge_id"
     t.index ["balance_id"], name: "index_credits_on_balance_id"
     t.index ["dispute_id"], name: "index_credits_on_dispute_id"
+    t.index ["refund_coverage_charge_id"], name: "index_credits_on_refund_coverage_charge_id"
   end
 
   create_table "custom_domains", id: :integer, charset: "utf8mb4", collation: "utf8mb4_unicode_ci", force: :cascade do |t|
@@ -1816,6 +1818,25 @@ ActiveRecord::Schema[7.1].define(version: 2025_11_24_133549) do
     t.index ["user_id"], name: "index_recurring_services_on_user_id"
   end
 
+  create_table "refund_coverage_charges", charset: "utf8mb4", collation: "utf8mb4_unicode_ci", force: :cascade do |t|
+    t.integer "user_id", null: false
+    t.integer "purchase_id", null: false
+    t.integer "refund_id"
+    t.integer "credit_card_id"
+    t.integer "charge_cents", null: false
+    t.string "charge_cents_currency", default: "usd", null: false
+    t.string "charge_processor_id", null: false
+    t.string "processor_payment_intent_id"
+    t.string "charge_processor_transaction_id"
+    t.integer "charge_processor_fee_cents"
+    t.string "charge_processor_fee_cents_currency", default: "usd", null: false
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.index ["purchase_id"], name: "index_refund_coverage_charges_on_purchase_id"
+    t.index ["refund_id"], name: "index_refund_coverage_charges_on_refund_id"
+    t.index ["user_id"], name: "index_refund_coverage_charges_on_user_id"
+  end
+
   create_table "refund_policies", charset: "utf8mb4", collation: "utf8mb4_unicode_ci", force: :cascade do |t|
     t.bigint "seller_id", null: false
     t.bigint "product_id"
@@ -2531,6 +2552,7 @@ ActiveRecord::Schema[7.1].define(version: 2025_11_24_133549) do
     t.string "notification_content_type", default: "application/x-www-form-urlencoded"
     t.string "google_uid"
     t.integer "purchasing_power_parity_limit"
+    t.integer "refund_credit_card_id"
     t.index ["account_created_ip"], name: "index_users_on_account_created_ip"
     t.index ["confirmation_token"], name: "index_users_on_confirmation_token", length: 191
     t.index ["created_at"], name: "index_users_on_created_at"
@@ -2542,6 +2564,7 @@ ActiveRecord::Schema[7.1].define(version: 2025_11_24_133549) do
     t.index ["last_sign_in_ip"], name: "index_users_on_last_sign_in_ip"
     t.index ["name"], name: "index_users_on_name"
     t.index ["payment_address", "user_risk_state"], name: "index_users_on_payment_address_and_user_risk_state"
+    t.index ["refund_credit_card_id"], name: "index_users_on_refund_credit_card_id"
     t.index ["reset_password_token"], name: "index_users_on_reset_password_token"
     t.index ["support_email"], name: "index_users_on_support_email"
     t.index ["tos_violation_reason"], name: "index_users_on_tos_violation_reason"

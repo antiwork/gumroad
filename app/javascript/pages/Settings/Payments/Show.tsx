@@ -29,6 +29,7 @@ import DebitCardSection from "$app/components/Settings/PaymentsPage/DebitCardSec
 import PayPalConnectSection, { PayPalConnect } from "$app/components/Settings/PaymentsPage/PayPalConnectSection";
 import PayPalEmailSection from "$app/components/Settings/PaymentsPage/PayPalEmailSection";
 import StripeConnectSection, { StripeConnect } from "$app/components/Settings/PaymentsPage/StripeConnectSection";
+import RefundCoverageCardSection from "$app/components/Settings/PaymentsPage/RefundCoverageCardSection";
 import { Toggle } from "$app/components/Toggle";
 import { TypeSafeOptionSelect } from "$app/components/TypeSafeOptionSelect";
 import { Alert } from "$app/components/ui/Alert";
@@ -76,6 +77,8 @@ type PaymentsPageProps = {
     br: { code: string; name: string }[];
   };
   saved_card: SavedCreditCard | null;
+  refund_credit_card: SavedCreditCard | null;
+  refund_coverage_max_amount_cents: number;
   formatted_balance_to_forfeit_on_country_change: string | null;
   formatted_balance_to_forfeit_on_payout_method_change: string | null;
   payouts_paused_internally: boolean;
@@ -1063,6 +1066,14 @@ export default function PaymentsPage() {
             connectAccountFeeInfoText={props.fee_info.connect_account_fee_info_text}
           />
         ) : null}
+        <RefundCoverageCardSection
+          refundCreditCard={props.refund_credit_card}
+          refundCoverageMaxAmountCents={props.refund_coverage_max_amount_cents}
+          cardDataHandlingMode={props.bank_account_details.card_data_handling_mode}
+          user={props.user}
+          complianceInfo={props.compliance_info}
+          isFormDisabled={props.is_form_disabled}
+        />
         {props.saved_card ? (
           <CreditCardForm
             card={props.saved_card}

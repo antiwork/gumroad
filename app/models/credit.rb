@@ -11,6 +11,7 @@ class Credit < ApplicationRecord
   belongs_to :dispute, optional: true
   belongs_to :returned_payment, class_name: "Payment", optional: true
   belongs_to :refund, optional: true
+  belongs_to :refund_coverage_charge, optional: true
   belongs_to :financing_paydown_purchase, class_name: "Purchase", optional: true
   belongs_to :fee_retention_refund, class_name: "Refund", optional: true
   belongs_to :backtax_agreement, optional: true
@@ -178,6 +179,32 @@ class Credit < ApplicationRecord
                                   MerchantAccount.gumroad(BraintreeChargeProcessor.charge_processor_id)
     credit.amount_cents = amount_to_credit
     credit.refund = refund
+    credit.save!
+
+    balance_transaction_amount = BalanceTransaction::Amount.new(
+      currency: Currency::USD,
+      gross_cents: credit.amount_cents,
+      net_cents: credit.amount_cents
+    )
+    balance_transaction = BalanceTransaction.create!(
+      user: credit.user,
+      merchant_account: credit.merchant_account,
+      credit:,
+      issued_amount: balance_transaction_amount,
+      holding_amount: balance_transaction_amount
+    )
+
+    credit.balance = balance_transaction.balance
+    credit.save!
+    credit
+  end
+
+  def self.create_for_refund_coverage!(user:, amount_cents:, refund_coverage_charge:)
+    credit = new
+    credit.user = user
+    credit.merchant_account = MerchantAccount.gumroad(StripeChargeProcessor.charge_processor_id)
+    credit.amount_cents = amount_cents
+    credit.refund_coverage_charge = refund_coverage_charge
     credit.save!
 
     balance_transaction_amount = BalanceTransaction::Amount.new(
@@ -431,6 +458,10 @@ class Credit < ApplicationRecord
     elsif returned_payment
       comment_attrs[:author_name] = "AutoCredit Returned Payment (#{returned_payment.id})"
       comment_attrs[:content] = "issued adjustment due to currency conversion differences when payment #{returned_payment.id} returned."
+    elsif refund_coverage_charge
+      purchase_id = refund_coverage_charge.purchase_id
+      comment_attrs[:author_name] = "AutoCredit Refund coverage (#{purchase_id})"
+      comment_attrs[:content] = "issued #{formatted_dollar_amount(amount_cents)} credit from refund coverage charge for purchase #{purchase_id}."
     elsif refund
       comment_attrs[:author_name] = "AutoCredit PayPal Connect VAT refund (#{refund.purchase.id})"
     end
@@ -439,8 +470,9 @@ class Credit < ApplicationRecord
 
   private
     def validate_associated_entity
-      return if crediting_user || chargebacked_purchase || returned_payment || refund || financing_paydown_purchase || fee_retention_refund || backtax_agreement
+      return if crediting_user || chargebacked_purchase || returned_payment || refund || refund_coverage_charge ||
+        financing_paydown_purchase || fee_retention_refund || backtax_agreement
 
-      errors.add(:base, "A crediting user, chargebacked purchase, returned payment, refund, financing_paydown_purchase, fee_retention_refund or backtax_agreement must be provided.")
+      errors.add(:base, "A crediting user, chargebacked purchase, returned payment, refund, refund_coverage_charge, financing_paydown_purchase, fee_retention_refund or backtax_agreement must be provided.")
     end
 end
