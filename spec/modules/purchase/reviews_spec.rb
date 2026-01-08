@@ -151,6 +151,29 @@ describe Purchase::Reviews do
       expect(product.average_rating).to eq(0)
       expect(purchase.product_review).to be_deleted
     end
+
+    it "removes reviews from all products in a bundle when bundle is refunded" do
+      bundle_purchase = create(:purchase, link: create(:product, :bundle))
+      bundle_purchase.create_artifacts_and_send_receipt!
+
+      bundle_purchase.product_purchases.each do |product_purchase|
+        product_purchase.post_review(rating: 1, message: "test review")
+        expect(product_purchase.link.average_rating).to eq(1)
+        expect(product_purchase.product_review).to be_present
+        expect(product_purchase.product_review).to be_alive
+        expect(product_purchase.link.reviews_count).to eq(1)
+        expect(product_purchase.link.average_rating).to eq(1)
+      end
+
+      bundle_purchase.refund_purchase!(FlowOfFunds.build_simple_flow_of_funds(Currency::USD, bundle_purchase.total_transaction_cents), bundle_purchase.seller.id)
+
+      bundle_purchase.product_purchases.each do |product_purchase|
+        expect(product_purchase.reload.stripe_refunded).to eq(true)
+        expect(product_purchase.product_review.reload).to be_deleted
+        expect(product_purchase.link.reviews_count).to eq(0)
+        expect(product_purchase.link.average_rating).to eq(0)
+      end
+    end
   end
 
   describe "revoking/unrevoking access" do

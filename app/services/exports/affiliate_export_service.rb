@@ -20,7 +20,7 @@ class Exports::AffiliateExportService
   def perform
     @tempfile = Tempfile.new(["Affiliates", ".csv"], "tmp", encoding: "UTF-8")
 
-    CSV.open(@tempfile, "wb") do |csv|
+    CsvSafe.open(@tempfile, "wb") do |csv|
       csv << AFFILIATE_FIELDS
       @seller.direct_affiliates.alive.includes(:affiliate_user, :products).find_each do |affiliate|
         csv << affiliate_row(affiliate)
