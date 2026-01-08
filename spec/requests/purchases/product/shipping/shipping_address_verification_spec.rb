@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-describe("Product Page - Shipping Scenarios Address verification", type: :system, js: true) do
+describe("Product Page - Shipping Scenarios Address verification", type: :system, js: true, mock_easypost: true) do
   describe "US address" do
     before do
       @user = create(:user)

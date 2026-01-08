@@ -307,6 +307,28 @@ RSpec.configure do |config|
     end
   end
 
+  # Mock EasyPost address verification for physical product tests without VCR
+  config.before(:each, :mock_easypost) do
+    mock_address = OpenStruct.new(
+      id: "adr_mock_#{SecureRandom.hex(8)}",
+      object: "Address",
+      street1: "1640 17TH ST",
+      street2: "",
+      city: "SAN FRANCISCO",
+      state: "CA",
+      zip: "94107-2332",
+      country: "US",
+      verifications: {
+        "delivery" => OpenStruct.new(
+          success: true,
+          errors: [],
+          details: OpenStruct.new(latitude: 37.76493, longitude: -122.40005, time_zone: "America/Los_Angeles")
+        )
+      }
+    )
+    allow_any_instance_of(EasyPost::Services::Address).to receive(:create).and_return(mock_address)
+  end
+
   config.after(:each, type: :system, js: true) do
     JSErrorReporter.instance.report_errors!(self)
     JSErrorReporter.instance.reset!
