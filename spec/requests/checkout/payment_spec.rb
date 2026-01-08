@@ -13,7 +13,7 @@ describe "Checkout payment", :js, type: :system do
     visit "/l/#{@product.unique_permalink}"
     add_to_cart(@product)
     select_tab "PayPal"
-    supports_paypal = page.evaluate_script("JSON.parse(document.querySelector('script.js-react-on-rails-component[data-component-name=\"CheckoutPage\"]').textContent).cart.items[0].product.supports_paypal")
+    supports_paypal = page.evaluate_script("JSON.parse(document.querySelector('script.js-react-on-rails-component[data-component-name=\"CheckoutPage\"]').textContent).add_products[0].product.supports_paypal")
     expect(supports_paypal).to eq("native")
 
     product2 = create(:product, price_cents: 1000)
