@@ -4,32 +4,14 @@ class HelpCenter::ArticlesController < HelpCenter::BaseController
   before_action :redirect_legacy_articles, only: :show
 
   def index
-    @props = {
-      categories: HelpCenter::Category.all.map do |category|
-        {
-          title: category.title,
-          url: help_center_category_path(category),
-          audience: category.audience,
-          articles: category.articles.map do |article|
-            {
-              title: article.title,
-              url: help_center_article_path(article)
-            }
-          end
-        }
-      end
-    }
-
     @title = "Gumroad Help Center"
-    @canonical_url = help_center_root_url
-    @description = "Common questions and support documentation"
+    render inertia: "HelpCenter/Index", props: help_center_presenter.index_props
   end
 
   def show
-    @article = HelpCenter::Article.find_by!(slug: params[:slug])
-
-    @title = "#{@article.title} - Gumroad Help Center"
-    @canonical_url = help_center_article_url(@article)
+    article = HelpCenter::Article.find_by!(slug: params[:slug])
+    @title = "#{article.title} - Gumroad Help Center"
+    render inertia: "HelpCenter/Article", props: help_center_presenter.article_props(article)
   end
 
   private

@@ -39,7 +39,6 @@ import GenerateInvoiceConfirmationPage from "$app/components/server-components/G
 import GenerateInvoicePage from "$app/components/server-components/GenerateInvoicePage";
 import GumroadBlogIndexPage from "$app/components/server-components/GumroadBlog/IndexPage";
 import GumroadBlogPostPage from "$app/components/server-components/GumroadBlog/PostPage";
-import HelpCenterArticlesIndexPage from "$app/components/server-components/HelpCenter/ArticlesIndexPage";
 import Nav from "$app/components/server-components/Nav";
 import PasswordResetPage from "$app/components/server-components/PasswordResetPage";
 import PdfReaderPage from "$app/components/server-components/PdfReaderPage";
@@ -94,7 +93,6 @@ ReactOnRails.register({
 
   Alert,
   AdminAddCreditForm,
-  HelpCenterArticlesIndexPage,
   SupportHeader,
   BundleEditPage,
   CheckoutPage,

@@ -2,6 +2,8 @@
 
 class HelpCenter::CategoriesController < HelpCenter::BaseController
   def show
-    @category = HelpCenter::Category.find_by!(slug: params[:slug])
+    category = HelpCenter::Category.find_by!(slug: params[:slug])
+    @title = "#{category.title} - Gumroad Help Center"
+    render inertia: "HelpCenter/Category", props: help_center_presenter.category_props(category)
   end
 end
