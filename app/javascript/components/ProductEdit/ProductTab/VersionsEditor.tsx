@@ -9,7 +9,7 @@ import { useProductUrl } from "$app/components/ProductEdit/Layout";
 import { Version, useProductEditContext } from "$app/components/ProductEdit/state";
 import { Drawer, ReorderingHandle, SortableList } from "$app/components/SortableList";
 import { Toggle } from "$app/components/Toggle";
-import Placeholder from "$app/components/ui/Placeholder";
+import { Placeholder } from "$app/components/ui/Placeholder";
 import { Row, RowActions, RowContent, RowDetails, Rows } from "$app/components/ui/Rows";
 import { WithTooltip } from "$app/components/WithTooltip";
 

@@ -572,6 +572,8 @@ describe LinksController, :vcr, inertia: true do
           description: "New description",
           custom_button_text_option: "pay_prompt",
           custom_summary: "summary",
+          custom_view_content_button_text: "Get Your Files",
+          custom_receipt_text: "Thank you for purchasing! Feel free to contact us any time for support.",
           custom_attributes: [
             {
               name: "name",
@@ -729,6 +731,8 @@ describe LinksController, :vcr, inertia: true do
         expect(@product.reload.name).to eq "sumlink"
         expect(@product.custom_button_text_option).to eq "pay_prompt"
         expect(@product.custom_summary).to eq "summary"
+        expect(@product.custom_view_content_button_text).to eq "Get Your Files"
+        expect(@product.custom_receipt_text).to eq "Thank you for purchasing! Feel free to contact us any time for support."
         expect(@product.custom_attributes).to eq [{ "name" => "name", "value" => "value" }]
         expect(@product.removed_file_info_attributes).to eq [:Size]
         expect(@product.product_refund_policy_enabled).to be(false)

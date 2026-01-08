@@ -1,3 +1,4 @@
+import { Link } from "@inertiajs/react";
 import * as React from "react";
 
 import { SettingPage as Page } from "$app/parsers/settings";
@@ -40,8 +41,8 @@ export const Layout = ({ onSave, pages, currentPage, children, canUpdate }: Prop
     >
       <Tabs>
         {pages.map((page) => (
-          <Tab key={page} href={Routes[`settings_${page}_path`]()} isSelected={currentPage === page}>
-            {PAGE_TITLES[page]}
+          <Tab key={page} isSelected={currentPage === page} asChild>
+            <Link href={Routes[`settings_${page}_path`]()}>{PAGE_TITLES[page]}</Link>
           </Tab>
         ))}
       </Tabs>

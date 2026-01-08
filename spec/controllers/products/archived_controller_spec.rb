@@ -190,12 +190,28 @@ describe Products::ArchivedController, inertia: true do
       let(:request_format) { :json }
     end
 
-    it "archives the product" do
+    it "archives and unpublishes the product" do
+      expect(membership.purchase_disabled_at).to be_nil
+
       post :create, params: { id: membership.unique_permalink }, as: :json
 
       expect(response).to have_http_status(:ok)
       expect(response.parsed_body).to eq({ "success" => true })
-      expect(membership.reload.archived?).to be(true)
+      membership.reload
+      expect(membership.archived?).to be(true)
+      expect(membership.purchase_disabled_at).to be_present
+    end
+
+    it "does not change purchase_disabled_at on an already unpublished product" do
+      original_disabled_at = 1.week.ago.floor
+      membership.update!(purchase_disabled_at: original_disabled_at)
+
+      post :create, params: { id: membership.unique_permalink }, as: :json
+
+      expect(response).to have_http_status(:ok)
+      membership.reload
+      expect(membership.archived?).to be(true)
+      expect(membership.purchase_disabled_at).to eq(original_disabled_at)
     end
   end
 

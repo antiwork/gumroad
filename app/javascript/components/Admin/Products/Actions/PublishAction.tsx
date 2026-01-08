@@ -10,7 +10,7 @@ type PublishActionProps = {
 const PublishAction = ({ product }: PublishActionProps) =>
   product.alive ? (
     <AdminActionButton
-      url={Routes.unpublish_admin_product_path(product.id)}
+      url={Routes.unpublish_admin_product_path(product.external_id)}
       label="Unpublish"
       loading="Unpublishing..."
       done="Unpublished!"
@@ -19,7 +19,7 @@ const PublishAction = ({ product }: PublishActionProps) =>
     />
   ) : (
     <AdminActionButton
-      url={Routes.publish_admin_product_path(product.id)}
+      url={Routes.publish_admin_product_path(product.external_id)}
       label="Publish"
       loading="Publishing..."
       done="Published!"

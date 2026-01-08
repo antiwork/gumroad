@@ -24,31 +24,24 @@ import AdminSuspendForTosForm from "$app/components/server-components/Admin/Susp
 import AdminUserGuids from "$app/components/server-components/Admin/UserGuids";
 import AdminUserStats from "$app/components/server-components/Admin/UserStats";
 import AffiliateRequestPage from "$app/components/server-components/AffiliateRequestPage";
-import AffiliatesPage from "$app/components/server-components/AffiliatesPage";
 import Alert from "$app/components/server-components/Alert";
-import AudiencePage from "$app/components/server-components/AudiencePage";
 import BundleEditPage from "$app/components/server-components/BundleEditPage";
 import CheckoutPage from "$app/components/server-components/CheckoutPage";
 import CommunitiesPage from "$app/components/server-components/CommunitiesPage";
-import CountrySelectionModal from "$app/components/server-components/CountrySelectionModal";
 import CustomersDownloadPopover from "$app/components/server-components/CustomersPage/DownloadPopover";
 import CustomersFilterPopover from "$app/components/server-components/CustomersPage/FilterPopover";
-import DeveloperWidgetsPage from "$app/components/server-components/Developer/WidgetsPage";
 import Discover from "$app/components/server-components/Discover";
 import DiscoverProductPage from "$app/components/server-components/Discover/ProductPage";
 import DiscoverWishlistPage from "$app/components/server-components/Discover/WishlistPage";
 import DownloadPageWithContent from "$app/components/server-components/DownloadPage/WithContent";
 import DownloadPageWithoutContent from "$app/components/server-components/DownloadPage/WithoutContent";
-import EmailsPage from "$app/components/server-components/EmailsPage";
 import GenerateInvoiceConfirmationPage from "$app/components/server-components/GenerateInvoiceConfirmationPage";
 import GenerateInvoicePage from "$app/components/server-components/GenerateInvoicePage";
 import GumroadBlogIndexPage from "$app/components/server-components/GumroadBlog/IndexPage";
 import GumroadBlogPostPage from "$app/components/server-components/GumroadBlog/PostPage";
 import HelpCenterArticlesIndexPage from "$app/components/server-components/HelpCenter/ArticlesIndexPage";
-import LoginPage from "$app/components/server-components/LoginPage";
 import Nav from "$app/components/server-components/Nav";
 import PasswordResetPage from "$app/components/server-components/PasswordResetPage";
-import PayoutCreditCard from "$app/components/server-components/PayoutPage/CreditCard";
 import PdfReaderPage from "$app/components/server-components/PdfReaderPage";
 import ProductPage from "$app/components/server-components/Product";
 import ProductIframePage from "$app/components/server-components/Product/IframePage";
@@ -65,15 +58,6 @@ import PurchaseProductPage from "$app/components/server-components/Purchase/Prod
 import SubscribeReviewReminders from "$app/components/server-components/ReviewReminders/SubscribeReviewReminders";
 import UnsubscribeReviewReminders from "$app/components/server-components/ReviewReminders/UnsubscribeReviewReminders";
 import SecureRedirectPage from "$app/components/server-components/SecureRedirectPage";
-import AdvancedSettingsPage from "$app/components/server-components/Settings/AdvancedPage";
-import ApplicationEditPage from "$app/components/server-components/Settings/AdvancedPage/EditApplicationPage";
-import AuthorizedApplicationsSettingsPage from "$app/components/server-components/Settings/AuthorizedApplicationsPage";
-import MainSettingsPage from "$app/components/server-components/Settings/MainPage";
-import PasswordSettingsPage from "$app/components/server-components/Settings/PasswordPage";
-import PaymentsSettingsPage from "$app/components/server-components/Settings/PaymentsPage";
-import TeamSettingsPage from "$app/components/server-components/Settings/TeamPage";
-import ThirdPartyAnalyticsSettingsPage from "$app/components/server-components/Settings/ThirdPartyAnalyticsPage";
-import SignupPage from "$app/components/server-components/SignupPage";
 import SubscribePage from "$app/components/server-components/SubscribePage";
 import SubscribePreview from "$app/components/server-components/SubscribePreview";
 import SubscriptionManager from "$app/components/server-components/SubscriptionManager";
@@ -81,7 +65,6 @@ import SubscriptionManagerMagicLink from "$app/components/server-components/Subs
 import SupportHeader from "$app/components/server-components/support/Header";
 import TaxesCollectionModal from "$app/components/server-components/TaxesCollectionModal";
 import TwoFactorAuthenticationPage from "$app/components/server-components/TwoFactorAuthenticationPage";
-import UtmLinksPage from "$app/components/server-components/UtmLinksPage";
 import VideoStreamPlayer from "$app/components/server-components/VideoStreamPlayer";
 import WishlistPage from "$app/components/server-components/WishlistPage";
 import CodeSnippet from "$app/components/ui/CodeSnippet";
@@ -107,42 +90,30 @@ ReactOnRails.register({
   AdminSuspendForTosForm,
   AdminUserGuids,
   AdminUserStats,
-  AdvancedSettingsPage,
   AffiliateRequestPage,
-  AffiliatesPage,
+
   Alert,
   AdminAddCreditForm,
-  ApplicationEditPage,
   HelpCenterArticlesIndexPage,
   SupportHeader,
-  AudiencePage,
-  AuthorizedApplicationsSettingsPage,
   BundleEditPage,
   CheckoutPage,
   CodeSnippet,
   CommunitiesPage,
-  CountrySelectionModal,
   CustomersDownloadPopover,
   CustomersFilterPopover,
-  DeveloperWidgetsPage,
   Discover,
   DiscoverProductPage,
   DiscoverWishlistPage,
   DisputeEvidencePage,
   DownloadPageWithContent,
   DownloadPageWithoutContent,
-  EmailsPage,
   GenerateInvoiceConfirmationPage,
   GenerateInvoicePage,
   GumroadBlogIndexPage,
   GumroadBlogPostPage,
-  LoginPage,
-  MainSettingsPage,
   Nav,
   PasswordResetPage,
-  PasswordSettingsPage,
-  PaymentsSettingsPage,
-  PayoutCreditCard,
   PdfReaderPage,
   Pill,
   ProductEditPage,
@@ -157,7 +128,6 @@ ReactOnRails.register({
   PublicChargePage,
   PublicLicenseKeyPage,
   SecureRedirectPage,
-  SignupPage,
   SubscribePage,
   SubscribePreview,
   SubscribeReviewReminders,
@@ -165,10 +135,7 @@ ReactOnRails.register({
   SubscriptionManager,
   SubscriptionManagerMagicLink,
   TaxesCollectionModal,
-  TeamSettingsPage,
-  ThirdPartyAnalyticsSettingsPage,
   TwoFactorAuthenticationPage,
   VideoStreamPlayer,
   WishlistPage,
-  UtmLinksPage,
 });

@@ -50,6 +50,7 @@ describe "Two-Factor Authentication", js: true, type: :system do
 
         first("nav[aria-label='Main'] details summary").click
         click_on "Logout"
+        expect(page).to have_content("Log in")
         login_to_app
 
         # It doesn't ask for 2FA again

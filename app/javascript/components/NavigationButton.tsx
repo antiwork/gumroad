@@ -9,12 +9,41 @@ import { buttonVariants, NavigationButtonProps, useValidateClassName } from "$ap
     This component is for inertia specific navigation button,
     since the other NavigationButton is used in a lot of ssr pages  and we can't import inertia Link there
 */
-export const NavigationButtonInertia = React.forwardRef<HTMLAnchorElement, NavigationButtonProps>(
-  ({ className, color, outline, small, disabled, children, ...props }, ref) => {
+
+type NavigationButtonInertiaProps = NavigationButtonProps & {
+  data?: Record<string, string | number | boolean | null | undefined | string[] | number[] | boolean[]>;
+  method?: "get" | "post" | "patch" | "put" | "delete";
+  only?: string[];
+  except?: string[];
+  preserveScroll?: boolean;
+  preserveState?: boolean;
+  preserveUrl?: boolean;
+  onStart?: (event: DocumentEventMap["inertia:start"]) => void;
+  onSuccess?: (event: DocumentEventMap["inertia:success"]) => void;
+  onError?: (event: DocumentEventMap["inertia:error"]) => void;
+  onProgress?: (event: DocumentEventMap["inertia:progress"]) => void;
+  onFinish?: (event: DocumentEventMap["inertia:finish"]) => void;
+};
+
+export const NavigationButtonInertia = React.forwardRef<HTMLAnchorElement, NavigationButtonInertiaProps>(
+  ({ className, color, outline, small, disabled, children, onClick, style, inert, ...props }, ref) => {
     useValidateClassName(className);
 
     const variant = outline ? "outline" : color === "danger" ? "destructive" : "default";
     const size = small ? "sm" : "default";
+
+    const filteredProps = Object.fromEntries(Object.entries(props).filter(([_, value]) => value !== undefined));
+
+    const isAnchorEvent = (event: React.MouseEvent): event is React.MouseEvent<HTMLAnchorElement> =>
+      event.currentTarget instanceof HTMLAnchorElement;
+
+    const handleClick = onClick
+      ? (event: React.MouseEvent) => {
+          if (isAnchorEvent(event)) {
+            onClick(event);
+          }
+        }
+      : undefined;
 
     return (
       <Link
@@ -25,7 +54,12 @@ export const NavigationButtonInertia = React.forwardRef<HTMLAnchorElement, Navig
         )}
         ref={ref}
         inert={disabled}
-        href={props.href ?? ""}
+        {...filteredProps}
+        {...(handleClick && { onClick: handleClick })}
+        style={{
+          ...style,
+          ...(disabled ? { pointerEvents: "none", cursor: "not-allowed", opacity: 0.3 } : {}),
+        }}
       >
         {children}
       </Link>
