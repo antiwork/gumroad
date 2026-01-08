@@ -143,4 +143,62 @@ describe User::LowBalanceFraudCheck do
       end
     end
   end
+
+  describe "#check_for_high_balance_and_remove_low_balance_probation!", versioning: true do
+    before do
+      allow(@creator).to receive(:unpaid_balance_cents).and_return(100_00)
+    end
+
+    context "when the user is not on probation" do
+      it "does nothing" do
+        expect { @creator.check_for_high_balance_and_remove_low_balance_probation! }
+          .not_to change { @creator.reload.user_risk_state }
+      end
+    end
+
+    context "when the user is on probation but not by LowBalanceFraudCheck" do
+      before do
+        @creator.put_on_probation(author_name: "admin", content: "manual")
+      end
+
+      it "does nothing" do
+        expect { @creator.check_for_high_balance_and_remove_low_balance_probation! }
+          .not_to change { @creator.reload.user_risk_state }
+      end
+    end
+
+    context "when the user was put on probation by LowBalanceFraudCheck" do
+      before do
+        @creator.send(:disable_refunds_and_put_on_probation!)
+      end
+
+      it "reverts to not_reviewed when the previous state was not_reviewed" do
+        expect(@creator.reload.user_risk_state).to eq("on_probation")
+
+        expect { @creator.check_for_high_balance_and_remove_low_balance_probation! }
+          .to change { @creator.reload.user_risk_state }.from("on_probation").to("not_reviewed")
+
+        comment = @creator.comments.where(comment_type: Comment::COMMENT_TYPE_NOT_REVIEWED, author_name: "LowBalanceFraudCheck").order(:created_at).last
+        expect(comment).to be_present
+      end
+
+      it "reverts to compliant when the previous state was compliant" do
+        creator = create(:user)
+        allow(creator).to receive(:unpaid_balance_cents).and_return(100_00)
+
+        creator.mark_compliant!(author_name: "test")
+        creator.send(:disable_refunds_and_put_on_probation!)
+
+        expect { creator.check_for_high_balance_and_remove_low_balance_probation! }
+          .to change { creator.reload.user_risk_state }.from("on_probation").to("compliant")
+      end
+
+      it "does not override a newer admin risk-state transition after probation" do
+        @creator.mark_compliant!(author_name: "admin", content: "manual review")
+
+        expect { @creator.check_for_high_balance_and_remove_low_balance_probation! }
+          .not_to change { @creator.reload.user_risk_state }
+      end
+    end
+  end
 end

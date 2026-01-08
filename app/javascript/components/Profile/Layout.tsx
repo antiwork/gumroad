@@ -37,7 +37,7 @@ export const Layout = ({ creatorProfile, hideFollowForm, children }: LayoutProps
 
   return (
     <div className="flex min-h-full flex-col">
-      <header className="relative z-20 border-border bg-background text-lg lg:border-b lg:px-4 lg:py-6">
+      <header className="z-20 border-border bg-background text-lg lg:border-b lg:px-4 lg:py-6">
         <div className="mx-auto flex max-w-6xl flex-wrap lg:flex-nowrap lg:items-center lg:gap-6">
           <div className="relative flex grow items-center gap-3 border-b border-border px-4 py-8 lg:flex-1 lg:border-0 lg:p-0">
             {(loggedInUser?.isGumroadAdmin || loggedInUser?.isImpersonating) &&
@@ -46,7 +46,7 @@ export const Layout = ({ creatorProfile, hideFollowForm, children }: LayoutProps
                 href={Routes.admin_impersonate_url({
                   user_identifier: creatorProfile.external_id,
                 })}
-                className="absolute left-3"
+                className="left-3"
                 color="filled"
               >
                 Impersonate
