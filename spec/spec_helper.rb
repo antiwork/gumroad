@@ -106,19 +106,9 @@ def configure_vcr
     config.filter_sensitive_data("<SLACK_WEBHOOK_URL>") { GlobalConfig.get("SLACK_WEBHOOK_URL") }
     config.filter_sensitive_data("<CLOUDFRONT_KEYPAIR_ID>") { GlobalConfig.get("CLOUDFRONT_KEYPAIR_ID") }
 
-    # Sanitize EasyPost Basic Auth headers (base64-encoded API keys) before recording cassettes
-    config.before_record do |interaction|
-      next unless interaction.request.uri.include?("easypost.com")
-
-      if interaction.request.headers["Authorization"]
-        interaction.request.headers["Authorization"] = interaction.request.headers["Authorization"].map do |auth|
-          if auth.start_with?("Basic ")
-            "Basic <EASYPOST_API_KEY_BASE64>"
-          else
-            auth
-          end
-        end
-      end
+    # Filter EasyPost API key (Base64-encoded for Basic Auth headers)
+    config.filter_sensitive_data("<EASYPOST_API_KEY_BASE64>") do
+      Base64.strict_encode64("#{GlobalConfig.get('EASYPOST_API_KEY')}:")
     end
   end
 end
