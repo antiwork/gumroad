@@ -4,14 +4,7 @@ import { Area, Line, XAxis, YAxis } from "recharts";
 import { formatPriceCentsWithCurrencySymbol } from "$app/utils/currency";
 
 import useChartTooltip from "$app/components/Analytics/useChartTooltip";
-import { Chart, lineProps, xAxisProps, yAxisProps } from "$app/components/Chart";
-
-type DotProps = {
-  key: string;
-  cx: number;
-  cy: number;
-  width: number;
-};
+import { Chart, type DotProps, lineProps, xAxisProps, yAxisProps } from "$app/components/Chart";
 
 export type DataPoint = {
   date: string;
