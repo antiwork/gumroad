@@ -85,11 +85,12 @@ describe LibraryPresenter do
       end
 
       before do
+        product.update!(block_access_after_membership_cancellation: true)
         create(:recurring_membership_purchase, link: product, purchaser: buyer, subscription: purchase.subscription)
         create(:membership_purchase, link: product, purchaser: buyer).tap { _1.subscription.update!(cancelled_at: 1.day.ago) }
       end
 
-      it "returns results for all live subscriptions" do
+      it "returns results for all live subscriptions and excludes cancelled ones when access is blocked" do
         purchases, creator_counts = described_class.new(buyer).library_cards
 
         expect(purchases).to eq([
@@ -120,6 +121,65 @@ describe LibraryPresenter do
                                 ])
 
         expect(creator_counts).to eq([{ count: 1, id: creator.external_id, name: creator.name }])
+      end
+    end
+
+    context "when subscription is cancelled or ended" do
+      context "when block_access_after_membership_cancellation is enabled (default)" do
+        before do
+          product.update!(block_access_after_membership_cancellation: true)
+        end
+
+        it "excludes cancelled subscriptions from library" do
+          purchase.subscription.update!(cancelled_at: 1.day.ago)
+
+          purchases, _ = described_class.new(buyer).library_cards
+          expect(purchases).to be_empty
+        end
+
+        it "excludes ended subscriptions from library" do
+          purchase.subscription.update!(ended_at: 1.day.ago)
+
+          purchases, _ = described_class.new(buyer).library_cards
+          expect(purchases).to be_empty
+        end
+
+        it "excludes failed subscriptions from library" do
+          purchase.subscription.update!(failed_at: 1.day.ago)
+
+          purchases, _ = described_class.new(buyer).library_cards
+          expect(purchases).to be_empty
+        end
+      end
+
+      context "when block_access_after_membership_cancellation is disabled" do
+        before do
+          product.update!(block_access_after_membership_cancellation: false)
+        end
+
+        it "includes cancelled subscriptions in library" do
+          purchase.subscription.update!(cancelled_at: 1.day.ago)
+
+          purchases, _ = described_class.new(buyer).library_cards
+          expect(purchases.size).to eq(1)
+          expect(purchases.first[:purchase][:id]).to eq(purchase.external_id)
+        end
+
+        it "includes ended subscriptions in library" do
+          purchase.subscription.update!(ended_at: 1.day.ago)
+
+          purchases, _ = described_class.new(buyer).library_cards
+          expect(purchases.size).to eq(1)
+          expect(purchases.first[:purchase][:id]).to eq(purchase.external_id)
+        end
+
+        it "includes failed subscriptions in library" do
+          purchase.subscription.update!(failed_at: 1.day.ago)
+
+          purchases, _ = described_class.new(buyer).library_cards
+          expect(purchases.size).to eq(1)
+          expect(purchases.first[:purchase][:id]).to eq(purchase.external_id)
+        end
       end
     end
 

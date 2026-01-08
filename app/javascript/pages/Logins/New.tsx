@@ -1,6 +1,7 @@
 import { Link, useForm, usePage } from "@inertiajs/react";
 import * as React from "react";
 
+import { AuthAlert } from "$app/components/AuthAlert";
 import { ForgotPasswordForm } from "$app/components/Authentication/ForgotPasswordForm";
 import { Layout } from "$app/components/Authentication/Layout";
 import { SocialAuth } from "$app/components/Authentication/SocialAuth";
@@ -9,7 +10,6 @@ import { PasswordInput } from "$app/components/PasswordInput";
 import { Separator } from "$app/components/Separator";
 import { useOriginalLocation } from "$app/components/useOriginalLocation";
 import { RecaptchaCancelledError, useRecaptcha } from "$app/components/useRecaptcha";
-import { WarningFlash } from "$app/components/WarningFlashMessage";
 
 type PageProps = {
   email: string | null;
@@ -71,7 +71,7 @@ function LoginPage() {
             <span>or</span>
           </Separator>
           <section>
-            <WarningFlash />
+            <AuthAlert />
             <fieldset>
               <legend>
                 <label htmlFor={`${uid}-email`}>Email</label>

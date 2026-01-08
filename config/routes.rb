@@ -341,7 +341,9 @@ Rails.application.routes.draw do
       get "/oauth/login" => "logins#new"
 
       post "login", to: "logins#create"
-      get "logout", to: "logins#destroy" # TODO: change the method to DELETE to conform to REST
+      # TODO: Keeping both routes for now to support legacy GET requests until all logout links are migrated to DELETE(inertia).
+      get "logout", to: "logins#destroy"
+      delete "logout", to: "logins#destroy"
       post "forgot_password", to: "user/passwords#create"
       scope "/users" do
         get "/check_twitter_link", to: "users/oauth#check_twitter_link"

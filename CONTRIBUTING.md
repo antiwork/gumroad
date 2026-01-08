@@ -74,7 +74,6 @@ Generally: Include an AI disclosure, self-review (comment) on your code, break u
     Link.where(id: batch.map(&:id)).update_all(Link.set_flag_sql(:DEPRECATED_stream_only, false))
   end
   ```
-- Use `import debounce from "lodash/debounce"` instead of `import { debounce } from "lodash"` because tree-shaking doesn't work well with Lodash.
 - Use `product` instead of `link` in new code (in variable names, column names, comments, etc.)
 - Use `request` instead of `$.ajax` in new code
 - Use `buyer` and `seller` when naming variables instead of `customer` and `creator`
