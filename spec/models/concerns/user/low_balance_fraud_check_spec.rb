@@ -5,7 +5,7 @@ require "spec_helper"
 describe User::LowBalanceFraudCheck do
   before do
     @creator = create(:user)
-    @refunded_or_disputed_purchase_id = 123
+    @purchase = create(:refunded_purchase, link: create(:product, user: @creator))
   end
 
   describe "#enable_refunds!" do
@@ -46,7 +46,7 @@ describe User::LowBalanceFraudCheck do
       end
 
       it "doesn't probate the creator" do
-        @creator.check_for_low_balance_and_probate(@refunded_or_disputed_purchase_id)
+        @creator.check_for_low_balance_and_probate(@purchase.id)
 
         expect(@creator.reload.on_probation?).to eq(false)
       end
@@ -66,8 +66,8 @@ describe User::LowBalanceFraudCheck do
 
           it "does not probate the creator" do
             expect do
-              @creator.check_for_low_balance_and_probate(@refunded_or_disputed_purchase_id)
-            end.to have_enqueued_mail(AdminMailer, :low_balance_notify).with(@creator.id, @refunded_or_disputed_purchase_id)
+              @creator.check_for_low_balance_and_probate(@purchase.id)
+            end.to have_enqueued_mail(AdminMailer, :low_balance_notify).with(@creator.id, @purchase.id)
 
             expect(@creator.reload.suspended_for_fraud?).to eq(true)
             expect(@creator.reload.on_probation?).to eq(false)
@@ -83,8 +83,8 @@ describe User::LowBalanceFraudCheck do
 
           it "does not probate the creator" do
             expect do
-              @creator.check_for_low_balance_and_probate(@refunded_or_disputed_purchase_id)
-            end.to have_enqueued_mail(AdminMailer, :low_balance_notify).with(@creator.id, @refunded_or_disputed_purchase_id)
+              @creator.check_for_low_balance_and_probate(@purchase.id)
+            end.to have_enqueued_mail(AdminMailer, :low_balance_notify).with(@creator.id, @purchase.id)
 
             expect(@creator.reload.suspended_for_tos_violation?).to eq(true)
             expect(@creator.reload.on_probation?).to eq(false)
@@ -96,8 +96,8 @@ describe User::LowBalanceFraudCheck do
         context "when the creator is not recently probated for low balance" do
           it "probates the creator" do
             expect do
-              @creator.check_for_low_balance_and_probate(@refunded_or_disputed_purchase_id)
-            end.to have_enqueued_mail(AdminMailer, :low_balance_notify).with(@creator.id, @refunded_or_disputed_purchase_id)
+              @creator.check_for_low_balance_and_probate(@purchase.id)
+            end.to have_enqueued_mail(AdminMailer, :low_balance_notify).with(@creator.id, @purchase.id)
 
             expect(@creator.reload.on_probation?).to eq(true)
             expect(@creator.comments.last.content).to eq("Probated (payouts suspended) automatically on #{Time.current.to_fs(:formatted_date_full_month)} because of suspicious refund activity")
@@ -115,8 +115,8 @@ describe User::LowBalanceFraudCheck do
 
             it "probates the creator" do
               expect do
-                @creator.check_for_low_balance_and_probate(@refunded_or_disputed_purchase_id)
-              end.to have_enqueued_mail(AdminMailer, :low_balance_notify).with(@creator.id, @refunded_or_disputed_purchase_id)
+                @creator.check_for_low_balance_and_probate(@purchase.id)
+              end.to have_enqueued_mail(AdminMailer, :low_balance_notify).with(@creator.id, @purchase.id)
 
               expect(@creator.reload.on_probation?).to eq(true)
               expect(@creator.comments.last.content).to eq("Probated (payouts suspended) automatically on #{Time.current.to_fs(:formatted_date_full_month)} because of suspicious refund activity")
@@ -133,8 +133,8 @@ describe User::LowBalanceFraudCheck do
 
             it "doesn't probate the creator" do
               expect do
-                @creator.check_for_low_balance_and_probate(@refunded_or_disputed_purchase_id)
-              end.to have_enqueued_mail(AdminMailer, :low_balance_notify).with(@creator.id, @refunded_or_disputed_purchase_id)
+                @creator.check_for_low_balance_and_probate(@purchase.id)
+              end.to have_enqueued_mail(AdminMailer, :low_balance_notify).with(@creator.id, @purchase.id)
 
               expect(@creator.reload.on_probation?).to eq(false)
             end
