@@ -65,6 +65,7 @@ import { FileKindIcon } from "$app/components/FileRowContent";
 import { Icon } from "$app/components/Icons";
 import { LoadingSpinner } from "$app/components/LoadingSpinner";
 import { Modal } from "$app/components/Modal";
+import { NavigationButtonInertia } from "$app/components/NavigationButton";
 import { NumberInput } from "$app/components/NumberInput";
 import { Pagination, PaginationProps } from "$app/components/Pagination";
 import { Popover } from "$app/components/Popover";
@@ -412,32 +413,37 @@ const CustomersPage = ({
                 </WithTooltip>
               }
             >
-              <div className="flex flex-col gap-4">
-                <h3>Download sales as CSV</h3>
-                <div>
-                  {exportNames
-                    ? `This will download sales of '${exportNames}' as a CSV, with each purchase on its own row.`
-                    : "This will download a CSV with each purchase on its own row."}
-                </div>
-                <DateRangePicker from={from} to={to} setFrom={setFrom} setTo={setTo} />
-                <NavigationButton
-                  color="primary"
-                  href={Routes.export_purchases_path({
-                    format: "csv",
-                    start_time: lightFormat(from, "yyyy-MM-dd"),
-                    end_time: lightFormat(to, "yyyy-MM-dd"),
-                    product_ids: includedProductIds,
-                    variant_ids: includedVariantIds,
-                  })}
-                >
-                  Download
-                </NavigationButton>
-                {count > 2000 && (
-                  <div className="mt-2 text-sm text-gray-600">
-                    Exports over 2,000 rows will be processed in the background and emailed to you.
+              {(close) => (
+                <div className="flex flex-col gap-4">
+                  <h3>Download sales as CSV</h3>
+                  <div>
+                    {exportNames
+                      ? `This will download sales of '${exportNames}' as a CSV, with each purchase on its own row.`
+                      : "This will download a CSV with each purchase on its own row."}
                   </div>
-                )}
-              </div>
+                  <DateRangePicker from={from} to={to} setFrom={setFrom} setTo={setTo} />
+                  <NavigationButtonInertia
+                    color="primary"
+                    href={Routes.export_purchases_path()}
+                    method="post"
+                    preserveScroll
+                    data={{
+                      start_time: lightFormat(from, "yyyy-MM-dd"),
+                      end_time: lightFormat(to, "yyyy-MM-dd"),
+                      product_ids: includedProductIds,
+                      variant_ids: includedVariantIds,
+                    }}
+                    onSuccess={() => close()}
+                  >
+                    Download
+                  </NavigationButtonInertia>
+                  {count > 2000 && (
+                    <div className="mt-2 text-sm text-gray-600">
+                      Exports over 2,000 rows will be processed in the background and emailed to you.
+                    </div>
+                  )}
+                </div>
+              )}
             </Popover>
           </>
         }
@@ -1893,7 +1899,7 @@ const UtmLinkStack = ({ link, showHeader }: { link: Customer["utm_link"]; showHe
       ) : null}
       <div>
         <h5>Title</h5>
-        <a href={Routes.utm_links_dashboard_path({ query: link.title })} target="_blank" rel="noreferrer">
+        <a href={Routes.dashboard_utm_links_path({ query: link.title })} target="_blank" rel="noreferrer">
           {link.title}
         </a>
       </div>

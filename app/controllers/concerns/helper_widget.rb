@@ -12,7 +12,7 @@ module HelperWidget
   end
 
   def helper_session
-    return unless current_seller
+    return unless current_seller && helper_widget_secret.present?
 
     timestamp = (Time.current.to_f * 1000).to_i
 
@@ -28,10 +28,10 @@ module HelperWidget
       email ||= current_seller.email
       message = "#{email}:#{timestamp}"
 
-      OpenSSL::HMAC.hexdigest(
-        "sha256",
-        GlobalConfig.get("HELPER_WIDGET_SECRET"),
-        message
-      )
+      OpenSSL::HMAC.hexdigest("sha256", helper_widget_secret, message)
+    end
+
+    def helper_widget_secret
+      GlobalConfig.get("HELPER_WIDGET_SECRET")
     end
 end
