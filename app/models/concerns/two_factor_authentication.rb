@@ -35,9 +35,8 @@ module TwoFactorAuthentication
   end
 
   def send_authentication_token!
-    use_resend = ResendFallbackTracker.should_use_resend_fallback?(email_type: :two_factor, user_id: id)
-    TwoFactorAuthenticationMailer.authentication_token(id, use_resend:).deliver_later(queue: "critical")
-    ResendFallbackTracker.record_email_sent(email_type: :two_factor, user_id: id)
+    email_provider = EmailRouterFallbackService.email_provider_for_two_factor(user: self)
+    TwoFactorAuthenticationMailer.authentication_token(id, email_provider:).deliver_later(queue: "critical")
   end
 
   def add_two_factor_authenticated_ip!(remote_ip)

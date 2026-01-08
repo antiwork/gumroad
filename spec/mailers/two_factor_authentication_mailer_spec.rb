@@ -18,25 +18,14 @@ describe TwoFactorAuthenticationMailer do
       expect(@mail.body).to include("This authentication token and login link will expire in 10 minutes.")
     end
 
-    context "when use_resend is false (default)" do
+    context "when email_provider is nil (default)" do
       before do
-        @mail = TwoFactorAuthenticationMailer.authentication_token(user.id, use_resend: false)
+        @mail = TwoFactorAuthenticationMailer.authentication_token(user.id, email_provider: nil)
       end
 
       it "uses SendGrid delivery method" do
         expect(@mail.delivery_method.settings[:address]).to eq SENDGRID_SMTP_ADDRESS
       end
     end
-
-    context "when use_resend is true" do
-      before do
-        @mail = TwoFactorAuthenticationMailer.authentication_token(user.id, use_resend: true)
-      end
-
-      it "uses Resend delivery method" do
-        expect(@mail.delivery_method.settings[:address]).to eq RESEND_SMTP_ADDRESS
-      end
-    end
   end
 end
-
