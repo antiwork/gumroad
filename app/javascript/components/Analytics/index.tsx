@@ -1,5 +1,5 @@
 import { lightFormat } from "date-fns";
-import pickBy from "lodash/pickBy";
+import { pickBy } from "lodash-es";
 import * as React from "react";
 
 import {

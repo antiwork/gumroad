@@ -1027,7 +1027,7 @@ describe ContactingCreatorMailer do
       expect(body).to include("Term: gumroad-day-123")
       expect(body).to include("Content: gumroad-day-56")
       expect(mail.body.encoded).to have_link("UTM link", href: utm_link.utm_url)
-      expect(mail.body.encoded).to have_link(utm_link.title, href: utm_links_dashboard_url(query: utm_link.title))
+      expect(mail.body.encoded).to have_link(utm_link.title, href: dashboard_utm_links_url(query: utm_link.title))
     end
   end
 
