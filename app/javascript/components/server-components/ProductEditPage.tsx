@@ -30,7 +30,7 @@ import {
   ExistingFileEntry,
   ShippingCountry,
   ContentUpdates,
-  AvailableDiscountCode,
+  OfferCode,
 } from "$app/components/ProductEdit/state";
 import { ImageUploadSettingsContext } from "$app/components/RichTextEditor";
 import { showAlert } from "$app/components/server-components/Alert";
@@ -85,7 +85,7 @@ type Props = {
   seller_refund_policy_enabled: boolean;
   seller_refund_policy: Pick<RefundPolicy, "title" | "fine_print">;
   cancellation_discounts_enabled: boolean;
-  available_discount_codes: AvailableDiscountCode[] | null;
+  default_offer_code: OfferCode | null;
 };
 
 const createContextValue = (props: Props) => ({
@@ -119,10 +119,8 @@ const createContextValue = (props: Props) => ({
   seller_refund_policy_enabled: props.seller_refund_policy_enabled,
   seller_refund_policy: props.seller_refund_policy,
   cancellationDiscountsEnabled: props.cancellation_discounts_enabled,
-  availableDiscountCodes: props.available_discount_codes,
   contentUpdates: null,
   setContentUpdates: () => {},
-  setAvailableDiscountCodes: () => {},
   filesById: new Map(props.product.files.map((file) => [file.id, { ...file, url: getDownloadUrl(props.id, file) }])),
 });
 
@@ -148,9 +146,6 @@ const ProductEditPage = (props: Props) => {
   const [product, setProduct] = React.useState(props.product);
   const [contentUpdates, setContentUpdates] = React.useState<ContentUpdates>(null);
   const [currencyType, setCurrencyType] = React.useState<CurrencyCode>(props.currency_type);
-  const [availableDiscountCodes, setAvailableDiscountCodes] = React.useState<AvailableDiscountCode[] | null>(
-    props.available_discount_codes,
-  );
   const lastSavedProductRef = React.useRef<Product>(structuredClone(props.product));
 
   const updateProduct = (update: Partial<Product> | ((product: Product) => void)) =>
@@ -209,16 +204,12 @@ const ProductEditPage = (props: Props) => {
       saving,
       contentUpdates,
       setContentUpdates,
-      availableDiscountCodes,
-      setAvailableDiscountCodes,
     }),
     [
       product,
       updateProduct,
       existingFiles,
       setExistingFiles,
-      availableDiscountCodes,
-      setAvailableDiscountCodes,
       currencyType,
       setCurrencyType,
       saving,
@@ -278,7 +269,6 @@ const ProductEditRouter = async (global: GlobalProps) => {
       value={{
         ...createContextValue(props),
         setCurrencyType: (_currency) => {}, // no-op
-        setAvailableDiscountCodes: () => {}, // no-op in SSR
         setContentUpdates: () => {}, // no-op in SSR
       }}
     >

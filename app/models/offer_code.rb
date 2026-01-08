@@ -48,6 +48,12 @@ class OfferCode < ApplicationRecord
   # Fixed-amount-off offer codes only show up on products that match their currency. That's why this scope takes a currency_type.
   # nil currency_type is a percentage offer code
   scope :universal_with_matching_currency, ->(currency_type) { where("universal = 1 and (currency_type = ? or currency_type is null)", currency_type) }
+
+  # Public: Search offer codes by name or code
+  scope :search_by_name_or_code, ->(query) {
+    query = query.to_s.strip.downcase
+    where("LOWER(name) LIKE ? OR LOWER(code) LIKE ?", "%#{query}%", "%#{query}%")
+  }
   scope :universal, -> { where(universal: true) }
 
   def is_valid_for_purchase?(purchase_quantity: 1)

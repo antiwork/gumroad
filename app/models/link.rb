@@ -821,8 +821,17 @@ class Link < ApplicationRecord
   # Public: Find all alive offer codes associated with product and user in order of created at.
   #
   # Returns list of offer codes.
-  def product_and_universal_offer_codes
-    (offer_codes.alive + user.offer_codes.universal_with_matching_currency(price_currency_type).alive).sort_by(&:created_at)
+  def product_and_universal_offer_codes(query = nil, limit = nil)
+    product_codes = offer_codes.alive
+    universal_codes = user.offer_codes.universal_with_matching_currency(price_currency_type).alive
+
+    if query.present?
+      product_codes = product_codes.search_by_name_or_code(query)
+      universal_codes = universal_codes.search_by_name_or_code(query)
+    end
+
+    combined_codes = (product_codes + universal_codes).sort_by(&:created_at)
+    limit ? combined_codes.first(limit) : combined_codes
   end
 
   def purchase_info_for_product_page(requested_user, browser_guid)
@@ -1235,12 +1244,9 @@ class Link < ApplicationRecord
     def default_offer_code_must_be_valid
       return unless default_offer_code.present?
 
-      unless user.offer_codes.alive.include?(default_offer_code)
+      if user.offer_codes.alive.include?(default_offer_code)
         errors.add(:default_offer_code, "must belong to your offer codes")
-        return
-      end
-
-      unless offer_codes.include?(default_offer_code) || default_offer_code.universal?
+      elsif !offer_codes.include?(default_offer_code) && !default_offer_code.universal?
         errors.add(:default_offer_code, "must be associated with this product or be universal")
       end
     end

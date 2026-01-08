@@ -4,46 +4,42 @@ import { searchProductOfferCodes } from "$app/data/offer_code";
 import { assertResponseError } from "$app/utils/request";
 
 import { ComboBox } from "$app/components/ComboBox";
-import { ProductEditContext, AvailableDiscountCode } from "$app/components/ProductEdit/state";
+import { OfferCode, useProductEditContext } from "$app/components/ProductEdit/state";
 import { showAlert } from "$app/components/server-components/Alert";
 import { ToggleSettingRow } from "$app/components/SettingRow";
 import { useDebouncedCallback } from "$app/components/useDebouncedCallback";
 
 export const DefaultDiscountCodeSelector = () => {
-  const context = React.useContext(ProductEditContext);
-  if (!context?.availableDiscountCodes) return null;
+  const { uniquePermalink, product, updateProduct } = useProductEditContext();
 
-  const { uniquePermalink, product, updateProduct, availableDiscountCodes, setAvailableDiscountCodes } = context;
+  const selectedDiscountCode = product.default_offer_code;
 
-  const defaultOfferCodeId = product.default_offer_code_id;
-  const isEnabled = !!defaultOfferCodeId;
+  const getLabel = (code: OfferCode) => code.name || code.code;
 
-  const selectedDiscountCode = availableDiscountCodes.find((code) => code.id === defaultOfferCodeId) ?? null;
-
-  const formatLabel = (code: AvailableDiscountCode) => code.name || code.code;
-
-  const [query, setQuery] = React.useState<string>(() =>
-    selectedDiscountCode ? formatLabel(selectedDiscountCode) : "",
-  );
-  const [options, setOptions] = React.useState<AvailableDiscountCode[]>(availableDiscountCodes);
+  const [query, setQuery] = React.useState(() => (selectedDiscountCode ? getLabel(selectedDiscountCode) : ""));
+  const [options, setOptions] = React.useState<OfferCode[]>([]);
   const [isOpen, setIsOpen] = React.useState(false);
   const [isTogglePending, setIsTogglePending] = React.useState(false);
-  const showDropdown = isEnabled || isTogglePending;
+
+  const resetSearch = React.useCallback(() => {
+    setQuery("");
+    setOptions([]);
+    setIsOpen(false);
+  }, []);
 
   React.useEffect(() => {
-    if (defaultOfferCodeId) {
+    if (product.default_offer_code) {
       setIsTogglePending(false);
     }
-  }, [defaultOfferCodeId]);
+  }, [product.default_offer_code]);
 
-  const loadOptions = React.useCallback(
+  const fetchOptions = React.useCallback(
     async (search: string) => {
       if (!uniquePermalink) return;
 
       const trimmedSearch = search.trim();
       if (!trimmedSearch) {
-        setOptions([]);
-        setIsOpen(false);
+        resetSearch();
         return;
       }
 
@@ -55,41 +51,40 @@ export const DefaultDiscountCodeSelector = () => {
         showAlert("Sorry, something went wrong while searching discount codes.", "error");
       }
     },
-    [uniquePermalink],
+    [uniquePermalink, resetSearch],
   );
 
-  const debouncedLoadOptions = useDebouncedCallback((search: string) => {
-    void loadOptions(search);
-  }, 300);
+  const debouncedFetchOptions = useDebouncedCallback((search: string) => void fetchOptions(search), 300);
 
-  const handleToggleChange = (enabled: boolean) => {
-    if (enabled) {
-      setIsTogglePending(true);
-      setQuery("");
-      setOptions([]);
-    } else {
-      setIsTogglePending(false);
-      updateProduct({ default_offer_code_id: null });
-      setQuery("");
-      setOptions([]);
-    }
-  };
+  const handleToggleChange = React.useCallback(
+    (enabled: boolean) => {
+      if (enabled) {
+        setIsTogglePending(true);
+        resetSearch();
+      } else {
+        updateProduct({ default_offer_code_id: null });
+        setIsTogglePending(false);
+        resetSearch();
+      }
+    },
+    [resetSearch, updateProduct],
+  );
 
   return (
     <ToggleSettingRow
-      value={showDropdown}
+      value={!!product.default_offer_code || isTogglePending}
       onChange={handleToggleChange}
-      disabled={false}
       label="Automatically apply discount code"
       dropdown={
         <section className="flex flex-col gap-4">
           <fieldset>
             <label htmlFor="default-discount-code">Discount code</label>
-            <ComboBox<AvailableDiscountCode>
+            <ComboBox<OfferCode>
               editable
               open={isOpen ? options.length > 0 : false}
               onToggle={setIsOpen}
               className="w-full"
+              options={options}
               input={(props) => (
                 <div className="input">
                   <input
@@ -98,41 +93,39 @@ export const DefaultDiscountCodeSelector = () => {
                     type="search"
                     placeholder="Begin typing to select a discount code"
                     value={query}
+                    aria-autocomplete="list"
                     onChange={(event) => {
                       const value = event.target.value;
                       setQuery(value);
-                      if (value.trim().length === 0) {
-                        setIsOpen(false);
-                        setOptions([]);
+
+                      if (!value.trim()) {
+                        resetSearch();
                         return;
                       }
-                      debouncedLoadOptions(value);
+
+                      debouncedFetchOptions(value);
                       setIsOpen(true);
                     }}
-                    aria-autocomplete="list"
                   />
                 </div>
               )}
-              options={options}
               option={(code, props) => (
                 <div
                   {...props}
-                  onClick={(event: React.MouseEvent<HTMLDivElement>) => {
-                    if (props.onClick) {
-                      props.onClick(event);
-                    }
-                    updateProduct({ default_offer_code_id: code.id });
-                    setQuery(formatLabel(code));
-                    setIsTogglePending(false);
-                    setAvailableDiscountCodes((current) => {
-                      if (!current) return [code];
-                      if (current.find((c) => c.id === code.id)) return current;
-                      return [code, ...current];
+                  aria-selected={code.id === product.default_offer_code?.id}
+                  onClick={(event) => {
+                    props.onClick?.(event);
+
+                    updateProduct({
+                      default_offer_code_id: code.id,
                     });
+
+                    setQuery(getLabel(code));
+                    setIsTogglePending(false);
+                    setIsOpen(false);
                   }}
-                  aria-selected={code.id === defaultOfferCodeId}
                 >
-                  {formatLabel(code)}
+                  {getLabel(code)}
                 </div>
               )}
             />

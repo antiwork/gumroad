@@ -197,6 +197,12 @@ class ProductPresenter
           duration_in_billing_cycles: cancellation_discount.duration_in_billing_cycles,
         } : nil,
         default_offer_code_id: product.default_offer_code&.external_id,
+        default_offer_code: product.default_offer_code ? {
+          id: product.default_offer_code.external_id,
+          code: product.default_offer_code.code,
+          name: product.default_offer_code.name.presence || "",
+          discount: product.default_offer_code.discount,
+        } : null,
         public_files: product.alive_public_files.attached.map { PublicFilePresenter.new(public_file: _1).props },
         audio_previews_enabled: Feature.active?(:audio_previews, product.user),
         community_chat_enabled: Feature.active?(:communities, product.user) ? product.community_chat_enabled? : nil,
@@ -242,7 +248,6 @@ class ProductPresenter
         fine_print: product.user.refund_policy.fine_print,
       },
       cancellation_discounts_enabled: Feature.active?(:cancellation_discounts, product.user),
-      available_discount_codes: available_discount_codes_for_edit,
     }
   end
 
@@ -265,20 +270,6 @@ class ProductPresenter
   end
 
   private
-    def available_discount_codes_for_edit
-      offer_codes = []
-      offer_codes << product.default_offer_code if product.default_offer_code.present?
-
-      offer_codes.map do |offer_code|
-        {
-          id: offer_code.external_id,
-          code: offer_code.code,
-          name: offer_code.name.presence || "",
-          discount: offer_code.discount,
-        }
-      end
-    end
-
     def default_sku
       skus_enabled && skus.alive.not_is_default_sku.empty? ? skus.is_default_sku.first : nil
     end

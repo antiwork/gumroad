@@ -86,7 +86,7 @@ export type InstallmentPlan = {
   number_of_installments: number;
 };
 
-export type AvailableDiscountCode = {
+export type OfferCode = {
   id: string;
   code: string;
   name: string;
@@ -152,6 +152,7 @@ export type Product = {
   require_shipping: boolean;
   cancellation_discount: CancellationDiscount | null;
   default_offer_code_id: string | null;
+  default_offer_code: OfferCode | null;
   public_files: PublicFileWithStatus[];
   audio_previews_enabled: boolean;
   community_chat_enabled: boolean | null;
@@ -200,8 +201,6 @@ export const ProductEditContext = React.createContext<{
   seller_refund_policy_enabled: boolean;
   seller_refund_policy: Pick<RefundPolicy, "title" | "fine_print">;
   cancellationDiscountsEnabled: boolean;
-  availableDiscountCodes: AvailableDiscountCode[] | null;
-  setAvailableDiscountCodes: React.Dispatch<React.SetStateAction<AvailableDiscountCode[] | null>>;
   contentUpdates: ContentUpdates;
   setContentUpdates: React.Dispatch<React.SetStateAction<ContentUpdates>>;
   filesById: Map<string, FileEntry>;

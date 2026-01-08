@@ -21,7 +21,6 @@ export const ProductPreview = ({ showRefundPolicyModal }: { showRefundPolicyModa
     ratings,
     seller_refund_policy_enabled,
     seller_refund_policy,
-    availableDiscountCodes,
   } = useProductEditContext();
 
   const url = useProductUrl();
@@ -32,19 +31,16 @@ export const ProductPreview = ({ showRefundPolicyModal }: { showRefundPolicyModa
     product.native_type === "membership" ? (product.subscription_duration ?? recurrenceIds[0]) : null;
 
   const defaultDiscountCode: ProductDiscount | null = React.useMemo(() => {
-    if (!product.default_offer_code_id || !availableDiscountCodes) return null;
-
-    const defaultDiscountCodeData = availableDiscountCodes.find((code) => code.id === product.default_offer_code_id);
-    if (!defaultDiscountCodeData) return null;
+    if (!product.default_offer_code) return null;
 
     return {
       valid: true as const,
-      code: defaultDiscountCodeData.code,
+      code: product.default_offer_code.code,
       discount: {
-        ...defaultDiscountCodeData.discount,
+        ...product.default_offer_code.discount,
       },
     };
-  }, [product.default_offer_code_id, availableDiscountCodes]);
+  }, [product.default_offer_code]);
 
   const serializedProduct: Product = {
     id,
