@@ -34,7 +34,7 @@ type Props = {
       links?: Record<string, string> | null;
     } | null;
     currentToken?: string | null;
-  };
+  } | null;
 };
 
 export const Nav = (props: Props) => {
