@@ -79,7 +79,7 @@ module User::LowBalanceFraudCheck
     def most_recent_low_balance_probation_comment
       comments.with_type_on_probation
               .where(author_name: LOW_BALANCE_FRAUD_CHECK_AUTHOR_NAME)
-              .order(id: :desc)
+              .order(created_at: :desc, id: :desc)
               .first
     end
 
@@ -92,7 +92,7 @@ module User::LowBalanceFraudCheck
     def previous_risk_state_before_low_balance_probation
       probation_version = versions
         .where("JSON_UNQUOTE(JSON_EXTRACT(CAST(object_changes AS JSON), '$.user_risk_state[1]')) = ?", "on_probation")
-        .order(id: :desc)
+        .order(created_at: :desc, id: :desc)
         .first
 
       return "not_reviewed" if probation_version.nil?
