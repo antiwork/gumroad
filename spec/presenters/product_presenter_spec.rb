@@ -256,6 +256,7 @@ describe ProductPresenter do
             **ProductPresenter::InstallmentPlanProps.new(product: presenter.product).props,
             customizable_price: true,
             suggested_price_cents: 200,
+            default_offer_code: nil,
             custom_button_text_option: "pay_prompt",
             custom_summary: "To summarize, I am a product.",
             custom_view_content_button_text: "Download Files",
@@ -447,10 +448,11 @@ describe ProductPresenter do
         expect(presenter.edit_props[:product][:default_offer_code_id]).to eq(offer_code.external_id)
       end
 
-      it "includes available discount codes in edit_props" do
-        available_codes = presenter.edit_props[:available_discount_codes]
-        expect(available_codes).to be_an(Array)
-        expect(available_codes.find { |code| code[:id] == offer_code.external_id }).to be_present
+      it "includes default_offer_code in product data" do
+        default_offer_code = presenter.edit_props[:product][:default_offer_code]
+        expect(default_offer_code).to be_a(Hash)
+        expect(default_offer_code[:id]).to eq(offer_code.external_id)
+        expect(default_offer_code[:code]).to eq(offer_code.code)
       end
     end
 
@@ -502,6 +504,7 @@ describe ProductPresenter do
               **ProductPresenter::InstallmentPlanProps.new(product: presenter.product).props,
               customizable_price: false,
               suggested_price_cents: nil,
+              default_offer_code: nil,
               custom_button_text_option: nil,
               custom_summary: nil,
               custom_view_content_button_text: nil,
@@ -756,6 +759,7 @@ describe ProductPresenter do
               **ProductPresenter::InstallmentPlanProps.new(product: presenter.product).props,
               customizable_price: false,
               suggested_price_cents: nil,
+              default_offer_code: nil,
               custom_button_text_option: nil,
               custom_summary: nil,
               custom_view_content_button_text: nil,

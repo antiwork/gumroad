@@ -1244,7 +1244,7 @@ class Link < ApplicationRecord
     def default_offer_code_must_be_valid
       return unless default_offer_code.present?
 
-      if user.offer_codes.alive.include?(default_offer_code)
+      if !user.offer_codes.alive.include?(default_offer_code)
         errors.add(:default_offer_code, "must belong to your offer codes")
       elsif !offer_codes.include?(default_offer_code) && !default_offer_code.universal?
         errors.add(:default_offer_code, "must be associated with this product or be universal")
