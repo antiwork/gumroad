@@ -5,6 +5,9 @@ require "spec_helper"
 describe User::AsyncDeviseNotification do
   include ActiveJob::TestHelper
 
+  # The methods in this module are private/protected so they aren't tested.
+  # Instead, the methods which they affect are tested.
+
   let(:user) { create(:user) }
 
   shared_examples_for "an email sending method" do |devise_email_method, devise_email_name|
