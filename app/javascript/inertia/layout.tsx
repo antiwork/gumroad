@@ -41,7 +41,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
       <CurrentSellerProvider value={parseCurrentSeller(current_seller)}>
         <Head title={title} />
         <Alert initial={null} />
-        <div id="inertia-shell" className="flex min-h-screen flex-col lg:h-screen lg:flex-row">
+        <div id="inertia-shell" className="flex h-screen flex-col lg:flex-row">
           {logged_in_user ? <Nav title="Dashboard" /> : null}
           {isRouteLoading ? <LoadingSkeleton /> : null}
           <main className={classNames("flex-1 lg:overflow-y-auto", { hidden: isRouteLoading })}>{children}</main>
