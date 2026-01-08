@@ -23,10 +23,12 @@ describe "Checkout bundles", :js, type: :system do
     within_cart_item "This bundle contains..." do
       within_cart_item "Product" do
         expect(page).to have_text("Qty: 1")
+        expect(page).to have_css("img[src*='#{product.thumbnail.filename}']")
       end
       within_cart_item "Versioned product" do
         expect(page).to have_text("Qty: 3")
         expect(page).to have_text("Version: Untitled 1")
+        expect(page).to have_css("img[src*='#{versioned_product.thumbnail.filename}']")
       end
     end
 
