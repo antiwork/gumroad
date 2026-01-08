@@ -34,7 +34,7 @@ type Props = {
       links?: Record<string, string> | null;
     } | null;
     currentToken?: string | null;
-  };
+  } | null;
 };
 
 export const Nav = (props: Props) => {
@@ -137,7 +137,7 @@ export const Nav = (props: Props) => {
           text="Analytics"
           icon="bar-chart-fill"
           href={Routes.sales_dashboard_url(routeParams)}
-          additionalPatterns={[Routes.audience_dashboard_url(routeParams), Routes.utm_links_dashboard_url(routeParams)]}
+          additionalPatterns={[Routes.audience_dashboard_url(routeParams), Routes.dashboard_utm_links_url(routeParams)]}
         />
         {loggedInUser?.policies.balance.index ? (
           <NavLink text="Payouts" icon="bank" href={Routes.balance_url(routeParams)} />
@@ -153,7 +153,7 @@ export const Nav = (props: Props) => {
             text="Library"
             icon="bookmark-heart-fill"
             href={Routes.library_url(routeParams)}
-            additionalPatterns={[Routes.wishlists_url(routeParams)]}
+            additionalPatterns={[Routes.wishlists_url(routeParams), Routes.reviews_url(routeParams)]}
           />
         ) : null}
       </NavSection>

@@ -38,7 +38,7 @@ class LibraryPresenter
     product_seller_data = {}
 
     purchases = purchases.map do |purchase|
-      next if purchase.link.is_recurring_billing && !purchase.subscription.alive?
+      next if purchase.link.is_recurring_billing && !purchase.subscription.grant_access_to_product?
 
       product = purchase.link
       product_seller_data[product.user.id] ||= product.user.username && {

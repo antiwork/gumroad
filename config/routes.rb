@@ -18,6 +18,7 @@ end
 Rails.application.routes.draw do
   get "/healthcheck" => "healthcheck#index"
   get "/healthcheck/sidekiq" => "healthcheck#sidekiq"
+  get "/healthcheck/paypal_balance" => "healthcheck#paypal_balance"
 
   use_doorkeeper do
     controllers applications: "oauth/applications"
@@ -340,7 +341,9 @@ Rails.application.routes.draw do
       get "/oauth/login" => "logins#new"
 
       post "login", to: "logins#create"
-      get "logout", to: "logins#destroy" # TODO: change the method to DELETE to conform to REST
+      # TODO: Keeping both routes for now to support legacy GET requests until all logout links are migrated to DELETE(inertia).
+      get "logout", to: "logins#destroy"
+      delete "logout", to: "logins#destroy"
       post "forgot_password", to: "user/passwords#create"
       scope "/users" do
         get "/check_twitter_link", to: "users/oauth#check_twitter_link"
@@ -357,11 +360,7 @@ Rails.application.routes.draw do
     resources :test_pings, only: [:create]
 
     # followers
-    resources :followers, only: [:index, :destroy], format: :json do
-      collection do
-        get "search"
-      end
-    end
+    resources :followers, only: [:index, :destroy]
 
     post "/follow_from_embed_form", to: "followers#from_embed_form", as: :follow_user_from_embed_form
     post "/follow", to: "followers#create", as: :follow_user
@@ -399,7 +398,6 @@ Rails.application.routes.draw do
     get "/collaborators/incomings", to: "collaborators#index"
     get "/collaborators/*other", to: "collaborators#index"
 
-    get "/dashboard/utm_links/*other", to: "utm_links#index" # route handled by react-router
     get "/communities/*other", to: "communities#index" # route handled by react-router
 
     get "/a/:affiliate_id", to: "affiliate_redirect#set_cookie_and_redirect", as: :affiliate_redirect
@@ -821,7 +819,9 @@ Rails.application.routes.draw do
 
     # utm links
     get "/utm_links" => redirect("/dashboard/utm_links")
-    get "/dashboard/utm_links", to: "utm_links#index", as: :utm_links_dashboard
+    scope as: :dashboard, path: "dashboard" do
+      resources :utm_links, only: [:index, :new, :create, :edit, :update, :destroy]
+    end
 
     # shipments
     post "/shipments/verify_shipping_address", to: "shipments#verify_shipping_address", as: :verify_shipping_address
@@ -930,12 +930,6 @@ Rails.application.routes.draw do
           resources :product_posts, only: [:index]
           resources :existing_product_files, only: [:index]
           resource :receipt_preview, only: [:show]
-        end
-        resources :utm_links, only: [:index, :new, :create, :edit, :update, :destroy] do
-          collection do
-            resource :unique_permalink, only: [:show], controller: "utm_links/unique_permalinks", as: :utm_link_unique_permalink
-            resources :stats, only: [:index], controller: "utm_links/stats", as: :utm_links_stats
-          end
         end
         resources :product_public_files, only: [:create]
         resources :communities, only: [:index] do

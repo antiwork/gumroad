@@ -15,7 +15,7 @@ export const Layout = ({
   children,
 }: {
   currentPage: keyof typeof pageNames;
-  children?: React.ReactNode;
+  children: React.ReactNode;
 }) => (
   <div>
     <PageHeader title={pageNames[currentPage]}>
@@ -26,8 +26,8 @@ export const Layout = ({
         <Tab isSelected={currentPage === "ping"} asChild>
           <Link href={Routes.ping_path()}>Ping</Link>
         </Tab>
-        <Tab isSelected={currentPage === "api"} href={Routes.api_path()}>
-          API
+        <Tab isSelected={currentPage === "api"} asChild>
+          <Link href={Routes.api_path()}>API</Link>
         </Tab>
       </Tabs>
     </PageHeader>
