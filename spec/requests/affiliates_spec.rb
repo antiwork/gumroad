@@ -44,7 +44,7 @@ describe "Affiliates", type: :system, js: true do
     expect(page).to_not have_table "Requests", with_rows: [{ "Name" => affiliate_request.name }]
 
     # Ensure that all affiliates and affiliate requests come back when clearing the search
-    select_disclosure "Toggle Search" do
+    select_disclosure "Search" do
       fill_in "Search", with: ""
     end
 
@@ -72,7 +72,7 @@ describe "Affiliates", type: :system, js: true do
     ]
     expect(page).to have_table "Requests", with_rows: [{ "Name" => affiliate_request.name }]
 
-    select_disclosure "Toggle Search" do
+    select_disclosure "Search" do
       fill_in "Search", with: "Jane"
     end
 
@@ -150,7 +150,7 @@ describe "Affiliates", type: :system, js: true do
     end
 
     it "paginates through search results" do
-      select_disclosure "Toggle Search" do
+      select_disclosure "Search" do
         fill_in "Search", with: "Affiliate"
       end
       expect(page).to have_table "Affiliate", with_rows: [
