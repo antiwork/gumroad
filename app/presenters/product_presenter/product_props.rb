@@ -82,20 +82,17 @@ class ProductPresenter::ProductProps
 
     def discount_code_props(discount_code_from_url, quantity)
       candidates = []
-      candidates << { code: discount_code_from_url } if discount_code_from_url.present?
-      if product.default_offer_code.present?
-        candidates << { code: product.default_offer_code.code }
-      end
-      candidates.uniq! { |c| c[:code] }
+      candidates << discount_code_from_url if discount_code_from_url.present?
+      candidates << product.default_offer_code.code if product.default_offer_code.present?
+      candidates.uniq!
+
       return if candidates.empty?
 
       best_candidate = nil
       last_error = nil
 
-      candidates.each do |candidate|
-        code = candidate[:code]
-        offer_code = product.find_offer_code(code:)
-
+      candidates.each do |code|
+        offer_code = product.find_offer_code(code: code)
         unless offer_code
           last_error ||= { valid: false, error_code: :invalid_offer }
           next
@@ -116,17 +113,13 @@ class ProductPresenter::ProductProps
           next
         end
 
-        discount = offer_code.discount
         amount_off_cents = offer_code.amount_off(product.price_cents)
-
-        candidate_data = {
-          code:,
-          discount:,
-          amount_off_cents:,
-        }
-
-        if best_candidate.nil? || candidate_data[:amount_off_cents] > best_candidate[:amount_off_cents]
-          best_candidate = candidate_data
+        if best_candidate.nil? || amount_off_cents > best_candidate[:amount_off_cents]
+          best_candidate = {
+            code: code,
+            discount: offer_code.discount,
+            amount_off_cents: amount_off_cents
+          }
         end
       end
 
@@ -135,7 +128,7 @@ class ProductPresenter::ProductProps
       {
         valid: true,
         code: best_candidate[:code],
-        discount: best_candidate[:discount],
+        discount: best_candidate[:discount]
       }
     end
 

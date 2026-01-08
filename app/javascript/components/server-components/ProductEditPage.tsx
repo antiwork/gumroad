@@ -205,17 +205,7 @@ const ProductEditPage = (props: Props) => {
       contentUpdates,
       setContentUpdates,
     }),
-    [
-      product,
-      updateProduct,
-      existingFiles,
-      setExistingFiles,
-      currencyType,
-      setCurrencyType,
-      saving,
-      contentUpdates,
-      setContentUpdates,
-    ],
+    [product, updateProduct, existingFiles, setExistingFiles],
   );
 
   const imageSettings = React.useMemo(
@@ -269,7 +259,6 @@ const ProductEditRouter = async (global: GlobalProps) => {
       value={{
         ...createContextValue(props),
         setCurrencyType: (_currency) => {}, // no-op
-        setContentUpdates: () => {}, // no-op in SSR
       }}
     >
       <StaticRouterProvider router={router} context={context} nonce={global.csp_nonce} />
