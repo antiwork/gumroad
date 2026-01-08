@@ -1,4 +1,4 @@
-import sortBy from "lodash/sortBy";
+import { sortBy } from "lodash-es";
 import * as React from "react";
 import { ReactSortable as Sortable } from "react-sortablejs";
 
