@@ -32,12 +32,6 @@ class GibraltarBankAccount < BankAccount
     "******#{account_number_last_four}"
   end
 
-  def to_hash
-    super.merge(
-      sort_code:
-    )
-  end
-
   private
     def validate_sort_code
       return if SORT_CODE_FORMAT_REGEX.match?(sort_code)
