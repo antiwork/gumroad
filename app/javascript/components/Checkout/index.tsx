@@ -431,7 +431,7 @@ const TipSelector = () => {
   const tipPercentages = [0, 15, 20, 25];
 
   return (
-    <div className="flex flex-col gap-2 sm:gap-3">
+    <div className="@container flex flex-col gap-2 sm:gap-3">
       <CartPriceItem
         className={{ priceField: "font-bold" }}
         title="Add a tip?"
@@ -441,8 +441,7 @@ const TipSelector = () => {
         {showPercentageOptions ? (
           <div
             role="radiogroup"
-            className="radio-buttons flex-1 basis-174"
-            style={{ gridTemplateColumns: "repeat(auto-fit, minmax(5rem, 1fr))" }}
+            className="radio-buttons flex-1 basis-174 grid-cols-1! gap-2 @3xs:grid-cols-2! @sm:grid-cols-4!"
           >
             {tipPercentages.map((percentage) => (
               <Button
