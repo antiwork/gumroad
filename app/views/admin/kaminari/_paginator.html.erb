@@ -11,7 +11,7 @@
   <div class="pagination" role="navigation" aria-label="Pagination">
     <%= first_page_tag %>
     <%= prev_page_tag %>
-    <menu>
+    <menu class="grid gap-3">
       <% each_page do |page| %>
         <% if page.display_tag? %>
           <li>

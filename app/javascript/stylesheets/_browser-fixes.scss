@@ -1,0 +1,61 @@
+// Browser-specific fixes and third-party integration styles.
+// These cannot be replaced with Tailwind utilities.
+
+.legacy-only {
+  display: none !important;
+}
+
+// Work around a strange Chromium issue where dragging doesn't work due to `all: unset`
+button[draggable="true"] {
+  -webkit-user-drag: element;
+}
+
+[role="tab"][aria-selected="true"][draggable="true"]::after {
+  transform: translate(-50%);
+  visibility: hidden;
+}
+
+.jwplayer {
+  position: absolute !important;
+  width: 100% !important;
+  height: 100% !important;
+}
+
+[role="tree"] [role="treeitem"].sortable-ghost {
+  background-color: gray(1);
+  border: dashed $border-width $border-color;
+  display: grid !important;
+  opacity: $disabled-opacity;
+}
+
+body#overlay-page {
+  display: flex;
+  flex-direction: column;
+  background: transparent;
+
+  &:not(.gumroad-minimized) {
+    background: rgba(0, 0, 0, 0.5);
+  }
+
+  .product-display {
+    overflow: auto;
+  }
+}
+
+// So that the `jwplayer` time tooltip isn't squished
+.jwplayer .jw-time-tip {
+  min-width: max-content;
+}
+
+body > header,
+header.sticky-top,
+main > header {
+  [role="tablist"] a[role="tab"] {
+    text-decoration: none;
+  }
+}
+
+// Firefox-specific fix to avoid showing node content as selected text
+.rich-text .selected *::selection {
+  background: none;
+}
