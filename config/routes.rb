@@ -18,6 +18,7 @@ end
 Rails.application.routes.draw do
   get "/healthcheck" => "healthcheck#index"
   get "/healthcheck/sidekiq" => "healthcheck#sidekiq"
+  get "/healthcheck/paypal_balance" => "healthcheck#paypal_balance"
 
   use_doorkeeper do
     controllers applications: "oauth/applications"
@@ -314,9 +315,6 @@ Rails.application.routes.draw do
     post "/notion/unfurl" => "api/v2/notion_unfurl_urls#create"
     delete "/notion/unfurl" => "api/v2/notion_unfurl_urls#destroy"
 
-    # legacy routes
-    get "users/password/new" => redirect("/login")
-
     # /robots.txt
     get "/robots.:format" => "robots#index"
 
@@ -327,8 +325,9 @@ Rails.application.routes.draw do
                  registrations: "signup",
                  confirmations: "confirmations",
                  omniauth_callbacks: "user/omniauth_callbacks",
-                 passwords: "user/passwords"
-               })
+                 passwords: "user/passwords",
+               },
+               path_names: { password: "forgot_password" })
 
     devise_scope :user do
       get "signup", to: "signup#new", as: :signup
@@ -340,8 +339,9 @@ Rails.application.routes.draw do
       get "/oauth/login" => "logins#new"
 
       post "login", to: "logins#create"
-      get "logout", to: "logins#destroy" # TODO: change the method to DELETE to conform to REST
-      post "forgot_password", to: "user/passwords#create"
+      # TODO: Keeping both routes for now to support legacy GET requests until all logout links are migrated to DELETE(inertia).
+      get "logout", to: "logins#destroy"
+      delete "logout", to: "logins#destroy"
       scope "/users" do
         get "/check_twitter_link", to: "users/oauth#check_twitter_link"
         get "/unsubscribe/:id", to: "users#email_unsubscribe", as: :user_unsubscribe
@@ -357,11 +357,7 @@ Rails.application.routes.draw do
     resources :test_pings, only: [:create]
 
     # followers
-    resources :followers, only: [:index, :destroy], format: :json do
-      collection do
-        get "search"
-      end
-    end
+    resources :followers, only: [:index, :destroy]
 
     post "/follow_from_embed_form", to: "followers#from_embed_form", as: :follow_user_from_embed_form
     post "/follow", to: "followers#create", as: :follow_user
@@ -393,13 +389,17 @@ Rails.application.routes.draw do
         get :export
       end
     end
-    resources :collaborators, only: [:index]
-    # Routes handled by react-router. Non-catch-all routes are declared to
-    # generate URL helpers.
-    get "/collaborators/incomings", to: "collaborators#index"
-    get "/collaborators/*other", to: "collaborators#index"
 
-    get "/dashboard/utm_links/*other", to: "utm_links#index" # route handled by react-router
+    resources :collaborators, only: [:index, :new, :create, :edit, :update, :destroy], path: "collaborators", controller: "collaborators/main"
+    scope path: "collaborators", module: :collaborators, as: "collaborators" do
+      resources :incomings, only: [:index, :destroy], controller: "incomings" do
+        member do
+          post :accept
+          post :decline
+        end
+      end
+    end
+
     get "/communities/*other", to: "communities#index" # route handled by react-router
 
     get "/a/:affiliate_id", to: "affiliate_redirect#set_cookie_and_redirect", as: :affiliate_redirect
@@ -536,17 +536,10 @@ Rails.application.routes.draw do
     end
 
     # Two-Factor Authentication
-    get "/two-factor", to: "two_factor_authentication#new", as: :two_factor_authentication
-
-    # Enforce stricter formats to restrict people from bypassing Rack::Attack by using different formats in URL.
-    scope format: true, constraints: { format: :json } do
-      post "/two-factor", to: "two_factor_authentication#create"
-      post "/two-factor/resend_authentication_token", to: "two_factor_authentication#resend_authentication_token", as: :resend_authentication_token
+    resource :two_factor_authentication, path: "two-factor", controller: "two_factor_authentication", only: [:show, :create] do
+      get :verify
     end
-
-    scope format: true, constraints: { format: :html } do
-      get "/two-factor/verify", to: "two_factor_authentication#verify", as: :verify_two_factor_authentication
-    end
+    post "/two-factor/resend_authentication_token", to: "two_factor_authentication#resend_authentication_token", as: :resend_authentication_token
 
     # library
     get "/library", to: "library#index", as: :library
@@ -821,7 +814,9 @@ Rails.application.routes.draw do
 
     # utm links
     get "/utm_links" => redirect("/dashboard/utm_links")
-    get "/dashboard/utm_links", to: "utm_links#index", as: :utm_links_dashboard
+    scope as: :dashboard, path: "dashboard" do
+      resources :utm_links, only: [:index, :new, :create, :edit, :update, :destroy]
+    end
 
     # shipments
     post "/shipments/verify_shipping_address", to: "shipments#verify_shipping_address", as: :verify_shipping_address
@@ -845,7 +840,7 @@ Rails.application.routes.draw do
     end
     resources :wishlists, only: [:index, :create, :update, :destroy] do
       resources :products, only: [:create], controller: "wishlists/products"
-      resource :followers, only: [:destroy], controller: "wishlists/followers" do
+      resource :followers, only: [:create, :destroy], controller: "wishlists/followers" do
         get :unsubscribe
       end
     end
@@ -906,16 +901,6 @@ Rails.application.routes.draw do
     # React Router routes
     scope module: :api, defaults: { format: :json } do
       namespace :internal do
-        resources :collaborators, only: [:index, :new, :create, :edit, :update, :destroy] do
-          scope module: :collaborators do
-            resources :invitation_acceptances, only: [:create]
-            resources :invitation_declines, only: [:create]
-          end
-        end
-        namespace :collaborators do
-          resources :incomings, only: [:index]
-        end
-
         resources :installments, only: [] do
           member do
             resource :audience_count, only: [:show], controller: "installments/audience_counts", as: :installment_audience_count
@@ -930,12 +915,6 @@ Rails.application.routes.draw do
           resources :product_posts, only: [:index]
           resources :existing_product_files, only: [:index]
           resource :receipt_preview, only: [:show]
-        end
-        resources :utm_links, only: [:index, :new, :create, :edit, :update, :destroy] do
-          collection do
-            resource :unique_permalink, only: [:show], controller: "utm_links/unique_permalinks", as: :utm_link_unique_permalink
-            resources :stats, only: [:index], controller: "utm_links/stats", as: :utm_links_stats
-          end
         end
         resources :product_public_files, only: [:create]
         resources :communities, only: [:index] do

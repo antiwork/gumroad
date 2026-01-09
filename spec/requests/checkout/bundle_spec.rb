@@ -6,10 +6,10 @@ describe "Checkout bundles", :js, type: :system do
   let(:seller) { create(:named_seller) }
   let(:bundle) { create(:product, user: seller, is_bundle: true, price_cents: 1000) }
 
-  let(:product) { create(:product, user: seller, name: "Product", price_cents: 500) }
+  let(:product) { create(:product, user: seller, name: "Product", price_cents: 500, thumbnail: create(:thumbnail)) }
   let!(:bundle_product) { create(:bundle_product, bundle:, product:) }
 
-  let(:versioned_product) { create(:product_with_digital_versions, user: seller, name: "Versioned product") }
+  let(:versioned_product) { create(:product_with_digital_versions, user: seller, name: "Versioned product", thumbnail: create(:thumbnail)) }
   let!(:versioned_bundle_product) { create(:bundle_product, bundle:, product: versioned_product, variant: versioned_product.alive_variants.first, quantity: 3) }
 
   before do
@@ -23,10 +23,12 @@ describe "Checkout bundles", :js, type: :system do
     within_cart_item "This bundle contains..." do
       within_cart_item "Product" do
         expect(page).to have_text("Qty: 1")
+        expect(page).to have_selector("a[href='#{product.long_url}'] > img[src='#{product.thumbnail.url}']")
       end
       within_cart_item "Versioned product" do
         expect(page).to have_text("Qty: 3")
         expect(page).to have_text("Version: Untitled 1")
+        expect(page).to have_selector("a[href='#{versioned_product.long_url}'] > img[src='#{versioned_product.thumbnail.url}']")
       end
     end
 

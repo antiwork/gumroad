@@ -59,6 +59,7 @@ export type Product = {
     name: string;
     thumbnail_url: string | null;
     native_type: ProductNativeType;
+    url: string;
     quantity: number;
     variant: { id: string; name: string } | null;
     custom_fields: CustomFieldDescriptor[];

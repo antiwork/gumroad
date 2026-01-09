@@ -1,4 +1,4 @@
-import throttle from "lodash/throttle";
+import { throttle } from "lodash-es";
 import * as React from "react";
 
 import { createConsumptionEvent } from "$app/data/consumption_analytics";

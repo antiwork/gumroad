@@ -7,7 +7,7 @@ import { cast } from "ts-safe-cast";
 import { CurrentSellerProvider, parseCurrentSeller } from "$app/components/CurrentSeller";
 import { DesignContextProvider, DesignSettings } from "$app/components/DesignSettings";
 import { DomainSettingsProvider } from "$app/components/DomainSettings";
-import { FeatureFlagsProvider } from "$app/components/FeatureFlags";
+import { FeatureFlags, FeatureFlagsProvider } from "$app/components/FeatureFlags";
 import { LoggedInUserProvider, parseLoggedInUser } from "$app/components/LoggedInUser";
 import { SSRLocationProvider } from "$app/components/useOriginalLocation";
 import { UserAgentProvider } from "$app/components/UserAgent";
@@ -32,9 +32,7 @@ export type GlobalProps = {
   href: string;
   csp_nonce: string;
   locale: string;
-  feature_flags: {
-    require_email_typo_acknowledgment: boolean;
-  };
+  feature_flags: FeatureFlags;
 };
 
 // Use this function to wrap a React component for server-side rendering.
