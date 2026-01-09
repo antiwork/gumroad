@@ -840,7 +840,7 @@ Rails.application.routes.draw do
     end
     resources :wishlists, only: [:index, :create, :update, :destroy] do
       resources :products, only: [:create], controller: "wishlists/products"
-      resource :followers, only: [:destroy], controller: "wishlists/followers" do
+      resource :followers, only: [:create, :destroy], controller: "wishlists/followers" do
         get :unsubscribe
       end
     end
