@@ -2,8 +2,9 @@
 
 require "spec_helper"
 require "shared_examples/merge_guest_cart_with_user_cart"
+require "inertia_rails/rspec"
 
-describe TwoFactorAuthenticationController do
+describe TwoFactorAuthenticationController, type: :controller, inertia: true do
   render_views
   include UsersHelper
 
@@ -26,33 +27,6 @@ describe TwoFactorAuthenticationController do
           expect(response).to redirect_to(signed_in_user_home(@user))
         end
       end
-    end
-  end
-
-  shared_examples_for "respond with signed_in path for json request" do
-    context "when two factor authentication can be skipped" do
-      before do
-        sign_in @user
-        controller.reset_two_factor_auth_login_session
-        allow(controller).to receive(:skip_two_factor_authentication?).and_return(true)
-      end
-
-      context "when request format is json" do
-        it "responds with redirect location" do
-          call_action
-
-          expect(response.parsed_body["redirect_location"]).to eq signed_in_user_home(@user)
-        end
-      end
-    end
-  end
-
-  shared_examples_for "validate user_id in params for json request" do |action|
-    it "renders not found error in json when user_is is invalid" do
-      post action, params: { user_id: "invalid" }, format: :json
-
-      expect(response).to have_http_status(:not_found)
-      expect(response.parsed_body["error"]).to eq "Not found"
     end
   end
 
@@ -98,17 +72,6 @@ describe TwoFactorAuthenticationController do
     end
   end
 
-  shared_examples_for "check user in session for json request" do
-    it "renders not found error in json when user is not found in session" do
-      controller.reset_two_factor_auth_login_session
-
-      call_action
-
-      expect(response).to have_http_status(:not_found)
-      expect(response.parsed_body["error"]).to eq "Not found"
-    end
-  end
-
   shared_examples_for "check user in session for html request" do
     it "raises ActionController::RoutingError when user is not found in session" do
       controller.reset_two_factor_auth_login_session
@@ -119,13 +82,13 @@ describe TwoFactorAuthenticationController do
     end
   end
 
-  describe "GET new" do # GET /two-factor
+  describe "GET show" do # GET /two-factor
     include_examples "redirect to signed_in path for html request" do
-      subject(:call_action) { get :new }
+      subject(:call_action) { get :show }
     end
 
     include_examples "check user in session for html request" do
-      subject(:call_action) { get :new }
+      subject(:call_action) { get :show }
     end
 
     before do
@@ -133,28 +96,46 @@ describe TwoFactorAuthenticationController do
     end
 
     it "renders HTTP success" do
-      get :new
+      get :show
 
       expect(response).to be_successful
-      expect(response).to render_template(:new)
     end
 
     it "sets @user" do
-      get :new
+      get :show
 
       expect(assigns[:user]).to eq @user
     end
-  end
 
-  describe "POST create" do # POST /two-factor.json
-    include_examples "validate user_id in params for json request", :create
+    it "renders the Inertia TwoFactorAuthentication/Show component" do
+      get :show
 
-    include_examples "respond with signed_in path for json request" do
-      subject(:call_action) { post :create, format: :json }
+      expect(inertia.component).to eq("TwoFactorAuthentication/Show")
+      expect(inertia.props[:user_id]).to eq(@user.encrypted_external_id)
+      expect(inertia.props[:email]).to eq(@user.email)
+      expect(inertia.props[:token]).to eq(User::DEFAULT_AUTH_TOKEN)
     end
 
-    include_examples "check user in session for json request" do
-      subject(:call_action) { post :create, format: :json }
+    it "sets the page title" do
+      get :show
+
+      expect(assigns[:title]).to eq("Two-Factor Authentication")
+    end
+  end
+
+  describe "POST create" do # POST /two-factor
+    it "raises ActionController::RoutingError when user_id is invalid" do
+      expect do
+        post :create, params: { user_id: "invalid" }
+      end.to raise_error(ActionController::RoutingError, "Not Found")
+    end
+
+    include_examples "redirect to signed_in path for html request" do
+      subject(:call_action) { post :create }
+    end
+
+    include_examples "check user in session for html request" do
+      subject(:call_action) { post :create }
     end
 
     before do
@@ -163,30 +144,29 @@ describe TwoFactorAuthenticationController do
 
     context "when authentication token is valid" do
       include_examples "sign in as user and remember two factor authentication status" do
-        subject(:call_action) { post :create, params: { token: @user.otp_code, user_id: @user.encrypted_external_id }, format: :json }
+        subject(:call_action) { post :create, params: { token: @user.otp_code, user_id: @user.encrypted_external_id } }
       end
 
-      it "responds with success message" do
-        post :create, params: { token: @user.otp_code, user_id: @user.encrypted_external_id }, format: :json
+      it "redirects with success message" do
+        post :create, params: { token: @user.otp_code, user_id: @user.encrypted_external_id }
 
-        expect(response).to be_successful
-        expect(response.parsed_body).to eq({ "redirect_location" => controller.send(:login_path_for, @user) })
+        expect(flash[:notice]).to eq "Successfully logged in!"
+        expect(response).to redirect_to(controller.send(:login_path_for, @user))
       end
 
       it_behaves_like "merge guest cart with user cart" do
         let(:user) { @user }
-        let(:call_action) { post :create, params: { token: @user.otp_code, user_id: @user.encrypted_external_id }, format: :json }
-        let(:expected_redirect_location) { controller.send(:login_path_for, @user) }
-        let(:expects_json_response) { true }
+        let(:call_action) { post :create, params: { token: user.otp_code, user_id: user.encrypted_external_id } }
+        let(:expected_redirect_location) { controller.send(:login_path_for, user) }
       end
     end
 
     context "when authentication token is invalid" do
-      it "responds with failure message" do
-        post :create, params: { token: "abcdef", user_id: @user.encrypted_external_id }, format: :json
+      it "redirects with failure message" do
+        post :create, params: { token: "abcdef", user_id: @user.encrypted_external_id }
 
-        expect(response).to have_http_status(:unprocessable_content)
-        expect(response.parsed_body).to eq({ "error_message" => "Invalid token, please try again." })
+        expect(flash[:warning]).to eq "Invalid token, please try again."
+        expect(response).to redirect_to(two_factor_authentication_path)
       end
     end
   end
@@ -220,7 +200,7 @@ describe TwoFactorAuthenticationController do
       it "redirects with failure message" do
         get :verify, params: { token: "abcdef", user_id: @user.encrypted_external_id }, format: :html
 
-        expect(flash[:alert]).to eq "Invalid token, please try again."
+        expect(flash[:warning]).to eq "Invalid token, please try again."
         expect(response).to redirect_to(two_factor_authentication_path)
       end
     end
@@ -238,27 +218,32 @@ describe TwoFactorAuthenticationController do
     end
   end
 
-  describe "POST resend_authentication_token" do # POST /two-factor/resend_authentication_token.json
-    include_examples "validate user_id in params for json request", :resend_authentication_token
-
-    include_examples "respond with signed_in path for json request" do
-      subject(:call_action) { post :resend_authentication_token, format: :json }
+  describe "POST resend_authentication_token" do # POST /two-factor/resend_authentication_token
+    it "raises ActionController::RoutingError when user_id is invalid" do
+      expect do
+        post :resend_authentication_token, params: { user_id: "invalid" }
+      end.to raise_error(ActionController::RoutingError, "Not Found")
     end
 
-    include_examples "check user in session for json request" do
-      subject(:call_action) { post :resend_authentication_token, format: :json }
+    include_examples "redirect to signed_in path for html request" do
+      subject(:call_action) { post :resend_authentication_token }
+    end
+
+    include_examples "check user in session for html request" do
+      subject(:call_action) { post :resend_authentication_token }
     end
 
     before do
       controller.prepare_for_two_factor_authentication(@user)
     end
 
-    it "resends the authentication token" do
+    it "resends the authentication token and redirects with notice" do
       expect do
-        post :resend_authentication_token, params: { user_id: @user.encrypted_external_id }, format: :json
+        post :resend_authentication_token, params: { user_id: @user.encrypted_external_id }
       end.to have_enqueued_mail(TwoFactorAuthenticationMailer, :authentication_token).with(@user.id)
 
-      expect(response).to be_successful
+      expect(response).to redirect_to(two_factor_authentication_path)
+      expect(flash[:notice]).to eq "Resent the authentication token, please check your inbox."
     end
   end
 end
