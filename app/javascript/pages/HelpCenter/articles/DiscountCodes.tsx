@@ -67,7 +67,7 @@ export default function DiscountCodes() {
         <p>
           To show the discount code input box on the checkout page, toggle "Only if a discount is available" in the{" "}
           <a href="https://gumroad.com/checkout/form">Checkout form</a> tab, otherwise, it will only be possible to
-          apply a discount code by using a <Link href="/help/article/270-url-parameters">a URL parameter</Link>.
+          apply a discount code by using a <Link href="/help/article/270-url-parameters">git add <that-file>URL parameter</Link>.
         </p>
         <figure>
           <img
