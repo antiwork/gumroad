@@ -157,6 +157,9 @@ $accent-color: map-get($colors, "pink"); // [1]
 
       &.table-stack {
         // [3]
+        width: 100%;
+        box-sizing: border-box;
+
         &,
         & > * {
           display: revert;
@@ -176,6 +179,8 @@ $accent-color: map-get($colors, "pink"); // [1]
         & > tbody,
         & > tfoot {
           & > * > * {
+            width: 100%;
+            box-sizing: border-box;
             border-top: $border;
 
             &:first-child {
