@@ -5,7 +5,6 @@ export type ArticleModule = {
   meta: { description: string };
 };
 
-// Map article slug to dynamic import
 export const articleModules: Record<string, () => Promise<ArticleModule>> = {
   "10-dealing-with-vat": () => import("./DealingWithVat"),
   "13-getting-paid": () => import("./GettingPaid"),
