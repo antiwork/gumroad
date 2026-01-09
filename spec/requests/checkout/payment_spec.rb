@@ -18,7 +18,7 @@ describe "Checkout payment", :js, type: :system do
       expect(supports_paypal).to eq("native")
     else
       expect(page).to have_selector("iframe[title=PayPal]")
-    end  
+    end
     expect(supports_paypal).to eq("native")
 
     product2 = create(:product, price_cents: 1000)
