@@ -445,7 +445,7 @@ const TipSelector = () => {
           >
             {tipPercentages.map((percentage) => (
               <Button
-                className="text-sm! whitespace-nowrap"
+                className="justify-center! whitespace-nowrap"
                 key={percentage}
                 role="radio"
                 aria-checked={state.tip.type === "percentage" && percentage === state.tip.percentage}
@@ -459,7 +459,6 @@ const TipSelector = () => {
                   });
                 }}
                 disabled={isProcessing(state)}
-                style={{ justifyContent: "center" }}
               >
                 {percentage === 0 ? "No Tip" : `${percentage}%`}
               </Button>
