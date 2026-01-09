@@ -14,8 +14,4 @@ class HelpCenter::Article < ActiveYaml::Base
   def to_param
     slug
   end
-
-  def to_partial_path
-    "help_center/articles/contents/#{slug}"
-  end
 end
