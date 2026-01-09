@@ -282,7 +282,6 @@ const MenubarItem = ({
         <PopoverContent
           className="border-0 p-0 shadow-none"
           arrowClassName="dark:fill-black/35"
-          usePortal
           onInteractOutside={(e: Event) => e.preventDefault()}
         >
           <ItemsList

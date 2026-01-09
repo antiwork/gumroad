@@ -161,9 +161,7 @@ describe "Products Page Scenario", type: :system, js: true do
         select_disclosure "Open product action menu" do
           click_on "Duplicate"
         end
-        select_disclosure "Open product action menu" do
-          expect(page).to have_menuitem("Duplicating...", disabled: true)
-        end
+        expect(page).to have_menuitem("Duplicating...", disabled: true)
       end
       expect(page).to have_alert(text: "Duplicating the product. You will be notified once it's ready.")
     end
@@ -176,9 +174,7 @@ describe "Products Page Scenario", type: :system, js: true do
         select_disclosure "Open product action menu" do
           click_on "Duplicate"
         end
-        select_disclosure "Open product action menu" do
-          expect(page).to have_menuitem("Duplicating...", disabled: true)
-        end
+        expect(page).to have_menuitem("Duplicating...", disabled: true)
       end
     end
 
@@ -190,9 +186,7 @@ describe "Products Page Scenario", type: :system, js: true do
         select_disclosure "Open product action menu" do
           click_on "Duplicate"
         end
-        select_disclosure "Open product action menu" do
-          expect(page).to have_menuitem("Duplicating...", disabled: true)
-        end
+        expect(page).to have_menuitem("Duplicating...", disabled: true)
       end
       expect(page).to have_alert(text: "Duplication in progress...")
     end
