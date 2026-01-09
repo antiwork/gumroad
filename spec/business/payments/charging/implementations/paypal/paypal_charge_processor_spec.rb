@@ -1600,9 +1600,9 @@ describe PaypalChargeProcessor, :vcr do
       end
 
       it "raises ChargeProcessorInvalidRequestError" do
-        expect {
+        expect do
           processor.fight_chargeback("capture_123", dispute_evidence)
-        }.to raise_error(ChargeProcessorInvalidRequestError)
+        end.to raise_error(ChargeProcessorInvalidRequestError)
       end
     end
   end
