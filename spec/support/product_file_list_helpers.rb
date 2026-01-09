@@ -19,11 +19,13 @@ module ProductFileListHelpers
   end
 
   def find_embed(name:)
-    fname = page.find(".embed h4", text: name, exact_text: true, match: :first, wait: 5)
-    fname.ancestor(".embed")
+    page.find(".embed:has(h4)", text: name, exact_text: true, match: :first, wait: 5)
   end
 
   def wait_for_file_embed_to_finish_uploading(name:)
+    expect(page).to have_css(".embed:has(h4)", text: name)
+    expect(page).not_to have_css(".embed [role='progressbar']")
+
     row = find_embed(name:)
     page.scroll_to row, align: :center
     row.find("h4").hover
