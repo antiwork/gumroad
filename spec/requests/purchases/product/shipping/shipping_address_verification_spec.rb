@@ -111,6 +111,24 @@ describe("Product Page - Shipping Scenarios Address verification", type: :system
     end
 
     describe "address verification confirmation prompt" do
+      before do
+        corrected_address = OpenStruct.new(
+          street1: "255 KING ST APT 602",
+          city: "SAN FRANCISCO",
+          state: "CA",
+          zip: "94107",
+          country: "US",
+          verifications: OpenStruct.new(
+            delivery: OpenStruct.new(
+              success: true,
+              errors: [],
+              details: OpenStruct.new(latitude: 37.77, longitude: -122.39, time_zone: "America/Los_Angeles")
+            )
+          )
+        )
+        allow_any_instance_of(EasyPost::Services::Address).to receive(:create).and_return(corrected_address)
+      end
+
       it "lets a buyer choose to use a verified address to complete their purchase" do
         visit "/l/#{@product.unique_permalink}"
         add_to_cart(@product)
