@@ -31,7 +31,7 @@ class LinksController < ApplicationController
   before_action :fetch_product_and_enforce_ownership, only: %i[destroy]
   before_action :fetch_product_and_enforce_access, only: %i[update publish unpublish release_preorder update_sections]
 
-  layout "inertia", only: [:index, :new]
+  layout "inertia", only: [:index, :new, :edit]
 
   def index
     authorize Link
@@ -325,11 +325,12 @@ class LinksController < ApplicationController
     fetch_product_by_unique_permalink
     authorize @product
 
-    redirect_to bundle_path(@product.external_id) if @product.is_bundle?
+    return redirect_to bundle_path(@product.external_id) if @product.is_bundle?
 
     @title = @product.name
+    presenter = ProductPresenter.new(product: @product, pundit_user:)
 
-    @presenter = ProductPresenter.new(product: @product, pundit_user:)
+    render inertia: "Products/Edit", props: presenter.edit_props
   end
 
   def update
@@ -370,9 +371,12 @@ class LinksController < ApplicationController
         @product.save_tags!(product_permitted_params[:tags] || [])
         @product.reorder_previews((product_permitted_params[:covers] || []).map.with_index.to_h)
         if !current_seller.account_level_refund_policy_enabled?
-          @product.product_refund_policy_enabled = product_permitted_params[:product_refund_policy_enabled]
-          if product_permitted_params[:refund_policy].present? && product_permitted_params[:product_refund_policy_enabled]
+          refund_policy_enabled = ActiveModel::Type::Boolean.new.cast(product_permitted_params[:product_refund_policy_enabled])
+          @product.product_refund_policy_enabled = refund_policy_enabled
+          if product_permitted_params[:refund_policy].present? && refund_policy_enabled
             @product.find_or_initialize_product_refund_policy.update!(product_permitted_params[:refund_policy])
+          elsif !refund_policy_enabled
+            @product.product_refund_policy&.destroy
           end
         end
         @product.show_in_sections!(product_permitted_params[:section_ids] || [])
@@ -382,7 +386,8 @@ class LinksController < ApplicationController
           begin
             Product::SaveCancellationDiscountService.new(@product, product_permitted_params[:cancellation_discount]).perform
           rescue ActiveRecord::RecordInvalid => e
-            return render json: { error_message: e.record.errors.full_messages.first }, status: :unprocessable_entity
+            flash[:error] = e.record.errors.full_messages.first
+            return redirect_to edit_link_path(@product)
           end
         end
 
@@ -422,7 +427,7 @@ class LinksController < ApplicationController
         end
         @product.description = SavePublicFilesService.new(resource: @product, files_params: product_permitted_params[:public_files], content: @product.description).process
         @product.save!
-        toggle_community_chat!(product_permitted_params[:community_chat_enabled])
+        toggle_community_chat!(ActiveModel::Type::Boolean.new.cast(product_permitted_params[:community_chat_enabled]))
         @product.generate_product_files_archives!
       end
     rescue ActiveRecord::RecordNotSaved, ActiveRecord::RecordInvalid, Link::LinkInvalid => e
@@ -431,7 +436,8 @@ class LinksController < ApplicationController
       else
         error_message = @product.errors.full_messages.first || e.message
       end
-      return render json: { error_message: }, status: :unprocessable_entity
+      flash[:error] = error_message
+      return redirect_to edit_link_path(@product)
     end
     invalid_currency_offer_codes = @product.product_and_universal_offer_codes.reject do |offer_code|
       offer_code.is_currency_valid?(@product)
@@ -453,12 +459,12 @@ class LinksController < ApplicationController
         issue_description = "#{all_invalid_offer_codes.count > 1 ? "discount" : "discounts"} this product below #{@product.min_price_formatted}, but not to #{MoneyFormatter.format(0, @product.price_currency_type.to_sym, no_cents_if_whole: true, symbol: true)}"
       end
 
-      return render json: {
-        warning_message: "The following offer #{"code".pluralize(all_invalid_offer_codes.count)} #{issue_description}: #{all_invalid_offer_codes.join(", ")}. Please update #{all_invalid_offer_codes.length > 1 ? "them or they" : "it or it"} will not work at checkout."
-      }
+      warning_message = "The following offer #{"code".pluralize(all_invalid_offer_codes.count)} #{issue_description}: #{all_invalid_offer_codes.join(", ")}. Please update #{all_invalid_offer_codes.length > 1 ? "them or they" : "it or it"} will not work at checkout."
+      flash[:warning] = warning_message
+      return redirect_to edit_link_path(@product), notice: "Changes saved!", status: :see_other
     end
 
-    head :no_content
+    redirect_to edit_link_path(@product), notice: "Changes saved!", status: :see_other
   end
 
   def unpublish

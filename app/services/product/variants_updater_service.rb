@@ -59,11 +59,14 @@ class Product::VariantsUpdaterService
 
             # TODO: :product_edit_react cleanup
             if option[:price_difference_cents].present?
-              option[:price] = option[:price_difference_cents]
+              option[:price] = option[:price_difference_cents].to_f
               option[:price] /= 100.0 unless @product.single_unit_currency?
             end
 
             new_option.merge!(price_difference: option[:price])
+            # Cast boolean from form params (string "false" -> false)
+            apply_price_changes = ActiveModel::Type::Boolean.new.cast(option[:apply_price_changes_to_existing_memberships])
+            new_option[:apply_price_changes_to_existing_memberships] = apply_price_changes
             if price_change_settings = option.dig(:settings, :apply_price_changes_to_existing_memberships)
               if price_change_settings[:enabled] == "1"
                 new_option[:apply_price_changes_to_existing_memberships] = true
@@ -75,7 +78,7 @@ class Product::VariantsUpdaterService
                 new_option[:subscription_price_change_message] = nil
               end
             end
-            if price_change_settings.blank? && !option[:apply_price_changes_to_existing_memberships]
+            if price_change_settings.blank? && !apply_price_changes
               new_option[:subscription_price_change_effective_date] = nil
               new_option[:subscription_price_change_message] = nil
             end

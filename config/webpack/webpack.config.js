@@ -21,6 +21,10 @@ export default async () => {
         "braintree-web": "braintree-web/dist/browser",
         "react-dom/server": "react-dom/server.browser",
         "@rails/activestorage": false,
+        // Exclude Inertia from SSR bundle - it uses browser APIs not available in MiniRacer
+        // This is safe because Inertia APIs are only used in event handlers, not during render
+        "@inertiajs/react": false,
+        "@inertiajs/core": false,
       },
       fallback: {
         tty: false,

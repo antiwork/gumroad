@@ -1,13 +1,17 @@
+import { router } from "@inertiajs/react";
+import { Editor, findChildren } from "@tiptap/core";
 import cx from "classnames";
 import * as React from "react";
 import { Link, useMatches, useNavigate } from "react-router-dom";
 
-import { saveProduct } from "$app/data/product_edit";
 import { setProductPublished } from "$app/data/publish_product";
 import { classNames } from "$app/utils/classNames";
 import { assertResponseError } from "$app/utils/request";
 
 import { Button, NavigationButton } from "$app/components/Button";
+import { extensions } from "$app/components/ProductEdit/ContentTab";
+import { FileEmbed } from "$app/components/ProductEdit/ContentTab/FileEmbed";
+import { baseEditorOptions } from "$app/components/RichTextEditor";
 import { CopyToClipboard } from "$app/components/CopyToClipboard";
 import { useCurrentSeller } from "$app/components/CurrentSeller";
 import { useDomains } from "$app/components/DomainSettings";
@@ -149,10 +153,57 @@ export const Layout = ({
   const navigate = useRefToLatest(useNavigate());
 
   const [isPublishing, setIsPublishing] = React.useState(false);
+
+  const saveProductBeforePublish = (): Promise<void> => {
+    return new Promise((resolve, reject) => {
+      // File filtering logic (same as in ProductEditPage)
+      const editor = new Editor(baseEditorOptions(extensions(id)));
+      const richContents =
+        product.has_same_rich_content_for_all_variants || !product.variants.length
+          ? product.rich_content
+          : product.variants.flatMap((variant) => variant.rich_content);
+      const fileIds = new Set(
+        richContents.flatMap((content) =>
+          findChildren(
+            editor.schema.nodeFromJSON(content.description),
+            (node) => node.type.name === FileEmbed.name,
+          ).map<unknown>((child) => child.node.attrs.id),
+        ),
+      );
+      editor.destroy();
+      const filteredFiles = product.files.filter((file) => fileIds.has(file.id));
+
+      const data = {
+        ...product,
+        files: filteredFiles,
+        price_currency_type: currencyType,
+        covers: product.covers.map(({ id }) => id),
+        variants: product.variants.map(({ newlyAdded, ...variant }) =>
+          newlyAdded ? { ...variant, id: null } : variant,
+        ),
+        availabilities: product.availabilities.map(({ newlyAdded, ...availability }) =>
+          newlyAdded ? { ...availability, id: null } : availability,
+        ),
+        installment_plan: product.allow_installment_plan ? product.installment_plan : null,
+      };
+
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      router.post(Routes.link_path(uniquePermalink), data as any, {
+        preserveState: true,
+        preserveScroll: true,
+        onSuccess: () => resolve(),
+        onError: (errors) => {
+          const firstError = Object.values(errors)[0];
+          reject(new Error(firstError as string || "Failed to save product"));
+        },
+      });
+    });
+  };
+
   const setPublished = async (published: boolean) => {
     try {
       setIsPublishing(true);
-      await saveProduct(uniquePermalink, id, product, currencyType);
+      await saveProductBeforePublish();
       await setProductPublished(uniquePermalink, published);
       updateProduct({ is_published: published });
       showAlert(published ? "Published!" : "Unpublished!", "success");

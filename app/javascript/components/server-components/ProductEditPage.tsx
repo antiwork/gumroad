@@ -1,11 +1,12 @@
 import { DirectUpload } from "@rails/activestorage";
+import { useForm } from "@inertiajs/react";
+import { Editor, findChildren } from "@tiptap/core";
 import { isEqual } from "lodash-es";
 import * as React from "react";
 import { createBrowserRouter, RouteObject, RouterProvider } from "react-router-dom";
 import { StaticRouterProvider } from "react-router-dom/server";
 import { cast, createCast } from "ts-safe-cast";
 
-import { saveProduct } from "$app/data/product_edit";
 import { OtherRefundPolicy } from "$app/data/products/other_refund_policies";
 import { Thumbnail } from "$app/data/thumbnails";
 import { RatingsWithPercentages } from "$app/parsers/product";
@@ -16,8 +17,8 @@ import { assertResponseError, request } from "$app/utils/request";
 import { buildStaticRouter, GlobalProps, register } from "$app/utils/serverComponentUtil";
 
 import { Seller } from "$app/components/Product";
-import { ContentTab } from "$app/components/ProductEdit/ContentTab";
-import { getDownloadUrl } from "$app/components/ProductEdit/ContentTab/FileEmbed";
+import { ContentTab, extensions } from "$app/components/ProductEdit/ContentTab";
+import { FileEmbed, getDownloadUrl } from "$app/components/ProductEdit/ContentTab/FileEmbed";
 import { Page } from "$app/components/ProductEdit/ContentTab/PageTab";
 import { ProductTab } from "$app/components/ProductEdit/ProductTab";
 import { ReceiptTab } from "$app/components/ProductEdit/ReceiptTab";
@@ -31,7 +32,7 @@ import {
   ShippingCountry,
   ContentUpdates,
 } from "$app/components/ProductEdit/state";
-import { ImageUploadSettingsContext } from "$app/components/RichTextEditor";
+import { baseEditorOptions, ImageUploadSettingsContext } from "$app/components/RichTextEditor";
 import { showAlert } from "$app/components/server-components/Alert";
 
 const routes: RouteObject[] = [
@@ -57,7 +58,7 @@ const routes: RouteObject[] = [
   },
 ];
 
-type Props = {
+export type Props = {
   product: Product;
   id: string;
   unique_permalink: string;
@@ -145,6 +146,7 @@ const ProductEditPage = (props: Props) => {
   const [contentUpdates, setContentUpdates] = React.useState<ContentUpdates>(null);
   const [currencyType, setCurrencyType] = React.useState<CurrencyCode>(props.currency_type);
   const lastSavedProductRef = React.useRef<Product>(structuredClone(props.product));
+  const form = useForm({});
 
   const updateProduct = (update: Partial<Product> | ((product: Product) => void)) =>
     setProduct((prevProduct) => {
@@ -156,39 +158,73 @@ const ProductEditPage = (props: Props) => {
   const [existingFiles, setExistingFiles] = React.useState(props.existing_files);
   const router = createBrowserRouter(routes);
 
-  const [saving, setSaving] = React.useState(false);
   const [imagesUploading, setImagesUploading] = React.useState<Set<File>>(new Set());
-  const save = async () => {
-    try {
-      setSaving(true);
-      const response = await saveProduct(props.unique_permalink, props.id, product, currencyType);
-      if (response.warning_message) showAlert(response.warning_message, "warning");
-      else {
-        const { contentUpdatedVariantIds, sharedContentUpdated } = findUpdatedContent(
-          product,
-          lastSavedProductRef.current,
-        );
-        const contentUpdated = sharedContentUpdated || contentUpdatedVariantIds.length > 0;
 
-        if (props.successful_sales_count > 0 && contentUpdated) {
-          const uniquePermalinkOrVariantIds = product.has_same_rich_content_for_all_variants
-            ? [props.unique_permalink]
-            : contentUpdatedVariantIds;
+  const save = (): Promise<void> => {
+    return new Promise((resolve, reject) => {
+      // File filtering logic (moved from saveProduct)
+      const editor = new Editor(baseEditorOptions(extensions(props.id)));
+      const richContents =
+        product.has_same_rich_content_for_all_variants || !product.variants.length
+          ? product.rich_content
+          : product.variants.flatMap((variant) => variant.rich_content);
+      const fileIds = new Set(
+        richContents.flatMap((content) =>
+          findChildren(
+            editor.schema.nodeFromJSON(content.description),
+            (node) => node.type.name === FileEmbed.name,
+          ).map<unknown>((child) => child.node.attrs.id),
+        ),
+      );
+      editor.destroy();
+      const filteredFiles = product.files.filter((file) => fileIds.has(file.id));
 
-          setContentUpdates({
-            uniquePermalinkOrVariantIds,
-          });
-        } else {
-          showAlert("Changes saved!", "success");
-        }
-        lastSavedProductRef.current = structuredClone(product);
-      }
-    } catch (e) {
-      assertResponseError(e);
-      showAlert(e.message, "error");
-    }
-    setSaving(false);
+      form.transform(() => ({
+        ...product,
+        files: filteredFiles,
+        price_currency_type: currencyType,
+        covers: product.covers.map(({ id }) => id),
+        variants: product.variants.map(({ newlyAdded, ...variant }) =>
+          newlyAdded ? { ...variant, id: null } : variant,
+        ),
+        availabilities: product.availabilities.map(({ newlyAdded, ...availability }) =>
+          newlyAdded ? { ...availability, id: null } : availability,
+        ),
+        installment_plan: product.allow_installment_plan ? product.installment_plan : null,
+      }));
+
+      form.post(Routes.link_path(props.unique_permalink), {
+        preserveState: true,
+        preserveScroll: true,
+        onSuccess: () => {
+          const { contentUpdatedVariantIds, sharedContentUpdated } = findUpdatedContent(
+            product,
+            lastSavedProductRef.current,
+          );
+          const contentUpdated = sharedContentUpdated || contentUpdatedVariantIds.length > 0;
+
+          if (props.successful_sales_count > 0 && contentUpdated) {
+            const uniquePermalinkOrVariantIds = product.has_same_rich_content_for_all_variants
+              ? [props.unique_permalink]
+              : contentUpdatedVariantIds;
+
+            setContentUpdates({
+              uniquePermalinkOrVariantIds,
+            });
+          }
+          lastSavedProductRef.current = structuredClone(product);
+          resolve();
+        },
+        onError: (errors) => {
+          const firstError = Object.values(errors)[0];
+          if (firstError) showAlert(firstError as string, "error");
+          reject(new Error(firstError as string || "Failed to save"));
+        },
+      });
+    });
   };
+
+  const saving = form.processing;
 
   const contextValue = React.useMemo(
     () => ({
@@ -266,4 +302,5 @@ const ProductEditRouter = async (global: GlobalProps) => {
   return component;
 };
 
+export { ProductEditPage };
 export default register({ component: ProductEditPage, ssrComponent: ProductEditRouter, propParser: createCast() });

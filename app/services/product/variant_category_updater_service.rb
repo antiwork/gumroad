@@ -123,7 +123,9 @@ class Product::VariantCategoryUpdaterService
       Integration::ALL_NAMES.each do |name|
         integration = product.find_integration_by_name(name)
         # TODO: :product_edit_react cleanup
-        if (option.dig(:integrations, name) == "1" || option.dig(:integrations, name) == true) && integration.present?
+        # Cast boolean from form params (string "true" -> true, "false" -> false)
+        integration_enabled = ActiveModel::Type::Boolean.new.cast(option.dig(:integrations, name))
+        if integration_enabled && integration.present?
           enabled_integrations << integration
         end
       end
