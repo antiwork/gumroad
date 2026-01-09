@@ -242,7 +242,8 @@ export const Checkout = ({
   return (
     <div className="mx-auto w-full max-w-400">
       <PageHeader
-        className="border-none md:px-16"
+        className="border-none pb-2 md:px-16 md:pb-0"
+        classNames={{ title: "block!", actionsContainer: "my-0!" }}
         title="Checkout"
         actions={
           isDesktop ? <NavigationButton href={cart.returnUrl ?? discoverUrl}>Continue shopping</NavigationButton> : null
