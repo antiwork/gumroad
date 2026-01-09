@@ -318,13 +318,13 @@ RSpec.configure do |config|
       state: "CA",
       zip: "94107-2332",
       country: "US",
-      verifications: {
-        "delivery" => OpenStruct.new(
+      verifications: OpenStruct.new(
+        delivery: OpenStruct.new(
           success: true,
           errors: [],
           details: OpenStruct.new(latitude: 37.76493, longitude: -122.40005, time_zone: "America/Los_Angeles")
         )
-      }
+      )
     )
     allow_any_instance_of(EasyPost::Services::Address).to receive(:create).and_return(mock_address)
   end
