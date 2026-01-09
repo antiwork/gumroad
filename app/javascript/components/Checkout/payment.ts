@@ -1,5 +1,5 @@
 import { enableMapSet, produce } from "immer";
-import groupBy from "lodash/groupBy";
+import { groupBy } from "lodash-es";
 import * as React from "react";
 
 import { getSurcharges, SurchargesResponse } from "$app/data/customer_surcharge";

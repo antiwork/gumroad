@@ -156,6 +156,17 @@ module User::Risk
     flagged_for_tos_violation? || flagged_for_fraud?
   end
 
+  def suspended_by_admin?
+    return false unless suspended?
+
+    last_suspension_comment = comments
+      .where(comment_type: Comment::COMMENT_TYPE_SUSPENDED)
+      .order(:created_at)
+      .last
+
+    last_suspension_comment&.author_id.present?
+  end
+
   def add_user_comment(transition)
     params = transition.args.first
     raise ArgumentError, "first transition argument must include an author_id or author_name" if !params || (!params[:author_id] && !params[:author_name])
@@ -165,6 +176,8 @@ module User::Risk
     content = case transition.to_name
               when :compliant
                 "Marked compliant by #{author_name} on #{date}"
+              when :not_reviewed
+                "Marked \"Not Reviewed\" by #{author_name} on #{date}"
               when :on_probation
                 "Probated (payouts suspended) by #{author_name} on #{date}"
               when :flagged_for_tos_violation
@@ -183,6 +196,8 @@ module User::Risk
     comment_type = case transition.to_name
                    when :compliant
                      Comment::COMMENT_TYPE_COMPLIANT
+                   when :not_reviewed
+                     Comment::COMMENT_TYPE_NOT_REVIEWED
                    when :on_probation
                      Comment::COMMENT_TYPE_ON_PROBATION
                    when :flagged_for_fraud, :flagged_for_tos_violation

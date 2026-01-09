@@ -13,7 +13,7 @@ class Exports::TaxSummary::Payable < Exports::TaxSummary::Base
     data = payouts_summary
     return nil unless data && data[:total_transaction_cents] > 0
     if as_csv
-      CSV.generate do |csv|
+      CsvSafe.generate do |csv|
         csv << payable_headers
 
         row = build_payable_summary(data)
