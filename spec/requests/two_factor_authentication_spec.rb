@@ -17,8 +17,6 @@ describe "Two-Factor Authentication", js: true, type: :system do
     fill_in "Email", with: user.email
     fill_in "Password", with: user.password
     click_on "Login"
-
-    wait_for_ajax
   end
 
   it "redirects to two_factor_authentication_path on login" do
@@ -33,27 +31,39 @@ describe "Two-Factor Authentication", js: true, type: :system do
 
   describe "Submit authentication token" do
     context "when correct token is entered" do
-      it "navigates to login_path_for(user) on successful two factor authentication and remembers 2FA status" do
+      it "navigates to login_path_for(user) on successful two factor authentication" do
         recreate_model_index(Purchase)
         login_to_app
         expect(page).to have_content "Two-Factor Authentication"
         expect(page).to have_link "Gumroad", href: UrlService.root_domain_with_protocol
 
-        fill_in "Token", with: user.otp_code
+        fill_in "Token", with: user.otp_code, fill_options: { clear: :backspace }
         click_on "Login"
 
-        wait_for_ajax
+        # Wait for dashboard content to appear
+        expect(page).to have_current_path(dashboard_path)
+      end
 
-        expect(page.current_url).to eq dashboard_url(host: Capybara.app_host)
+      it "remembers 2FA status so user doesn't need to verify again" do
+        # First, complete 2FA authentication
+        login_to_app
+        expect(page).to have_content "Two-Factor Authentication"
 
-        fill_in_profile
+        fill_in "Token", with: user.otp_code, fill_options: { clear: :backspace }
+        click_on "Login"
 
+        expect(page).to have_current_path(dashboard_path)
+
+        # Clear the session by logging out
         first("nav[aria-label='Main'] details summary").click
         click_on "Logout"
+
+        expect(page).to have_content("Login")
         login_to_app
 
-        # It doesn't ask for 2FA again
+        # It doesn't ask for 2FA again - goes directly to dashboard
         expect(page).to have_text("Dashboard")
+        expect(page).to have_current_path(dashboard_path)
       end
     end
 
@@ -62,10 +72,8 @@ describe "Two-Factor Authentication", js: true, type: :system do
         login_to_app
         expect(page).to have_content "Two-Factor Authentication"
 
-        fill_in "Token", with: "abcd"
+        fill_in "Token", with: "abcd", fill_options: { clear: :backspace }
         click_on "Login"
-
-        wait_for_ajax
 
         expect(page).to have_content("Invalid token, please try again.")
       end
@@ -80,7 +88,8 @@ describe "Two-Factor Authentication", js: true, type: :system do
 
         click_on "Resend Authentication Token"
 
-        wait_for_ajax
+        # Wait for the success message to appear (flash notice from the redirect)
+        expect(page).to have_content "Resent the authentication token"
       end.to have_enqueued_mail(TwoFactorAuthenticationMailer, :authentication_token).twice.with(user.id)
     end
   end
@@ -91,18 +100,17 @@ describe "Two-Factor Authentication", js: true, type: :system do
       expect(page).to have_content "Two-Factor Authentication"
 
       # Fill the data before opening a new window to make sure the page is fully loaded before switching to the new page.
-      fill_in "Token", with: "invalid"
+      fill_in "Token", with: "invalid", fill_options: { clear: :backspace }
 
       new_window = open_new_window
       within_window new_window do
         visit verify_two_factor_authentication_path(token: user.otp_code, user_id: user.encrypted_external_id, format: :html)
-        expect(page.current_url).to eq dashboard_url(host: Capybara.app_host)
+        expect(page).to have_current_path(dashboard_path)
       end
 
       # Once 2FA is verified through link, it should redirect to logged in page without checking token
       click_on "Login"
-      wait_for_ajax
-      expect(page.current_url).to eq dashboard_url(host: Capybara.app_host)
+      expect(page).to have_current_path(dashboard_path)
     end
 
     it "navigates to login page when the user is not logged in before" do
@@ -116,7 +124,7 @@ describe "Two-Factor Authentication", js: true, type: :system do
 
         # It directly navigates to logged in page since 2FA is verified through the link between the redirects.
         expect(page).to have_text("Dashboard")
-        expect(page.current_url).to eq dashboard_url(host: Capybara.app_host)
+        expect(page).to have_current_path(dashboard_path)
       end.not_to have_enqueued_mail(TwoFactorAuthenticationMailer, :authentication_token).with(user.id)
     end
 
@@ -128,12 +136,10 @@ describe "Two-Factor Authentication", js: true, type: :system do
       submit_login_form
       expect(page).to have_content "Two-Factor Authentication"
 
-      fill_in "Token", with: user.otp_code
+      fill_in "Token", with: user.otp_code, fill_options: { clear: :backspace }
       click_on "Login"
 
-      wait_for_ajax
-
-      expect(page.current_url).to eq dashboard_url(host: Capybara.app_host)
+      expect(page).to have_current_path(dashboard_path)
     end
   end
 end

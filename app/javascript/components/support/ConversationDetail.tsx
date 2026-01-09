@@ -2,7 +2,7 @@ import type { Message } from "@helperai/client";
 import { useConversation, useRealtimeEvents, useCreateMessage, MessageContent } from "@helperai/react";
 import cx from "classnames";
 import pinkIcon from "images/pink-icon.png";
-import startCase from "lodash/startCase";
+import { startCase } from "lodash-es";
 import React from "react";
 
 import FileUtils from "$app/utils/file";

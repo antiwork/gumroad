@@ -182,6 +182,7 @@ describe "Checkout cart", :js, type: :system do
         click_on "Back to Library"
         toggle_disclosure buyer.username
         click_on "Logout"
+        expect(page).to have_content("Log in")
 
         visit @membership_product.long_url
         add_to_cart(@membership_product, recurrence: "Yearly", option: @membership_product.variants.first.name)

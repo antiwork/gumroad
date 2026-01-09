@@ -40,7 +40,6 @@ import GenerateInvoicePage from "$app/components/server-components/GenerateInvoi
 import GumroadBlogIndexPage from "$app/components/server-components/GumroadBlog/IndexPage";
 import GumroadBlogPostPage from "$app/components/server-components/GumroadBlog/PostPage";
 import Nav from "$app/components/server-components/Nav";
-import PasswordResetPage from "$app/components/server-components/PasswordResetPage";
 import PdfReaderPage from "$app/components/server-components/PdfReaderPage";
 import ProductPage from "$app/components/server-components/Product";
 import ProductIframePage from "$app/components/server-components/Product/IframePage";
@@ -63,7 +62,6 @@ import SubscriptionManager from "$app/components/server-components/SubscriptionM
 import SubscriptionManagerMagicLink from "$app/components/server-components/SubscriptionManagerMagicLink";
 import SupportHeader from "$app/components/server-components/support/Header";
 import TaxesCollectionModal from "$app/components/server-components/TaxesCollectionModal";
-import TwoFactorAuthenticationPage from "$app/components/server-components/TwoFactorAuthenticationPage";
 import VideoStreamPlayer from "$app/components/server-components/VideoStreamPlayer";
 import WishlistPage from "$app/components/server-components/WishlistPage";
 import CodeSnippet from "$app/components/ui/CodeSnippet";
@@ -90,7 +88,6 @@ ReactOnRails.register({
   AdminUserGuids,
   AdminUserStats,
   AffiliateRequestPage,
-
   Alert,
   AdminAddCreditForm,
   SupportHeader,
@@ -111,7 +108,6 @@ ReactOnRails.register({
   GumroadBlogIndexPage,
   GumroadBlogPostPage,
   Nav,
-  PasswordResetPage,
   PdfReaderPage,
   Pill,
   ProductEditPage,
@@ -133,7 +129,6 @@ ReactOnRails.register({
   SubscriptionManager,
   SubscriptionManagerMagicLink,
   TaxesCollectionModal,
-  TwoFactorAuthenticationPage,
   VideoStreamPlayer,
   WishlistPage,
 });

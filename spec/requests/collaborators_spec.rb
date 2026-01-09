@@ -12,6 +12,7 @@ describe "Collaborators", type: :system, js: true do
         it "displays a placeholder message" do
           visit collaborators_path
 
+          expect(page).to have_title("Collaborators")
           expect(page).to have_selector("h1", text: "Collaborators")
           expect(page).to have_selector("h2", text: "No collaborators yet")
           expect(page).to have_selector("h4", text: "Share your revenue with the people who helped create your products.")
@@ -124,12 +125,17 @@ describe "Collaborators", type: :system, js: true do
           visit collaborators_path
           click_on "Add collaborator"
 
+          expect(page).to have_title("Collaborators")
+          expect(page).to have_selector("h1", text: "New collaborator")
+          expect(page).to_not have_tab_button("Collaborators")
+          expect(page).to_not have_tab_button("Collaborations")
+
           fill_in "email", with: "#{collaborating_user.email}  " # test trimming email
           uncheck "Show as co-creator", checked: true
           click_on "Add collaborator"
 
           expect(page).to have_alert(text: "Changes saved!")
-          expect(page).to have_current_path "/collaborators"
+          expect(page).to have_current_path(collaborators_path)
         end.to change { seller.collaborators.count }.from(1).to(2)
            .and change { ProductAffiliate.count }.from(2).to(5)
 
@@ -157,7 +163,7 @@ describe "Collaborators", type: :system, js: true do
 
       it "allows enabling different products with different cuts" do
         expect do
-          visit "/collaborators/new"
+          visit new_collaborator_path
 
           fill_in "email", with: collaborating_user.email
           uncheck "All products"
@@ -174,7 +180,7 @@ describe "Collaborators", type: :system, js: true do
           click_on "Add collaborator"
 
           expect(page).to have_alert(text: "Changes saved!")
-          expect(page).to have_current_path "/collaborators"
+          expect(page).to have_current_path(collaborators_path)
         end.to change { seller.collaborators.count }.from(1).to(2)
            .and change { ProductAffiliate.count }.from(2).to(4)
 
@@ -196,7 +202,7 @@ describe "Collaborators", type: :system, js: true do
       end
 
       it "does not allow creating a collaborator with invalid parameters" do
-        visit "/collaborators/new"
+        visit new_collaborator_path
 
         # invalid email
         fill_in "email", with: "foo"
@@ -282,7 +288,7 @@ describe "Collaborators", type: :system, js: true do
       it "does not allow adding a collaborator for ineligible products but does for unpublished products" do
         invisible_product = create(:product, user: seller, name: "Deleted product", deleted_at: 1.day.ago)
 
-        visit "/collaborators/new"
+        visit new_collaborator_path
         expect(page).not_to have_content invisible_product.name
         expect(page).not_to have_content product4.name
         expect(page).not_to have_content product5.name
@@ -319,7 +325,7 @@ describe "Collaborators", type: :system, js: true do
           click_on "Add collaborator"
 
           expect(page).to have_alert(text: "Changes saved!")
-          expect(page).to have_current_path "/collaborators"
+          expect(page).to have_current_path(collaborators_path)
         end.to change { seller.collaborators.count }.from(1).to(2)
            .and change { ProductAffiliate.count }.from(2).to(5)
 
@@ -342,7 +348,7 @@ describe "Collaborators", type: :system, js: true do
         affiliated_products = (1..12).map { |i| create(:product, user: seller, name: "Number #{i} affiliate product") }
         affiliate.products = affiliated_products
 
-        visit "/collaborators/new"
+        visit new_collaborator_path
         expect do
           fill_in "email", with: collaborating_user.email
 
@@ -375,7 +381,7 @@ describe "Collaborators", type: :system, js: true do
           end
 
           expect(page).to have_alert(text: "Changes saved!")
-          expect(page).to have_current_path "/collaborators"
+          expect(page).to have_current_path(collaborators_path)
 
           collaborator = seller.collaborators.last
           expect(collaborator.products).to match_array([product1, product2, product3] + affiliated_products)
@@ -394,7 +400,7 @@ describe "Collaborators", type: :system, js: true do
         link.hover
         expect(link).to have_tooltip(text: "Collaborators with Brazilian Stripe accounts are not supported.")
 
-        visit "/collaborators/new"
+        visit new_collaborator_path
 
         button = find_button("Add collaborator", disabled: true)
         button.hover
@@ -422,8 +428,8 @@ describe "Collaborators", type: :system, js: true do
       end
       wait_for_ajax
       expect(page).to have_alert(text: "The collaborator was removed successfully.")
-      expect(collaborators.second.reload.deleted_at).to be_present
       expect(page).to_not have_table_row({ "Name" => collaborators.second.affiliate_user.username })
+      expect(collaborators.second.reload.deleted_at).to be_present
     end
 
     context "editing a collaborator" do
@@ -445,7 +451,10 @@ describe "Collaborators", type: :system, js: true do
             click_on "Edit"
           end
 
-          expect(page).to have_text collaborator.affiliate_user.display_name
+          expect(page).to have_title("Collaborators")
+          expect(page).to have_selector("h1", text: collaborator.affiliate_user.display_name)
+          expect(page).to_not have_tab_button("Collaborators")
+          expect(page).to_not have_tab_button("Collaborations")
 
           # edit default commission
           within find(:table_row, { "Product" => "All products" }) do
@@ -502,7 +511,7 @@ describe "Collaborators", type: :system, js: true do
           end
 
           expect(page).to have_alert(text: "Changes saved!")
-          expect(page).to have_current_path "/collaborators"
+          expect(page).to have_current_path(collaborators_path)
         end.to change { collaborator.products.count }.from(2).to(3)
            .and change { product1.reload.is_collab }.from(true).to(false)
            .and change { product4.direct_affiliates.count }.from(1).to(0)

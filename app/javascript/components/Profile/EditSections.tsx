@@ -1,8 +1,6 @@
 import { DirectUpload } from "@rails/activestorage";
 import { EditorContent } from "@tiptap/react";
-import debounce from "lodash/debounce";
-import isEqual from "lodash/isEqual";
-import sortBy from "lodash/sortBy";
+import { debounce, isEqual, sortBy } from "lodash-es";
 import * as React from "react";
 import { ReactSortable as Sortable } from "react-sortablejs";
 import { cast } from "ts-safe-cast";
