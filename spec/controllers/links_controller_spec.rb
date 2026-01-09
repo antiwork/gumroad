@@ -515,13 +515,12 @@ describe LinksController, :vcr, inertia: true do
         let(:request_params) { { id: product.unique_permalink } }
       end
 
-      it "assigns the correct instance variables" do
+      it "renders the Inertia page with product props" do
         get :edit, params: { id: product.unique_permalink }
         expect(response).to be_successful
-
-        product_presenter = assigns(:presenter)
-        expect(product_presenter.product).to eq(product)
-        expect(product_presenter.pundit_user).to eq(controller.pundit_user)
+        expect(inertia.component).to eq("Products/Edit")
+        expect(inertia.props[:product][:name]).to eq(product.name)
+        expect(inertia.props[:unique_permalink]).to eq(product.unique_permalink)
       end
 
       context "with other user not owning the product" do
@@ -608,7 +607,7 @@ describe LinksController, :vcr, inertia: true do
       it_behaves_like "collaborator can access", :put, :update do
         let(:product) { @product }
         let(:request_params) { @params }
-        let(:response_status) { 204 }
+        let(:response_status) { 303 }
       end
 
       context "when user email is empty" do
@@ -629,7 +628,7 @@ describe LinksController, :vcr, inertia: true do
           it "sets is_licensed to true" do
             expect(@product.is_licensed).to be(false)
 
-            post :update, params: @params.merge({ rich_content: [{ id: nil, title: "Page title", description: { type: "doc", content: [{ "type" => "licenseKey" }] } }] }), format: :json
+            post :update, params: @params.merge({ rich_content: [{ id: nil, title: "Page title", description: { type: "doc", content: [{ "type" => "licenseKey" }] } }] })
 
             expect(@product.reload.is_licensed).to be(true)
           end
@@ -650,7 +649,7 @@ describe LinksController, :vcr, inertia: true do
                                                   variants: [
                                                     { id: version1.external_id, name: version1.name, rich_content: [{ id: version1_rich_content1.external_id, title: "Version 1 - Page 1", description: version1_rich_content1_updated_description }] },
                                                     { id: version2.external_id, name: version2.name, rich_content: [{ id: nil, title: "Version 2 - Page 1", description: version2_new_rich_content_description }] }]
-                                                }), format: :json
+                                                })
 
             expect(@product.reload.is_licensed).to be(true)
           end
@@ -661,7 +660,7 @@ describe LinksController, :vcr, inertia: true do
 
           post :update, params: @params.merge({
                                                 rich_content: [{ id: nil, title: "Page title", description: { type: "doc", content: [{ type: "paragraph", content: [{ type: "text", text: "Hello" }] }] } }]
-                                              }), format: :json
+                                              })
 
           expect(@product.reload.is_licensed).to be(false)
         end
@@ -679,9 +678,10 @@ describe LinksController, :vcr, inertia: true do
               { price_difference_cents: 500 },
               { price_difference_cents: 100 }
             ]
-          }, as: :json
+          }
 
-          expect(response).to be_successful
+          expect(response).to redirect_to(edit_link_path(coffee_product))
+          expect(response).to have_http_status(:see_other)
           expect(coffee_product.reload.suggested_price_cents).to eq(500)
         end
       end
@@ -690,7 +690,7 @@ describe LinksController, :vcr, inertia: true do
         it "is updated when a new file is uploaded" do
           freeze_time do
             url = "#{AWS_S3_ENDPOINT}/#{S3_BUCKET}/attachment/pencil.png"
-            post(:update, params: @params.merge!(files: [{ id: SecureRandom.uuid, url: }]), format: :json)
+            post(:update, params: @params.merge!(files: [{ id: SecureRandom.uuid, url: }]))
 
             @product.reload
             expect(@product.content_updated_at).to eq Time.current
@@ -698,9 +698,10 @@ describe LinksController, :vcr, inertia: true do
         end
         it "is not updated when irrelevant attributes are changed" do
           freeze_time do
-            post(:update, params: @params.merge(description: "new description"), format: :json)
+            post(:update, params: @params.merge(description: "new description"))
 
-            expect(response).to be_successful
+            expect(response).to redirect_to(edit_link_path(@product))
+            expect(response).to have_http_status(:see_other)
             @product.reload
             expect(@product.content_updated_at).to be_nil
           end
@@ -726,7 +727,7 @@ describe LinksController, :vcr, inertia: true do
           old_content: "This is a collection of works spanning 1984 — 1994, while I spent time in a shack in the Andes.",
         ).and_call_original
 
-        put :update, params: @params, as: :json
+        put :update, params: @params
 
         expect(@product.reload.name).to eq "sumlink"
         expect(@product.custom_button_text_option).to eq "pay_prompt"
@@ -745,7 +746,7 @@ describe LinksController, :vcr, inertia: true do
         end
 
         it "updates the product refund policy" do
-          put :update, params: @params, as: :json
+          put :update, params: @params
           @product.reload
           expect(@product.product_refund_policy_enabled).to be(true)
           expect(@product.product_refund_policy.title).to eq("7-day money back guarantee")
@@ -759,7 +760,7 @@ describe LinksController, :vcr, inertia: true do
         end
 
         it "updates the product refund policy" do
-          put :update, params: @params, as: :json
+          put :update, params: @params
           @product.reload
           expect(@product.product_refund_policy_enabled).to be(true)
           expect(@product.product_refund_policy.title).to eq "7-day money back guarantee"
@@ -773,7 +774,7 @@ describe LinksController, :vcr, inertia: true do
 
           it "disables the product refund policy" do
             @params[:product_refund_policy_enabled] = false
-            put :update, params: @params, as: :json
+            put :update, params: @params
             @product.reload
             expect(@product.product_refund_policy_enabled).to be(false)
             expect(@product.product_refund_policy).to be_nil
@@ -796,14 +797,14 @@ describe LinksController, :vcr, inertia: true do
             }
           ]
         }
-        expect(response).to be_successful
+        expect(response).to have_http_status(:see_other)
         product.reload
         expect(product.name).to eq "physical"
         expect(product.skus_enabled).to be(false)
       end
 
       it "appends removed_file_info_attributes when additional keys are provided" do
-        put :update, params: @params.merge({ file_attributes: [] }), format: :json
+        put :update, params: @params.merge({ file_attributes: [] })
         expect(@product.reload.removed_file_info_attributes).to eq %i[Size Length]
       end
 
@@ -820,9 +821,9 @@ describe LinksController, :vcr, inertia: true do
             id: @product.unique_permalink,
             price_currency_type: "eur",
             price_cents: 1200
-          }, as: :json
+          }
 
-          expect(response).to be_successful
+          expect(response).to have_http_status(:see_other)
           @product.reload
           expect(@product.price_currency_type).to eq "eur"
           expect(@product.price_cents).to eq 1200
@@ -831,9 +832,9 @@ describe LinksController, :vcr, inertia: true do
             id: @product.unique_permalink,
             price_currency_type: "usd",
             price_cents: 1100
-          }, as: :json
+          }
 
-          expect(response).to be_successful
+          expect(response).to have_http_status(:see_other)
           @product.reload
           expect(@product.price_currency_type).to eq "usd"
           expect(@product.price_cents).to eq 1100
@@ -852,50 +853,50 @@ describe LinksController, :vcr, inertia: true do
                                                   value: "100 TB"
                                                 }
                                               ]
-                                            }), format: :json
+                                            })
         expect(@product.reload.removed_file_info_attributes).to eq []
       end
 
       it "deletes custom attributes" do
-        post :update, params: @params.merge(custom_attributes: []), format: :json
+        post :update, params: @params.merge(custom_attributes: [])
         expect(@product.reload.custom_attributes).to eq []
       end
 
       it "ignores custom attributes with both blank name and blank value" do
-        post :update, params: @params.merge(custom_attributes: [{ name: "", value: "" }]), format: :json
+        post :update, params: @params.merge(custom_attributes: [{ name: "", value: "" }])
         expect(@product.reload.custom_attributes).to eq []
       end
 
       it "marks the product as adult if the is_adult param is true" do
-        post :update, params: @params.merge(is_adult: true), format: :json
+        post :update, params: @params.merge(is_adult: true)
         expect(@product.reload.is_adult).to be(true)
       end
 
       it "marks the product as non-adult if the is_adult param is false" do
         @product.update!(is_adult: true)
-        post :update, params: @params.merge(is_adult: false), format: :json
+        post :update, params: @params.merge(is_adult: false)
         expect(@product.reload.is_adult).to be(false)
       end
 
       it "marks the product as allowing display of reviews if the display_product_reviews param is true" do
-        post :update, params: @params.merge(display_product_reviews: true), format: :json
+        post :update, params: @params.merge(display_product_reviews: true)
         expect(@product.reload.display_product_reviews).to be(true)
       end
 
       it "marks the product as not allowing display of reviews if the display_product_reviews param is false" do
         @product.update!(display_product_reviews: true)
-        post :update, params: @params.merge(display_product_reviews: false), format: :json
+        post :update, params: @params.merge(display_product_reviews: false)
         expect(@product.reload.display_product_reviews).to be(false)
       end
 
       it "marks the product as allowing display of sales count if the should_show_sales_count param is true" do
-        post :update, params: @params.merge(should_show_sales_count: true), format: :json
+        post :update, params: @params.merge(should_show_sales_count: true)
         expect(@product.reload.should_show_sales_count).to be(true)
       end
 
       it "marks the product as not allowing display of sales count if the should_show_sales_count param is false" do
         @product.update!(should_show_sales_count: true)
-        post :update, params: @params.merge(should_show_sales_count: false), format: :json
+        post :update, params: @params.merge(should_show_sales_count: false)
         expect(@product.reload.should_show_sales_count).to be(false)
       end
 
@@ -906,7 +907,7 @@ describe LinksController, :vcr, inertia: true do
               { name: "red", price_difference_cents: 400, max_purchase_count: 100 },
               { name: "blue", price_difference_cents: 300 }
             ]
-            post :update, params: { id: @product.unique_permalink, variants: }, as: :json
+            post :update, params: { id: @product.unique_permalink, variants: }
 
             variant1 = @product.alive_variants.first
             expect(variant1.name).to eq("red")
@@ -928,7 +929,7 @@ describe LinksController, :vcr, inertia: true do
             variants = [
               { name: "small", id: variant1.external_id, price_difference_cents: 200, max_purchase_count: 100 }
             ]
-            post :update, params: { id: @product.unique_permalink, variants: }, as: :json
+            post :update, params: { id: @product.unique_permalink, variants: }
 
             expect(@product.reload.variant_categories.count).to eq(1)
             expect(@product.alive_variants.count).to eq(1)
@@ -947,7 +948,7 @@ describe LinksController, :vcr, inertia: true do
 
           it "removes the category" do
             expect do
-              post :update, params: { id: @product.unique_permalink, variants: [] }, as: :json
+              post :update, params: { id: @product.unique_permalink, variants: [] }
             end.to change { @product.reload.variant_categories_alive.count }.from(1).to(0)
           end
         end
@@ -963,12 +964,12 @@ describe LinksController, :vcr, inertia: true do
           id: product1.unique_permalink,
           section_ids: [section3.external_id],
         }
-        put :update, params:, format: :json
+        put :update, params: params
         expect(section1.reload.shown_products).to eq [product2.id]
         expect(section2.reload.shown_products).to eq []
         expect(section3.reload.shown_products).to eq [product2, product1].map(&:id)
 
-        put :update, params: params.merge({ section_ids: [] }), format: :json
+        put :update, params: params.merge({ section_ids: [] })
         expect(section1.reload.shown_products).to eq [product2.id]
         expect(section2.reload.shown_products).to eq []
         expect(section3.reload.shown_products).to eq [product2.id]
@@ -1037,7 +1038,7 @@ describe LinksController, :vcr, inertia: true do
             end
 
             it "disables them" do
-              post :update, params: disabled_params, as: :json
+              post :update, params: disabled_params
 
               tier.reload
               expect(tier.apply_price_changes_to_existing_memberships).to eq false
@@ -1107,7 +1108,7 @@ describe LinksController, :vcr, inertia: true do
         end
 
         it "sets the prices on the variants" do
-          post :update, params: @params, format: :json
+          post :update, params: @params
 
           variants = @tier_category.reload.variants
 
@@ -1141,7 +1142,7 @@ describe LinksController, :vcr, inertia: true do
           context "when cancellation_discounts feature flag is off" do
             it "does not update the cancellation discount" do
               expect(Product::SaveCancellationDiscountService).not_to receive(:new)
-              post :update, params: @params, format: :json
+              post :update, params: @params
             end
           end
 
@@ -1152,7 +1153,7 @@ describe LinksController, :vcr, inertia: true do
 
             it "updates the cancellation discount" do
               expect(Product::SaveCancellationDiscountService).to receive(:new).with(@product, @params[:cancellation_discount]).and_call_original
-              post :update, params: @params, format: :json
+              post :update, params: @params
             end
           end
         end
@@ -1192,7 +1193,7 @@ describe LinksController, :vcr, inertia: true do
               ]
             )
 
-            post :update, params: @params, format: :json
+            post :update, params: @params
 
             first_tier = @tier_category.reload.variants.find_by(name: "First Tier")
             first_tier_prices = first_tier.prices
@@ -1221,9 +1222,9 @@ describe LinksController, :vcr, inertia: true do
               { country_code: "US", one_item_rate_cents: 1200, multiple_items_rate_cents: 600 },
               { country_code: "DE", one_item_rate_cents: 1000, multiple_items_rate_cents: 500 }
             ]
-          }, format: :json
+          }
 
-          expect(response).to be_successful
+          expect(response).to have_http_status(:see_other)
           expect(@product.reload.shipping_destinations.alive.size).to eq(2)
 
           expect(@product.shipping_destinations.alive.first.country_code).to eq("US")
@@ -1242,20 +1243,20 @@ describe LinksController, :vcr, inertia: true do
               { country_code: "US", one_item_rate_cents: 1200, multiple_items_rate_cents: 600 },
               { country_code: "US", one_item_rate_cents: 1000, multiple_items_rate_cents: 500 }
             ]
-          }, format: :json
+          }
 
-          expect(response).not_to be_successful
-          expect(response.parsed_body["error_message"]).to eq("Sorry, shipping destinations have to be unique.")
+          expect(response).to redirect_to(edit_link_path(@product))
+          expect(flash[:error]).to eq("Sorry, shipping destinations have to be unique.")
         end
 
         it "does not allow link to be saved if there are no shipping destinations" do
           post :update, params: {
             id: @product.unique_permalink,
             shipping_destinations: []
-          }, format: :json
+          }
 
-          expect(response).not_to be_successful
-          expect(response.parsed_body["error_message"]).to eq("The product needs to be shippable to at least one destination.")
+          expect(response).to redirect_to(edit_link_path(@product))
+          expect(flash[:error]).to eq("The product needs to be shippable to at least one destination.")
           expect(@product.reload.shipping_destinations.alive.size).to eq(1)
         end
 
@@ -1267,9 +1268,9 @@ describe LinksController, :vcr, inertia: true do
                 { country_code: "EUROPE", one_item_rate_cents: 1200, multiple_items_rate_cents: 600 },
                 { country_code: "ASIA", one_item_rate_cents: 1000, multiple_items_rate_cents: 500 }
               ]
-            }, format: :json
+            }
 
-            expect(response).to be_successful
+            expect(response).to have_http_status(:see_other)
             expect(@product.reload.shipping_destinations.alive.size).to eq(2)
 
             expect(@product.shipping_destinations.alive.first.country_code).to eq("EUROPE")
@@ -1288,10 +1289,10 @@ describe LinksController, :vcr, inertia: true do
                 { country_code: "EUROPE", one_item_rate_cents: 1200, multiple_items_rate_cents: 600 },
                 { country_code: "EUROPE", one_item_rate_cents: 1000, multiple_items_rate_cents: 500 }
               ]
-            }, format: :json
+            }
 
-            expect(response).not_to be_successful
-            expect(response.parsed_body["error_message"]).to eq("Sorry, shipping destinations have to be unique.")
+            expect(response).to redirect_to(edit_link_path(@product))
+            expect(flash[:error]).to eq("Sorry, shipping destinations have to be unique.")
           end
         end
       end
@@ -1350,11 +1351,11 @@ describe LinksController, :vcr, inertia: true do
       describe "without files" do
         it "allows updating a published product to have no files" do
           expect do
-            post :update, params: { id: @product.unique_permalink, files: [] }, format: :json
+            post :update, params: { id: @product.unique_permalink, files: [] }
             # Initialzing a new object instead of using @product.alive_product_file.count to
             # prevent reading cached value
           end.to change { Link.find(@product.id).alive_product_files.count }.from(1).to(0)
-          expect(response).to be_successful
+          expect(response).to have_http_status(:see_other)
         end
       end
 
@@ -1382,9 +1383,9 @@ describe LinksController, :vcr, inertia: true do
             { "id" => "blob:http://example.com/audio.mp3", "name" => "Audio 3", "status" => { "type" => "uploading" } }
           ]
 
-          post :update, params: { id: @product.unique_permalink, description:, public_files: files_params }, format: :json
+          post :update, params: { id: @product.unique_permalink, description:, public_files: files_params }
 
-          expect(response).to be_successful
+          expect(response).to have_http_status(:see_other)
           expect(public_file1.reload.attributes.values_at("display_name", "scheduled_for_deletion_at")).to eq(["Updated Audio 1", nil])
           expect(public_file2.reload.attributes.values_at("display_name", "scheduled_for_deletion_at")).to eq(["Updated Audio 2", nil])
           expect(@product.public_files.alive.count).to eq(2)
@@ -1397,9 +1398,9 @@ describe LinksController, :vcr, inertia: true do
             { "id" => public_file1.public_id, "name" => "Audio 1", "status" => { "type" => "saved" } }
           ]
 
-          post :update, params: { id: @product.unique_permalink, description:, public_files: files_params }, format: :json
+          post :update, params: { id: @product.unique_permalink, description:, public_files: files_params }
 
-          expect(response).to be_successful
+          expect(response).to have_http_status(:see_other)
           expect(@product.public_files.alive.count).to eq(3)
           expect(@product.reload.description).to include(public_file1.public_id)
           expect(@product.description).to_not include(public_file2.public_id)
@@ -1423,9 +1424,9 @@ describe LinksController, :vcr, inertia: true do
             { "id" => public_file2.public_id, "name" => "Audio 2", "status" => { "type" => "saved" } },
           ]
 
-          post :update, params: { id: @product.unique_permalink, description: content_with_invalid_embeds, public_files: files_params }, format: :json
+          post :update, params: { id: @product.unique_permalink, description: content_with_invalid_embeds, public_files: files_params }
 
-          expect(response).to be_successful
+          expect(response).to have_http_status(:see_other)
           expect(@product.reload.description).to eq(<<~HTML
             <p>Some text</p>
             <public-file-embed id="#{public_file1.public_id}"></public-file-embed>
@@ -1441,9 +1442,9 @@ describe LinksController, :vcr, inertia: true do
         end
 
         it "handles missing public_files params" do
-          post :update, params: { id: @product.unique_permalink, description: }, format: :json
+          post :update, params: { id: @product.unique_permalink, description: }
 
-          expect(response).to be_successful
+          expect(response).to have_http_status(:see_other)
           expect(@product.reload.description).to eq(<<~HTML
             <p>Some text</p>
 
@@ -1461,9 +1462,9 @@ describe LinksController, :vcr, inertia: true do
             { "id" => public_file1.public_id, "status" => { "type" => "saved" } }
           ]
 
-          post :update, params: { id: @product.unique_permalink, description: "", public_files: files_params }, format: :json
+          post :update, params: { id: @product.unique_permalink, description: "", public_files: files_params }
 
-          expect(response).to be_successful
+          expect(response).to have_http_status(:see_other)
           expect(@product.reload.description).to eq("")
           expect(public_file1.reload.scheduled_for_deletion_at).to be_present
           expect(public_file2.reload.scheduled_for_deletion_at).to be_present
@@ -1475,9 +1476,9 @@ describe LinksController, :vcr, inertia: true do
           ]
           allow_any_instance_of(PublicFile).to receive(:save!).and_raise(ActiveRecord::RecordInvalid.new(public_file1))
 
-          post :update, params: { id: @product.unique_permalink, description:, public_files: files_params }, format: :json
+          post :update, params: { id: @product.unique_permalink, description:, public_files: files_params }
 
-          expect(response).not_to be_successful
+          expect(response).to redirect_to(edit_link_path(@product))
           expect(public_file1.reload.display_name).to eq("Audio 1")
           expect(public_file1.reload.scheduled_for_deletion_at).to be_nil
           expect(public_file2.reload.scheduled_for_deletion_at).to be_nil
@@ -1492,8 +1493,8 @@ describe LinksController, :vcr, inertia: true do
 
         it "preserves correct s3 key for s3 files containing percent and ampersand" do
           urls = ["#{AWS_S3_ENDPOINT}/#{S3_BUCKET}/specs/test file %26 & ) %29.txt"]
-          post :update, params: @params.merge!(files: files_data_from_urls(urls)), format: :json
-          expect(response).to be_successful
+          post :update, params: @params.merge!(files: files_data_from_urls(urls))
+          expect(response).to have_http_status(:see_other)
           product_file = @product.alive_product_files.first
           expect(product_file.s3_key).to eq "specs/test file %26 & ) %29.txt"
         end
@@ -1501,8 +1502,8 @@ describe LinksController, :vcr, inertia: true do
         it "saves the files properly" do
           urls = ["#{AWS_S3_ENDPOINT}/#{S3_BUCKET}/attachment/pencil.png",
                   "#{AWS_S3_ENDPOINT}/#{S3_BUCKET}/attachment/manual.pdf"]
-          post :update, params: @params.merge!(files: files_data_from_urls(urls)), format: :json
-          expect(response).to be_successful
+          post :update, params: @params.merge!(files: files_data_from_urls(urls))
+          expect(response).to have_http_status(:see_other)
           expect(@product.alive_product_files.count).to eq 2
           expect(@product.alive_product_files[0].url).to eq "#{AWS_S3_ENDPOINT}/#{S3_BUCKET}/attachment/pencil.png"
           expect(@product.alive_product_files[1].url).to eq "#{AWS_S3_ENDPOINT}/#{S3_BUCKET}/attachment/manual.pdf"
@@ -1511,7 +1512,7 @@ describe LinksController, :vcr, inertia: true do
         it "has pdf filetype" do
           urls = ["#{AWS_S3_ENDPOINT}/#{S3_BUCKET}/attachment/pencil.png",
                   "#{AWS_S3_ENDPOINT}/#{S3_BUCKET}/attachment/manual.pdf"]
-          post :update, params: @params.merge!(files: files_data_from_urls(urls)), format: :json
+          post :update, params: @params.merge!(files: files_data_from_urls(urls))
           expect(@product.has_filetype?("pdf")).to be(true)
         end
 
@@ -1520,8 +1521,8 @@ describe LinksController, :vcr, inertia: true do
           @product.save!
 
           urls = ["#{AWS_S3_ENDPOINT}/#{S3_BUCKET}/attachment/manual.pdf"]
-          post :update, params: @params.merge!(files: files_data_from_urls(urls)), format: :json
-          expect(response).to be_successful
+          post :update, params: @params.merge!(files: files_data_from_urls(urls))
+          expect(response).to have_http_status(:see_other)
           expect(@product.reload.alive_product_files.count).to eq 1
           expect(@product.alive_product_files.first.url).to eq "#{AWS_S3_ENDPOINT}/#{S3_BUCKET}/attachment/manual.pdf"
         end
@@ -1531,8 +1532,8 @@ describe LinksController, :vcr, inertia: true do
           @product.product_files << create(:product_file, link: @product, url: "#{AWS_S3_ENDPOINT}/#{S3_BUCKET}/attachment/pencil.png")
           @product.save!
 
-          post :update, params: @params.merge!(files: {}), format: :json
-          expect(response).to be_successful
+          post :update, params: @params.merge!(files: {})
+          expect(response).to have_http_status(:see_other)
         end
 
         it "updates product's rich content when file embed IDs exist in product_rich_content" do
@@ -1542,7 +1543,7 @@ describe LinksController, :vcr, inertia: true do
           old_rich_content = rich_content.description
           product_rich_content = [{ id: rich_content.external_id, title: "Page title", description: { type: "doc", content: old_rich_content.dup.concat([{ "type" => "fileEmbed", "attrs" => { "id" => files_data[0][:id], "uid" => "64e84875-c795-567c-d2dd-96336ab093d5" } }, { "type" => "fileEmbed", "attrs" => { "id" => files_data[1][:id], "uid" => "0c042930-2df1-4583-82ef-a6317213868d" } }]) } }]
 
-          post :update, params: @params.merge!(rich_content: product_rich_content, files: files_data), format: :json
+          post :update, params: @params.merge!(rich_content: product_rich_content, files: files_data)
 
           new_external_id_1, new_external_id_2 = @product.product_files.alive.map(&:external_id)
           expect(@product.reload.rich_content_json).to eq([{ id: rich_content.external_id, page_id: rich_content.external_id, variant_id: nil, title: "Page title", description: { type: "doc", content: old_rich_content.dup.concat([{ "type" => "fileEmbed", "attrs" => { "id" => new_external_id_1, "uid" => "64e84875-c795-567c-d2dd-96336ab093d5" } }, { "type" => "fileEmbed", "attrs" => { "id" => new_external_id_2, "uid" => "0c042930-2df1-4583-82ef-a6317213868d" } }]) }, updated_at: rich_content.reload.updated_at }])
@@ -1565,7 +1566,7 @@ describe LinksController, :vcr, inertia: true do
           post :update, params: @params.merge!(
             files: [{ id: external_id1, url: "#{AWS_S3_ENDPOINT}/#{S3_BUCKET}/attachment/#{external_id1}/original/pencil.png" }, { id: external_id2, url: "#{AWS_S3_ENDPOINT}/#{S3_BUCKET}/attachment/#{external_id2}/original/manual.pdf" }],
             variants: [{ id: version1.external_id, name: version1.name, rich_content: [{ id: version1_rich_content1.external_id, title: "Version 1 - Page 1", description: { type: "doc", content: version1_rich_content1_updated_description } }, { id: nil, title: "Version 1 - Page 2", description: { type: "doc", content: version1_new_rich_content_description } }] }, { id: version2.external_id, name: version2.name, rich_content: [{ id: nil, title: "Version 2 - Page 1", description: { type: "doc", content: version2_new_rich_content_description } }] }]
-          ), format: :json
+          )
 
           expect(version1_rich_content1.reload.deleted?).to be(false)
           expect(version1_rich_content2.reload.deleted?).to be(true)
@@ -1618,8 +1619,8 @@ describe LinksController, :vcr, inertia: true do
             ]
           ).and_call_original
 
-          post :update, params: @params.merge(rich_content: product_rich_content), format: :json
-          expect(response).to be_successful
+          post :update, params: @params.merge(rich_content: product_rich_content)
+          expect(response).to have_http_status(:see_other)
         end
 
         it "saves the product file thumbnails" do
@@ -1632,14 +1633,14 @@ describe LinksController, :vcr, inertia: true do
           files_data = [{ id: product_file1.external_id, url: product_file1.url, thumbnail: { signed_id: blob.signed_id } }, { id: product_file2.external_id, url: product_file2.url }]
 
           expect do
-            post :update, params: @params.merge!(files: files_data), format: :json
+            post :update, params: @params.merge!(files: files_data)
           end.to change { product_file1.reload.thumbnail.blob }.from(nil).to(blob)
 
           expect(product_file2.reload.thumbnail.blob).to be_nil
-          expect(response).to be_successful
+          expect(response).to have_http_status(:see_other)
 
           expect do
-            post :update, params: { id: @product.unique_permalink, link: @params.merge!(files: files_data), format: :json }
+            post :update, params: { id: @product.unique_permalink, link: @params.merge!(files: files_data) }
           end.not_to change { product_file1.reload.thumbnail.blob }
         end
       end
@@ -1650,7 +1651,7 @@ describe LinksController, :vcr, inertia: true do
             expect do
               post :update, params: @params.merge(
                 integrations: { integration_name => new_integration_params }
-              ), as: :json
+              )
             end.to change { Integration.count }.by(1)
               .and change { ProductIntegration.count }.by(1)
 
@@ -1672,7 +1673,7 @@ describe LinksController, :vcr, inertia: true do
             expect do
               post :update, params: @params.merge(
                 integrations: { integration_name => modified_integration_params }
-              ), as: :json
+              )
             end.to change { Integration.count }.by(0)
               .and change { ProductIntegration.count }.by(0)
 
@@ -1707,7 +1708,7 @@ describe LinksController, :vcr, inertia: true do
                       },
                     },
                   ]
-                ), as: :json
+                )
               end.to change { Integration.count }.by(1)
                 .and change { ProductIntegration.count }.by(1)
                 .and change { BaseVariantIntegration.count }.by(1)
@@ -1762,7 +1763,7 @@ describe LinksController, :vcr, inertia: true do
                       },
                     },
                   ]
-                ), as: :json
+                )
               end.to change { Integration.count }.by(0)
                 .and change { ProductIntegration.count }.by(0)
                 .and change { BaseVariantIntegration.count }.by(1)
@@ -1841,7 +1842,7 @@ describe LinksController, :vcr, inertia: true do
                 to_return(status: 204)
 
               expect do
-                post :update, params: { id: @product.unique_permalink, link: @params.merge(integrations: {}) }, as: :json
+                post :update, params: { id: @product.unique_permalink, link: @params.merge(integrations: {}) }
               end.to change { @product.active_integrations.count }.by(-1)
 
               expect(@product.live_product_integrations.pluck(:integration_id)).to match_array []
@@ -1853,11 +1854,11 @@ describe LinksController, :vcr, inertia: true do
                 to_return(status: 404, body: { code: Discordrb::Errors::UnknownMember.code }.to_json)
 
               expect do
-                post :update, params: { id: @product.unique_permalink, link: @params.merge(integrations: {}) }, as: :json
+                post :update, params: { id: @product.unique_permalink, link: @params.merge(integrations: {}) }
               end.to change { @product.active_integrations.count }.by(0)
 
               expect(@product.live_product_integrations.pluck(:integration_id)).to match_array [discord_integration.id]
-              expect(response.parsed_body["error_message"]).to eq("Could not disconnect the discord integration, please try again.")
+              expect(flash[:error]).to eq("Could not disconnect the discord integration, please try again.")
             end
           end
         end
@@ -1909,7 +1910,7 @@ describe LinksController, :vcr, inertia: true do
                 with(query: { token: google_calendar_integration.access_token }).to_return(status: 200)
 
               expect do
-                post :update, params: { id: @product.unique_permalink, link: @params.merge(integrations: {}) }, as: :json
+                post :update, params: { id: @product.unique_permalink, link: @params.merge(integrations: {}) }
               end.to change { @product.active_integrations.count }.by(-1)
 
               expect(@product.live_product_integrations.pluck(:integration_id)).to match_array []
@@ -1920,11 +1921,11 @@ describe LinksController, :vcr, inertia: true do
                 with(query: { token: google_calendar_integration.access_token }).to_return(status: 404)
 
               expect do
-                post :update, params: { id: @product.unique_permalink, link: @params.merge(integrations: {}) }, as: :json
+                post :update, params: { id: @product.unique_permalink, link: @params.merge(integrations: {}) }
               end.to change { @product.active_integrations.count }.by(0)
 
               expect(@product.live_product_integrations.pluck(:integration_id)).to match_array [google_calendar_integration.id]
-              expect(response.parsed_body["error_message"]).to eq("Could not disconnect the google calendar integration, please try again.")
+              expect(flash[:error]).to eq("Could not disconnect the google calendar integration, please try again.")
             end
           end
         end
@@ -1941,12 +1942,12 @@ describe LinksController, :vcr, inertia: true do
 
             it "updates the custom_domain" do
               expect do
-                post(:update, params: @params.merge({ custom_domain: new_domain_name }), format: :json)
+                post(:update, params: @params.merge({ custom_domain: new_domain_name }))
               end.to change {
                 @product.reload.custom_domain.domain
               }.from("example-domain.com").to(new_domain_name)
 
-              expect(response).to be_successful
+              expect(response).to have_http_status(:see_other)
             end
 
             context "when domain verification fails" do
@@ -1960,7 +1961,7 @@ describe LinksController, :vcr, inertia: true do
 
               it "does not increment the failed verification attempts count" do
                 expect do
-                  post(:update, params: @params.merge({ custom_domain: "invalid.example.com" }), format: :json)
+                  post(:update, params: @params.merge({ custom_domain: "invalid.example.com" }))
                 end.to_not change {
                   @product.reload.custom_domain.failed_verification_attempts_count
                 }
@@ -1971,11 +1972,11 @@ describe LinksController, :vcr, inertia: true do
           context "when the product doesn't have an existing custom_domain" do
             it "creates a new custom_domain" do
               expect do
-                post(:update, params: @params.merge({ custom_domain: new_domain_name }), format: :json)
+                post(:update, params: @params.merge({ custom_domain: new_domain_name }))
               end.to change { CustomDomain.alive.count }.by(1)
 
               expect(@product.reload.custom_domain.domain).to eq new_domain_name
-              expect(response).to be_successful
+              expect(response).to have_http_status(:see_other)
             end
           end
         end
@@ -1996,7 +1997,7 @@ describe LinksController, :vcr, inertia: true do
           ],
           rich_content: [],
         }
-        expect(response).to be_successful
+        expect(response).to have_http_status(:see_other)
         product_file = @product.alive_product_files.last.reload
 
         expect(product_file.display_name).to eq("sample")
@@ -2050,7 +2051,7 @@ describe LinksController, :vcr, inertia: true do
                 description: nil,
               },
             ],
-          }, format: :json
+          }
 
           expect(rich_content1.reload.deleted?).to be(false)
           expect(rich_content1.description).to eq(updated_rich_content1_description)
@@ -2066,7 +2067,7 @@ describe LinksController, :vcr, inertia: true do
 
           # Deletes all existing rich content pages if no rich content is passed
           expect do
-            post :update, params: { id: product.unique_permalink, rich_content: [] }, format: :json
+            post :update, params: { id: product.unique_permalink, rich_content: [] }
           end.to change { product.reload.alive_rich_contents.count }.from(4).to(0)
           .and change { product.rich_contents.count }.by(0)
         end
@@ -2094,7 +2095,7 @@ describe LinksController, :vcr, inertia: true do
               id: @product.unique_permalink,
               rich_content: [{ title: "Page 1", description: { type: "doc", content: description } }],
               files:,
-            }, format: :json
+            }
           end.to change { @product.product_files_archives.alive.count }.by(1)
           archives = @product.product_files_archives.alive.to_a
           archives.each do |archive|
@@ -2114,7 +2115,7 @@ describe LinksController, :vcr, inertia: true do
                 }
               ],
               files:,
-            }, format: :json
+            }
           end.to_not change { ProductFilesArchive.count }
           expect(archives.all?(&:alive?)).to eq(true)
 
@@ -2134,7 +2135,7 @@ describe LinksController, :vcr, inertia: true do
                 }
               ],
               files:,
-            }, format: :json
+            }
           end.to change { ProductFilesArchive.where.not(variant_id: nil).alive.count }.by(1)
           .and change { @product.product_files_archives.alive.count }.by(-1)
         end
@@ -2158,7 +2159,7 @@ describe LinksController, :vcr, inertia: true do
               has_same_rich_content_for_all_variants: false,
               files: [{ id: file1.external_id, url: file1.url }, { id: file2.external_id, url: file2.url }],
               variants: [{ id: version1.external_id, name: version1.name, rich_content: [{ id: nil, title: "Version 1 - Page 1", description: { type: "doc", content: version1_rich_content_description, } }] }]
-            }, format: :json
+            }
           end.to change { version1.product_files_archives.alive.count }.by(1)
           .and change { @product.product_files_archives.alive.count }.by(0)
 
@@ -2169,13 +2170,13 @@ describe LinksController, :vcr, inertia: true do
               rich_content: [{ id: nil, title: "Version 1 - Page 1", description: { type: "doc", content: version1_rich_content_description } }],
               files: [{ id: file1.external_id, url: file1.url }, { id: file2.external_id, url: file2.url }],
               variants: [{ id: version1.external_id, name: version1.name }]
-            }, format: :json
+            }
           end.to change { version1.product_files_archives.alive.count }.by(-1)
           .and change { @product.product_files_archives.alive.count }.by(1)
         end
 
         it "does not generate a folder archive when nothing has changed" do
-          expect { post :update, params: { id: @product.unique_permalink, name: @product.name }, format: :json }.to change { @product.product_files_archives.folder_archives.alive.count }.by(0)
+          expect { post :update, params: { id: @product.unique_permalink, name: @product.name } }.to change { @product.product_files_archives.folder_archives.alive.count }.by(0)
           expect(@product.product_files_archives.folder_archives.alive.count).to eq(0)
         end
 
@@ -2189,7 +2190,7 @@ describe LinksController, :vcr, inertia: true do
               id: @product.unique_permalink,
               rich_content: [{ id: nil, title: "Page 1", description: { type: "doc", content: description } }],
               files: [{ id: file1.external_id, url: file1.url }]
-            }, format: :json
+            }
           end.to_not change { @product.product_files_archives.folder_archives.alive.count }
         end
 
@@ -2206,7 +2207,7 @@ describe LinksController, :vcr, inertia: true do
               id: @product.unique_permalink,
               rich_content: [{ id: nil, title: "Page 1", description: { type: "doc", content: description } }],
               files: [{ id: file1.external_id, url: file1.url }]
-            }, format: :json
+            }
           end.to_not change { @product.product_files_archives.folder_archives.alive.count }
         end
 
@@ -2226,7 +2227,7 @@ describe LinksController, :vcr, inertia: true do
             id: @product.unique_permalink,
             rich_content: [{ id: nil, title: "Page 1", description: { type: "doc", content: [folder1] } }],
             files: [{ id: file1.external_id, url: file1.url }, { id: file2.external_id, url: file2.url }]
-          }, format: :json
+          }
 
           folder1_archive = @product.product_files_archives.folder_archives.alive.find_by(folder_id: folder1_id)
           folder1_archive.mark_in_progress!
@@ -2238,7 +2239,7 @@ describe LinksController, :vcr, inertia: true do
               name: "New product name",
               rich_content: [{ id: nil, title: "New page title", description: { type: "doc", content: [folder1] } }],
               files: [{ id: file1.external_id, url: file1.url }, { id: file2.external_id, url: file2.url }],
-            }, format: :json
+            }
           end.to_not change { @product.product_files_archives.folder_archives.alive.count }
           expect(folder1_archive.reload.alive?).to eq(true)
           expect(@product.product_files_archives.folder_archives.alive.count).to eq(1)
@@ -2266,7 +2267,7 @@ describe LinksController, :vcr, inertia: true do
               id: @product.unique_permalink,
               rich_content: [{ id: nil, title: "Page 1", description: { type: "doc", content: page1_description } }],
               files: [file1, file2, file3, file4].map { { id: _1.external_id, url: _1.url } }
-            }, format: :json
+            }
           end.to change { @product.product_files_archives.folder_archives.alive.count }.by(1)
 
           folder1_archive = @product.product_files_archives.folder_archives.alive.find_by(folder_id: folder1_id)
@@ -2291,7 +2292,7 @@ describe LinksController, :vcr, inertia: true do
               id: @product.unique_permalink,
               rich_content: [{ id: page1.external_id, title: page1.title, description: { type: "doc", content: updated_description } }],
               files: [file2, file3, file4, file5].map { { id: _1.external_id, url: _1.url } }
-            }, format: :json
+            }
           end.to_not change { @product.product_files_archives.folder_archives.alive.count }
           expect(folder1_archive.reload.alive?).to eq(true)
 
@@ -2332,7 +2333,7 @@ describe LinksController, :vcr, inertia: true do
               id: @product.unique_permalink,
               rich_content: [{ id: nil, title: "Page 1", description: { type: "doc", content: description } }],
               files: [file1, file2, file3, file4, file5, file6].map { { id: _1.external_id, url: _1.url } }
-            }, format: :json
+            }
           end.to change { @product.product_files_archives.folder_archives.alive.count }.by(3)
 
           folder1_archive = Link.find(@product.id).product_files_archives.folder_archives.alive.find_by(folder_id: folder1_id)
@@ -2360,7 +2361,7 @@ describe LinksController, :vcr, inertia: true do
               id: @product.unique_permalink,
               rich_content: [{ id: page1.external_id, title: page1.title, description: { type: "doc", content: page1.description } }],
               files: [file1, file2, file3, file4, file5, file6].map { { id: _1.external_id, url: _1.url } }
-            }, format: :json
+            }
           end.to_not change { @product.product_files_archives.folder_archives.count }
 
           expect([folder1_archive.reload, folder2_archive.reload, folder3_archive.reload].all?(&:alive?)).to eq(true)
@@ -2381,7 +2382,7 @@ describe LinksController, :vcr, inertia: true do
               id: @product.unique_permalink,
               rich_content: [{ id: nil, title: "Page 1", description: { type: "doc", content: [folder1] } }],
               files: [file1, file2].map { { id: _1.external_id, url: _1.url } }
-            }, format: :json
+            }
           end.to change { @product.product_files_archives.folder_archives.alive.count }.by(1)
           archive = @product.product_files_archives.folder_archives.alive.last
           archive.mark_in_progress!
@@ -2405,7 +2406,7 @@ describe LinksController, :vcr, inertia: true do
               id: @product.unique_permalink,
               rich_content: [{ id: page1.external_id, title: page1.title, description: { type: "doc", content: updated_page1_description } }],
               files: [{ id: file1.external_id, url: file1.url }, { id: file2.external_id, url: file2.url }, { id: file3_id, display_name: "File 3", url: create(:product_file, display_name: "File 3").url }, { id: file4_id, display_name: "File 4", url: create(:product_file, display_name: "File 4").url }],
-            }, format: :json
+            }
           end.to change { @product.product_files_archives.folder_archives.alive.count }.by(1)
           expect(archive.needs_updating?(@product.product_files)).to be(false)
           expect(archive.reload.alive?).to eq(true)
@@ -2438,7 +2439,7 @@ describe LinksController, :vcr, inertia: true do
               id: @product.unique_permalink,
               rich_content: [{ id: nil, title: "Page 1", description: { type: "doc", content: description } }],
               files: [file1, file2].map { { id: _1.external_id, url: _1.url } }
-            }, format: :json
+            }
           end.to change { @product.product_files_archives.folder_archives.alive.count }.by(1)
 
           old_archive = @product.product_files_archives.folder_archives.alive.last
@@ -2456,7 +2457,7 @@ describe LinksController, :vcr, inertia: true do
             id: @product.unique_permalink,
             rich_content: [{ id: page1.external_id, title: page1.title, description: { type: "doc", content: description } }],
             files: [file1, file2].map { { id: _1.external_id, url: _1.url } },
-          }, format: :json
+          }
 
           expect(old_archive.reload.alive?).to eq(false)
           expect(@product.product_files_archives.folder_archives.alive.count).to eq(1)
@@ -2492,7 +2493,7 @@ describe LinksController, :vcr, inertia: true do
             id: @product.unique_permalink,
             rich_content: [{ id: nil, title: "Page 1", description: { type: "doc", content: description } }],
             files: [file1, file2, file3, file4, file5].map { { id: _1.external_id, url: _1.url } }
-          }, format: :json
+          }
 
           folder1_archive = @product.product_files_archives.create!(folder_id: folder1.dig("attrs", "uid"))
           folder1_archive.product_files = @product.product_files
@@ -2520,7 +2521,7 @@ describe LinksController, :vcr, inertia: true do
             id: @product.unique_permalink,
             rich_content: [{ id: page1.external_id, title: page1.title, description: { type: "doc", content: new_description } }],
             files: [file1, file2, file3, file4, file5].map { { id: _1.external_id, url: _1.url } },
-          }, format: :json
+          }
 
           expect(folder1_archive.reload.alive?).to eq(false)
           expect(folder2_archive.reload.alive?).to eq(false)
@@ -2552,7 +2553,7 @@ describe LinksController, :vcr, inertia: true do
             id: @product.unique_permalink,
             rich_content: [{ id: nil, title: "Page 1", description: { type: "doc", content: description } }],
             files: [file1, file2].map { { id: _1.external_id, url: _1.url } },
-          }, format: :json
+          }
           expect(@product.product_files_archives.folder_archives.alive.count).to eq(1)
 
           old_archive = @product.product_files_archives.folder_archives.alive.find_by(folder_id:)
@@ -2566,7 +2567,7 @@ describe LinksController, :vcr, inertia: true do
             id: @product.unique_permalink,
             rich_content: [{ id: page1.external_id, title: page1.title, description: { type: "doc", content: new_description } }],
             files: [],
-          }, format: :json
+          }
 
           expect(old_archive.reload.alive?).to eq(false)
           expect(@product.product_files_archives.folder_archives.alive.count).to eq(0)
@@ -2586,7 +2587,7 @@ describe LinksController, :vcr, inertia: true do
             id: @product.unique_permalink,
             rich_content: [{ id: nil, title: "Page 1", description: { type: "doc", content: description } }],
             files: [file1, file2].map { { id: _1.external_id, url: _1.url } },
-          }, format: :json
+          }
           expect(@product.product_files_archives.folder_archives.alive.count).to eq(1)
 
           old_archive = @product.product_files_archives.folder_archives.alive.find_by(folder_id:)
@@ -2603,7 +2604,7 @@ describe LinksController, :vcr, inertia: true do
             id: @product.unique_permalink,
             rich_content: [{ id: page1.external_id, title: page1.title, description: { type: "doc", content: new_description } }],
             files: [{ id: file1.external_id, url: file1.url }]
-          }, format: :json
+          }
 
           expect(old_archive.reload.alive?).to eq(false)
           expect(@product.product_files_archives.folder_archives.alive.count).to eq(0)
@@ -2636,7 +2637,7 @@ describe LinksController, :vcr, inertia: true do
             id: @product.unique_permalink,
             rich_content: [{ id: nil, title: "Page 1", description: { type: "doc", content: page1_description } }, { id: nil, title: "Page 2", description: { type: "doc", content: page2_description } }],
             files: [file1, file2, file3, file4].map { { id: _1.external_id, url: _1.url } },
-          }, format: :json
+          }
 
           folder1_archive = Link.find(@product.id).product_files_archives.folder_archives.alive.find_by(folder_id: folder1_id)
           folder1_archive.mark_in_progress!
@@ -2671,7 +2672,7 @@ describe LinksController, :vcr, inertia: true do
             id: @product.unique_permalink,
             rich_content: [{ id: page1.external_id, title: page1.title, description: { type: "doc", content: updated_page1_description } }, { id: page2.external_id, title: page2.title, description: { type: "doc", content: updated_page2_description } }],
             files: [file1, file3, file4, file5].map { { id: _1.external_id, url: _1.url } },
-          }, format: :json
+          }
 
           expect(folder1_archive.reload.alive?).to eq(false)
           expect(folder2_archive.reload.alive?).to eq(false)
@@ -2704,7 +2705,7 @@ describe LinksController, :vcr, inertia: true do
                 has_same_rich_content_for_all_variants: false,
                 files: [file1, file2].map { { id: _1.external_id, url: _1.url } },
                 variants: [{ id: version1.external_id, name: version1.name, rich_content: [{ id: nil, title: "Version 1 - Page 1", description: { type: "doc", content: version1_rich_content_description } }] }]
-              }, format: :json
+              }
             end.to change { version1.product_files_archives.folder_archives.alive.count }.by(1)
             .and change { @product.product_files_archives.folder_archives.alive.count }.by(0)
           end
@@ -2729,7 +2730,7 @@ describe LinksController, :vcr, inertia: true do
                 rich_content: [{ id: nil, title: "Page 1", description: { type: "doc", content: [folder1] } }],
                 variants: [{ "id" => variant.external_id, "name" => "linux", "price" => "2" }],
                 files: [file1, file2].map { { id: _1.external_id, url: _1.url } },
-              }, format: :json
+              }
             end.to change { variant.product_files_archives.folder_archives.alive.count }.by(0)
             .and change { @product.product_files_archives.folder_archives.alive.count }.by(1)
           end
@@ -2743,9 +2744,10 @@ describe LinksController, :vcr, inertia: true do
           it "logs and renders error message" do
             allow_any_instance_of(Link).to receive(:save!).and_raise(Link::LinkInvalid)
 
-            post :update, params: @params, as: :json
+            post :update, params: @params
 
-            expect(response).to have_http_status(:unprocessable_entity)
+            expect(response).to redirect_to(edit_link_path(@product))
+            expect(flash[:error]).to be_present
           end
         end
       end
@@ -2763,7 +2765,7 @@ describe LinksController, :vcr, inertia: true do
                     number_of_installments: 3,
                     recurrence: "monthly"
                   }
-                }, as: :json
+                }
               end.to change { ProductInstallmentPlan.alive.count }.by(1)
 
               plan = product.reload.installment_plan
@@ -2796,7 +2798,7 @@ describe LinksController, :vcr, inertia: true do
                       number_of_installments: 4,
                       recurrence: "monthly"
                     }
-                  }, as: :json
+                  }
                 end.to change { existing_plan.reload.deleted_at }.from(nil)
 
                 new_plan = product.reload.installment_plan
@@ -2813,7 +2815,7 @@ describe LinksController, :vcr, inertia: true do
                       number_of_installments: 4,
                       recurrence: "monthly"
                     }
-                  }, as: :json
+                  }
                 end.not_to change { new_plan.reload.deleted_at }
                 expect(product.reload.installment_plan).to eq(new_plan)
               end
@@ -2828,7 +2830,7 @@ describe LinksController, :vcr, inertia: true do
                       number_of_installments: 4,
                       recurrence: "monthly"
                     }
-                  }, as: :json
+                  }
                 end.not_to change { ProductInstallmentPlan.count }
 
                 expect { existing_plan.reload }.to raise_error(ActiveRecord::RecordNotFound)
@@ -2845,7 +2847,7 @@ describe LinksController, :vcr, inertia: true do
                       number_of_installments: 4,
                       recurrence: "monthly"
                     }
-                  }, as: :json
+                  }
                 end.not_to change { new_plan.reload.deleted_at }
                 expect(product.reload.installment_plan).to eq(new_plan)
               end
@@ -2874,7 +2876,7 @@ describe LinksController, :vcr, inertia: true do
                     id: product.unique_permalink,
                     price_cents: 0,
                     installment_plan: nil
-                  }, as: :json
+                  }
                 end.to change { existing_plan.reload.deleted_at }.from(nil)
 
                 expect(product.reload.installment_plan).to be_nil
@@ -2887,7 +2889,7 @@ describe LinksController, :vcr, inertia: true do
                   post :update, params: {
                     id: product.unique_permalink,
                     installment_plan: nil
-                  }, as: :json
+                  }
                 end.to change { ProductInstallmentPlan.count }.by(-1)
 
                 expect { existing_plan.reload }.to raise_error(ActiveRecord::RecordNotFound)
@@ -2908,7 +2910,7 @@ describe LinksController, :vcr, inertia: true do
                   number_of_installments: 3,
                   recurrence: "monthly"
                 }
-              }, as: :json
+              }
             end.not_to change { ProductInstallmentPlan.count }
           end
         end
@@ -2921,9 +2923,10 @@ describe LinksController, :vcr, inertia: true do
           end
 
           it "enables community chat when requested" do
-            post :update, params: { id: @product.unique_permalink, community_chat_enabled: true }, as: :json
+            post :update, params: { id: @product.unique_permalink, community_chat_enabled: true }
 
-            expect(response).to be_successful
+            expect(response).to redirect_to(edit_link_path(@product))
+            expect(response).to have_http_status(:see_other)
             expect(@product.reload.community_chat_enabled?).to be(true)
             expect(@product.reload.active_community).to be_present
           end
@@ -2931,9 +2934,10 @@ describe LinksController, :vcr, inertia: true do
           it "disables community chat when requested" do
             @product.update!(community_chat_enabled: true)
 
-            post :update, params: { id: @product.unique_permalink, community_chat_enabled: false }, as: :json
+            post :update, params: { id: @product.unique_permalink, community_chat_enabled: false }
 
-            expect(response).to be_successful
+            expect(response).to redirect_to(edit_link_path(@product))
+            expect(response).to have_http_status(:see_other)
             expect(@product.reload.community_chat_enabled?).to be(false)
             expect(@product.reload.active_community).to be_nil
           end
@@ -2942,8 +2946,9 @@ describe LinksController, :vcr, inertia: true do
             seller.update!(created_at: (User::MIN_AGE_FOR_SERVICE_PRODUCTS + 1.day).ago)
             product = create(:product, user: seller, native_type: Link::NATIVE_TYPE_COFFEE, price_cents: 1000)
 
-            post :update, params: { id: product.unique_permalink, community_chat_enabled: true, variants: [{ price_difference_cents: 1000 }] }, as: :json
-            expect(response).to be_successful
+            post :update, params: { id: product.unique_permalink, community_chat_enabled: true, variants: [{ price_difference_cents: 1000 }] }
+            expect(response).to redirect_to(edit_link_path(product))
+            expect(response).to have_http_status(:see_other)
             expect(product.reload.community_chat_enabled?).to be(false)
             expect(product.reload.active_community).to be_nil
           end
@@ -2951,8 +2956,9 @@ describe LinksController, :vcr, inertia: true do
           it "does not enable community chat for bundle products" do
             @product.update!(native_type: Link::NATIVE_TYPE_BUNDLE)
 
-            post :update, params: { id: @product.unique_permalink, community_chat_enabled: true }, as: :json
-            expect(response).to be_successful
+            post :update, params: { id: @product.unique_permalink, community_chat_enabled: true }
+            expect(response).to redirect_to(edit_link_path(@product))
+            expect(response).to have_http_status(:see_other)
             expect(@product.reload.community_chat_enabled?).to be(false)
             expect(@product.reload.active_community).to be_nil
           end
@@ -2962,9 +2968,10 @@ describe LinksController, :vcr, inertia: true do
             community.mark_deleted!
             @product.update!(community_chat_enabled: false)
 
-            post :update, params: { id: @product.unique_permalink, community_chat_enabled: true }, as: :json
+            post :update, params: { id: @product.unique_permalink, community_chat_enabled: true }
 
-            expect(response).to be_successful
+            expect(response).to redirect_to(edit_link_path(@product))
+            expect(response).to have_http_status(:see_other)
             expect(@product.reload.community_chat_enabled?).to be(true)
             expect(community.reload).to be_alive
           end
@@ -2976,9 +2983,10 @@ describe LinksController, :vcr, inertia: true do
           end
 
           it "does not enable community chat" do
-            post :update, params: { id: @product.unique_permalink, community_chat_enabled: true }, as: :json
+            post :update, params: { id: @product.unique_permalink, community_chat_enabled: true }
 
-            expect(response).to be_successful
+            expect(response).to redirect_to(edit_link_path(@product))
+            expect(response).to have_http_status(:see_other)
             expect(@product.reload.community_chat_enabled?).to be(false)
             expect(@product.reload.active_community).to be_nil
           end
@@ -3054,26 +3062,26 @@ describe LinksController, :vcr, inertia: true do
       it "succeeds with name and price" do
         params = { price_cents: 100, name: "test link" }
 
-        post :create, params: { format: :json, link: params }
+        post :create, params: { as: :json, link: params }
 
         expect(response.parsed_body["success"]).to be(true)
       end
 
       it "fails if price missing" do
         params = { name: "test link" }
-        post :create, params: { format: :json, link: params }
+        post :create, params: { as: :json, link: params }
         expect(response.parsed_body["success"]).to_not be(true)
       end
 
       it "fails if name is missing" do
         params = { price_cents: 100 }
-        post :create, params: { format: :json, link: params }
+        post :create, params: { as: :json, link: params }
         expect(response.parsed_body["success"]).to be(false)
       end
 
       it "creates link with display_product_reviews set to true" do
         params = { price_cents: 100, name: "test link" }
-        post :create, params: { format: :json, link: params }
+        post :create, params: { as: :json, link: params }
         expect(response.parsed_body["success"]).to be(true)
         link = seller.links.last
         expect(link.display_product_reviews).to be(true)
@@ -3081,7 +3089,7 @@ describe LinksController, :vcr, inertia: true do
 
       it "ignores is_in_preorder_state param" do
         params = { price_cents: 100, name: "preorder", is_in_preorder_state: true, release_at: 1.year.from_now.iso8601 }
-        post :create, params: { format: :json, link: params }
+        post :create, params: { as: :json, link: params }
         expect(response.parsed_body["success"]).to be(true)
         link = seller.links.last
         expect(link.name).to eq "preorder"
@@ -3091,26 +3099,26 @@ describe LinksController, :vcr, inertia: true do
 
       it "is able to set currency type" do
         params = { price_cents: 100, name: "test link", url: @s3_url, price_currency_type: "jpy" }
-        post :create, params: { format: :json, link: params }
+        post :create, params: { as: :json, link: params }
         expect(response.parsed_body["success"]).to be(true)
         expect(Link.last.price_currency_type).to eq "jpy"
       end
 
       it "creates the product if no files are provided" do
         params = { price_cents: 100, name: "test link", files: {} }
-        expect { post :create, params: { format: :json, link: params } }.to change { seller.links.count }.by(1)
+        expect { post :create, params: { as: :json, link: params } }.to change { seller.links.count }.by(1)
       end
 
       it "assigns 'other' taxonomy" do
         params = { price_cents: 100, name: "test link" }
-        post :create, params: { format: :json, link: params }
+        post :create, params: { as: :json, link: params }
         expect(response.parsed_body["success"]).to be(true)
         expect(Link.last.taxonomy).to eq(Taxonomy.find_by(slug: "other"))
       end
 
       context "when the product's native type is bundle" do
         it "sets is_bundle to true" do
-          post :create, params: { format: :json, link: { price_cents: 100, name: "Bundle", native_type: "bundle" } }
+          post :create, params: { as: :json, link: { price_cents: 100, name: "Bundle", native_type: "bundle" } }
           expect(response.parsed_body["success"]).to be(true)
 
           product = Link.last
@@ -3123,7 +3131,7 @@ describe LinksController, :vcr, inertia: true do
         let(:seller) { create(:user, :eligible_for_service_products) }
 
         it "sets custom_button_text_option to 'donate_prompt'" do
-          post :create, params: { format: :json, link: { price_cents: 100, name: "Coffee", native_type: "coffee" } }
+          post :create, params: { as: :json, link: { price_cents: 100, name: "Coffee", native_type: "coffee" } }
           expect(response.parsed_body["success"]).to be(true)
 
           product = Link.last
@@ -3189,7 +3197,7 @@ describe LinksController, :vcr, inertia: true do
           end
 
           it "allows users to create physical products" do
-            post :create, params: { format: :json, link: @params }
+            post :create, params: { as: :json, link: @params }
             expect(response.parsed_body["success"]).to be(true)
             product = Link.last
             expect(product.is_physical).to be(true)
@@ -3199,7 +3207,7 @@ describe LinksController, :vcr, inertia: true do
 
         context "when physical products are disabled" do
           it "returns forbidden" do
-            post :create, params: { format: :json, link: @params }
+            post :create, params: { as: :json, link: @params }
             expect(response).to have_http_status(:forbidden)
           end
         end
@@ -3214,7 +3222,7 @@ describe LinksController, :vcr, inertia: true do
           it "does not enable community chat by default" do
             params = { price_cents: 100, name: "test link" }
 
-            post :create, params: { format: :json, link: params }
+            post :create, params: { as: :json, link: params }
 
             expect(response.parsed_body["success"]).to be(true)
             product = seller.links.last
@@ -3231,7 +3239,7 @@ describe LinksController, :vcr, inertia: true do
           it "does not enable community chat" do
             params = { price_cents: 100, name: "test link" }
 
-            post :create, params: { format: :json, link: params }
+            post :create, params: { as: :json, link: params }
 
             expect(response.parsed_body["success"]).to be(true)
             product = seller.links.last
@@ -3272,7 +3280,7 @@ describe LinksController, :vcr, inertia: true do
           allow_any_instance_of(Link).to receive_message_chain(:asset_previews, :build).and_return(nil)
           allow_any_instance_of(Link).to receive(:build_thumbnail).and_return(nil)
 
-          post :create, params: { format: :json, link: params }
+          post :create, params: { as: :json, link: params }
 
           expect(service_double).to have_received(:generate_cover_image)
           expect(service_double).to have_received(:generate_rich_content_pages)
@@ -3298,7 +3306,7 @@ describe LinksController, :vcr, inertia: true do
           expect(service_double).not_to receive(:generate_cover_image)
           expect(service_double).not_to receive(:generate_rich_content_pages)
 
-          post :create, params: { format: :json, link: params }
+          post :create, params: { as: :json, link: params }
         end
 
         it "does not call AI service when ai_prompt is blank" do
@@ -3307,7 +3315,7 @@ describe LinksController, :vcr, inertia: true do
           expect(service_double).not_to receive(:generate_cover_image)
           expect(service_double).not_to receive(:generate_rich_content_pages)
 
-          post :create, params: { format: :json, link: { price_cents: 100, name: "Regular Product" } }
+          post :create, params: { as: :json, link: { price_cents: 100, name: "Regular Product" } }
         end
       end
     end
@@ -3400,7 +3408,7 @@ describe LinksController, :vcr, inertia: true do
       product = create(:product, user: seller, purchase_disabled_at: Time.current)
 
       expect do
-        post :update, params: { id: product.unique_permalink, name: "Test" }, format: :json
+        post :update, params: { id: product.unique_permalink, name: "Test" }, as: :json
       end.to change { product.reload.name }.from(product.name).to("Test")
 
       expect do
