@@ -1,7 +1,8 @@
 import React from "react";
 
 export const meta = {
-  description: "In this article: Discover eligibility Setting product categories and tags Increase Sales on Discover with tags Filter your products by tag NSFW tag Improved Pro",
+  description:
+    "In this article: Discover eligibility Setting product categories and tags Increase Sales on Discover with tags Filter your products by tag NSFW tag Improved Pro",
 };
 
 export default function GumroadDiscover() {
@@ -10,21 +11,51 @@ export default function GumroadDiscover() {
       <div>
         <p>In this article:</p>
         <ul>
-          <li><a href="#Discover-eligibility-OtTcp">Discover eligibility</a></li>
-          <li><a href="#Setting-product-categories-and-tags-L8D6v">Setting product categories and tags</a></li>
-          <li><a href="#Increase-Sales-on-Discover-with-tags-lrrKj">Increase Sales on Discover with tags</a></li>
-          <li><a href="#Filter-your-product-by-tag-YX_h-">Filter your products by tag</a></li>
-          <li><a href="#NSFW-tag-bWd81">NSFW tag</a></li>
+          <li>
+            <a href="#Discover-eligibility-OtTcp">Discover eligibility</a>
+          </li>
+          <li>
+            <a href="#Setting-product-categories-and-tags-L8D6v">Setting product categories and tags</a>
+          </li>
+          <li>
+            <a href="#Increase-Sales-on-Discover-with-tags-lrrKj">Increase Sales on Discover with tags</a>
+          </li>
+          <li>
+            <a href="#Filter-your-product-by-tag-YX_h-">Filter your products by tag</a>
+          </li>
+          <li>
+            <a href="#NSFW-tag-bWd81">NSFW tag</a>
+          </li>
         </ul>
         <br />
-        <p><a href="https://gumroad.com/discover">Gumroad Discover</a> recommends your products to prospective customers, helping you grow beyond your existing audience and find even more people who might be interested in your work.</p>
-        <figure><img src="https://d33v4339jhl8k0.cloudfront.net/docs/assets/5c4657ad2c7d3a66e32d763f/images/659b89b3baa1964909074d55/file-HBpd8e90fL.png" alt="" /></figure>
+        <p>
+          <a href="https://gumroad.com/discover">Gumroad Discover</a> recommends your products to prospective customers,
+          helping you grow beyond your existing audience and find even more people who might be interested in your work.
+        </p>
+        <figure>
+          <img
+            src="https://d33v4339jhl8k0.cloudfront.net/docs/assets/5c4657ad2c7d3a66e32d763f/images/659b89b3baa1964909074d55/file-HBpd8e90fL.png"
+            alt=""
+          />
+        </figure>
         <h3 id="Discover-eligibility-OtTcp">Discover eligibility</h3>
         <p>The account level criteria for being eligible for Gumroad Discover is:</p>
         <ul>
-          <li>Your <a href="https://gumroad.com/settings/payments">payout settings</a> must be filled in.</li>
-          <li>Reach a balance of at least $10 USD from enough genuine sales (not self-purchases or asking your partner/housemates to buy your product).</li>
-          <li>Be verified by our risk team in the <a href="/help/article/13-getting-paid#:~:text=For%20our%20review%2C%20we%20require%20your%20account%20to%20be%20legitimate%20in%20two%20major%20ways%3A"> risk review process</a>, which can take on average 3 weeks after you pass the $10 threshold.</li>
+          <li>
+            Your <a href="https://gumroad.com/settings/payments">payout settings</a> must be filled in.
+          </li>
+          <li>
+            Reach a balance of at least $10 USD from enough genuine sales (not self-purchases or asking your
+            partner/housemates to buy your product).
+          </li>
+          <li>
+            Be verified by our risk team in the{" "}
+            <a href="/help/article/13-getting-paid#:~:text=For%20our%20review%2C%20we%20require%20your%20account%20to%20be%20legitimate%20in%20two%20major%20ways%3A">
+              {" "}
+              risk review process
+            </a>
+            , which can take on average 3 weeks after you pass the $10 threshold.
+          </li>
         </ul>
         <p>Once the above criteria are satisfied, a product will be listed on Discover if:</p>
         <ul>
@@ -33,35 +64,96 @@ export default function GumroadDiscover() {
           <li>Ratings are enabled</li>
         </ul>
         <p>These settings can be changed in the share tab of the product edit page.</p>
-        <figure><img src="https://lh7-us.googleusercontent.com/LBJCCP55dI3ENJvrNSUhEqJYOTj8xTXh3veiTcjMbqNXA-4pXAk5nE39_8PJCFLdHHNDg_kA_2VtMfkfrpiKIW-7lIznwk5tmh3iYmSKcKMMQJqfB3S_5D-DHXjvzQW8ai_5gl-cnCO6KvAaSqSpFqQ" alt="" /></figure>
-        <p>Note: Products on Discover are automatically opted into the Gumroad Affiliates Program. To learn more about this program and how to opt-out of it, see <a href="/help/article/333-affiliates-on-gumroad">Affiliates on Gumroad.</a></p>
+        <figure>
+          <img
+            src="https://lh7-us.googleusercontent.com/LBJCCP55dI3ENJvrNSUhEqJYOTj8xTXh3veiTcjMbqNXA-4pXAk5nE39_8PJCFLdHHNDg_kA_2VtMfkfrpiKIW-7lIznwk5tmh3iYmSKcKMMQJqfB3S_5D-DHXjvzQW8ai_5gl-cnCO6KvAaSqSpFqQ"
+            alt=""
+          />
+        </figure>
+        <p>
+          Note: Products on Discover are automatically opted into the Gumroad Affiliates Program. To learn more about
+          this program and how to opt-out of it, see{" "}
+          <a href="/help/article/333-affiliates-on-gumroad">Affiliates on Gumroad.</a>
+        </p>
         <h3 id="Setting-product-categories-and-tags-L8D6v">Setting product categories and tags</h3>
-        <p>To help customers find your products, use categories and tags. When you <a href="/help/article/149-adding-a-product">create a product</a>, you can select your preferred category and add tags on its Share tab.</p>
-        <p>To add a tag to your product,  scroll down to the Gumroad Discover section. </p>
-        <figure><img src="https://lh7-us.googleusercontent.com/docsz/AD_4nXf74jarLbiBBjv5cn8ioSpNOoqaCiW_rfWB9W9TvgqGCTpSEaJGgWWLAmEkWnQ50XpRF9sFxkuh3ovk9Z5uOrZlHgA9E3sRjBu7DFn0Ql7J41IP8OEKi5RSCojiBOW584DBfP7NaKYr1ZeC0qWLwlVPO1Y?key=2UaOp2EY2Zjduk4jkSScMw" alt="" /></figure>
-        <p>Detailed tags on your products can both boost sales on <a href="https://gumroad.com/discover">Discover</a> and help your customers filter your profile. By default, Discover is enabled for all your products. You can turn this off on your product edit page under the Share tab by deleting the product category. </p>
+        <p>
+          To help customers find your products, use categories and tags. When you{" "}
+          <a href="/help/article/149-adding-a-product">create a product</a>, you can select your preferred category and
+          add tags on its Share tab.
+        </p>
+        <p>To add a tag to your product, scroll down to the Gumroad Discover section. </p>
+        <figure>
+          <img
+            src="https://lh7-us.googleusercontent.com/docsz/AD_4nXf74jarLbiBBjv5cn8ioSpNOoqaCiW_rfWB9W9TvgqGCTpSEaJGgWWLAmEkWnQ50XpRF9sFxkuh3ovk9Z5uOrZlHgA9E3sRjBu7DFn0Ql7J41IP8OEKi5RSCojiBOW584DBfP7NaKYr1ZeC0qWLwlVPO1Y?key=2UaOp2EY2Zjduk4jkSScMw"
+            alt=""
+          />
+        </figure>
+        <p>
+          Detailed tags on your products can both boost sales on <a href="https://gumroad.com/discover">Discover</a> and
+          help your customers filter your profile. By default, Discover is enabled for all your products. You can turn
+          this off on your product edit page under the Share tab by deleting the product category.{" "}
+        </p>
         <h3 id="Increase-Sales-on-Discover-with-tags-lrrKj">Increase Sales on Discover with tags</h3>
         <p>Here’s how tags are displayed within each category on Discover:</p>
-        <figure><img src="https://lh7-us.googleusercontent.com/710uM05eTXzO0z2pClriQrKQgNgOFb2OXpdRZ3xvEdcPj0k8uXO5ljJmNvpIhd37IeeYEtt71Yr2ZnGfUtieaIU1l3p3wel1uC34MFGKZ0hxB3ct5vub1finW217jf-TOqTjhEOcxji6u3Qp8JWIiNw" alt="" /></figure>
-        <p>Think about how your customers would search for your product and add tags to help them find it. The more descriptive and specific your tags are, the better chance you’ll have to attract new customers. </p>
+        <figure>
+          <img
+            src="https://lh7-us.googleusercontent.com/710uM05eTXzO0z2pClriQrKQgNgOFb2OXpdRZ3xvEdcPj0k8uXO5ljJmNvpIhd37IeeYEtt71Yr2ZnGfUtieaIU1l3p3wel1uC34MFGKZ0hxB3ct5vub1finW217jf-TOqTjhEOcxji6u3Qp8JWIiNw"
+            alt=""
+          />
+        </figure>
+        <p>
+          Think about how your customers would search for your product and add tags to help them find it. The more
+          descriptive and specific your tags are, the better chance you’ll have to attract new customers.{" "}
+        </p>
         <h3 id="Filter-your-product-by-tag-YX_h-">Filter your product by tag</h3>
         <ol>
           <li>Add tags to all of your products. </li>
           <li>Enable product filters from your profile at [username].gumroad.com</li>
-          <li>Send customers to your profile page URL with the tag added to the URL. To do that, simply take: [Your profile URL] + ?sort=page_layout&amp;tags=[tag]</li>
+          <li>
+            Send customers to your profile page URL with the tag added to the URL. To do that, simply take: [Your
+            profile URL] + ?sort=page_layout&amp;tags=[tag]
+          </li>
         </ol>
-        <p>For example, if we wanted to link customers solely to the "Tutorial" products by the Gumroad creator<a href="https://matkatmusic.gumroad.com/"> Matkat Music</a>, then the URL would look like this:<a href="https://matkatmusic.gumroad.com/?sort=page_layout&amp;tags=tutorial"> https://matkatmusic.gumroad.com/?sort=page_layout&amp;tags=tutorial</a></p>
-        <figure><img src="https://lh7-us.googleusercontent.com/c743cAj50Lu53lZdJXMAggDHZRHiRr2Mlnv18FNIcZ6FogN1bIKLfB-M0C6lNznY7ljeUfpf2zrFf5LVy0GVCsuiR_K6s76ZvwKTUCEbLqlMvzlXQEydMKBvseHcTAsMeuI7f_rMYwQ9ZquU6IwBVeE" alt="" /></figure>
+        <p>
+          For example, if we wanted to link customers solely to the "Tutorial" products by the Gumroad creator
+          <a href="https://matkatmusic.gumroad.com/"> Matkat Music</a>, then the URL would look like this:
+          <a href="https://matkatmusic.gumroad.com/?sort=page_layout&amp;tags=tutorial">
+            {" "}
+            https://matkatmusic.gumroad.com/?sort=page_layout&amp;tags=tutorial
+          </a>
+        </p>
+        <figure>
+          <img
+            src="https://lh7-us.googleusercontent.com/c743cAj50Lu53lZdJXMAggDHZRHiRr2Mlnv18FNIcZ6FogN1bIKLfB-M0C6lNznY7ljeUfpf2zrFf5LVy0GVCsuiR_K6s76ZvwKTUCEbLqlMvzlXQEydMKBvseHcTAsMeuI7f_rMYwQ9ZquU6IwBVeE"
+            alt=""
+          />
+        </figure>
         <h3 id="NSFW-tag-bWd81">NSFW tag</h3>
-        <p>If your product is <a href="/help/article/156-gumroad-and-adult-content#Selling-NSFW">NSFW</a>, be sure to tag it so by setting the toggle on your product's Share tab.</p>
-        <p>We will only display it to customers who opt in to see NSFW content by enabling the Adult content toggle in their Gumroad account settings.</p>
-        <figure><img src="help_center/nsfw-settings-toggle.png" alt="" /></figure>
+        <p>
+          If your product is <a href="/help/article/156-gumroad-and-adult-content#Selling-NSFW">NSFW</a>, be sure to tag
+          it so by setting the toggle on your product's Share tab.
+        </p>
+        <p>
+          We will only display it to customers who opt in to see NSFW content by enabling the Adult content toggle in
+          their Gumroad account settings.
+        </p>
+        <figure>
+          <img src="help_center/nsfw-settings-toggle.png" alt="" />
+        </figure>
       </div>
       <div>
         <h3>Related Articles</h3>
         <ul>
-          <li><a href="/help/article/222-product-ratings-on-gumroad"><span>Product ratings and reviews</span></a></li>
-          <li><a href="/help/article/325-indirect-taxes-on-sales-via-discover"><span>Indirect taxes on sales via Gumroad Discover</span></a></li>
+          <li>
+            <a href="/help/article/222-product-ratings-on-gumroad">
+              <span>Product ratings and reviews</span>
+            </a>
+          </li>
+          <li>
+            <a href="/help/article/325-indirect-taxes-on-sales-via-discover">
+              <span>Indirect taxes on sales via Gumroad Discover</span>
+            </a>
+          </li>
         </ul>
       </div>
     </>

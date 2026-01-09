@@ -10,7 +10,17 @@ import { UnreadTicketsBadge } from "$app/components/support/UnreadTicketsBadge";
 import { PageHeader } from "$app/components/ui/PageHeader";
 import { Tab, Tabs } from "$app/components/ui/Tabs";
 
-import type { SharedProps } from "./types";
+type SharedProps = {
+  helper_widget_host?: string | null;
+  helper_session?: {
+    email?: string | null;
+    emailHash?: string | null;
+    timestamp?: number | null;
+  } | null;
+  recaptcha_site_key?: string | null;
+  is_logged_in: boolean;
+  new_ticket_url: string;
+};
 
 type HelpCenterLayoutProps = {
   children: React.ReactNode;

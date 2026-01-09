@@ -1,14 +1,19 @@
 import React from "react";
 
 export const meta = {
-  description: "If you have created a product on Gumroad and want your customers to be able to take full advantage of the Gumroad app (for iOS and Android!), it is important to",
+  description:
+    "If you have created a product on Gumroad and want your customers to be able to take full advantage of the Gumroad app (for iOS and Android!), it is important to",
 };
 
 export default function MobileFriendlyFiles() {
   return (
     <>
       <div>
-        <p>If you have created a product on Gumroad and want your customers to be able to take full advantage of the <a href="/help/article/177-the-gumroad-dashboard-app">Gumroad app</a> (for iOS and Android!), it is important to be aware of the types of files that can be accessed in the Gumroad app.</p>
+        <p>
+          If you have created a product on Gumroad and want your customers to be able to take full advantage of the{" "}
+          <a href="/help/article/177-the-gumroad-dashboard-app">Gumroad app</a> (for iOS and Android!), it is important
+          to be aware of the types of files that can be accessed in the Gumroad app.
+        </p>
         <p>For your convenience, we've assembled those filetypes here:</p>
         <h3>Audio</h3>
         <ul>
@@ -33,16 +38,36 @@ export default function MobileFriendlyFiles() {
           <li>EPUB</li>
         </ul>
         <h3>Optimizing a PDF for Mobile:</h3>
-        <p>Some customers would rather download ebooks to their devices instead of using the Gumroad app. For an optimized customer service experience, consider uploading multiple ebook formats. Most importantly, always upload a PDF version, as most devices can easily display them and don’t require third-party software such as .epub or .mobi file formats.</p>
+        <p>
+          Some customers would rather download ebooks to their devices instead of using the Gumroad app. For an
+          optimized customer service experience, consider uploading multiple ebook formats. Most importantly, always
+          upload a PDF version, as most devices can easily display them and don’t require third-party software such as
+          .epub or .mobi file formats.
+        </p>
         <h3>PDF Settings</h3>
-        <p>Set the page size to 6x9" and use a 12pt font for the body. Regular PDF defaults tend to make them hard to read on mobile because they are generally optimized for print.</p>
+        <p>
+          Set the page size to 6x9" and use a 12pt font for the body. Regular PDF defaults tend to make them hard to
+          read on mobile because they are generally optimized for print.
+        </p>
       </div>
       <div>
         <h3>Related Articles</h3>
         <ul>
-          <li><a href="/help/article/247-what-your-customers-see"><span>The Gumroad Library</span></a></li>
-          <li><a href="/help/article/43-streaming-videos"><span>Prepare videos for streaming</span></a></li>
-          <li><a href="/help/article/176-metadata-for-audio-files"><span>Metadata for audio files</span></a></li>
+          <li>
+            <a href="/help/article/247-what-your-customers-see">
+              <span>The Gumroad Library</span>
+            </a>
+          </li>
+          <li>
+            <a href="/help/article/43-streaming-videos">
+              <span>Prepare videos for streaming</span>
+            </a>
+          </li>
+          <li>
+            <a href="/help/article/176-metadata-for-audio-files">
+              <span>Metadata for audio files</span>
+            </a>
+          </li>
         </ul>
       </div>
     </>

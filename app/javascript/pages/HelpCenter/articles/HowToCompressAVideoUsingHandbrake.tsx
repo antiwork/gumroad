@@ -1,29 +1,61 @@
 import React from "react";
 
 export const meta = {
-  description: "For all our Gumroad filmmakers allowing their customers to download video products, we highly recommend compressing your files before uploading them. By using t",
+  description:
+    "For all our Gumroad filmmakers allowing their customers to download video products, we highly recommend compressing your files before uploading them. By using t",
 };
 
 export default function HowToCompressAVideoUsingHandbrake() {
   return (
     <>
       <div>
-        <p> For all our Gumroad filmmakers allowing their customers to download video products, we highly recommend compressing your files before uploading them. By using the free software <a href="http://www.handbrake.fr/" target="_blank" rel="noreferrer">Handbrake</a> you're guaranteed to find a great compromise between manageable file size and video quality. </p>
-        <figure><img src="https://d33v4339jhl8k0.cloudfront.net/docs/assets/5c4657ad2c7d3a66e32d763f/images/5c64ec13042863543cccf938/file-nJHj9ERTf7.jpg" alt="" /></figure>
+        <p>
+          {" "}
+          For all our Gumroad filmmakers allowing their customers to download video products, we highly recommend
+          compressing your files before uploading them. By using the free software{" "}
+          <a href="http://www.handbrake.fr/" target="_blank" rel="noreferrer">
+            Handbrake
+          </a>{" "}
+          you're guaranteed to find a great compromise between manageable file size and video quality.{" "}
+        </p>
+        <figure>
+          <img
+            src="https://d33v4339jhl8k0.cloudfront.net/docs/assets/5c4657ad2c7d3a66e32d763f/images/5c64ec13042863543cccf938/file-nJHj9ERTf7.jpg"
+            alt=""
+          />
+        </figure>
         <p> The basics of using Handbrake are as follows: </p>
         <ol>
-          <li>Click <strong>Source </strong>and select your file.</li>
+          <li>
+            Click <strong>Source </strong>and select your file.
+          </li>
           <li>Ensure the correct title (and chapters, if you have them) are selected from the Dropdown.</li>
           <li>Set the new output file name.</li>
-          <li>Use the encoding presets to automatically set up all the required settings. We recommend <strong>Normal</strong> for watching on computers and TV.</li>
-          <li>Click <strong>Start </strong>to begin encoding!</li>
+          <li>
+            Use the encoding presets to automatically set up all the required settings. We recommend{" "}
+            <strong>Normal</strong> for watching on computers and TV.
+          </li>
+          <li>
+            Click <strong>Start </strong>to begin encoding!
+          </li>
         </ol>
-        <p> For more advanced issues with Handbrake, please refer to their <a href="http://handbrake.fr/community.php" target="_blank" rel="noreferrer">Support Page</a>. </p>
+        <p>
+          {" "}
+          For more advanced issues with Handbrake, please refer to their{" "}
+          <a href="http://handbrake.fr/community.php" target="_blank" rel="noreferrer">
+            Support Page
+          </a>
+          .{" "}
+        </p>
       </div>
       <div>
         <h3>Related Articles</h3>
         <ul>
-          <li><a href="/help/article/43-streaming-videos"><span>Prepare videos for streaming</span></a></li>
+          <li>
+            <a href="/help/article/43-streaming-videos">
+              <span>Prepare videos for streaming</span>
+            </a>
+          </li>
         </ul>
       </div>
     </>

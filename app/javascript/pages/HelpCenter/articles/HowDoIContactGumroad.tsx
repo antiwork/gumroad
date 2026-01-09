@@ -1,19 +1,27 @@
 import React from "react";
 
 export const meta = {
-  description: "If issues arise, Gumroad support is here to help. Below is a breakdown of what questions we can help answer and which questions creators answer.  Gumroad can he",
+  description:
+    "If issues arise, Gumroad support is here to help. Below is a breakdown of what questions we can help answer and which questions creators answer.  Gumroad can he",
 };
 
 export default function HowDoIContactGumroad() {
   return (
     <>
       <div>
-        <p>If issues arise, Gumroad support is here to help. Below is a breakdown of what questions we can help answer and which questions creators answer. </p>
+        <p>
+          If issues arise, Gumroad support is here to help. Below is a breakdown of what questions we can help answer
+          and which questions creators answer.{" "}
+        </p>
         <table>
           <tbody>
             <tr>
-              <td><b>Gumroad can help with</b></td>
-              <td><b>Creators handle</b></td>
+              <td>
+                <b>Gumroad can help with</b>
+              </td>
+              <td>
+                <b>Creators handle</b>
+              </td>
             </tr>
             <tr>
               <td>Download/Upload issues</td>
@@ -37,17 +45,34 @@ export default function HowDoIContactGumroad() {
             </tr>
           </tbody>
         </table>
-        <p>We hope that our <a href="/help">Help Center</a> can address the majority of your issues, but if not, we will be pleased to assist you.</p>
-        <p>To contact us, email <a href="mailto:support@gumroad.com">support@gumroad.com</a></p>
+        <p>
+          We hope that our <a href="/help">Help Center</a> can address the majority of your issues, but if not, we will
+          be pleased to assist you.
+        </p>
+        <p>
+          To contact us, email <a href="mailto:support@gumroad.com">support@gumroad.com</a>
+        </p>
         <h3>Phone support</h3>
         <p>Unfortunately, we don't have the capacity to offer phone support at this time.</p>
       </div>
       <div>
         <h3>Related Articles</h3>
         <ul>
-          <li><a href="/help/article/64-is-gumroad-for-me"><span>Why choose Gumroad?</span></a></li>
-          <li><a href="/help/article/51-what-is-gumroads-refund-policy"><span>Gumroad's refund policy</span></a></li>
-          <li><a href="/help/article/160-suspension"><span>Account suspension FAQ</span></a></li>
+          <li>
+            <a href="/help/article/64-is-gumroad-for-me">
+              <span>Why choose Gumroad?</span>
+            </a>
+          </li>
+          <li>
+            <a href="/help/article/51-what-is-gumroads-refund-policy">
+              <span>Gumroad's refund policy</span>
+            </a>
+          </li>
+          <li>
+            <a href="/help/article/160-suspension">
+              <span>Account suspension FAQ</span>
+            </a>
+          </li>
         </ul>
       </div>
     </>

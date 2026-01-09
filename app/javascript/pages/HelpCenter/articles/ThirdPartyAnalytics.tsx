@@ -48,6 +48,7 @@ export default function ThirdPartyAnalytics() {
         </div>
         <p>Watch this Google Analytics setup video by our engineer, Connor:</p>
         <div data-html-block>
+          {/* eslint-disable-next-line react/iframe-missing-sandbox */}
           <iframe
             width="560"
             height="315"
@@ -169,6 +170,7 @@ export default function ThirdPartyAnalytics() {
           Xia:
         </p>
         <div data-html-block>
+          {/* eslint-disable-next-line react/iframe-missing-sandbox */}
           <iframe
             width="560"
             height="315"
@@ -336,6 +338,7 @@ export default function ThirdPartyAnalytics() {
           tracking walkthrough video by our engineer, Connor:
         </p>
         <div data-html-block>
+          {/* eslint-disable-next-line react/iframe-missing-sandbox */}
           <iframe
             width="560"
             height="315"

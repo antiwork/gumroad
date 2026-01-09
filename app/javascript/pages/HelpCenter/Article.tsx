@@ -41,8 +41,7 @@ export default function HelpCenterArticle() {
           setArticleMeta(module.meta);
           setLoading(false);
         })
-        .catch((err) => {
-          console.error(`Failed to load article ${article.slug}:`, err);
+        .catch(() => {
           setError(true);
           setLoading(false);
         });
@@ -73,21 +72,21 @@ export default function HelpCenterArticle() {
         <div className="flex-1 grow rounded-sm border border-[rgb(var(--parent-color)/var(--border-alpha))] bg-[rgb(var(--filled))] p-8">
           <h2 className="mb-6 text-3xl font-bold">{article.title}</h2>
           <div className="prose dark:prose-invert">
-            {loading && (
+            {loading ? (
               <div className="flex items-center justify-center py-8">
                 <p className="text-gray-500">Loading article...</p>
               </div>
-            )}
-            {error && (
+            ) : null}
+            {error ? (
               <div className="rounded-md bg-red-50 p-4">
                 <p className="text-red-800">Failed to load article content. Please try refreshing the page.</p>
               </div>
-            )}
-            {!loading && !error && ArticleContent && (
+            ) : null}
+            {!loading && !error && ArticleContent ? (
               <Suspense fallback={<div>Loading...</div>}>
                 <ArticleContent />
               </Suspense>
-            )}
+            ) : null}
           </div>
         </div>
       </div>

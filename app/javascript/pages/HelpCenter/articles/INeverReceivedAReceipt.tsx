@@ -1,7 +1,8 @@
 import React from "react";
 
 export const meta = {
-  description: "If you can't locate a receipt in your inbox, it is either: In your Spam folder. In another Inbox. You may have used a different email during checkout (emails li",
+  description:
+    "If you can't locate a receipt in your inbox, it is either: In your Spam folder. In another Inbox. You may have used a different email during checkout (emails li",
 };
 
 export default function INeverReceivedAReceipt() {
@@ -11,8 +12,15 @@ export default function INeverReceivedAReceipt() {
         <p>If you can't locate a receipt in your inbox, it is either:</p>
         <ul>
           <li>In your Spam folder.</li>
-          <li>In another Inbox. You may have used a different email during checkout (emails linked with PayPal or Apple/Google Pay are the usual culprits). You can check the email address that you used <a href="https://gumroad.com/charge">here</a>.</li>
-          <li>If the above page can't find a match, there's most likely a typo in the email address used at checkout. <a href="/help/article/196-contact-gumroad">Contact us</a> with the following purchase details:</li>
+          <li>
+            In another Inbox. You may have used a different email during checkout (emails linked with PayPal or
+            Apple/Google Pay are the usual culprits). You can check the email address that you used{" "}
+            <a href="https://gumroad.com/charge">here</a>.
+          </li>
+          <li>
+            If the above page can't find a match, there's most likely a typo in the email address used at checkout.{" "}
+            <a href="/help/article/196-contact-gumroad">Contact us</a> with the following purchase details:
+          </li>
         </ul>
         <h3>If it's a purchase on a credit card</h3>
         <p>If the charge was on your credit card, you should email us with:</p>
@@ -23,21 +31,53 @@ export default function INeverReceivedAReceipt() {
           <li>The charge amount (in USD) and charge date</li>
         </ul>
         <h3>If it's a purchase made with PayPal</h3>
-        <p>Go to your PayPal transaction invoice and look for an “Invoice ID” on the page, that looks like a series of numbers and letters, followed by two equal signs, for example in this image, it's <code className="inline-code">GliB1-mnSPZUYwPX_oB34vQ==</code></p>
-        <figure><img src="https://d33v4339jhl8k0.cloudfront.net/docs/assets/5c4657ad2c7d3a66e32d763f/images/5c6dd64a2c7d3a66e32eb83c/file-cjlP3YjCES.png" alt="" /></figure>
+        <p>
+          Go to your PayPal transaction invoice and look for an “Invoice ID” on the page, that looks like a series of
+          numbers and letters, followed by two equal signs, for example in this image, it's{" "}
+          <code className="inline-code">GliB1-mnSPZUYwPX_oB34vQ==</code>
+        </p>
+        <figure>
+          <img
+            src="https://d33v4339jhl8k0.cloudfront.net/docs/assets/5c4657ad2c7d3a66e32d763f/images/5c6dd64a2c7d3a66e32eb83c/file-cjlP3YjCES.png"
+            alt=""
+          />
+        </figure>
         <p>If that were your invoice ID, simply plug that into this URL: </p>
-        <p>https://www.gumroad.com/purchases/ <strong> [ Invoice ID] </strong>/ receipt </p>
+        <p>
+          https://www.gumroad.com/purchases/ <strong> [ Invoice ID] </strong>/ receipt{" "}
+        </p>
         <p>So, using the above example, you would get this:</p>
-        <figure><img src="https://d33v4339jhl8k0.cloudfront.net/docs/assets/5c4657ad2c7d3a66e32d763f/images/5c6dd661042863543ccd404a/file-uc1ykwT8gh.png" alt="" /></figure>
+        <figure>
+          <img
+            src="https://d33v4339jhl8k0.cloudfront.net/docs/assets/5c4657ad2c7d3a66e32d763f/images/5c6dd661042863543ccd404a/file-uc1ykwT8gh.png"
+            alt=""
+          />
+        </figure>
         <p>You'll be sent directly to your receipt, with a download link and an invoice link.</p>
       </div>
       <div>
         <h3>Related Articles</h3>
         <ul>
-          <li><a href="/help/article/203-why-did-my-payment-fail"><span>Why did my payment fail?</span></a></li>
-          <li><a href="/help/article/214-why-was-i-charged-by-gumroad"><span>Why was I charged by Gumroad?</span></a></li>
-          <li><a href="/help/article/196-contact-gumroad"><span>How do I contact Gumroad?</span></a></li>
-          <li><a href="/help/article/197-why-do-i-have-a-1-charge-from-gumroad"><span>Why do I have a $1 charge from Gumroad?</span></a></li>
+          <li>
+            <a href="/help/article/203-why-did-my-payment-fail">
+              <span>Why did my payment fail?</span>
+            </a>
+          </li>
+          <li>
+            <a href="/help/article/214-why-was-i-charged-by-gumroad">
+              <span>Why was I charged by Gumroad?</span>
+            </a>
+          </li>
+          <li>
+            <a href="/help/article/196-contact-gumroad">
+              <span>How do I contact Gumroad?</span>
+            </a>
+          </li>
+          <li>
+            <a href="/help/article/197-why-do-i-have-a-1-charge-from-gumroad">
+              <span>Why do I have a $1 charge from Gumroad?</span>
+            </a>
+          </li>
         </ul>
       </div>
     </>

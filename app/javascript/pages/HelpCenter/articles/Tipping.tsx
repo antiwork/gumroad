@@ -1,23 +1,33 @@
 import React from "react";
 
 export const meta = {
-  description: "Tips are optional extra payments customers can add to their purchase to show additional support for your work.",
+  description:
+    "Tips are optional extra payments customers can add to their purchase to show additional support for your work.",
 };
 
 export default function Tipping() {
   return (
     <>
       <div>
-        <p><b>What are tips? </b>Tips are optional extra payments customers can add to their purchase to show additional support for your work.</p>
-        <figure><img src="help_center/tipping.png" alt="" /></figure>
+        <p>
+          <b>What are tips? </b>Tips are optional extra payments customers can add to their purchase to show additional
+          support for your work.
+        </p>
+        <figure>
+          <img src="help_center/tipping.png" alt="" />
+        </figure>
         <h3>How to enable tipping:</h3>
         <p>Tipping is turned on by default. To turn it off:</p>
         <ol>
           <li>Go to your Gumroad dashboard</li>
-          <li>Navigate to the Tipping section on the <a href="https://gumroad.com/checkout/form">Checkout form</a> page</li>
+          <li>
+            Navigate to the Tipping section on the <a href="https://gumroad.com/checkout/form">Checkout form</a> page
+          </li>
           <li>Toggle on "Allow customers to add tips for their orders"</li>
         </ol>
-        <figure><img src="help_center/tipping-toggle.png" alt="" /></figure>
+        <figure>
+          <img src="help_center/tipping-toggle.png" alt="" />
+        </figure>
         <h3>Tip visibility:</h3>
         <ul>
           <li>When enabled, the tipping option appears during checkout</li>
@@ -46,18 +56,27 @@ export default function Tipping() {
           <li>Tips can't be refunded separately from the main purchase</li>
         </ul>
         <h3>Troubleshooting:</h3>
-        <p><b>If tips aren't appearing at checkout:</b></p>
+        <p>
+          <b>If tips aren't appearing at checkout:</b>
+        </p>
         <ol>
           <li>Double-check that you've enabled tipping in your settings</li>
           <li>Ensure your checkout page is up to date</li>
           <li>Contact Gumroad support if the issue persists</li>
         </ol>
-        <p>By enabling tipping, you're giving your most supportive customers an easy way to provide additional compensation for your work. Monitor your tipping data to gauge its impact on your overall earnings.</p>
+        <p>
+          By enabling tipping, you're giving your most supportive customers an easy way to provide additional
+          compensation for your work. Monitor your tipping data to gauge its impact on your overall earnings.
+        </p>
       </div>
       <div>
         <h3>Related Articles</h3>
         <ul>
-          <li><a href="/help/article/101-designing-your-product-page"><span>Checkout customization</span></a></li>
+          <li>
+            <a href="/help/article/101-designing-your-product-page">
+              <span>Checkout customization</span>
+            </a>
+          </li>
         </ul>
       </div>
     </>

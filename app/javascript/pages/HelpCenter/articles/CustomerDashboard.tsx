@@ -1,7 +1,8 @@
 import React from "react";
 
 export const meta = {
-  description: "In this article: Search and Filter Customer drawer Discover or Offer codes Edit a customer's email address Tiers, versions, and variants Manage license keys Shi",
+  description:
+    "In this article: Search and Filter Customer drawer Discover or Offer codes Edit a customer's email address Tiers, versions, and variants Manage license keys Shi",
 };
 
 export default function CustomerDashboard() {
@@ -10,27 +11,64 @@ export default function CustomerDashboard() {
       <div>
         <p>In this article:</p>
         <ul>
-          <li><a href="#Search-and-Filter-5a7fG">Search and Filter</a></li>
-          <li><a href="#Customer-drawer-n59GN">Customer drawer</a>
+          <li>
+            <a href="#Search-and-Filter-5a7fG">Search and Filter</a>
+          </li>
+          <li>
+            <a href="#Customer-drawer-n59GN">Customer drawer</a>
             <ul>
-              <li><a href="#Discover-or-Offer-codes-Ij0xL">Discover or Offer codes</a></li>
-              <li><a href="#Edit-a-customers-email-address-fJhCO">Edit a customer's email address</a></li>
-              <li><a href="#Tiers-versions-and-variants-5tqxu">Tiers, versions, and variants</a></li>
-              <li><a href="#Manage-license-keys-5AuIs">Manage license keys</a></li>
-              <li><a href="#Shipping-information-l476B">Shipping information</a></li>
-              <li><a href="#Ratings-HLwRM">Ratings</a></li>
-              <li><a href="#Cancel-a-membership-M5JjP">Cancel a membership</a></li>
-              <li><a href="#Refund-a-customer-tQVdX">Refund a customer</a></li>
-              <li><a href="#Resend-posts-workflow-emails-and-receipts-l2OYk">Resend posts, workflow emails, and receipts</a></li>
+              <li>
+                <a href="#Discover-or-Offer-codes-Ij0xL">Discover or Offer codes</a>
+              </li>
+              <li>
+                <a href="#Edit-a-customers-email-address-fJhCO">Edit a customer's email address</a>
+              </li>
+              <li>
+                <a href="#Tiers-versions-and-variants-5tqxu">Tiers, versions, and variants</a>
+              </li>
+              <li>
+                <a href="#Manage-license-keys-5AuIs">Manage license keys</a>
+              </li>
+              <li>
+                <a href="#Shipping-information-l476B">Shipping information</a>
+              </li>
+              <li>
+                <a href="#Ratings-HLwRM">Ratings</a>
+              </li>
+              <li>
+                <a href="#Cancel-a-membership-M5JjP">Cancel a membership</a>
+              </li>
+              <li>
+                <a href="#Refund-a-customer-tQVdX">Refund a customer</a>
+              </li>
+              <li>
+                <a href="#Resend-posts-workflow-emails-and-receipts-l2OYk">
+                  Resend posts, workflow emails, and receipts
+                </a>
+              </li>
             </ul>
           </li>
-          <li><a href="#Export-a-sales-CSV-f-1YW">Export a sales CSV</a></li>
+          <li>
+            <a href="#Export-a-sales-CSV-f-1YW">Export a sales CSV</a>
+          </li>
         </ul>
         <hr role="separator" />
-        <p>Every time a new customer purchases a product from your Gumroad, their email address and other details are added to your <a href="https://gumroad.com/customers">Sales</a> dashboard. You can review all of your customers and manage your customer information from this page. </p>
+        <p>
+          Every time a new customer purchases a product from your Gumroad, their email address and other details are
+          added to your <a href="https://gumroad.com/customers">Sales</a> dashboard. You can review all of your
+          customers and manage your customer information from this page.{" "}
+        </p>
         <h3 id="Search-and-Filter-5a7fG">Search and Filter</h3>
-        <p>You can search for a customer’s name, if given, or email address directly by selecting the magnifying glass on the upper right-hand side. </p>
-        <figure><img src="https://d33v4339jhl8k0.cloudfront.net/docs/assets/5c4657ad2c7d3a66e32d763f/images/62151893db4c3c5ea2ebfe9b/file-hb7q6qx7On.png" alt="" /></figure>
+        <p>
+          You can search for a customer’s name, if given, or email address directly by selecting the magnifying glass on
+          the upper right-hand side.{" "}
+        </p>
+        <figure>
+          <img
+            src="https://d33v4339jhl8k0.cloudfront.net/docs/assets/5c4657ad2c7d3a66e32d763f/images/62151893db4c3c5ea2ebfe9b/file-hb7q6qx7On.png"
+            alt=""
+          />
+        </figure>
         <p>You have the option to filter your customers based on the following: </p>
         <ul>
           <li>what they have or haven't bought </li>
@@ -40,51 +78,167 @@ export default function CustomerDashboard() {
           <li>if they're an active customer. </li>
         </ul>
         <p>An active customer is someone who is not refunded and has not unsubscribed from the product. </p>
-        <figure><img src="https://d33v4339jhl8k0.cloudfront.net/docs/assets/5c4657ad2c7d3a66e32d763f/images/621519593271e31797cf0f8a/file-n3Oj2VmCOE.png" alt="" /></figure>
+        <figure>
+          <img
+            src="https://d33v4339jhl8k0.cloudfront.net/docs/assets/5c4657ad2c7d3a66e32d763f/images/621519593271e31797cf0f8a/file-n3Oj2VmCOE.png"
+            alt=""
+          />
+        </figure>
         <h3 id="Customer-drawer-n59GN">Customer drawer</h3>
         <p>You can view more information by clicking directly on their email address.</p>
-        <figure><img src="https://d33v4339jhl8k0.cloudfront.net/docs/assets/5c4657ad2c7d3a66e32d763f/images/657b076375eb4a5f70498b02/file-8AWAoabHPR.png" alt="" /></figure>
+        <figure>
+          <img
+            src="https://d33v4339jhl8k0.cloudfront.net/docs/assets/5c4657ad2c7d3a66e32d763f/images/657b076375eb4a5f70498b02/file-8AWAoabHPR.png"
+            alt=""
+          />
+        </figure>
         <h3 id="Discover-or-Offer-codes-Ij0xL">Discover or Discount codes</h3>
-        <p>Right below the product title, you're able to see if a Customer found this product via <a href="/help/article/79-gumroad-discover">Discover</a> or if a <a href="https://gumroad.com/help/article/128-discount-codes">Discount code</a> was used. </p>
-        <figure><img src="https://d33v4339jhl8k0.cloudfront.net/docs/assets/5c4657ad2c7d3a66e32d763f/images/621520b73271e31797cf0fd7/file-najTuXeRCf.png" alt="" /></figure>
+        <p>
+          Right below the product title, you're able to see if a Customer found this product via{" "}
+          <a href="/help/article/79-gumroad-discover">Discover</a> or if a{" "}
+          <a href="https://gumroad.com/help/article/128-discount-codes">Discount code</a> was used.{" "}
+        </p>
+        <figure>
+          <img
+            src="https://d33v4339jhl8k0.cloudfront.net/docs/assets/5c4657ad2c7d3a66e32d763f/images/621520b73271e31797cf0fd7/file-najTuXeRCf.png"
+            alt=""
+          />
+        </figure>
         <h3 id="Edit-a-customers-email-address-fJhCO">Edit a customer's email address</h3>
-        <p>If your customer has mistyped their email address when purchasing your product or needs to change their mailing information, you can fix this for them. Click the "Edit" button next to the email, edit it, and save your changes. </p>
-        <p>We do not allow creators to edit customers' email addresses if they created a Gumroad account during their purchase. Please reach out to support@gumroad.com in this case. </p>
-        <p>You can also select if a customer receives your <a href="/help/article/169-how-to-send-an-update">emails</a> or not.</p>
-        <figure><img src="https://d33v4339jhl8k0.cloudfront.net/docs/assets/5c4657ad2c7d3a66e32d763f/images/62166eba1173d072c69fb117/file-prFEDMObGA.gif" alt="" /></figure>
+        <p>
+          If your customer has mistyped their email address when purchasing your product or needs to change their
+          mailing information, you can fix this for them. Click the "Edit" button next to the email, edit it, and save
+          your changes.{" "}
+        </p>
+        <p>
+          We do not allow creators to edit customers' email addresses if they created a Gumroad account during their
+          purchase. Please reach out to support@gumroad.com in this case.{" "}
+        </p>
+        <p>
+          You can also select if a customer receives your <a href="/help/article/169-how-to-send-an-update">emails</a>{" "}
+          or not.
+        </p>
+        <figure>
+          <img
+            src="https://d33v4339jhl8k0.cloudfront.net/docs/assets/5c4657ad2c7d3a66e32d763f/images/62166eba1173d072c69fb117/file-prFEDMObGA.gif"
+            alt=""
+          />
+        </figure>
         <h3 id="Tiers-versions-and-variants-5tqxu">Tiers, versions, and variants</h3>
         <p>Depending on the product, you can reassign your customer to a different tier or version. </p>
-        <p>This does not charge or refund the customer, it simply changes their product type and the files they receive.</p>
-        <figure><img src="https://d33v4339jhl8k0.cloudfront.net/docs/assets/5c4657ad2c7d3a66e32d763f/images/62171f7a1c416e446e804223/file-n9069uPZRk.png" alt="" /></figure>
+        <p>
+          This does not charge or refund the customer, it simply changes their product type and the files they receive.
+        </p>
+        <figure>
+          <img
+            src="https://d33v4339jhl8k0.cloudfront.net/docs/assets/5c4657ad2c7d3a66e32d763f/images/62171f7a1c416e446e804223/file-n9069uPZRk.png"
+            alt=""
+          />
+        </figure>
         <h3 id="Manage-license-keys-5AuIs">Manage license keys</h3>
-        <p>You can disable a <a href="/help/article/76-license-keys">license key</a> or change the number of seats for a multi-seat license key.</p>
-        <p>Customers will immediately be charged a prorated amount if the number of seats is increased. However, for a decrease in the number of seats, their membership will get updated at the end of the current billing cycle, and they will be charged the reduced amount for subsequent renewals.</p>
-        <figure><img src="https://d33v4339jhl8k0.cloudfront.net/docs/assets/5c4657ad2c7d3a66e32d763f/images/639b0a1c2e586565571c20eb/file-4oW74KD2yB.gif" alt="" /></figure>
+        <p>
+          You can disable a <a href="/help/article/76-license-keys">license key</a> or change the number of seats for a
+          multi-seat license key.
+        </p>
+        <p>
+          Customers will immediately be charged a prorated amount if the number of seats is increased. However, for a
+          decrease in the number of seats, their membership will get updated at the end of the current billing cycle,
+          and they will be charged the reduced amount for subsequent renewals.
+        </p>
+        <figure>
+          <img
+            src="https://d33v4339jhl8k0.cloudfront.net/docs/assets/5c4657ad2c7d3a66e32d763f/images/639b0a1c2e586565571c20eb/file-4oW74KD2yB.gif"
+            alt=""
+          />
+        </figure>
         <h3 id="Shipping-information-l476B">Shipping information</h3>
-        <p>You can mark a physical product as being shipped and enter tracking information in the dashboard. You need to enter the full URL of the tracking order, not just the tracking ID. </p>
-        <figure><img src="https://d33v4339jhl8k0.cloudfront.net/docs/assets/5c4657ad2c7d3a66e32d763f/images/621753c21173d072c69fb5c1/file-yPe5TFUA88.png" alt="" /></figure>
+        <p>
+          You can mark a physical product as being shipped and enter tracking information in the dashboard. You need to
+          enter the full URL of the tracking order, not just the tracking ID.{" "}
+        </p>
+        <figure>
+          <img
+            src="https://d33v4339jhl8k0.cloudfront.net/docs/assets/5c4657ad2c7d3a66e32d763f/images/621753c21173d072c69fb5c1/file-yPe5TFUA88.png"
+            alt=""
+          />
+        </figure>
         <h3 id="Ratings-HLwRM">Ratings</h3>
-        <p>You can see how a customer has rated your product. If you're unhappy with your ratings, you can hide all of <a href="/help/article/222-product-ratings-on-gumroad">them</a> from being visible or refund the customer to automatically delete their rating.  You cannot hide a single rating only.</p>
-        <figure><img src="https://d33v4339jhl8k0.cloudfront.net/docs/assets/5c4657ad2c7d3a66e32d763f/images/6216fcb4528a5515a2fcbffd/file-pN4ODMgP44.png" alt="" /></figure>
+        <p>
+          You can see how a customer has rated your product. If you're unhappy with your ratings, you can hide all of{" "}
+          <a href="/help/article/222-product-ratings-on-gumroad">them</a> from being visible or refund the customer to
+          automatically delete their rating. You cannot hide a single rating only.
+        </p>
+        <figure>
+          <img
+            src="https://d33v4339jhl8k0.cloudfront.net/docs/assets/5c4657ad2c7d3a66e32d763f/images/6216fcb4528a5515a2fcbffd/file-pN4ODMgP44.png"
+            alt=""
+          />
+        </figure>
         <h3 id="Cancel-a-membership-M5JjP">Cancel a membership</h3>
         <p>From here, you're able to cancel a customer's membership by clicking the "Cancel subscription" button. </p>
-        <figure><img src="https://d33v4339jhl8k0.cloudfront.net/docs/assets/5c4657ad2c7d3a66e32d763f/images/62171df91173d072c69fb4b7/file-bTrKYFBJYK.png" alt="" /></figure>
-        <p>If you want to prevent customers from subscribing or delete a membership product entirely, you can use <a href="/help/article/139-how-to-cancel-your-customers-subscriptions">these methods</a>. </p>
+        <figure>
+          <img
+            src="https://d33v4339jhl8k0.cloudfront.net/docs/assets/5c4657ad2c7d3a66e32d763f/images/62171df91173d072c69fb4b7/file-bTrKYFBJYK.png"
+            alt=""
+          />
+        </figure>
+        <p>
+          If you want to prevent customers from subscribing or delete a membership product entirely, you can use{" "}
+          <a href="/help/article/139-how-to-cancel-your-customers-subscriptions">these methods</a>.{" "}
+        </p>
         <h3 id="Refund-a-customer-tQVdX">Refund a customer</h3>
-        <p>You can <a href="/help/article/47-how-to-refund-a-customer">refund a customer</a> from the dashboard as well. If you only want to issue a partial refund, type in the amount you want to refund and hit "Issue partial refund".</p>
-        <figure><img src="https://d33v4339jhl8k0.cloudfront.net/docs/assets/5c4657ad2c7d3a66e32d763f/images/62171e501c416e446e80421e/file-DztaXllyQR.png" alt="" /></figure>
+        <p>
+          You can <a href="/help/article/47-how-to-refund-a-customer">refund a customer</a> from the dashboard as well.
+          If you only want to issue a partial refund, type in the amount you want to refund and hit "Issue partial
+          refund".
+        </p>
+        <figure>
+          <img
+            src="https://d33v4339jhl8k0.cloudfront.net/docs/assets/5c4657ad2c7d3a66e32d763f/images/62171e501c416e446e80421e/file-DztaXllyQR.png"
+            alt=""
+          />
+        </figure>
         <h3 id="Resend-posts-workflow-emails-and-receipts-l2OYk">Resend posts, workflow emails, and receipts</h3>
-        <p>You can resend <a href="/help/article/169-how-to-send-an-update">emails</a>, <a href="/help/article/131-using-workflows-to-send-automated-updates">workflow emails</a>, and receipts at the bottom of this section. If your customer did not receive a receipt from you, <a href="/help/article/78-my-customer-did-not-receive-a-receipt">here are a few common reasons why</a>. </p>
-        <figure><img src="https://d33v4339jhl8k0.cloudfront.net/docs/assets/5c4657ad2c7d3a66e32d763f/images/62171a871173d072c69fb4ad/file-8qS4xHJOJm.png" alt="" /></figure>
+        <p>
+          You can resend <a href="/help/article/169-how-to-send-an-update">emails</a>,{" "}
+          <a href="/help/article/131-using-workflows-to-send-automated-updates">workflow emails</a>, and receipts at the
+          bottom of this section. If your customer did not receive a receipt from you,{" "}
+          <a href="/help/article/78-my-customer-did-not-receive-a-receipt">here are a few common reasons why</a>.{" "}
+        </p>
+        <figure>
+          <img
+            src="https://d33v4339jhl8k0.cloudfront.net/docs/assets/5c4657ad2c7d3a66e32d763f/images/62171a871173d072c69fb4ad/file-8qS4xHJOJm.png"
+            alt=""
+          />
+        </figure>
         <h3 id="Export-a-sales-CSV-f-1YW">Export a sales CSV</h3>
-        <p>At any time, you can <a href="/help/article/74-the-analytics-dashboard#sales-csv">download a CSV file</a> of your customers and their purchases within a selected date range. If the CSV is not immediately available for download, it will be emailed to you. This CSV will cover all sales of your products within the date range, or you can choose to download information pertaining to a single product.  Please note that <a href="#Search-and-Filter-5a7fG">any filters</a> you applied to this page will not apply to the export.</p>
-        <figure><img src="https://d33v4339jhl8k0.cloudfront.net/docs/assets/5c4657ad2c7d3a66e32d763f/images/657b073fe020fe4b2fcaef56/file-MEKHrXJBg4.png" alt="" /></figure>
+        <p>
+          At any time, you can <a href="/help/article/74-the-analytics-dashboard#sales-csv">download a CSV file</a> of
+          your customers and their purchases within a selected date range. If the CSV is not immediately available for
+          download, it will be emailed to you. This CSV will cover all sales of your products within the date range, or
+          you can choose to download information pertaining to a single product. Please note that{" "}
+          <a href="#Search-and-Filter-5a7fG">any filters</a> you applied to this page will not apply to the export.
+        </p>
+        <figure>
+          <img
+            src="https://d33v4339jhl8k0.cloudfront.net/docs/assets/5c4657ad2c7d3a66e32d763f/images/657b073fe020fe4b2fcaef56/file-MEKHrXJBg4.png"
+            alt=""
+          />
+        </figure>
       </div>
       <div>
         <h3>Related Articles</h3>
         <ul>
-          <li><a href="/help/article/47-how-to-refund-a-customer"><span>Issuing a refund</span></a></li>
-          <li><a href="/help/article/78-my-customer-did-not-receive-a-receipt"><span>Customers not receiving receipts</span></a></li>
+          <li>
+            <a href="/help/article/47-how-to-refund-a-customer">
+              <span>Issuing a refund</span>
+            </a>
+          </li>
+          <li>
+            <a href="/help/article/78-my-customer-did-not-receive-a-receipt">
+              <span>Customers not receiving receipts</span>
+            </a>
+          </li>
         </ul>
       </div>
     </>

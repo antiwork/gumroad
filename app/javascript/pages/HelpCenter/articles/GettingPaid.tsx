@@ -1,36 +1,67 @@
 import React from "react";
 
 export const meta = {
-  description: "In this article: Payout modes Get paid to your bank account Get paid to Stripe Get paid to PayPal Other payout modes Stripe verification process Payout schedule",
+  description:
+    "In this article: Payout modes Get paid to your bank account Get paid to Stripe Get paid to PayPal Other payout modes Stripe verification process Payout schedule",
 };
 
 export default function GettingPaid() {
   return (
     <>
       <div>
-        <p><strong>In this article:</strong></p>
+        <p>
+          <strong>In this article:</strong>
+        </p>
         <ul>
-          <li><a href="#payout-modes">Payout modes</a>
+          <li>
+            <a href="#payout-modes">Payout modes</a>
             <ul>
-              <li><a href="#bank-account">Get paid to your bank account</a></li>
-              <li><a href="#paypal">Get paid to PayPal</a></li>
+              <li>
+                <a href="#bank-account">Get paid to your bank account</a>
+              </li>
+              <li>
+                <a href="#paypal">Get paid to PayPal</a>
+              </li>
             </ul>
           </li>
-          <li><a href="#Stripe-verification-process-ZFq5c">Verification process</a></li>
-          <li><a href="#schedule">Payout schedule</a></li>
+          <li>
+            <a href="#Stripe-verification-process-ZFq5c">Verification process</a>
+          </li>
+          <li>
+            <a href="#schedule">Payout schedule</a>
+          </li>
           <ul>
-            <li><a href="#instant-payouts">Instant payouts</a></li>
+            <li>
+              <a href="#instant-payouts">Instant payouts</a>
+            </li>
           </ul>
-          <li><a href="#paypal-connect">Enable payments via PayPal</a></li>
-          <li><a href="#review">The account review process</a></li>
+          <li>
+            <a href="#paypal-connect">Enable payments via PayPal</a>
+          </li>
+          <li>
+            <a href="#review">The account review process</a>
+          </li>
         </ul>
         <h3 id="payout-modes">Payout modes</h3>
-        <p>We support direct bank deposits in the local currency for most countries. For countries where bank deposits are not available, we offer PayPal transfers as the only payment option.</p>
-        <p>We do <i>not</i> support alternative payout modes like Payoneer, Wise, check, money order, wire transfer, etc. If your country is not supported by direct bank deposits or PayPal, then unfortunately, we have no way to pay you out for now.</p>
-        <p>To get paid for your sales, start by filling out your <a href="https://gumroad.com/settings/payments">Payments Settings</a>.</p>
+        <p>
+          We support direct bank deposits in the local currency for most countries. For countries where bank deposits
+          are not available, we offer PayPal transfers as the only payment option.
+        </p>
+        <p>
+          We do <i>not</i> support alternative payout modes like Payoneer, Wise, check, money order, wire transfer, etc.
+          If your country is not supported by direct bank deposits or PayPal, then unfortunately, we have no way to pay
+          you out for now.
+        </p>
+        <p>
+          To get paid for your sales, start by filling out your{" "}
+          <a href="https://gumroad.com/settings/payments">Payments Settings</a>.
+        </p>
         <h3 id="bank-account">Get paid to your bank account</h3>
         <div className="callout-yellow">
-          <p><b>Note: </b>Due to restrictions from our payment partners, you may have to forfeit your balance if you want to change your country in the future. Choose carefully!</p>
+          <p>
+            <b>Note: </b>Due to restrictions from our payment partners, you may have to forfeit your balance if you want
+            to change your country in the future. Choose carefully!
+          </p>
         </div>
         <p>We currently support bank payouts in the following countries:</p>
         <div className="table-responsive">
@@ -353,62 +384,181 @@ export default function GettingPaid() {
             </tbody>
           </table>
         </div>
-        <p><b>Note:</b> Countries showing "(min X)" have a higher minimum payout threshold than the standard $10 USD requirement.</p>
-        <p>We can only pay out to a local bank account and in your local currency. We cannot pay you out in USD if it is not listed above as your country's payout currency. All currency conversions happen based on the exchange rates at the time of sale, not at the time of the payout. These are typically mid-market rates that you can estimate <a href="https://dashboard.stripe.com/currency_conversion">here</a>.</p>
+        <p>
+          <b>Note:</b> Countries showing "(min X)" have a higher minimum payout threshold than the standard $10 USD
+          requirement.
+        </p>
+        <p>
+          We can only pay out to a local bank account and in your local currency. We cannot pay you out in USD if it is
+          not listed above as your country's payout currency. All currency conversions happen based on the exchange
+          rates at the time of sale, not at the time of the payout. These are typically mid-market rates that you can
+          estimate <a href="https://dashboard.stripe.com/currency_conversion">here</a>.
+        </p>
         <p>For prompt payouts, please ensure that you have the following for your country of residence: </p>
         <ul>
           <li>A valid, government-issued photo ID</li>
           <li>Proof of residence within the country</li>
         </ul>
-        <p>If you are selling as a business, the business must be registered in the same country. You cannot get paid to another country's bank account by just having a business registered in that country. You must physically live (and can prove residence) in that country.</p>
-        <p>Depending on your country, bank payouts can take 2-7 business days to process, and can be delayed around bank holidays.</p>
+        <p>
+          If you are selling as a business, the business must be registered in the same country. You cannot get paid to
+          another country's bank account by just having a business registered in that country. You must physically live
+          (and can prove residence) in that country.
+        </p>
+        <p>
+          Depending on your country, bank payouts can take 2-7 business days to process, and can be delayed around bank
+          holidays.
+        </p>
         <h3 id="paypal">Get paid to PayPal</h3>
-        <p>If bank payouts aren't supported in your country, we will pay you via PayPal. You just need an individual or business PayPal account without any restrictions.</p>
+        <p>
+          If bank payouts aren't supported in your country, we will pay you via PayPal. You just need an individual or
+          business PayPal account without any restrictions.
+        </p>
         <p>All PayPal payouts are processed in USD and usually arrive within 1–3 business days.</p>
         <p>PayPal payouts have a 2% processing fee.</p>
         <h3 id="Stripe-verification-process-ZFq5c">Verification process</h3>
-        <p>Our payment processor, Stripe, requires additional information to verify the identity of the account holder after a certain amount of time has passed and sales accrued. This is a standard practice in the financial industry and is part of their <a href="https://support.stripe.com/questions/know-your-customer-obligations">Know Your Customer (KYC) obligations</a>.</p>
+        <p>
+          Our payment processor, Stripe, requires additional information to verify the identity of the account holder
+          after a certain amount of time has passed and sales accrued. This is a standard practice in the financial
+          industry and is part of their{" "}
+          <a href="https://support.stripe.com/questions/know-your-customer-obligations">
+            Know Your Customer (KYC) obligations
+          </a>
+          .
+        </p>
         <h3>ID verification</h3>
-        <p>You can learn the correct documents needed for ID verification for your specific location <a href="https://docs.stripe.com/connect/handling-api-verification?country=CA&amp;document-type=identity#acceptable-verification-documents">here</a>. </p>
+        <p>
+          You can learn the correct documents needed for ID verification for your specific location{" "}
+          <a href="https://docs.stripe.com/connect/handling-api-verification?country=CA&amp;document-type=identity#acceptable-verification-documents">
+            here
+          </a>
+          .{" "}
+        </p>
         <h3>Address verification</h3>
-        <p>You can learn the correct documents needed for address verification for your specific location <a href="https://docs.stripe.com/connect/handling-api-verification?country=CA&amp;document-type=address#acceptable-verification-documents">here</a>. </p>
+        <p>
+          You can learn the correct documents needed for address verification for your specific location{" "}
+          <a href="https://docs.stripe.com/connect/handling-api-verification?country=CA&amp;document-type=address#acceptable-verification-documents">
+            here
+          </a>
+          .{" "}
+        </p>
         <h3>Social Security number (SSN)</h3>
-        <p>SSN is required for US sellers. The name and date of birth on your SSN must match exactly with the information filled in your <a href="https://gumroad.com/settings/payments">Payments Settings</a>. Refer to your social security card to see how your name is formatted, and enter your name in the settings exactly as it is on the card. If you have a middle name, you can add it to the First Name field on the settings page.</p>
+        <p>
+          SSN is required for US sellers. The name and date of birth on your SSN must match exactly with the information
+          filled in your <a href="https://gumroad.com/settings/payments">Payments Settings</a>. Refer to your social
+          security card to see how your name is formatted, and enter your name in the settings exactly as it is on the
+          card. If you have a middle name, you can add it to the First Name field on the settings page.
+        </p>
         <br />
-        <p>If you don't have your Social Security card, or if you believe you've entered the correct information but still receive an error, please contact the Social Security Administration. You can request a copy of your card or update your name here: https://www.ssa.gov/ssnumber/ </p>
+        <p>
+          If you don't have your Social Security card, or if you believe you've entered the correct information but
+          still receive an error, please contact the Social Security Administration. You can request a copy of your card
+          or update your name here: https://www.ssa.gov/ssnumber/{" "}
+        </p>
         <h3 id="schedule">Payout schedule</h3>
         <div className="callout-red">
-          <p><b>⚠️ You need a minimum balance of $10 USD to receive a payout.</b> Some countries have higher local currency minimums—see the "(min X)" values in the <a href="#bank-account">table above</a>.</p>
+          <p>
+            <b>⚠️ You need a minimum balance of $10 USD to receive a payout.</b> Some countries have higher local
+            currency minimums—see the "(min X)" values in the <a href="#bank-account">table above</a>.
+          </p>
         </div>
-        <p>You can choose to get paid daily, weekly, monthly, or quarterly, and set your own payout threshold. Daily payouts are only available for US users with eligible bank accounts and at least 4 prior payouts. You can also pause and resume payouts anytime.</p>
-        <p>Payouts include sales made through the previous Friday (UTC). All sales have a minimum 7-day holding period in your Gumroad balance before they become eligible for payout.</p>
-        <figure><img src="https://d33v4339jhl8k0.cloudfront.net/docs/assets/5c4657ad2c7d3a66e32d763f/images/63bb91fed851444a9b4d27ef/file-5kClaU1t2C.png" alt="" /></figure>
-        <p>You can download a CSV report for each payout from the <a href="/help/article/269-balance-page">Payouts dashboard</a>, which includes a breakdown of all <a href="/help/article/66-gumroads-fees">Gumroad fees</a> and customer data. </p>
+        <p>
+          You can choose to get paid daily, weekly, monthly, or quarterly, and set your own payout threshold. Daily
+          payouts are only available for US users with eligible bank accounts and at least 4 prior payouts. You can also
+          pause and resume payouts anytime.
+        </p>
+        <p>
+          Payouts include sales made through the previous Friday (UTC). All sales have a minimum 7-day holding period in
+          your Gumroad balance before they become eligible for payout.
+        </p>
+        <figure>
+          <img
+            src="https://d33v4339jhl8k0.cloudfront.net/docs/assets/5c4657ad2c7d3a66e32d763f/images/63bb91fed851444a9b4d27ef/file-5kClaU1t2C.png"
+            alt=""
+          />
+        </figure>
+        <p>
+          You can download a CSV report for each payout from the{" "}
+          <a href="/help/article/269-balance-page">Payouts dashboard</a>, which includes a breakdown of all{" "}
+          <a href="/help/article/66-gumroads-fees">Gumroad fees</a> and customer data.{" "}
+        </p>
         <h3 id="instant-payouts">Instant payouts</h3>
-        <p>Creators from the US can get paid within minutes for amounts up to $10K and a 3% fee. Instant payouts are available only to creators from the US who have completed four payouts.</p>
-        <p>If you are eligible for an instant payout, you will see the option to get paid instantly on your <a href="https://gumroad.com/payouts">Payouts dashboard</a>. </p>
-        <p>Not all debit cards are eligible for instant payouts. If you connect a debit card and still see a message to connect a debit card to receive instant payouts, the card you connected is not eligible. You will need to try a different card. </p>
+        <p>
+          Creators from the US can get paid within minutes for amounts up to $10K and a 3% fee. Instant payouts are
+          available only to creators from the US who have completed four payouts.
+        </p>
+        <p>
+          If you are eligible for an instant payout, you will see the option to get paid instantly on your{" "}
+          <a href="https://gumroad.com/payouts">Payouts dashboard</a>.{" "}
+        </p>
+        <p>
+          Not all debit cards are eligible for instant payouts. If you connect a debit card and still see a message to
+          connect a debit card to receive instant payouts, the card you connected is not eligible. You will need to try
+          a different card.{" "}
+        </p>
         <h3 id="paypal-connect">Enable payments via PayPal</h3>
-        <p>If you have <a href="/help/article/275-paypal-connect">connected your PayPal account</a> with Gumroad, proceeds from all sales via PayPal will be credited to your connected account at the time of sale, in the default currency of your PayPal account. This appears on your <a href="/help/article/269-balance-page">Payouts page</a> as "PayPal Payouts".</p>
+        <p>
+          If you have <a href="/help/article/275-paypal-connect">connected your PayPal account</a> with Gumroad,
+          proceeds from all sales via PayPal will be credited to your connected account at the time of sale, in the
+          default currency of your PayPal account. This appears on your{" "}
+          <a href="/help/article/269-balance-page">Payouts page</a> as "PayPal Payouts".
+        </p>
         <h3 id="review">The account review process</h3>
-        <figure><img src="https://d33v4339jhl8k0.cloudfront.net/docs/assets/5c4657ad2c7d3a66e32d763f/images/63bb9209d0b6de7e3be2a8e4/file-5aTUwIGukY.png" alt="" /></figure>
+        <figure>
+          <img
+            src="https://d33v4339jhl8k0.cloudfront.net/docs/assets/5c4657ad2c7d3a66e32d763f/images/63bb9209d0b6de7e3be2a8e4/file-5aTUwIGukY.png"
+            alt=""
+          />
+        </figure>
         <p>For our review, we require your account to be legitimate in two major ways:</p>
         <ul>
-          <li>You comply with both <a href="https://gumroad.com/terms">Gumroad's terms</a> and those of our payment processors.</li>
+          <li>
+            You comply with both <a href="https://gumroad.com/terms">Gumroad's terms</a> and those of our payment
+            processors.
+          </li>
           <li>Your account is not racking up chargebacks and suspicious purchases.</li>
         </ul>
-        <p>The review process can take 1-3 weeks depending on your sales and the data we can analyze. Typically, this means 3-4 sales with a balance over US$10; however, every account is unique so we thank you for your patience. </p>
-        <p>You cannot speed up the review process by purchasing your own product. Payment processors view purchasing your own products as fraudulent, and this can get you suspended or permanently banned. If you just want to test your product, please use the <a href="/help/article/62-testing-a-purchase">test purchase feature</a>.</p>
-        <p>There can be other reasons for a payout delay that you can know more about here: <a href="/help/article/281-payout-delays">Payout delays</a></p>
+        <p>
+          The review process can take 1-3 weeks depending on your sales and the data we can analyze. Typically, this
+          means 3-4 sales with a balance over US$10; however, every account is unique so we thank you for your patience.{" "}
+        </p>
+        <p>
+          You cannot speed up the review process by purchasing your own product. Payment processors view purchasing your
+          own products as fraudulent, and this can get you suspended or permanently banned. If you just want to test
+          your product, please use the <a href="/help/article/62-testing-a-purchase">test purchase feature</a>.
+        </p>
+        <p>
+          There can be other reasons for a payout delay that you can know more about here:{" "}
+          <a href="/help/article/281-payout-delays">Payout delays</a>
+        </p>
       </div>
       <div>
         <h3>Related Articles</h3>
         <ul>
-          <li><a href="/help/article/66-gumroads-fees"><span>Gumroad's fees</span></a></li>
-          <li><a href="/help/article/64-is-gumroad-for-me"><span>Why choose Gumroad?</span></a></li>
-          <li><a href="/help/article/281-payout-delays"><span>Payout delays</span></a></li>
-          <li><a href="/help/article/15-1099s"><span>Does Gumroad issue form 1099-K and 1099-MISC?</span></a></li>
-          <li><a href="/help/article/330-stripe-connect"><span>Connect your Stripe account to Gumroad</span></a></li>
+          <li>
+            <a href="/help/article/66-gumroads-fees">
+              <span>Gumroad's fees</span>
+            </a>
+          </li>
+          <li>
+            <a href="/help/article/64-is-gumroad-for-me">
+              <span>Why choose Gumroad?</span>
+            </a>
+          </li>
+          <li>
+            <a href="/help/article/281-payout-delays">
+              <span>Payout delays</span>
+            </a>
+          </li>
+          <li>
+            <a href="/help/article/15-1099s">
+              <span>Does Gumroad issue form 1099-K and 1099-MISC?</span>
+            </a>
+          </li>
+          <li>
+            <a href="/help/article/330-stripe-connect">
+              <span>Connect your Stripe account to Gumroad</span>
+            </a>
+          </li>
         </ul>
       </div>
     </>

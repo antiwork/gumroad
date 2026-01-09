@@ -1,21 +1,32 @@
 import React from "react";
 
 export const meta = {
-  description: "Sales originating from Gumroad Discover may be subject to an indirect tax (VAT, GST, Sales Tax) based on the customer’s tax jurisdiction and requirements there.",
+  description:
+    "Sales originating from Gumroad Discover may be subject to an indirect tax (VAT, GST, Sales Tax) based on the customer’s tax jurisdiction and requirements there.",
 };
 
 export default function IndirectTaxesOnSalesViaDiscover() {
   return (
     <>
       <div>
-        <p>Sales originating from <a href="https://gumroad.com/discover">Gumroad Discover</a> may be subject to an indirect tax (VAT, GST, Sales Tax) based on the customer’s tax jurisdiction and requirements there.</p>
-        <p>In some cases, these jurisdictions may determine Gumroad to be the supplier of the goods for tax purposes and thus require us to collect and remit tax as a Marketplace Facilitator on both digital and physical goods.</p>
+        <p>
+          Sales originating from <a href="https://gumroad.com/discover">Gumroad Discover</a> may be subject to an
+          indirect tax (VAT, GST, Sales Tax) based on the customer’s tax jurisdiction and requirements there.
+        </p>
+        <p>
+          In some cases, these jurisdictions may determine Gumroad to be the supplier of the goods for tax purposes and
+          thus require us to collect and remit tax as a Marketplace Facilitator on both digital and physical goods.
+        </p>
         <p>Current jurisdictions where this is in effect are:</p>
         <table>
           <tbody>
             <tr>
-              <th><strong>Jurisdiction</strong></th>
-              <th><strong>Date introduced</strong></th>
+              <th>
+                <strong>Jurisdiction</strong>
+              </th>
+              <th>
+                <strong>Date introduced</strong>
+              </th>
             </tr>
             <tr>
               <td>Wisconsin, USA</td>
@@ -51,8 +62,16 @@ export default function IndirectTaxesOnSalesViaDiscover() {
       <div>
         <h3>Related Articles</h3>
         <ul>
-          <li><a href="/help/article/79-gumroad-discover"><span>Gumroad Discover</span></a></li>
-          <li><a href="/help/article/121-sales-tax-on-gumroad"><span>Sales tax on Gumroad</span></a></li>
+          <li>
+            <a href="/help/article/79-gumroad-discover">
+              <span>Gumroad Discover</span>
+            </a>
+          </li>
+          <li>
+            <a href="/help/article/121-sales-tax-on-gumroad">
+              <span>Sales tax on Gumroad</span>
+            </a>
+          </li>
         </ul>
       </div>
     </>

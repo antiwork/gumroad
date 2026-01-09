@@ -5,7 +5,19 @@ import { cast } from "ts-safe-cast";
 import { NavigationButtonInertia } from "$app/components/NavigationButton";
 
 import { HelpCenterLayout } from "./Layout";
-import type { Category } from "./types";
+
+type ArticleSummary = {
+  title: string;
+  url: string;
+};
+
+type Category = {
+  title: string;
+  slug: string;
+  url: string;
+  audience: string;
+  articles: ArticleSummary[];
+};
 
 type Props = {
   categories: Category[];

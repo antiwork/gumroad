@@ -1,49 +1,114 @@
 import React from "react";
 
 export const meta = {
-  description: "In this article: Full refund Partial refund PayPal refund After issuing a refund Handling negative balances Refund fees Please only issue refunds from your Gumr",
+  description:
+    "In this article: Full refund Partial refund PayPal refund After issuing a refund Handling negative balances Refund fees Please only issue refunds from your Gumr",
 };
 
 export default function HowToRefundACustomer() {
   return (
     <>
       <div>
-        <p><strong>In this article:</strong></p>
+        <p>
+          <strong>In this article:</strong>
+        </p>
         <ul>
-          <li><a href="#full">Full refund</a></li>
-          <li><a href="#partial">Partial refund</a></li>
-          <li><a href="#paypal">PayPal refund</a></li>
-          <li><a href="#after">After issuing a refund</a></li>
-          <li><a href="#Refund-fees-hk-4p">Refund fees</a></li>
+          <li>
+            <a href="#full">Full refund</a>
+          </li>
+          <li>
+            <a href="#partial">Partial refund</a>
+          </li>
+          <li>
+            <a href="#paypal">PayPal refund</a>
+          </li>
+          <li>
+            <a href="#after">After issuing a refund</a>
+          </li>
+          <li>
+            <a href="#Refund-fees-hk-4p">Refund fees</a>
+          </li>
         </ul>
         <br />
         <div className="callout-red">
-          <p>Refunds can only be processed if your balance is able to cover the transaction amount. If your balance is too low you will need to make additional sales until the refund can be issued.</p>
-          <p>Please only issue refunds from your Gumroad dashboard. Our system does not support refunds issued directly from Stripe or PayPal accounts.</p>
+          <p>
+            Refunds can only be processed if your balance is able to cover the transaction amount. If your balance is
+            too low you will need to make additional sales until the refund can be issued.
+          </p>
+          <p>
+            Please only issue refunds from your Gumroad dashboard. Our system does not support refunds issued directly
+            from Stripe or PayPal accounts.
+          </p>
         </div>
         <h3 id="full">Full refund</h3>
-        <p>Go to your <a href="https://gumroad.com/customers">Sales dashboard</a> and click on the sale to open the customer drawer. Then scroll down and click the <strong>Refund fully</strong> button:</p>
-        <figure><img src="https://d33v4339jhl8k0.cloudfront.net/docs/assets/5c4657ad2c7d3a66e32d763f/images/6385991eb3261c24b49eda78/file-v3dx5aMJjS.png" alt="" /></figure>
-        <p>We charge and refund customers in USD. The amount customers receive back in their local currency may be different than what they initially paid due to differences in exchange rates.</p>
+        <p>
+          Go to your <a href="https://gumroad.com/customers">Sales dashboard</a> and click on the sale to open the
+          customer drawer. Then scroll down and click the <strong>Refund fully</strong> button:
+        </p>
+        <figure>
+          <img
+            src="https://d33v4339jhl8k0.cloudfront.net/docs/assets/5c4657ad2c7d3a66e32d763f/images/6385991eb3261c24b49eda78/file-v3dx5aMJjS.png"
+            alt=""
+          />
+        </figure>
+        <p>
+          We charge and refund customers in USD. The amount customers receive back in their local currency may be
+          different than what they initially paid due to differences in exchange rates.
+        </p>
         <h3 id="partial">Partial refund</h3>
-        <p>To issue a partial refund, enter the amount to be refunded in the ‘Refund’ box and click <strong>Issue partial refund</strong>.  </p>
+        <p>
+          To issue a partial refund, enter the amount to be refunded in the ‘Refund’ box and click{" "}
+          <strong>Issue partial refund</strong>.{" "}
+        </p>
         <p>Your customer will still have access to their content after a partial refund.</p>
-        <p>If it is a Membership that is pending cancellation and has 'Members will lose access when their Membership ends' toggled on, issuing a partial refund will end the Membership and revoke the customer's access.</p>
-        <figure><img src="https://d33v4339jhl8k0.cloudfront.net/docs/assets/5c4657ad2c7d3a66e32d763f/images/62469f0eab585b230a8a7601/file-nnUgqbE3pw.gif" alt="" /></figure>
+        <p>
+          If it is a Membership that is pending cancellation and has 'Members will lose access when their Membership
+          ends' toggled on, issuing a partial refund will end the Membership and revoke the customer's access.
+        </p>
+        <figure>
+          <img
+            src="https://d33v4339jhl8k0.cloudfront.net/docs/assets/5c4657ad2c7d3a66e32d763f/images/62469f0eab585b230a8a7601/file-nnUgqbE3pw.gif"
+            alt=""
+          />
+        </figure>
         <h3 id="paypal">PayPal refund</h3>
-        <p>If you refund a <a href="/help/article/275-paypal-connect">PayPal Connect</a> purchase, PayPal keeps its fees on the sale but refunds 100% of the amount to the customer. In this case, you would be responsible for Gumroad and PayPal's fees.</p>
+        <p>
+          If you refund a <a href="/help/article/275-paypal-connect">PayPal Connect</a> purchase, PayPal keeps its fees
+          on the sale but refunds 100% of the amount to the customer. In this case, you would be responsible for Gumroad
+          and PayPal's fees.
+        </p>
         <h3 id="after">After issuing a refund</h3>
-        <p>Customers receive an email confirmation after a refund is issued. Credit card funds usually take 5-10 business days to appear on the buyer’s account while PayPal refunds are immediate. </p>
-        <p>In the case of a full refund, customers will no longer be able to access the content or receive the respective product’s updates.</p>
-        <p>Refunding a customer fully will also delete any <a href="/help/article/222-product-ratings-on-gumroad">product rating</a> they've given.</p>
+        <p>
+          Customers receive an email confirmation after a refund is issued. Credit card funds usually take 5-10 business
+          days to appear on the buyer’s account while PayPal refunds are immediate.{" "}
+        </p>
+        <p>
+          In the case of a full refund, customers will no longer be able to access the content or receive the respective
+          product’s updates.
+        </p>
+        <p>
+          Refunding a customer fully will also delete any{" "}
+          <a href="/help/article/222-product-ratings-on-gumroad">product rating</a> they've given.
+        </p>
         <h3 id="Refund-fees-hk-4p">Refund fees</h3>
-        <p>We don't refund any <a href="https://gumroad.com/help/article/66-gumroads-fees">fees</a> when processing refunds.</p>
+        <p>
+          We don't refund any <a href="https://gumroad.com/help/article/66-gumroads-fees">fees</a> when processing
+          refunds.
+        </p>
       </div>
       <div>
         <h3>Related Articles</h3>
         <ul>
-          <li><a href="/help/article/51-what-is-gumroads-refund-policy"><span>Gumroad's refund policy</span></a></li>
-          <li><a href="/help/article/42-content-security"><span>Content protection on Gumroad</span></a></li>
+          <li>
+            <a href="/help/article/51-what-is-gumroads-refund-policy">
+              <span>Gumroad's refund policy</span>
+            </a>
+          </li>
+          <li>
+            <a href="/help/article/42-content-security">
+              <span>Content protection on Gumroad</span>
+            </a>
+          </li>
         </ul>
       </div>
     </>

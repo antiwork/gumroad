@@ -9,7 +9,7 @@ export type ArticleModule = {
 export const articleModules: Record<string, () => Promise<ArticleModule>> = {
   "10-dealing-with-vat": () => import("./DealingWithVat"),
   "13-getting-paid": () => import("./GettingPaid"),
-  "15-1099s": () => import("./1099s"),
+  "15-1099s": () => import("./Article1099s"),
   "20-how-do-i-contact-gumroad": () => import("./HowDoIContactGumroad"),
   "37-how-to-delete-your-gumroad-account": () => import("./HowToDeleteYourGumroadAccount"),
   "42-content-security": () => import("./ContentSecurity"),

@@ -40,6 +40,7 @@ class HelpCenterPresenter
       HelpCenter::Category.all.map do |category|
         {
           title: category.title,
+          slug: category.slug,
           url: help_center_category_path(category),
           audience: category.audience,
           articles: category.articles.map { |article| article_link_data(article) }

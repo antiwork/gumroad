@@ -1,7 +1,8 @@
 import React from "react";
 
 export const meta = {
-  description: "Gumroad offers a variety of security measures to keep your content safe: All download links are unique Purchaser IP addresses are tracked and we ask for the buy",
+  description:
+    "Gumroad offers a variety of security measures to keep your content safe: All download links are unique Purchaser IP addresses are tracked and we ask for the buy",
 };
 
 export default function ContentSecurity() {
@@ -11,16 +12,36 @@ export default function ContentSecurity() {
         <p> Gumroad offers a variety of security measures to keep your content safe:</p>
         <ul>
           <li>All download links are unique</li>
-          <li>Purchaser IP addresses are tracked and we ask for the buyer's email address if they attempt to access the link from a different location.</li>
-          <li>Streaming-only for videos allows for a high level of protection because the file is never downloaded to the buyer's computer or device. The signed, expired, and tracked links for streaming prevent file sharing.</li>
-          <li><a href="/help/article/130-pdf-stamping" target="_blank" rel="noreferrer">PDF Stamping</a> allows you to stamp your ebook or other written file (in PDF format) with a beautiful graphic of your buyer's email address, acting as a strong deterrent to widespread sharing.</li>
+          <li>
+            Purchaser IP addresses are tracked and we ask for the buyer's email address if they attempt to access the
+            link from a different location.
+          </li>
+          <li>
+            Streaming-only for videos allows for a high level of protection because the file is never downloaded to the
+            buyer's computer or device. The signed, expired, and tracked links for streaming prevent file sharing.
+          </li>
+          <li>
+            <a href="/help/article/130-pdf-stamping" target="_blank" rel="noreferrer">
+              PDF Stamping
+            </a>{" "}
+            allows you to stamp your ebook or other written file (in PDF format) with a beautiful graphic of your
+            buyer's email address, acting as a strong deterrent to widespread sharing.
+          </li>
         </ul>
       </div>
       <div>
         <h3>Related Articles</h3>
         <ul>
-          <li><a href="/help/article/130-pdf-stamping"><span>PDF stamping</span></a></li>
-          <li><a href="/help/article/120-protecting-your-privacy-on-gumroad"><span>Protecting creator privacy</span></a></li>
+          <li>
+            <a href="/help/article/130-pdf-stamping">
+              <span>PDF stamping</span>
+            </a>
+          </li>
+          <li>
+            <a href="/help/article/120-protecting-your-privacy-on-gumroad">
+              <span>Protecting creator privacy</span>
+            </a>
+          </li>
         </ul>
       </div>
     </>
