@@ -1,0 +1,35 @@
+import React from "react";
+
+export const meta = {
+  description: "If you are not receiving updates from a product you subscribed to, you may have inadvertently opted out of receiving all communication from the creator. To fix ",
+};
+
+export default function ImNotReceivingUpdates() {
+  return (
+    <>
+      <div>
+        <p>If you are not receiving updates from a product you subscribed to, you may have inadvertently opted out of receiving all communication from the creator.</p>
+        <p>To fix this, go to <a href="/help/article/204-get-to-know-your-gumroad-receipt">your receipt</a>, which you can find:</p>
+        <ul>
+          <li>In your email inbox</li>
+          <li>By going to your <a href="https://gumroad.com/library">Gumroad library</a> (if you have a Gumroad account)</li>
+          <li>By checking for your purchase <a href="https://gumroad.com/charge">here</a></li>
+        </ul>
+        <p>Then click “Unsubscribe” in the receipt’s footer.</p>
+        <figure><img src="https://d33v4339jhl8k0.cloudfront.net/docs/assets/5c4657ad2c7d3a66e32d763f/images/624c282f56ed31630f6ed9a5/file-XzaFg8H3IH.png" alt="" /></figure>
+        <p>Click “here” on the next page to resubscribe.</p>
+        <figure><img src="https://d33v4339jhl8k0.cloudfront.net/docs/assets/5c4657ad2c7d3a66e32d763f/images/624c2856309f633fb1e2a5e5/file-LLT2yZTxUt.png" alt="" /></figure>
+        <h3>Check your Library</h3>
+        <p>To see all of your product updates, <a href="https://gumroad.com/signup">create a Gumroad account</a> with the same email as your purchases (if you don't have an account already).</p>
+        <p>In your <a href="https://gumroad.com/library">Library</a>, you can quickly access all of your purchases and any updates associated with them. Just click on the product's card and you'll see the product's up-to-date files and posts.</p>
+      </div>
+      <div>
+        <h3>Related Articles</h3>
+        <ul>
+          <li><a href="/help/article/198-your-gumroad-library"><span>Your Gumroad Library</span></a></li>
+          <li><a href="/help/article/195-theres-an-issue-with-my-purchase"><span>There's an issue with my purchase</span></a></li>
+        </ul>
+      </div>
+    </>
+  );
+}

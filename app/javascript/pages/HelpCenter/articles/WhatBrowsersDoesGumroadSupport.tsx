@@ -1,0 +1,22 @@
+import React from "react";
+
+export const meta = {
+  description: "Gumroad supports the last four major updates to the following browsers: Edge, Safari, Chrome, and Firefox. Using an outdated browser with Gumroad can result in ",
+};
+
+export default function WhatBrowsersDoesGumroadSupport() {
+  return (
+    <>
+      <div>
+        <p> Gumroad supports the last four major updates to the following browsers: Edge, Safari, Chrome, and Firefox. Using an outdated browser with Gumroad can result in errors in uploading and purchasing.</p>
+        <p> Find the latest version of your browser <a href="http://www.browsehappy.com/?locale=en">here</a>.</p>
+      </div>
+      <div>
+        <h3>Related Articles</h3>
+        <ul>
+          <li><a href="/help/article/44-build-gumroad-into-your-website"><span>Integrating Gumroad into websites</span></a></li>
+        </ul>
+      </div>
+    </>
+  );
+}

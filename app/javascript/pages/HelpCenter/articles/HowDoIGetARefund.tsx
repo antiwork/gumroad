@@ -1,0 +1,47 @@
+import React from "react";
+
+export const meta = {
+  description: "In this article: Website purchases In-app purchases Website purchases When you buy a product from a Gumroad creator, Gumroad only processes payments on behalf o",
+};
+
+export default function HowDoIGetARefund() {
+  return (
+    <>
+      <div>
+        <p>In this article:</p>
+        <ul>
+          <li><a href="#Website-purchases-YEQit">Website purchases</a></li>
+          <li><a href="#In-App-Purchases-GL6fX">In-app purchases</a></li>
+        </ul>
+        <hr role="separator" />
+        <h3 id="Website-purchases-YEQit">Website purchases</h3>
+        <p>When you buy a product from a Gumroad creator, Gumroad only processes payments on behalf of that creator. We allow creators on our platform to <a href="/help/article/51-what-is-gumroads-refund-policy">set their own refund policies</a> and issue their own refunds to their customers (i.e. you!).</p>
+        <p>Unfortunately, we can't issue an immediate refund unless the charge was <a href="https://gumroad.com/help/article/283-fraudulent-purchases">fraudulent</a> or a duplicate.</p>
+        <p>Please write to us if you haven’t heard back from the creator for 30 days since first contacting them, along with the proof of correspondence. We will reach out to them and will issue a refund if they continue to be unresponsive.</p>
+        <p>If you have issues with the product you've purchased through Gumroad or feel you deserve a refund, you should contact the creator of the product. </p>
+        <p>You can contact the creator by replying directly to your receipt email:</p>
+        <figure><img src="https://lh7-us.googleusercontent.com/dl2KcyB6VcgKyQjf_PdY7mSpA3PwCXm4kfCzmq-kbi0hRee7mzCRjIG0oLOuAjucAk-1Z6uEl4rVS-LeIjd58epUux48b0Sm1QhY_AhBPSZWAKgINSkHcFiWMTNUEOlYlYG5KdDpPdhuOhJk3_7RebM" alt="" /></figure>
+        <p>or by looking at the "reply-to" information on your purchase email</p>
+        <h3></h3>
+        <figure><img src="https://d33v4339jhl8k0.cloudfront.net/docs/assets/5c4657ad2c7d3a66e32d763f/images/61fb919bd86136157d9a05c5/file-kV4glDwBbx.png" alt="" /></figure>
+        <p>If you didn't receive a receipt, please first check the spam folder in your email inbox. If you still cannot find your receipt, please go through the steps <a href="/help/article/212-i-never-received-a-receipt">on this page</a>.</p>
+        <br />
+        <h3 id="In-App-Purchases-GL6fX">In-App purchases</h3>
+        <p>Refunds for in-app purchases are handled independently by Apple/Google support, so if you made a purchase on the <a href="/help/article/177-the-gumroad-dashboard-app#Download-the-app-a0fEa">Gumroad mobile app</a>, neither the creator nor Gumroad can refund your purchase.</p>
+        <br />
+        <p>If you need a refund for an in-app purchase, please contact <a href="https://support.apple.com/en-au/118223">Apple</a> (for IOS devices) or <a href="https://support.google.com/googleplay/answer/2479637?sjid=15689087848422407774-AP">Google support</a> (for Android devices).</p>
+      </div>
+      <div>
+        <h3>Related Articles</h3>
+        <ul>
+          <li><a href="/help/article/192-how-do-i-cancel-my-membership"><span>How do I cancel my membership?</span></a></li>
+          <li><a href="/help/article/214-why-was-i-charged-by-gumroad"><span>Why was I charged by Gumroad?</span></a></li>
+          <li><a href="/help/article/195-theres-an-issue-with-my-purchase"><span>There's an issue with my purchase</span></a></li>
+          <li><a href="/help/article/197-why-do-i-have-a-1-charge-from-gumroad"><span>Why do I have a $1 charge from Gumroad?</span></a></li>
+          <li><a href="/help/article/215-when-will-my-purchase-be-shipped"><span>When will my purchase be shipped?</span></a></li>
+          <li><a href="/help/article/211-im-not-receiving-updates"><span>I'm not receiving updates</span></a></li>
+        </ul>
+      </div>
+    </>
+  );
+}

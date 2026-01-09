@@ -31,13 +31,6 @@ export type Category = {
   articles: ArticleSummary[];
 };
 
-export type Article = {
-  title: string;
-  slug: string;
-  content: string;
-  category: { title: string; slug: string; url: string };
-};
-
 export type Meta = {
   title: string;
   description: string;

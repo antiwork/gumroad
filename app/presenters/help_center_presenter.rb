@@ -58,7 +58,6 @@ class HelpCenterPresenter
       {
         title: article.title,
         slug: article.slug,
-        content: render_article_content(article),
         category: category_link_data(article.category)
       }
     end
@@ -90,24 +89,10 @@ class HelpCenterPresenter
       end
     end
 
-    def render_article_content(article)
-      html = view_context.render(partial: article.to_partial_path, layout: false)
-      post_process_internal_links(html)
-    end
-
-    def post_process_internal_links(html)
-      # Convert relative article links to full paths
-      # e.g., href="128-discount-codes" -> href="/help/article/128-discount-codes"
-      html.gsub(/href="(\d+-[^"]+)"/) do |_match|
-        slug = ::Regexp.last_match(1)
-        %{href="#{help_center_article_path(slug)}"}
-      end
-    end
-
     def article_meta(article)
       {
         title: "#{article.title} - Gumroad Help Center",
-        description: extract_description_from_content(article),
+        description: "Read about #{article.title} in the Gumroad Help Center",
         canonical_url: help_center_article_url(article)
       }
     end
@@ -118,15 +103,5 @@ class HelpCenterPresenter
         description: "Help articles for #{category.title}",
         canonical_url: help_center_category_url(category)
       }
-    end
-
-    def extract_description_from_content(article)
-      # First, try to get @description from the rendered partial
-      # Article partials set @description in the first line like:
-      # <% @description = "In this article: ..." %>
-      # But we can't access it directly, so we extract from rendered content
-      content = view_context.render(partial: article.to_partial_path, layout: false)
-      plain_text = ActionController::Base.helpers.strip_tags(content).squish
-      plain_text.truncate(160)
     end
 end

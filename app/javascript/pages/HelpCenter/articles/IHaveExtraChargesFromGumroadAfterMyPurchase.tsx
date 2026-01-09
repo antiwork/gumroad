@@ -1,0 +1,25 @@
+import React from "react";
+
+export const meta = {
+  description: "All purchases made on Gumroad, regardless of the currency they are displayed in, are processed in USD ($). Often, payment processors will charge an internationa",
+};
+
+export default function IHaveExtraChargesFromGumroadAfterMyPurchase() {
+  return (
+    <>
+      <div>
+        <p>All purchases made on Gumroad, regardless of the currency they are displayed in, are processed in USD ($). Often, payment processors will charge an international transaction fee and add this to your purchase.</p>
+        <p>Please contact your payment processor (Bank, PayPal, etc.) for additional details.</p>
+      </div>
+      <div>
+        <h3>Related Articles</h3>
+        <ul>
+          <li><a href="/help/article/191-a-guide-to-buying-on-gumroad"><span>A guide to buying on Gumroad</span></a></li>
+          <li><a href="/help/article/203-why-did-my-payment-fail"><span>Why did my payment fail?</span></a></li>
+          <li><a href="/help/article/214-why-was-i-charged-by-gumroad"><span>Why was I charged by Gumroad?</span></a></li>
+          <li><a href="/help/article/197-why-do-i-have-a-1-charge-from-gumroad"><span>Why do I have a $1 charge from Gumroad?</span></a></li>
+        </ul>
+      </div>
+    </>
+  );
+}

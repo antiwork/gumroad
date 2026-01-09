@@ -38,7 +38,7 @@ describe HelpCenter::ArticlesController, type: :controller, inertia: true do
       expect(inertia.component).to eq("HelpCenter/Article")
       expect(inertia.props[:article]).to be_present
       expect(inertia.props[:article][:title]).to eq(article.title)
-      expect(inertia.props[:article][:content]).to be_present
+      expect(inertia.props[:article][:slug]).to eq(article.slug)
       expect(inertia.props[:sidebar_categories]).to be_present
       expect(inertia.props[:meta]).to be_present
     end
@@ -75,40 +75,13 @@ describe HelpCenter::ArticlesController, type: :controller, inertia: true do
     end
 
     context "render views" do
-      it "renders the article with HTML content" do
-        get :show, params: { slug: article.slug }
-
-        expect(response).to have_http_status(:ok)
-        # Article content should contain HTML markup
-        expect(inertia.props[:article][:content]).to include("<")
-        expect(inertia.props[:article][:content]).to include("</")
-        # And should not be empty
-        expect(inertia.props[:article][:content].length).to be > 100
-      end
-
-      it "processes internal links in article content" do
-        # Find an article that contains internal links
-        article_with_links = HelpCenter::Article.all.find do |a|
-          partial_path = "app/views/#{a.to_partial_path}.html.erb"
-          File.exist?(partial_path) && File.read(partial_path).include?('href="')
-        end
-
-        next unless article_with_links
-
-        get :show, params: { slug: article_with_links.slug }
-
-        content = inertia.props[:article][:content]
-        # Check that relative links are converted to full paths
-        expect(content).to match(%r{href="/help/article/\d+-[^"]+})
-      end
-
       HelpCenter::Article.all.each do |article|
-        it "renders the article #{article.slug}" do
+        it "can show article #{article.slug}" do
           get :show, params: { slug: article.slug }
 
           expect(response).to have_http_status(:ok)
           expect(inertia.props[:article][:title]).to eq(article.title)
-          expect(inertia.props[:article][:content]).to be_present
+          expect(inertia.props[:article][:slug]).to eq(article.slug)
         end
       end
     end
