@@ -1,7 +1,7 @@
 import { Link, useForm, usePage } from "@inertiajs/react";
 import * as React from "react";
 
-import { ForgotPasswordForm } from "$app/components/Authentication/ForgotPasswordForm";
+import { AuthAlert } from "$app/components/AuthAlert";
 import { Layout } from "$app/components/Authentication/Layout";
 import { SocialAuth } from "$app/components/Authentication/SocialAuth";
 import { Button } from "$app/components/Button";
@@ -9,7 +9,6 @@ import { PasswordInput } from "$app/components/PasswordInput";
 import { Separator } from "$app/components/Separator";
 import { useOriginalLocation } from "$app/components/useOriginalLocation";
 import { RecaptchaCancelledError, useRecaptcha } from "$app/components/useRecaptcha";
-import { WarningFlash } from "$app/components/WarningFlashMessage";
 
 type PageProps = {
   email: string | null;
@@ -24,7 +23,6 @@ function LoginPage() {
   const next = url.searchParams.get("next");
   const recaptcha = useRecaptcha({ siteKey: recaptcha_site_key });
   const uid = React.useId();
-  const [showForgotPassword, setShowForgotPassword] = React.useState(false);
 
   const form = useForm<{
     user: {
@@ -62,52 +60,48 @@ function LoginPage() {
       header={<h1>{application_name ? `Connect ${application_name} to Gumroad` : "Log in"}</h1>}
       headerActions={<Link href={Routes.signup_path({ next })}>Sign up</Link>}
     >
-      {showForgotPassword ? (
-        <ForgotPasswordForm onClose={() => setShowForgotPassword(false)} />
-      ) : (
-        <form onSubmit={(e) => void handleSubmit(e)}>
-          <SocialAuth />
-          <Separator>
-            <span>or</span>
-          </Separator>
-          <section>
-            <WarningFlash />
-            <fieldset>
-              <legend>
-                <label htmlFor={`${uid}-email`}>Email</label>
-              </legend>
-              <input
-                id={`${uid}-email`}
-                type="email"
-                value={form.data.user.login_identifier}
-                onChange={(e) => form.setData("user.login_identifier", e.target.value)}
-                required
-                tabIndex={1}
-                autoComplete="email"
-              />
-            </fieldset>
-            <fieldset>
-              <legend>
-                <label htmlFor={`${uid}-password`}>Password</label>
-                <button type="button" className="font-normal underline" onClick={() => setShowForgotPassword(true)}>
-                  Forgot your password?
-                </button>
-              </legend>
-              <PasswordInput
-                id={`${uid}-password`}
-                value={form.data.user.password}
-                onChange={(e) => form.setData("user.password", e.target.value)}
-                required
-                tabIndex={1}
-                autoComplete="current-password"
-              />
-            </fieldset>
-            <Button color="primary" type="submit" disabled={form.processing}>
-              {form.processing ? "Logging in..." : "Login"}
-            </Button>
-          </section>
-        </form>
-      )}
+      <form onSubmit={(e) => void handleSubmit(e)}>
+        <SocialAuth />
+        <Separator>
+          <span>or</span>
+        </Separator>
+        <section>
+          <AuthAlert />
+          <fieldset>
+            <legend>
+              <label htmlFor={`${uid}-email`}>Email</label>
+            </legend>
+            <input
+              id={`${uid}-email`}
+              type="email"
+              value={form.data.user.login_identifier}
+              onChange={(e) => form.setData("user.login_identifier", e.target.value)}
+              required
+              tabIndex={1}
+              autoComplete="email"
+            />
+          </fieldset>
+          <fieldset>
+            <legend>
+              <label htmlFor={`${uid}-password`}>Password</label>
+              <Link href={Routes.new_user_password_path({ next })} className="font-normal underline">
+                Forgot your password?
+              </Link>
+            </legend>
+            <PasswordInput
+              id={`${uid}-password`}
+              value={form.data.user.password}
+              onChange={(e) => form.setData("user.password", e.target.value)}
+              required
+              tabIndex={1}
+              autoComplete="current-password"
+            />
+          </fieldset>
+          <Button color="primary" type="submit" disabled={form.processing}>
+            {form.processing ? "Logging in..." : "Login"}
+          </Button>
+        </section>
+      </form>
       {recaptcha.container}
     </Layout>
   );

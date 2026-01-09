@@ -122,12 +122,8 @@ describe SignupController, type: :controller, inertia: true do
       end
 
       context "when two factor authentication is enabled for the user" do
-        before do
-          @user.two_factor_authentication_enabled = true
-          @user.save!
-        end
-
         it "sets the user_id in session and redirects for two factor authentication" do
+          @user.update!(two_factor_authentication_enabled: true)
           post "create", params: { user: { email: @user.email, password: "password" } }
 
           expect(session[:verify_two_factor_auth_for]).to eq @user.id
@@ -392,6 +388,24 @@ describe SignupController, type: :controller, inertia: true do
       expect(last_user.email).to eq user.email
       expect(last_user.purchases.count).to eq 1
       expect(last_user.purchases.first.id).to eq purchase.id
+    end
+
+    it "rejects mass assignment of privileged attributes" do
+      params = {
+        user: {
+          email: generate(:email),
+          password: "password",
+          verified: true,
+          user_risk_state: "compliant",
+          tos_violation_reason: "fraud",
+        }
+      }
+      post "create", params:, format: :json
+      last_user = User.last
+      expect(last_user).to be_present
+      expect(last_user.verified).to be_falsey
+      expect(last_user.user_risk_state).not_to eq "compliant"
+      expect(last_user.tos_violation_reason).to be_nil
     end
 
     it "associates the preorder with the newly created user", :vcr do
