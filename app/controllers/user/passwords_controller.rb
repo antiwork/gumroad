@@ -1,49 +1,57 @@
 # frozen_string_literal: true
 
 class User::PasswordsController < Devise::PasswordsController
+  include InertiaRendering
+  layout "inertia", only: [:new, :edit]
+
   def new
-    e404
+    @title = "Forgot password"
+    auth_presenter = AuthPresenter.new(params:, application: @application)
+    render inertia: "User/Passwords/New", props: auth_presenter.login_props
   end
 
   def create
     email = params[:user][:email]
-    if EmailFormatValidator.valid?(email)
-      @user = User.alive.by_email(email).first
-      return head :no_content if @user&.send_reset_password_instructions
+    user = User.alive.by_email(email).first if EmailFormatValidator.valid?(email)
+
+    if user&.send_reset_password_instructions
+      redirect_to login_url, notice: "Password reset sent! Please make sure to check your spam folder.", status: :see_other
+    else
+      redirect_back fallback_location: login_url, warning: "An account does not exist with that email."
     end
-    render json: { error_message: "An account does not exist with that email." }, status: :unprocessable_entity
   end
 
   def edit
-    @reset_password_token = params[:reset_password_token]
-    @user = User.find_or_initialize_with_error_by(:reset_password_token,
-                                                  Devise.token_generator.digest(User, :reset_password_token, @reset_password_token))
-    if @user.errors.present?
-      flash[:alert] = "That reset password token doesn't look valid (or may have expired)."
-      return redirect_to root_url
+    reset_password_token = params[:reset_password_token]
+    user = User.find_or_initialize_with_error_by(:reset_password_token,
+                                                 Devise.token_generator.digest(User, :reset_password_token, reset_password_token))
+    if user.errors.present?
+      return redirect_to root_path, warning: "That reset password token doesn't look valid (or may have expired)."
     end
 
     @title = "Reset your password"
+    render inertia: "User/Passwords/Edit", props: {
+      reset_password_token: reset_password_token
+    }
   end
 
   def update
-    @reset_password_token = params[:user][:reset_password_token]
-    @user = User.reset_password_by_token(params[:user])
+    reset_password_token = params[:user][:reset_password_token]
+    user = User.reset_password_by_token(params[:user])
 
-    if @user.errors.present?
-      error_message = if @user.errors[:password_confirmation].present?
+    if user.errors.present?
+      error_message = if user.errors[:password_confirmation].present?
         "Those two passwords didn't match."
-      elsif @user.errors[:password].present?
-        @user.errors.full_messages.first
+      elsif user.errors[:password].present?
+        user.errors.full_messages.first
       else
         "That reset password token doesn't look valid (or may have expired)."
       end
-      render json: { error_message: error_message }, status: :unprocessable_entity
+      redirect_to edit_user_password_path(reset_password_token: reset_password_token), warning: error_message
     else
-      flash[:notice] = "Your password has been reset, and you're now logged in."
-      @user.invalidate_active_sessions!
-      sign_in @user unless @user.deleted?
-      head :no_content
+      user.invalidate_active_sessions!
+      sign_in user unless user.deleted?
+      redirect_to root_path, status: :see_other, notice: "Your password has been reset, and you're now logged in."
     end
   end
 
