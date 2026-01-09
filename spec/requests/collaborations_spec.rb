@@ -69,6 +69,14 @@ describe "Collaborations", type: :system, js: true do
         visit collaborators_path
         expect(page).to have_tab_button("Collaborators")
         expect(page).to have_tab_button("Collaborations")
+
+        click_on "Collaborations"
+
+        expect(page).to have_current_path(collaborators_incomings_path)
+        expect(page).to have_title("Collaborators")
+        expect(page).to have_selector("h1", text: "Collaborators")
+        expect(page).to have_tab_button("Collaborators")
+        expect(page).to have_tab_button("Collaborations")
       end
 
       it "displays a list of collaborators" do
