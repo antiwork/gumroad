@@ -1,3 +1,4 @@
+import { Link } from "@inertiajs/react";
 import React from "react";
 
 export const meta = {
@@ -17,7 +18,7 @@ export default function HowToDeleteYourGumroadAccount() {
           <li>Change your account’s email address if you’d like to use it with a different Gumroad account</li>
           <li>
             Download your sales and payout CSV reports, and your product files by{" "}
-            <a href="/help/article/62-testing-a-purchase">testing a purchase</a>
+            <Link href="/help/article/62-testing-a-purchase">testing a purchase</Link>
           </li>
           <li>Download your purchases from your Gumroad Library</li>
         </ul>
@@ -34,7 +35,7 @@ export default function HowToDeleteYourGumroadAccount() {
         <p>
           If you have an existing balance that is yet to be paid out, you will be able to forfeit it and delete your
           account. If you do not wish to forfeit your balance, you will have to wait until you have been{" "}
-          <a href="/help/article/13-getting-paid">paid out</a> completely before you can delete your account.
+          <Link href="/help/article/13-getting-paid">paid out</Link> completely before you can delete your account.
         </p>
         <p>
           When you delete your Gumroad account, your username, payment data, products and product files, and compliance
@@ -45,14 +46,14 @@ export default function HowToDeleteYourGumroadAccount() {
         <h3>Related Articles</h3>
         <ul>
           <li>
-            <a href="/help/article/20-how-do-i-contact-gumroad">
+            <Link href="/help/article/20-how-do-i-contact-gumroad">
               <span>Contact Gumroad</span>
-            </a>
+            </Link>
           </li>
           <li>
-            <a href="/help/article/67-the-settings-menu">
+            <Link href="/help/article/67-the-settings-menu">
               <span>Account settings</span>
-            </a>
+            </Link>
           </li>
         </ul>
       </div>

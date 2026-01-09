@@ -1,3 +1,4 @@
+import { Link } from "@inertiajs/react";
 import React from "react";
 
 export const meta = {
@@ -21,7 +22,8 @@ export default function WhyWasIChargedByGumroad() {
           <a href="http://www.gumroad.com/charge">here</a>.
         </p>
         <p>
-          Can't locate it there? <a href="/help/article/196-contact-gumroad">Contact us</a> with the following details:
+          Can't locate it there? <Link href="/help/article/196-contact-gumroad">Contact us</Link> with the following
+          details:
         </p>
         <h3>If the charge was on your credit card</h3>
         <ul>
@@ -44,24 +46,24 @@ export default function WhyWasIChargedByGumroad() {
         <h3>Related Articles</h3>
         <ul>
           <li>
-            <a href="/help/article/189-safe-gumroad-buying">
+            <Link href="/help/article/189-safe-gumroad-buying">
               <span>Safe buying on Gumroad</span>
-            </a>
+            </Link>
           </li>
           <li>
-            <a href="/help/article/191-a-guide-to-buying-on-gumroad">
+            <Link href="/help/article/191-a-guide-to-buying-on-gumroad">
               <span>A guide to buying on Gumroad</span>
-            </a>
+            </Link>
           </li>
           <li>
-            <a href="/help/article/196-contact-gumroad">
+            <Link href="/help/article/196-contact-gumroad">
               <span>How do I contact Gumroad?</span>
-            </a>
+            </Link>
           </li>
           <li>
-            <a href="/help/article/204-get-to-know-your-gumroad-receipt">
+            <Link href="/help/article/204-get-to-know-your-gumroad-receipt">
               <span>Get to know your Gumroad receipt</span>
-            </a>
+            </Link>
           </li>
         </ul>
       </div>

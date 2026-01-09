@@ -1,3 +1,4 @@
+import { Link } from "@inertiajs/react";
 import React from "react";
 
 export const meta = {
@@ -198,24 +199,24 @@ export default function AffiliateFaq() {
           />
         </figure>
         <p>
-          Also note that you can provide <a href="/help/article/270-url-parameters">URL parameters</a> (for example,
-          &amp;wanted=true&amp;offer_code=thanksgiving) to our overlay as well.
+          Also note that you can provide <Link href="/help/article/270-url-parameters">URL parameters</Link> (for
+          example, &amp;wanted=true&amp;offer_code=thanksgiving) to our overlay as well.
         </p>
         <p>
           If you need more help with setting up these widgets on your website, please refer to{" "}
-          <a href="/help/article/44-build-gumroad-into-your-website">this article</a>.{" "}
+          <Link href="/help/article/44-build-gumroad-into-your-website">this article</Link>.{" "}
         </p>
         <p>
           {" "}
           As a Gumroad affiliate, you will not be able to see any sales on the iOS{" "}
-          <a
+          <Link
             href="/help/article/177-the-gumroad-dashboard-app"
             style={{ fontSize: "14px" }}
             target="_blank"
             rel="noreferrer"
           >
             Gumroad Dashboard app
-          </a>
+          </Link>
           . That means there is no place for you to track your sales or see analytics on how your links are being
           shared. If you wish to get detailed insights into how your links are performing, you can use a service like{" "}
           <a href="https://bitly.com/" style={{ fontSize: "14px" }} target="_blank" rel="noreferrer">
@@ -226,7 +227,7 @@ export default function AffiliateFaq() {
         <h3 id="getting-paid">Getting paid for your affiliate sales</h3>
         <p>
           We pay affiliates the same way we pay creators. You can read in detail about that process in{" "}
-          <a href="/help/article/13-getting-paid">this article</a>.{" "}
+          <Link href="/help/article/13-getting-paid">this article</Link>.{" "}
         </p>
         <figure>
           <img
@@ -256,9 +257,9 @@ export default function AffiliateFaq() {
         <h3>Related Articles</h3>
         <ul>
           <li>
-            <a href="/help/article/333-affiliates-on-gumroad">
+            <Link href="/help/article/333-affiliates-on-gumroad">
               <span>Affiliates on Gumroad</span>
-            </a>
+            </Link>
           </li>
         </ul>
       </div>

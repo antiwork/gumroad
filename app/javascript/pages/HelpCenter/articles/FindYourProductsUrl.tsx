@@ -1,3 +1,4 @@
+import { Link } from "@inertiajs/react";
 import React from "react";
 
 export const meta = {
@@ -74,14 +75,14 @@ export default function FindYourProductsUrl() {
         <h3>Related Articles</h3>
         <ul>
           <li>
-            <a href="/help/article/101-designing-your-product-page">
+            <Link href="/help/article/101-designing-your-product-page">
               <span>Checkout customization</span>
-            </a>
+            </Link>
           </li>
           <li>
-            <a href="/help/article/81-custom-product-urls">
+            <Link href="/help/article/81-custom-product-urls">
               <span>Custom product URLs</span>
-            </a>
+            </Link>
           </li>
         </ul>
       </div>

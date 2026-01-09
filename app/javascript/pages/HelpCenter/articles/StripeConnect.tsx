@@ -1,3 +1,4 @@
+import { Link } from "@inertiajs/react";
 import React from "react";
 
 export const meta = {
@@ -40,9 +41,9 @@ export default function StripeConnect() {
         </p>
         <p>
           This is valid for all purchases made via a credit card or Apple/Google Pay. Gumroad will still retain its 10%{" "}
-          <a href="/help/article/66-gumroads-fees" target="_blank" rel="noreferrer">
+          <Link href="/help/article/66-gumroads-fees" target="_blank" rel="noreferrer">
             fee
-          </a>
+          </Link>
           , any VAT/GST charged, and any affiliate commission.
         </p>
         <p>
@@ -70,15 +71,16 @@ export default function StripeConnect() {
           time of sale. Gumroad will only retain its 10% fee, any VAT/GST charged, and any affiliate commission.
         </p>
         <p>
-          As always, <a href="/help/article/46-what-currency-does-gumroad-use">we will charge the customer in USD</a>,
-          but if you do not have a USD bank account connected to your Stripe account, Stripe will convert the payments
-          to your default currency based on{" "}
-          <a href="https://dashboard.stripe.com/currency_conversion">their exchange rates</a>. If you have multiple
-          currency support in your Stripe account and a USD bank account, then the amount will remain in USD.
+          As always,{" "}
+          <Link href="/help/article/46-what-currency-does-gumroad-use">we will charge the customer in USD</Link>, but if
+          you do not have a USD bank account connected to your Stripe account, Stripe will convert the payments to your
+          default currency based on <a href="https://dashboard.stripe.com/currency_conversion">their exchange rates</a>.
+          If you have multiple currency support in your Stripe account and a USD bank account, then the amount will
+          remain in USD.
         </p>
         <p>
           You will also find the Stripe transaction ID, fee amount, and fee currency for these sales in the{" "}
-          <a href="/help/article/74-the-analytics-dashboard#sales-csv">sales CSV export</a>.{" "}
+          <Link href="/help/article/74-the-analytics-dashboard#sales-csv">sales CSV export</Link>.{" "}
         </p>
         <p>
           These payouts will be listed on your <a href="https://gumroad.com/payouts">payouts page</a> under “Stripe
@@ -101,7 +103,7 @@ export default function StripeConnect() {
         </p>
         <h3 id="refunds">Issue refunds</h3>
         <p>
-          You can <a href="/help/article/47-how-to-refund-a-customer">refund customers</a> either from the sales
+          You can <Link href="/help/article/47-how-to-refund-a-customer">refund customers</Link> either from the sales
           dashboard or from your Stripe account, and the amount will be deducted from your connected account's balance.
         </p>
         <p>
@@ -134,8 +136,8 @@ export default function StripeConnect() {
           However, you cannot disconnect your Stripe account if you have a membership product with active recurring
           credit card payments. You have to cancel all existing memberships first, or wait until those memberships
           expire, then proceed to disconnect. You can identify Stripe-paid memberships in your{" "}
-          <a href="/help/article/74-the-analytics-dashboard#sales-csv"> CSV sales file</a>, they will have a Stripe
-          transaction ID.
+          <Link href="/help/article/74-the-analytics-dashboard#sales-csv"> CSV sales file</Link>, they will have a
+          Stripe transaction ID.
         </p>
         <p className="font-medium">
           Please note that once you disconnect your Stripe account, you will not be able to reconnect it anymore.
@@ -152,24 +154,24 @@ export default function StripeConnect() {
         <h3>Related Articles</h3>
         <ul>
           <li>
-            <a href="/help/article/13-getting-paid">
+            <Link href="/help/article/13-getting-paid">
               <span>Getting paid by Gumroad</span>
-            </a>
+            </Link>
           </li>
           <li>
-            <a href="/help/article/66-gumroads-fees">
+            <Link href="/help/article/66-gumroads-fees">
               <span>Gumroad's fees</span>
-            </a>
+            </Link>
           </li>
           <li>
-            <a href="/help/article/275-paypal-connect">
+            <Link href="/help/article/275-paypal-connect">
               <span>Adding PayPal to checkout</span>
-            </a>
+            </Link>
           </li>
           <li>
-            <a href="/help/article/260-your-payout-settings-page">
+            <Link href="/help/article/260-your-payout-settings-page">
               <span>Filling out payout settings</span>
-            </a>
+            </Link>
           </li>
         </ul>
       </div>

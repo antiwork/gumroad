@@ -1,3 +1,4 @@
+import { Link } from "@inertiajs/react";
 import React from "react";
 
 export const meta = {
@@ -42,9 +43,10 @@ export default function GetToKnowYourGumroadReceipt() {
         </figure>
         <h3 id="Generate-an-invoice-TSJNg">Generate an invoice</h3>
         <p>
-          You can <a href="/help/article/194-i-need-an-invoice">print your own invoice</a> by clicking the Generate link
-          at the bottom of your receipt. If you need to customize your invoice, you can use the 'Additional Notes' field
-          to add any relevant information. We are not able to customize invoices beyond that for you.{" "}
+          You can <Link href="/help/article/194-i-need-an-invoice">print your own invoice</Link> by clicking the
+          Generate link at the bottom of your receipt. If you need to customize your invoice, you can use the
+          'Additional Notes' field to add any relevant information. We are not able to customize invoices beyond that
+          for you.{" "}
         </p>
         <figure>
           <img
@@ -90,39 +92,39 @@ export default function GetToKnowYourGumroadReceipt() {
         <h3>Related Articles</h3>
         <ul>
           <li>
-            <a href="/help/article/190-how-do-i-get-a-refund">
+            <Link href="/help/article/190-how-do-i-get-a-refund">
               <span>How do I get a refund?</span>
-            </a>
+            </Link>
           </li>
           <li>
-            <a href="/help/article/193-my-purchase-isnt-downloading">
+            <Link href="/help/article/193-my-purchase-isnt-downloading">
               <span>My purchase isn't downloading</span>
-            </a>
+            </Link>
           </li>
           <li>
-            <a href="/help/article/194-i-need-an-invoice">
+            <Link href="/help/article/194-i-need-an-invoice">
               <span>I need an invoice</span>
-            </a>
+            </Link>
           </li>
           <li>
-            <a href="/help/article/200-i-need-a-vat-refund">
+            <Link href="/help/article/200-i-need-a-vat-refund">
               <span>I need a VAT refund</span>
-            </a>
+            </Link>
           </li>
           <li>
-            <a href="/help/article/195-theres-an-issue-with-my-purchase">
+            <Link href="/help/article/195-theres-an-issue-with-my-purchase">
               <span>There's an issue with my purchase</span>
-            </a>
+            </Link>
           </li>
           <li>
-            <a href="/help/article/212-i-never-received-a-receipt">
+            <Link href="/help/article/212-i-never-received-a-receipt">
               <span>I never received a receipt</span>
-            </a>
+            </Link>
           </li>
           <li>
-            <a href="/help/article/215-when-will-my-purchase-be-shipped">
+            <Link href="/help/article/215-when-will-my-purchase-be-shipped">
               <span>When will my purchase be shipped?</span>
-            </a>
+            </Link>
           </li>
         </ul>
       </div>

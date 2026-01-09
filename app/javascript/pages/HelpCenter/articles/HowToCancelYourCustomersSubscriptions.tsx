@@ -1,3 +1,4 @@
+import { Link } from "@inertiajs/react";
 import React from "react";
 
 export const meta = {
@@ -20,9 +21,9 @@ export default function HowToCancelYourCustomersSubscriptions() {
         <h3>Preventing new customers from subscribing</h3>
         <p>
           If you're looking to keep all your existing subscribers and not accept any new subscribers, simply{" "}
-          <a href="/help/article/248-delete-a-product" target="_blank" rel="noreferrer">
+          <Link href="/help/article/248-delete-a-product" target="_blank" rel="noreferrer">
             Unpublish the product
-          </a>
+          </Link>
           . Any new customers will not be able to buy or find the product, while existing customers will continue to be
           charged and have access to their files.
         </p>
@@ -47,16 +48,17 @@ export default function HowToCancelYourCustomersSubscriptions() {
         <h3>Fixed-length memberships</h3>
         <p>
           When building your product, you can set your membership to terminate after a{" "}
-          <a href="/help/article/278-guide-to-memberships#Fixed-length-memberships-8EL39">set number of months</a>.{" "}
+          <Link href="/help/article/278-guide-to-memberships#Fixed-length-memberships-8EL39">set number of months</Link>
+          .{" "}
         </p>
       </div>
       <div>
         <h3>Related Articles</h3>
         <ul>
           <li>
-            <a href="/help/article/82-membership-products">
+            <Link href="/help/article/82-membership-products">
               <span>Selling memberships</span>
-            </a>
+            </Link>
           </li>
         </ul>
       </div>

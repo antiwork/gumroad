@@ -1,3 +1,4 @@
+import { Link } from "@inertiajs/react";
 import React from "react";
 
 export const meta = {
@@ -81,8 +82,8 @@ export default function LicenseKeys() {
         <h3 id="multi-seat">Issuing multi-seat licenses</h3>
         <div className="callout-blue">
           <p>
-            This feature is currently only available for <a href="/help/article/82-membership-products">Membership</a>{" "}
-            products.
+            This feature is currently only available for{" "}
+            <Link href="/help/article/82-membership-products">Membership</Link> products.
           </p>
         </div>
         <p>The “Multi-seat license” setting allows you to issue multiple seats for a single purchase or license key.</p>
@@ -98,7 +99,7 @@ export default function LicenseKeys() {
         </figure>
         <p>
           If you'd like to prepopulate the number of seats for a given customer, you can use the quantity{" "}
-          <a href="/help/article/270-url-parameters">URL parameter</a> (Example:{" "}
+          <Link href="/help/article/270-url-parameters">URL parameter</Link> (Example:{" "}
           <a href="https://hypermatic.gumroad.com/l/emailify?layout=profile&amp;quantity=4">
             https://hypermatic.gumroad.com/l/emailify?layout=profile&amp;quantity=4)
           </a>
@@ -205,8 +206,8 @@ export default function LicenseKeys() {
           </li>
           <li>
             <strong>Does the "disable" method cancel the customer's subscription?</strong> No, it just disables the
-            license key. <a href="/help/article/139-how-to-cancel-your-customers-subscriptions">Here's how</a> to cancel
-            a subscription for a customer.{" "}
+            license key. <Link href="/help/article/139-how-to-cancel-your-customers-subscriptions">Here's how</Link> to
+            cancel a subscription for a customer.{" "}
           </li>
           <li>
             <strong>Can I use my own license keys?</strong> You either have to choose the license keys we generate or
@@ -251,29 +252,29 @@ export default function LicenseKeys() {
         <h3>Related Articles</h3>
         <ul>
           <li>
-            <a href="/help/article/64-is-gumroad-for-me">
+            <Link href="/help/article/64-is-gumroad-for-me">
               <span>Why choose Gumroad?</span>
-            </a>
+            </Link>
           </li>
           <li>
-            <a href="/help/article/149-adding-a-product">
+            <Link href="/help/article/149-adding-a-product">
               <span>Adding a product</span>
-            </a>
+            </Link>
           </li>
           <li>
-            <a href="/help/article/82-membership-products">
+            <Link href="/help/article/82-membership-products">
               <span>Selling memberships and subscriptions</span>
-            </a>
+            </Link>
           </li>
           <li>
-            <a href="/help/article/70-can-i-sell-services">
+            <Link href="/help/article/70-can-i-sell-services">
               <span>Sell digital services: freelancing, coaching, and tip jars</span>
-            </a>
+            </Link>
           </li>
           <li>
-            <a href="/help/article/81-custom-product-urls">
+            <Link href="/help/article/81-custom-product-urls">
               <span>Custom product URLs</span>
-            </a>
+            </Link>
           </li>
         </ul>
       </div>

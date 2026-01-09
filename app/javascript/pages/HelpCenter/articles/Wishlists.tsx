@@ -1,3 +1,4 @@
+import { Link } from "@inertiajs/react";
 import React from "react";
 
 export const meta = {
@@ -142,9 +143,9 @@ export default function Wishlists() {
         <h3>Related Articles</h3>
         <ul>
           <li>
-            <a href="/help/article/213-how-do-i-give-a-product-as-a-gift">
+            <Link href="/help/article/213-how-do-i-give-a-product-as-a-gift">
               <span>How do I give a product as a gift?</span>
-            </a>
+            </Link>
           </li>
         </ul>
       </div>

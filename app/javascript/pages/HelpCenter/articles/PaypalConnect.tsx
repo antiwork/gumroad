@@ -1,3 +1,4 @@
+import { Link } from "@inertiajs/react";
 import React from "react";
 
 export const meta = {
@@ -108,9 +109,10 @@ export default function PaypalConnect() {
         </figure>
         <h3 id="refunds">Refunds</h3>
         <p>
-          With PayPal Connect, you can still <a href="/help/article/47-how-to-refund-a-customer">refund customers</a>{" "}
-          via the <a href="https://gumroad.com/customers">customer's tab</a>; you just have to ensure you have enough
-          balance in your PayPal account for the refund. We will also refund our fees and any VAT/GST.
+          With PayPal Connect, you can still{" "}
+          <Link href="/help/article/47-how-to-refund-a-customer">refund customers</Link> via the{" "}
+          <a href="https://gumroad.com/customers">customer's tab</a>; you just have to ensure you have enough balance in
+          your PayPal account for the refund. We will also refund our fees and any VAT/GST.
         </p>
         <p>Paypal will, however, charge a fee to process refunds, and sellers pay those fees – not Gumroad.</p>
         <h3 id="chargebacks">Chargebacks</h3>
@@ -199,19 +201,19 @@ export default function PaypalConnect() {
         <h3>Related Articles</h3>
         <ul>
           <li>
-            <a href="/help/article/66-gumroads-fees">
+            <Link href="/help/article/66-gumroads-fees">
               <span>Gumroad's fees</span>
-            </a>
+            </Link>
           </li>
           <li>
-            <a href="/help/article/282-how-do-purchases-work-for-my-customers">
+            <Link href="/help/article/282-how-do-purchases-work-for-my-customers">
               <span>How Gumroad works for customers</span>
-            </a>
+            </Link>
           </li>
           <li>
-            <a href="/help/article/330-stripe-connect">
+            <Link href="/help/article/330-stripe-connect">
               <span>Connect your Stripe account to Gumroad</span>
-            </a>
+            </Link>
           </li>
         </ul>
       </div>

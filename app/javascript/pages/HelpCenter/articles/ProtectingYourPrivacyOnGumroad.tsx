@@ -1,3 +1,4 @@
+import { Link } from "@inertiajs/react";
 import React from "react";
 
 export const meta = {
@@ -54,8 +55,8 @@ export default function ProtectingYourPrivacyOnGumroad() {
         </figure>
         <h3 id="PayPal-BtBkS">PayPal</h3>
         <p>
-          If you <a href="/help/article/275-paypal-connect">Add PayPal to checkout</a>, customers will be able to see
-          your name and email in their PayPal transaction details. This is because the payment goes directly to your
+          If you <Link href="/help/article/275-paypal-connect">Add PayPal to checkout</Link>, customers will be able to
+          see your name and email in their PayPal transaction details. This is because the payment goes directly to your
           PayPal account, and Gumroad merely acts as the marketplace.{" "}
         </p>
         <p>
@@ -64,8 +65,8 @@ export default function ProtectingYourPrivacyOnGumroad() {
         </p>
         <h3 id="Stripe--1Qjp">Stripe</h3>
         <p>
-          If you <a href="/help/article/330-stripe-connect">Connect your Stripe account to Gumroad</a>, customers will
-          still only be able to see the email that is connected to your Gumroad account. You will also be able to
+          If you <Link href="/help/article/330-stripe-connect">Connect your Stripe account to Gumroad</Link>, customers
+          will still only be able to see the email that is connected to your Gumroad account. You will also be able to
           customize the charge description that customers see on their bank statements. It is important to use a
           recognizable name that will not lead to unintended disputes. More on that{" "}
           <a href="https://support.stripe.com/questions/update-business-name-shown-on-customer-bank-statements">here</a>
@@ -83,7 +84,7 @@ export default function ProtectingYourPrivacyOnGumroad() {
         <ul>
           <li>
             Creating an LLC and selling as{" "}
-            <a href="/help/article/260-your-payout-settings-page#account-type">a business account,</a> or
+            <Link href="/help/article/260-your-payout-settings-page#account-type">a business account,</Link> or
           </li>
           <li>
             Creating a phone number specifically for your business and/or Gumroad using Google Voice or a similar VoIP
@@ -95,14 +96,14 @@ export default function ProtectingYourPrivacyOnGumroad() {
         <h3>Related Articles</h3>
         <ul>
           <li>
-            <a href="/help/article/130-pdf-stamping">
+            <Link href="/help/article/130-pdf-stamping">
               <span>PDF stamping</span>
-            </a>
+            </Link>
           </li>
           <li>
-            <a href="/help/article/42-content-security">
+            <Link href="/help/article/42-content-security">
               <span>Content protection on Gumroad</span>
-            </a>
+            </Link>
           </li>
         </ul>
       </div>

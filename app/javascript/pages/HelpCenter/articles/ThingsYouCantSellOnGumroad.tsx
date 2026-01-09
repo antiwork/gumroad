@@ -1,3 +1,4 @@
+import { Link } from "@inertiajs/react";
 import React from "react";
 
 export const meta = {
@@ -62,11 +63,12 @@ export default function ThingsYouCantSellOnGumroad() {
             businesses.{" "}
           </li>
           <li>
-            Any NSFW or sexually explicit content—<a href="/help/article/156-gumroad-and-adult-content">See why here</a>
+            Any NSFW or sexually explicit content—
+            <Link href="/help/article/156-gumroad-and-adult-content">See why here</Link>
           </li>
           <li>
             Services that are fulfilled outside Gumroad's purview. More on that{" "}
-            <a href="/help/article/70-can-i-sell-services">here</a>.
+            <Link href="/help/article/70-can-i-sell-services">here</Link>.
           </li>
           <li>Food products, medical products, skincare or beauty supplies</li>
           <li>Credit repair ebooks or services, or products that discuss credit improvement</li>
@@ -106,29 +108,29 @@ export default function ThingsYouCantSellOnGumroad() {
         <h3>Related Articles</h3>
         <ul>
           <li>
-            <a href="/help/article/156-gumroad-and-adult-content">
+            <Link href="/help/article/156-gumroad-and-adult-content">
               <span>Adult content on Gumroad</span>
-            </a>
+            </Link>
           </li>
           <li>
-            <a href="/help/article/64-is-gumroad-for-me">
+            <Link href="/help/article/64-is-gumroad-for-me">
               <span>Why choose Gumroad?</span>
-            </a>
+            </Link>
           </li>
           <li>
-            <a href="/help/article/70-can-i-sell-services">
+            <Link href="/help/article/70-can-i-sell-services">
               <span>Sell digital services: freelancing, coaching, and tip jars</span>
-            </a>
+            </Link>
           </li>
           <li>
-            <a href="/help/article/51-what-is-gumroads-refund-policy">
+            <Link href="/help/article/51-what-is-gumroads-refund-policy">
               <span>Gumroad's refund policy</span>
-            </a>
+            </Link>
           </li>
           <li>
-            <a href="/help/article/160-suspension">
+            <Link href="/help/article/160-suspension">
               <span>Account suspension FAQ</span>
-            </a>
+            </Link>
           </li>
         </ul>
       </div>

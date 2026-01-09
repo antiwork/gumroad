@@ -1,3 +1,4 @@
+import { Link } from "@inertiajs/react";
 import React from "react";
 
 export const meta = {
@@ -23,7 +24,8 @@ export default function MultipleAccounts() {
       <br />
       <p>
         <b>Yes, you can have as many Gumroad accounts as you want</b>, and they can pay out to the same bank or PayPal
-        account (depending on where you are on the globe - more info <a href="/help/article/13-getting-paid">here</a>
+        account (depending on where you are on the globe - more info{" "}
+        <Link href="/help/article/13-getting-paid">here</Link>
         ).
       </p>
       <p>
@@ -34,7 +36,7 @@ export default function MultipleAccounts() {
       <p>
         Just to make this very clear: We do not offer multiple logins for the same account. If you are sharing an
         account with someone else (your accountant, assistant, partner, etc.), you would both need to log in using the
-        same credentials or add them to your <a href="/help/article/326-teams-and-roles">team</a>.
+        same credentials or add them to your <Link href="/help/article/326-teams-and-roles">team</Link>.
       </p>
       <h3 id="Combining-products-or-customers-Ns2_e">Transferring products or customers</h3>
       <p>A common question creators ask is if they can combine (or transfer) their: </p>

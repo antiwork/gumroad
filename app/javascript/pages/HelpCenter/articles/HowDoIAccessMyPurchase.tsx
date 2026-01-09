@@ -1,3 +1,4 @@
+import { Link } from "@inertiajs/react";
 import React from "react";
 
 export const meta = {
@@ -12,7 +13,7 @@ export default function HowDoIAccessMyPurchase() {
         <p>
           In this article, we explain how to access your digital purchase from Gumroad. If you are trying to find out
           when your physical purchase will arrive, you will need to{" "}
-          <a href="/help/article/215-when-will-my-purchase-be-shipped">contact your product's creator</a>.
+          <Link href="/help/article/215-when-will-my-purchase-be-shipped">contact your product's creator</Link>.
         </p>
         <h3>Accessing from your receipt</h3>
         <p>
@@ -21,7 +22,7 @@ export default function HowDoIAccessMyPurchase() {
         </p>
         <p>
           If you have not received an email receipt, please check your spam folder. If you still can't locate it, please{" "}
-          <a href="/help/article/196-contact-gumroad">contact us</a>.
+          <Link href="/help/article/196-contact-gumroad">contact us</Link>.
         </p>
         <figure>
           <img
@@ -56,24 +57,24 @@ export default function HowDoIAccessMyPurchase() {
         <h3>Related Articles</h3>
         <ul>
           <li>
-            <a href="/help/article/193-my-purchase-isnt-downloading">
+            <Link href="/help/article/193-my-purchase-isnt-downloading">
               <span>My purchase isn't downloading</span>
-            </a>
+            </Link>
           </li>
           <li>
-            <a href="/help/article/212-i-never-received-a-receipt">
+            <Link href="/help/article/212-i-never-received-a-receipt">
               <span>I never received a receipt</span>
-            </a>
+            </Link>
           </li>
           <li>
-            <a href="/help/article/215-when-will-my-purchase-be-shipped">
+            <Link href="/help/article/215-when-will-my-purchase-be-shipped">
               <span>When will my purchase be shipped?</span>
-            </a>
+            </Link>
           </li>
           <li>
-            <a href="/help/article/211-im-not-receiving-updates">
+            <Link href="/help/article/211-im-not-receiving-updates">
               <span>I'm not receiving updates</span>
-            </a>
+            </Link>
           </li>
         </ul>
       </div>

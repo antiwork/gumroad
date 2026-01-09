@@ -1,3 +1,4 @@
+import { Link } from "@inertiajs/react";
 import React from "react";
 
 export const meta = {
@@ -98,8 +99,8 @@ export default function HowToSendAnUpdate() {
         <p>
           Refine your email audience by selecting customers who bought a specific product, paid a certain amount, or
           joined within a specific date range. You can also filter by location,{" "}
-          <a href="/help/article/126-setting-up-versions-on-a-digital-product">versions</a>, or{" "}
-          <a href="/help/article/82-membership-products#Tiers">tiers</a>.{" "}
+          <Link href="/help/article/126-setting-up-versions-on-a-digital-product">versions</Link>, or{" "}
+          <Link href="/help/article/82-membership-products#Tiers">tiers</Link>.{" "}
         </p>
         <br />
         <p>
@@ -227,14 +228,14 @@ export default function HowToSendAnUpdate() {
         <h3>Related Articles</h3>
         <ul>
           <li>
-            <a href="/help/article/131-using-workflows-to-send-automated-updates">
+            <Link href="/help/article/131-using-workflows-to-send-automated-updates">
               <span>Send automated emails with Workflows</span>
-            </a>
+            </Link>
           </li>
           <li>
-            <a href="/help/article/54-not-receiving-updates">
+            <Link href="/help/article/54-not-receiving-updates">
               <span>Customers not receiving emails</span>
-            </a>
+            </Link>
           </li>
         </ul>
       </div>

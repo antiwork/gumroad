@@ -1,3 +1,4 @@
+import { Link } from "@inertiajs/react";
 import React from "react";
 
 export const meta = {
@@ -78,7 +79,7 @@ export default function TheGumroadDashboardApp() {
         </p>
         <p>
           The amounts shown for individual sales and the total over a given time period are before we've applied
-          <a href="/help/article/66-gumroads-fees"> our transaction fee</a>.{" "}
+          <Link href="/help/article/66-gumroads-fees"> our transaction fee</Link>.{" "}
         </p>
         <figure>
           <img
@@ -101,33 +102,33 @@ export default function TheGumroadDashboardApp() {
         </figure>
         <p>
           If you do not see a product or file in the app, the product may not be mobile-friendly. For example, it might
-          be a <a href="/help/article/206-how-to-open-zip-and-rar-files">RAR file</a>, which needs to be opened on your
-          desktop. Essentially, the product does not contain a file that can be read, watched, or listened to on our
-          app.
+          be a <Link href="/help/article/206-how-to-open-zip-and-rar-files">RAR file</Link>, which needs to be opened on
+          your desktop. Essentially, the product does not contain a file that can be read, watched, or listened to on
+          our app.
         </p>
       </div>
       <div>
         <h3>Related Articles</h3>
         <ul>
           <li>
-            <a href="/help/article/268-customer-dashboard">
+            <Link href="/help/article/268-customer-dashboard">
               <span>The sales dashboard</span>
-            </a>
+            </Link>
           </li>
           <li>
-            <a href="/help/article/74-the-analytics-dashboard">
+            <Link href="/help/article/74-the-analytics-dashboard">
               <span>The sales analytics dashboard</span>
-            </a>
+            </Link>
           </li>
           <li>
-            <a href="/help/article/247-what-your-customers-see">
+            <Link href="/help/article/247-what-your-customers-see">
               <span>The Gumroad Library</span>
-            </a>
+            </Link>
           </li>
           <li>
-            <a href="/help/article/174-third-party-analytics">
+            <Link href="/help/article/174-third-party-analytics">
               <span>Third-party analytics</span>
-            </a>
+            </Link>
           </li>
         </ul>
       </div>

@@ -1,3 +1,4 @@
+import { Link } from "@inertiajs/react";
 import React from "react";
 
 export const meta = {
@@ -66,8 +67,8 @@ export default function INeedAnInvoice() {
         </p>
         <h3 id="Dont-have-your-receipt-Kger0">Don't have your receipt?</h3>
         <p>
-          Please see <a href="/help/article/212-i-never-received-a-receipt">this article</a> if you are unable to find
-          your receipt.
+          Please see <Link href="/help/article/212-i-never-received-a-receipt">this article</Link> if you are unable to
+          find your receipt.
         </p>
         <h3 id="Older-purchases-II5BZ">Older purchases</h3>
         <p>
@@ -87,14 +88,14 @@ export default function INeedAnInvoice() {
         <h3>Related Articles</h3>
         <ul>
           <li>
-            <a href="/help/article/200-i-need-a-vat-refund">
+            <Link href="/help/article/200-i-need-a-vat-refund">
               <span>I need a VAT refund</span>
-            </a>
+            </Link>
           </li>
           <li>
-            <a href="/help/article/212-i-never-received-a-receipt">
+            <Link href="/help/article/212-i-never-received-a-receipt">
               <span>I never received a receipt</span>
-            </a>
+            </Link>
           </li>
         </ul>
       </div>

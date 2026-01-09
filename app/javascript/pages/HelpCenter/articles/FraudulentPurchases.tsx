@@ -1,3 +1,4 @@
+import { Link } from "@inertiajs/react";
 import React from "react";
 
 export const meta = {
@@ -54,9 +55,9 @@ export default function FraudulentPurchases() {
           </li>
         </ol>
         <p>
-          For our regular, honest creators, we offer the <a href="/help/article/62-testing-a-purchase">test purchase</a>{" "}
-          feature. This lets you buy your own products without using actual money, and therefore, recreating the same
-          behavior as our fraudster friends.{" "}
+          For our regular, honest creators, we offer the{" "}
+          <Link href="/help/article/62-testing-a-purchase">test purchase</Link> feature. This lets you buy your own
+          products without using actual money, and therefore, recreating the same behavior as our fraudster friends.{" "}
         </p>
         <p>
           All that said, the majority of the fraud that we see on Gumroad consists of people using stolen credit/debit
@@ -66,7 +67,7 @@ export default function FraudulentPurchases() {
         </p>
         <p>
           Such purchases inevitably result in{" "}
-          <a href="/help/article/134-how-does-gumroad-handle-chargebacks">chargebacks</a> (essentially a forced,
+          <Link href="/help/article/134-how-does-gumroad-handle-chargebacks">chargebacks</Link> (essentially a forced,
           non-negotiable refund enforced by card networks), or proactive refunds on our end, if we can catch them early
           enough.{" "}
         </p>
@@ -80,8 +81,8 @@ export default function FraudulentPurchases() {
         <p>
           When we get these notifications, we refund every sale listed as a measure to prevent future fraud and enhance
           our ability to catch these same fraudsters when they try to buy things again. We also do this to prevent{" "}
-          <a href="/help/article/134-how-does-gumroad-handle-chargebacks">chargebacks</a>, because chargebacks cost
-          Gumroad money, hurt our credit line, and make it harder for us to do business as a payment processor.{" "}
+          <Link href="/help/article/134-how-does-gumroad-handle-chargebacks">chargebacks</Link>, because chargebacks
+          cost Gumroad money, hurt our credit line, and make it harder for us to do business as a payment processor.{" "}
         </p>
         <p>When we refund these sales, you'll receive an email from us.</p>
         <h3 id="So-you-got-an-email-BBJFN">So you got an email...</h3>
@@ -104,9 +105,10 @@ export default function FraudulentPurchases() {
         <p>
           Unfortunately, these refunds do entail a loss of money on everyone's part. We can not simply choose{" "}
           <span>not</span> to refund these sales, as it would be illegal to keep stolen money. Moreover, not refunding
-          fraudulent sales leads to <a href="/help/article/134-how-does-gumroad-handle-chargebacks">chargebacks</a>,
-          which cost Gumroad <span>more</span> money than simple refunds. Thus, Gumroad can not reimburse its creators
-          for fraudulent sales.
+          fraudulent sales leads to{" "}
+          <Link href="/help/article/134-how-does-gumroad-handle-chargebacks">chargebacks</Link>, which cost Gumroad{" "}
+          <span>more</span> money than simple refunds. Thus, Gumroad can not reimburse its creators for fraudulent
+          sales.
         </p>
         <h3 id="-What-do-I-a-creator-have-to-do-xJW8R"> What do I, a creator, have to do?</h3>
         <p>
@@ -138,7 +140,7 @@ export default function FraudulentPurchases() {
         <h3 id="Can-I-block-customers-on-my-own--I3Xch">Can I block customers on my own? </h3>
         <p>Yes!</p>
         <p>
-          Using our <a href="/help/article/329-customer-moderation">Customer Moderation tools</a>, you can block
+          Using our <Link href="/help/article/329-customer-moderation">Customer Moderation tools</Link>, you can block
           customers from purchasing your products. You can also revoke access to their content if you've noticed a
           customer distributing your content illegally or otherwise violating your terms.
         </p>
@@ -147,19 +149,19 @@ export default function FraudulentPurchases() {
         <h3>Related Articles</h3>
         <ul>
           <li>
-            <a href="/help/article/134-how-does-gumroad-handle-chargebacks">
+            <Link href="/help/article/134-how-does-gumroad-handle-chargebacks">
               <span>Chargebacks on Gumroad</span>
-            </a>
+            </Link>
           </li>
           <li>
-            <a href="/help/article/42-content-security">
+            <Link href="/help/article/42-content-security">
               <span>Content protection on Gumroad</span>
-            </a>
+            </Link>
           </li>
           <li>
-            <a href="/help/article/161-what-gumroad-considers-fraud">
+            <Link href="/help/article/161-what-gumroad-considers-fraud">
               <span>Defining fraud on Gumroad</span>
-            </a>
+            </Link>
           </li>
         </ul>
       </div>

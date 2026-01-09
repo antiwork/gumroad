@@ -1,3 +1,4 @@
+import { Link } from "@inertiajs/react";
 import React from "react";
 
 export const meta = {
@@ -92,8 +93,8 @@ export default function GuideToMemberships() {
           remain active until the end of the current billing cycle.
         </p>
         <p>
-          Read <a href="/help/article/192-how-do-i-cancel-my-membership">this article</a> to know more about cancelling
-          memberships.
+          Read <Link href="/help/article/192-how-do-i-cancel-my-membership">this article</Link> to know more about
+          cancelling memberships.
         </p>
         <h3 id="Restarting-a-membership-o4BBz">Restarting a membership</h3>
         <p>
@@ -180,9 +181,9 @@ export default function GuideToMemberships() {
         <h3>Related Articles</h3>
         <ul>
           <li>
-            <a href="/help/article/192-how-do-i-cancel-my-membership">
+            <Link href="/help/article/192-how-do-i-cancel-my-membership">
               <span>How do I cancel my membership?</span>
-            </a>
+            </Link>
           </li>
         </ul>
       </div>

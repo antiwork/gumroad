@@ -1,3 +1,4 @@
+import { Link } from "@inertiajs/react";
 import React from "react";
 
 export const meta = {
@@ -14,9 +15,10 @@ export default function HowDoISendMyGumroadPurchaseToMyKindle() {
         </p>
         <p>
           <strong>Note:</strong> ePub files do not work on Kindle for now. If you have mistakenly purchased an ePub file
-          and need a PDF, please <a href="/help/article/195-theres-an-issue-with-my-purchase">contact the creator</a>.
-          Also, Gumroad can only send files 16 MB in size or smaller. If the "Send to Kindle" button is not appearing in
-          your Library, please verify the size of the file you have purchased.
+          and need a PDF, please{" "}
+          <Link href="/help/article/195-theres-an-issue-with-my-purchase">contact the creator</Link>. Also, Gumroad can
+          only send files 16 MB in size or smaller. If the "Send to Kindle" button is not appearing in your Library,
+          please verify the size of the file you have purchased.
         </p>
         <h3>Send from your Gumroad Library</h3>
         <ol>
@@ -81,9 +83,9 @@ export default function HowDoISendMyGumroadPurchaseToMyKindle() {
         <h3>Related Articles</h3>
         <ul>
           <li>
-            <a href="/help/article/210-send-your-purchase-to-dropbox">
+            <Link href="/help/article/210-send-your-purchase-to-dropbox">
               <span>How do I send my purchase to Dropbox?</span>
-            </a>
+            </Link>
           </li>
         </ul>
       </div>

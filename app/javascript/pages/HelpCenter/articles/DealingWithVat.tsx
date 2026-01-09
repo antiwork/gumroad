@@ -1,3 +1,4 @@
+import { Link } from "@inertiajs/react";
 import React from "react";
 
 export const meta = {
@@ -81,9 +82,9 @@ export default function DealingWithVat() {
           <li>
             If your customers have a VAT ID, they can enter it at checkout or later into their invoice to get a refund.
             More information{" "}
-            <a href="/help/article/200-i-need-a-vat-refund" target="_blank" rel="noreferrer">
+            <Link href="/help/article/200-i-need-a-vat-refund" target="_blank" rel="noreferrer">
               here
-            </a>
+            </Link>
             .
           </li>
         </ul>
@@ -113,9 +114,9 @@ export default function DealingWithVat() {
         <h3>Related Articles</h3>
         <ul>
           <li>
-            <a href="/help/article/121-sales-tax-on-gumroad">
+            <Link href="/help/article/121-sales-tax-on-gumroad">
               <span>Sales tax on Gumroad</span>
-            </a>
+            </Link>
           </li>
         </ul>
       </div>

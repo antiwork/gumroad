@@ -1,3 +1,4 @@
+import { Link } from "@inertiajs/react";
 import React from "react";
 
 export const meta = {
@@ -70,8 +71,8 @@ export default function TheSettingsMenu() {
         </figure>
         <p>
           You can customize the notifications you wish to receive via email or push notifications through the{" "}
-          <a href="/help/article/177-the-gumroad-dashboard-app">Gumroad Dashboard app</a>. Don't want to receive email
-          notifications for every $0 purchase? No problem, toggle off notifications for "Free downloads!"
+          <Link href="/help/article/177-the-gumroad-dashboard-app">Gumroad Dashboard app</Link>. Don't want to receive
+          email notifications for every $0 purchase? No problem, toggle off notifications for "Free downloads!"
         </p>
         <h3 id="Support-email-t50Tg">Support email</h3>
         <figure>
@@ -90,7 +91,7 @@ export default function TheSettingsMenu() {
         </figure>
         <p>
           The <b>time zone</b> you select will also affect your{" "}
-          <a href="/help/article/74-the-analytics-dashboard">sales and following dashboards</a>.
+          <Link href="/help/article/74-the-analytics-dashboard">sales and following dashboards</Link>.
         </p>
         <h3 id="Currency-JsGGs">Currency</h3>
         <figure>
@@ -111,7 +112,7 @@ export default function TheSettingsMenu() {
         </p>
         <p>
           For more information on how we handle currencies, check out{" "}
-          <a href="/help/article/46-what-currency-does-gumroad-use">this article</a>.{" "}
+          <Link href="/help/article/46-what-currency-does-gumroad-use">this article</Link>.{" "}
         </p>
         <h3 id="Sales-tax-V0G0j">Sales tax</h3>
         <figure>
@@ -141,15 +142,15 @@ export default function TheSettingsMenu() {
         </p>
         <p>
           Your <a href="http://www.gumroad.com/settings/payments">payments page</a> allows you to{" "}
-          <a href="/help/article/13-getting-paid">get paid</a> for the products you sell on Gumroad.
+          <Link href="/help/article/13-getting-paid">get paid</Link> for the products you sell on Gumroad.
         </p>
         <p>
           You can read more about the payouts settings page{" "}
-          <a href="/help/article/260-your-payout-settings-page">here</a>.
+          <Link href="/help/article/260-your-payout-settings-page">here</Link>.
         </p>
         <p>
           If you live in a country where PayPal Connect is enabled, you can connect your PayPal account below the Payout
-          method. This allows customers to pay <a href="/help/article/275-paypal-connect">using PayPal</a>.{" "}
+          method. This allows customers to pay <Link href="/help/article/275-paypal-connect">using PayPal</Link>.{" "}
         </p>
         <figure>
           <img
@@ -169,10 +170,10 @@ export default function TheSettingsMenu() {
         <p>Your advanced settings allow you to: </p>
         <ul>
           <li>
-            <a href="/help/article/153-setting-up-a-custom-domain">Connect a custom domain</a>.
+            <Link href="/help/article/153-setting-up-a-custom-domain">Connect a custom domain</Link>.
           </li>
           <li>
-            <a href="/help/article/329-customer-moderation">Mass block customer emails</a>.
+            <Link href="/help/article/329-customer-moderation">Mass block customer emails</Link>.
           </li>
           <li>
             Use Gumroad's <a href="https://gumroad.com/ping">Ping service</a> to help automate specific post-sale tasks.{" "}
@@ -186,24 +187,24 @@ export default function TheSettingsMenu() {
         <h3>Related Articles</h3>
         <ul>
           <li>
-            <a href="/help/article/124-your-gumroad-profile-page">
+            <Link href="/help/article/124-your-gumroad-profile-page">
               <span>Build a website on Gumroad</span>
-            </a>
+            </Link>
           </li>
           <li>
-            <a href="/help/article/37-how-to-delete-your-gumroad-account">
+            <Link href="/help/article/37-how-to-delete-your-gumroad-account">
               <span>Deleting a Gumroad account</span>
-            </a>
+            </Link>
           </li>
           <li>
-            <a href="/help/article/292-account-login-security">
+            <Link href="/help/article/292-account-login-security">
               <span>Account login security</span>
-            </a>
+            </Link>
           </li>
           <li>
-            <a href="/help/article/326-teams-and-roles">
+            <Link href="/help/article/326-teams-and-roles">
               <span>Teams and Roles</span>
-            </a>
+            </Link>
           </li>
         </ul>
       </div>

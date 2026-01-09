@@ -1,3 +1,4 @@
+import { Link } from "@inertiajs/react";
 import React from "react";
 
 export const meta = {
@@ -54,15 +55,15 @@ export default function ProductRatingsOnGumroad() {
           they are logged in to Gumroad.
         </p>
         <p>
-          For memberships with <a href="/help/article/82-membership-products#FreeTrials">free trials</a>, reviews are
-          allowed only after the first successful charge and not when the free trial begins.
+          For memberships with <Link href="/help/article/82-membership-products#FreeTrials">free trials</Link>, reviews
+          are allowed only after the first successful charge and not when the free trial begins.
         </p>
         <p>
           We automatically send a reminder email to customers who have yet to leave a review 5 days after their
           purchase, but customers can unsubscribe from these emails. You can also solicit reviews by{" "}
-          <a href="/help/article/169-how-to-send-an-update">sending an email</a> or{" "}
-          <a href="/help/article/131-using-workflows-to-send-automated-updates">creating a workflow</a> targeting only
-          the customers of a specific product.
+          <Link href="/help/article/169-how-to-send-an-update">sending an email</Link> or{" "}
+          <Link href="/help/article/131-using-workflows-to-send-automated-updates">creating a workflow</Link> targeting
+          only the customers of a specific product.
         </p>
         <p>
           We also notify you via email when a written review is submitted for your product. However, you can turn off
@@ -79,8 +80,8 @@ export default function ProductRatingsOnGumroad() {
           potential customers on product fixes to previous issues.
         </p>
         <p>
-          You can also <a href="/help/article/74-the-analytics-dashboard#sales-csv">export a sales CSV</a> and find the
-          ratings in the "Rating" column.
+          You can also <Link href="/help/article/74-the-analytics-dashboard#sales-csv">export a sales CSV</Link> and
+          find the ratings in the "Rating" column.
         </p>
         <h3 id="add-reviews">Add reviews to product descriptions</h3>
         <p>You can embed reviews to your product descriptions by taking the following steps:</p>
@@ -93,7 +94,7 @@ export default function ProductRatingsOnGumroad() {
         <h3 id="Organize-products-by-rating-on-your-profile-X_tME">Organize products by rating on your profile</h3>
         <p>
           You can organize your products by rating on your profile page by selecting "Highest rated" as the default sort
-          order on <a href="/help/article/124-your-gumroad-profile-page">your profile page</a>.
+          order on <Link href="/help/article/124-your-gumroad-profile-page">your profile page</Link>.
         </p>
         <figure>
           <img
@@ -105,7 +106,7 @@ export default function ProductRatingsOnGumroad() {
         <p>
           You can refund a purchase to remove its rating. For membership purchases, you just need to refund the original
           charge and not all the recurring charges. In case of a free download, you can{" "}
-          <a href="/help/article/329-customer-moderation">revoke its access</a> to remove the rating.
+          <Link href="/help/article/329-customer-moderation">revoke its access</Link> to remove the rating.
         </p>
         <p>Issuing a partial refund will not remove a customer's rating.</p>
         <p>
@@ -128,16 +129,16 @@ export default function ProductRatingsOnGumroad() {
         </p>
         <p>
           Be aware that when you do this, your product will <strong>not show up</strong> in the{" "}
-          <a href="/help/article/79-gumroad-discover">Discover search</a> anymore.{" "}
+          <Link href="/help/article/79-gumroad-discover">Discover search</Link> anymore.{" "}
         </p>
       </div>
       <div>
         <h3>Related Articles</h3>
         <ul>
           <li>
-            <a href="/help/article/149-adding-a-product">
+            <Link href="/help/article/149-adding-a-product">
               <span>Adding a product</span>
-            </a>
+            </Link>
           </li>
         </ul>
       </div>

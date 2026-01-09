@@ -1,3 +1,4 @@
+import { Link } from "@inertiajs/react";
 import React from "react";
 
 export const meta = {
@@ -95,7 +96,7 @@ export default function CustomerDashboard() {
         <h3 id="Discover-or-Offer-codes-Ij0xL">Discover or Discount codes</h3>
         <p>
           Right below the product title, you're able to see if a Customer found this product via{" "}
-          <a href="/help/article/79-gumroad-discover">Discover</a> or if a{" "}
+          <Link href="/help/article/79-gumroad-discover">Discover</Link> or if a{" "}
           <a href="https://gumroad.com/help/article/128-discount-codes">Discount code</a> was used.{" "}
         </p>
         <figure>
@@ -115,8 +116,8 @@ export default function CustomerDashboard() {
           purchase. Please reach out to support@gumroad.com in this case.{" "}
         </p>
         <p>
-          You can also select if a customer receives your <a href="/help/article/169-how-to-send-an-update">emails</a>{" "}
-          or not.
+          You can also select if a customer receives your{" "}
+          <Link href="/help/article/169-how-to-send-an-update">emails</Link> or not.
         </p>
         <figure>
           <img
@@ -137,8 +138,8 @@ export default function CustomerDashboard() {
         </figure>
         <h3 id="Manage-license-keys-5AuIs">Manage license keys</h3>
         <p>
-          You can disable a <a href="/help/article/76-license-keys">license key</a> or change the number of seats for a
-          multi-seat license key.
+          You can disable a <Link href="/help/article/76-license-keys">license key</Link> or change the number of seats
+          for a multi-seat license key.
         </p>
         <p>
           Customers will immediately be charged a prorated amount if the number of seats is increased. However, for a
@@ -165,8 +166,8 @@ export default function CustomerDashboard() {
         <h3 id="Ratings-HLwRM">Ratings</h3>
         <p>
           You can see how a customer has rated your product. If you're unhappy with your ratings, you can hide all of{" "}
-          <a href="/help/article/222-product-ratings-on-gumroad">them</a> from being visible or refund the customer to
-          automatically delete their rating. You cannot hide a single rating only.
+          <Link href="/help/article/222-product-ratings-on-gumroad">them</Link> from being visible or refund the
+          customer to automatically delete their rating. You cannot hide a single rating only.
         </p>
         <figure>
           <img
@@ -184,12 +185,12 @@ export default function CustomerDashboard() {
         </figure>
         <p>
           If you want to prevent customers from subscribing or delete a membership product entirely, you can use{" "}
-          <a href="/help/article/139-how-to-cancel-your-customers-subscriptions">these methods</a>.{" "}
+          <Link href="/help/article/139-how-to-cancel-your-customers-subscriptions">these methods</Link>.{" "}
         </p>
         <h3 id="Refund-a-customer-tQVdX">Refund a customer</h3>
         <p>
-          You can <a href="/help/article/47-how-to-refund-a-customer">refund a customer</a> from the dashboard as well.
-          If you only want to issue a partial refund, type in the amount you want to refund and hit "Issue partial
+          You can <Link href="/help/article/47-how-to-refund-a-customer">refund a customer</Link> from the dashboard as
+          well. If you only want to issue a partial refund, type in the amount you want to refund and hit "Issue partial
           refund".
         </p>
         <figure>
@@ -200,10 +201,10 @@ export default function CustomerDashboard() {
         </figure>
         <h3 id="Resend-posts-workflow-emails-and-receipts-l2OYk">Resend posts, workflow emails, and receipts</h3>
         <p>
-          You can resend <a href="/help/article/169-how-to-send-an-update">emails</a>,{" "}
-          <a href="/help/article/131-using-workflows-to-send-automated-updates">workflow emails</a>, and receipts at the
-          bottom of this section. If your customer did not receive a receipt from you,{" "}
-          <a href="/help/article/78-my-customer-did-not-receive-a-receipt">here are a few common reasons why</a>.{" "}
+          You can resend <Link href="/help/article/169-how-to-send-an-update">emails</Link>,{" "}
+          <Link href="/help/article/131-using-workflows-to-send-automated-updates">workflow emails</Link>, and receipts
+          at the bottom of this section. If your customer did not receive a receipt from you,{" "}
+          <Link href="/help/article/78-my-customer-did-not-receive-a-receipt">here are a few common reasons why</Link>.{" "}
         </p>
         <figure>
           <img
@@ -213,10 +214,11 @@ export default function CustomerDashboard() {
         </figure>
         <h3 id="Export-a-sales-CSV-f-1YW">Export a sales CSV</h3>
         <p>
-          At any time, you can <a href="/help/article/74-the-analytics-dashboard#sales-csv">download a CSV file</a> of
-          your customers and their purchases within a selected date range. If the CSV is not immediately available for
-          download, it will be emailed to you. This CSV will cover all sales of your products within the date range, or
-          you can choose to download information pertaining to a single product. Please note that{" "}
+          At any time, you can{" "}
+          <Link href="/help/article/74-the-analytics-dashboard#sales-csv">download a CSV file</Link> of your customers
+          and their purchases within a selected date range. If the CSV is not immediately available for download, it
+          will be emailed to you. This CSV will cover all sales of your products within the date range, or you can
+          choose to download information pertaining to a single product. Please note that{" "}
           <a href="#Search-and-Filter-5a7fG">any filters</a> you applied to this page will not apply to the export.
         </p>
         <figure>
@@ -230,14 +232,14 @@ export default function CustomerDashboard() {
         <h3>Related Articles</h3>
         <ul>
           <li>
-            <a href="/help/article/47-how-to-refund-a-customer">
+            <Link href="/help/article/47-how-to-refund-a-customer">
               <span>Issuing a refund</span>
-            </a>
+            </Link>
           </li>
           <li>
-            <a href="/help/article/78-my-customer-did-not-receive-a-receipt">
+            <Link href="/help/article/78-my-customer-did-not-receive-a-receipt">
               <span>Customers not receiving receipts</span>
-            </a>
+            </Link>
           </li>
         </ul>
       </div>

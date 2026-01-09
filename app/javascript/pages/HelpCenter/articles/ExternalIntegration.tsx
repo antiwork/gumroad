@@ -1,3 +1,4 @@
+import { Link } from "@inertiajs/react";
 import React from "react";
 
 export const meta = {
@@ -105,8 +106,8 @@ export default function ExternalIntegration() {
       </figure>
       <h3 id="customization">Customize your integration further</h3>
       <p>
-        If your product has <a href="/help/article/149-adding-a-product#versions">versions</a> or you have a{" "}
-        <a href="/help/article/82-membership-products#Tiers">membership with tiers</a>, you can choose to either:{" "}
+        If your product has <Link href="/help/article/149-adding-a-product#versions">versions</Link> or you have a{" "}
+        <Link href="/help/article/82-membership-products#Tiers">membership with tiers</Link>, you can choose to either:{" "}
       </p>
       <p>1) Enable the integration for all your versions from the Integrations section, or </p>
       <p>2) Enable specific ones from the respective version's settings.</p>
@@ -117,7 +118,7 @@ export default function ExternalIntegration() {
         />
       </figure>
       <p>
-        For <a href="/help/article/82-membership-products">membership products</a>, by default, Gumroad will
+        For <Link href="/help/article/82-membership-products">membership products</Link>, by default, Gumroad will
         automatically remove the customer from the connected service if and when the membership ends. You can turn this
         off when adding an integration.
       </p>

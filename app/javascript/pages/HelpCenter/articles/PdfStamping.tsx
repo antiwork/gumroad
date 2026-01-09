@@ -1,3 +1,4 @@
+import { Link } from "@inertiajs/react";
 import React from "react";
 
 export const meta = {
@@ -63,29 +64,29 @@ export default function PdfStamping() {
         <h3>Related Articles</h3>
         <ul>
           <li>
-            <a href="/help/article/149-adding-a-product">
+            <Link href="/help/article/149-adding-a-product">
               <span>Adding a product</span>
-            </a>
+            </Link>
           </li>
           <li>
-            <a href="/help/article/101-designing-your-product-page">
+            <Link href="/help/article/101-designing-your-product-page">
               <span>Checkout customization</span>
-            </a>
+            </Link>
           </li>
           <li>
-            <a href="/help/article/81-custom-product-urls">
+            <Link href="/help/article/81-custom-product-urls">
               <span>Custom product URLs</span>
-            </a>
+            </Link>
           </li>
           <li>
-            <a href="/help/article/42-content-security">
+            <Link href="/help/article/42-content-security">
               <span>Content protection on Gumroad</span>
-            </a>
+            </Link>
           </li>
           <li>
-            <a href="/help/article/302-sell-ebooks">
+            <Link href="/help/article/302-sell-ebooks">
               <span>How to sell eBooks</span>
-            </a>
+            </Link>
           </li>
         </ul>
       </div>

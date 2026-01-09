@@ -1,3 +1,4 @@
+import { Link } from "@inertiajs/react";
 import React from "react";
 
 export const meta = {
@@ -45,8 +46,8 @@ export default function FileSizeLimitsOnGumroad() {
       <h3 id="250-MB-File-size-limit-g_EnM">250 MB limit</h3>
       <p>
         If you price your product at $0, then the max <i>product</i> size can be 250 MB. In other words, if you're using
-        our <a href="/help/article/133-pay-what-you-want-pricing">Pay What You Want</a> feature, and setting the lowest
-        possible price to be $0, then the max cumulative size of all your files can be 250 MB.
+        our <Link href="/help/article/133-pay-what-you-want-pricing">Pay What You Want</Link> feature, and setting the
+        lowest possible price to be $0, then the max cumulative size of all your files can be 250 MB.
       </p>
       <h3 id="Download-All-button--rvoOs">Download All button </h3>
       <p>

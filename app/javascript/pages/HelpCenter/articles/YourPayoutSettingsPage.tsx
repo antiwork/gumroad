@@ -1,3 +1,4 @@
+import { Link } from "@inertiajs/react";
 import React from "react";
 
 export const meta = {
@@ -98,14 +99,14 @@ export default function YourPayoutSettingsPage() {
         <h3>Related Articles</h3>
         <ul>
           <li>
-            <a href="/help/article/275-paypal-connect">
+            <Link href="/help/article/275-paypal-connect">
               <span>Adding PayPal to checkout</span>
-            </a>
+            </Link>
           </li>
           <li>
-            <a href="/help/article/330-stripe-connect">
+            <Link href="/help/article/330-stripe-connect">
               <span>Connect your Stripe account to Gumroad</span>
-            </a>
+            </Link>
           </li>
         </ul>
       </div>

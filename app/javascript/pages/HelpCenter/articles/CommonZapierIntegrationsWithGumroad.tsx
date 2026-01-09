@@ -1,3 +1,4 @@
+import { Link } from "@inertiajs/react";
 import React from "react";
 
 export const meta = {
@@ -64,9 +65,9 @@ export default function CommonZapierIntegrationsWithGumroad() {
         <h3>Related Articles</h3>
         <ul>
           <li>
-            <a href="/help/article/174-third-party-analytics">
+            <Link href="/help/article/174-third-party-analytics">
               <span>Third-party analytics</span>
-            </a>
+            </Link>
           </li>
         </ul>
       </div>

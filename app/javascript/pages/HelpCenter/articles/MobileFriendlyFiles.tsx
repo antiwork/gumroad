@@ -1,3 +1,4 @@
+import { Link } from "@inertiajs/react";
 import React from "react";
 
 export const meta = {
@@ -11,8 +12,8 @@ export default function MobileFriendlyFiles() {
       <div>
         <p>
           If you have created a product on Gumroad and want your customers to be able to take full advantage of the{" "}
-          <a href="/help/article/177-the-gumroad-dashboard-app">Gumroad app</a> (for iOS and Android!), it is important
-          to be aware of the types of files that can be accessed in the Gumroad app.
+          <Link href="/help/article/177-the-gumroad-dashboard-app">Gumroad app</Link> (for iOS and Android!), it is
+          important to be aware of the types of files that can be accessed in the Gumroad app.
         </p>
         <p>For your convenience, we've assembled those filetypes here:</p>
         <h3>Audio</h3>
@@ -54,19 +55,19 @@ export default function MobileFriendlyFiles() {
         <h3>Related Articles</h3>
         <ul>
           <li>
-            <a href="/help/article/247-what-your-customers-see">
+            <Link href="/help/article/247-what-your-customers-see">
               <span>The Gumroad Library</span>
-            </a>
+            </Link>
           </li>
           <li>
-            <a href="/help/article/43-streaming-videos">
+            <Link href="/help/article/43-streaming-videos">
               <span>Prepare videos for streaming</span>
-            </a>
+            </Link>
           </li>
           <li>
-            <a href="/help/article/176-metadata-for-audio-files">
+            <Link href="/help/article/176-metadata-for-audio-files">
               <span>Metadata for audio files</span>
-            </a>
+            </Link>
           </li>
         </ul>
       </div>

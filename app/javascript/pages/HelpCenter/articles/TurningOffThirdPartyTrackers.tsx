@@ -1,3 +1,4 @@
+import { Link } from "@inertiajs/react";
 import React from "react";
 
 export const meta = {
@@ -33,9 +34,9 @@ export default function TurningOffThirdPartyTrackers() {
           <tr>
             <td>Earn extra trust from customers by respecting their privacy</td>
             <td>
-              This setting disables the <a href="/help/article/174-third-party-analytics">Google Analytics</a> and{" "}
-              <a href="/help/article/174-third-party-analytics#Facebook-yo4eq">Facebook Pixel</a> integrations, if in
-              use.
+              This setting disables the <Link href="/help/article/174-third-party-analytics">Google Analytics</Link> and{" "}
+              <Link href="/help/article/174-third-party-analytics#Facebook-yo4eq">Facebook Pixel</Link> integrations, if
+              in use.
             </td>
           </tr>
           <tr>
@@ -64,7 +65,7 @@ export default function TurningOffThirdPartyTrackers() {
       <p>3) Click "Update settings"</p>
       <p>
         For more on analytics and tracking, check out{" "}
-        <a href="/help/article/174-third-party-analytics">Third-party analytics</a>
+        <Link href="/help/article/174-third-party-analytics">Third-party analytics</Link>
       </p>
     </div>
   );

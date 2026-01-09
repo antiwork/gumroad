@@ -1,3 +1,4 @@
+import { Link } from "@inertiajs/react";
 import React from "react";
 
 export const meta = {
@@ -120,24 +121,24 @@ export default function GumroadAndAdultContent() {
         <h3>Related Articles</h3>
         <ul>
           <li>
-            <a href="/help/article/155-things-you-cant-sell-on-gumroad">
+            <Link href="/help/article/155-things-you-cant-sell-on-gumroad">
               <span>Things not allowed on Gumroad</span>
-            </a>
+            </Link>
           </li>
           <li>
-            <a href="/help/article/79-gumroad-discover">
+            <Link href="/help/article/79-gumroad-discover">
               <span>Gumroad Discover</span>
-            </a>
+            </Link>
           </li>
           <li>
-            <a href="/help/article/70-can-i-sell-services">
+            <Link href="/help/article/70-can-i-sell-services">
               <span>Sell digital services: freelancing, coaching, and tip jars</span>
-            </a>
+            </Link>
           </li>
           <li>
-            <a href="/help/article/160-suspension">
+            <Link href="/help/article/160-suspension">
               <span>Account suspension FAQ</span>
-            </a>
+            </Link>
           </li>
         </ul>
       </div>

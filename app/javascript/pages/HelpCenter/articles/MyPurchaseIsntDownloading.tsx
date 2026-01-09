@@ -1,3 +1,4 @@
+import { Link } from "@inertiajs/react";
 import React from "react";
 
 export const meta = {
@@ -12,8 +13,8 @@ export default function MyPurchaseIsntDownloading() {
         <p>Here are the most common reasons why a download may not be working from Gumroad:</p>
         <h3>Downloading on mobile devices</h3>
         <p>
-          Please use our <a href="/help/article/177-the-gumroad-dashboard-app">mobile app</a> to download files directly
-          to your device, or:
+          Please use our <Link href="/help/article/177-the-gumroad-dashboard-app">mobile app</Link> to download files
+          directly to your device, or:
         </p>
         <ul>
           <li>Download the files to your laptop or desktop computer</li>
@@ -24,7 +25,8 @@ export default function MyPurchaseIsntDownloading() {
           It may be the case that your internet connection doesn't support downloading large files (when downloading big
           files, sometimes your ISP has a time-out limit). You can call your provider to know more, or{" "}
           <a href="http://www.speedtest.net/">click here</a> to check if you have a speed issue. You may find that{" "}
-          <a href="/help/article/210-send-your-purchase-to-dropbox">sending the file to your Dropbox</a> will be faster.
+          <Link href="/help/article/210-send-your-purchase-to-dropbox">sending the file to your Dropbox</Link> will be
+          faster.
         </p>
         <p>
           Worst case scenario—we recommend finding a faster internet connection (for example, at a nearby university,
@@ -52,21 +54,21 @@ export default function MyPurchaseIsntDownloading() {
         </p>
         <p>
           If the file is a .ZIP or .RAR format, please refer to{" "}
-          <a href="/help/article/206-how-to-open-zip-and-rar-files">this article</a> for more information.
+          <Link href="/help/article/206-how-to-open-zip-and-rar-files">this article</Link> for more information.
         </p>
       </div>
       <div>
         <h3>Related Articles</h3>
         <ul>
           <li>
-            <a href="/help/article/199-how-do-i-access-my-purchase">
+            <Link href="/help/article/199-how-do-i-access-my-purchase">
               <span>How do I access my purchase?</span>
-            </a>
+            </Link>
           </li>
           <li>
-            <a href="/help/article/195-theres-an-issue-with-my-purchase">
+            <Link href="/help/article/195-theres-an-issue-with-my-purchase">
               <span>There's an issue with my purchase</span>
-            </a>
+            </Link>
           </li>
         </ul>
       </div>

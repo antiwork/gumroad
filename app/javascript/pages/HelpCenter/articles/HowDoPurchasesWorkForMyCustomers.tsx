@@ -1,3 +1,4 @@
+import { Link } from "@inertiajs/react";
 import React from "react";
 
 export const meta = {
@@ -56,7 +57,7 @@ export default function HowDoPurchasesWorkForMyCustomers() {
         </p>
         <p>
           If they didn't get their receipt,{" "}
-          <a href="/help/article/78-my-customer-did-not-receive-a-receipt">please refer to this article</a>.{" "}
+          <Link href="/help/article/78-my-customer-did-not-receive-a-receipt">please refer to this article</Link>.{" "}
         </p>
         <p>They can generate their own invoices through the Generate button at the bottom of their receipt:</p>
         <figure>
@@ -91,13 +92,17 @@ export default function HowDoPurchasesWorkForMyCustomers() {
         <p>To process PayPal payments, we use PayPal Connect. </p>
         <p>If you have not connected to PayPal Connect, your customers will not be able to pay via PayPal. </p>
         <p>
-          <a href="/help/article/275-paypal-connect">Read our article on PayPal Connect for a more thorough rundown</a>
+          <Link href="/help/article/275-paypal-connect">
+            Read our article on PayPal Connect for a more thorough rundown
+          </Link>
         </p>
         <h3 id="Why-do-purchases-fail-tcOa0">Why do purchases fail?</h3>
         <p>
           There are instances where a purchase is attempted and fails.{" "}
-          <a href="/help/article/266-why-are-my-customers-purchases-failing">This can happen for multiple reasons</a>,
-          but:
+          <Link href="/help/article/266-why-are-my-customers-purchases-failing">
+            This can happen for multiple reasons
+          </Link>
+          , but:
         </p>
         <p>The most common are:</p>
         <ul>
@@ -116,7 +121,7 @@ export default function HowDoPurchasesWorkForMyCustomers() {
         </h3>
         <p>
           To test how purchases work and how your files are delivered to customers, we have created a{" "}
-          <a href="/help/article/62-testing-a-purchase">test purchase functionality</a>. Please
+          <Link href="/help/article/62-testing-a-purchase">test purchase functionality</Link>. Please
           <b> don't pay for your products</b>, as it can be seen as fraud by our payment processors.{" "}
         </p>
         <br />
@@ -130,19 +135,19 @@ export default function HowDoPurchasesWorkForMyCustomers() {
         <h3>Related Articles</h3>
         <ul>
           <li>
-            <a href="/help/article/275-paypal-connect">
+            <Link href="/help/article/275-paypal-connect">
               <span>Adding PayPal to checkout</span>
-            </a>
+            </Link>
           </li>
           <li>
-            <a href="/help/article/62-testing-a-purchase">
+            <Link href="/help/article/62-testing-a-purchase">
               <span>Testing a purchase</span>
-            </a>
+            </Link>
           </li>
           <li>
-            <a href="/help/article/266-why-are-my-customers-purchases-failing">
+            <Link href="/help/article/266-why-are-my-customers-purchases-failing">
               <span>Why customer payments fail</span>
-            </a>
+            </Link>
           </li>
         </ul>
       </div>

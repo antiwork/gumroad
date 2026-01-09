@@ -1,3 +1,4 @@
+import { Link } from "@inertiajs/react";
 import React from "react";
 
 export const meta = {
@@ -63,14 +64,14 @@ export default function IndirectTaxesOnSalesViaDiscover() {
         <h3>Related Articles</h3>
         <ul>
           <li>
-            <a href="/help/article/79-gumroad-discover">
+            <Link href="/help/article/79-gumroad-discover">
               <span>Gumroad Discover</span>
-            </a>
+            </Link>
           </li>
           <li>
-            <a href="/help/article/121-sales-tax-on-gumroad">
+            <Link href="/help/article/121-sales-tax-on-gumroad">
               <span>Sales tax on Gumroad</span>
-            </a>
+            </Link>
           </li>
         </ul>
       </div>

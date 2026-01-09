@@ -1,3 +1,4 @@
+import { Link } from "@inertiajs/react";
 import React from "react";
 
 export const meta = {
@@ -57,8 +58,8 @@ export default function YourGumroadLibrary() {
         <h3>The Gumroad mobile app</h3>
         <p>
           You can also access your Library from our iOS or Android mobile app.{" "}
-          <a href="/help/article/177-the-gumroad-dashboard-app">Read this article</a> to know all about downloading and
-          using our app!
+          <Link href="/help/article/177-the-gumroad-dashboard-app">Read this article</Link> to know all about
+          downloading and using our app!
         </p>
         <figure>
           <img
@@ -71,9 +72,9 @@ export default function YourGumroadLibrary() {
         <h3>Related Articles</h3>
         <ul>
           <li>
-            <a href="/help/article/211-im-not-receiving-updates">
+            <Link href="/help/article/211-im-not-receiving-updates">
               <span>I'm not receiving updates</span>
-            </a>
+            </Link>
           </li>
         </ul>
       </div>

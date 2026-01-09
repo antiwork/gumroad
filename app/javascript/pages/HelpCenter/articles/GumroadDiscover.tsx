@@ -1,3 +1,4 @@
+import { Link } from "@inertiajs/react";
 import React from "react";
 
 export const meta = {
@@ -50,10 +51,10 @@ export default function GumroadDiscover() {
           </li>
           <li>
             Be verified by our risk team in the{" "}
-            <a href="/help/article/13-getting-paid#:~:text=For%20our%20review%2C%20we%20require%20your%20account%20to%20be%20legitimate%20in%20two%20major%20ways%3A">
+            <Link href="/help/article/13-getting-paid#:~:text=For%20our%20review%2C%20we%20require%20your%20account%20to%20be%20legitimate%20in%20two%20major%20ways%3A">
               {" "}
               risk review process
-            </a>
+            </Link>
             , which can take on average 3 weeks after you pass the $10 threshold.
           </li>
         </ul>
@@ -73,13 +74,13 @@ export default function GumroadDiscover() {
         <p>
           Note: Products on Discover are automatically opted into the Gumroad Affiliates Program. To learn more about
           this program and how to opt-out of it, see{" "}
-          <a href="/help/article/333-affiliates-on-gumroad">Affiliates on Gumroad.</a>
+          <Link href="/help/article/333-affiliates-on-gumroad">Affiliates on Gumroad.</Link>
         </p>
         <h3 id="Setting-product-categories-and-tags-L8D6v">Setting product categories and tags</h3>
         <p>
           To help customers find your products, use categories and tags. When you{" "}
-          <a href="/help/article/149-adding-a-product">create a product</a>, you can select your preferred category and
-          add tags on its Share tab.
+          <Link href="/help/article/149-adding-a-product">create a product</Link>, you can select your preferred
+          category and add tags on its Share tab.
         </p>
         <p>To add a tag to your product, scroll down to the Gumroad Discover section. </p>
         <figure>
@@ -130,8 +131,8 @@ export default function GumroadDiscover() {
         </figure>
         <h3 id="NSFW-tag-bWd81">NSFW tag</h3>
         <p>
-          If your product is <a href="/help/article/156-gumroad-and-adult-content#Selling-NSFW">NSFW</a>, be sure to tag
-          it so by setting the toggle on your product's Share tab.
+          If your product is <Link href="/help/article/156-gumroad-and-adult-content#Selling-NSFW">NSFW</Link>, be sure
+          to tag it so by setting the toggle on your product's Share tab.
         </p>
         <p>
           We will only display it to customers who opt in to see NSFW content by enabling the Adult content toggle in
@@ -145,14 +146,14 @@ export default function GumroadDiscover() {
         <h3>Related Articles</h3>
         <ul>
           <li>
-            <a href="/help/article/222-product-ratings-on-gumroad">
+            <Link href="/help/article/222-product-ratings-on-gumroad">
               <span>Product ratings and reviews</span>
-            </a>
+            </Link>
           </li>
           <li>
-            <a href="/help/article/325-indirect-taxes-on-sales-via-discover">
+            <Link href="/help/article/325-indirect-taxes-on-sales-via-discover">
               <span>Indirect taxes on sales via Gumroad Discover</span>
-            </a>
+            </Link>
           </li>
         </ul>
       </div>

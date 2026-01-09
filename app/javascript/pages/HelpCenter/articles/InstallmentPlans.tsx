@@ -1,3 +1,4 @@
+import { Link } from "@inertiajs/react";
 import React from "react";
 
 export const meta = {
@@ -87,19 +88,19 @@ export default function InstallmentPlans() {
         <h3>Related Articles</h3>
         <ul>
           <li>
-            <a href="/help/article/149-adding-a-product">
+            <Link href="/help/article/149-adding-a-product">
               <span>Adding a product</span>
-            </a>
+            </Link>
           </li>
           <li>
-            <a href="/help/article/66-gumroads-fees">
+            <Link href="/help/article/66-gumroads-fees">
               <span>Gumroad's fees</span>
-            </a>
+            </Link>
           </li>
           <li>
-            <a href="/help/article/82-membership-products">
+            <Link href="/help/article/82-membership-products">
               <span>Selling memberships and subscriptions</span>
-            </a>
+            </Link>
           </li>
         </ul>
       </div>

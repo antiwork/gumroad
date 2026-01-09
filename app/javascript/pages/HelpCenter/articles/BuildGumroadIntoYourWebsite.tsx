@@ -1,3 +1,4 @@
+import { Link } from "@inertiajs/react";
 import React from "react";
 
 export const meta = {
@@ -148,8 +149,8 @@ export default function BuildGumroadIntoYourWebsite() {
         </strong>
       </p>
       <p>
-        A: Yes! Check out our <a href="/help/article/270-url-parameters">URL parameters</a> article to see which fields
-        you can autofill on the checkout page.
+        A: Yes! Check out our <Link href="/help/article/270-url-parameters">URL parameters</Link> article to see which
+        fields you can autofill on the checkout page.
       </p>
     </div>
   );

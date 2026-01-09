@@ -1,3 +1,4 @@
+import { Link } from "@inertiajs/react";
 import React from "react";
 
 export const meta = {
@@ -49,17 +50,17 @@ export default function WhatCurrencyDoesGumroadUse() {
         <h3>For all credit/debit card-related sales:</h3>
         <p>
           If you live in one of the following{" "}
-          <a href="/help/article/13-getting-paid#DirectDeposits">direct-deposit countries</a>, Gumroad pays you out in
-          your native currency. All currency conversions happen based on the exchange rates at the time of sale, not at
-          the time of the payout. These are typically mid-market rates that you can estimate{" "}
+          <Link href="/help/article/13-getting-paid#DirectDeposits">direct-deposit countries</Link>, Gumroad pays you
+          out in your native currency. All currency conversions happen based on the exchange rates at the time of sale,
+          not at the time of the payout. These are typically mid-market rates that you can estimate{" "}
           <a href="https://dashboard.stripe.com/currency_conversion">here</a>.
         </p>
         <p>If you live in any other country, we pay you out via PayPal and you will be paid in USD. </p>
         <h3>For all sales made via PayPal &amp; Stripe Connect accounts:</h3>
         <p>
-          <a href="/help/article/275-paypal-connect">PayPal Connect</a> and{" "}
-          <a href="/help/article/330-stripe-connect#disputes">Stripe Connect</a> allow creators to get paid instantly to
-          their respective accounts whenever someone purchases their product.
+          <Link href="/help/article/275-paypal-connect">PayPal Connect</Link> and{" "}
+          <Link href="/help/article/330-stripe-connect#disputes">Stripe Connect</Link> allow creators to get paid
+          instantly to their respective accounts whenever someone purchases their product.
         </p>
         <p>
           For these sales, payouts will be at the time of sale and will be in the default currency of the creator's
@@ -70,19 +71,19 @@ export default function WhatCurrencyDoesGumroadUse() {
         <h3>Related Articles</h3>
         <ul>
           <li>
-            <a href="/help/article/13-getting-paid">
+            <Link href="/help/article/13-getting-paid">
               <span>Getting paid by Gumroad</span>
-            </a>
+            </Link>
           </li>
           <li>
-            <a href="/help/article/66-gumroads-fees">
+            <Link href="/help/article/66-gumroads-fees">
               <span>Gumroad's fees</span>
-            </a>
+            </Link>
           </li>
           <li>
-            <a href="/help/article/121-sales-tax-on-gumroad">
+            <Link href="/help/article/121-sales-tax-on-gumroad">
               <span>Sales tax on Gumroad</span>
-            </a>
+            </Link>
           </li>
         </ul>
       </div>

@@ -1,3 +1,4 @@
+import { Link } from "@inertiajs/react";
 import React from "react";
 
 export const meta = {
@@ -12,7 +13,7 @@ export default function WhatIsGumroadsRefundPolicy() {
         <p>
           Every seller has their own unique needs and principles when it comes to issuing refunds, therefore Gumroad
           allows and encourages its sellers to{" "}
-          <a href="/help/article/335-custom-refund-policy">set their own refund policies</a>.
+          <Link href="/help/article/335-custom-refund-policy">set their own refund policies</Link>.
         </p>
         <p>
           That said, Gumroad reserves the right to issue refunds within 90 days of purchase, at its discretion, to
@@ -20,13 +21,13 @@ export default function WhatIsGumroadsRefundPolicy() {
         </p>
         <p>
           That said, you can set a "no-refunds" policy, but card networks still allow customers to file{" "}
-          <a href="/help/article/134-how-does-gumroad-handle-chargebacks">chargebacks</a> at any time.{" "}
+          <Link href="/help/article/134-how-does-gumroad-handle-chargebacks">chargebacks</Link> at any time.{" "}
           <strong>Too many successful disputes can put your Gumroad account at risk of suspension</strong>, even if your
           policy is clearly stated.{" "}
         </p>
         <p>
           If a customer is threatening a chargeback, we recommend that you offer them a{" "}
-          <a href="/help/article/47-how-to-refund-a-customer#partial">partial refund</a> using the feature we've
+          <Link href="/help/article/47-how-to-refund-a-customer#partial">partial refund</Link> using the feature we've
           provided you with.{" "}
         </p>
         <p>
@@ -34,9 +35,9 @@ export default function WhatIsGumroadsRefundPolicy() {
         </p>
         <p>
           And learn more about chargebacks{" "}
-          <a href="/help/article/134-how-does-gumroad-handle-chargebacks" rel="nofollow">
+          <Link href="/help/article/134-how-does-gumroad-handle-chargebacks" rel="nofollow">
             here
-          </a>
+          </Link>
           .
         </p>
       </div>
@@ -44,14 +45,14 @@ export default function WhatIsGumroadsRefundPolicy() {
         <h3>Related Articles</h3>
         <ul>
           <li>
-            <a href="/help/article/47-how-to-refund-a-customer">
+            <Link href="/help/article/47-how-to-refund-a-customer">
               <span>Issuing a refund</span>
-            </a>
+            </Link>
           </li>
           <li>
-            <a href="/help/article/134-how-does-gumroad-handle-chargebacks">
+            <Link href="/help/article/134-how-does-gumroad-handle-chargebacks">
               <span>Chargebacks on Gumroad</span>
-            </a>
+            </Link>
           </li>
         </ul>
       </div>

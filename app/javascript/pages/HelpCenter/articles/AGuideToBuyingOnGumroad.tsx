@@ -1,3 +1,4 @@
+import { Link } from "@inertiajs/react";
 import React from "react";
 
 export const meta = {
@@ -119,7 +120,7 @@ export default function AGuideToBuyingOnGumroad() {
         <p>Yes.</p>
         <p>
           Our payment is secured by SSL with 128-bit encryption and processed with PCI Compliant service providers. Find
-          out more <a href="/help/article/189-safe-gumroad-buying">here</a>.
+          out more <Link href="/help/article/189-safe-gumroad-buying">here</Link>.
         </p>
         <h3 id="Do-I-need-to-have-a-Gumroad-account-to-buy-products-OMrrT">
           Do I need to have a Gumroad account to buy products?
@@ -148,8 +149,8 @@ export default function AGuideToBuyingOnGumroad() {
           description of the product, and maybe multiple options to choose from.
         </p>
         <p>
-          The example below features a <a href="/help/article/278-guide-to-memberships">membership product</a> where you
-          can get content from a creator regularly (in this example, by paying monthly).
+          The example below features a <Link href="/help/article/278-guide-to-memberships">membership product</Link>{" "}
+          where you can get content from a creator regularly (in this example, by paying monthly).
         </p>
         <figure>
           <img
@@ -184,8 +185,8 @@ export default function AGuideToBuyingOnGumroad() {
           <li>
             <strong>Give as a gift:</strong> See the toggle here? You can click this to send this product to a friend.
             This will send the receipt to you, but the product to your friend.{" "}
-            <a href="/help/article/213-how-do-i-give-a-product-as-a-gift">Read more here</a>. Keep in mind that you
-            currently cannot gift memberships.
+            <Link href="/help/article/213-how-do-i-give-a-product-as-a-gift">Read more here</Link>. Keep in mind that
+            you currently cannot gift memberships.
           </li>
           <li>
             <b>Discount code:*</b> You may not see this box if it's not turned on for this product. A discount code is a
@@ -221,7 +222,7 @@ export default function AGuideToBuyingOnGumroad() {
           proceeding. However, there may be something else amiss.
         </p>
         <p>
-          For more information, <a href="/help/article/203-why-did-my-payment-fail">see this article</a>. Briefly,
+          For more information, <Link href="/help/article/203-why-did-my-payment-fail">see this article</Link>. Briefly,
           though, you may be blocked for one of the following reasons:
         </p>
         <ul>
@@ -251,9 +252,9 @@ export default function AGuideToBuyingOnGumroad() {
         <p>You will see a success message and your receipt will be emailed to you.</p>
         <p>
           Double-check the email address here. Is there a typo? Then copy the wrong email address and{" "}
-          <a href="/help/article/196-contact-gumroad">let us know</a> the misspelled email and to which email address
-          the product should be sent. If you don't know the misspelled email address, don't worry. We have other ways of
-          finding your purchase, and we will be happy to fix it for you.
+          <Link href="/help/article/196-contact-gumroad">let us know</Link> the misspelled email and to which email
+          address the product should be sent. If you don't know the misspelled email address, don't worry. We have other
+          ways of finding your purchase, and we will be happy to fix it for you.
         </p>
         <figure>
           <img
@@ -271,31 +272,31 @@ export default function AGuideToBuyingOnGumroad() {
         </p>
         <p>
           From your Gumroad receipt, you can also easily repurchase a product, download the product, or open it in our{" "}
-          <a href="/help/article/177-the-gumroad-dashboard-app">iOS or Android app</a>.
+          <Link href="/help/article/177-the-gumroad-dashboard-app">iOS or Android app</Link>.
         </p>
       </div>
       <div>
         <h3>Related Articles</h3>
         <ul>
           <li>
-            <a href="/help/article/189-safe-gumroad-buying">
+            <Link href="/help/article/189-safe-gumroad-buying">
               <span>Safe buying on Gumroad</span>
-            </a>
+            </Link>
           </li>
           <li>
-            <a href="/help/article/199-how-do-i-access-my-purchase">
+            <Link href="/help/article/199-how-do-i-access-my-purchase">
               <span>How do I access my purchase?</span>
-            </a>
+            </Link>
           </li>
           <li>
-            <a href="/help/article/203-why-did-my-payment-fail">
+            <Link href="/help/article/203-why-did-my-payment-fail">
               <span>Why did my payment fail?</span>
-            </a>
+            </Link>
           </li>
           <li>
-            <a href="/help/article/192-how-do-i-cancel-my-membership">
+            <Link href="/help/article/192-how-do-i-cancel-my-membership">
               <span>How do I cancel my membership?</span>
-            </a>
+            </Link>
           </li>
         </ul>
       </div>

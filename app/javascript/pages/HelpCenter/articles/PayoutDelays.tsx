@@ -1,3 +1,4 @@
+import { Link } from "@inertiajs/react";
 import React from "react";
 
 export const meta = {
@@ -12,7 +13,7 @@ export default function PayoutDelays() {
         <p>
           {" "}
           Creators are typically paid every Friday for all sales <strong>not</strong> made through PayPal (
-          <a href="/help/article/13-getting-paid">here's how payouts work</a>). However, payouts can sometimes be
+          <Link href="/help/article/13-getting-paid">here's how payouts work</Link>). However, payouts can sometimes be
           delayed—see reasons below. If yours is delayed by more than one Friday, please{" "}
           <a href="mailto:support@gumroad.com">email us</a>.{" "}
         </p>
@@ -35,7 +36,7 @@ export default function PayoutDelays() {
           this, we need data about your sales. We look for proof that your products are real, your customers are
           receiving what they paid for, and your sales don't raise red flags with our payment partners or pose a risk to
           our bottom line. For a list of products you cannot sell on Gumroad,{" "}
-          <a href="/help/article/155-things-you-cant-sell-on-gumroad">read our guidelines here</a>.{" "}
+          <Link href="/help/article/155-things-you-cant-sell-on-gumroad">read our guidelines here</Link>.{" "}
         </p>
         <p>
           {" "}
@@ -142,8 +143,8 @@ export default function PayoutDelays() {
         </p>
         <p>
           {" "}
-          As per <a href="/help/article/13-getting-paid">Getting Paid</a>, we pay out every Friday for all sales made{" "}
-          <em>up to the previous Friday</em>. For example:
+          As per <Link href="/help/article/13-getting-paid">Getting Paid</Link>, we pay out every Friday for all sales
+          made <em>up to the previous Friday</em>. For example:
         </p>
         <ul>
           <li>
@@ -185,14 +186,14 @@ export default function PayoutDelays() {
         <h3>Related Articles</h3>
         <ul>
           <li>
-            <a href="/help/article/13-getting-paid">
+            <Link href="/help/article/13-getting-paid">
               <span>Getting paid by Gumroad</span>
-            </a>
+            </Link>
           </li>
           <li>
-            <a href="/help/article/269-balance-page">
+            <Link href="/help/article/269-balance-page">
               <span>The payouts dashboard</span>
-            </a>
+            </Link>
           </li>
         </ul>
       </div>

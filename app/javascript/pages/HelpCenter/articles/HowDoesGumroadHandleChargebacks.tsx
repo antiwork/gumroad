@@ -1,3 +1,4 @@
+import { Link } from "@inertiajs/react";
 import React from "react";
 
 export const meta = {
@@ -57,7 +58,7 @@ export default function HowDoesGumroadHandleChargebacks() {
         </p>
         <p>
           As the creator, you are responsible for covering both the refunded amount and any payment processing fees.
-          Gumroad will return our <a href="/help/article/66-gumroads-fees">platform fee</a> to you.
+          Gumroad will return our <Link href="/help/article/66-gumroads-fees">platform fee</Link> to you.
         </p>
         <h3 id="Why-do-they-happen--gg9r4">Why do they happen? </h3>
         <p>There are a few reasons why chargebacks are issued: </p>
@@ -79,8 +80,8 @@ export default function HowDoesGumroadHandleChargebacks() {
         <p>
           Until Jan 1, 2021, we used to fight every chargeback (or dispute, in PayPal's lingo), irrespective of whether
           the payment was made through a card or PayPal. But unfortunately, that changed when{" "}
-          <a href="/help/article/275-paypal-connect">PayPal Connect</a> and{" "}
-          <a href="/help/article/330-stripe-connect#disputes">Stripe Connect</a> kicked in.{" "}
+          <Link href="/help/article/275-paypal-connect">PayPal Connect</Link> and{" "}
+          <Link href="/help/article/330-stripe-connect#disputes">Stripe Connect</Link> kicked in.{" "}
         </p>
         <p>
           Now, resolving disputes on those transactions is the creator's responsibility. Since the customer directly
@@ -91,9 +92,9 @@ export default function HowDoesGumroadHandleChargebacks() {
           assistance.{" "}
         </p>
         <p>
-          If the dispute is filed for a <a href="/help/article/330-stripe-connect">Stripe Connect</a> or{" "}
-          <a href="/help/article/275-paypal-connect">PayPal Connect</a> purchase, you will need to fight this dispute
-          through your respective Stripe or PayPal accounts.{" "}
+          If the dispute is filed for a <Link href="/help/article/330-stripe-connect">Stripe Connect</Link> or{" "}
+          <Link href="/help/article/275-paypal-connect">PayPal Connect</Link> purchase, you will need to fight this
+          dispute through your respective Stripe or PayPal accounts.{" "}
         </p>
         <p>
           We also email your customer, asking them to cancel the dispute. In our email, we tell them what they bought
@@ -133,8 +134,8 @@ export default function HowDoesGumroadHandleChargebacks() {
         <p>
           The chargeback will appear to you as a full refund of the sale. We will notify you of the chargeback and
           provide you with the email address of the customer in question. When you export{" "}
-          <a href="/help/article/74-the-analytics-dashboard#sales-csv">customer information</a>, chargebacks appear in
-          the "Disputed" column.
+          <Link href="/help/article/74-the-analytics-dashboard#sales-csv">customer information</Link>, chargebacks
+          appear in the "Disputed" column.
         </p>
         <p>
           As a means of preventing further chargebacks, which hurt our credit rating, we also block that customer from
@@ -306,14 +307,14 @@ export default function HowDoesGumroadHandleChargebacks() {
         <h3>Related Articles</h3>
         <ul>
           <li>
-            <a href="/help/article/47-how-to-refund-a-customer">
+            <Link href="/help/article/47-how-to-refund-a-customer">
               <span>Issuing a refund</span>
-            </a>
+            </Link>
           </li>
           <li>
-            <a href="/help/article/161-what-gumroad-considers-fraud">
+            <Link href="/help/article/161-what-gumroad-considers-fraud">
               <span>Defining fraud on Gumroad</span>
-            </a>
+            </Link>
           </li>
         </ul>
       </div>

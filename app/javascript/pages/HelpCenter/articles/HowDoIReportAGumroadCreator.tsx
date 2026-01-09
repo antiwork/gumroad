@@ -1,3 +1,4 @@
+import { Link } from "@inertiajs/react";
 import React from "react";
 
 export const meta = {
@@ -17,7 +18,7 @@ export default function HowDoIReportAGumroadCreator() {
       <p>
         We can all play a part in making our community safe for everyone by speaking up when we see something that
         violates Gumroad's values. You can read more about what we allow and don't in our terms of service{" "}
-        <a href="/help/article/155-things-you-cant-sell-on-gumroad">here</a>, but in sum, if someone on Gumroad is
+        <Link href="/help/article/155-things-you-cant-sell-on-gumroad">here</Link>, but in sum, if someone on Gumroad is
         selling content that:
       </p>
       <ul>
@@ -59,9 +60,9 @@ export default function HowDoIReportAGumroadCreator() {
       <p>
         Once you fill out the form, a staff member will review the product in question and determine whether or not it
         is in violation of the{" "}
-        <a href="/help/article/155-things-you-cant-sell-on-gumroad" target="_blank" rel="noreferrer">
+        <Link href="/help/article/155-things-you-cant-sell-on-gumroad" target="_blank" rel="noreferrer">
           Gumroad Terms of Service
-        </a>
+        </Link>
         . The first violation will result in the product being removed from Gumroad and the user's account will remain
         open. After the second violation, the user will be given a two-weeks notice before their account is deleted.
       </p>

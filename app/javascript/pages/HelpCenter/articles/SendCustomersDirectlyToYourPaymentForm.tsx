@@ -1,3 +1,4 @@
+import { Link } from "@inertiajs/react";
 import React from "react";
 
 export const meta = {
@@ -12,9 +13,9 @@ export default function SendCustomersDirectlyToYourPaymentForm() {
         <p>
           {" "}
           Many Gumroad creators using{" "}
-          <a href="/help/article/44-build-gumroad-into-your-website#overlay" target="_blank" rel="noreferrer">
+          <Link href="/help/article/44-build-gumroad-into-your-website#overlay" target="_blank" rel="noreferrer">
             Overlay
-          </a>{" "}
+          </Link>{" "}
           or linking to their product page from their websites find it useful to have the Gumroad payment form open up
           automatically, rather than their product description.
         </p>
@@ -22,9 +23,9 @@ export default function SendCustomersDirectlyToYourPaymentForm() {
           {" "}
           To link directly to a payment form on a product with a set price, simply add <code>?wanted=true</code> to the
           end of your product's{" "}
-          <a href="/help/article/136-find-your-products-url" target="_blank" rel="noreferrer">
+          <Link href="/help/article/136-find-your-products-url" target="_blank" rel="noreferrer">
             URL
-          </a>
+          </Link>
           .
         </p>
         <p>
@@ -52,16 +53,17 @@ export default function SendCustomersDirectlyToYourPaymentForm() {
         <p> In the words of Ben Franklin, "Now you're cooking with gas!"</p>
         <p>
           {" "}
-          You can learn more about using URL Parameters in <a href="/help/article/270-url-parameters">this article</a>,
-          but here are some quick tips while you're here:{" "}
+          You can learn more about using URL Parameters in{" "}
+          <Link href="/help/article/270-url-parameters">this article</Link>, but here are some quick tips while you're
+          here:{" "}
         </p>
         <h3>Versions and Tiers</h3>
         <p>
           {" "}
           When you create a product with{" "}
-          <a href="/help/article/126-setting-up-versions-on-a-digital-product" target="_blank" rel="noreferrer">
+          <Link href="/help/article/126-setting-up-versions-on-a-digital-product" target="_blank" rel="noreferrer">
             versions
-          </a>
+          </Link>
           , you'll see "Share" buttons next to each option. You can click that to copy the URL, and then add{" "}
           <code>?wanted=true</code> to the end when you share it.{" "}
         </p>
@@ -103,8 +105,8 @@ export default function SendCustomersDirectlyToYourPaymentForm() {
         <h3>Different payment frequencies</h3>
         <p>
           {" "}
-          If you are selling a <a href="/help/article/82-membership-products">membership product</a>, and want to link a
-          customer to a specific recurring purchase rate, you have to first add that rate into the URL.{" "}
+          If you are selling a <Link href="/help/article/82-membership-products">membership product</Link>, and want to
+          link a customer to a specific recurring purchase rate, you have to first add that rate into the URL.{" "}
         </p>
         <p>
           {" "}
@@ -155,9 +157,9 @@ export default function SendCustomersDirectlyToYourPaymentForm() {
         <p>
           {" "}
           Please note that this function will not as easily work with{" "}
-          <a href="/help/article/133-pay-what-you-want-pricing">Pay What You Want</a> products - i.e. products with a
-          "+" in the price. That's because customers have to confirm the price that they want to pay before they are
-          sent to the payment form.{" "}
+          <Link href="/help/article/133-pay-what-you-want-pricing">Pay What You Want</Link> products - i.e. products
+          with a "+" in the price. That's because customers have to confirm the price that they want to pay before they
+          are sent to the payment form.{" "}
         </p>
         <p>
           {" "}
@@ -189,9 +191,9 @@ export default function SendCustomersDirectlyToYourPaymentForm() {
         <h3>Related Articles</h3>
         <ul>
           <li>
-            <a href="/help/article/136-find-your-products-url">
+            <Link href="/help/article/136-find-your-products-url">
               <span>Find a product's URL</span>
-            </a>
+            </Link>
           </li>
         </ul>
       </div>

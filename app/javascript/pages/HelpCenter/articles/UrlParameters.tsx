@@ -1,3 +1,4 @@
+import { Link } from "@inertiajs/react";
 import React from "react";
 
 export const meta = {
@@ -55,9 +56,9 @@ export default function UrlParameters() {
         <h3 id="Send-customers-directly-to-checkout-Vr4vz">Send customers directly to checkout</h3>
         <p>
           To{" "}
-          <a href="/help/article/44-build-gumroad-into-your-website#direct-checkout">
+          <Link href="/help/article/44-build-gumroad-into-your-website#direct-checkout">
             send the customer directly to the checkout page
-          </a>{" "}
+          </Link>{" "}
           upon clicking the link, simply add ?wanted=true to the end of any product link.
         </p>
         <h3 id="Autofill-your-checkout-form-FmJK-">Autofill your checkout form</h3>
@@ -108,8 +109,11 @@ export default function UrlParameters() {
         </table>
         <p>
           Note: This will also work with our{" "}
-          <a href="/help/article/44-build-gumroad-into-your-website#overlay">overlay feature</a> and{" "}
-          <a href="/help/article/44-build-gumroad-into-your-website#custom-button">custom buttons on your website</a>.
+          <Link href="/help/article/44-build-gumroad-into-your-website#overlay">overlay feature</Link> and{" "}
+          <Link href="/help/article/44-build-gumroad-into-your-website#custom-button">
+            custom buttons on your website
+          </Link>
+          .
         </p>
         <h3 id="Pay-in-installments-parameter-behavior-Ks9Lp">Pay in installments parameter behavior</h3>
         <p>
@@ -151,7 +155,7 @@ export default function UrlParameters() {
           Auto-select payment frequency for your membership
         </h3>
         <p>
-          If you have a <a href="/help/article/82-membership-products">Membership</a> product, you can direct your
+          If you have a <Link href="/help/article/82-membership-products">Membership</Link> product, you can direct your
           customer to a pre-selected payment frequency using the "monthly", "quarterly", "biannually", or "yearly" URL
           parameters.{" "}
         </p>
@@ -179,8 +183,9 @@ export default function UrlParameters() {
         </ul>
         <h3 id="Discounts-codes--rwfP">Discounts codes</h3>
         <p>
-          Discount codes can be applied if <a href="/help/article/128-discount-codes">passed as a URL parameter</a> as
-          well. Just attach it to the end of the URL!{" "}
+          Discount codes can be applied if{" "}
+          <Link href="/help/article/128-discount-codes">passed as a URL parameter</Link> as well. Just attach it to the
+          end of the URL!{" "}
         </p>
         <p>For example: </p>
         <ul>
@@ -229,19 +234,19 @@ export default function UrlParameters() {
         <h3>Related Articles</h3>
         <ul>
           <li>
-            <a href="/help/article/44-build-gumroad-into-your-website">
+            <Link href="/help/article/44-build-gumroad-into-your-website">
               <span>Integrating Gumroad into websites</span>
-            </a>
+            </Link>
           </li>
           <li>
-            <a href="/help/article/136-find-your-products-url">
+            <Link href="/help/article/136-find-your-products-url">
               <span>Find a product's URL</span>
-            </a>
+            </Link>
           </li>
           <li>
-            <a href="/help/article/81-custom-product-urls">
+            <Link href="/help/article/81-custom-product-urls">
               <span>Custom product URLs</span>
-            </a>
+            </Link>
           </li>
         </ul>
       </div>

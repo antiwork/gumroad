@@ -1,3 +1,4 @@
+import { Link } from "@inertiajs/react";
 import React from "react";
 
 export const meta = {
@@ -57,7 +58,7 @@ export default function TestingAPurchase() {
         </p>
         <p>
           Alternatively, you can also test the purchase using a 100%{" "}
-          <a href="/help/article/128-discount-codes">discount code</a>.
+          <Link href="/help/article/128-discount-codes">discount code</Link>.
         </p>
         <h3> Why You Shouldn't Pay For Your Own Products</h3>
         <p>
@@ -82,19 +83,19 @@ export default function TestingAPurchase() {
         <h3>Related Articles</h3>
         <ul>
           <li>
-            <a href="/help/article/101-designing-your-product-page">
+            <Link href="/help/article/101-designing-your-product-page">
               <span>Checkout customization</span>
-            </a>
+            </Link>
           </li>
           <li>
-            <a href="/help/article/247-what-your-customers-see">
+            <Link href="/help/article/247-what-your-customers-see">
               <span>The Gumroad Library</span>
-            </a>
+            </Link>
           </li>
           <li>
-            <a href="/help/article/282-how-do-purchases-work-for-my-customers">
+            <Link href="/help/article/282-how-do-purchases-work-for-my-customers">
               <span>How Gumroad works for customers</span>
-            </a>
+            </Link>
           </li>
         </ul>
       </div>

@@ -1,3 +1,4 @@
+import { Link } from "@inertiajs/react";
 import React from "react";
 
 export const meta = {
@@ -73,9 +74,9 @@ export default function Tipping() {
         <h3>Related Articles</h3>
         <ul>
           <li>
-            <a href="/help/article/101-designing-your-product-page">
+            <Link href="/help/article/101-designing-your-product-page">
               <span>Checkout customization</span>
-            </a>
+            </Link>
           </li>
         </ul>
       </div>

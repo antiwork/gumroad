@@ -1,3 +1,4 @@
+import { Link } from "@inertiajs/react";
 import React from "react";
 
 export const meta = {
@@ -38,7 +39,7 @@ export default function CanISellServices() {
           <img src="help_center/new-product.png" alt="" />
         </figure>
         <p>
-          We also recommend reading <a href="/help/article/149-adding-a-product">this article</a> as creating a
+          We also recommend reading <Link href="/help/article/149-adding-a-product">this article</Link> as creating a
           service-type product is similar to creating a digital product.
         </p>
         <h3 id="commission">Commission</h3>
@@ -119,7 +120,7 @@ export default function CanISellServices() {
         <p>
           You can only have one Coffee-type product with its URL set to [username].gumroad.com/coffee. While you cannot
           change this URL, you can set up a{" "}
-          <a href="/help/article/153-setting-up-a-custom-domain">custom domain for this product</a> if you wish.
+          <Link href="/help/article/153-setting-up-a-custom-domain">custom domain for this product</Link> if you wish.
         </p>
         <p>
           Along with the default suggested amount, you can enable two additional amounts. Your supporters will also have
@@ -160,19 +161,19 @@ export default function CanISellServices() {
         <h3>Related Articles</h3>
         <ul>
           <li>
-            <a href="/help/article/155-things-you-cant-sell-on-gumroad">
+            <Link href="/help/article/155-things-you-cant-sell-on-gumroad">
               <span>Things not allowed on Gumroad</span>
-            </a>
+            </Link>
           </li>
           <li>
-            <a href="/help/article/149-adding-a-product">
+            <Link href="/help/article/149-adding-a-product">
               <span>Adding a product</span>
-            </a>
+            </Link>
           </li>
           <li>
-            <a href="/help/article/160-suspension">
+            <Link href="/help/article/160-suspension">
               <span>Account suspension FAQ</span>
-            </a>
+            </Link>
           </li>
         </ul>
       </div>

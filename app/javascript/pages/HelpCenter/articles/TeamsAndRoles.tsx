@@ -1,3 +1,4 @@
+import { Link } from "@inertiajs/react";
 import React from "react";
 
 export const meta = {
@@ -228,9 +229,9 @@ export default function TeamsAndRoles() {
         <h3>Related Articles</h3>
         <ul>
           <li>
-            <a href="/help/article/67-the-settings-menu">
+            <Link href="/help/article/67-the-settings-menu">
               <span>Account settings</span>
-            </a>
+            </Link>
           </li>
         </ul>
       </div>

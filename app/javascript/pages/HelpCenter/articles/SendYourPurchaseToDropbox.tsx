@@ -1,3 +1,4 @@
+import { Link } from "@inertiajs/react";
 import React from "react";
 
 export const meta = {
@@ -34,14 +35,14 @@ export default function SendYourPurchaseToDropbox() {
         <h3>Related Articles</h3>
         <ul>
           <li>
-            <a href="/help/article/193-my-purchase-isnt-downloading">
+            <Link href="/help/article/193-my-purchase-isnt-downloading">
               <span>My purchase isn't downloading</span>
-            </a>
+            </Link>
           </li>
           <li>
-            <a href="/help/article/208-how-do-i-send-my-gumroad-purchase-to-my-kindle">
+            <Link href="/help/article/208-how-do-i-send-my-gumroad-purchase-to-my-kindle">
               <span>How do I send my purchases to Kindle?</span>
-            </a>
+            </Link>
           </li>
         </ul>
       </div>

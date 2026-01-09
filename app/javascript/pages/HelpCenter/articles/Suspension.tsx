@@ -1,3 +1,4 @@
+import { Link } from "@inertiajs/react";
 import React from "react";
 
 export const meta = {
@@ -35,8 +36,8 @@ export default function Suspension() {
         <h3 id="The-short-of-it-2VPy4">Summary</h3>
         <p>
           Before your first payout, we review your account.{" "}
-          <a href="/help/article/281-payout-delays">See our review process here.</a> If we detect fraudulent sales,
-          clear violations of our <a href="https://gumroad.com/terms">Terms of Service</a>, or signs that you're
+          <Link href="/help/article/281-payout-delays">See our review process here.</Link> If we detect fraudulent
+          sales, clear violations of our <a href="https://gumroad.com/terms">Terms of Service</a>, or signs that you're
           attempting to launder money, spam the platform, or test the site's security, your account will be suspended.
           In some cases, we may also refund your customers. You'll have the option to appeal the suspension or request
           account deletion.
@@ -106,16 +107,16 @@ export default function Suspension() {
         <p>
           And our list of goods that cannot be sold through Gumroad is here:{" "}
           <a href="https://gumroad.com/prohibited">Prohibited Products and Activities</a> and in less legal terms here:{" "}
-          <a href="/help/article/155-things-you-cant-sell-on-gumroad">Things That Are Not Allowed on Gumroad</a>
+          <Link href="/help/article/155-things-you-cant-sell-on-gumroad">Things That Are Not Allowed on Gumroad</Link>
         </p>
         <br />
         <p>
           If you are using Gumroad in a way that violates our ToS, or selling a product that we are not authorized to
           sell (common offenders include PLR ebooks, graphic pornography,{" "}
-          <a href="/help/article/70-can-i-sell-services">services</a>, credit repair products, tickets to events, health
-          products, unlicensed software you didn't create, or unlicensed electronics), we have to suspend your account.
-          In general, you cannot resell products that you didn't create. However, you can be an affiliate for another
-          Gumroad creator—<a href="/help/article/249-affiliate-faq">learn about that here</a>.
+          <Link href="/help/article/70-can-i-sell-services">services</Link>, credit repair products, tickets to events,
+          health products, unlicensed software you didn't create, or unlicensed electronics), we have to suspend your
+          account. In general, you cannot resell products that you didn't create. However, you can be an affiliate for
+          another Gumroad creator—<Link href="/help/article/249-affiliate-faq">learn about that here</Link>.
         </p>
         <br />
         <p>
@@ -146,10 +147,10 @@ export default function Suspension() {
         </p>
         <ul>
           <li>
-            <a href="/help/article/13-getting-paid">Getting Paid by Gumroad</a>
+            <Link href="/help/article/13-getting-paid">Getting Paid by Gumroad</Link>
           </li>
           <li>
-            <a href="/help/article/281-payout-delays#Reason1Youhaventbeen">Payout Delays</a>
+            <Link href="/help/article/281-payout-delays#Reason1Youhaventbeen">Payout Delays</Link>
           </li>
         </ul>
         <p>
@@ -190,8 +191,8 @@ export default function Suspension() {
         <h3 id="Reason-3-High-Chargeback-Amounts-p8SkX">Reason 3: High Chargeback Amounts</h3>
         <p>
           To learn how Gumroad deals with chargebacks, you can read{" "}
-          <a href="/help/article/134-how-does-gumroad-handle-chargebacks">this rather lengthy article</a>. It offers
-          tips on how to avoid chargebacks and how to help us if your customer issues one.
+          <Link href="/help/article/134-how-does-gumroad-handle-chargebacks">this rather lengthy article</Link>. It
+          offers tips on how to avoid chargebacks and how to help us if your customer issues one.
         </p>
         <p>
           In short though, if your account racks up a high number of chargebacks, your account is categorized as
@@ -304,19 +305,19 @@ export default function Suspension() {
         <h3>Related Articles</h3>
         <ul>
           <li>
-            <a href="/help/article/155-things-you-cant-sell-on-gumroad">
+            <Link href="/help/article/155-things-you-cant-sell-on-gumroad">
               <span>Things not allowed on Gumroad</span>
-            </a>
+            </Link>
           </li>
           <li>
-            <a href="/help/article/64-is-gumroad-for-me">
+            <Link href="/help/article/64-is-gumroad-for-me">
               <span>Why choose Gumroad?</span>
-            </a>
+            </Link>
           </li>
           <li>
-            <a href="/help/article/161-what-gumroad-considers-fraud">
+            <Link href="/help/article/161-what-gumroad-considers-fraud">
               <span>Defining fraud on Gumroad</span>
-            </a>
+            </Link>
           </li>
         </ul>
       </div>

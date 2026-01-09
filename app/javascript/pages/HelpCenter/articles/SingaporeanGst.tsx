@@ -1,3 +1,4 @@
+import { Link } from "@inertiajs/react";
 import React from "react";
 
 export const meta = {
@@ -18,7 +19,7 @@ export default function SingaporeanGst() {
         </p>
         <p>
           The simple answer: You don't have to worry about it! Just like{" "}
-          <a href="/help/article/10-dealing-with-vat">EU VAT</a>, Gumroad now automatically collects and remits
+          <Link href="/help/article/10-dealing-with-vat">EU VAT</Link>, Gumroad now automatically collects and remits
           Singaporean GST on all sales made to customers in Singapore. No action required, no settings to toggle. It
           just happens, leaving you to create and sell awesome products!
         </p>
@@ -56,9 +57,9 @@ export default function SingaporeanGst() {
         <h3>Related Articles</h3>
         <ul>
           <li>
-            <a href="/help/article/121-sales-tax-on-gumroad">
+            <Link href="/help/article/121-sales-tax-on-gumroad">
               <span>Sales tax on Gumroad</span>
-            </a>
+            </Link>
           </li>
         </ul>
       </div>

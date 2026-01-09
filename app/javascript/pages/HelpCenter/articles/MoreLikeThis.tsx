@@ -1,3 +1,4 @@
+import { Link } from "@inertiajs/react";
 import React from "react";
 
 export const meta = {
@@ -61,28 +62,28 @@ export default function MoreLikeThis() {
         <p>
           <b>Recommend all products and earn a commission with Gumroad Affiliates</b> allows you to recommend products
           that you’re a direct affiliate of <span>and</span> products eligible for{" "}
-          <a href="/help/article/333-affiliates-on-gumroad#Gumroad-Affiliates-sIp2H">Gumroad Affiliates</a>. Directly
-          affiliated products yield your full affiliate commission, while Gumroad Affiliate products earn you a 10%
-          commission.
+          <Link href="/help/article/333-affiliates-on-gumroad#Gumroad-Affiliates-sIp2H">Gumroad Affiliates</Link>.
+          Directly affiliated products yield your full affiliate commission, while Gumroad Affiliate products earn you a
+          10% commission.
         </p>
       </div>
       <div>
         <h3>Related Articles</h3>
         <ul>
           <li>
-            <a href="/help/article/149-adding-a-product">
+            <Link href="/help/article/149-adding-a-product">
               <span>Adding a product</span>
-            </a>
+            </Link>
           </li>
           <li>
-            <a href="/help/article/128-discount-codes">
+            <Link href="/help/article/128-discount-codes">
               <span>Discount codes</span>
-            </a>
+            </Link>
           </li>
           <li>
-            <a href="/help/article/331-creating-upsells">
+            <Link href="/help/article/331-creating-upsells">
               <span>Creating an Upsell</span>
-            </a>
+            </Link>
           </li>
         </ul>
       </div>

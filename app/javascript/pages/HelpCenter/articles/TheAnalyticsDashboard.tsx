@@ -1,3 +1,4 @@
+import { Link } from "@inertiajs/react";
 import React from "react";
 
 export const meta = {
@@ -274,7 +275,7 @@ export default function TheAnalyticsDashboard() {
                 {" "}
                 If US Sales tax calculation is enabled, the amount that you should set aside for remittance to the US
                 government. For more information see our{" "}
-                <a href="/help/article/121-sales-tax-on-gumroad">help article on sales tax.</a>
+                <Link href="/help/article/121-sales-tax-on-gumroad">help article on sales tax.</Link>
               </td>
             </tr>
             <tr>
@@ -293,7 +294,7 @@ export default function TheAnalyticsDashboard() {
               <td>
                 {" "}
                 This is how much Gumroad took out from the sale plus any additional fees from Apple/Google for in-app
-                sales. You can read about fees <a href="/help/article/66-gumroads-fees">here.</a>
+                sales. You can read about fees <Link href="/help/article/66-gumroads-fees">here.</Link>
               </td>
             </tr>
             <tr>
@@ -405,7 +406,7 @@ export default function TheAnalyticsDashboard() {
                 If "1" = This is an automated recurring charge for a subscription product. Note that each subsequent
                 charge will appear on its own line. <br />
                 For more information, see our{" "}
-                <a href="/help/article/82-membership-products">help center article on subscriptions.</a>
+                <Link href="/help/article/82-membership-products">help center article on subscriptions.</Link>
               </td>
             </tr>
             <tr>
@@ -416,7 +417,7 @@ export default function TheAnalyticsDashboard() {
                 through only at the end of the trial period. <br />
                 0 = Not a free trial. The customer was charged at the time of sale. <br />
                 For more information, see our{" "}
-                <a href="/help/article/82-membership-products#FreeTrials">help article on free trials</a>.{" "}
+                <Link href="/help/article/82-membership-products#FreeTrials">help article on free trials</Link>.{" "}
               </td>
             </tr>
             <tr>
@@ -455,7 +456,7 @@ export default function TheAnalyticsDashboard() {
               <td>
                 {" "}
                 If you have custom fields on your product, the information entered in them will show up here. More on
-                custom fields <a href="/help/article/101-designing-your-product-page#custom-fields">here</a>.{" "}
+                custom fields <Link href="/help/article/101-designing-your-product-page#custom-fields">here</Link>.{" "}
               </td>
             </tr>
             <tr>
@@ -566,7 +567,7 @@ export default function TheAnalyticsDashboard() {
               <td>
                 {" "}
                 Amount of fee collected by PayPal for payments through{" "}
-                <a href="/help/article/275-paypal-connect">PayPal Connect</a>
+                <Link href="/help/article/275-paypal-connect">PayPal Connect</Link>
               </td>
             </tr>
             <tr>
@@ -574,28 +575,28 @@ export default function TheAnalyticsDashboard() {
               <td>
                 {" "}
                 The currency in which you've received payments through sales made via{" "}
-                <a href="/help/article/275-paypal-connect">PayPal Connect</a>
+                <Link href="/help/article/275-paypal-connect">PayPal Connect</Link>
               </td>
             </tr>
             <tr>
               <td>Stripe Transaction ID</td>
               <td>
                 The transaction ID if the sale was processed through{" "}
-                <a href="/help/article/330-stripe-connect">Stripe Connect</a>
+                <Link href="/help/article/330-stripe-connect">Stripe Connect</Link>
               </td>
             </tr>
             <tr>
               <td>Stripe Fee Amount</td>
               <td>
                 Amount of fee collected by Stripe for payments through{" "}
-                <a href="/help/article/330-stripe-connect">Stripe Connect</a>
+                <Link href="/help/article/330-stripe-connect">Stripe Connect</Link>
               </td>
             </tr>
             <tr>
               <td>Stripe Fee Currency</td>
               <td>
                 Currency in which Stripe collected its fee for payments through{" "}
-                <a href="/help/article/330-stripe-connect">Stripe Connect</a>
+                <Link href="/help/article/330-stripe-connect">Stripe Connect</Link>
               </td>
             </tr>
             <tr>
@@ -607,22 +608,23 @@ export default function TheAnalyticsDashboard() {
                 0 = No PPP discount was applied on the sale
                 <br />
                 For more information, see our{" "}
-                <a href="/help/article/327-purchasing-power-parity">help article on Purchasing Power Parity</a>.<br />
+                <Link href="/help/article/327-purchasing-power-parity">help article on Purchasing Power Parity</Link>.
+                <br />
               </td>
             </tr>
             <tr>
               <td>Upsold?</td>
               <td>
-                1 if the sale came from an <a href="/help/article/331-creating-upsells">upsell</a>, otherwise 0.
+                1 if the sale came from an <Link href="/help/article/331-creating-upsells">upsell</Link>, otherwise 0.
               </td>
             </tr>
             <tr>
               <td>Sent Abandoned Cart Email?</td>
               <td>
                 1 if an{" "}
-                <a href="/help/article/131-using-workflows-to-send-automated-updates#Send-abandoned-cart-emails-UYdro">
+                <Link href="/help/article/131-using-workflows-to-send-automated-updates#Send-abandoned-cart-emails-UYdro">
                   abandoned cart email
-                </a>{" "}
+                </Link>{" "}
                 was sent for that purchase's cart, otherwise 0.
               </td>
             </tr>
@@ -684,14 +686,14 @@ export default function TheAnalyticsDashboard() {
         <h3>Related Articles</h3>
         <ul>
           <li>
-            <a href="/help/article/174-third-party-analytics">
+            <Link href="/help/article/174-third-party-analytics">
               <span>Third-party analytics</span>
-            </a>
+            </Link>
           </li>
           <li>
-            <a href="/help/article/177-the-gumroad-dashboard-app">
+            <Link href="/help/article/177-the-gumroad-dashboard-app">
               <span>Gumroad mobile app</span>
-            </a>
+            </Link>
           </li>
         </ul>
       </div>

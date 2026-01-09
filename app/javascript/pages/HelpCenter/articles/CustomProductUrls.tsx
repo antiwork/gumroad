@@ -1,3 +1,4 @@
+import { Link } from "@inertiajs/react";
 import React from "react";
 
 export const meta = {
@@ -42,19 +43,19 @@ export default function CustomProductUrls() {
         <h3>Related Articles</h3>
         <ul>
           <li>
-            <a href="/help/article/153-setting-up-a-custom-domain">
+            <Link href="/help/article/153-setting-up-a-custom-domain">
               <span>Setting up a custom domain</span>
-            </a>
+            </Link>
           </li>
           <li>
-            <a href="/help/article/149-adding-a-product">
+            <Link href="/help/article/149-adding-a-product">
               <span>Adding a product</span>
-            </a>
+            </Link>
           </li>
           <li>
-            <a href="/help/article/101-designing-your-product-page">
+            <Link href="/help/article/101-designing-your-product-page">
               <span>Checkout customization</span>
-            </a>
+            </Link>
           </li>
         </ul>
       </div>

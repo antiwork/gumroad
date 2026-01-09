@@ -1,3 +1,4 @@
+import { Link } from "@inertiajs/react";
 import React from "react";
 
 export const meta = {
@@ -17,8 +18,8 @@ export default function HowDoICancelMyMembership() {
         <p>
           Cancellation will not lead to an automatic refund. Cancelling a subscription merely means you will no longer
           be charged future payments. You still need to{" "}
-          <a href="/help/article/190-how-do-i-get-a-refund">ask the creator of the product for a refund</a>, should you
-          need one.
+          <Link href="/help/article/190-how-do-i-get-a-refund">ask the creator of the product for a refund</Link>,
+          should you need one.
         </p>
         <p>
           <b>Note: </b>Deleting your account will automatically cancel all memberships you are currently subscribed to.
@@ -65,19 +66,19 @@ export default function HowDoICancelMyMembership() {
         <h3>Related Articles</h3>
         <ul>
           <li>
-            <a href="/help/article/190-how-do-i-get-a-refund">
+            <Link href="/help/article/190-how-do-i-get-a-refund">
               <span>How do I get a refund?</span>
-            </a>
+            </Link>
           </li>
           <li>
-            <a href="/help/article/212-i-never-received-a-receipt">
+            <Link href="/help/article/212-i-never-received-a-receipt">
               <span>I never received a receipt</span>
-            </a>
+            </Link>
           </li>
           <li>
-            <a href="/help/article/278-guide-to-memberships">
+            <Link href="/help/article/278-guide-to-memberships">
               <span>Guide to memberships</span>
-            </a>
+            </Link>
           </li>
         </ul>
       </div>

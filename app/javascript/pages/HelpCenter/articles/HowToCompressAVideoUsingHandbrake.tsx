@@ -1,3 +1,4 @@
+import { Link } from "@inertiajs/react";
 import React from "react";
 
 export const meta = {
@@ -52,9 +53,9 @@ export default function HowToCompressAVideoUsingHandbrake() {
         <h3>Related Articles</h3>
         <ul>
           <li>
-            <a href="/help/article/43-streaming-videos">
+            <Link href="/help/article/43-streaming-videos">
               <span>Prepare videos for streaming</span>
-            </a>
+            </Link>
           </li>
         </ul>
       </div>

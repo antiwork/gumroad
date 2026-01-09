@@ -1,3 +1,4 @@
+import { Link } from "@inertiajs/react";
 import React from "react";
 
 export const meta = {
@@ -70,9 +71,9 @@ export default function Article1099s() {
         </p>
         <h3 id="PayPal">Does the form include Stripe and PayPal sales?</h3>
         <p>
-          Payments processed through <a href="/help/article/330-stripe-connect">Stripe Connect</a> and{" "}
-          <a href="/help/article/275-paypal-connect">PayPal Connect</a> are <i>not</i> included in your 1099-K. You will
-          have to request a separate 1099-K for those sales from the respective platforms.
+          Payments processed through <Link href="/help/article/330-stripe-connect">Stripe Connect</Link> and{" "}
+          <Link href="/help/article/275-paypal-connect">PayPal Connect</Link> are <i>not</i> included in your 1099-K.
+          You will have to request a separate 1099-K for those sales from the respective platforms.
         </p>
         <h3 id="ETA">When can I expect the form to reach me?</h3>
         <p>
@@ -105,8 +106,8 @@ export default function Article1099s() {
           The 1099 amounts will not align with your payout as the gross amount includes our fee, VAT amount (which is
           not disclosed to you as we pay that ourselves), affiliate commissions, etc. Also, as mentioned above, the
           1099K does not include your sales via Stripe or PayPal Connect, and there is at least a{" "}
-          <a href="/help/article/13-getting-paid#schedule">7-day gap</a> between when a sale occurs vs. when it is paid
-          out, which can add to the mismatch.
+          <Link href="/help/article/13-getting-paid#schedule">7-day gap</Link> between when a sale occurs vs. when it is
+          paid out, which can add to the mismatch.
         </p>
         <p>
           <strong>Please use the 1099s as a marker, not as an end-all-be-all.</strong>
@@ -130,9 +131,9 @@ export default function Article1099s() {
         <h3>Related Articles</h3>
         <ul>
           <li>
-            <a href="/help/article/13-getting-paid">
+            <Link href="/help/article/13-getting-paid">
               <span>Getting paid by Gumroad</span>
-            </a>
+            </Link>
           </li>
         </ul>
       </div>

@@ -1,3 +1,4 @@
+import { Link } from "@inertiajs/react";
 import React from "react";
 
 export const meta = {
@@ -32,7 +33,7 @@ export default function MyCustomerDidNotReceiveAReceipt() {
       <p>
         {" "}
         The customer needs to go to the URL of your product and try buying it again.{" "}
-        <a href="/help/article/136-find-your-products-url">Here's how to find the URL of your product</a>.
+        <Link href="/help/article/136-find-your-products-url">Here's how to find the URL of your product</Link>.
       </p>
       <p>
         {" "}
@@ -47,7 +48,7 @@ export default function MyCustomerDidNotReceiveAReceipt() {
       <p>
         {" "}
         If this is the case, the customer needs to reach out to us via the Contact form on our{" "}
-        <a href="/help">Help Center</a> telling us that Invoice ID, so we can fix this.
+        <Link href="/help">Help Center</Link> telling us that Invoice ID, so we can fix this.
       </p>
       <h3>Reason #2: They mis-typed their email address at checkout</h3>
       <p>

@@ -1,3 +1,4 @@
+import { Link } from "@inertiajs/react";
 import React from "react";
 
 export const meta = {
@@ -41,13 +42,13 @@ export default function PayWhatYouWantPricing() {
           price and access your product for free.{" "}
         </li>
         <li>
-          You can send customers a 100% off <a href="/help/article/128-discount-codes">discount code</a>.{" "}
+          You can send customers a 100% off <Link href="/help/article/128-discount-codes">discount code</Link>.{" "}
         </li>
       </ol>
       <p>
         <b>Note</b>: You cannot price a product at $0 without the PWYW feature, and they have a lower{" "}
-        <a href="/help/article/289-file-size-limits-on-gumroad">file-size limit</a>. We also don't take any{" "}
-        <a href="/help/article/66-gumroads-fees">fee</a> on free product sales.
+        <Link href="/help/article/289-file-size-limits-on-gumroad">file-size limit</Link>. We also don't take any{" "}
+        <Link href="/help/article/66-gumroads-fees">fee</Link> on free product sales.
       </p>
     </div>
   );

@@ -1,3 +1,4 @@
+import { Link } from "@inertiajs/react";
 import React from "react";
 
 export const meta = {
@@ -23,8 +24,8 @@ export default function HowDoIGetARefund() {
         <p>
           When you buy a product from a Gumroad creator, Gumroad only processes payments on behalf of that creator. We
           allow creators on our platform to{" "}
-          <a href="/help/article/51-what-is-gumroads-refund-policy">set their own refund policies</a> and issue their
-          own refunds to their customers (i.e. you!).
+          <Link href="/help/article/51-what-is-gumroads-refund-policy">set their own refund policies</Link> and issue
+          their own refunds to their customers (i.e. you!).
         </p>
         <p>
           Unfortunately, we can't issue an immediate refund unless the charge was{" "}
@@ -57,13 +58,13 @@ export default function HowDoIGetARefund() {
         <p>
           If you didn't receive a receipt, please first check the spam folder in your email inbox. If you still cannot
           find your receipt, please go through the steps{" "}
-          <a href="/help/article/212-i-never-received-a-receipt">on this page</a>.
+          <Link href="/help/article/212-i-never-received-a-receipt">on this page</Link>.
         </p>
         <br />
         <h3 id="In-App-Purchases-GL6fX">In-App purchases</h3>
         <p>
           Refunds for in-app purchases are handled independently by Apple/Google support, so if you made a purchase on
-          the <a href="/help/article/177-the-gumroad-dashboard-app#Download-the-app-a0fEa">Gumroad mobile app</a>,
+          the <Link href="/help/article/177-the-gumroad-dashboard-app#Download-the-app-a0fEa">Gumroad mobile app</Link>,
           neither the creator nor Gumroad can refund your purchase.
         </p>
         <br />
@@ -78,34 +79,34 @@ export default function HowDoIGetARefund() {
         <h3>Related Articles</h3>
         <ul>
           <li>
-            <a href="/help/article/192-how-do-i-cancel-my-membership">
+            <Link href="/help/article/192-how-do-i-cancel-my-membership">
               <span>How do I cancel my membership?</span>
-            </a>
+            </Link>
           </li>
           <li>
-            <a href="/help/article/214-why-was-i-charged-by-gumroad">
+            <Link href="/help/article/214-why-was-i-charged-by-gumroad">
               <span>Why was I charged by Gumroad?</span>
-            </a>
+            </Link>
           </li>
           <li>
-            <a href="/help/article/195-theres-an-issue-with-my-purchase">
+            <Link href="/help/article/195-theres-an-issue-with-my-purchase">
               <span>There's an issue with my purchase</span>
-            </a>
+            </Link>
           </li>
           <li>
-            <a href="/help/article/197-why-do-i-have-a-1-charge-from-gumroad">
+            <Link href="/help/article/197-why-do-i-have-a-1-charge-from-gumroad">
               <span>Why do I have a $1 charge from Gumroad?</span>
-            </a>
+            </Link>
           </li>
           <li>
-            <a href="/help/article/215-when-will-my-purchase-be-shipped">
+            <Link href="/help/article/215-when-will-my-purchase-be-shipped">
               <span>When will my purchase be shipped?</span>
-            </a>
+            </Link>
           </li>
           <li>
-            <a href="/help/article/211-im-not-receiving-updates">
+            <Link href="/help/article/211-im-not-receiving-updates">
               <span>I'm not receiving updates</span>
-            </a>
+            </Link>
           </li>
         </ul>
       </div>

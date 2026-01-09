@@ -1,3 +1,4 @@
+import { Link } from "@inertiajs/react";
 import React from "react";
 
 export const meta = {
@@ -16,34 +17,34 @@ export default function IsGumroadForMe() {
         <h3>Simple setup, powerful sales</h3>
         <p>Once you create an account, you can start selling products on Gumroad quickly.</p>
         <p>
-          Just <a href="/help/article/149-adding-a-product">choose a product type</a> and start creating:
+          Just <Link href="/help/article/149-adding-a-product">choose a product type</Link> and start creating:
         </p>
         <figure>
           <img src="help_center/start-creating.png" alt="" />
         </figure>
         <p>
           Once your product is live, send your audience to your Gumroad{" "}
-          <a href="/help/article/124-your-gumroad-profile-page">profile page</a> or place products{" "}
-          <a href="/help/article/44-build-gumroad-into-your-website">on your website</a> to start selling.
+          <Link href="/help/article/124-your-gumroad-profile-page">profile page</Link> or place products{" "}
+          <Link href="/help/article/44-build-gumroad-into-your-website">on your website</Link> to start selling.
         </p>
         <h3>Managing customers and sales</h3>
         <p>
           Gumroad allows you to interact with your audience through{" "}
-          <a href="/help/article/169-how-to-send-an-update">emails</a>,{" "}
-          <a href="/help/article/131-using-workflows-to-send-automated-updates">drip content</a>,{" "}
-          <a href="/help/article/170-audience">growing followers</a>, and access to{" "}
-          <a href="/help/article/74-the-analytics-dashboard">sales data</a>.
+          <Link href="/help/article/169-how-to-send-an-update">emails</Link>,{" "}
+          <Link href="/help/article/131-using-workflows-to-send-automated-updates">drip content</Link>,{" "}
+          <Link href="/help/article/170-audience">growing followers</Link>, and access to{" "}
+          <Link href="/help/article/74-the-analytics-dashboard">sales data</Link>.
         </p>
         <p>
-          Not only that, it's easy to <a href="/help/article/47-how-to-refund-a-customer">issue refunds</a>, update
-          product content, create <a href="/help/article/128-discount-codes">discount codes</a>, and{" "}
-          <a href="/help/article/333-affiliates-on-gumroad">add affiliates</a>. Read more about interacting with
-          customers <a href="/help/article/169-how-to-send-an-update">here</a>.
+          Not only that, it's easy to <Link href="/help/article/47-how-to-refund-a-customer">issue refunds</Link>,
+          update product content, create <Link href="/help/article/128-discount-codes">discount codes</Link>, and{" "}
+          <Link href="/help/article/333-affiliates-on-gumroad">add affiliates</Link>. Read more about interacting with
+          customers <Link href="/help/article/169-how-to-send-an-update">here</Link>.
         </p>
         <h3>Grow your audience on Discover</h3>
         <p>
           Your Gumroad profile and website aren't the only places where you can make sales. With{" "}
-          <a href="/help/article/79-gumroad-discover">Discover</a>, your products can appear on our site-wide
+          <Link href="/help/article/79-gumroad-discover">Discover</Link>, your products can appear on our site-wide
           marketplace. Discover works by recommending your products from search and getting you more customers beyond
           your typical audience.
         </p>
@@ -61,13 +62,13 @@ export default function IsGumroadForMe() {
         <p>Your customers' download links are secure and require email verification if repeatedly used. </p>
         <h3>Fees</h3>
         <p>
-          <a href="/help/article/66-gumroads-fees">Gumroad seller fees</a> are simple. We only charge a fee when you
-          make a sale – no extra monthly charges.{" "}
+          <Link href="/help/article/66-gumroads-fees">Gumroad seller fees</Link> are simple. We only charge a fee when
+          you make a sale – no extra monthly charges.{" "}
         </p>
         <h3>Get Paid</h3>
         <p>
           As long as you are able to receive money through PayPal, you can use Gumroad. Residents of some countries are
-          able to <a href="/help/article/13-getting-paid">receive weekly payouts</a> to their bank accounts.
+          able to <Link href="/help/article/13-getting-paid">receive weekly payouts</Link> to their bank accounts.
         </p>
         <p>
           If you are <em>unable</em> to receive money through PayPal because PayPal doesn't work in your country, then
@@ -110,9 +111,9 @@ export default function IsGumroadForMe() {
             - see how products work from a customer's perspective
           </li>
           <li>
-            <a href="/help/article/155-things-you-cant-sell-on-gumroad" target="_blank" rel="noreferrer">
+            <Link href="/help/article/155-things-you-cant-sell-on-gumroad" target="_blank" rel="noreferrer">
               Things that are not allowed on Gumroad
-            </a>
+            </Link>
           </li>
         </ul>
       </div>
@@ -120,19 +121,19 @@ export default function IsGumroadForMe() {
         <h3>Related Articles</h3>
         <ul>
           <li>
-            <a href="/help/article/66-gumroads-fees">
+            <Link href="/help/article/66-gumroads-fees">
               <span>Gumroad's fees</span>
-            </a>
+            </Link>
           </li>
           <li>
-            <a href="/help/article/155-things-you-cant-sell-on-gumroad">
+            <Link href="/help/article/155-things-you-cant-sell-on-gumroad">
               <span>Things not allowed on Gumroad</span>
-            </a>
+            </Link>
           </li>
           <li>
-            <a href="/help/article/149-adding-a-product">
+            <Link href="/help/article/149-adding-a-product">
               <span>Adding a product</span>
-            </a>
+            </Link>
           </li>
         </ul>
       </div>

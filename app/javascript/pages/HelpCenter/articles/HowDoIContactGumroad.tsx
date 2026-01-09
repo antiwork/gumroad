@@ -1,3 +1,4 @@
+import { Link } from "@inertiajs/react";
 import React from "react";
 
 export const meta = {
@@ -46,8 +47,8 @@ export default function HowDoIContactGumroad() {
           </tbody>
         </table>
         <p>
-          We hope that our <a href="/help">Help Center</a> can address the majority of your issues, but if not, we will
-          be pleased to assist you.
+          We hope that our <Link href="/help">Help Center</Link> can address the majority of your issues, but if not, we
+          will be pleased to assist you.
         </p>
         <p>
           To contact us, email <a href="mailto:support@gumroad.com">support@gumroad.com</a>
@@ -59,19 +60,19 @@ export default function HowDoIContactGumroad() {
         <h3>Related Articles</h3>
         <ul>
           <li>
-            <a href="/help/article/64-is-gumroad-for-me">
+            <Link href="/help/article/64-is-gumroad-for-me">
               <span>Why choose Gumroad?</span>
-            </a>
+            </Link>
           </li>
           <li>
-            <a href="/help/article/51-what-is-gumroads-refund-policy">
+            <Link href="/help/article/51-what-is-gumroads-refund-policy">
               <span>Gumroad's refund policy</span>
-            </a>
+            </Link>
           </li>
           <li>
-            <a href="/help/article/160-suspension">
+            <Link href="/help/article/160-suspension">
               <span>Account suspension FAQ</span>
-            </a>
+            </Link>
           </li>
         </ul>
       </div>

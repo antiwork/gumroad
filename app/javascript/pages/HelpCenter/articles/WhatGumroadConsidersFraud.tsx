@@ -1,3 +1,4 @@
+import { Link } from "@inertiajs/react";
 import React from "react";
 
 export const meta = {
@@ -34,7 +35,7 @@ export default function WhatGumroadConsidersFraud() {
         <ul>
           <li>
             An account with a higher-than-average chargeback rate. Read more about chargebacks{" "}
-            <a href="/help/article/134-how-does-gumroad-handle-chargebacks">here</a>
+            <Link href="/help/article/134-how-does-gumroad-handle-chargebacks">here</Link>
           </li>
           <li>
             Transaction anomalies - stolen credit cards being used, suspicious IP addresses, evidence of someone running
@@ -89,24 +90,24 @@ export default function WhatGumroadConsidersFraud() {
         <h3>Related Articles</h3>
         <ul>
           <li>
-            <a href="/help/article/156-gumroad-and-adult-content">
+            <Link href="/help/article/156-gumroad-and-adult-content">
               <span>Adult content on Gumroad</span>
-            </a>
+            </Link>
           </li>
           <li>
-            <a href="/help/article/155-things-you-cant-sell-on-gumroad">
+            <Link href="/help/article/155-things-you-cant-sell-on-gumroad">
               <span>Things not allowed on Gumroad</span>
-            </a>
+            </Link>
           </li>
           <li>
-            <a href="/help/article/70-can-i-sell-services">
+            <Link href="/help/article/70-can-i-sell-services">
               <span>Sell digital services: freelancing, coaching, and tip jars</span>
-            </a>
+            </Link>
           </li>
           <li>
-            <a href="/help/article/134-how-does-gumroad-handle-chargebacks">
+            <Link href="/help/article/134-how-does-gumroad-handle-chargebacks">
               <span>Chargebacks on Gumroad</span>
-            </a>
+            </Link>
           </li>
         </ul>
       </div>

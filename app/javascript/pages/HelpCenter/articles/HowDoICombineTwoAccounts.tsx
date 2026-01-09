@@ -1,3 +1,4 @@
+import { Link } from "@inertiajs/react";
 import React from "react";
 
 export const meta = {
@@ -37,9 +38,9 @@ export default function HowDoICombineTwoAccounts() {
         <h3>Related Articles</h3>
         <ul>
           <li>
-            <a href="/help/article/199-how-do-i-access-my-purchase">
+            <Link href="/help/article/199-how-do-i-access-my-purchase">
               <span>How do I access my purchase?</span>
-            </a>
+            </Link>
           </li>
         </ul>
       </div>

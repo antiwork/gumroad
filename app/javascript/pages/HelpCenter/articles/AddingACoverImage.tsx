@@ -1,3 +1,4 @@
+import { Link } from "@inertiajs/react";
 import React from "react";
 
 export const meta = {
@@ -60,8 +61,8 @@ export default function AddingACoverImage() {
         <p>A cover image can be a PNG, JPEG, MOV, or GIF file. You can also link to a YouTube or Vimeo video.</p>
         <h3 id="Adding-cover-images-VExHp">Adding cover images</h3>
         <p>
-          After you have <a href="/help/article/149-adding-a-product">created a product</a>, click 'Upload images or
-          videos' under Cover to add the cover image/video. You can upload the file from your device or paste an
+          After you have <Link href="/help/article/149-adding-a-product">created a product</Link>, click 'Upload images
+          or videos' under Cover to add the cover image/video. You can upload the file from your device or paste an
           external URL (like YouTube or Vimeo). You can add up to 8 covers to your product.{" "}
         </p>
         <figure>
@@ -168,19 +169,19 @@ export default function AddingACoverImage() {
         <h3>Related Articles</h3>
         <ul>
           <li>
-            <a href="/help/article/149-adding-a-product">
+            <Link href="/help/article/149-adding-a-product">
               <span>Adding a product</span>
-            </a>
+            </Link>
           </li>
           <li>
-            <a href="/help/article/101-designing-your-product-page">
+            <Link href="/help/article/101-designing-your-product-page">
               <span>Checkout customization</span>
-            </a>
+            </Link>
           </li>
           <li>
-            <a href="/help/article/81-custom-product-urls">
+            <Link href="/help/article/81-custom-product-urls">
               <span>Custom product URLs</span>
-            </a>
+            </Link>
           </li>
         </ul>
       </div>

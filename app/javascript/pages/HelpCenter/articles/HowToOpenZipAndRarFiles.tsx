@@ -1,3 +1,4 @@
+import { Link } from "@inertiajs/react";
 import React from "react";
 
 export const meta = {
@@ -49,22 +50,22 @@ export default function HowToOpenZipAndRarFiles() {
         </p>
         <p>
           If that doesn't help, the file is likely corrupt and you'll have to{" "}
-          <a href="/help/article/195-theres-an-issue-with-my-purchase">contact the product's creator</a> to get that
-          fixed!
+          <Link href="/help/article/195-theres-an-issue-with-my-purchase">contact the product's creator</Link> to get
+          that fixed!
         </p>
       </div>
       <div>
         <h3>Related Articles</h3>
         <ul>
           <li>
-            <a href="/help/article/190-how-do-i-get-a-refund">
+            <Link href="/help/article/190-how-do-i-get-a-refund">
               <span>How do I get a refund?</span>
-            </a>
+            </Link>
           </li>
           <li>
-            <a href="/help/article/195-theres-an-issue-with-my-purchase">
+            <Link href="/help/article/195-theres-an-issue-with-my-purchase">
               <span>There's an issue with my purchase</span>
-            </a>
+            </Link>
           </li>
         </ul>
       </div>

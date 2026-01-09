@@ -1,3 +1,4 @@
+import { Link } from "@inertiajs/react";
 import React from "react";
 
 export const meta = {
@@ -54,14 +55,14 @@ export default function CustomRefundPolicy() {
         <h3>Related Articles</h3>
         <ul>
           <li>
-            <a href="/help/article/51-what-is-gumroads-refund-policy">
+            <Link href="/help/article/51-what-is-gumroads-refund-policy">
               <span>Gumroad's refund policy</span>
-            </a>
+            </Link>
           </li>
           <li>
-            <a href="/help/article/47-how-to-refund-a-customer">
+            <Link href="/help/article/47-how-to-refund-a-customer">
               <span>Issuing a refund</span>
-            </a>
+            </Link>
           </li>
         </ul>
       </div>

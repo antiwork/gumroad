@@ -1,3 +1,4 @@
+import { Link } from "@inertiajs/react";
 import React from "react";
 
 export const meta = {
@@ -23,9 +24,9 @@ export default function WhatBrowsersDoesGumroadSupport() {
         <h3>Related Articles</h3>
         <ul>
           <li>
-            <a href="/help/article/44-build-gumroad-into-your-website">
+            <Link href="/help/article/44-build-gumroad-into-your-website">
               <span>Integrating Gumroad into websites</span>
-            </a>
+            </Link>
           </li>
         </ul>
       </div>

@@ -1,3 +1,4 @@
+import { Link } from "@inertiajs/react";
 import React from "react";
 
 export const meta = {
@@ -118,7 +119,7 @@ export default function AffiliatesOnGumroad() {
           </li>
           <li>
             After 7 days, your affiliate can be paid out for that sale. The same{" "}
-            <a href="/help/article/13-getting-paid"> payout rules</a> apply!
+            <Link href="/help/article/13-getting-paid"> payout rules</Link> apply!
           </li>
         </ul>
         <p>
@@ -148,7 +149,7 @@ export default function AffiliatesOnGumroad() {
         </p>
         <p>
           Also, if they have any questions, you can link them to{" "}
-          <a href="/help/article/249-affiliate-faq"> this page</a>.
+          <Link href="/help/article/249-affiliate-faq"> this page</Link>.
         </p>
         <h4>
           <span>Why can't I add an affiliate?</span>
@@ -361,7 +362,7 @@ export default function AffiliatesOnGumroad() {
         <p>
           You can also export a CSV from your <a href="https://gumroad.com/customers"> Audience tab</a>. In the CSV you
           will see a column that specifically names the affiliates responsible for your sales. More on exporting CSVs{" "}
-          <a href="/help/article/74-the-analytics-dashboard#sales-csv"> here</a>.{" "}
+          <Link href="/help/article/74-the-analytics-dashboard#sales-csv"> here</Link>.{" "}
         </p>
         <h3 id="Send-a-post-to-your-affiliates">
           <span>Send a post to your affiliates</span>
@@ -441,7 +442,7 @@ export default function AffiliatesOnGumroad() {
         <p>Affiliates will be paid out every other Friday, just like Gumroad creators.</p>
         <p>
           Are you an affiliate looking for more information on Gumroad payouts?{" "}
-          <a href="/help/article/13-getting-paid"> Learn more about getting paid here</a>.
+          <Link href="/help/article/13-getting-paid"> Learn more about getting paid here</Link>.
         </p>
         <p>
           Affiliates can log in to their Gumroad account and visit their{" "}
@@ -498,7 +499,7 @@ export default function AffiliatesOnGumroad() {
           <li>
             The customer's web browser does not accept "cookies." Our affiliate feature can only work if a browser
             accepts cookies. (Unless you are using a{" "}
-            <a href="/help/article/249-affiliate-faq#Stickyaffiliatelinks"> sticky link</a>).
+            <Link href="/help/article/249-affiliate-faq#Stickyaffiliatelinks"> sticky link</Link>).
           </li>
           <li>The sale was refunded - when that happens your affiliate commission is refunded, as well. </li>
           <li>
@@ -527,7 +528,7 @@ export default function AffiliatesOnGumroad() {
         <br />
         <p>
           And, yes, you can combine an affiliate link with a{" "}
-          <a href="/help/article/128-discount-codes"> discount code</a> :
+          <Link href="/help/article/128-discount-codes"> discount code</Link> :
         </p>
         <p>
           https://&#123;Your_Username&#125;.
@@ -552,21 +553,21 @@ export default function AffiliatesOnGumroad() {
         <p>
           Fees on affiliate purchases are split between the affiliate and the creator proportional to the affiliate's
           commission. For example, if an affiliate's commission is 30%, they'll be responsible for 30% of the fees on
-          the purchase. For more details, see our <a href="/help/article/66-gumroads-fees">fees page</a>.
+          the purchase. For more details, see our <Link href="/help/article/66-gumroads-fees">fees page</Link>.
         </p>
       </div>
       <div>
         <h3>Related Articles</h3>
         <ul>
           <li>
-            <a href="/help/article/79-gumroad-discover">
+            <Link href="/help/article/79-gumroad-discover">
               <span>Gumroad Discover</span>
-            </a>
+            </Link>
           </li>
           <li>
-            <a href="/help/article/249-affiliate-faq">
+            <Link href="/help/article/249-affiliate-faq">
               <span>Becoming an affiliate on Gumroad</span>
-            </a>
+            </Link>
           </li>
         </ul>
       </div>

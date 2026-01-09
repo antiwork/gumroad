@@ -1,3 +1,4 @@
+import { Link } from "@inertiajs/react";
 import React from "react";
 
 export const meta = {
@@ -76,8 +77,8 @@ export default function MembershipProducts() {
         </figure>
         <p>
           Except for Tiers and some membership-specific settings, the product creation flow is the same as any other
-          digital product on Gumroad. Please read <a href="/help/article/149-adding-a-product">this article</a> for more
-          help on that.
+          digital product on Gumroad. Please read <Link href="/help/article/149-adding-a-product">this article</Link>{" "}
+          for more help on that.
         </p>
         <h3 id="Creating-and-managing-tiers-CcdNQ">Creating and managing tiers</h3>
         <p>Tiers are versions you can create within a membership. They can help you:</p>
@@ -120,7 +121,7 @@ export default function MembershipProducts() {
         <p>
           Next, head over to your Content tab to add files and content for each tier. The drop-down on the right lets
           you control content for each tier individually. More on that{" "}
-          <a href="/help/article/149-adding-a-product#content">here</a>.
+          <Link href="/help/article/149-adding-a-product#content">here</Link>.
         </p>
         <figure>
           <img
@@ -193,7 +194,7 @@ export default function MembershipProducts() {
         <h3 id="Discounts-on-memberships-3YCh2">Discounts on memberships</h3>
         <p>
           You can offer discounts on your membership that apply to all recurring charges, or only the first one. Learn
-          more about that <a href="/help/article/128-discount-codes#Discounts-for-memberships-_Pxb_">here</a>.{" "}
+          more about that <Link href="/help/article/128-discount-codes#Discounts-for-memberships-_Pxb_">here</Link>.{" "}
         </p>
         <h3 id="Increase-membership-price-for-existing-customers-kdjpu">
           Increase membership price for existing customers
@@ -231,27 +232,27 @@ export default function MembershipProducts() {
         </p>
         <p>
           Your customers will be able to access their membership content from their email receipts or their{" "}
-          <a href="/help/article/247-what-your-customers-see">Library</a>. Read{" "}
-          <a href="/help/article/282-how-do-purchases-work-for-my-customers">this article</a> to learn more about the
-          customers' experience.
+          <Link href="/help/article/247-what-your-customers-see">Library</Link>. Read{" "}
+          <Link href="/help/article/282-how-do-purchases-work-for-my-customers">this article</Link> to learn more about
+          the customers' experience.
         </p>
         <p>
           You can also direct your customers to{" "}
-          <a href="/help/../customers.gumroad.com/article/278-guide-to-memberships">this article</a> if they need help
-          with managing their membership like canceling or restarting it, updating their payment method, etc. When a
-          membership is canceled, the customer will have access to the content up until the end of their billing period.
-          If a refund or partial refund is issued when a Membership is pending cancellation the Membership will be ended
-          and the customers access will be revoked.
+          <Link href="/help/../customers.gumroad.com/article/278-guide-to-memberships">this article</Link> if they need
+          help with managing their membership like canceling or restarting it, updating their payment method, etc. When
+          a membership is canceled, the customer will have access to the content up until the end of their billing
+          period. If a refund or partial refund is issued when a Membership is pending cancellation the Membership will
+          be ended and the customers access will be revoked.
         </p>
         <h3 id="Sending-updates-or-planned-emails-avBZ0">Sending updates or planned emails</h3>
         <p>
-          You can use our <a href="/help/article/169-how-to-send-an-update">Emails</a> feature to update customers about
-          new files being added or any changes to the membership in general. You can choose to send emails to customers
-          of specific tiers or select the entire membership.
+          You can use our <Link href="/help/article/169-how-to-send-an-update">Emails</Link> feature to update customers
+          about new files being added or any changes to the membership in general. You can choose to send emails to
+          customers of specific tiers or select the entire membership.
         </p>
         <p>
           You can also send scheduled emails to your customers using{" "}
-          <a href="/help/article/131-using-workflows-to-send-automated-updates">Workflows</a>.{" "}
+          <Link href="/help/article/131-using-workflows-to-send-automated-updates">Workflows</Link>.{" "}
         </p>
         <h3 id="Reassign-a-member-to-a-different-tier-i-iNW">Reassign a member to a different tier</h3>
         <p>
@@ -336,29 +337,29 @@ export default function MembershipProducts() {
         <h3>Related Articles</h3>
         <ul>
           <li>
-            <a href="/help/article/156-gumroad-and-adult-content">
+            <Link href="/help/article/156-gumroad-and-adult-content">
               <span>Adult content on Gumroad</span>
-            </a>
+            </Link>
           </li>
           <li>
-            <a href="/help/article/149-adding-a-product">
+            <Link href="/help/article/149-adding-a-product">
               <span>Adding a product</span>
-            </a>
+            </Link>
           </li>
           <li>
-            <a href="/help/article/247-what-your-customers-see">
+            <Link href="/help/article/247-what-your-customers-see">
               <span>The Gumroad Library</span>
-            </a>
+            </Link>
           </li>
           <li>
-            <a href="/help/article/139-how-to-cancel-your-customers-subscriptions">
+            <Link href="/help/article/139-how-to-cancel-your-customers-subscriptions">
               <span>Cancel customer memberships</span>
-            </a>
+            </Link>
           </li>
           <li>
-            <a href="/help/article/78-my-customer-did-not-receive-a-receipt">
+            <Link href="/help/article/78-my-customer-did-not-receive-a-receipt">
               <span>Customers not receiving receipts</span>
-            </a>
+            </Link>
           </li>
         </ul>
       </div>

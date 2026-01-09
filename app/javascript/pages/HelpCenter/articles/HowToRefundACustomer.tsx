@@ -1,3 +1,4 @@
+import { Link } from "@inertiajs/react";
 import React from "react";
 
 export const meta = {
@@ -73,9 +74,9 @@ export default function HowToRefundACustomer() {
         </figure>
         <h3 id="paypal">PayPal refund</h3>
         <p>
-          If you refund a <a href="/help/article/275-paypal-connect">PayPal Connect</a> purchase, PayPal keeps its fees
-          on the sale but refunds 100% of the amount to the customer. In this case, you would be responsible for Gumroad
-          and PayPal's fees.
+          If you refund a <Link href="/help/article/275-paypal-connect">PayPal Connect</Link> purchase, PayPal keeps its
+          fees on the sale but refunds 100% of the amount to the customer. In this case, you would be responsible for
+          Gumroad and PayPal's fees.
         </p>
         <h3 id="after">After issuing a refund</h3>
         <p>
@@ -88,7 +89,7 @@ export default function HowToRefundACustomer() {
         </p>
         <p>
           Refunding a customer fully will also delete any{" "}
-          <a href="/help/article/222-product-ratings-on-gumroad">product rating</a> they've given.
+          <Link href="/help/article/222-product-ratings-on-gumroad">product rating</Link> they've given.
         </p>
         <h3 id="Refund-fees-hk-4p">Refund fees</h3>
         <p>
@@ -100,14 +101,14 @@ export default function HowToRefundACustomer() {
         <h3>Related Articles</h3>
         <ul>
           <li>
-            <a href="/help/article/51-what-is-gumroads-refund-policy">
+            <Link href="/help/article/51-what-is-gumroads-refund-policy">
               <span>Gumroad's refund policy</span>
-            </a>
+            </Link>
           </li>
           <li>
-            <a href="/help/article/42-content-security">
+            <Link href="/help/article/42-content-security">
               <span>Content protection on Gumroad</span>
-            </a>
+            </Link>
           </li>
         </ul>
       </div>

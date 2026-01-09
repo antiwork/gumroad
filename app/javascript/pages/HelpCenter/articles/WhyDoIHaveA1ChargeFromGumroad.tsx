@@ -1,3 +1,4 @@
+import { Link } from "@inertiajs/react";
 import React from "react";
 
 export const meta = {
@@ -23,19 +24,19 @@ export default function WhyDoIHaveA1ChargeFromGumroad() {
         <h3>Related Articles</h3>
         <ul>
           <li>
-            <a href="/help/article/191-a-guide-to-buying-on-gumroad">
+            <Link href="/help/article/191-a-guide-to-buying-on-gumroad">
               <span>A guide to buying on Gumroad</span>
-            </a>
+            </Link>
           </li>
           <li>
-            <a href="/help/article/203-why-did-my-payment-fail">
+            <Link href="/help/article/203-why-did-my-payment-fail">
               <span>Why did my payment fail?</span>
-            </a>
+            </Link>
           </li>
           <li>
-            <a href="/help/article/214-why-was-i-charged-by-gumroad">
+            <Link href="/help/article/214-why-was-i-charged-by-gumroad">
               <span>Why was I charged by Gumroad?</span>
-            </a>
+            </Link>
           </li>
         </ul>
       </div>

@@ -1,3 +1,4 @@
+import { Link } from "@inertiajs/react";
 import React from "react";
 
 export const meta = {
@@ -21,9 +22,9 @@ export default function ContentSecurity() {
             buyer's computer or device. The signed, expired, and tracked links for streaming prevent file sharing.
           </li>
           <li>
-            <a href="/help/article/130-pdf-stamping" target="_blank" rel="noreferrer">
+            <Link href="/help/article/130-pdf-stamping" target="_blank" rel="noreferrer">
               PDF Stamping
-            </a>{" "}
+            </Link>{" "}
             allows you to stamp your ebook or other written file (in PDF format) with a beautiful graphic of your
             buyer's email address, acting as a strong deterrent to widespread sharing.
           </li>
@@ -33,14 +34,14 @@ export default function ContentSecurity() {
         <h3>Related Articles</h3>
         <ul>
           <li>
-            <a href="/help/article/130-pdf-stamping">
+            <Link href="/help/article/130-pdf-stamping">
               <span>PDF stamping</span>
-            </a>
+            </Link>
           </li>
           <li>
-            <a href="/help/article/120-protecting-your-privacy-on-gumroad">
+            <Link href="/help/article/120-protecting-your-privacy-on-gumroad">
               <span>Protecting creator privacy</span>
-            </a>
+            </Link>
           </li>
         </ul>
       </div>

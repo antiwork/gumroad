@@ -1,3 +1,4 @@
+import { Link } from "@inertiajs/react";
 import React from "react";
 
 export const meta = {
@@ -19,7 +20,7 @@ export default function INeverReceivedAReceipt() {
           </li>
           <li>
             If the above page can't find a match, there's most likely a typo in the email address used at checkout.{" "}
-            <a href="/help/article/196-contact-gumroad">Contact us</a> with the following purchase details:
+            <Link href="/help/article/196-contact-gumroad">Contact us</Link> with the following purchase details:
           </li>
         </ul>
         <h3>If it's a purchase on a credit card</h3>
@@ -59,24 +60,24 @@ export default function INeverReceivedAReceipt() {
         <h3>Related Articles</h3>
         <ul>
           <li>
-            <a href="/help/article/203-why-did-my-payment-fail">
+            <Link href="/help/article/203-why-did-my-payment-fail">
               <span>Why did my payment fail?</span>
-            </a>
+            </Link>
           </li>
           <li>
-            <a href="/help/article/214-why-was-i-charged-by-gumroad">
+            <Link href="/help/article/214-why-was-i-charged-by-gumroad">
               <span>Why was I charged by Gumroad?</span>
-            </a>
+            </Link>
           </li>
           <li>
-            <a href="/help/article/196-contact-gumroad">
+            <Link href="/help/article/196-contact-gumroad">
               <span>How do I contact Gumroad?</span>
-            </a>
+            </Link>
           </li>
           <li>
-            <a href="/help/article/197-why-do-i-have-a-1-charge-from-gumroad">
+            <Link href="/help/article/197-why-do-i-have-a-1-charge-from-gumroad">
               <span>Why do I have a $1 charge from Gumroad?</span>
-            </a>
+            </Link>
           </li>
         </ul>
       </div>

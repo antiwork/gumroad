@@ -1,3 +1,4 @@
+import { Link } from "@inertiajs/react";
 import React from "react";
 
 export const meta = {
@@ -39,8 +40,8 @@ export default function WhyAreMyCustomersPurchasesFailing() {
         <p>
           We want to make it easy for you to sell your products on Gumroad, which is why we offer multiple payment
           options. They can pay using credit/debit cards or{" "}
-          <a href="/help/article/275-paypal-connect">PayPal, if enabled by the creator</a>. Gumroad takes care of all
-          the risk and processing, so you don't have to worry about it!
+          <Link href="/help/article/275-paypal-connect">PayPal, if enabled by the creator</Link>. Gumroad takes care of
+          all the risk and processing, so you don't have to worry about it!
         </p>
         <p>
           That said, online payments are not as hassle-free as they ought to be, and there are a variety of reasons why
@@ -48,8 +49,8 @@ export default function WhyAreMyCustomersPurchasesFailing() {
         </p>
         <p>
           The best way to handle a payment error is to have your customer{" "}
-          <a href="/help/article/20-how-do-i-contact-gumroad">contact us</a> directly or for you to email us with them
-          CC'ed.{" "}
+          <Link href="/help/article/20-how-do-i-contact-gumroad">contact us</Link> directly or for you to email us with
+          them CC'ed.{" "}
         </p>
         <p>Here are the most common reasons why a payment error occurred:</p>
         <h3 id="PayPal-Is-Blocking-their-Purchase-25EcI">PayPal Is Blocking their Purchase</h3>
@@ -94,9 +95,9 @@ export default function WhyAreMyCustomersPurchasesFailing() {
         </h3>
         <p>
           If they{" "}
-          <a href="/help/article/134-how-does-gumroad-handle-chargebacks">
+          <Link href="/help/article/134-how-does-gumroad-handle-chargebacks">
             charged back against a purchase made on Gumroad
-          </a>{" "}
+          </Link>{" "}
           in the past, our risk detectors are going to automatically flag their IP address and payment method and not
           let them purchase on Gumroad again. To get around this restriction without dropping the chargeback, they need
           to take these steps::
@@ -118,9 +119,9 @@ export default function WhyAreMyCustomersPurchasesFailing() {
         <h3>Related Articles</h3>
         <ul>
           <li>
-            <a href="/help/article/282-how-do-purchases-work-for-my-customers">
+            <Link href="/help/article/282-how-do-purchases-work-for-my-customers">
               <span>How Gumroad works for customers</span>
-            </a>
+            </Link>
           </li>
         </ul>
       </div>

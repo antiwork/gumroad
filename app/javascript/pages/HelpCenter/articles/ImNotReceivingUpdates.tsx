@@ -1,3 +1,4 @@
+import { Link } from "@inertiajs/react";
 import React from "react";
 
 export const meta = {
@@ -14,8 +15,8 @@ export default function ImNotReceivingUpdates() {
           receiving all communication from the creator.
         </p>
         <p>
-          To fix this, go to <a href="/help/article/204-get-to-know-your-gumroad-receipt">your receipt</a>, which you
-          can find:
+          To fix this, go to <Link href="/help/article/204-get-to-know-your-gumroad-receipt">your receipt</Link>, which
+          you can find:
         </p>
         <ul>
           <li>In your email inbox</li>
@@ -55,14 +56,14 @@ export default function ImNotReceivingUpdates() {
         <h3>Related Articles</h3>
         <ul>
           <li>
-            <a href="/help/article/198-your-gumroad-library">
+            <Link href="/help/article/198-your-gumroad-library">
               <span>Your Gumroad Library</span>
-            </a>
+            </Link>
           </li>
           <li>
-            <a href="/help/article/195-theres-an-issue-with-my-purchase">
+            <Link href="/help/article/195-theres-an-issue-with-my-purchase">
               <span>There's an issue with my purchase</span>
-            </a>
+            </Link>
           </li>
         </ul>
       </div>

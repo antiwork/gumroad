@@ -1,3 +1,4 @@
+import { Link } from "@inertiajs/react";
 import React from "react";
 
 export const meta = {
@@ -149,12 +150,12 @@ export default function UsingWorkflowsToSendAutomatedUpdates() {
         </p>
         <h3 id="Testing-your-workflow-z6ml8">Testing your workflow</h3>
         <p>
-          You can't test a workflow as part of a <a href="/help/article/62-testing-a-purchase">test purchase</a>. As a
-          test purchase isn't a real transaction, the workflow won't be triggered.
+          You can't test a workflow as part of a <Link href="/help/article/62-testing-a-purchase">test purchase</Link>.
+          As a test purchase isn't a real transaction, the workflow won't be triggered.
         </p>
         <p>
           Instead, you can test the workflow by creating a 100%{" "}
-          <a href="/help/article/128-discount-codes">Discount Code</a> and purchasing using another email address.
+          <Link href="/help/article/128-discount-codes">Discount Code</Link> and purchasing using another email address.
         </p>
         <h3 id="Your-audiences-experience-ZpRZS">Your audience's experience</h3>
         <p>Your audience will receive workflows as emails with links to any files you've attached.</p>
@@ -176,9 +177,9 @@ export default function UsingWorkflowsToSendAutomatedUpdates() {
         </figure>
         <p>
           Please follow{" "}
-          <a href="/help/article/54-not-receiving-updates" target="_blank" rel="noreferrer">
+          <Link href="/help/article/54-not-receiving-updates" target="_blank" rel="noreferrer">
             this article
-          </a>{" "}
+          </Link>{" "}
           if your customers report about not receiving workflow emails, or if you'd like to resend them.
         </p>
       </div>
@@ -186,14 +187,14 @@ export default function UsingWorkflowsToSendAutomatedUpdates() {
         <h3>Related Articles</h3>
         <ul>
           <li>
-            <a href="/help/article/82-membership-products">
+            <Link href="/help/article/82-membership-products">
               <span>Selling memberships and subscriptions</span>
-            </a>
+            </Link>
           </li>
           <li>
-            <a href="/help/article/169-how-to-send-an-update">
+            <Link href="/help/article/169-how-to-send-an-update">
               <span>Send email updates</span>
-            </a>
+            </Link>
           </li>
         </ul>
       </div>

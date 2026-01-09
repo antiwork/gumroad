@@ -1,3 +1,4 @@
+import { Link } from "@inertiajs/react";
 import React from "react";
 
 export const meta = {
@@ -62,25 +63,26 @@ export default function AddingAProduct() {
           digital content in it.{" "}
         </p>
         <p>
-          You can also sell recurring charge <a href="/help/article/82-membership-products">memberships</a>, a{" "}
-          <a href="/help/article/339-product-bundles">bundle</a> of multiple existing products, and{" "}
-          <a href="/help/article/70-can-i-sell-services">service-type products</a>.
+          You can also sell recurring charge <Link href="/help/article/82-membership-products">memberships</Link>, a{" "}
+          <Link href="/help/article/339-product-bundles">bundle</Link> of multiple existing products, and{" "}
+          <Link href="/help/article/70-can-i-sell-services">service-type products</Link>.
         </p>
         <figure>
           <img src="help_center/creating-tab.png" alt="" />
         </figure>
         <h3 id="set-price">Set a price</h3>
         <p>
-          Products can be <a href="/help/article/133-pay-what-you-want-pricing#Create-a-free-product-EV4ZH">free</a> or
-          as much as USD 5,000. You can also let customers{" "}
-          <a href="/help/article/133-pay-what-you-want-pricing">pay whatever they want</a> by adding a '+' to a
+          Products can be{" "}
+          <Link href="/help/article/133-pay-what-you-want-pricing#Create-a-free-product-EV4ZH">free</Link> or as much as
+          USD 5,000. You can also let customers{" "}
+          <Link href="/help/article/133-pay-what-you-want-pricing">pay whatever they want</Link> by adding a '+' to a
           product's minimum price, like "$5+".
         </p>
         <p>
           Click the currency sign to select from the display currency options. For most products, you can change the
           display currency later, except for membership and bundle-type products which cannot be changed once created.
           Regardless of the display currency, please note that{" "}
-          <a href="/help/article/46-what-currency-does-gumroad-use">all charges are processed in USD.</a>
+          <Link href="/help/article/46-what-currency-does-gumroad-use">all charges are processed in USD.</Link>
         </p>
         <h3 id="describe">Describe your product</h3>
         <p>
@@ -104,8 +106,8 @@ export default function AddingAProduct() {
           />
         </figure>
         <p>
-          Read <a href="/help/article/60-adding-a-cover-image">this article</a> if you need help setting up a cover
-          image or thumbnail for your product.
+          Read <Link href="/help/article/60-adding-a-cover-image">this article</Link> if you need help setting up a
+          cover image or thumbnail for your product.
         </p>
         <br />
         <p>
@@ -144,7 +146,7 @@ export default function AddingAProduct() {
         <p>
           Connect your product with external services like <a href="https://circle.so/">Circle</a> or{" "}
           <a href="https://discord.com/">Discord</a> to automatically invite customers to them. Learn more about that{" "}
-          <a href="/help/article/295-external-integration">here</a>.{" "}
+          <Link href="/help/article/295-external-integration">here</Link>.{" "}
         </p>
         <h3 id="content">Add content to your product</h3>
         <p>Go to your product’s “Content” tab and start typing!</p>
@@ -182,12 +184,12 @@ export default function AddingAProduct() {
         </figure>
         <p>
           Your customers will see the product just as you see it in the editor, both on a browser and our{" "}
-          <a href="/help/article/177-the-gumroad-dashboard-app">mobile app</a> as well!
+          <Link href="/help/article/177-the-gumroad-dashboard-app">mobile app</Link> as well!
         </p>
         <p>It’s always a good habit to keep saving those changes intermittently.</p>
         <h3 id="Embed-emails-into-your-product-sX3L4">Embed emails into your product</h3>
         <p>
-          If there are <a href="/help/article/169-how-to-send-an-update">emails</a> that you want to ensure all
+          If there are <Link href="/help/article/169-how-to-send-an-update">emails</Link> that you want to ensure all
           customers can view, you can embed them directly into your Content page.
         </p>
         <figure>
@@ -230,14 +232,14 @@ export default function AddingAProduct() {
         <p>
           Versions can help you sell different sets of content, software access levels, or optional added services
           within the same product at different price points. Read{" "}
-          <a href="/help/article/126-setting-up-versions-on-a-digital-product">this article</a> to know all about
+          <Link href="/help/article/126-setting-up-versions-on-a-digital-product">this article</Link> to know all about
           setting up versions.
         </p>
         <h3 id="test-publish">Publish your product</h3>
         <p>
-          You can <a href="/help/article/101-designing-your-product-page">customize your product's checkout</a> flow and
-          see it from your customer's point of view with{" "}
-          <a href="/help/article/62-testing-a-purchase">a test purchase</a>.{" "}
+          You can <Link href="/help/article/101-designing-your-product-page">customize your product's checkout</Link>{" "}
+          flow and see it from your customer's point of view with{" "}
+          <Link href="/help/article/62-testing-a-purchase">a test purchase</Link>.{" "}
         </p>
         <p>
           Once you're happy with everything, click Publish at the top of the page and add it to a profile section to
@@ -252,32 +254,32 @@ export default function AddingAProduct() {
         <p>
           You can also add profile sections like posts, subscribe, rich text, and even other products on your product
           page. Check out{" "}
-          <a href="/help/article/124-your-gumroad-profile-page#Create-product-categories-LYEcj">this article</a> to
-          learn more about profile sections.
+          <Link href="/help/article/124-your-gumroad-profile-page#Create-product-categories-LYEcj">this article</Link>{" "}
+          to learn more about profile sections.
         </p>
       </div>
       <div>
         <h3>Related Articles</h3>
         <ul>
           <li>
-            <a href="/help/article/128-discount-codes">
+            <Link href="/help/article/128-discount-codes">
               <span>Discount codes</span>
-            </a>
+            </Link>
           </li>
           <li>
-            <a href="/help/article/126-setting-up-versions-on-a-digital-product">
+            <Link href="/help/article/126-setting-up-versions-on-a-digital-product">
               <span>Setting up versions on a digital product</span>
-            </a>
+            </Link>
           </li>
           <li>
-            <a href="/help/article/60-adding-a-cover-image">
+            <Link href="/help/article/60-adding-a-cover-image">
               <span>Adding cover and thumbnail images</span>
-            </a>
+            </Link>
           </li>
           <li>
-            <a href="/help/article/81-custom-product-urls">
+            <Link href="/help/article/81-custom-product-urls">
               <span>Custom product URLs</span>
-            </a>
+            </Link>
           </li>
         </ul>
       </div>

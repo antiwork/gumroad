@@ -1,3 +1,4 @@
+import { Link } from "@inertiajs/react";
 import React from "react";
 
 export const meta = {
@@ -37,19 +38,19 @@ export default function SalesTaxOnGumroad() {
         <h3>Related Articles</h3>
         <ul>
           <li>
-            <a href="/help/article/66-gumroads-fees">
+            <Link href="/help/article/66-gumroads-fees">
               <span>Gumroad's fees</span>
-            </a>
+            </Link>
           </li>
           <li>
-            <a href="/help/article/10-dealing-with-vat">
+            <Link href="/help/article/10-dealing-with-vat">
               <span>EU &amp; UK VAT on Gumroad</span>
-            </a>
+            </Link>
           </li>
           <li>
-            <a href="/help/article/336-singaporean-gst">
+            <Link href="/help/article/336-singaporean-gst">
               <span>Singaporean GST on Gumroad</span>
-            </a>
+            </Link>
           </li>
         </ul>
       </div>

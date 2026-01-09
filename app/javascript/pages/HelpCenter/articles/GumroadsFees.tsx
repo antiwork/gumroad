@@ -1,3 +1,4 @@
+import { Link } from "@inertiajs/react";
 import React from "react";
 
 export const meta = {
@@ -30,13 +31,13 @@ export default function GumroadsFees() {
         <p>There are no monthly payments or other hidden charges.</p>
         <p>
           If you wish to see the exact fees taken out on every sale, you can{" "}
-          <a href="/help/article/74-the-analytics-dashboard#sales-csv">export a CSV of your sales</a>, giving a full
-          breakdown of every sale.
+          <Link href="/help/article/74-the-analytics-dashboard#sales-csv">export a CSV of your sales</Link>, giving a
+          full breakdown of every sale.
         </p>
         <h3 id="Affiliates-sW9pK">Affiliates</h3>
         <p>
-          For <a href="/help/article/333-affiliates-on-gumroad">affiliates</a>, fees on affiliate purchases are split
-          between the affiliate and the creator proportional to the affiliate's commission. For example, if an
+          For <Link href="/help/article/333-affiliates-on-gumroad">affiliates</Link>, fees on affiliate purchases are
+          split between the affiliate and the creator proportional to the affiliate's commission. For example, if an
           affiliate's commission is 30%, they'll be responsible for 30% of the fees on the purchase.
         </p>
         <h3 id="Refunds-aSEwt">Refunds</h3>
@@ -49,19 +50,19 @@ export default function GumroadsFees() {
         <h3>Related Articles</h3>
         <ul>
           <li>
-            <a href="/help/article/13-getting-paid">
+            <Link href="/help/article/13-getting-paid">
               <span>Getting paid by Gumroad</span>
-            </a>
+            </Link>
           </li>
           <li>
-            <a href="/help/article/121-sales-tax-on-gumroad">
+            <Link href="/help/article/121-sales-tax-on-gumroad">
               <span>Sales tax on Gumroad</span>
-            </a>
+            </Link>
           </li>
           <li>
-            <a href="/help/article/46-what-currency-does-gumroad-use">
+            <Link href="/help/article/46-what-currency-does-gumroad-use">
               <span>What currency does Gumroad use?</span>
-            </a>
+            </Link>
           </li>
         </ul>
       </div>

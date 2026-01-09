@@ -1,3 +1,4 @@
+import { Link } from "@inertiajs/react";
 import React from "react";
 
 export const meta = {
@@ -66,7 +67,7 @@ export default function DiscountCodes() {
         <p>
           To show the discount code input box on the checkout page, toggle "Only if a discount is available" in the{" "}
           <a href="https://gumroad.com/checkout/form">Checkout form</a> tab, otherwise, it will only be possible to
-          apply a discount code by using a <a href="/help/article/270-url-parameters">a URL parameter</a>.
+          apply a discount code by using a <Link href="/help/article/270-url-parameters">a URL parameter</Link>.
         </p>
         <figure>
           <img
@@ -164,8 +165,8 @@ export default function DiscountCodes() {
         <p>Click any discount you want to edit, and a side panel will open. </p>
         <p>
           Under "Products", click the share button to copy a product-specific link. This copies the URL to your{" "}
-          <a href="/help/article/136-find-your-products-url">Gumroad product</a> with "/&#123;yourdiscountcode&#125;"
-          attached.
+          <Link href="/help/article/136-find-your-products-url">Gumroad product</Link> with
+          "/&#123;yourdiscountcode&#125;" attached.
         </p>
         <figure>
           <img
@@ -203,7 +204,7 @@ export default function DiscountCodes() {
         </p>
         <p>
           Yes! Similar to how it's done on the Gumroad domain, you'll have to add the coupon code at the end of the
-          custom URL: <a href="/help/article/128-discount-codes">https://</a>{" "}
+          custom URL: <Link href="/help/article/128-discount-codes">https://</Link>{" "}
           &#123;YourCustomDomain&#125;/&#123;YourProductID&#125;/&#123;YourDiscountCode&#125;
         </p>
         <p>
@@ -238,14 +239,14 @@ export default function DiscountCodes() {
         <h3>Related Articles</h3>
         <ul>
           <li>
-            <a href="/help/article/149-adding-a-product">
+            <Link href="/help/article/149-adding-a-product">
               <span>Adding a product</span>
-            </a>
+            </Link>
           </li>
           <li>
-            <a href="/help/article/101-designing-your-product-page">
+            <Link href="/help/article/101-designing-your-product-page">
               <span>Checkout customization</span>
-            </a>
+            </Link>
           </li>
         </ul>
       </div>

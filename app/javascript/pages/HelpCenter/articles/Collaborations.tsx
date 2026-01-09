@@ -1,3 +1,4 @@
+import { Link } from "@inertiajs/react";
 import React from "react";
 
 export const meta = {
@@ -15,7 +16,7 @@ export default function Collaborations() {
       <h3>Add a collaborator</h3>
       <ol>
         <li>
-          <a href="/help/article/149-adding-a-product">Create your product</a> as you typically would{" "}
+          <Link href="/help/article/149-adding-a-product">Create your product</Link> as you typically would{" "}
         </li>
         <li>
           Click Add collaborator on the <a href="http://gumroad.com/collaborators">Collaborators dashboard</a>
@@ -49,9 +50,9 @@ export default function Collaborations() {
       </p>
       <h3>Pricing</h3>
       <p>
-        Starting Aug 6, 2024, <a href="/help/article/66-gumroads-fees">Gumroad's fees</a> will be split between the
-        creator and the collaborator based on the cut %. For example, if you set the collaborator's cut as 25%, 25% of
-        the fee will be deducted from their share of the sale proceeds.
+        Starting Aug 6, 2024, <Link href="/help/article/66-gumroads-fees">Gumroad's fees</Link> will be split between
+        the creator and the collaborator based on the cut %. For example, if you set the collaborator's cut as 25%, 25%
+        of the fee will be deducted from their share of the sale proceeds.
       </p>
       <p>
         Shipping fees for physical products collected are added entirely to the creator's share and are not split with
@@ -82,7 +83,7 @@ export default function Collaborations() {
       <h3>What happens after a purchase?</h3>
       <p>
         At the time of sale, the collaborator's portion is added to their Gumroad balance and is paid out the same way
-        as <a href="/help/article/13-getting-paid">all other Gumroad creators and affiliates.</a>{" "}
+        as <Link href="/help/article/13-getting-paid">all other Gumroad creators and affiliates.</Link>{" "}
       </p>
       <h3>Editing/Deleting a collaborator</h3>
       <p>

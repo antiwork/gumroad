@@ -1,3 +1,4 @@
+import { Link } from "@inertiajs/react";
 import React from "react";
 
 export const meta = {
@@ -64,7 +65,7 @@ export default function StreamingVideos() {
         <p>
           {" "}
           If problems persist, try using a program like{" "}
-          <a href="/help/article/125-how-to-compress-a-video-using-handbrake">Handbrake</a> to fix them.
+          <Link href="/help/article/125-how-to-compress-a-video-using-handbrake">Handbrake</Link> to fix them.
         </p>
         <h3 id="adding-subtitles">Adding subtitles</h3>
         <p>
@@ -115,24 +116,24 @@ export default function StreamingVideos() {
         <h3>Related Articles</h3>
         <ul>
           <li>
-            <a href="/help/article/149-adding-a-product">
+            <Link href="/help/article/149-adding-a-product">
               <span>Adding a product</span>
-            </a>
+            </Link>
           </li>
           <li>
-            <a href="/help/article/81-custom-product-urls">
+            <Link href="/help/article/81-custom-product-urls">
               <span>Custom product URLs</span>
-            </a>
+            </Link>
           </li>
           <li>
-            <a href="/help/article/42-content-security">
+            <Link href="/help/article/42-content-security">
               <span>Content protection on Gumroad</span>
-            </a>
+            </Link>
           </li>
           <li>
-            <a href="/help/article/125-how-to-compress-a-video-using-handbrake">
+            <Link href="/help/article/125-how-to-compress-a-video-using-handbrake">
               <span>Compress videos using Handbrake</span>
-            </a>
+            </Link>
           </li>
         </ul>
       </div>

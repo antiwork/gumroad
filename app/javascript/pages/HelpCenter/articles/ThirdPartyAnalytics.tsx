@@ -1,3 +1,4 @@
+import { Link } from "@inertiajs/react";
 import React from "react";
 
 export const meta = {
@@ -145,9 +146,9 @@ export default function ThirdPartyAnalytics() {
         <h3 id="Domain-Verification-D-m7W">Domain verification for Meta (Facebook)</h3>
         <p>
           You can{" "}
-          <a href="/help/article/290-facebook-domain-verification" target="_blank" rel="noreferrer">
+          <Link href="/help/article/290-facebook-domain-verification" target="_blank" rel="noreferrer">
             verify your Facebook domain
-          </a>{" "}
+          </Link>{" "}
           by entering the meta tag containing the Facebook domain verification code generated from{" "}
           <a href="https://business.facebook.com/settings/owned-domains/" target="_blank" rel="noreferrer">
             Facebook Business Manager
@@ -267,9 +268,9 @@ export default function ThirdPartyAnalytics() {
         <p>
           The status of your Conversion ID will remain Unverified until someone clicks your product link on Facebook and
           buys your product. If you run a{" "}
-          <a href="/help/article/62-testing-a-purchase" target="_blank" rel="noreferrer">
+          <Link href="/help/article/62-testing-a-purchase" target="_blank" rel="noreferrer">
             test purchase
-          </a>{" "}
+          </Link>{" "}
           of the product through Facebook, this will verify and activate the pixel.
         </p>
         <p>
@@ -465,19 +466,19 @@ export default function ThirdPartyAnalytics() {
         <h3>Related Articles</h3>
         <ul>
           <li>
-            <a href="/help/article/149-adding-a-product">
+            <Link href="/help/article/149-adding-a-product">
               <span>Adding a product</span>
-            </a>
+            </Link>
           </li>
           <li>
-            <a href="/help/article/44-build-gumroad-into-your-website">
+            <Link href="/help/article/44-build-gumroad-into-your-website">
               <span>Integrating Gumroad into websites</span>
-            </a>
+            </Link>
           </li>
           <li>
-            <a href="/help/article/67-the-settings-menu">
+            <Link href="/help/article/67-the-settings-menu">
               <span>Account settings</span>
-            </a>
+            </Link>
           </li>
         </ul>
       </div>

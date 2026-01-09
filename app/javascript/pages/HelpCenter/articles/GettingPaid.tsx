@@ -1,3 +1,4 @@
+import { Link } from "@inertiajs/react";
 import React from "react";
 
 export const meta = {
@@ -478,8 +479,8 @@ export default function GettingPaid() {
         </figure>
         <p>
           You can download a CSV report for each payout from the{" "}
-          <a href="/help/article/269-balance-page">Payouts dashboard</a>, which includes a breakdown of all{" "}
-          <a href="/help/article/66-gumroads-fees">Gumroad fees</a> and customer data.{" "}
+          <Link href="/help/article/269-balance-page">Payouts dashboard</Link>, which includes a breakdown of all{" "}
+          <Link href="/help/article/66-gumroads-fees">Gumroad fees</Link> and customer data.{" "}
         </p>
         <h3 id="instant-payouts">Instant payouts</h3>
         <p>
@@ -497,10 +498,10 @@ export default function GettingPaid() {
         </p>
         <h3 id="paypal-connect">Enable payments via PayPal</h3>
         <p>
-          If you have <a href="/help/article/275-paypal-connect">connected your PayPal account</a> with Gumroad,
+          If you have <Link href="/help/article/275-paypal-connect">connected your PayPal account</Link> with Gumroad,
           proceeds from all sales via PayPal will be credited to your connected account at the time of sale, in the
           default currency of your PayPal account. This appears on your{" "}
-          <a href="/help/article/269-balance-page">Payouts page</a> as "PayPal Payouts".
+          <Link href="/help/article/269-balance-page">Payouts page</Link> as "PayPal Payouts".
         </p>
         <h3 id="review">The account review process</h3>
         <figure>
@@ -524,40 +525,40 @@ export default function GettingPaid() {
         <p>
           You cannot speed up the review process by purchasing your own product. Payment processors view purchasing your
           own products as fraudulent, and this can get you suspended or permanently banned. If you just want to test
-          your product, please use the <a href="/help/article/62-testing-a-purchase">test purchase feature</a>.
+          your product, please use the <Link href="/help/article/62-testing-a-purchase">test purchase feature</Link>.
         </p>
         <p>
           There can be other reasons for a payout delay that you can know more about here:{" "}
-          <a href="/help/article/281-payout-delays">Payout delays</a>
+          <Link href="/help/article/281-payout-delays">Payout delays</Link>
         </p>
       </div>
       <div>
         <h3>Related Articles</h3>
         <ul>
           <li>
-            <a href="/help/article/66-gumroads-fees">
+            <Link href="/help/article/66-gumroads-fees">
               <span>Gumroad's fees</span>
-            </a>
+            </Link>
           </li>
           <li>
-            <a href="/help/article/64-is-gumroad-for-me">
+            <Link href="/help/article/64-is-gumroad-for-me">
               <span>Why choose Gumroad?</span>
-            </a>
+            </Link>
           </li>
           <li>
-            <a href="/help/article/281-payout-delays">
+            <Link href="/help/article/281-payout-delays">
               <span>Payout delays</span>
-            </a>
+            </Link>
           </li>
           <li>
-            <a href="/help/article/15-1099s">
+            <Link href="/help/article/15-1099s">
               <span>Does Gumroad issue form 1099-K and 1099-MISC?</span>
-            </a>
+            </Link>
           </li>
           <li>
-            <a href="/help/article/330-stripe-connect">
+            <Link href="/help/article/330-stripe-connect">
               <span>Connect your Stripe account to Gumroad</span>
-            </a>
+            </Link>
           </li>
         </ul>
       </div>

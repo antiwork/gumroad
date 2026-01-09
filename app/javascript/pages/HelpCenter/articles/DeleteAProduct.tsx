@@ -1,3 +1,4 @@
+import { Link } from "@inertiajs/react";
 import React from "react";
 
 export const meta = {
@@ -71,13 +72,13 @@ export default function DeleteAProduct() {
         </figure>
         <p>
           If you have lingering doubts about nixing the product,{" "}
-          <a href="/help/article/20-how-do-i-contact-gumroad">contact us</a>, and we can restore it for you.{" "}
+          <Link href="/help/article/20-how-do-i-contact-gumroad">contact us</Link>, and we can restore it for you.{" "}
         </p>
         <h3 id="After-deleting-the-product-jT6vp">After deleting the product</h3>
         <p>
           Your customers will still have access to the files they purchased, but you will not be able to see them in
           your Audience tab. They will also not show up in the{" "}
-          <a href="/help/article/74-the-analytics-dashboard">exportable CSV of your sales</a>.{" "}
+          <Link href="/help/article/74-the-analytics-dashboard">exportable CSV of your sales</Link>.{" "}
         </p>
         <h3 id="Deleting-a-membership-product-mwaed">Deleting a membership product</h3>
         <p>Deleting a membership product cancels everyone's subscription. </p>
@@ -86,14 +87,14 @@ export default function DeleteAProduct() {
         <h3>Related Articles</h3>
         <ul>
           <li>
-            <a href="/help/article/149-adding-a-product">
+            <Link href="/help/article/149-adding-a-product">
               <span>Adding a product</span>
-            </a>
+            </Link>
           </li>
           <li>
-            <a href="/help/article/81-custom-product-urls">
+            <Link href="/help/article/81-custom-product-urls">
               <span>Custom product URLs</span>
-            </a>
+            </Link>
           </li>
         </ul>
       </div>

@@ -1,3 +1,4 @@
+import { Link } from "@inertiajs/react";
 import React from "react";
 
 export const meta = {
@@ -60,7 +61,7 @@ export default function BalancePage() {
         </p>
         <h3 id="paypal">PayPal payouts</h3>
         <p>
-          If you have <a href="/help/article/275-paypal-connect">connected your PayPal account</a> from the{" "}
+          If you have <Link href="/help/article/275-paypal-connect">connected your PayPal account</Link> from the{" "}
           <a href="https://gumroad.com/settings/payments">payment settings</a>, the net sale amount immediately goes to
           your PayPal account. Locate the sale in your PayPal with the buyer's email.
         </p>
@@ -82,12 +83,12 @@ export default function BalancePage() {
         <ul>
           <li>
             Winning a chargeback: When you win a{" "}
-            <a href="/help/article/134-how-does-gumroad-handle-chargebacks">chargeback</a>, the withheld amount is
+            <Link href="/help/article/134-how-does-gumroad-handle-chargebacks">chargeback</Link>, the withheld amount is
             returned to your balance in the form of a credit.
           </li>
           <li>
-            VAT refunds: If you have a <a href="/help/article/330-stripe-connect">Stripe</a> or{" "}
-            <a href="/help/article/275-paypal-connect">PayPal</a> account connected to Gumroad and a VAT refund is
+            VAT refunds: If you have a <Link href="/help/article/330-stripe-connect">Stripe</Link> or{" "}
+            <Link href="/help/article/275-paypal-connect">PayPal</Link> account connected to Gumroad and a VAT refund is
             issued on a connected account's sale, a part of the VAT refund gets deducted from your connected account. We
             issue a credit to fully compensate you for that charge.
           </li>
@@ -98,7 +99,7 @@ export default function BalancePage() {
         </ul>
         <p>
           Credits are not paid separately but are included as part of your{" "}
-          <a href="/help/article/13-getting-paid#schedule">weekly payouts</a>.
+          <Link href="/help/article/13-getting-paid#schedule">weekly payouts</Link>.
         </p>
         <h3 id="Bank-withdrawals-U1p-o">Bank withdrawals</h3>
         <p>
@@ -134,7 +135,7 @@ export default function BalancePage() {
         <p>
           If you have recently started selling, or you have been notified about irregularities on your account, you will
           see that your account is under review. For a thorough explanation of reviews, please see{" "}
-          <a href="/help/article/13-getting-paid#RiskReview">our article about getting paid.</a>
+          <Link href="/help/article/13-getting-paid#RiskReview">our article about getting paid.</Link>
         </p>
         <p>You will see your payout date after your account has been reviewed.</p>
       </div>
@@ -142,39 +143,39 @@ export default function BalancePage() {
         <h3>Related Articles</h3>
         <ul>
           <li>
-            <a href="/help/article/13-getting-paid">
+            <Link href="/help/article/13-getting-paid">
               <span>Getting paid by Gumroad</span>
-            </a>
+            </Link>
           </li>
           <li>
-            <a href="/help/article/66-gumroads-fees">
+            <Link href="/help/article/66-gumroads-fees">
               <span>Gumroad's fees</span>
-            </a>
+            </Link>
           </li>
           <li>
-            <a href="/help/article/275-paypal-connect">
+            <Link href="/help/article/275-paypal-connect">
               <span>Adding PayPal to checkout</span>
-            </a>
+            </Link>
           </li>
           <li>
-            <a href="/help/article/260-your-payout-settings-page">
+            <Link href="/help/article/260-your-payout-settings-page">
               <span>Filling out payout settings</span>
-            </a>
+            </Link>
           </li>
           <li>
-            <a href="/help/article/10-dealing-with-vat">
+            <Link href="/help/article/10-dealing-with-vat">
               <span>EU &amp; UK VAT on Gumroad</span>
-            </a>
+            </Link>
           </li>
           <li>
-            <a href="/help/article/121-sales-tax-on-gumroad">
+            <Link href="/help/article/121-sales-tax-on-gumroad">
               <span>Sales tax on Gumroad</span>
-            </a>
+            </Link>
           </li>
           <li>
-            <a href="/help/article/281-payout-delays">
+            <Link href="/help/article/281-payout-delays">
               <span>Payout delays</span>
-            </a>
+            </Link>
           </li>
         </ul>
       </div>

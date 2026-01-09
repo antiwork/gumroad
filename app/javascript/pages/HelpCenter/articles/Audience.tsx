@@ -1,3 +1,4 @@
+import { Link } from "@inertiajs/react";
 import React from "react";
 
 export const meta = {
@@ -46,9 +47,9 @@ export default function Audience() {
         </div>
         <p>
           A subscriber on Gumroad is someone you can send email notifications or updates to via{" "}
-          <a href="/help/article/169-how-to-send-an-update">Emails</a> or{" "}
-          <a href="/help/article/131-using-workflows-to-send-automated-updates">Workflows</a>. Subscribers may or may
-          not be your customers yet.
+          <Link href="/help/article/169-how-to-send-an-update">Emails</Link> or{" "}
+          <Link href="/help/article/131-using-workflows-to-send-automated-updates">Workflows</Link>. Subscribers may or
+          may not be your customers yet.
         </p>
         <p>
           To see a list of your subscribers, simply go to <a href="https://gumroad.com/followers">this page</a> from
@@ -98,8 +99,8 @@ export default function Audience() {
         <h3 id="SendPosts">Sending posts to your subscribers</h3>
         <p>
           To send out an email to your followers, you can go to your <a href="https://www.gumroad.com/posts">Emails</a>{" "}
-          dashboard and click <a href="/help/article/169-how-to-send-an-update">New Email</a> in the top right-hand
-          corner.
+          dashboard and click <Link href="/help/article/169-how-to-send-an-update">New Email</Link> in the top
+          right-hand corner.
         </p>
         <figure>
           <img
@@ -110,7 +111,7 @@ export default function Audience() {
         <p>
           Under Audience, you can choose to send this email to your Subscribers only, to your Customers only, Affiliates
           only, or to Everyone. You can also choose several other parameters to narrow down your target audience even
-          further. <a href="/help/article/169-how-to-send-an-update">Learn more about emails</a>.
+          further. <Link href="/help/article/169-how-to-send-an-update">Learn more about emails</Link>.
         </p>
         <figure>
           <img
@@ -124,8 +125,8 @@ export default function Audience() {
         <h3 id="Workflows">Using Workflows to keep Subscribers engaged</h3>
         <p>
           Make sure your new subscribers receive an email from you as soon as they sign up by creating a{" "}
-          <a href="/help/article/131-using-workflows-to-send-automated-updates">Workflow</a>. Workflows are a series of
-          automated emails that are sent to your subscribers relative to the time they sign up.
+          <Link href="/help/article/131-using-workflows-to-send-automated-updates">Workflow</Link>. Workflows are a
+          series of automated emails that are sent to your subscribers relative to the time they sign up.
         </p>
         <p>
           Go to your <a href="https://gumroad.com/workflows">workflows dashboard</a> and click the pink New workflow
@@ -150,7 +151,7 @@ export default function Audience() {
         <p>
           You can test out what timing, subject lines, or offerings work best with workflow email analytics. On your
           Workflows tab, you'll be able to see your open and click-through rates as well.{" "}
-          <a href="/help/article/131-using-workflows-to-send-automated-updates">Learn more about workflows</a>.
+          <Link href="/help/article/131-using-workflows-to-send-automated-updates">Learn more about workflows</Link>.
         </p>
         <figure>
           <img
@@ -173,9 +174,10 @@ export default function Audience() {
         <p>Unfortunately, we don’t support the importing of customers or subscribers.</p>
         <p>
           You can ask your existing audience to sign up on your Gumroad Subscribe page. Alternatively, you can create a{" "}
-          <a href="/help/article/128-discount-codes">100% off discount code</a> to give free access to a product. Those
-          who purchase the product will appear on your <a href="/help/article/268-customer-dashboard">Sales page</a> and
-          can then receive <a href="/help/article/169-how-to-send-an-update">emails</a> from you.
+          <Link href="/help/article/128-discount-codes">100% off discount code</Link> to give free access to a product.
+          Those who purchase the product will appear on your{" "}
+          <Link href="/help/article/268-customer-dashboard">Sales page</Link> and can then receive{" "}
+          <Link href="/help/article/169-how-to-send-an-update">emails</Link> from you.
         </p>
         <h3 id="Viewing-and-Deleting-Yd5j6">Viewing and Deleting</h3>
         <p>
@@ -197,19 +199,19 @@ export default function Audience() {
         <h3>Related Articles</h3>
         <ul>
           <li>
-            <a href="/help/article/131-using-workflows-to-send-automated-updates">
+            <Link href="/help/article/131-using-workflows-to-send-automated-updates">
               <span>Send automated emails with Workflows</span>
-            </a>
+            </Link>
           </li>
           <li>
-            <a href="/help/article/169-how-to-send-an-update">
+            <Link href="/help/article/169-how-to-send-an-update">
               <span>Send email updates</span>
-            </a>
+            </Link>
           </li>
           <li>
-            <a href="/help/article/54-not-receiving-updates">
+            <Link href="/help/article/54-not-receiving-updates">
               <span>Customers not receiving emails</span>
-            </a>
+            </Link>
           </li>
         </ul>
       </div>

@@ -1,3 +1,4 @@
+import { Link } from "@inertiajs/react";
 import React from "react";
 
 export const meta = {
@@ -71,7 +72,7 @@ export default function NotReceivingUpdates() {
         <h3>2. Check the CSV</h3>
         <p>
           You can also verify this by{" "}
-          <a href="/help/article/74-the-analytics-dashboard#sales-csv">exporting your sales CSV</a> from the Sales
+          <Link href="/help/article/74-the-analytics-dashboard#sales-csv">exporting your sales CSV</Link> from the Sales
           dashboard.
         </p>
         <p>In the "Do not contact?" column of your CSV, they will be marked by 1 for TRUE, and 0 for FALSE.</p>
@@ -89,14 +90,14 @@ export default function NotReceivingUpdates() {
         <h3>Related Articles</h3>
         <ul>
           <li>
-            <a href="/help/article/131-using-workflows-to-send-automated-updates">
+            <Link href="/help/article/131-using-workflows-to-send-automated-updates">
               <span>Send automated emails with Workflows</span>
-            </a>
+            </Link>
           </li>
           <li>
-            <a href="/help/article/169-how-to-send-an-update">
+            <Link href="/help/article/169-how-to-send-an-update">
               <span>Send email updates</span>
-            </a>
+            </Link>
           </li>
         </ul>
       </div>
