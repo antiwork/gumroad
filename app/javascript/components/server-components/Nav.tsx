@@ -34,7 +34,7 @@ type Props = {
       links?: Record<string, string> | null;
     } | null;
     currentToken?: string | null;
-  };
+  } | null;
 };
 
 export const Nav = (props: Props) => {
@@ -153,7 +153,7 @@ export const Nav = (props: Props) => {
             text="Library"
             icon="bookmark-heart-fill"
             href={Routes.library_url(routeParams)}
-            additionalPatterns={[Routes.wishlists_url(routeParams)]}
+            additionalPatterns={[Routes.wishlists_url(routeParams), Routes.reviews_url(routeParams)]}
           />
         ) : null}
       </NavSection>
