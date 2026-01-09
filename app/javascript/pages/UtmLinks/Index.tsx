@@ -171,7 +171,7 @@ export default function UtmLinksIndex() {
           <LoadingSpinner className="size-20" />
         </div>
       ) : utmLinks.length > 0 ? (
-        <section className="p-4 md:p-8">
+        <section className="flex flex-col gap-4 p-4 md:p-8">
           <Table aria-live="polite" className={classNames(isNavigating && "pointer-events-none opacity-50")}>
             <TableHeader>
               <TableRow>

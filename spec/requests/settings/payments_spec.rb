@@ -3693,8 +3693,9 @@ describe("Payments Settings Scenario", type: :system, js: true) do
         select("1980", from: "Year")
 
         fill_in("Pay to the order of", with: "barnabas ngagy")
-        fill_in("IBAN", with: "GI75NWBK000000007099453")
-        fill_in("Confirm IBAN", with: "GI75NWBK000000007099453")
+        fill_in("Sort code", with: "10-88-00")
+        fill_in("Account #", with: "00012345")
+        fill_in("Confirm account #", with: "00012345")
 
         expect(page).to have_content("Must exactly match the name on your bank account")
         expect(page).to have_content("Payouts will be made in GBP.")
@@ -3702,7 +3703,6 @@ describe("Payments Settings Scenario", type: :system, js: true) do
         click_on("Update settings")
 
         expect(page).to have_alert(text: "Thanks! You're all set.")
-        expect(page).not_to have_content("Routing number")
         compliance_info = @user.alive_user_compliance_info
         expect(compliance_info.first_name).to eq("barnabas")
         expect(compliance_info.last_name).to eq("barnabastein")
@@ -3711,7 +3711,8 @@ describe("Payments Settings Scenario", type: :system, js: true) do
         expect(compliance_info.zip_code).to eq("GX11 1AA")
         expect(compliance_info.phone).to eq("+35020079123")
         expect(compliance_info.birthday).to eq(Date.new(1980, 1, 1))
-        expect(@user.reload.active_bank_account.send(:account_number_decrypted)).to eq("GI75NWBK000000007099453")
+        expect(@user.reload.active_bank_account.send(:account_number_decrypted)).to eq("00012345")
+        expect(@user.reload.active_bank_account.routing_number).to eq("10-88-00")
       end
     end
 

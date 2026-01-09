@@ -1,4 +1,4 @@
-import reverse from "lodash/reverse";
+import { reverse } from "lodash-es";
 import * as React from "react";
 import { createCast, cast } from "ts-safe-cast";
 
