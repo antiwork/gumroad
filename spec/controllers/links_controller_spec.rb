@@ -518,9 +518,27 @@ describe LinksController, :vcr, inertia: true do
       it "renders the Inertia page with product props" do
         get :edit, params: { id: product.unique_permalink }
         expect(response).to be_successful
-        expect(inertia.component).to eq("Products/Edit")
-        expect(inertia.props[:product][:name]).to eq(product.name)
-        expect(inertia.props[:unique_permalink]).to eq(product.unique_permalink)
+        expect(inertia.component).to eq("Products/Edit/Product")
+        expect(inertia.props[:edit_props][:product][:name]).to eq(product.name)
+        expect(inertia.props[:edit_props][:unique_permalink]).to eq(product.unique_permalink)
+      end
+
+      it "renders the content tab when other param is content" do
+        get :edit, params: { id: product.unique_permalink, other: "content" }
+        expect(response).to be_successful
+        expect(inertia.component).to eq("Products/Edit/Content")
+      end
+
+      it "renders the receipt tab when other param is receipt" do
+        get :edit, params: { id: product.unique_permalink, other: "receipt" }
+        expect(response).to be_successful
+        expect(inertia.component).to eq("Products/Edit/Receipt")
+      end
+
+      it "renders the share tab when other param is share" do
+        get :edit, params: { id: product.unique_permalink, other: "share" }
+        expect(response).to be_successful
+        expect(inertia.component).to eq("Products/Edit/Share")
       end
 
       context "with other user not owning the product" do

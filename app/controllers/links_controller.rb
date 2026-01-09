@@ -330,7 +330,18 @@ class LinksController < ApplicationController
     @title = @product.name
     presenter = ProductPresenter.new(product: @product, pundit_user:)
 
-    render inertia: "Products/Edit", props: presenter.edit_props
+    inertia_page = case params[:other]
+                   when "content" then "Products/Edit/Content"
+                   when "receipt" then "Products/Edit/Receipt"
+                   when "share" then "Products/Edit/Share"
+                   else "Products/Edit/Product"
+                   end
+
+    render inertia: inertia_page,
+           props: {
+             edit_props: presenter.edit_props,
+             dropbox_app_key: DROPBOX_PICKER_API_KEY
+           }
   end
 
   def update
@@ -387,7 +398,7 @@ class LinksController < ApplicationController
             Product::SaveCancellationDiscountService.new(@product, product_permitted_params[:cancellation_discount]).perform
           rescue ActiveRecord::RecordInvalid => e
             flash[:error] = e.record.errors.full_messages.first
-            return redirect_to edit_link_path(@product)
+            return redirect_to edit_link_tab_path(@product)
           end
         end
 
@@ -437,7 +448,7 @@ class LinksController < ApplicationController
         error_message = @product.errors.full_messages.first || e.message
       end
       flash[:error] = error_message
-      return redirect_to edit_link_path(@product)
+      return redirect_to edit_link_tab_path(@product)
     end
     invalid_currency_offer_codes = @product.product_and_universal_offer_codes.reject do |offer_code|
       offer_code.is_currency_valid?(@product)
@@ -461,36 +472,60 @@ class LinksController < ApplicationController
 
       warning_message = "The following offer #{"code".pluralize(all_invalid_offer_codes.count)} #{issue_description}: #{all_invalid_offer_codes.join(", ")}. Please update #{all_invalid_offer_codes.length > 1 ? "them or they" : "it or it"} will not work at checkout."
       flash[:warning] = warning_message
-      return redirect_to edit_link_path(@product), notice: "Changes saved!", status: :see_other
+      return redirect_to edit_link_tab_path(@product), notice: "Changes saved!", status: :see_other
     end
 
-    redirect_to edit_link_path(@product), notice: "Changes saved!", status: :see_other
+    redirect_to edit_link_tab_path(@product), notice: "Changes saved!", status: :see_other
   end
 
   def unpublish
     authorize @product
 
     @product.unpublish!
-    render json: { success: true }
+
+    if request.inertia?
+      redirect_to edit_link_tab_path(@product), notice: "Unpublished!", status: :see_other
+    else
+      render json: { success: true }
+    end
   end
 
   def publish
     authorize @product
 
     if @product.user.email.blank?
-      return render json: { success: false, error_message: "<span>To publish a product, we need you to have an email. <a href=\"#{settings_main_url}\">Set an email</a> to continue.</span>" }
+      error_message = "<span>To publish a product, we need you to have an email. <a href=\"#{settings_main_url}\">Set an email</a> to continue.</span>"
+      if request.inertia?
+        return redirect_to edit_link_tab_path(@product), alert: error_message, status: :see_other
+      else
+        return render json: { success: false, error_message: }
+      end
     end
 
     begin
       @product.publish!
     rescue Link::LinkInvalid, ActiveRecord::RecordInvalid
-      return render json: { success: false, error_message: @product.errors.full_messages[0] }
+      error_message = @product.errors.full_messages[0]
+      if request.inertia?
+        return redirect_to edit_link_tab_path(@product), alert: error_message, status: :see_other
+      else
+        return render json: { success: false, error_message: }
+      end
     rescue => e
       Bugsnag.notify(e)
-      return render json: { success: false, error_message: "Something broke. We're looking into what happened. Sorry about this!" }
+      error_message = "Something broke. We're looking into what happened. Sorry about this!"
+      if request.inertia?
+        return redirect_to edit_link_tab_path(@product), alert: error_message, status: :see_other
+      else
+        return render json: { success: false, error_message: }
+      end
     end
 
-    render json: { success: true }
+    if request.inertia?
+      redirect_to edit_link_tab_path(@product), notice: "Published!", status: :see_other
+    else
+      render json: { success: true }
+    end
   end
 
   def destroy
@@ -544,6 +579,16 @@ class LinksController < ApplicationController
   end
 
   private
+    def edit_link_tab_path(product)
+      base_path = edit_link_path(product)
+      case params[:current_tab]
+      when "content" then "#{base_path}/content"
+      when "receipt" then "#{base_path}/receipt"
+      when "share" then "#{base_path}/share"
+      else base_path
+      end
+    end
+
     def fetch_product_for_show
       fetch_product_by_custom_domain || fetch_product_by_general_permalink
     end

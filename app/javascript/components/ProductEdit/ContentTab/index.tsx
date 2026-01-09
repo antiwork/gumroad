@@ -29,7 +29,7 @@ import { LoadingSpinner } from "$app/components/LoadingSpinner";
 import { Modal } from "$app/components/Modal";
 import { Popover } from "$app/components/Popover";
 import { FileEmbedGroup } from "$app/components/ProductEdit/ContentTab/FileEmbedGroup";
-import { Layout } from "$app/components/ProductEdit/Layout";
+import { Layout, type ProductEditTab } from "$app/components/ProductEdit/Layout";
 import { ExistingFileEntry, FileEntry, useProductEditContext, Variant } from "$app/components/ProductEdit/state";
 import { ReviewForm } from "$app/components/ReviewForm";
 import {
@@ -958,7 +958,7 @@ const ContentTabContent = ({ selectedVariantId }: { selectedVariantId: string | 
 };
 
 //TODO inline this once all the crazy providers are gone
-export const ContentTab = () => {
+export const ContentTab = ({ currentTab }: { currentTab: ProductEditTab }) => {
   const { id, awsKey, s3Url, seller, product, updateProduct, uniquePermalink } = useProductEditContext();
   const [selectedVariantId, setSelectedVariantId] = React.useState(product.variants[0]?.id ?? null);
   const [confirmingDiscardVariantContent, setConfirmingDiscardVariantContent] = React.useState(false);
@@ -1044,6 +1044,7 @@ export const ContentTab = () => {
         <EvaporateUploaderProvider value={evaporateUploader}>
           <S3UploadConfigProvider value={s3UploadConfig}>
             <Layout
+              currentTab={currentTab}
               headerActions={
                 product.variants.length > 0 ? (
                   <>

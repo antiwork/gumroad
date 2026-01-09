@@ -8,7 +8,7 @@ import { CopyToClipboard } from "$app/components/CopyToClipboard";
 import { useCurrentSeller } from "$app/components/CurrentSeller";
 import CustomDomain from "$app/components/CustomDomain";
 import { Icon } from "$app/components/Icons";
-import { Layout, useProductUrl } from "$app/components/ProductEdit/Layout";
+import { Layout, useProductUrl, type ProductEditTab } from "$app/components/ProductEdit/Layout";
 import { ProductPreview } from "$app/components/ProductEdit/ProductPreview";
 import { AttributesEditor } from "$app/components/ProductEdit/ProductTab/AttributesEditor";
 import { AvailabilityEditor } from "$app/components/ProductEdit/ProductTab/AvailabilityEditor";
@@ -40,7 +40,7 @@ import { Toggle } from "$app/components/Toggle";
 import { TypeSafeOptionSelect } from "$app/components/TypeSafeOptionSelect";
 import { Alert } from "$app/components/ui/Alert";
 
-export const ProductTab = () => {
+export const ProductTab = ({ currentTab }: { currentTab: ProductEditTab }) => {
   const uid = React.useId();
   const currentSeller = useCurrentSeller();
 
@@ -82,7 +82,7 @@ export const ProductTab = () => {
   if (!currentSeller) return null;
 
   return (
-    <Layout preview={<ProductPreview showRefundPolicyModal={showRefundPolicyPreview} />} isLoading={isUploading}>
+    <Layout currentTab={currentTab} preview={<ProductPreview showRefundPolicyModal={showRefundPolicyPreview} />} isLoading={isUploading}>
       <div className="squished">
         <form>
           <section className="p-4! md:p-8!">

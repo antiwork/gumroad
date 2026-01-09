@@ -7,7 +7,7 @@ import { useCurrentSeller } from "$app/components/CurrentSeller";
 import { useDiscoverUrl } from "$app/components/DomainSettings";
 import { FacebookShareButton } from "$app/components/FacebookShareButton";
 import { Icon } from "$app/components/Icons";
-import { Layout, useProductUrl } from "$app/components/ProductEdit/Layout";
+import { Layout, useProductUrl, type ProductEditTab } from "$app/components/ProductEdit/Layout";
 import { ProductPreview } from "$app/components/ProductEdit/ProductPreview";
 import { ProfileSectionsEditor } from "$app/components/ProductEdit/ShareTab/ProfileSectionsEditor";
 import { TagSelector } from "$app/components/ProductEdit/ShareTab/TagSelector";
@@ -18,7 +18,7 @@ import { TwitterShareButton } from "$app/components/TwitterShareButton";
 import { Alert } from "$app/components/ui/Alert";
 import { useRunOnce } from "$app/components/useRunOnce";
 
-export const ShareTab = () => {
+export const ShareTab = ({ currentTab }: { currentTab: ProductEditTab }) => {
   const currentSeller = useCurrentSeller();
 
   const { id, product, updateProduct, profileSections, taxonomies, isListedOnDiscover } = useProductEditContext();
@@ -31,7 +31,7 @@ export const ShareTab = () => {
   discoverLink.searchParams.set("query", product.name);
 
   return (
-    <Layout preview={<ProductPreview />}>
+    <Layout currentTab={currentTab} preview={<ProductPreview />}>
       <div className="squished">
         <form>
           <section className="p-4! md:p-8!">
