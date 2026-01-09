@@ -394,6 +394,24 @@ describe SignupController, type: :controller, inertia: true do
       expect(last_user.purchases.first.id).to eq purchase.id
     end
 
+    it "rejects mass assignment of privileged attributes" do
+      params = {
+        user: {
+          email: generate(:email),
+          password: "password",
+          verified: true,
+          user_risk_state: "compliant",
+          tos_violation_reason: "fraud",
+        }
+      }
+      post "create", params:, format: :json
+      last_user = User.last
+      expect(last_user).to be_present
+      expect(last_user.verified).to be_falsey
+      expect(last_user.user_risk_state).not_to eq "compliant"
+      expect(last_user.tos_violation_reason).to be_nil
+    end
+
     it "associates the preorder with the newly created user", :vcr do
       purchase = create(:purchase)
       preorder = create(:preorder)
