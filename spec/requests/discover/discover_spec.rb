@@ -215,6 +215,38 @@ describe("Discover", js: true, type: :system) do
         expect_product_cards_in_order([related_wishlist, *wishlists.first(3)])
       end
     end
+
+    it "allows users to follow and unfollow a wishlist from the discover page" do
+      login_as @buyer
+      visit discover_url(host: discover_host)
+      wait_for_ajax
+
+      within_section "Wishlists you might like", section_element: :section do
+        wishlist_card = find_product_card(wishlists.first)
+        within wishlist_card do
+          follow_button = find("a[role='button'] .icon-bookmark-plus")
+          follow_button.click
+          wait_for_ajax
+          expect(page).to have_selector("a[role='button'] .icon-bookmark-check-fill")
+        end
+      end
+
+      expect(WishlistFollower.where(wishlist: wishlists.first, follower_user: @buyer)).to exist
+      expect(wishlists.first.reload.follower_count).to eq(1)
+
+      within_section "Wishlists you might like", section_element: :section do
+        wishlist_card = find_product_card(wishlists.first)
+        within wishlist_card do
+          unfollow_button = find("a[role='button'] .icon-bookmark-check-fill")
+          unfollow_button.click
+          wait_for_ajax
+          expect(page).to have_selector("a[role='button'] .icon-bookmark-plus")
+        end
+      end
+
+      expect(WishlistFollower.alive.where(wishlist: wishlists.first, follower_user: @buyer)).not_to exist
+      expect(wishlists.first.reload.follower_count).to eq(0)
+    end
   end
 
   describe "category pages" do

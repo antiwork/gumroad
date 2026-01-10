@@ -389,11 +389,16 @@ Rails.application.routes.draw do
         get :export
       end
     end
-    resources :collaborators, only: [:index]
-    # Routes handled by react-router. Non-catch-all routes are declared to
-    # generate URL helpers.
-    get "/collaborators/incomings", to: "collaborators#index"
-    get "/collaborators/*other", to: "collaborators#index"
+
+    resources :collaborators, only: [:index, :new, :create, :edit, :update, :destroy], path: "collaborators", controller: "collaborators/main"
+    scope path: "collaborators", module: :collaborators, as: "collaborators" do
+      resources :incomings, only: [:index, :destroy], controller: "incomings" do
+        member do
+          post :accept
+          post :decline
+        end
+      end
+    end
 
     get "/communities/*other", to: "communities#index" # route handled by react-router
 
@@ -835,7 +840,7 @@ Rails.application.routes.draw do
     end
     resources :wishlists, only: [:index, :create, :update, :destroy] do
       resources :products, only: [:create], controller: "wishlists/products"
-      resource :followers, only: [:destroy], controller: "wishlists/followers" do
+      resource :followers, only: [:create, :destroy], controller: "wishlists/followers" do
         get :unsubscribe
       end
     end
@@ -896,16 +901,6 @@ Rails.application.routes.draw do
     # React Router routes
     scope module: :api, defaults: { format: :json } do
       namespace :internal do
-        resources :collaborators, only: [:index, :new, :create, :edit, :update, :destroy] do
-          scope module: :collaborators do
-            resources :invitation_acceptances, only: [:create]
-            resources :invitation_declines, only: [:create]
-          end
-        end
-        namespace :collaborators do
-          resources :incomings, only: [:index]
-        end
-
         resources :installments, only: [] do
           member do
             resource :audience_count, only: [:show], controller: "installments/audience_counts", as: :installment_audience_count
