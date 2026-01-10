@@ -3736,9 +3736,7 @@ class Purchase < ApplicationRecord
       card_and_ip_country_are_taxable ||= (ip_and_card_locations.uniq & taxable_countries).size == 1
       return true if !country_code.in?(taxable_countries) && !card_and_ip_country_are_taxable
 
-      # If buyer selected a taxable country but their IP/card are from non-taxable countries,
-      # trust the buyer's selection and proceed with tax calculation for the selected country.
-      # This ensures proper tax collection when buyer legitimately selects their country (e.g., using VPN/foreign card).
+      # Trust buyer's country selection when IP/card are from non-taxable countries
       return true if country_code.in?(taxable_countries) && (ip_and_card_locations & taxable_countries).empty?
 
       # Country matched
