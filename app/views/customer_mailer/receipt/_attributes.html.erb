@@ -1,17 +1,21 @@
 <% if attributes.present? %>
-  <table class="table-stack">
+  <table class="table-stack" width="100%" cellpadding="0" cellspacing="0">
     <tbody>
       <% attributes.each do |attribute| %>
         <tr>
-          <td>
+          <td width="70%" style="padding: 6px 8px 6px 0;">
             <% if attribute[:label].present? %>
-              <span style="font-weight: bold"><%= attribute[:label] %></span>
-              <br>
+              <strong><%= attribute[:label] %></strong>
             <% end %>
+          </td>
+          <td
+            width="30%"
+            align="right"
+            style="padding: 6px 0; white-space: nowrap;"
+          >
             <% if attribute[:value].is_a?(Array) %>
               <% attribute[:value].each do |item| %>
-                <%= auto_link(item.to_s, html: { target: "_blank" }) %>
-                <br>
+                <%= auto_link(item.to_s, html: { target: "_blank" }) %><br>
               <% end %>
             <% else %>
               <%= auto_link(attribute[:value].to_s, html: { target: "_blank" }) %>
@@ -22,3 +26,4 @@
     </tbody>
   </table>
 <% end %>
+
