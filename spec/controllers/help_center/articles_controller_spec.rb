@@ -24,7 +24,6 @@ describe HelpCenter::ArticlesController, type: :controller, inertia: true do
       expect(inertia.props).to have_key(:helper_widget_host)
       expect(inertia.props).to have_key(:helper_session)
       expect(inertia.props[:is_logged_in]).to eq(false)
-      expect(inertia.props[:new_ticket_url]).to be_present
     end
   end
 

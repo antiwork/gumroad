@@ -19,7 +19,6 @@ type SharedProps = {
   } | null;
   recaptcha_site_key?: string | null;
   is_logged_in: boolean;
-  new_ticket_url: string;
 };
 
 type HelpCenterLayoutProps = {
