@@ -10,6 +10,65 @@ a.gumroad-button {
   --parent-color: 0 0 0 !important;
   @extend %button, .primary;
   font-family: $font-family;
-  $icons: [];
-  @import "../stylesheets/icons";
 }
+
+/* Base icon styles for widget (migrated from _icons.scss) */
+.icon {
+  content: "\00a0";
+  display: inline-block;
+  background: currentColor;
+  min-height: max(1lh, 1em);
+  width: 1em;
+  mask-position: 50% 50%;
+  mask-size: 120%;
+  mask-repeat: no-repeat;
+  flex-shrink: 0;
+
+  &::after {
+    content: "\00a0";
+  }
+}
+
+.logo-full {
+  content: "\00a0";
+  display: inline-block;
+  background: currentColor;
+  min-height: max(1lh, 1em);
+  width: calc(1em / 0.14);
+  mask-image: url("~images/logo.svg");
+  mask-position: 50% 50%;
+  mask-size: contain;
+  mask-repeat: no-repeat;
+  flex-shrink: 0;
+
+  &::after {
+    content: "\00a0";
+  }
+}
+
+.logo-g {
+  display: block;
+  background-image: url("~images/logo-g.svg");
+  background-size: contain;
+  width: 1.25em;
+  height: 1.25em;
+}
+
+.brand-icon {
+  content: "\00a0";
+  display: inline-block;
+  background: currentColor;
+  min-height: max(1lh, 1em);
+  width: 1em;
+  mask-position: 50% 50%;
+  mask-size: 100%;
+  mask-repeat: no-repeat;
+  flex-shrink: 0;
+
+  &::after {
+    content: "\00a0";
+  }
+}
+
+/* Widget-specific icon: close button (x) */
+.icon-x { mask-image: url("~images/icons/x.svg"); }

@@ -1,0 +1,1329 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Gumroad Icon Catalog</title>
+  <style>
+    :root {
+      --pink: #ff90e8;
+      --bg: #ffffff;
+      --fg: #000000;
+    }
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --bg: #1a1a1a;
+        --fg: #ffffff;
+      }
+    }
+    * { box-sizing: border-box; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background: var(--bg);
+      color: var(--fg);
+      margin: 0;
+      padding: 2rem;
+    }
+    h1 { color: var(--pink); margin-bottom: 0.5rem; }
+    .stats { color: #888; margin-bottom: 2rem; }
+    .search {
+      width: 100%;
+      max-width: 400px;
+      padding: 0.75rem 1rem;
+      font-size: 1rem;
+      border: 2px solid #333;
+      border-radius: 8px;
+      margin-bottom: 2rem;
+      background: var(--bg);
+      color: var(--fg);
+    }
+    .section { margin-bottom: 3rem; }
+    .section h2 { 
+      border-bottom: 2px solid var(--pink);
+      padding-bottom: 0.5rem;
+      margin-bottom: 1rem;
+    }
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+      gap: 1rem;
+    }
+    .icon-card {
+      background: #f5f5f5;
+      border-radius: 8px;
+      padding: 1rem;
+      text-align: center;
+      transition: transform 0.1s, box-shadow 0.1s;
+    }
+    @media (prefers-color-scheme: dark) {
+      .icon-card { background: #2a2a2a; }
+    }
+    .icon-card:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+    }
+    .icon-card.unused {
+      opacity: 0.5;
+      border: 2px dashed #888;
+    }
+    .icon-preview {
+      width: 32px;
+      height: 32px;
+      margin: 0 auto 0.5rem;
+      background: currentColor;
+      mask-size: contain;
+      mask-position: center;
+      mask-repeat: no-repeat;
+    }
+    .icon-name {
+      font-size: 0.75rem;
+      word-break: break-all;
+      color: #666;
+    }
+    .legend {
+      display: flex;
+      gap: 2rem;
+      margin-bottom: 1rem;
+      font-size: 0.875rem;
+    }
+    .legend span { display: flex; align-items: center; gap: 0.5rem; }
+    .legend .dot {
+      width: 12px;
+      height: 12px;
+      border-radius: 50%;
+    }
+    .legend .used { background: var(--pink); }
+    .legend .unused { background: #888; border: 2px dashed #666; }
+    .copy-btn {
+      font-size: 0.625rem;
+      padding: 0.25rem 0.5rem;
+      margin-top: 0.5rem;
+      cursor: pointer;
+      background: var(--pink);
+      border: none;
+      border-radius: 4px;
+      color: #000;
+    }
+  </style>
+</head>
+<body>
+  <h1>Gumroad Icon Catalog</h1>
+  <p class="stats">186 icons | 10 brand icons | Generated 2025-01-10</p>
+  
+  <input type="text" class="search" placeholder="Search icons..." oninput="filterIcons(this.value)">
+  
+  <div class="legend">
+    <span><div class="dot used"></div> Used in codebase</span>
+    <span><div class="dot unused"></div> Unused (candidate for removal)</span>
+  </div>
+
+  <div class="section">
+    <h2>Icons (186)</h2>
+    <div class="grid" id="icons-grid">
+
+      <div class="icon-card" data-name="archive">
+        <div class="icon-preview" style="mask-image: url('app/assets/images/icons/archive.svg')"></div>
+        <div class="icon-name">archive</div>
+        <button class="copy-btn" onclick="copyIcon('archive')">Copy</button>
+      </div>
+
+      <div class="icon-card" data-name="archive-fill">
+        <div class="icon-preview" style="mask-image: url('app/assets/images/icons/archive-fill.svg')"></div>
+        <div class="icon-name">archive-fill</div>
+        <button class="copy-btn" onclick="copyIcon('archive-fill')">Copy</button>
+      </div>
+
+      <div class="icon-card unused" data-name="arrow-counterclockwise">
+        <div class="icon-preview" style="mask-image: url('app/assets/images/icons/arrow-counterclockwise.svg')"></div>
+        <div class="icon-name">arrow-counterclockwise</div>
+        <button class="copy-btn" onclick="copyIcon('arrow-counterclockwise')">Copy</button>
+      </div>
+
+      <div class="icon-card" data-name="arrow-diagonal-up-right">
+        <div class="icon-preview" style="mask-image: url('app/assets/images/icons/arrow-diagonal-up-right.svg')"></div>
+        <div class="icon-name">arrow-diagonal-up-right</div>
+        <button class="copy-btn" onclick="copyIcon('arrow-diagonal-up-right')">Copy</button>
+      </div>
+
+      <div class="icon-card" data-name="arrow-down">
+        <div class="icon-preview" style="mask-image: url('app/assets/images/icons/arrow-down.svg')"></div>
+        <div class="icon-name">arrow-down</div>
+        <button class="copy-btn" onclick="copyIcon('arrow-down')">Copy</button>
+      </div>
+
+      <div class="icon-card" data-name="arrow-left">
+        <div class="icon-preview" style="mask-image: url('app/assets/images/icons/arrow-left.svg')"></div>
+        <div class="icon-name">arrow-left</div>
+        <button class="copy-btn" onclick="copyIcon('arrow-left')">Copy</button>
+      </div>
+
+      <div class="icon-card" data-name="arrow-right">
+        <div class="icon-preview" style="mask-image: url('app/assets/images/icons/arrow-right.svg')"></div>
+        <div class="icon-name">arrow-right</div>
+        <button class="copy-btn" onclick="copyIcon('arrow-right')">Copy</button>
+      </div>
+
+      <div class="icon-card" data-name="arrow-right-circle">
+        <div class="icon-preview" style="mask-image: url('app/assets/images/icons/arrow-right-circle.svg')"></div>
+        <div class="icon-name">arrow-right-circle</div>
+        <button class="copy-btn" onclick="copyIcon('arrow-right-circle')">Copy</button>
+      </div>
+
+      <div class="icon-card" data-name="arrow-right-reply">
+        <div class="icon-preview" style="mask-image: url('app/assets/images/icons/arrow-right-reply.svg')"></div>
+        <div class="icon-name">arrow-right-reply</div>
+        <button class="copy-btn" onclick="copyIcon('arrow-right-reply')">Copy</button>
+      </div>
+
+      <div class="icon-card" data-name="arrow-up">
+        <div class="icon-preview" style="mask-image: url('app/assets/images/icons/arrow-up.svg')"></div>
+        <div class="icon-name">arrow-up</div>
+        <button class="copy-btn" onclick="copyIcon('arrow-up')">Copy</button>
+      </div>
+
+      <div class="icon-card" data-name="arrow-up-right-square">
+        <div class="icon-preview" style="mask-image: url('app/assets/images/icons/arrow-up-right-square.svg')"></div>
+        <div class="icon-name">arrow-up-right-square</div>
+        <button class="copy-btn" onclick="copyIcon('arrow-up-right-square')">Copy</button>
+      </div>
+
+      <div class="icon-card unused" data-name="arrows-collapse">
+        <div class="icon-preview" style="mask-image: url('app/assets/images/icons/arrows-collapse.svg')"></div>
+        <div class="icon-name">arrows-collapse</div>
+        <button class="copy-btn" onclick="copyIcon('arrows-collapse')">Copy</button>
+      </div>
+
+      <div class="icon-card unused" data-name="arrows-expand">
+        <div class="icon-preview" style="mask-image: url('app/assets/images/icons/arrows-expand.svg')"></div>
+        <div class="icon-name">arrows-expand</div>
+        <button class="copy-btn" onclick="copyIcon('arrows-expand')">Copy</button>
+      </div>
+
+      <div class="icon-card" data-name="bank">
+        <div class="icon-preview" style="mask-image: url('app/assets/images/icons/bank.svg')"></div>
+        <div class="icon-name">bank</div>
+        <button class="copy-btn" onclick="copyIcon('bank')">Copy</button>
+      </div>
+
+      <div class="icon-card unused" data-name="bar-chart-fill">
+        <div class="icon-preview" style="mask-image: url('app/assets/images/icons/bar-chart-fill.svg')"></div>
+        <div class="icon-name">bar-chart-fill</div>
+        <button class="copy-btn" onclick="copyIcon('bar-chart-fill')">Copy</button>
+      </div>
+
+      <div class="icon-card unused" data-name="bold">
+        <div class="icon-preview" style="mask-image: url('app/assets/images/icons/bold.svg')"></div>
+        <div class="icon-name">bold</div>
+        <button class="copy-btn" onclick="copyIcon('bold')">Copy</button>
+      </div>
+
+      <div class="icon-card unused" data-name="book">
+        <div class="icon-preview" style="mask-image: url('app/assets/images/icons/book.svg')"></div>
+        <div class="icon-name">book</div>
+        <button class="copy-btn" onclick="copyIcon('book')">Copy</button>
+      </div>
+
+      <div class="icon-card unused" data-name="book-half">
+        <div class="icon-preview" style="mask-image: url('app/assets/images/icons/book-half.svg')"></div>
+        <div class="icon-name">book-half</div>
+        <button class="copy-btn" onclick="copyIcon('book-half')">Copy</button>
+      </div>
+
+      <div class="icon-card" data-name="bookmark-check-fill">
+        <div class="icon-preview" style="mask-image: url('app/assets/images/icons/bookmark-check-fill.svg')"></div>
+        <div class="icon-name">bookmark-check-fill</div>
+        <button class="copy-btn" onclick="copyIcon('bookmark-check-fill')">Copy</button>
+      </div>
+
+      <div class="icon-card" data-name="bookmark-fill">
+        <div class="icon-preview" style="mask-image: url('app/assets/images/icons/bookmark-fill.svg')"></div>
+        <div class="icon-name">bookmark-fill</div>
+        <button class="copy-btn" onclick="copyIcon('bookmark-fill')">Copy</button>
+      </div>
+
+      <div class="icon-card" data-name="bookmark-heart-fill">
+        <div class="icon-preview" style="mask-image: url('app/assets/images/icons/bookmark-heart-fill.svg')"></div>
+        <div class="icon-name">bookmark-heart-fill</div>
+        <button class="copy-btn" onclick="copyIcon('bookmark-heart-fill')">Copy</button>
+      </div>
+
+      <div class="icon-card" data-name="bookmark-plus">
+        <div class="icon-preview" style="mask-image: url('app/assets/images/icons/bookmark-plus.svg')"></div>
+        <div class="icon-name">bookmark-plus</div>
+        <button class="copy-btn" onclick="copyIcon('bookmark-plus')">Copy</button>
+      </div>
+
+      <div class="icon-card" data-name="bookmark-x">
+        <div class="icon-preview" style="mask-image: url('app/assets/images/icons/bookmark-x.svg')"></div>
+        <div class="icon-name">bookmark-x</div>
+        <button class="copy-btn" onclick="copyIcon('bookmark-x')">Copy</button>
+      </div>
+
+      <div class="icon-card" data-name="box">
+        <div class="icon-preview" style="mask-image: url('app/assets/images/icons/box.svg')"></div>
+        <div class="icon-name">box</div>
+        <button class="copy-btn" onclick="copyIcon('box')">Copy</button>
+      </div>
+
+      <div class="icon-card" data-name="box-arrow-in-right-fill">
+        <div class="icon-preview" style="mask-image: url('app/assets/images/icons/box-arrow-in-right-fill.svg')"></div>
+        <div class="icon-name">box-arrow-in-right-fill</div>
+        <button class="copy-btn" onclick="copyIcon('box-arrow-in-right-fill')">Copy</button>
+      </div>
+
+      <div class="icon-card unused" data-name="brush">
+        <div class="icon-preview" style="mask-image: url('app/assets/images/icons/brush.svg')"></div>
+        <div class="icon-name">brush</div>
+        <button class="copy-btn" onclick="copyIcon('brush')">Copy</button>
+      </div>
+
+      <div class="icon-card unused" data-name="bullseye">
+        <div class="icon-preview" style="mask-image: url('app/assets/images/icons/bullseye.svg')"></div>
+        <div class="icon-name">bullseye</div>
+        <button class="copy-btn" onclick="copyIcon('bullseye')">Copy</button>
+      </div>
+
+      <div class="icon-card" data-name="button">
+        <div class="icon-preview" style="mask-image: url('app/assets/images/icons/button.svg')"></div>
+        <div class="icon-name">button</div>
+        <button class="copy-btn" onclick="copyIcon('button')">Copy</button>
+      </div>
+
+      <div class="icon-card" data-name="calendar-all">
+        <div class="icon-preview" style="mask-image: url('app/assets/images/icons/calendar-all.svg')"></div>
+        <div class="icon-name">calendar-all</div>
+        <button class="copy-btn" onclick="copyIcon('calendar-all')">Copy</button>
+      </div>
+
+      <div class="icon-card unused" data-name="camera-video">
+        <div class="icon-preview" style="mask-image: url('app/assets/images/icons/camera-video.svg')"></div>
+        <div class="icon-name">camera-video</div>
+        <button class="copy-btn" onclick="copyIcon('camera-video')">Copy</button>
+      </div>
+
+      <div class="icon-card unused" data-name="camera-video-fill">
+        <div class="icon-preview" style="mask-image: url('app/assets/images/icons/camera-video-fill.svg')"></div>
+        <div class="icon-name">camera-video-fill</div>
+        <button class="copy-btn" onclick="copyIcon('camera-video-fill')">Copy</button>
+      </div>
+
+      <div class="icon-card unused" data-name="camera2">
+        <div class="icon-preview" style="mask-image: url('app/assets/images/icons/camera2.svg')"></div>
+        <div class="icon-name">camera2</div>
+        <button class="copy-btn" onclick="copyIcon('camera2')">Copy</button>
+      </div>
+
+      <div class="icon-card" data-name="card">
+        <div class="icon-preview" style="mask-image: url('app/assets/images/icons/card.svg')"></div>
+        <div class="icon-name">card</div>
+        <button class="copy-btn" onclick="copyIcon('card')">Copy</button>
+      </div>
+
+      <div class="icon-card" data-name="card-image-fill">
+        <div class="icon-preview" style="mask-image: url('app/assets/images/icons/card-image-fill.svg')"></div>
+        <div class="icon-name">card-image-fill</div>
+        <button class="copy-btn" onclick="copyIcon('card-image-fill')">Copy</button>
+      </div>
+
+      <div class="icon-card" data-name="card-text">
+        <div class="icon-preview" style="mask-image: url('app/assets/images/icons/card-text.svg')"></div>
+        <div class="icon-name">card-text</div>
+        <button class="copy-btn" onclick="copyIcon('card-text')">Copy</button>
+      </div>
+
+      <div class="icon-card" data-name="cart-plus">
+        <div class="icon-preview" style="mask-image: url('app/assets/images/icons/cart-plus.svg')"></div>
+        <div class="icon-name">cart-plus</div>
+        <button class="copy-btn" onclick="copyIcon('cart-plus')">Copy</button>
+      </div>
+
+      <div class="icon-card" data-name="cart3-fill">
+        <div class="icon-preview" style="mask-image: url('app/assets/images/icons/cart3-fill.svg')"></div>
+        <div class="icon-name">cart3-fill</div>
+        <button class="copy-btn" onclick="copyIcon('cart3-fill')">Copy</button>
+      </div>
+
+      <div class="icon-card unused" data-name="chat-right-text-fill">
+        <div class="icon-preview" style="mask-image: url('app/assets/images/icons/chat-right-text-fill.svg')"></div>
+        <div class="icon-name">chat-right-text-fill</div>
+        <button class="copy-btn" onclick="copyIcon('chat-right-text-fill')">Copy</button>
+      </div>
+
+      <div class="icon-card unused" data-name="check-square">
+        <div class="icon-preview" style="mask-image: url('app/assets/images/icons/check-square.svg')"></div>
+        <div class="icon-name">check-square</div>
+        <button class="copy-btn" onclick="copyIcon('check-square')">Copy</button>
+      </div>
+
+      <div class="icon-card" data-name="circle">
+        <div class="icon-preview" style="mask-image: url('app/assets/images/icons/circle.svg')"></div>
+        <div class="icon-name">circle</div>
+        <button class="copy-btn" onclick="copyIcon('circle')">Copy</button>
+      </div>
+
+      <div class="icon-card" data-name="circle-fill">
+        <div class="icon-preview" style="mask-image: url('app/assets/images/icons/circle-fill.svg')"></div>
+        <div class="icon-name">circle-fill</div>
+        <button class="copy-btn" onclick="copyIcon('circle-fill')">Copy</button>
+      </div>
+
+      <div class="icon-card" data-name="circle-pause">
+        <div class="icon-preview" style="mask-image: url('app/assets/images/icons/circle-pause.svg')"></div>
+        <div class="icon-name">circle-pause</div>
+        <button class="copy-btn" onclick="copyIcon('circle-pause')">Copy</button>
+      </div>
+
+      <div class="icon-card" data-name="circle-play">
+        <div class="icon-preview" style="mask-image: url('app/assets/images/icons/circle-play.svg')"></div>
+        <div class="icon-name">circle-play</div>
+        <button class="copy-btn" onclick="copyIcon('circle-play')">Copy</button>
+      </div>
+
+      <div class="icon-card" data-name="clock-history">
+        <div class="icon-preview" style="mask-image: url('app/assets/images/icons/clock-history.svg')"></div>
+        <div class="icon-name">clock-history</div>
+        <button class="copy-btn" onclick="copyIcon('clock-history')">Copy</button>
+      </div>
+
+      <div class="icon-card unused" data-name="code">
+        <div class="icon-preview" style="mask-image: url('app/assets/images/icons/code.svg')"></div>
+        <div class="icon-name">code</div>
+        <button class="copy-btn" onclick="copyIcon('code')">Copy</button>
+      </div>
+
+      <div class="icon-card" data-name="code-square">
+        <div class="icon-preview" style="mask-image: url('app/assets/images/icons/code-square.svg')"></div>
+        <div class="icon-name">code-square</div>
+        <button class="copy-btn" onclick="copyIcon('code-square')">Copy</button>
+      </div>
+
+      <div class="icon-card unused" data-name="cup2">
+        <div class="icon-preview" style="mask-image: url('app/assets/images/icons/cup2.svg')"></div>
+        <div class="icon-name">cup2</div>
+        <button class="copy-btn" onclick="copyIcon('cup2')">Copy</button>
+      </div>
+
+      <div class="icon-card unused" data-name="deal-fill">
+        <div class="icon-preview" style="mask-image: url('app/assets/images/icons/deal-fill.svg')"></div>
+        <div class="icon-name">deal-fill</div>
+        <button class="copy-btn" onclick="copyIcon('deal-fill')">Copy</button>
+      </div>
+
+      <div class="icon-card unused" data-name="diagram-2-fill">
+        <div class="icon-preview" style="mask-image: url('app/assets/images/icons/diagram-2-fill.svg')"></div>
+        <div class="icon-name">diagram-2-fill</div>
+        <button class="copy-btn" onclick="copyIcon('diagram-2-fill')">Copy</button>
+      </div>
+
+      <div class="icon-card" data-name="download">
+        <div class="icon-preview" style="mask-image: url('app/assets/images/icons/download.svg')"></div>
+        <div class="icon-name">download</div>
+        <button class="copy-btn" onclick="copyIcon('download')">Copy</button>
+      </div>
+
+      <div class="icon-card" data-name="download-fill">
+        <div class="icon-preview" style="mask-image: url('app/assets/images/icons/download-fill.svg')"></div>
+        <div class="icon-name">download-fill</div>
+        <button class="copy-btn" onclick="copyIcon('download-fill')">Copy</button>
+      </div>
+
+      <div class="icon-card" data-name="dropbox">
+        <div class="icon-preview" style="mask-image: url('app/assets/images/icons/dropbox.svg')"></div>
+        <div class="icon-name">dropbox</div>
+        <button class="copy-btn" onclick="copyIcon('dropbox')">Copy</button>
+      </div>
+
+      <div class="icon-card unused" data-name="embed">
+        <div class="icon-preview" style="mask-image: url('app/assets/images/icons/embed.svg')"></div>
+        <div class="icon-name">embed</div>
+        <button class="copy-btn" onclick="copyIcon('embed')">Copy</button>
+      </div>
+
+      <div class="icon-card unused" data-name="emoji-smile">
+        <div class="icon-preview" style="mask-image: url('app/assets/images/icons/emoji-smile.svg')"></div>
+        <div class="icon-name">emoji-smile</div>
+        <button class="copy-btn" onclick="copyIcon('emoji-smile')">Copy</button>
+      </div>
+
+      <div class="icon-card" data-name="envelope-fill">
+        <div class="icon-preview" style="mask-image: url('app/assets/images/icons/envelope-fill.svg')"></div>
+        <div class="icon-name">envelope-fill</div>
+        <button class="copy-btn" onclick="copyIcon('envelope-fill')">Copy</button>
+      </div>
+
+      <div class="icon-card unused" data-name="envelope-open-fill">
+        <div class="icon-preview" style="mask-image: url('app/assets/images/icons/envelope-open-fill.svg')"></div>
+        <div class="icon-name">envelope-open-fill</div>
+        <button class="copy-btn" onclick="copyIcon('envelope-open-fill')">Copy</button>
+      </div>
+
+      <div class="icon-card" data-name="eye-fill">
+        <div class="icon-preview" style="mask-image: url('app/assets/images/icons/eye-fill.svg')"></div>
+        <div class="icon-name">eye-fill</div>
+        <button class="copy-btn" onclick="copyIcon('eye-fill')">Copy</button>
+      </div>
+
+      <div class="icon-card unused" data-name="file-arrow-down">
+        <div class="icon-preview" style="mask-image: url('app/assets/images/icons/file-arrow-down.svg')"></div>
+        <div class="icon-name">file-arrow-down</div>
+        <button class="copy-btn" onclick="copyIcon('file-arrow-down')">Copy</button>
+      </div>
+
+      <div class="icon-card" data-name="file-earmark-binary-fill">
+        <div class="icon-preview" style="mask-image: url('app/assets/images/icons/file-earmark-binary-fill.svg')"></div>
+        <div class="icon-name">file-earmark-binary-fill</div>
+        <button class="copy-btn" onclick="copyIcon('file-earmark-binary-fill')">Copy</button>
+      </div>
+
+      <div class="icon-card unused" data-name="file-earmark-diff">
+        <div class="icon-preview" style="mask-image: url('app/assets/images/icons/file-earmark-diff.svg')"></div>
+        <div class="icon-name">file-earmark-diff</div>
+        <button class="copy-btn" onclick="copyIcon('file-earmark-diff')">Copy</button>
+      </div>
+
+      <div class="icon-card" data-name="file-earmark-font">
+        <div class="icon-preview" style="mask-image: url('app/assets/images/icons/file-earmark-font.svg')"></div>
+        <div class="icon-name">file-earmark-font</div>
+        <button class="copy-btn" onclick="copyIcon('file-earmark-font')">Copy</button>
+      </div>
+
+      <div class="icon-card unused" data-name="file-earmark-image-fill">
+        <div class="icon-preview" style="mask-image: url('app/assets/images/icons/file-earmark-image-fill.svg')"></div>
+        <div class="icon-name">file-earmark-image-fill</div>
+        <button class="copy-btn" onclick="copyIcon('file-earmark-image-fill')">Copy</button>
+      </div>
+
+      <div class="icon-card" data-name="file-earmark-medical">
+        <div class="icon-preview" style="mask-image: url('app/assets/images/icons/file-earmark-medical.svg')"></div>
+        <div class="icon-name">file-earmark-medical</div>
+        <button class="copy-btn" onclick="copyIcon('file-earmark-medical')">Copy</button>
+      </div>
+
+      <div class="icon-card" data-name="file-earmark-medical-fill">
+        <div class="icon-preview" style="mask-image: url('app/assets/images/icons/file-earmark-medical-fill.svg')"></div>
+        <div class="icon-name">file-earmark-medical-fill</div>
+        <button class="copy-btn" onclick="copyIcon('file-earmark-medical-fill')">Copy</button>
+      </div>
+
+      <div class="icon-card unused" data-name="file-earmark-music-fill">
+        <div class="icon-preview" style="mask-image: url('app/assets/images/icons/file-earmark-music-fill.svg')"></div>
+        <div class="icon-name">file-earmark-music-fill</div>
+        <button class="copy-btn" onclick="copyIcon('file-earmark-music-fill')">Copy</button>
+      </div>
+
+      <div class="icon-card" data-name="file-earmark-play-fill">
+        <div class="icon-preview" style="mask-image: url('app/assets/images/icons/file-earmark-play-fill.svg')"></div>
+        <div class="icon-name">file-earmark-play-fill</div>
+        <button class="copy-btn" onclick="copyIcon('file-earmark-play-fill')">Copy</button>
+      </div>
+
+      <div class="icon-card unused" data-name="file-earmark-plus">
+        <div class="icon-preview" style="mask-image: url('app/assets/images/icons/file-earmark-plus.svg')"></div>
+        <div class="icon-name">file-earmark-plus</div>
+        <button class="copy-btn" onclick="copyIcon('file-earmark-plus')">Copy</button>
+      </div>
+
+      <div class="icon-card" data-name="file-earmark-text">
+        <div class="icon-preview" style="mask-image: url('app/assets/images/icons/file-earmark-text.svg')"></div>
+        <div class="icon-name">file-earmark-text</div>
+        <button class="copy-btn" onclick="copyIcon('file-earmark-text')">Copy</button>
+      </div>
+
+      <div class="icon-card unused" data-name="file-earmark-text-fill">
+        <div class="icon-preview" style="mask-image: url('app/assets/images/icons/file-earmark-text-fill.svg')"></div>
+        <div class="icon-name">file-earmark-text-fill</div>
+        <button class="copy-btn" onclick="copyIcon('file-earmark-text-fill')">Copy</button>
+      </div>
+
+      <div class="icon-card unused" data-name="file-earmark-zip-fill">
+        <div class="icon-preview" style="mask-image: url('app/assets/images/icons/file-earmark-zip-fill.svg')"></div>
+        <div class="icon-name">file-earmark-zip-fill</div>
+        <button class="copy-btn" onclick="copyIcon('file-earmark-zip-fill')">Copy</button>
+      </div>
+
+      <div class="icon-card unused" data-name="file-music">
+        <div class="icon-preview" style="mask-image: url('app/assets/images/icons/file-music.svg')"></div>
+        <div class="icon-name">file-music</div>
+        <button class="copy-btn" onclick="copyIcon('file-music')">Copy</button>
+      </div>
+
+      <div class="icon-card unused" data-name="file-play">
+        <div class="icon-preview" style="mask-image: url('app/assets/images/icons/file-play.svg')"></div>
+        <div class="icon-name">file-play</div>
+        <button class="copy-btn" onclick="copyIcon('file-play')">Copy</button>
+      </div>
+
+      <div class="icon-card" data-name="file-text">
+        <div class="icon-preview" style="mask-image: url('app/assets/images/icons/file-text.svg')"></div>
+        <div class="icon-name">file-text</div>
+        <button class="copy-btn" onclick="copyIcon('file-text')">Copy</button>
+      </div>
+
+      <div class="icon-card" data-name="file-text-fill">
+        <div class="icon-preview" style="mask-image: url('app/assets/images/icons/file-text-fill.svg')"></div>
+        <div class="icon-name">file-text-fill</div>
+        <button class="copy-btn" onclick="copyIcon('file-text-fill')">Copy</button>
+      </div>
+
+      <div class="icon-card" data-name="files-earmark">
+        <div class="icon-preview" style="mask-image: url('app/assets/images/icons/files-earmark.svg')"></div>
+        <div class="icon-name">files-earmark</div>
+        <button class="copy-btn" onclick="copyIcon('files-earmark')">Copy</button>
+      </div>
+
+      <div class="icon-card" data-name="filter">
+        <div class="icon-preview" style="mask-image: url('app/assets/images/icons/filter.svg')"></div>
+        <div class="icon-name">filter</div>
+        <button class="copy-btn" onclick="copyIcon('filter')">Copy</button>
+      </div>
+
+      <div class="icon-card" data-name="folder-plus">
+        <div class="icon-preview" style="mask-image: url('app/assets/images/icons/folder-plus.svg')"></div>
+        <div class="icon-name">folder-plus</div>
+        <button class="copy-btn" onclick="copyIcon('folder-plus')">Copy</button>
+      </div>
+
+      <div class="icon-card unused" data-name="fonts">
+        <div class="icon-preview" style="mask-image: url('app/assets/images/icons/fonts.svg')"></div>
+        <div class="icon-name">fonts</div>
+        <button class="copy-btn" onclick="copyIcon('fonts')">Copy</button>
+      </div>
+
+      <div class="icon-card" data-name="gear">
+        <div class="icon-preview" style="mask-image: url('app/assets/images/icons/gear.svg')"></div>
+        <div class="icon-name">gear</div>
+        <button class="copy-btn" onclick="copyIcon('gear')">Copy</button>
+      </div>
+
+      <div class="icon-card" data-name="gear-fill">
+        <div class="icon-preview" style="mask-image: url('app/assets/images/icons/gear-fill.svg')"></div>
+        <div class="icon-name">gear-fill</div>
+        <button class="copy-btn" onclick="copyIcon('gear-fill')">Copy</button>
+      </div>
+
+      <div class="icon-card unused" data-name="gift">
+        <div class="icon-preview" style="mask-image: url('app/assets/images/icons/gift.svg')"></div>
+        <div class="icon-name">gift</div>
+        <button class="copy-btn" onclick="copyIcon('gift')">Copy</button>
+      </div>
+
+      <div class="icon-card" data-name="gift-fill">
+        <div class="icon-preview" style="mask-image: url('app/assets/images/icons/gift-fill.svg')"></div>
+        <div class="icon-name">gift-fill</div>
+        <button class="copy-btn" onclick="copyIcon('gift-fill')">Copy</button>
+      </div>
+
+      <div class="icon-card unused" data-name="globe">
+        <div class="icon-preview" style="mask-image: url('app/assets/images/icons/globe.svg')"></div>
+        <div class="icon-name">globe</div>
+        <button class="copy-btn" onclick="copyIcon('globe')">Copy</button>
+      </div>
+
+      <div class="icon-card" data-name="grid">
+        <div class="icon-preview" style="mask-image: url('app/assets/images/icons/grid.svg')"></div>
+        <div class="icon-name">grid</div>
+        <button class="copy-btn" onclick="copyIcon('grid')">Copy</button>
+      </div>
+
+      <div class="icon-card unused" data-name="h1">
+        <div class="icon-preview" style="mask-image: url('app/assets/images/icons/h1.svg')"></div>
+        <div class="icon-name">h1</div>
+        <button class="copy-btn" onclick="copyIcon('h1')">Copy</button>
+      </div>
+
+      <div class="icon-card unused" data-name="h2">
+        <div class="icon-preview" style="mask-image: url('app/assets/images/icons/h2.svg')"></div>
+        <div class="icon-name">h2</div>
+        <button class="copy-btn" onclick="copyIcon('h2')">Copy</button>
+      </div>
+
+      <div class="icon-card unused" data-name="h3">
+        <div class="icon-preview" style="mask-image: url('app/assets/images/icons/h3.svg')"></div>
+        <div class="icon-name">h3</div>
+        <button class="copy-btn" onclick="copyIcon('h3')">Copy</button>
+      </div>
+
+      <div class="icon-card" data-name="half-star">
+        <div class="icon-preview" style="mask-image: url('app/assets/images/icons/half-star.svg')"></div>
+        <div class="icon-name">half-star</div>
+        <button class="copy-btn" onclick="copyIcon('half-star')">Copy</button>
+      </div>
+
+      <div class="icon-card unused" data-name="hdd-network-fill">
+        <div class="icon-preview" style="mask-image: url('app/assets/images/icons/hdd-network-fill.svg')"></div>
+        <div class="icon-name">hdd-network-fill</div>
+        <button class="copy-btn" onclick="copyIcon('hdd-network-fill')">Copy</button>
+      </div>
+
+      <div class="icon-card unused" data-name="heart-fill">
+        <div class="icon-preview" style="mask-image: url('app/assets/images/icons/heart-fill.svg')"></div>
+        <div class="icon-name">heart-fill</div>
+        <button class="copy-btn" onclick="copyIcon('heart-fill')">Copy</button>
+      </div>
+
+      <div class="icon-card" data-name="horizontal-rule">
+        <div class="icon-preview" style="mask-image: url('app/assets/images/icons/horizontal-rule.svg')"></div>
+        <div class="icon-name">horizontal-rule</div>
+        <button class="copy-btn" onclick="copyIcon('horizontal-rule')">Copy</button>
+      </div>
+
+      <div class="icon-card unused" data-name="image">
+        <div class="icon-preview" style="mask-image: url('app/assets/images/icons/image.svg')"></div>
+        <div class="icon-name">image</div>
+        <button class="copy-btn" onclick="copyIcon('image')">Copy</button>
+      </div>
+
+      <div class="icon-card" data-name="info-circle">
+        <div class="icon-preview" style="mask-image: url('app/assets/images/icons/info-circle.svg')"></div>
+        <div class="icon-name">info-circle</div>
+        <button class="copy-btn" onclick="copyIcon('info-circle')">Copy</button>
+      </div>
+
+      <div class="icon-card unused" data-name="info-circle-fill">
+        <div class="icon-preview" style="mask-image: url('app/assets/images/icons/info-circle-fill.svg')"></div>
+        <div class="icon-name">info-circle-fill</div>
+        <button class="copy-btn" onclick="copyIcon('info-circle-fill')">Copy</button>
+      </div>
+
+      <div class="icon-card" data-name="input-cursor-text">
+        <div class="icon-preview" style="mask-image: url('app/assets/images/icons/input-cursor-text.svg')"></div>
+        <div class="icon-name">input-cursor-text</div>
+        <button class="copy-btn" onclick="copyIcon('input-cursor-text')">Copy</button>
+      </div>
+
+      <div class="icon-card unused" data-name="italic">
+        <div class="icon-preview" style="mask-image: url('app/assets/images/icons/italic.svg')"></div>
+        <div class="icon-name">italic</div>
+        <button class="copy-btn" onclick="copyIcon('italic')">Copy</button>
+      </div>
+
+      <div class="icon-card unused" data-name="key2">
+        <div class="icon-preview" style="mask-image: url('app/assets/images/icons/key2.svg')"></div>
+        <div class="icon-name">key2</div>
+        <button class="copy-btn" onclick="copyIcon('key2')">Copy</button>
+      </div>
+
+      <div class="icon-card unused" data-name="lighting-fill">
+        <div class="icon-preview" style="mask-image: url('app/assets/images/icons/lighting-fill.svg')"></div>
+        <div class="icon-name">lighting-fill</div>
+        <button class="copy-btn" onclick="copyIcon('lighting-fill')">Copy</button>
+      </div>
+
+      <div class="icon-card" data-name="link">
+        <div class="icon-preview" style="mask-image: url('app/assets/images/icons/link.svg')"></div>
+        <div class="icon-name">link</div>
+        <button class="copy-btn" onclick="copyIcon('link')">Copy</button>
+      </div>
+
+      <div class="icon-card unused" data-name="linkedin">
+        <div class="icon-preview" style="mask-image: url('app/assets/images/icons/linkedin.svg')"></div>
+        <div class="icon-name">linkedin</div>
+        <button class="copy-btn" onclick="copyIcon('linkedin')">Copy</button>
+      </div>
+
+      <div class="icon-card" data-name="lock-fill">
+        <div class="icon-preview" style="mask-image: url('app/assets/images/icons/lock-fill.svg')"></div>
+        <div class="icon-name">lock-fill</div>
+        <button class="copy-btn" onclick="copyIcon('lock-fill')">Copy</button>
+      </div>
+
+      <div class="icon-card" data-name="media">
+        <div class="icon-preview" style="mask-image: url('app/assets/images/icons/media.svg')"></div>
+        <div class="icon-name">media</div>
+        <button class="copy-btn" onclick="copyIcon('media')">Copy</button>
+      </div>
+
+      <div class="icon-card unused" data-name="mic-fill">
+        <div class="icon-preview" style="mask-image: url('app/assets/images/icons/mic-fill.svg')"></div>
+        <div class="icon-name">mic-fill</div>
+        <button class="copy-btn" onclick="copyIcon('mic-fill')">Copy</button>
+      </div>
+
+      <div class="icon-card unused" data-name="music-note-beamed">
+        <div class="icon-preview" style="mask-image: url('app/assets/images/icons/music-note-beamed.svg')"></div>
+        <div class="icon-name">music-note-beamed</div>
+        <button class="copy-btn" onclick="copyIcon('music-note-beamed')">Copy</button>
+      </div>
+
+      <div class="icon-card unused" data-name="ordered-list">
+        <div class="icon-preview" style="mask-image: url('app/assets/images/icons/ordered-list.svg')"></div>
+        <div class="icon-name">ordered-list</div>
+        <button class="copy-btn" onclick="copyIcon('ordered-list')">Copy</button>
+      </div>
+
+      <div class="icon-card" data-name="outline-bell">
+        <div class="icon-preview" style="mask-image: url('app/assets/images/icons/outline-bell.svg')"></div>
+        <div class="icon-name">outline-bell</div>
+        <button class="copy-btn" onclick="copyIcon('outline-bell')">Copy</button>
+      </div>
+
+      <div class="icon-card" data-name="outline-check">
+        <div class="icon-preview" style="mask-image: url('app/assets/images/icons/outline-check.svg')"></div>
+        <div class="icon-name">outline-check</div>
+        <button class="copy-btn" onclick="copyIcon('outline-check')">Copy</button>
+      </div>
+
+      <div class="icon-card unused" data-name="outline-check-circle">
+        <div class="icon-preview" style="mask-image: url('app/assets/images/icons/outline-check-circle.svg')"></div>
+        <div class="icon-name">outline-check-circle</div>
+        <button class="copy-btn" onclick="copyIcon('outline-check-circle')">Copy</button>
+      </div>
+
+      <div class="icon-card unused" data-name="outline-check-circle-about">
+        <div class="icon-preview" style="mask-image: url('app/assets/images/icons/outline-check-circle-about.svg')"></div>
+        <div class="icon-name">outline-check-circle-about</div>
+        <button class="copy-btn" onclick="copyIcon('outline-check-circle-about')">Copy</button>
+      </div>
+
+      <div class="icon-card unused" data-name="outline-cheveron-double-left">
+        <div class="icon-preview" style="mask-image: url('app/assets/images/icons/outline-cheveron-double-left.svg')"></div>
+        <div class="icon-name">outline-cheveron-double-left</div>
+        <button class="copy-btn" onclick="copyIcon('outline-cheveron-double-left')">Copy</button>
+      </div>
+
+      <div class="icon-card unused" data-name="outline-cheveron-double-right">
+        <div class="icon-preview" style="mask-image: url('app/assets/images/icons/outline-cheveron-double-right.svg')"></div>
+        <div class="icon-name">outline-cheveron-double-right</div>
+        <button class="copy-btn" onclick="copyIcon('outline-cheveron-double-right')">Copy</button>
+      </div>
+
+      <div class="icon-card" data-name="outline-cheveron-down">
+        <div class="icon-preview" style="mask-image: url('app/assets/images/icons/outline-cheveron-down.svg')"></div>
+        <div class="icon-name">outline-cheveron-down</div>
+        <button class="copy-btn" onclick="copyIcon('outline-cheveron-down')">Copy</button>
+      </div>
+
+      <div class="icon-card" data-name="outline-cheveron-left">
+        <div class="icon-preview" style="mask-image: url('app/assets/images/icons/outline-cheveron-left.svg')"></div>
+        <div class="icon-name">outline-cheveron-left</div>
+        <button class="copy-btn" onclick="copyIcon('outline-cheveron-left')">Copy</button>
+      </div>
+
+      <div class="icon-card" data-name="outline-cheveron-right">
+        <div class="icon-preview" style="mask-image: url('app/assets/images/icons/outline-cheveron-right.svg')"></div>
+        <div class="icon-name">outline-cheveron-right</div>
+        <button class="copy-btn" onclick="copyIcon('outline-cheveron-right')">Copy</button>
+      </div>
+
+      <div class="icon-card" data-name="outline-cheveron-up">
+        <div class="icon-preview" style="mask-image: url('app/assets/images/icons/outline-cheveron-up.svg')"></div>
+        <div class="icon-name">outline-cheveron-up</div>
+        <button class="copy-btn" onclick="copyIcon('outline-cheveron-up')">Copy</button>
+      </div>
+
+      <div class="icon-card unused" data-name="outline-circle-play">
+        <div class="icon-preview" style="mask-image: url('app/assets/images/icons/outline-circle-play.svg')"></div>
+        <div class="icon-name">outline-circle-play</div>
+        <button class="copy-btn" onclick="copyIcon('outline-circle-play')">Copy</button>
+      </div>
+
+      <div class="icon-card" data-name="outline-clock">
+        <div class="icon-preview" style="mask-image: url('app/assets/images/icons/outline-clock.svg')"></div>
+        <div class="icon-name">outline-clock</div>
+        <button class="copy-btn" onclick="copyIcon('outline-clock')">Copy</button>
+      </div>
+
+      <div class="icon-card" data-name="outline-credit-card">
+        <div class="icon-preview" style="mask-image: url('app/assets/images/icons/outline-credit-card.svg')"></div>
+        <div class="icon-name">outline-credit-card</div>
+        <button class="copy-btn" onclick="copyIcon('outline-credit-card')">Copy</button>
+      </div>
+
+      <div class="icon-card" data-name="outline-currency-dollar">
+        <div class="icon-preview" style="mask-image: url('app/assets/images/icons/outline-currency-dollar.svg')"></div>
+        <div class="icon-name">outline-currency-dollar</div>
+        <button class="copy-btn" onclick="copyIcon('outline-currency-dollar')">Copy</button>
+      </div>
+
+      <div class="icon-card unused" data-name="outline-dots-circle-horizontal">
+        <div class="icon-preview" style="mask-image: url('app/assets/images/icons/outline-dots-circle-horizontal.svg')"></div>
+        <div class="icon-name">outline-dots-circle-horizontal</div>
+        <button class="copy-btn" onclick="copyIcon('outline-dots-circle-horizontal')">Copy</button>
+      </div>
+
+      <div class="icon-card" data-name="outline-drag">
+        <div class="icon-preview" style="mask-image: url('app/assets/images/icons/outline-drag.svg')"></div>
+        <div class="icon-name">outline-drag</div>
+        <button class="copy-btn" onclick="copyIcon('outline-drag')">Copy</button>
+      </div>
+
+      <div class="icon-card unused" data-name="outline-drag-vert">
+        <div class="icon-preview" style="mask-image: url('app/assets/images/icons/outline-drag-vert.svg')"></div>
+        <div class="icon-name">outline-drag-vert</div>
+        <button class="copy-btn" onclick="copyIcon('outline-drag-vert')">Copy</button>
+      </div>
+
+      <div class="icon-card" data-name="outline-duplicate">
+        <div class="icon-preview" style="mask-image: url('app/assets/images/icons/outline-duplicate.svg')"></div>
+        <div class="icon-name">outline-duplicate</div>
+        <button class="copy-btn" onclick="copyIcon('outline-duplicate')">Copy</button>
+      </div>
+
+      <div class="icon-card" data-name="outline-key">
+        <div class="icon-preview" style="mask-image: url('app/assets/images/icons/outline-key.svg')"></div>
+        <div class="icon-name">outline-key</div>
+        <button class="copy-btn" onclick="copyIcon('outline-key')">Copy</button>
+      </div>
+
+      <div class="icon-card unused" data-name="outline-mail-open">
+        <div class="icon-preview" style="mask-image: url('app/assets/images/icons/outline-mail-open.svg')"></div>
+        <div class="icon-name">outline-mail-open</div>
+        <button class="copy-btn" onclick="copyIcon('outline-mail-open')">Copy</button>
+      </div>
+
+      <div class="icon-card unused" data-name="outline-menu">
+        <div class="icon-preview" style="mask-image: url('app/assets/images/icons/outline-menu.svg')"></div>
+        <div class="icon-name">outline-menu</div>
+        <button class="copy-btn" onclick="copyIcon('outline-menu')">Copy</button>
+      </div>
+
+      <div class="icon-card" data-name="outline-refresh">
+        <div class="icon-preview" style="mask-image: url('app/assets/images/icons/outline-refresh.svg')"></div>
+        <div class="icon-name">outline-refresh</div>
+        <button class="copy-btn" onclick="copyIcon('outline-refresh')">Copy</button>
+      </div>
+
+      <div class="icon-card unused" data-name="outline-shopping-bag">
+        <div class="icon-preview" style="mask-image: url('app/assets/images/icons/outline-shopping-bag.svg')"></div>
+        <div class="icon-name">outline-shopping-bag</div>
+        <button class="copy-btn" onclick="copyIcon('outline-shopping-bag')">Copy</button>
+      </div>
+
+      <div class="icon-card" data-name="outline-star">
+        <div class="icon-preview" style="mask-image: url('app/assets/images/icons/outline-star.svg')"></div>
+        <div class="icon-name">outline-star</div>
+        <button class="copy-btn" onclick="copyIcon('outline-star')">Copy</button>
+      </div>
+
+      <div class="icon-card" data-name="paperclip">
+        <div class="icon-preview" style="mask-image: url('app/assets/images/icons/paperclip.svg')"></div>
+        <div class="icon-name">paperclip</div>
+        <button class="copy-btn" onclick="copyIcon('paperclip')">Copy</button>
+      </div>
+
+      <div class="icon-card" data-name="pencil">
+        <div class="icon-preview" style="mask-image: url('app/assets/images/icons/pencil.svg')"></div>
+        <div class="icon-name">pencil</div>
+        <button class="copy-btn" onclick="copyIcon('pencil')">Copy</button>
+      </div>
+
+      <div class="icon-card" data-name="people-fill">
+        <div class="icon-preview" style="mask-image: url('app/assets/images/icons/people-fill.svg')"></div>
+        <div class="icon-name">people-fill</div>
+        <button class="copy-btn" onclick="copyIcon('people-fill')">Copy</button>
+      </div>
+
+      <div class="icon-card" data-name="person">
+        <div class="icon-preview" style="mask-image: url('app/assets/images/icons/person.svg')"></div>
+        <div class="icon-name">person</div>
+        <button class="copy-btn" onclick="copyIcon('person')">Copy</button>
+      </div>
+
+      <div class="icon-card" data-name="person-circle-fill">
+        <div class="icon-preview" style="mask-image: url('app/assets/images/icons/person-circle-fill.svg')"></div>
+        <div class="icon-name">person-circle-fill</div>
+        <button class="copy-btn" onclick="copyIcon('person-circle-fill')">Copy</button>
+      </div>
+
+      <div class="icon-card unused" data-name="person-plus-fill">
+        <div class="icon-preview" style="mask-image: url('app/assets/images/icons/person-plus-fill.svg')"></div>
+        <div class="icon-name">person-plus-fill</div>
+        <button class="copy-btn" onclick="copyIcon('person-plus-fill')">Copy</button>
+      </div>
+
+      <div class="icon-card unused" data-name="person-x-fill">
+        <div class="icon-preview" style="mask-image: url('app/assets/images/icons/person-x-fill.svg')"></div>
+        <div class="icon-name">person-x-fill</div>
+        <button class="copy-btn" onclick="copyIcon('person-x-fill')">Copy</button>
+      </div>
+
+      <div class="icon-card unused" data-name="phone">
+        <div class="icon-preview" style="mask-image: url('app/assets/images/icons/phone.svg')"></div>
+        <div class="icon-name">phone</div>
+        <button class="copy-btn" onclick="copyIcon('phone')">Copy</button>
+      </div>
+
+      <div class="icon-card" data-name="plus">
+        <div class="icon-preview" style="mask-image: url('app/assets/images/icons/plus.svg')"></div>
+        <div class="icon-name">plus</div>
+        <button class="copy-btn" onclick="copyIcon('plus')">Copy</button>
+      </div>
+
+      <div class="icon-card unused" data-name="quote">
+        <div class="icon-preview" style="mask-image: url('app/assets/images/icons/quote.svg')"></div>
+        <div class="icon-name">quote</div>
+        <button class="copy-btn" onclick="copyIcon('quote')">Copy</button>
+      </div>
+
+      <div class="icon-card unused" data-name="quote-squared">
+        <div class="icon-preview" style="mask-image: url('app/assets/images/icons/quote-squared.svg')"></div>
+        <div class="icon-name">quote-squared</div>
+        <button class="copy-btn" onclick="copyIcon('quote-squared')">Copy</button>
+      </div>
+
+      <div class="icon-card unused" data-name="redo">
+        <div class="icon-preview" style="mask-image: url('app/assets/images/icons/redo.svg')"></div>
+        <div class="icon-name">redo</div>
+        <button class="copy-btn" onclick="copyIcon('redo')">Copy</button>
+      </div>
+
+      <div class="icon-card unused" data-name="save">
+        <div class="icon-preview" style="mask-image: url('app/assets/images/icons/save.svg')"></div>
+        <div class="icon-name">save</div>
+        <button class="copy-btn" onclick="copyIcon('save')">Copy</button>
+      </div>
+
+      <div class="icon-card unused" data-name="scissors">
+        <div class="icon-preview" style="mask-image: url('app/assets/images/icons/scissors.svg')"></div>
+        <div class="icon-name">scissors</div>
+        <button class="copy-btn" onclick="copyIcon('scissors')">Copy</button>
+      </div>
+
+      <div class="icon-card" data-name="share">
+        <div class="icon-preview" style="mask-image: url('app/assets/images/icons/share.svg')"></div>
+        <div class="icon-name">share</div>
+        <button class="copy-btn" onclick="copyIcon('share')">Copy</button>
+      </div>
+
+      <div class="icon-card unused" data-name="shield-exclamation">
+        <div class="icon-preview" style="mask-image: url('app/assets/images/icons/shield-exclamation.svg')"></div>
+        <div class="icon-name">shield-exclamation</div>
+        <button class="copy-btn" onclick="copyIcon('shield-exclamation')">Copy</button>
+      </div>
+
+      <div class="icon-card" data-name="shop-window">
+        <div class="icon-preview" style="mask-image: url('app/assets/images/icons/shop-window.svg')"></div>
+        <div class="icon-name">shop-window</div>
+        <button class="copy-btn" onclick="copyIcon('shop-window')">Copy</button>
+      </div>
+
+      <div class="icon-card unused" data-name="shop-window-fill">
+        <div class="icon-preview" style="mask-image: url('app/assets/images/icons/shop-window-fill.svg')"></div>
+        <div class="icon-name">shop-window-fill</div>
+        <button class="copy-btn" onclick="copyIcon('shop-window-fill')">Copy</button>
+      </div>
+
+      <div class="icon-card" data-name="skip-back-15">
+        <div class="icon-preview" style="mask-image: url('app/assets/images/icons/skip-back-15.svg')"></div>
+        <div class="icon-name">skip-back-15</div>
+        <button class="copy-btn" onclick="copyIcon('skip-back-15')">Copy</button>
+      </div>
+
+      <div class="icon-card" data-name="skip-forward-30">
+        <div class="icon-preview" style="mask-image: url('app/assets/images/icons/skip-forward-30.svg')"></div>
+        <div class="icon-name">skip-forward-30</div>
+        <button class="copy-btn" onclick="copyIcon('skip-forward-30')">Copy</button>
+      </div>
+
+      <div class="icon-card" data-name="solid-bell">
+        <div class="icon-preview" style="mask-image: url('app/assets/images/icons/solid-bell.svg')"></div>
+        <div class="icon-name">solid-bell</div>
+        <button class="copy-btn" onclick="copyIcon('solid-bell')">Copy</button>
+      </div>
+
+      <div class="icon-card unused" data-name="solid-chat-alt">
+        <div class="icon-preview" style="mask-image: url('app/assets/images/icons/solid-chat-alt.svg')"></div>
+        <div class="icon-name">solid-chat-alt</div>
+        <button class="copy-btn" onclick="copyIcon('solid-chat-alt')">Copy</button>
+      </div>
+
+      <div class="icon-card" data-name="solid-check-circle">
+        <div class="icon-preview" style="mask-image: url('app/assets/images/icons/solid-check-circle.svg')"></div>
+        <div class="icon-name">solid-check-circle</div>
+        <button class="copy-btn" onclick="copyIcon('solid-check-circle')">Copy</button>
+      </div>
+
+      <div class="icon-card unused" data-name="solid-cog">
+        <div class="icon-preview" style="mask-image: url('app/assets/images/icons/solid-cog.svg')"></div>
+        <div class="icon-name">solid-cog</div>
+        <button class="copy-btn" onclick="copyIcon('solid-cog')">Copy</button>
+      </div>
+
+      <div class="icon-card" data-name="solid-currency-dollar">
+        <div class="icon-preview" style="mask-image: url('app/assets/images/icons/solid-currency-dollar.svg')"></div>
+        <div class="icon-name">solid-currency-dollar</div>
+        <button class="copy-btn" onclick="copyIcon('solid-currency-dollar')">Copy</button>
+      </div>
+
+      <div class="icon-card unused" data-name="solid-database">
+        <div class="icon-preview" style="mask-image: url('app/assets/images/icons/solid-database.svg')"></div>
+        <div class="icon-name">solid-database</div>
+        <button class="copy-btn" onclick="copyIcon('solid-database')">Copy</button>
+      </div>
+
+      <div class="icon-card" data-name="solid-document-text">
+        <div class="icon-preview" style="mask-image: url('app/assets/images/icons/solid-document-text.svg')"></div>
+        <div class="icon-name">solid-document-text</div>
+        <button class="copy-btn" onclick="copyIcon('solid-document-text')">Copy</button>
+      </div>
+
+      <div class="icon-card unused" data-name="solid-flag">
+        <div class="icon-preview" style="mask-image: url('app/assets/images/icons/solid-flag.svg')"></div>
+        <div class="icon-name">solid-flag</div>
+        <button class="copy-btn" onclick="copyIcon('solid-flag')">Copy</button>
+      </div>
+
+      <div class="icon-card" data-name="solid-folder-open">
+        <div class="icon-preview" style="mask-image: url('app/assets/images/icons/solid-folder-open.svg')"></div>
+        <div class="icon-name">solid-folder-open</div>
+        <button class="copy-btn" onclick="copyIcon('solid-folder-open')">Copy</button>
+      </div>
+
+      <div class="icon-card unused" data-name="solid-hand">
+        <div class="icon-preview" style="mask-image: url('app/assets/images/icons/solid-hand.svg')"></div>
+        <div class="icon-name">solid-hand</div>
+        <button class="copy-btn" onclick="copyIcon('solid-hand')">Copy</button>
+      </div>
+
+      <div class="icon-card" data-name="solid-key">
+        <div class="icon-preview" style="mask-image: url('app/assets/images/icons/solid-key.svg')"></div>
+        <div class="icon-name">solid-key</div>
+        <button class="copy-btn" onclick="copyIcon('solid-key')">Copy</button>
+      </div>
+
+      <div class="icon-card" data-name="solid-search">
+        <div class="icon-preview" style="mask-image: url('app/assets/images/icons/solid-search.svg')"></div>
+        <div class="icon-name">solid-search</div>
+        <button class="copy-btn" onclick="copyIcon('solid-search')">Copy</button>
+      </div>
+
+      <div class="icon-card" data-name="solid-send">
+        <div class="icon-preview" style="mask-image: url('app/assets/images/icons/solid-send.svg')"></div>
+        <div class="icon-name">solid-send</div>
+        <button class="copy-btn" onclick="copyIcon('solid-send')">Copy</button>
+      </div>
+
+      <div class="icon-card" data-name="solid-shield-exclamation">
+        <div class="icon-preview" style="mask-image: url('app/assets/images/icons/solid-shield-exclamation.svg')"></div>
+        <div class="icon-name">solid-shield-exclamation</div>
+        <button class="copy-btn" onclick="copyIcon('solid-shield-exclamation')">Copy</button>
+      </div>
+
+      <div class="icon-card" data-name="solid-star">
+        <div class="icon-preview" style="mask-image: url('app/assets/images/icons/solid-star.svg')"></div>
+        <div class="icon-name">solid-star</div>
+        <button class="copy-btn" onclick="copyIcon('solid-star')">Copy</button>
+      </div>
+
+      <div class="icon-card unused" data-name="solid-user">
+        <div class="icon-preview" style="mask-image: url('app/assets/images/icons/solid-user.svg')"></div>
+        <div class="icon-name">solid-user</div>
+        <button class="copy-btn" onclick="copyIcon('solid-user')">Copy</button>
+      </div>
+
+      <div class="icon-card unused" data-name="soundwave">
+        <div class="icon-preview" style="mask-image: url('app/assets/images/icons/soundwave.svg')"></div>
+        <div class="icon-name">soundwave</div>
+        <button class="copy-btn" onclick="copyIcon('soundwave')">Copy</button>
+      </div>
+
+      <div class="icon-card" data-name="sparkle">
+        <div class="icon-preview" style="mask-image: url('app/assets/images/icons/sparkle.svg')"></div>
+        <div class="icon-name">sparkle</div>
+        <button class="copy-btn" onclick="copyIcon('sparkle')">Copy</button>
+      </div>
+
+      <div class="icon-card" data-name="stack-fill">
+        <div class="icon-preview" style="mask-image: url('app/assets/images/icons/stack-fill.svg')"></div>
+        <div class="icon-name">stack-fill</div>
+        <button class="copy-btn" onclick="copyIcon('stack-fill')">Copy</button>
+      </div>
+
+      <div class="icon-card unused" data-name="stickies">
+        <div class="icon-preview" style="mask-image: url('app/assets/images/icons/stickies.svg')"></div>
+        <div class="icon-name">stickies</div>
+        <button class="copy-btn" onclick="copyIcon('stickies')">Copy</button>
+      </div>
+
+      <div class="icon-card unused" data-name="strikethrough">
+        <div class="icon-preview" style="mask-image: url('app/assets/images/icons/strikethrough.svg')"></div>
+        <div class="icon-name">strikethrough</div>
+        <button class="copy-btn" onclick="copyIcon('strikethrough')">Copy</button>
+      </div>
+
+      <div class="icon-card" data-name="stripe">
+        <div class="icon-preview" style="mask-image: url('app/assets/images/icons/stripe.svg')"></div>
+        <div class="icon-name">stripe</div>
+        <button class="copy-btn" onclick="copyIcon('stripe')">Copy</button>
+      </div>
+
+      <div class="icon-card" data-name="three-dots">
+        <div class="icon-preview" style="mask-image: url('app/assets/images/icons/three-dots.svg')"></div>
+        <div class="icon-name">three-dots</div>
+        <button class="copy-btn" onclick="copyIcon('three-dots')">Copy</button>
+      </div>
+
+      <div class="icon-card" data-name="trash2">
+        <div class="icon-preview" style="mask-image: url('app/assets/images/icons/trash2.svg')"></div>
+        <div class="icon-name">trash2</div>
+        <button class="copy-btn" onclick="copyIcon('trash2')">Copy</button>
+      </div>
+
+      <div class="icon-card" data-name="truck">
+        <div class="icon-preview" style="mask-image: url('app/assets/images/icons/truck.svg')"></div>
+        <div class="icon-name">truck</div>
+        <button class="copy-btn" onclick="copyIcon('truck')">Copy</button>
+      </div>
+
+      <div class="icon-card" data-name="twitter">
+        <div class="icon-preview" style="mask-image: url('app/assets/images/icons/twitter.svg')"></div>
+        <div class="icon-name">twitter</div>
+        <button class="copy-btn" onclick="copyIcon('twitter')">Copy</button>
+      </div>
+
+      <div class="icon-card unused" data-name="underline">
+        <div class="icon-preview" style="mask-image: url('app/assets/images/icons/underline.svg')"></div>
+        <div class="icon-name">underline</div>
+        <button class="copy-btn" onclick="copyIcon('underline')">Copy</button>
+      </div>
+
+      <div class="icon-card unused" data-name="undo">
+        <div class="icon-preview" style="mask-image: url('app/assets/images/icons/undo.svg')"></div>
+        <div class="icon-name">undo</div>
+        <button class="copy-btn" onclick="copyIcon('undo')">Copy</button>
+      </div>
+
+      <div class="icon-card" data-name="unordered-list">
+        <div class="icon-preview" style="mask-image: url('app/assets/images/icons/unordered-list.svg')"></div>
+        <div class="icon-name">unordered-list</div>
+        <button class="copy-btn" onclick="copyIcon('unordered-list')">Copy</button>
+      </div>
+
+      <div class="icon-card" data-name="upload-fill">
+        <div class="icon-preview" style="mask-image: url('app/assets/images/icons/upload-fill.svg')"></div>
+        <div class="icon-name">upload-fill</div>
+        <button class="copy-btn" onclick="copyIcon('upload-fill')">Copy</button>
+      </div>
+
+      <div class="icon-card unused" data-name="volume-down">
+        <div class="icon-preview" style="mask-image: url('app/assets/images/icons/volume-down.svg')"></div>
+        <div class="icon-name">volume-down</div>
+        <button class="copy-btn" onclick="copyIcon('volume-down')">Copy</button>
+      </div>
+
+      <div class="icon-card" data-name="x">
+        <div class="icon-preview" style="mask-image: url('app/assets/images/icons/x.svg')"></div>
+        <div class="icon-name">x</div>
+        <button class="copy-btn" onclick="copyIcon('x')">Copy</button>
+      </div>
+
+      <div class="icon-card" data-name="x-circle">
+        <div class="icon-preview" style="mask-image: url('app/assets/images/icons/x-circle.svg')"></div>
+        <div class="icon-name">x-circle</div>
+        <button class="copy-btn" onclick="copyIcon('x-circle')">Copy</button>
+      </div>
+
+      <div class="icon-card" data-name="x-circle-fill">
+        <div class="icon-preview" style="mask-image: url('app/assets/images/icons/x-circle-fill.svg')"></div>
+        <div class="icon-name">x-circle-fill</div>
+        <button class="copy-btn" onclick="copyIcon('x-circle-fill')">Copy</button>
+      </div>
+
+      <div class="icon-card" data-name="x-square">
+        <div class="icon-preview" style="mask-image: url('app/assets/images/icons/x-square.svg')"></div>
+        <div class="icon-name">x-square</div>
+        <button class="copy-btn" onclick="copyIcon('x-square')">Copy</button>
+      </div>
+
+      <div class="icon-card" data-name="zoom-in">
+        <div class="icon-preview" style="mask-image: url('app/assets/images/icons/zoom-in.svg')"></div>
+        <div class="icon-name">zoom-in</div>
+        <button class="copy-btn" onclick="copyIcon('zoom-in')">Copy</button>
+      </div>
+
+      <div class="icon-card" data-name="zoom-out">
+        <div class="icon-preview" style="mask-image: url('app/assets/images/icons/zoom-out.svg')"></div>
+        <div class="icon-name">zoom-out</div>
+        <button class="copy-btn" onclick="copyIcon('zoom-out')">Copy</button>
+      </div>
+
+    </div>
+  </div>
+
+  <div class="section">
+    <h2>Brand Icons (10)</h2>
+    <div class="grid" id="brands-grid">
+
+      <div class="icon-card" data-name="android">
+        <div class="icon-preview" style="mask-image: url('app/assets/images/brands/android.svg')"></div>
+        <div class="icon-name">android</div>
+        <button class="copy-btn" onclick="copyBrand('android')">Copy</button>
+      </div>
+
+      <div class="icon-card" data-name="apple">
+        <div class="icon-preview" style="mask-image: url('app/assets/images/brands/apple.svg')"></div>
+        <div class="icon-name">apple</div>
+        <button class="copy-btn" onclick="copyBrand('apple')">Copy</button>
+      </div>
+
+      <div class="icon-card" data-name="discord">
+        <div class="icon-preview" style="mask-image: url('app/assets/images/brands/discord.svg')"></div>
+        <div class="icon-name">discord</div>
+        <button class="copy-btn" onclick="copyBrand('discord')">Copy</button>
+      </div>
+
+      <div class="icon-card" data-name="facebook">
+        <div class="icon-preview" style="mask-image: url('app/assets/images/brands/facebook.svg')"></div>
+        <div class="icon-name">facebook</div>
+        <button class="copy-btn" onclick="copyBrand('facebook')">Copy</button>
+      </div>
+
+      <div class="icon-card" data-name="google">
+        <div class="icon-preview" style="mask-image: url('app/assets/images/brands/google.svg')"></div>
+        <div class="icon-name">google</div>
+        <button class="copy-btn" onclick="copyBrand('google')">Copy</button>
+      </div>
+
+      <div class="icon-card" data-name="kindle">
+        <div class="icon-preview" style="mask-image: url('app/assets/images/brands/kindle.svg')"></div>
+        <div class="icon-name">kindle</div>
+        <button class="copy-btn" onclick="copyBrand('kindle')">Copy</button>
+      </div>
+
+      <div class="icon-card" data-name="paypal">
+        <div class="icon-preview" style="mask-image: url('app/assets/images/brands/paypal.svg')"></div>
+        <div class="icon-name">paypal</div>
+        <button class="copy-btn" onclick="copyBrand('paypal')">Copy</button>
+      </div>
+
+      <div class="icon-card" data-name="stripe">
+        <div class="icon-preview" style="mask-image: url('app/assets/images/brands/stripe.svg')"></div>
+        <div class="icon-name">stripe</div>
+        <button class="copy-btn" onclick="copyBrand('stripe')">Copy</button>
+      </div>
+
+      <div class="icon-card" data-name="twitter">
+        <div class="icon-preview" style="mask-image: url('app/assets/images/brands/twitter.svg')"></div>
+        <div class="icon-name">twitter</div>
+        <button class="copy-btn" onclick="copyBrand('twitter')">Copy</button>
+      </div>
+
+      <div class="icon-card" data-name="zoom">
+        <div class="icon-preview" style="mask-image: url('app/assets/images/brands/zoom.svg')"></div>
+        <div class="icon-name">zoom</div>
+        <button class="copy-btn" onclick="copyBrand('zoom')">Copy</button>
+      </div>
+
+    </div>
+  </div>
+
+  <script>
+    function filterIcons(query) {
+      const cards = document.querySelectorAll('.icon-card');
+      const q = query.toLowerCase();
+      cards.forEach(card => {
+        const name = card.dataset.name;
+        card.style.display = name.includes(q) ? '' : 'none';
+      });
+    }
+    function copyIcon(name) {
+      navigator.clipboard.writeText(`<Icon name="${name}" />`);
+      alert(`Copied: <Icon name="${name}" />`);
+    }
+    function copyBrand(name) {
+      navigator.clipboard.writeText(`<span className="brand-icon brand-icon-${name}" />`);
+      alert(`Copied brand icon: ${name}`);
+    }
+  </script>
+</body>
+</html>

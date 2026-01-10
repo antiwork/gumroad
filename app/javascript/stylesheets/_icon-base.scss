@@ -1,0 +1,54 @@
+// Base icon styles for SCSS @extend usage
+// The actual icon-* classes are in tailwind.css
+// This provides placeholders for other SCSS files to @extend
+
+%icon {
+  content: "\00a0";
+  display: inline-block;
+  background: currentColor;
+  min-height: max(1lh, 1em);
+  width: 1em;
+  mask-position: 50% 50%;
+  mask-size: 120%;
+  mask-repeat: no-repeat;
+  flex-shrink: 0;
+
+  &::after {
+    content: "\00a0";
+  }
+}
+
+// Brand icon base placeholder
+%brand-icon {
+  content: "\00a0";
+  display: inline-block;
+  background: currentColor;
+  min-height: max(1lh, 1em);
+  width: 1em;
+  mask-position: 50% 50%;
+  mask-size: 100%;
+  mask-repeat: no-repeat;
+  flex-shrink: 0;
+
+  &::after {
+    content: "\00a0";
+  }
+}
+
+// Brand icon placeholders (used in _button.scss loop)
+%brand-icon-facebook { mask-image: url("~images/icons/facebook.svg"); }
+%brand-icon-twitter { mask-image: url("~images/icons/twitter.svg"); }
+%brand-icon-paypal { mask-image: url("~images/icons/paypal.svg"); }
+%brand-icon-stripe { mask-image: url("~images/icons/stripe.svg"); }
+%brand-icon-apple { mask-image: url("~images/icons/apple.svg"); }
+%brand-icon-android { mask-image: url("~images/icons/android.svg"); }
+%brand-icon-kindle { mask-image: url("~images/icons/kindle.svg"); }
+%brand-icon-discord { mask-image: url("~images/icons/discord.svg"); }
+%brand-icon-zoom { mask-image: url("~images/icons/zoom.svg"); }
+%brand-icon-google { mask-image: url("~images/icons/google.svg"); }
+
+// Icon placeholders (used in _global.scss and _forms.scss)
+%icon-outline-cheveron-right { mask-image: url("~images/icons/outline-cheveron-right.svg"); }
+%icon-outline-cheveron-down { mask-image: url("~images/icons/outline-cheveron-down.svg"); }
+%icon-outline-check { mask-image: url("~images/icons/outline-check.svg"); }
+%icon-solid-check-circle { mask-image: url("~images/icons/solid-check-circle.svg"); }

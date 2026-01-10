@@ -1,3 +1,5 @@
+@import "icon-base";
+
 @layer base {
   :root,
   :host {
@@ -131,7 +133,7 @@ details {
     }
 
     &::before {
-      @extend %icon, .icon-outline-cheveron-right;
+      @extend %icon, %icon-outline-cheveron-right;
       margin-right: spacer(1);
     }
   }
@@ -140,7 +142,7 @@ details {
     margin-bottom: spacer(2);
 
     &::before {
-      @extend .icon-outline-cheveron-down;
+      @extend %icon-outline-cheveron-down;
     }
   }
 
