@@ -75,11 +75,13 @@ export const ProductsPageProductsTable = (props: {
       }));
       activeRequest.current = null;
       tableRef.current?.scrollIntoView({ behavior: "smooth" });
+      return response;
     } catch (e) {
       if (e instanceof AbortError) return;
       assertResponseError(e);
       setState((prevState) => ({ ...prevState, isLoading: false }));
       showAlert(e.message, "error");
+      return null;
     }
   };
   const debouncedLoadProducts = useDebouncedCallback(() => void loadProducts(1), 300);
@@ -88,7 +90,12 @@ export const ProductsPageProductsTable = (props: {
     if (props.query !== null) debouncedLoadProducts();
   }, [props.query]);
 
-  const reloadProducts = () => loadProducts(pagination.page);
+  const reloadProducts = async () => {
+    const response = await loadProducts(pagination.page);
+    if (response?.entries.length === 0) {
+      router.get(Routes.products_path());
+    }
+  };
 
   if (!products.length) return null;
 
