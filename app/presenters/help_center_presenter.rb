@@ -15,7 +15,8 @@ class HelpCenterPresenter
 
   def index_props
     {
-      categories: categories_with_articles
+      categories: categories_with_articles,
+      meta: index_meta
     }
   end
 
@@ -103,6 +104,14 @@ class HelpCenterPresenter
         title: "#{category.title} - Gumroad Help Center",
         description: "Help articles for #{category.title}",
         canonical_url: help_center_category_url(category)
+      }
+    end
+
+    def index_meta
+      {
+        title: "Gumroad Help Center",
+        description: "Common questions and support documentation",
+        canonical_url: help_center_root_url
       }
     end
 end

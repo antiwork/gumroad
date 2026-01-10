@@ -5,6 +5,7 @@ import { cast } from "ts-safe-cast";
 import { NavigationButtonInertia } from "$app/components/NavigationButton";
 
 import { HelpCenterLayout } from "./Layout";
+import type { Meta } from "./types";
 
 type ArticleSummary = {
   title: string;
@@ -21,6 +22,7 @@ type Category = {
 
 type Props = {
   categories: Category[];
+  meta: Meta;
 };
 
 const escapeRegExp = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/gu, "\\$&");
@@ -66,7 +68,7 @@ const CategoryArticles = ({ category, searchTerm }: { category: Category; search
 };
 
 export default function HelpCenterIndex() {
-  const { categories } = cast<Props>(usePage().props);
+  const { categories, meta } = cast<Props>(usePage().props);
   const [searchTerm, setSearchTerm] = React.useState("");
 
   const filteredCategories = searchTerm
@@ -79,8 +81,16 @@ export default function HelpCenterIndex() {
   return (
     <HelpCenterLayout>
       <Head>
-        <title>Gumroad Help Center</title>
-        <meta name="description" content="Common questions and support documentation" />
+        <title>{meta.title}</title>
+        <meta name="description" content={meta.description} />
+        <link rel="canonical" href={meta.canonical_url} />
+        <meta property="og:title" content={meta.title} />
+        <meta property="og:description" content={meta.description} />
+        <meta property="og:type" content="website" />
+        <meta property="og:url" content={meta.canonical_url} />
+        <meta name="twitter:card" content="summary" />
+        <meta name="twitter:title" content={meta.title} />
+        <meta name="twitter:description" content={meta.description} />
       </Head>
       <input
         type="text"
