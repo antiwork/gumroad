@@ -731,9 +731,13 @@ class LinksController < ApplicationController
       if default_offer_code_id.present?
         offer_code = @product.user.offer_codes.alive.find_by_external_id(default_offer_code_id)
         unless offer_code
-          @product.errors.add(:default_offer_code, "Invalid offer code")
-          return
+          raise Link::LinkInvalid, "Invalid offer code"
         end
+
+        unless @product.offer_codes.where(id: offer_code.id).exists? || offer_code.universal?
+          raise Link::LinkInvalid, "Offer code must be associated with this product or be universal"
+        end
+
         @product.default_offer_code = offer_code
       else
         @product.default_offer_code = nil

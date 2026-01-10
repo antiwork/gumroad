@@ -30,7 +30,6 @@ import {
   ExistingFileEntry,
   ShippingCountry,
   ContentUpdates,
-  OfferCode,
 } from "$app/components/ProductEdit/state";
 import { ImageUploadSettingsContext } from "$app/components/RichTextEditor";
 import { showAlert } from "$app/components/server-components/Alert";
@@ -85,7 +84,6 @@ type Props = {
   seller_refund_policy_enabled: boolean;
   seller_refund_policy: Pick<RefundPolicy, "title" | "fine_print">;
   cancellation_discounts_enabled: boolean;
-  default_offer_code: OfferCode | null;
 };
 
 const createContextValue = (props: Props) => ({
