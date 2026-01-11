@@ -13,7 +13,7 @@ describe HelpCenter::CategoriesController, type: :controller, inertia: true do
       get :show, params: { slug: category.slug }
 
       expect(response).to have_http_status(:ok)
-      expect(inertia.component).to eq("HelpCenter/Category")
+      expect(inertia.component).to eq("HelpCenter/Category/Show")
       expect(inertia.props[:category]).to be_present
       expect(inertia.props[:category][:title]).to eq(category.title)
       expect(inertia.props[:category][:articles]).to be_present
@@ -35,7 +35,7 @@ describe HelpCenter::CategoriesController, type: :controller, inertia: true do
       # Shared props should always be present, though some may be nil
       expect(inertia.props).to have_key(:helper_widget_host)
       expect(inertia.props).to have_key(:helper_session)
-      expect(inertia.props[:is_logged_in]).to eq(false)
+      expect(inertia.props).to have_key(:recaptcha_site_key)
     end
 
     context "sidebar_categories" do

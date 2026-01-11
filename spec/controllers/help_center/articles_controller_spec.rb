@@ -23,7 +23,7 @@ describe HelpCenter::ArticlesController, type: :controller, inertia: true do
       # Shared props should always be present, though some may be nil
       expect(inertia.props).to have_key(:helper_widget_host)
       expect(inertia.props).to have_key(:helper_session)
-      expect(inertia.props[:is_logged_in]).to eq(false)
+      expect(inertia.props).to have_key(:recaptcha_site_key)
     end
   end
 
@@ -34,7 +34,7 @@ describe HelpCenter::ArticlesController, type: :controller, inertia: true do
       get :show, params: { slug: article.slug }
 
       expect(response).to have_http_status(:ok)
-      expect(inertia.component).to eq("HelpCenter/Article")
+      expect(inertia.component).to eq("HelpCenter/Article/Show")
       expect(inertia.props[:article]).to be_present
       expect(inertia.props[:article][:title]).to eq(article.title)
       expect(inertia.props[:article][:slug]).to eq(article.slug)
@@ -56,7 +56,7 @@ describe HelpCenter::ArticlesController, type: :controller, inertia: true do
       # Shared props should always be present, though some may be nil
       expect(inertia.props).to have_key(:helper_widget_host)
       expect(inertia.props).to have_key(:helper_session)
-      expect(inertia.props[:is_logged_in]).to eq(false)
+      expect(inertia.props).to have_key(:recaptcha_site_key)
     end
 
     context "sidebar_categories" do
