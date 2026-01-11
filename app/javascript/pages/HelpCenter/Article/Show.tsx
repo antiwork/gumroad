@@ -17,15 +17,15 @@ type Article = {
   };
 };
 
-type Props = {
+type HelpCenterArticleProps = {
   article: Article;
   sidebar_categories: CategorySummary[];
   meta: Meta;
 };
 
 export default function HelpCenterArticle() {
-  const { article, sidebar_categories, meta } = cast<Props>(usePage().props);
-  const [ArticleContent, setArticleContent] = useState<React.ComponentType | null>(null);
+  const { article, sidebar_categories, meta } = cast<HelpCenterArticleProps>(usePage().props);
+  const [ArticleComponent, setArticleComponent] = useState<React.ComponentType | null>(null);
   const [articleMeta, setArticleMeta] = useState<{ description: string } | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
@@ -37,7 +37,7 @@ export default function HelpCenterArticle() {
       setError(false);
       loader()
         .then((module: ArticleModule) => {
-          setArticleContent(() => module.default);
+          setArticleComponent(() => module.default);
           setArticleMeta(module.meta);
           setLoading(false);
         })
@@ -81,9 +81,9 @@ export default function HelpCenterArticle() {
                 <p className="text-red-800">Failed to load article content. Please try refreshing the page.</p>
               </div>
             ) : null}
-            {!loading && !error && ArticleContent ? (
+            {!loading && !error && ArticleComponent ? (
               <Suspense fallback={<div>Loading...</div>}>
-                <ArticleContent />
+                <ArticleComponent />
               </Suspense>
             ) : null}
           </div>

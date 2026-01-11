@@ -12,14 +12,14 @@ type CategoryWithArticles = {
   articles: { title: string; url: string }[];
 };
 
-type Props = {
+type HelpCenterCategoryProps = {
   category: CategoryWithArticles;
   sidebar_categories: CategorySummary[];
   meta: Meta;
 };
 
 export default function HelpCenterCategory() {
-  const { category, sidebar_categories, meta } = cast<Props>(usePage().props);
+  const { category, sidebar_categories, meta } = cast<HelpCenterCategoryProps>(usePage().props);
 
   return (
     <HelpCenterLayout showSearchButton>
