@@ -2,7 +2,7 @@ import { Head, usePage } from "@inertiajs/react";
 import React, { Suspense, useEffect, useState } from "react";
 import { cast } from "ts-safe-cast";
 
-import { articleModules, type ArticleModule } from "../articles";
+import { getArticle } from "../articles";
 import { CategorySidebar } from "../components/CategorySidebar";
 import { HelpCenterLayout } from "../Layout";
 import type { CategorySummary, Meta } from "../types";
@@ -31,24 +31,22 @@ export default function HelpCenterArticle() {
   const [error, setError] = useState(false);
 
   useEffect(() => {
-    const loader = articleModules[article.slug];
-    if (loader) {
-      setLoading(true);
-      setError(false);
-      loader()
-        .then((module: ArticleModule) => {
+    setLoading(true);
+    setError(false);
+    getArticle(article.slug)
+      .then((module) => {
+        if (module) {
           setArticleComponent(() => module.default);
           setArticleMeta(module.meta);
-          setLoading(false);
-        })
-        .catch(() => {
+        } else {
           setError(true);
-          setLoading(false);
-        });
-    } else {
-      setError(true);
-      setLoading(false);
-    }
+        }
+        setLoading(false);
+      })
+      .catch(() => {
+        setError(true);
+        setLoading(false);
+      });
   }, [article.slug]);
 
   const description = articleMeta?.description || meta.description;
