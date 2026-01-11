@@ -1,5 +1,3 @@
-/* Rich text content styling - for ProseMirror-generated elements */
-
 .rich-text {
   & > *,
   & .ProseMirror > * {
@@ -30,10 +28,6 @@
 
   & hr {
     margin: --spacing(8) 0;
-  }
-
-  & p {
-    margin-bottom: --spacing(4);
   }
 
   & blockquote {
@@ -72,7 +66,6 @@
       display: initial;
     }
 
-    /* Syntax highlighting - hljs colors */
     & .hljs-comment,
     & .hljs-quote {
       color: var(--color-muted);
@@ -165,7 +158,6 @@
     &.selected {
       border-radius: var(--radius-sm);
       outline: 2px solid var(--color-accent);
-      position: relative;
     }
 
     & [role="group"] {
@@ -246,7 +238,6 @@
   }
 }
 
-/* Toolbar styling - kept in CSS for specificity with role attribute */
 .rich-text-editor-toolbar[role="toolbar"] {
   position: sticky;
   top: 0;
@@ -292,7 +283,7 @@
   }
 
   & [role="menuitemradio"][aria-checked="true"] {
-    background-color: var(--active-bg);
+    background-color: var(--color-active-bg);
   }
 }
 
@@ -300,7 +291,6 @@
   padding-inline: --spacing(2);
 }
 
-/* ProseMirror editor-specific styles */
 .ProseMirror[contenteditable="true"] {
   white-space: break-spaces;
 
@@ -313,7 +303,6 @@
       cursor: pointer;
     }
 
-    /* Chrome-specific workaround to prevent highlighting the br */
     & br::selection {
       background: none;
     }
@@ -328,7 +317,6 @@
   }
 }
 
-/* Editor container */
 .rich-text-editor {
   display: grid;
   grid-template-rows: max-content 1fr;
@@ -352,7 +340,6 @@
   }
 }
 
-/* Placeholder plugin */
 .ProseMirror p.is-editor-empty:first-child::before,
 .ProseMirror .node-image.is-empty .figcaption::before {
   content: attr(data-placeholder);
