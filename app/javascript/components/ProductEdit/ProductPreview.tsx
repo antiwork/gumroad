@@ -36,9 +36,7 @@ export const ProductPreview = ({ showRefundPolicyModal }: { showRefundPolicyModa
     return {
       valid: true as const,
       code: product.default_offer_code.code,
-      discount: {
-        ...product.default_offer_code.discount,
-      },
+      discount: product.default_offer_code.discount,
     };
   }, [product.default_offer_code]);
 

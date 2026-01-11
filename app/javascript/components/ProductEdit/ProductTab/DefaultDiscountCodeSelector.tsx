@@ -19,7 +19,7 @@ export const DefaultDiscountCodeSelector = () => {
   const [query, setQuery] = React.useState(() => (selectedDiscountCode ? getLabel(selectedDiscountCode) : ""));
   const [options, setOptions] = React.useState<OfferCode[]>([]);
   const [isOpen, setIsOpen] = React.useState(false);
-  const [isTogglePending, setIsTogglePending] = React.useState(false);
+  const [isToggleOn, setIsToggleOn] = React.useState(false);
 
   const resetSearch = React.useCallback(() => {
     setQuery("");
@@ -29,7 +29,7 @@ export const DefaultDiscountCodeSelector = () => {
 
   React.useEffect(() => {
     if (product.default_offer_code) {
-      setIsTogglePending(false);
+      setIsToggleOn(true);
     }
   }, [product.default_offer_code]);
 
@@ -59,11 +59,14 @@ export const DefaultDiscountCodeSelector = () => {
   const handleToggleChange = React.useCallback(
     (enabled: boolean) => {
       if (enabled) {
-        setIsTogglePending(true);
+        setIsToggleOn(true);
         resetSearch();
       } else {
-        updateProduct({ default_offer_code_id: null });
-        setIsTogglePending(false);
+        updateProduct({
+          default_offer_code_id: null,
+          default_offer_code: null,
+        });
+        setIsToggleOn(false);
         resetSearch();
       }
     },
@@ -72,7 +75,7 @@ export const DefaultDiscountCodeSelector = () => {
 
   return (
     <ToggleSettingRow
-      value={!!product.default_offer_code || isTogglePending}
+      value={isToggleOn}
       onChange={handleToggleChange}
       label="Automatically apply discount code"
       dropdown={
@@ -118,10 +121,10 @@ export const DefaultDiscountCodeSelector = () => {
 
                     updateProduct({
                       default_offer_code_id: code.id,
+                      default_offer_code: code,
                     });
 
                     setQuery(getLabel(code));
-                    setIsTogglePending(false);
                     setIsOpen(false);
                   }}
                 >
