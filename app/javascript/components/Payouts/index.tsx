@@ -169,9 +169,13 @@ export type BankAccount =
       routing_number: string;
       account_number: string;
       bank_name?: string;
-      sort_code: string;
     }
-  | { payout_method_type: "bank"; bank_account_type: "GI"; account_number: string }
+  | {
+      payout_method_type: "bank";
+      bank_account_type: "GI";
+      routing_number: string;
+      account_number: string;
+    }
   | { payout_method_type: "bank"; bank_account_type: "GA"; routing_number: string; account_number: string }
   | { payout_method_type: "bank"; bank_account_type: "MC"; account_number: string };
 

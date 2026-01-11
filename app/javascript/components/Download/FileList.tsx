@@ -1,5 +1,5 @@
 import cx from "classnames";
-import throttle from "lodash/throttle";
+import { throttle } from "lodash-es";
 import * as React from "react";
 import { cast } from "ts-safe-cast";
 

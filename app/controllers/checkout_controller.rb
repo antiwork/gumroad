@@ -18,7 +18,7 @@ class CheckoutController < ApplicationController
       # Always show their own cart to the logged-in user
       return redirect_to(request_path_except_cart_id_param) if logged_in_user.present?
 
-      cart = Cart.includes(:user).alive.find_by_external_id(params[:cart_id])
+      cart = Cart.includes(:user).alive.find_by_secure_external_id(params[:cart_id], scope: "cart_login")
       return redirect_to(request_path_except_cart_id_param) if cart.nil?
 
       # Prompt the user to log in if the cart matching the `cart_id` param is associated with a user
