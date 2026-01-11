@@ -648,30 +648,46 @@ describe UrlRedirectsController do
     end
 
     describe "mobile app webview" do
-      let(:user) { create(:user) }
-      let(:oauth_app) { create(:oauth_application, owner: user) }
+      let(:purchaser) { create(:user) }
+      let(:oauth_app) { create(:oauth_application, owner: purchaser) }
 
-      context "with valid mobile_api scoped token" do
-        let(:access_token) { create("doorkeeper/access_token", application: oauth_app, resource_owner_id: user.id, scopes: "mobile_api") }
+      before do
+        @url_redirect.purchase.update!(purchaser:)
+      end
 
-        it "signs in the user" do
+      context "with valid mobile_api token for the purchaser" do
+        let(:access_token) { create("doorkeeper/access_token", application: oauth_app, resource_owner_id: purchaser.id, scopes: "mobile_api") }
+
+        it "grants access when the token owner is the purchaser" do
           get :download_page, params: { id: @token, access_token: access_token.token }
 
           expect(response).to be_successful
-          expect(controller.logged_in_user).to eq(user)
+        end
+      end
+
+      context "with valid token but user is not the purchaser" do
+        let(:other_user) { create(:user) }
+        let(:access_token) { create("doorkeeper/access_token", application: oauth_app, resource_owner_id: other_user.id, scopes: "mobile_api") }
+
+        it "redirects to confirm page" do
+          @url_redirect.update!(has_been_seen: true)
+
+          get :download_page, params: { id: @token, access_token: access_token.token }
+
+          expect(response).to redirect_to(confirm_page_path(id: @url_redirect.token, destination: "download_page"))
         end
       end
 
       context "with invalid token" do
-        it "returns 404" do
-          expect do
-            get :download_page, params: { id: @token, access_token: "invalid_token" }
-          end.to raise_error(ActionController::RoutingError)
+        it "returns 401" do
+          get :download_page, params: { id: @token, access_token: "invalid_token" }
+
+          expect(response).to have_http_status(:unauthorized)
         end
       end
 
       context "with token that has wrong scope" do
-        let(:access_token) { create("doorkeeper/access_token", application: oauth_app, resource_owner_id: user.id, scopes: "creator_api") }
+        let(:access_token) { create("doorkeeper/access_token", application: oauth_app, resource_owner_id: purchaser.id, scopes: "creator_api") }
 
         it "returns 403" do
           get :download_page, params: { id: @token, access_token: access_token.token }

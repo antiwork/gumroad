@@ -9,7 +9,6 @@ class UrlRedirectsController < ApplicationController
     audio_durations
   ]
   before_action :redirect_to_custom_domain_if_needed, only: :download_page
-  before_action :sign_in_mobile_app_user, only: :download_page
   before_action :redirect_bundle_purchase_to_library_if_needed, only: :download_page
   before_action :redirect_to_coffee_page_if_needed, only: :download_page
   before_action :check_permissions, only: %i[show stream download_page
@@ -300,14 +299,6 @@ class UrlRedirectsController < ApplicationController
       )
     end
 
-    def sign_in_mobile_app_user
-      return unless params[:access_token].present?
-
-      doorkeeper_authorize! :mobile_api
-      e404 unless current_api_user.present?
-      sign_in current_api_user
-    end
-
     def redirect_bundle_purchase_to_library_if_needed
       return unless @url_redirect.purchase&.is_bundle_purchase?
 
@@ -363,6 +354,11 @@ class UrlRedirectsController < ApplicationController
 
       if purchase&.subscription && !purchase.subscription.grant_access_to_product?
         return redirect_to url_redirect_membership_inactive_page_path(@url_redirect.token)
+      end
+
+      if params[:access_token].present?
+        doorkeeper_authorize! :mobile_api
+        return if purchase.purchaser && purchase.purchaser == current_api_user
       end
 
       if cookies.encrypted[:confirmed_redirect] == @url_redirect.token ||
