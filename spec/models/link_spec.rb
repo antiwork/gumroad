@@ -4873,5 +4873,13 @@ describe Link, :vcr do
       product.default_offer_code = nil
       expect(product).to be_valid
     end
+
+    it "clears default_offer_code when the offer code is destroyed" do
+      product.update!(default_offer_code: product_offer_code)
+      expect(product.reload.default_offer_code_id).to eq(product_offer_code.id)
+
+      product_offer_code.destroy!
+      expect(product.reload.default_offer_code_id).to be_nil
+    end
   end
 end
