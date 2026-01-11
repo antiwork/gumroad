@@ -2,9 +2,9 @@ import { Head, Link, usePage } from "@inertiajs/react";
 import React from "react";
 import { cast } from "ts-safe-cast";
 
-import { CategorySidebar } from "./components/CategorySidebar";
-import { HelpCenterLayout } from "./Layout";
-import type { CategorySummary, Meta } from "./types";
+import { CategorySidebar } from "../components/CategorySidebar";
+import { HelpCenterLayout } from "../Layout";
+import type { CategorySummary, Meta } from "../types";
 
 type CategoryWithArticles = {
   title: string;

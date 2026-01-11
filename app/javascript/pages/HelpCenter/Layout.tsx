@@ -18,7 +18,6 @@ type SharedProps = {
     timestamp?: number | null;
   } | null;
   recaptcha_site_key?: string | null;
-  is_logged_in: boolean;
 };
 
 type HelpCenterLayoutProps = {

@@ -11,7 +11,7 @@ class HelpCenter::ArticlesController < HelpCenter::BaseController
   def show
     article = HelpCenter::Article.find_by!(slug: params[:slug])
     @title = "#{article.title} - Gumroad Help Center"
-    render inertia: "HelpCenter/Article", props: help_center_presenter.article_props(article)
+    render inertia: "HelpCenter/Article/Show", props: help_center_presenter.article_props(article)
   end
 
   private

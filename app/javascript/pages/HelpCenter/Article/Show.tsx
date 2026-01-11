@@ -2,10 +2,10 @@ import { Head, usePage } from "@inertiajs/react";
 import React, { Suspense, useEffect, useState } from "react";
 import { cast } from "ts-safe-cast";
 
-import { articleModules, type ArticleModule } from "./articles";
-import { CategorySidebar } from "./components/CategorySidebar";
-import { HelpCenterLayout } from "./Layout";
-import type { CategorySummary, Meta } from "./types";
+import { articleModules, type ArticleModule } from "../articles";
+import { CategorySidebar } from "../components/CategorySidebar";
+import { HelpCenterLayout } from "../Layout";
+import type { CategorySummary, Meta } from "../types";
 
 type Article = {
   title: string;

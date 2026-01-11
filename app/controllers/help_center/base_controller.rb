@@ -9,8 +9,7 @@ class HelpCenter::BaseController < ApplicationController
     {
       helper_widget_host: helper_widget_host,
       helper_session: helper_session,
-      recaptcha_site_key: user_signed_in? ? nil : GlobalConfig.get("RECAPTCHA_LOGIN_SITE_KEY"),
-      is_logged_in: user_signed_in?
+      recaptcha_site_key: user_signed_in? ? nil : GlobalConfig.get("RECAPTCHA_LOGIN_SITE_KEY")
     }
   end
 
