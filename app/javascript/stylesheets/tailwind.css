@@ -75,6 +75,9 @@
   }
 }
 
+/* Rich text editor styling */
+@import "./rich-text.css";
+
 /* Coins parallax animation */
 .parallax-up {
   transform: translateY(0);
