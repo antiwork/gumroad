@@ -3,12 +3,6 @@
 class HelpCenterPresenter
   include Rails.application.routes.url_helpers
 
-  attr_reader :view_context
-
-  def initialize(view_context:)
-    @view_context = view_context
-  end
-
   def default_url_options
     { host: DOMAIN, protocol: PROTOCOL }
   end
