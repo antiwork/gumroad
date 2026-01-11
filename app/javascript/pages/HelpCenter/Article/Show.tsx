@@ -56,7 +56,6 @@ export default function HelpCenterArticle() {
   return (
     <HelpCenterLayout showSearchButton>
       <Head>
-        <title>{meta.title}</title>
         <meta name="description" content={description} />
         <link rel="canonical" href={meta.canonical_url} />
         <meta property="og:title" content={meta.title} />

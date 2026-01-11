@@ -24,7 +24,6 @@ export default function HelpCenterCategory() {
   return (
     <HelpCenterLayout showSearchButton>
       <Head>
-        <title>{meta.title}</title>
         <meta name="description" content={meta.description} />
         <link rel="canonical" href={meta.canonical_url} />
         <meta property="og:title" content={meta.title} />
