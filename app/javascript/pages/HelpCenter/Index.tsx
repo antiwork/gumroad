@@ -7,23 +7,22 @@ import { NavigationButtonInertia } from "$app/components/NavigationButton";
 import { HelpCenterLayout } from "./Layout";
 import type { Meta } from "./types";
 
-type ArticleSummary = {
+interface Article {
   title: string;
   url: string;
-};
+}
 
-type Category = {
-  title: string;
-  slug: string;
+interface Category {
   url: string;
+  title: string;
   audience: string;
-  articles: ArticleSummary[];
-};
+  articles: Article[];
+}
 
-type Props = {
+interface ArticlesIndexPageProps {
   categories: Category[];
   meta: Meta;
-};
+}
 
 const escapeRegExp = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/gu, "\\$&");
 
@@ -68,7 +67,7 @@ const CategoryArticles = ({ category, searchTerm }: { category: Category; search
 };
 
 export default function HelpCenterIndex() {
-  const { categories, meta } = cast<Props>(usePage().props);
+  const { categories, meta } = cast<ArticlesIndexPageProps>(usePage().props);
   const [searchTerm, setSearchTerm] = React.useState("");
 
   const filteredCategories = searchTerm
