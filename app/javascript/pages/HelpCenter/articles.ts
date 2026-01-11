@@ -5,7 +5,7 @@ export type ArticleModule = {
   meta: { description: string };
 };
 
-const articleModules: Record<string, () => Promise<ArticleModule>> = {
+export const articleModules: Record<string, () => Promise<ArticleModule>> = {
   "10-dealing-with-vat": () => import("./articles/DealingWithVat"),
   "13-getting-paid": () => import("./articles/GettingPaid"),
   "15-1099s": () => import("./articles/Article1099s"),

@@ -2,7 +2,7 @@ import { Head, usePage } from "@inertiajs/react";
 import React, { Suspense, useEffect, useState } from "react";
 import { cast } from "ts-safe-cast";
 
-import { getArticle } from "../articles";
+import { articleModules, type ArticleModule } from "../articles";
 import { CategorySidebar } from "../components/CategorySidebar";
 import { HelpCenterLayout } from "../Layout";
 import type { CategorySummary, Meta } from "../types";
@@ -25,31 +25,36 @@ type HelpCenterArticleProps = {
 
 export default function HelpCenterArticle() {
   const { article, sidebar_categories, meta } = cast<HelpCenterArticleProps>(usePage().props);
-  const [ArticleComponent, setArticleComponent] = useState<React.ComponentType | null>(null);
-  const [articleMeta, setArticleMeta] = useState<{ description: string } | null>(null);
+  const [moduleData, setModuleData] = useState<ArticleModule | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
 
+  const loader = articleModules[article.slug];
+
   useEffect(() => {
+    if (!loader) {
+      setError(true);
+      setLoading(false);
+      return;
+    }
+
     setLoading(true);
     setError(false);
-    getArticle(article.slug)
+
+    loader()
       .then((module) => {
-        if (module) {
-          setArticleComponent(() => module.default);
-          setArticleMeta(module.meta);
-        } else {
-          setError(true);
-        }
+        setModuleData(module);
         setLoading(false);
       })
       .catch(() => {
         setError(true);
         setLoading(false);
       });
-  }, [article.slug]);
+  }, [loader]);
 
-  const description = articleMeta?.description || meta.description;
+  const ArticleComponent = moduleData?.default ?? null;
+
+  const description = moduleData?.meta.description || meta.description;
 
   return (
     <HelpCenterLayout showSearchButton>
