@@ -734,6 +734,10 @@ class LinksController < ApplicationController
           raise Link::LinkInvalid, "Invalid offer code"
         end
 
+        if offer_code.inactive?
+          raise Link::LinkInvalid, "Offer code cannot be expired"
+        end
+
         unless @product.offer_codes.where(id: offer_code.id).exists? || offer_code.universal?
           raise Link::LinkInvalid, "Offer code must be associated with this product or be universal"
         end

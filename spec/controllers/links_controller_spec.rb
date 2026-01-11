@@ -1191,6 +1191,14 @@ describe LinksController, :vcr, inertia: true do
             expect(@product.reload.default_offer_code).to be_nil
           end
 
+          it "does not set the default offer code when offer code is expired" do
+            expired_offer_code = create(:offer_code, user: @product.user, products: [@product], valid_at: 2.days.ago, expires_at: 1.day.ago)
+            @params[:default_offer_code_id] = expired_offer_code.external_id
+            post :update, params: @params, format: :json
+
+            expect(@product.reload.default_offer_code).to be_nil
+          end
+
           it "clears the default offer code when nil is provided" do
             @product.update!(default_offer_code: offer_code)
             @params[:default_offer_code_id] = nil
