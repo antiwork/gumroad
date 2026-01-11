@@ -74,11 +74,13 @@ export const ProductsPageMembershipsTable = (props: {
         isLoading: false,
       }));
       activeRequest.current = null;
+      return response;
     } catch (e) {
       if (e instanceof AbortError) return;
       assertResponseError(e);
       showAlert(e.message, "error");
       setState((prevState) => ({ ...prevState, isLoading: false }));
+      return null;
     }
   };
   const debouncedLoadMemberships = useDebouncedCallback(() => void loadMemberships(1), 300);
@@ -87,7 +89,12 @@ export const ProductsPageMembershipsTable = (props: {
     if (props.query !== null) debouncedLoadMemberships();
   }, [props.query]);
 
-  const reloadMemberships = () => loadMemberships(pagination.page);
+  const reloadMemberships = async () => {
+    const response = await loadMemberships(pagination.page);
+    if (response?.entries.length === 0) {
+      router.get(Routes.products_path());
+    }
+  };
 
   if (!memberships.length) return null;
 
