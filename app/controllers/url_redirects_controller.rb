@@ -9,6 +9,7 @@ class UrlRedirectsController < ApplicationController
     audio_durations
   ]
   before_action :redirect_to_custom_domain_if_needed, only: :download_page
+  before_action :sign_in_mobile_app_user, only: :download_page
   before_action :redirect_bundle_purchase_to_library_if_needed, only: :download_page
   before_action :redirect_to_coffee_page_if_needed, only: :download_page
   before_action :check_permissions, only: %i[show stream download_page
@@ -297,6 +298,14 @@ class UrlRedirectsController < ApplicationController
         status: :moved_permanently,
         allow_other_host: true
       )
+    end
+
+    def sign_in_mobile_app_user
+      return unless params[:access_token].present?
+
+      doorkeeper_authorize! :mobile_api
+      e404 unless current_api_user.present?
+      sign_in current_api_user
     end
 
     def redirect_bundle_purchase_to_library_if_needed

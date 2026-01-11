@@ -646,6 +646,40 @@ describe UrlRedirectsController do
         expect(response).to redirect_to(custom_domain_coffee_url(host: url_redirect.seller.subdomain_with_protocol, purchase_email: "test@gumroad.com"))
       end
     end
+
+    describe "mobile app webview" do
+      let(:user) { create(:user) }
+      let(:oauth_app) { create(:oauth_application, owner: user) }
+
+      context "with valid mobile_api scoped token" do
+        let(:access_token) { create("doorkeeper/access_token", application: oauth_app, resource_owner_id: user.id, scopes: "mobile_api") }
+
+        it "signs in the user" do
+          get :download_page, params: { id: @token, access_token: access_token.token }
+
+          expect(response).to be_successful
+          expect(controller.logged_in_user).to eq(user)
+        end
+      end
+
+      context "with invalid token" do
+        it "returns 404" do
+          expect do
+            get :download_page, params: { id: @token, access_token: "invalid_token" }
+          end.to raise_error(ActionController::RoutingError)
+        end
+      end
+
+      context "with token that has wrong scope" do
+        let(:access_token) { create("doorkeeper/access_token", application: oauth_app, resource_owner_id: user.id, scopes: "creator_api") }
+
+        it "returns 403" do
+          get :download_page, params: { id: @token, access_token: access_token.token }
+
+          expect(response).to have_http_status(:forbidden)
+        end
+      end
+    end
   end
 
   describe "GET download_archive" do
