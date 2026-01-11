@@ -33,6 +33,7 @@ class OfferCode < ApplicationRecord
   validate :price_validation
   validate :validate_cancellation_discount_uniqueness
   validate :validate_cancellation_discount_product_type
+  validate :validate_not_used_as_default_discount
 
   before_save :to_mongo
 
@@ -307,4 +308,12 @@ class OfferCode < ApplicationRecord
     def reindex_captured_products
       reindex_associated_products(products_to_reindex: Link.where(id: @product_ids_to_reindex)) if @product_ids_to_reindex.present?
     end
-end
+
+    def validate_not_used_as_default_discount
+      return unless deleted_at_changed? && deleted_at.present?
+
+      if Link.alive.where(default_discount_code_id: id).exists?
+        errors.add(:base, "This discount code is currently set as the default discount for one or more active products. Please remove it from all products before deleting.")
+      end
+    end
+  end
