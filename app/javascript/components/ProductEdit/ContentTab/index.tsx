@@ -92,7 +92,7 @@ export const extensions = (productId: string, extraExtensions: TiptapNode[] = []
 ];
 
 const ContentTabContent = ({ selectedVariantId }: { selectedVariantId: string | null }) => {
-  const { id, product, updateProduct, seller, save, existingFiles, setExistingFiles, uniquePermalink, filesById } =
+  const { id, product, updateProduct, seller, save, existingFiles, setExistingFiles, uniquePermalink, filesById, dropboxChoose, dropboxSave } =
     useProductEditContext();
   const uid = React.useId();
   const isDesktop = useIsAboveBreakpoint("lg");
@@ -211,6 +211,7 @@ const ContentTabContent = ({ selectedVariantId }: { selectedVariantId: string | 
     variantId: selectedVariantId,
     prepareDownload: save,
     filesById,
+    dropboxSave,
   });
   const fileEmbedConfig = useRefToLatest<FileEmbedConfig>({ filesById });
   const uploadFilesRef = useRefToLatest(uploadFiles);
@@ -410,7 +411,7 @@ const ContentTabContent = ({ selectedVariantId }: { selectedVariantId: string | 
       window.___dropbox_files_picked = null;
       return;
     }
-    window.Dropbox.choose({ linkType: "direct", multiselect: true, success: (files) => void uploadFiles(files) });
+    dropboxChoose({ linkType: "direct", multiselect: true, success: (files) => void uploadFiles(files) });
   };
   React.useEffect(() => {
     const interval = setInterval(

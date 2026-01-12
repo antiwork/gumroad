@@ -35,6 +35,7 @@ type FileGroupConfig = {
   variantId: string | null;
   prepareDownload: () => Promise<void>;
   filesById: Map<string, FileEntry>;
+  dropboxSave: (options: Parameters<typeof Dropbox.save>[0]) => void;
 };
 type FileEmbedGroupStorage = { lastCreatedUid: string | null };
 
@@ -128,7 +129,7 @@ const FileEmbedGroupNodeView = ({
           product_file_ids: downloadableFiles.map((file) => file.id),
         }),
       );
-      if (fileDownloadInfos.length > 0) Dropbox.save({ files: fileDownloadInfos });
+      if (fileDownloadInfos.length > 0) config.dropboxSave({ files: fileDownloadInfos });
     } catch (e) {
       assertResponseError(e);
       showAlert(e.message, "error");

@@ -6,6 +6,7 @@ import * as React from "react";
 import { cast } from "ts-safe-cast";
 
 import { OtherRefundPolicy } from "$app/data/products/other_refund_policies";
+import { useDropboxDropins } from "$app/hooks/useDropboxDropins";
 import { Thumbnail } from "$app/data/thumbnails";
 import { RatingsWithPercentages } from "$app/parsers/product";
 import { CurrencyCode } from "$app/utils/currency";
@@ -101,6 +102,8 @@ export const ProductEditProvider = ({ children, currentTab }: { children: React.
 
   const form = useForm({});
   const publishForm = useForm({});
+
+  const { choose: dropboxChoose, save: dropboxSave } = useDropboxDropins(dropbox_app_key);
 
   const [imagesUploading, setImagesUploading] = React.useState<Set<File>>(new Set());
 
@@ -237,6 +240,8 @@ export const ProductEditProvider = ({ children, currentTab }: { children: React.
       publishing: publishForm.processing,
       publish,
       unpublish,
+      dropboxChoose,
+      dropboxSave,
     }),
     [
       product,
@@ -248,6 +253,8 @@ export const ProductEditProvider = ({ children, currentTab }: { children: React.
       filesById,
       dropbox_app_key,
       edit_props,
+      dropboxChoose,
+      dropboxSave,
     ],
   );
 

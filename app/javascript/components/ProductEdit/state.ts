@@ -198,6 +198,8 @@ export const ProductEditContext = React.createContext<{
   publishing: boolean;
   publish: () => void;
   unpublish: () => void;
+  dropboxChoose: (options: Parameters<typeof Dropbox.choose>[0]) => void;
+  dropboxSave: (options: Parameters<typeof Dropbox.save>[0]) => void;
 } | null>(null);
 export const useProductEditContext = () => assertDefined(React.useContext(ProductEditContext));
 
