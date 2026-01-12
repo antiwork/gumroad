@@ -987,9 +987,12 @@ describe CustomerMailer do
     context "when the cart is missing user_id" do
       let(:cart) { create(:cart, user: nil, email: "guest@example.com") }
       let!(:cart_product) { create(:cart_product, cart: cart, product: seller1.products.first) }
+      let(:stubbed_cart_id) { "stubbed_secure_cart_id" }
 
       before do
         cart.update!(updated_at: 2.days.ago)
+        allow(cart).to receive(:secure_external_id).with(scope: "cart_login").and_return(stubbed_cart_id)
+        allow(Cart).to receive(:find).with(cart.id).and_return(cart)
       end
 
       it "sends an email" do
@@ -1002,7 +1005,7 @@ describe CustomerMailer do
           expect(mail.body.sanitized).to have_text("S1 Product 1")
           expect(mail.body.sanitized).to_not have_text("S1 Product 2")
           expect(mail.body.sanitized).to have_text("Thanks!")
-          expect(mail.body).to have_link("Complete checkout", href: checkout_index_url(host: UrlService.domain_with_protocol, cart_id: cart.external_id))
+          expect(mail.body).to have_link("Complete checkout", href: checkout_index_url(host: UrlService.domain_with_protocol, cart_id: stubbed_cart_id))
         end.to change { SentAbandonedCartEmail.count }.by(1)
       end
 
@@ -1024,10 +1027,13 @@ describe CustomerMailer do
 
     context "when the cart is abandoned" do
       let(:cart) { create(:cart) }
+      let(:stubbed_cart_id) { "stubbed_secure_cart_id" }
 
       before do
         create(:cart_product, cart: cart, product: seller1.products.first)
         cart.update!(updated_at: 25.hours.ago)
+        allow(cart).to receive(:secure_external_id).with(scope: "cart_login").and_return(stubbed_cart_id)
+        allow(Cart).to receive(:find).with(cart.id).and_return(cart)
       end
 
       context "when the provided workflow is not published" do
@@ -1076,7 +1082,7 @@ describe CustomerMailer do
             expect(mail.body.sanitized).to_not have_text("S1 Product 2")
             expect(mail.body.sanitized).to_not have_text("S2 Product 1")
             expect(mail.body.sanitized).to have_text("Thanks!")
-            expect(mail.body).to have_link("Complete checkout", href: checkout_index_url(host: UrlService.domain_with_protocol, cart_id: cart.external_id))
+            expect(mail.body).to have_link("Complete checkout", href: checkout_index_url(host: UrlService.domain_with_protocol, cart_id: stubbed_cart_id))
           end.to change { SentAbandonedCartEmail.count }.by(1)
 
           expect(SentAbandonedCartEmail.last).to have_attributes(cart_id: cart.id, installment_id: seller1_workflow_installment.id)
@@ -1088,7 +1094,7 @@ describe CustomerMailer do
             expect(mail.body.sanitized).to have_text("S1 Product 1")
             expect(mail.body.sanitized).to have_text("S1 Product 2")
             expect(mail.body.sanitized).to have_text("S1 Product 3")
-            expect(mail.body).to have_link("and 1 more product", href: checkout_index_url(host: UrlService.domain_with_protocol, cart_id: cart.external_id))
+            expect(mail.body).to have_link("and 1 more product", href: checkout_index_url(host: UrlService.domain_with_protocol, cart_id: stubbed_cart_id))
             expect(mail.body.sanitized).to_not have_text("S1 Product 4")
           end
         end
@@ -1108,7 +1114,6 @@ describe CustomerMailer do
           expect do
             seller1_workflow_installment.update!(name: "Uh oh, you left something in your cart!")
             seller2_workflow_installment.update!(name: "Hurry up and complete your purchase!")
-
             mail = CustomerMailer.abandoned_cart(cart.id, {
               seller1_workflow.id => seller1.products.pluck(:id).first(2),
               seller2_workflow.id => seller2.products.pluck(:id),
@@ -1128,8 +1133,8 @@ describe CustomerMailer do
             expect(mail.body.sanitized).to have_text("S2 Product 3")
             expect(mail.body.sanitized).to_not have_text("S2 Product 4")
             expect(mail.body).to have_link("John Smith", href: "http://johnsmith.test.gumroad.com:31337", exact: true, count: 3)
-            expect(mail.body).to have_link("and 1 more product", href: checkout_index_url(host: UrlService.domain_with_protocol, cart_id: cart.external_id), count: 1)
-            expect(mail.body).to have_link("Complete checkout", href: checkout_index_url(host: UrlService.domain_with_protocol, cart_id: cart.external_id), count: 2)
+            expect(mail.body).to have_link("and 1 more product", href: checkout_index_url(host: UrlService.domain_with_protocol, cart_id: stubbed_cart_id), count: 1)
+            expect(mail.body).to have_link("Complete checkout", href: checkout_index_url(host: UrlService.domain_with_protocol, cart_id: stubbed_cart_id), count: 2)
           end.to change { SentAbandonedCartEmail.count }.by(2)
 
           expect(SentAbandonedCartEmail.pluck(:cart_id, :installment_id)).to match_array([
