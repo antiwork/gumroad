@@ -19,6 +19,7 @@ import { Pagination, PaginationProps } from "$app/components/Pagination";
 import { Popover } from "$app/components/Popover";
 import { showAlert } from "$app/components/server-components/Alert";
 import { Skeleton } from "$app/components/Skeleton";
+import { Card, CardContent } from "$app/components/ui/Card";
 import { PageHeader } from "$app/components/ui/PageHeader";
 import { Placeholder, PlaceholderImage } from "$app/components/ui/Placeholder";
 import { Sheet, SheetHeader } from "$app/components/ui/Sheet";
@@ -544,30 +545,34 @@ const AffiliateDetails = ({
         const productStatistics = statistics?.products[product.id];
 
         return (
-          <section key={product.id} className="stack">
-            <h3>{product.name}</h3>
-            {statistics ? (
-              <>
-                <div>
-                  <h5>Revenue</h5>
-                  {formattedSalesVolumeAmount(productStatistics?.volume_cents ?? 0)}
-                </div>
-                <div>
-                  <h5>Sales</h5>
-                  {productStatistics?.sales_count ?? 0}
-                </div>
-              </>
-            ) : null}
-            <div>
-              <h5>Commission</h5>
-              {((product.fee_percent ?? 0) / 100).toLocaleString([], { style: "percent" })}
-            </div>
-            <div>
-              <CopyToClipboard tooltipPosition="bottom" copyTooltip="Copy link" text={product.referral_url}>
-                <Button>Copy link</Button>
-              </CopyToClipboard>
-            </div>
-          </section>
+          <Card asChild key={product.id}>
+            <section>
+              <CardContent asChild>
+                <h3>{product.name}</h3>
+              </CardContent>
+              {statistics ? (
+                <>
+                  <CardContent>
+                    <h5 className="grow font-bold">Revenue</h5>
+                    {formattedSalesVolumeAmount(productStatistics?.volume_cents ?? 0)}
+                  </CardContent>
+                  <CardContent>
+                    <h5 className="grow font-bold">Sales</h5>
+                    {productStatistics?.sales_count ?? 0}
+                  </CardContent>
+                </>
+              ) : null}
+              <CardContent>
+                <h5 className="grow font-bold">Commission</h5>
+                {((product.fee_percent ?? 0) / 100).toLocaleString([], { style: "percent" })}
+              </CardContent>
+              <CardContent>
+                <CopyToClipboard tooltipPosition="bottom" copyTooltip="Copy link" text={product.referral_url}>
+                  <Button>Copy link</Button>
+                </CopyToClipboard>
+              </CardContent>
+            </section>
+          </Card>
         );
       })}
       <section style={{ display: "grid", gap: "var(--spacer-4)", gridAutoFlow: "column", gridAutoColumns: "1fr" }}>

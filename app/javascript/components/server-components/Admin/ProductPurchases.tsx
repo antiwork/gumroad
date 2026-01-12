@@ -8,6 +8,7 @@ import { register } from "$app/utils/serverComponentUtil";
 import { LoadingSpinner } from "$app/components/LoadingSpinner";
 import { showAlert } from "$app/components/server-components/Alert";
 import { Alert } from "$app/components/ui/Alert";
+import { Card, CardContent } from "$app/components/ui/Card";
 
 const AdminProductPurchases = ({
   product_id,
@@ -57,11 +58,11 @@ const AdminProductPurchases = ({
       </summary>
       <div className="paragraphs">
         {purchases && purchases.length > 0 ? (
-          <div className="stack">
+          <Card>
             {purchases.map((purchase) => (
-              <div key={purchase.external_id}>
-                <div>
-                  <h5>
+              <CardContent key={purchase.external_id}>
+                <div className="grow">
+                  <h5 className="font-bold">
                     <a href={Routes.admin_purchase_path(purchase.external_id)}>{purchase.displayed_price}</a>
                     {purchase.gumroad_responsible_for_tax ? ` + ${purchase.formatted_gumroad_tax_amount} VAT` : null}
                   </h5>
@@ -91,9 +92,9 @@ const AdminProductPurchases = ({
                   <a href={Routes.admin_search_purchases_path({ query: purchase.email })}>{purchase.email}</a>
                   <small>{purchase.created}</small>
                 </div>
-              </div>
+              </CardContent>
             ))}
-          </div>
+          </Card>
         ) : null}
         {isLoading ? <LoadingSpinner className="size-3" /> : null}
         {purchases?.length === 0 ? (
