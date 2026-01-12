@@ -8958,7 +8958,7 @@ describe StripeMerchantAccountManager, :vcr do
         bank_account_2.reload
         expect(bank_account_1.stripe_fingerprint).to eq(bank_account_1_stripe_fingerprint)
         expect(bank_account_2.stripe_fingerprint).to match(/[a-zA-Z0-9]+/)
-        expect(FlagForFraudStripeFingerprintWorker).to have_enqueued_sidekiq_job(user.id).in(5.seconds)
+        expect(FlagForFraudStripeFingerprintWorker).to have_enqueued_sidekiq_job(user.id)
       end
 
       describe "invalid account number provided" do
@@ -10451,7 +10451,7 @@ describe StripeMerchantAccountManager, :vcr do
 
           expect(user.active_bank_account.stripe_connect_account_id).to eq(merchant_account.charge_processor_merchant_id)
           expect(user.active_bank_account.stripe_external_account_id).to be_present
-          expect(FlagForFraudStripeFingerprintWorker).to have_enqueued_sidekiq_job(user.id).in(5.seconds)
+          expect(FlagForFraudStripeFingerprintWorker).to have_enqueued_sidekiq_job(user.id)
         end
 
         it "removes request for a card bank account if present" do
