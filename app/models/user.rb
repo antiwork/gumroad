@@ -1218,9 +1218,10 @@ class User < ApplicationRecord
       value.presence && Mail::Address.new(value).domain
     end
 
+    # Checks if a value is purely numeric (returns true for both database IDs and external_ids).
+    # Used in redirect logic after external_id lookup fails, to distinguish numeric identifiers
+    # from usernames that start with numbers (e.g., "1jyo" should not redirect to user with id=1).
     def self.id?(value)
-      return false if value.blank?
-
-      value.to_s == value.to_i.to_s
+      value.present? && value.to_s == value.to_i.to_s
     end
 end
