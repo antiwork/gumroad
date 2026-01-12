@@ -5,6 +5,6 @@ class Admin::Products::BaseController < Admin::BaseController
 
   private
     def set_product
-      @product = Link.find(params[:product_id])
+      @product = Link.find_by_external_id!(params[:product_external_id])
     end
 end

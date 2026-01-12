@@ -20,7 +20,6 @@ describe "Login Feature Scenario", js: true, type: :system do
 
       click_on "Login"
       expect(page).to have_selector("iframe[title*=recaptcha]", visible: false)
-      wait_for_ajax
       expect(page).to have_content("Dashboard")
     end
 
@@ -32,7 +31,6 @@ describe "Login Feature Scenario", js: true, type: :system do
       fill_in "Password", with: "someotherpassword"
 
       click_on "Login"
-      wait_for_ajax
       expect(page).to have_alert(text: "Please try another password. The one you entered was incorrect.")
       expect(page).to have_button("Login")
     end
@@ -54,7 +52,6 @@ describe "Login Feature Scenario", js: true, type: :system do
       fill_in "Email", with: user.email
       fill_in "Password", with: user.password
       click_on "Login"
-      wait_for_ajax
 
       expect(page.has_content?("Authorize #{@oauth_application.name} to use your account?")).to be(true)
     end
@@ -133,7 +130,6 @@ describe "Login Feature Scenario", js: true, type: :system do
       click_on "Forgot your password?"
       fill_in "Email to send reset instructions to", with: user.email
       click_on "Send"
-      wait_for_ajax
 
       expect(page).to have_alert(text: "Password reset sent! Please make sure to check your spam folder.")
       expect(user.reload.reset_password_sent_at).to be_present
@@ -145,7 +141,6 @@ describe "Login Feature Scenario", js: true, type: :system do
       click_on "Forgot your password?"
       fill_in "Email to send reset instructions to", with: "notauser@example.com"
       click_on "Send"
-      wait_for_ajax
 
       expect(page).to have_alert(text: "An account does not exist with that email.")
     end

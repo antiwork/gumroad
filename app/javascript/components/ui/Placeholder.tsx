@@ -9,7 +9,7 @@ type PlaceholderProps = React.PropsWithChildren<{
   style?: React.CSSProperties;
 }>;
 
-const Placeholder: React.FC<PlaceholderProps> = ({ className, children, ...rest }) => (
+export const Placeholder: React.FC<PlaceholderProps> = ({ className, children, ...rest }) => (
   <div
     className={classNames(
       "grid justify-items-center gap-3 rounded border border-dashed border-border bg-background p-6 text-center",
@@ -22,4 +22,8 @@ const Placeholder: React.FC<PlaceholderProps> = ({ className, children, ...rest 
   </div>
 );
 
-export default Placeholder;
+export const PlaceholderImage = ({ className, src, ...imgProps }: React.ImgHTMLAttributes<HTMLImageElement>) => (
+  <figure className="w-full">
+    <img src={src} className={classNames("w-full", className)} role="presentation" {...imgProps} />
+  </figure>
+);

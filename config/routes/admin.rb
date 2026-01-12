@@ -30,7 +30,7 @@ namespace :admin do
       resource :payout_info, only: :show
       resources :latest_posts, only: :index
       resources :stats, only: :index
-      resources :products, only: :index do
+      resources :products, only: :index, param: :external_id do
         scope module: :products do
           resources :tos_violation_flags, only: [:index, :create]
           resources :purchases, only: :index
@@ -65,7 +65,7 @@ namespace :admin do
   end
 
   resources :affiliates, only: [] do
-    resources :products, only: [:index], module: :affiliates do
+    resources :products, only: [:index], param: :external_id, module: :affiliates do
       resources :purchases, only: :index, module: :products
     end
   end
@@ -80,7 +80,7 @@ namespace :admin do
 
   get "links/:id", to: redirect("/admin/products/%{id}"), as: :link
 
-  resources :products, controller: "links", only: [:show, :destroy] do
+  resources :products, controller: "links", only: [:show, :destroy], param: :external_id do
     member do
       post :restore
       post :publish

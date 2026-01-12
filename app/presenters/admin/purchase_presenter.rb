@@ -13,7 +13,7 @@ class Admin::PurchasePresenter
       formatted_display_price: purchase.formatted_display_price,
       formatted_gumroad_tax_amount: purchase.gumroad_tax_cents > 0 ? purchase.formatted_gumroad_tax_amount : nil,
       gumroad_responsible_for_tax: purchase.gumroad_responsible_for_tax?,
-      product: { id: purchase.link.id, name: purchase.link.name, long_url: purchase.link.long_url },
+      product: { external_id: purchase.link.external_id, name: purchase.link.name, long_url: purchase.link.long_url },
       variants_list: purchase.variants_list,
       refund_policy: purchase.purchase_refund_policy.present? ? {
         title: purchase.purchase_refund_policy.title,

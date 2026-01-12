@@ -1,4 +1,4 @@
-import orderBy from "lodash/orderBy";
+import { orderBy } from "lodash-es";
 import * as React from "react";
 
 import { TableHead } from "$app/components/ui/Table";
