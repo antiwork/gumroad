@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[7.1].define(version: 2025_11_24_133549) do
+ActiveRecord::Schema[7.1].define(version: 2026_01_12_135104) do
   create_table "active_storage_attachments", charset: "utf8mb4", collation: "utf8mb4_unicode_ci", force: :cascade do |t|
     t.string "name", limit: 191, null: false
     t.string "record_type", limit: 191, null: false
@@ -263,6 +263,7 @@ ActiveRecord::Schema[7.1].define(version: 2025_11_24_133549) do
     t.string "stripe_connect_account_id"
     t.string "country", limit: 191
     t.integer "credit_card_id"
+    t.index ["stripe_fingerprint"], name: "index_bank_accounts_on_stripe_fingerprint"
     t.index ["user_id"], name: "index_ach_accounts_on_user_id"
   end
 

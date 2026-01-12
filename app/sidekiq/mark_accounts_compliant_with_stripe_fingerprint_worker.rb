@@ -19,7 +19,7 @@ class MarkAccountsCompliantWithStripeFingerprintWorker
         _1.mark_compliant(
           author_name: User::Risk::ENABLE_SELLER_ACCOUNTS_AUTHOR_NAME,
           content: "Marked compliant automatically on #{Time.current.to_fs(:formatted_date_full_month)} as Stripe fingerprint #{stripe_fingerprint} is now unblocked (from User##{compliant_user.id})",
-          skip_transition: :enable_sellers_other_accounts
+          skip_transition_callback: :enable_sellers_other_accounts
         )
       end
   end

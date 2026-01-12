@@ -23,7 +23,7 @@ class SuspendAccountsWithStripeFingerprintWorker
       user.suspend_for_fraud(
         author_name: "suspend_sellers_other_accounts",
         content: "Suspended for fraud automatically on #{Time.current.to_fs(:formatted_date_full_month)} because of usage of Stripe fingerprint #{stripe_fingerprint} (from User##{suspended_user.id})",
-        skip_transition: :suspend_sellers_other_accounts
+        skip_transition_callback: :suspend_sellers_other_accounts
       )
     end
   end

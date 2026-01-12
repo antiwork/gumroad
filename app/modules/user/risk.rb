@@ -122,7 +122,7 @@ module User::Risk
   end
 
   def suspend_sellers_other_accounts(transition)
-    return if transition.args.first&.dig(:skip_transition) == __method__
+    return if transition.args.first&.dig(:skip_transition_callback) == __method__
 
     case current_payout_processor
     when PayoutProcessorType::PAYPAL
@@ -137,12 +137,12 @@ module User::Risk
   end
 
   def enable_sellers_other_accounts(transition)
-    return if transition.args.first&.dig(:skip_transition) == __method__
+    return if transition.args.first&.dig(:skip_transition_callback) == __method__
 
     case current_payout_processor
     when PayoutProcessorType::PAYPAL
       User.where(payment_address:).where.not(id:).each do |user|
-        user.mark_compliant!(author_name: ENABLE_SELLER_ACCOUNTS_AUTHOR_NAME, content: "Marked compliant automatically on #{Time.current.to_fs(:formatted_date_full_month)} as payment address #{payment_address} is now unblocked (from User##{id})", skip_transition: :enable_sellers_other_accounts)
+        user.mark_compliant!(author_name: ENABLE_SELLER_ACCOUNTS_AUTHOR_NAME, content: "Marked compliant automatically on #{Time.current.to_fs(:formatted_date_full_month)} as payment address #{payment_address} is now unblocked (from User##{id})", skip_transition_callback: :enable_sellers_other_accounts)
       end
     when PayoutProcessorType::STRIPE
       MarkAccountsCompliantWithStripeFingerprintWorker.perform_async(id)
