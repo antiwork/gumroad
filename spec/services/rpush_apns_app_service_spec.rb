@@ -30,10 +30,6 @@ describe RpushApnsAppService do
         method.call(path)
       end
     end
-
-    allow(GlobalConfig).to receive(:get).and_call_original
-    allow(GlobalConfig).to receive(:get).with("RPUSH_APN_CERT_CREATOR_PASSWORD").and_return("mock_creator_password")
-    allow(GlobalConfig).to receive(:get).with("RPUSH_APN_CERT_BUYER_PASSWORD").and_return("mock_buyer_password")
   end
 
   describe "#first_or_create!" do
