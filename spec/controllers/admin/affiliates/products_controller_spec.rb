@@ -26,7 +26,7 @@ describe Admin::Affiliates::ProductsController, inertia: true do
 
   describe "GET index" do
     before do
-      get :index, params: { affiliate_id: affiliate_user.id }
+      get :index, params: { affiliate_external_id: affiliate_user.external_id }
     end
 
     it "returns successful response with Inertia page data" do

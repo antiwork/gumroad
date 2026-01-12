@@ -77,7 +77,7 @@ describe Admin::UnreviewedUsersController, type: :controller, inertia: true do
 
           expect(response).to be_successful
           expect(inertia.props[:users].size).to eq(1)
-          expect(inertia.props[:users].first[:id]).to eq(unreviewed_user.id)
+          expect(inertia.props[:users].first[:external_id]).to eq(unreviewed_user.external_id)
           expect(inertia.props[:total_count]).to eq(1)
           expect(inertia.props[:cutoff_date]).to eq("2024-01-01")
         end

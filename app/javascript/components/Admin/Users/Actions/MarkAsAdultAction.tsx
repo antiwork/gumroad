@@ -7,20 +7,20 @@ type MarkAsAdultActionProps = {
   user: User;
 };
 
-const MarkAsAdultAction = ({ user: { id, all_adult_products } }: MarkAsAdultActionProps) =>
+const MarkAsAdultAction = ({ user: { external_id, all_adult_products } }: MarkAsAdultActionProps) =>
   all_adult_products ? (
     <AdminAction
       label="Unmark as adult"
-      url={Routes.toggle_adult_products_admin_user_path(id)}
-      confirm_message={`Are you sure you want to unmark user ${id} as adult?`}
+      url={Routes.toggle_adult_products_admin_user_path(external_id)}
+      confirm_message={`Are you sure you want to unmark user ${external_id} as adult?`}
       done="Mark as adult"
       success_message="Unmarked as adult."
     />
   ) : (
     <AdminAction
       label="Mark as adult"
-      url={Routes.toggle_adult_products_admin_user_path(id)}
-      confirm_message={`Are you sure you want to mark user ${id} as adult?`}
+      url={Routes.toggle_adult_products_admin_user_path(external_id)}
+      confirm_message={`Are you sure you want to mark user ${external_id} as adult?`}
       done="Unmark as adult"
       success_message="Marked as adult."
     />
