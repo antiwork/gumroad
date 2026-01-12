@@ -9,9 +9,9 @@ import { showAlert } from "$app/components/server-components/Alert";
 import { Alert } from "$app/components/ui/Alert";
 import { Card, CardContent } from "$app/components/ui/Card";
 
-type UserGuids = { guid: string; user_ids: number[] }[];
+type UserGuids = { guid: string; user_external_ids: string[] }[];
 
-const AdminUserGuids = ({ user_id }: { user_id: number }) => {
+const AdminUserGuids = ({ user_external_id }: { user_external_id: string }) => {
   const [userGuids, setUserGuids] = React.useState<UserGuids | null>(null);
 
   const fetchUserGuids = async () => {
@@ -20,7 +20,7 @@ const AdminUserGuids = ({ user_id }: { user_id: number }) => {
       const response = await request({
         method: "GET",
         accept: "json",
-        url: Routes.admin_user_guids_path(user_id, { format: "json" }),
+        url: Routes.admin_user_guids_path(user_external_id, { format: "json" }),
       });
       setUserGuids(cast<UserGuids>(await response.json()));
     } catch (e) {
@@ -42,7 +42,7 @@ const AdminUserGuids = ({ user_id }: { user_id: number }) => {
                 <h5 className="grow font-bold">
                   <a href={`/admin/guids/${guidData.guid}`}>{guidData.guid}</a>
                 </h5>
-                <span>{guidData.user_ids.length} users</span>
+                <span>{guidData.user_external_ids.length} users</span>
               </CardContent>
             ))}
           </Card>

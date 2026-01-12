@@ -82,7 +82,7 @@ const AdminUserEmailChanges = ({ user }: AdminUserEmailChangesProps) => {
     setIsLoading(true);
     const response = await request({
       method: "GET",
-      url: Routes.admin_user_email_changes_path(user.id),
+      url: Routes.admin_user_email_changes_path(user.external_id),
       accept: "json",
     });
     const data = cast<{ email_changes: EmailChangesProps; fields: FieldsProps }>(await response.json());

@@ -20,7 +20,7 @@ describe Admin::Users::PayoutsController, type: :controller, inertia: true do
 
     it "lists all the payouts for a user" do
       sign_in admin_user
-      get :index, params: { user_id: seller.id }
+      get :index, params: { user_external_id: seller.external_id }
 
       expect(response).to be_successful
       expect(inertia.component).to eq("Admin/Users/Payouts/Index")
@@ -42,7 +42,7 @@ describe Admin::Users::PayoutsController, type: :controller, inertia: true do
       expect(seller.payouts_paused_for_reason).to be nil
 
       expect do
-        post :pause, params: { user_id: seller.id, pause_payouts: { reason: "Chargeback rate too high." } }, format: :json
+        post :pause, params: { user_external_id: seller.external_id, pause_payouts: { reason: "Chargeback rate too high." } }, format: :json
       end.to change { seller.comments.with_type_payouts_paused.count }.by(1)
 
       expect(seller.reload.payouts_paused_internally?).to be true
@@ -57,7 +57,7 @@ describe Admin::Users::PayoutsController, type: :controller, inertia: true do
       expect(seller.payouts_paused_for_reason).to be nil
 
       expect do
-        post :pause, params: { user_id: seller.id, pause_payouts: { reason: nil } }, format: :json
+        post :pause, params: { user_external_id: seller.external_id, pause_payouts: { reason: nil } }, format: :json
       end.not_to change { seller.comments.with_type_payouts_paused.count }
 
       expect(seller.reload.payouts_paused_internally?).to be true
@@ -79,7 +79,7 @@ describe Admin::Users::PayoutsController, type: :controller, inertia: true do
       expect(seller.payouts_paused_for_reason).to be nil
 
       expect do
-        post :resume, params: { user_id: seller.id }, format: :json
+        post :resume, params: { user_external_id: seller.external_id }, format: :json
       end.to change { seller.comments.with_type_payouts_resumed.count }.by(1)
 
       expect(seller.reload.payouts_paused_internally?).to be false
@@ -95,7 +95,7 @@ describe Admin::Users::PayoutsController, type: :controller, inertia: true do
       expect(seller.payouts_paused_for_reason).to be nil
 
       expect do
-        post :resume, params: { user_id: seller.id }, format: :json
+        post :resume, params: { user_external_id: seller.external_id }, format: :json
       end.to change { seller.comments.with_type_payouts_resumed.count }.by(1)
 
       expect(seller.reload.payouts_paused_internally?).to be false
@@ -111,7 +111,7 @@ describe Admin::Users::PayoutsController, type: :controller, inertia: true do
       expect(seller.payouts_paused_for_reason).to be nil
 
       expect do
-        post :resume, params: { user_id: seller.id }, format: :json
+        post :resume, params: { user_external_id: seller.external_id }, format: :json
       end.to change { seller.comments.with_type_payouts_resumed.count }.by(1)
 
       expect(seller.reload.payouts_paused_internally?).to be false
