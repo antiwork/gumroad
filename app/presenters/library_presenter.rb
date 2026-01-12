@@ -38,7 +38,8 @@ class LibraryPresenter
     product_seller_data = {}
 
     purchases = purchases.map do |purchase|
-      next if purchase.link.is_recurring_billing && !purchase.subscription.alive?
+      # Skip recurring billing purchases with dead subscriptions, EXCEPT for gift receiver purchases
+      next if purchase.link.is_recurring_billing && !purchase.subscription.alive? && !purchase.is_gift_receiver_purchase
 
       product = purchase.link
       product_seller_data[product.user.id] ||= product.user.username && {
