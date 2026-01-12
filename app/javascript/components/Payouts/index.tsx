@@ -1,13 +1,11 @@
-import { Link } from "@inertiajs/react";
+import { Link, router } from "@inertiajs/react";
 import classNames from "classnames";
 import * as React from "react";
-import { cast } from "ts-safe-cast";
 
 import { exportPayouts } from "$app/data/balance";
-import { createInstantPayout } from "$app/data/payout";
 import { formatPriceCentsWithCurrencySymbol, formatPriceCentsWithoutCurrencySymbol } from "$app/utils/currency";
 import { asyncVoid } from "$app/utils/promise";
-import { assertResponseError, request } from "$app/utils/request";
+import { assertResponseError } from "$app/utils/request";
 
 import { Button, NavigationButton } from "$app/components/Button";
 import { Icon } from "$app/components/Icons";
@@ -19,7 +17,7 @@ import { showAlert } from "$app/components/server-components/Alert";
 import { Alert } from "$app/components/ui/Alert";
 import { PageHeader } from "$app/components/ui/PageHeader";
 import { Pill } from "$app/components/ui/Pill";
-import Placeholder from "$app/components/ui/Placeholder";
+import { Placeholder, PlaceholderImage } from "$app/components/ui/Placeholder";
 import { Tabs, Tab } from "$app/components/ui/Tabs";
 import { useUserAgentInfo } from "$app/components/UserAgent";
 import { WithTooltip } from "$app/components/WithTooltip";
@@ -171,9 +169,13 @@ export type BankAccount =
       routing_number: string;
       account_number: string;
       bank_name?: string;
-      sort_code: string;
     }
-  | { payout_method_type: "bank"; bank_account_type: "GI"; account_number: string }
+  | {
+      payout_method_type: "bank";
+      bank_account_type: "GI";
+      routing_number: string;
+      account_number: string;
+    }
   | { payout_method_type: "bank"; bank_account_type: "GA"; routing_number: string; account_number: string }
   | { payout_method_type: "bank"; bank_account_type: "MC"; account_number: string };
 
@@ -532,9 +534,7 @@ const Period = ({ payoutPeriodData }: { payoutPeriodData: PayoutPeriodData }) =>
 const PeriodEmpty = ({ minimumPayoutAmountCents }: { minimumPayoutAmountCents: number }) => (
   <div className="period period-empty full column">
     <Placeholder>
-      <figure>
-        <img src={placeholder} />
-      </figure>
+      <PlaceholderImage src={placeholder} />
       <h2>Let's get you paid.</h2>
       Reach a balance of at least{" "}
       {formatPriceCentsWithCurrencySymbol("usd", minimumPayoutAmountCents, {
@@ -651,36 +651,21 @@ const Payouts = ({
   past_payout_period_data,
   instant_payout,
   show_instant_payouts_notice,
-  pagination: initialPagination,
+  pagination,
   tax_center_enabled,
 }: PayoutsProps) => {
   const loggedInUser = useLoggedInUser();
   const userAgentInfo = useUserAgentInfo();
 
-  const [pastPayoutPeriodData, setPastPayoutPeriodData] = React.useState(past_payout_period_data);
-  const [pagination, setPagination] = React.useState(initialPagination);
-
   const [isLoading, setIsLoading] = React.useState(false);
 
-  const loadNextPage = async () => {
-    setIsLoading(true);
-    try {
-      const response = await request({
-        method: "GET",
-        accept: "json",
-        url: Routes.payments_paged_path({ page: pagination.page + 1 }),
-      })
-        .then((res) => res.json())
-        .then((json) => cast<{ payouts: PayoutPeriodData[]; pagination: PaginationProps }>(json));
-
-      setPastPayoutPeriodData((prevData) => [...prevData, ...response.payouts]);
-      setPagination(response.pagination);
-    } catch (error) {
-      assertResponseError(error);
-      showAlert(error.message, "error");
-    } finally {
-      setIsLoading(false);
-    }
+  const loadNextPage = () => {
+    router.reload({
+      data: { page: pagination.page + 1 },
+      only: ["pagination", "past_payout_period_data"],
+      onStart: () => setIsLoading(true),
+      onFinish: () => setIsLoading(false),
+    });
   };
 
   const [isInstantPayoutModalOpen, setIsInstantPayoutModalOpen] = React.useState(false);
@@ -693,22 +678,27 @@ const Payouts = ({
   const instantPayoutFee = instant_payout
     ? instantPayoutAmountCents - Math.floor(instantPayoutAmountCents / (1 + INSTANT_PAYOUT_FEE_PERCENTAGE))
     : 0;
-  const onRequestInstantPayout = async () => {
+  const onRequestInstantPayout = () => {
     if (!instant_payout) return;
-    setIsLoading(true);
-    try {
-      await createInstantPayout(
-        instant_payout.payable_balances.find((balance) => balance.id === instantPayoutId)?.date ??
-          new Date().toISOString(),
-      );
-      window.location.reload();
-    } catch (error) {
-      assertResponseError(error);
-      showAlert(error.message, "error");
-    } finally {
-      setIsInstantPayoutModalOpen(false);
-      setIsLoading(false);
-    }
+
+    const selectedDate =
+      instant_payout.payable_balances.find((balance) => balance.id === instantPayoutId)?.date ??
+      new Date().toISOString();
+
+    router.post(
+      Routes.instant_payouts_path(),
+      { date: selectedDate },
+      {
+        onStart: () => {
+          setIsInstantPayoutModalOpen(false);
+          setIsLoading(true);
+        },
+        onFinish: () => setIsLoading(false),
+        onError: () => {
+          showAlert("Failed to initiate instant payout. Please try again.", "error");
+        },
+      },
+    );
   };
 
   if (!loggedInUser) return null;
@@ -789,7 +779,7 @@ const Payouts = ({
               footer={
                 <>
                   <Button onClick={() => setIsInstantPayoutModalOpen(false)}>Cancel</Button>
-                  <Button color="primary" disabled={isLoading} onClick={() => void onRequestInstantPayout()}>
+                  <Button color="primary" disabled={isLoading} onClick={() => onRequestInstantPayout()}>
                     Get paid!
                   </Button>
                 </>
@@ -915,7 +905,7 @@ const Payouts = ({
                 </Alert>
               ) : null}
               {next_payout_period_data.status === "not_payable" ? (
-                pastPayoutPeriodData.length > 0 ? (
+                past_payout_period_data.length > 0 ? (
                   <Alert role="status" variant="info">
                     Reach a balance of at least{" "}
                     {formatPriceCentsWithCurrencySymbol("usd", next_payout_period_data.minimum_payout_amount_cents, {
@@ -942,18 +932,18 @@ const Payouts = ({
           </section>
         ) : null}
 
-        {pastPayoutPeriodData.length > 0 ? (
+        {past_payout_period_data.length > 0 ? (
           <>
             <section>
               <h2>Past payouts</h2>
               <section className="flex flex-col gap-4">
-                {pastPayoutPeriodData.map((payoutPeriodData, idx) => (
+                {past_payout_period_data.map((payoutPeriodData, idx) => (
                   <Period key={idx} payoutPeriodData={payoutPeriodData} />
                 ))}
               </section>
             </section>
             {pagination.page < pagination.pages ? (
-              <Button color="primary" onClick={() => void loadNextPage()} disabled={isLoading}>
+              <Button color="primary" onClick={loadNextPage} disabled={isLoading}>
                 Show older payouts
               </Button>
             ) : null}

@@ -17,26 +17,6 @@ class UsersController < ApplicationController
   before_action :check_if_needs_redirect, only: %i[show]
   before_action :set_affiliate_cookie, only: %i[show]
 
-  USER_PERMITTED_ATTRS = [:username, :email, :bio, :password,
-                          :password_confirmation, :remember_me, :name, :payment_address,
-                          :currency_type, :country, :state,
-                          :city, :zip_code, :street_address,
-                          :facebook_access_token, :manage_pages, :verified,
-                          :weekly_notification,
-                          :twitter_oauth_token, :twitter_oauth_secret,
-                          :notification_endpoint, :locale, :announcement_notification_enabled,
-                          :google_analytics_id, :timezone, :user_risk_state,
-                          :tos_violation_reason, :terms_accepted,
-                          :buyer_signup, :support_email,
-                          :background_opacity_percent, :should_paypal_payout_be_split,
-                          :check_merchant_account_is_linked, :collect_eu_vat, :is_eu_vat_exclusive,
-                          :facebook_pixel_id, :skip_free_sale_analytics,
-                          :disable_third_party_analytics, :two_factor_authentication_enabled, :facebook_meta_tag,
-                          :enable_verify_domain_third_party_services,
-                          :enable_payment_email, :enable_payment_push_notification, :enable_free_downloads_email, :enable_free_downloads_push_notification,
-                          :enable_recurring_subscription_charge_email, :enable_recurring_subscription_charge_push_notification,
-                          :disable_comments_email, :disable_reviews_email]
-
   def show
     format_search_params!
 

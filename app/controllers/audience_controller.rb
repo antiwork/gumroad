@@ -1,16 +1,31 @@
 # frozen_string_literal: true
 
 class AudienceController < Sellers::BaseController
-  before_action :set_body_id_as_app
-  before_action :set_time_range, only: %i[data_by_date]
+  before_action :set_time_range, only: :index
 
   after_action :set_dashboard_preference_to_audience, only: :index
   before_action :check_payment_details, only: :index
 
+  layout "inertia", only: :index
+
   def index
     authorize :audience
 
-    @total_follower_count = current_seller.audience_members.where(follower: true).count
+    total_follower_count = current_seller.audience_members.where(follower: true).count
+
+    render inertia: "Audience/Index", props: {
+      total_follower_count: InertiaRails.always { total_follower_count },
+      audience_data: InertiaRails.defer do
+        if total_follower_count.zero?
+          nil
+        else
+          CreatorAnalytics::Following.new(current_seller).by_date(
+            start_date: @start_date.to_date,
+            end_date: @end_date.to_date
+          )
+        end
+      end
+    }
   end
 
   def export
@@ -25,26 +40,18 @@ class AudienceController < Sellers::BaseController
     head :ok
   end
 
-  def data_by_date
-    authorize :audience, :index?
-
-    data = CreatorAnalytics::Following.new(current_seller).by_date(start_date: @start_date.to_date, end_date: @end_date.to_date)
-
-    render json: data
-  end
-
   protected
     def set_time_range
       begin
-        end_time = DateTime.parse(params[:end_time])
-        start_date = DateTime.parse(params[:start_time])
+        end_date = DateTime.parse(params[:to])
+        start_date = DateTime.parse(params[:from])
+        end_date = start_date if end_date < start_date
       rescue StandardError
-        end_time = DateTime.current
-        start_date = end_time.ago(29.days)
+        end_date = DateTime.current
+        start_date = end_date.ago(29.days)
       end
       @start_date = start_date
-      @end_date = end_time
-      @timezone_offset = end_time.zone
+      @end_date = end_date
     end
 
     def set_title

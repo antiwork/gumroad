@@ -56,8 +56,8 @@ class UserBalanceStatsService
         .displayable
         .order("created_at DESC")
 
-      if payments.size > BalanceController::PAST_PAYMENTS_PER_PAGE
-        payments = payments.limit(BalanceController::PAST_PAYMENTS_PER_PAGE)
+      if payments.size > PayoutsPresenter::PAST_PAYMENTS_PER_PAGE
+        payments = payments.limit(PayoutsPresenter::PAST_PAYMENTS_PER_PAGE)
         result[:is_paginating] = true
       else
         result[:is_paginating] = false

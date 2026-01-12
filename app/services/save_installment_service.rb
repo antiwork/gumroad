@@ -85,6 +85,7 @@ class SaveInstallmentService
       installment_rule = installment.installment_rule || installment.build_installment_rule
       installment_rule.to_be_published_at = to_be_published_at
       installment.ready_to_publish = true
+
       if installment_rule.save && installment.save
         PublishScheduledPostJob.perform_at(to_be_published_at, installment.id, installment_rule.version)
       else

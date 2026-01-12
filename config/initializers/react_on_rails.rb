@@ -28,6 +28,7 @@ module RenderingExtension
       locale: view_context.controller.http_accept_language.user_preferred_languages[0] || "en-US",
       feature_flags: {
         require_email_typo_acknowledgment: Feature.active?(:require_email_typo_acknowledgment),
+        disable_stripe_signup: Feature.active?(:disable_stripe_signup),
       }
     }
   end

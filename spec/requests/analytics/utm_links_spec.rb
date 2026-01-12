@@ -16,11 +16,11 @@ describe "UTM links", :js, type: :system do
 
     describe "listing page" do
       it_behaves_like "creator dashboard page", "Analytics" do
-        let(:path) { utm_links_dashboard_path }
+        let(:path) { dashboard_utm_links_path }
       end
 
       it "shows the empty state when there are no UTM links" do
-        visit utm_links_dashboard_path
+        visit dashboard_utm_links_path
 
         expect(page).to have_text("No links yet")
         expect(page).to have_text("Use UTM links to track which sources are driving the most conversions and revenue")
@@ -31,7 +31,7 @@ describe "UTM links", :js, type: :system do
         utm_link = create(:utm_link, seller:, unique_clicks: 3)
         create(:utm_link_driven_sale, utm_link:, purchase: create(:purchase, price_cents: 1000, seller:, link: create(:product, user: seller)))
 
-        visit utm_links_dashboard_path
+        visit dashboard_utm_links_path
 
         wait_for_ajax
         expect(page).to have_table_row({ "Link" => utm_link.title, "Source" => utm_link.utm_source, "Medium" => utm_link.utm_medium, "Campaign" => utm_link.utm_campaign, "Destination" => "Profile page", "Clicks" => "3", "Revenue" => "$10", "Conversion" => "33.33%" })
@@ -51,7 +51,7 @@ describe "UTM links", :js, type: :system do
         let!(:utm_link_driven_sale2) { create(:utm_link_driven_sale, utm_link:, purchase: create(:purchase, price_cents: 1000, seller:, link: create(:product, user: seller))) }
 
         it "shows the selected UTM link details" do
-          visit utm_links_dashboard_path
+          visit dashboard_utm_links_path
 
           wait_for_ajax
           find(:table_row, { "Link" => utm_link.title, "Clicks" => "3", "Conversion" => "66.67%" }).click
@@ -92,7 +92,7 @@ describe "UTM links", :js, type: :system do
         end
 
         it "allows deleting a UTM link" do
-          visit utm_links_dashboard_path
+          visit dashboard_utm_links_path
 
           find(:table_row, { "Link" => utm_link.title }).click
           within_modal utm_link.title do
@@ -115,7 +115,7 @@ describe "UTM links", :js, type: :system do
         utm_link1 = create(:utm_link, seller:, created_at: 2.days.ago)
         utm_link2 = create(:utm_link, seller:, created_at: 1.day.ago)
 
-        visit utm_links_dashboard_path
+        visit dashboard_utm_links_path
 
         expect(page).to have_table_row({ "Link" => utm_link2.title })
         expect(page).to_not have_table_row({ "Link" => utm_link1.title })
@@ -132,7 +132,7 @@ describe "UTM links", :js, type: :system do
         expect(page).to_not have_button("3")
         expect(page).to have_button("Previous")
         expect(page).to have_button("Next", disabled: true)
-        expect(page).to have_current_path(utm_links_dashboard_path({ page: 2 }))
+        expect(page).to have_current_path(dashboard_utm_links_path({ page: 2 }))
       end
 
       it "sorts UTM links by different columns and direction and allows pagination" do
@@ -146,7 +146,7 @@ describe "UTM links", :js, type: :system do
         create(:utm_link_driven_sale, utm_link: utm_link1, purchase: create(:purchase, price_cents: 500, seller:, link: create(:product, user: seller)))
         create(:utm_link_driven_sale, utm_link: utm_link2, purchase: create(:purchase, price_cents: 2000, seller:, link: create(:product, user: seller)))
 
-        visit utm_links_dashboard_path
+        visit dashboard_utm_links_path
 
         # By default, it sorts by "Date" column in descending order
         expect(page).to have_table_row({ "Link" => "B Link" })
@@ -157,71 +157,71 @@ describe "UTM links", :js, type: :system do
 
         # Sort by "Link" title
         find_and_click("th", text: "Link")
-        expect(page).to have_current_path("#{utm_links_dashboard_path}?key=link&direction=asc")
+        expect(page).to have_current_path("#{dashboard_utm_links_path}?key=link&direction=asc")
         expect(page).to have_table_row({ "Link" => "A Link" })
         expect(page).to_not have_table_row({ "Link" => "B Link" })
         click_on "Next"
-        expect(page).to have_current_path("#{utm_links_dashboard_path}?key=link&direction=asc&page=2")
+        expect(page).to have_current_path("#{dashboard_utm_links_path}?key=link&direction=asc&page=2")
         expect(page).to have_table_row({ "Link" => "B Link" })
         expect(page).to_not have_table_row({ "Link" => "A Link" })
 
         # Sort by "Source" column
         find_and_click("th", text: "Source")
-        expect(page).to have_current_path("#{utm_links_dashboard_path}?key=source&direction=asc")
+        expect(page).to have_current_path("#{dashboard_utm_links_path}?key=source&direction=asc")
         expect(page).to have_table_row({ "Link" => "B Link", "Source" => "newsletter" })
         expect(page).to_not have_table_row({ "Link" => "A Link", "Source" => "twitter" })
         click_on "Next"
-        expect(page).to have_current_path("#{utm_links_dashboard_path}?key=source&direction=asc&page=2")
+        expect(page).to have_current_path("#{dashboard_utm_links_path}?key=source&direction=asc&page=2")
         expect(page).to have_table_row({ "Link" => "A Link", "Source" => "twitter" })
         expect(page).to_not have_table_row({ "Link" => "B Link", "Source" => "newsletter" })
 
         # Sort by "Medium" column
         find_and_click("th", text: "Medium")
-        expect(page).to have_current_path("#{utm_links_dashboard_path}?key=medium&direction=asc")
+        expect(page).to have_current_path("#{dashboard_utm_links_path}?key=medium&direction=asc")
         expect(page).to have_table_row({ "Link" => "B Link", "Medium" => "email" })
         expect(page).to_not have_table_row({ "Link" => "A Link", "Medium" => "social" })
         click_on "Next"
-        expect(page).to have_current_path("#{utm_links_dashboard_path}?key=medium&direction=asc&page=2")
+        expect(page).to have_current_path("#{dashboard_utm_links_path}?key=medium&direction=asc&page=2")
         expect(page).to have_table_row({ "Link" => "A Link", "Medium" => "social" })
         expect(page).to_not have_table_row({ "Link" => "B Link", "Medium" => "email" })
 
         # Sort by "Campaign" column
         find_and_click("th", text: "Campaign")
-        expect(page).to have_current_path("#{utm_links_dashboard_path}?key=campaign&direction=asc")
+        expect(page).to have_current_path("#{dashboard_utm_links_path}?key=campaign&direction=asc")
         expect(page).to have_table_row({ "Link" => "A Link", "Campaign" => "spring" })
         expect(page).to_not have_table_row({ "Link" => "B Link", "Campaign" => "winter" })
         click_on "Next"
-        expect(page).to have_current_path("#{utm_links_dashboard_path}?key=campaign&direction=asc&page=2")
+        expect(page).to have_current_path("#{dashboard_utm_links_path}?key=campaign&direction=asc&page=2")
         expect(page).to have_table_row({ "Link" => "B Link", "Campaign" => "winter" })
         expect(page).to_not have_table_row({ "Link" => "A Link", "Campaign" => "spring" })
 
         # Sort by "Clicks" column
         find_and_click("th", text: "Clicks")
-        expect(page).to have_current_path("#{utm_links_dashboard_path}?key=clicks&direction=asc")
+        expect(page).to have_current_path("#{dashboard_utm_links_path}?key=clicks&direction=asc")
         expect(page).to have_table_row({ "Link" => "B Link", "Clicks" => "1" })
         expect(page).to_not have_table_row({ "Link" => "A Link", "Clicks" => "3" })
         click_on "Next"
-        expect(page).to have_current_path("#{utm_links_dashboard_path}?key=clicks&direction=asc&page=2")
+        expect(page).to have_current_path("#{dashboard_utm_links_path}?key=clicks&direction=asc&page=2")
         expect(page).to have_table_row({ "Link" => "A Link", "Clicks" => "3" })
         expect(page).to_not have_table_row({ "Link" => "B Link", "Clicks" => "1" })
 
         # Sort by "Revenue" column
         find_and_click("th", text: "Revenue")
-        expect(page).to have_current_path("#{utm_links_dashboard_path}?key=revenue_cents&direction=asc")
+        expect(page).to have_current_path("#{dashboard_utm_links_path}?key=revenue_cents&direction=asc")
         expect(page).to have_table_row({ "Link" => "A Link", "Revenue" => "$15" })
         expect(page).to_not have_table_row({ "Link" => "B Link", "Revenue" => "$20" })
         click_on "Next"
-        expect(page).to have_current_path("#{utm_links_dashboard_path}?key=revenue_cents&direction=asc&page=2")
+        expect(page).to have_current_path("#{dashboard_utm_links_path}?key=revenue_cents&direction=asc&page=2")
         expect(page).to have_table_row({ "Link" => "B Link", "Revenue" => "$20" })
         expect(page).to_not have_table_row({ "Link" => "A Link", "Revenue" => "$15" })
 
         # Sort by "Conversion" column
         find_and_click("th", text: "Conversion")
-        expect(page).to have_current_path("#{utm_links_dashboard_path}?key=conversion_rate&direction=asc")
+        expect(page).to have_current_path("#{dashboard_utm_links_path}?key=conversion_rate&direction=asc")
         expect(page).to have_table_row({ "Link" => "A Link", "Conversion" => "66.67%" })
         expect(page).to_not have_table_row({ "Link" => "B Link", "Conversion" => "100%" })
         click_on "Next"
-        expect(page).to have_current_path("#{utm_links_dashboard_path}?key=conversion_rate&direction=asc&page=2")
+        expect(page).to have_current_path("#{dashboard_utm_links_path}?key=conversion_rate&direction=asc&page=2")
         expect(page).to have_table_row({ "Link" => "B Link", "Conversion" => "100%" })
         expect(page).to_not have_table_row({ "Link" => "A Link", "Conversion" => "66.67%" })
       end
@@ -242,20 +242,20 @@ describe "UTM links", :js, type: :system do
                                       utm_campaign: "winter_2024"
         )
 
-        visit utm_links_dashboard_path
+        visit dashboard_utm_links_path
 
         # Sort by "Link" column in descending order
         find_and_click("th", text: "Link")
-        expect(page).to have_current_path("#{utm_links_dashboard_path}?key=link&direction=asc")
+        expect(page).to have_current_path("#{dashboard_utm_links_path}?key=link&direction=asc")
         find_and_click("th", text: "Link")
-        expect(page).to have_current_path("#{utm_links_dashboard_path}?key=link&direction=desc")
+        expect(page).to have_current_path("#{dashboard_utm_links_path}?key=link&direction=desc")
 
         expect(page).to have_table_row({ "Link" => utm_link2.title })
         expect(page).to_not have_table_row({ "Link" => utm_link1.title })
         click_on "Next"
         expect(page).to have_table_row({ "Link" => utm_link1.title })
         expect(page).to_not have_table_row({ "Link" => utm_link2.title })
-        expect(page).to have_current_path("#{utm_links_dashboard_path}?key=link&direction=desc&page=2")
+        expect(page).to have_current_path("#{dashboard_utm_links_path}?key=link&direction=desc&page=2")
 
         # Search by title
         select_disclosure "Search" do
@@ -266,7 +266,7 @@ describe "UTM links", :js, type: :system do
         expect(page).not_to have_table_row({ "Link" => utm_link2.title })
         expect(page).to_not have_button("Next")
         # Always takes to the first page when searching regardless of the previous page number
-        expect(page).to have_current_path("#{utm_links_dashboard_path}?key=link&direction=desc&query=+Sale+++++")
+        expect(page).to have_current_path("#{dashboard_utm_links_path}?key=link&direction=desc&query=%20Sale%20%20%20%20%20")
 
         # Search by source
         select_disclosure "Search" do
@@ -276,10 +276,10 @@ describe "UTM links", :js, type: :system do
         expect(page).to have_table_row({ "Link" => utm_link2.title })
         expect(page).not_to have_table_row({ "Link" => utm_link1.title })
         expect(page).to_not have_button("Next")
-        expect(page).to have_current_path("#{utm_links_dashboard_path}?key=link&direction=desc&query=TwiTTer")
+        expect(page).to have_current_path("#{dashboard_utm_links_path}?key=link&direction=desc&query=TwiTTer")
 
         # Shows filtered results on accessing the page with the 'query' param
-        visit "#{utm_links_dashboard_path}?key=source&direction=asc&query=PROMO"
+        visit "#{dashboard_utm_links_path}?key=source&direction=asc&query=PROMO"
         expect(page).to have_table_row({ "Link" => utm_link2.title })
         expect(page).not_to have_table_row({ "Link" => utm_link1.title })
         expect(page).to_not have_button("Next")
@@ -332,7 +332,7 @@ describe "UTM links", :js, type: :system do
         utm_link1 = create(:utm_link, seller:)
         utm_link2 = create(:utm_link, seller:)
 
-        visit utm_links_dashboard_path
+        visit dashboard_utm_links_path
         find_and_click("th", text: "Link")
         expect(page).to have_table_row({ "Link" => utm_link1.title })
         expect(page).to_not have_table_row({ "Link" => utm_link2.title })
@@ -383,10 +383,10 @@ describe "UTM links", :js, type: :system do
       it "renders the create link form" do
         allow(SecureRandom).to receive(:alphanumeric).and_return("unique01")
 
-        visit "#{utm_links_dashboard_path}/new"
+        visit "#{dashboard_utm_links_path}/new"
 
         expect(page).to have_text("Create link")
-        expect(page).to have_link("Cancel", href: utm_links_dashboard_path)
+        expect(page).to have_link("Cancel", href: dashboard_utm_links_path)
         expect(page).to have_text("Create UTM links to track where your traffic is coming from")
         expect(page).to have_text("Once set up, simply share the links to see which sources are driving more conversions and revenue")
         expect(find("a", text: "Learn more")[:href]).to include("/help/article/74-the-analytics-dashboard")
@@ -455,7 +455,7 @@ describe "UTM links", :js, type: :system do
 
       it "generates a new permalink when clicking the refresh button" do
         allow(SecureRandom).to receive(:alphanumeric).and_return("initial1", "newlink2")
-        visit "#{utm_links_dashboard_path}/new"
+        visit "#{dashboard_utm_links_path}/new"
 
         within :fieldset, "Link" do
           expect(page).to have_text(%Q(#{UrlService.short_domain_with_protocol.sub("#{PROTOCOL}://", '')}/u/))
@@ -471,7 +471,7 @@ describe "UTM links", :js, type: :system do
         record.valid?
         allow_any_instance_of(SaveUtmLinkService).to receive(:perform).and_raise(ActiveRecord::RecordInvalid.new(record))
 
-        visit "#{utm_links_dashboard_path}/new"
+        visit "#{dashboard_utm_links_path}/new"
 
         click_on "Add link"
         expect(find_field("Title")).to have_ancestor("fieldset.danger")
@@ -521,11 +521,11 @@ describe "UTM links", :js, type: :system do
           expect(page).to have_text("is invalid")
         end
         expect(page).to_not have_alert(text: "Link created!")
-        expect(page).to have_current_path("#{utm_links_dashboard_path}/new")
+        expect(page).to have_current_path("#{dashboard_utm_links_path}/new")
       end
 
       it "creates a UTM link" do
-        visit "#{utm_links_dashboard_path}/new"
+        visit "#{dashboard_utm_links_path}/new"
 
         fill_in "Title", with: "Test Link"
         expect(page).to_not have_field("Generated URL with UTM tags")
@@ -555,7 +555,7 @@ describe "UTM links", :js, type: :system do
         wait_for_ajax
 
         expect(page).to have_alert(text: "Link created!")
-        expect(page).to have_current_path(utm_links_dashboard_path)
+        expect(page).to have_current_path(dashboard_utm_links_path)
 
         expect(page).to have_table_row({ "Link" => "Test Link", "Source" => "facebook", "Medium" => "social", "Campaign" => "spring", "Destination" => "Product A" })
 
@@ -575,7 +575,7 @@ describe "UTM links", :js, type: :system do
       it "pre-fills the create page with the existing UTM link's values" do
         product = create(:product, user: seller, name: "Product A")
         existing_utm_link = create(:utm_link, seller:, title: "Existing UTM Link", target_resource_type: :product_page, target_resource_id: product.id, utm_source: "newsletter", utm_medium: "email", utm_campaign: "summer-sale", utm_term: "sale", utm_content: "banner")
-        visit utm_links_dashboard_path
+        visit dashboard_utm_links_path
 
         within(:table_row, { "Link" => "Existing UTM Link" }) do
           select_disclosure "Open action menu"  do
@@ -583,7 +583,7 @@ describe "UTM links", :js, type: :system do
           end
         end
 
-        expect(page).to have_current_path("#{utm_links_dashboard_path}/new?copy_from=#{existing_utm_link.external_id}")
+        expect(page).to have_current_path("#{dashboard_utm_links_path}/new?copy_from=#{existing_utm_link.external_id}")
         expect(page).to have_input_labelled("Title", with: "Existing UTM Link (copy)")
         within :fieldset, "Destination" do
           expect(page).to have_text("Product — Product A")
@@ -612,7 +612,7 @@ describe "UTM links", :js, type: :system do
         within :fieldset, "Destination" do
           expect(page).to have_text("A link with similar UTM parameters already exists for this destination!")
         end
-        expect(page).to have_current_path("#{utm_links_dashboard_path}/new?copy_from=#{existing_utm_link.external_id}")
+        expect(page).to have_current_path("#{dashboard_utm_links_path}/new?copy_from=#{existing_utm_link.external_id}")
         expect(UtmLink.sole).to eq(existing_utm_link)
 
         # Update a UTM parameter with a different value
@@ -624,7 +624,7 @@ describe "UTM links", :js, type: :system do
         click_on "Add link"
         wait_for_ajax
         expect(page).to have_alert(text: "Link created!")
-        expect(page).to have_current_path(utm_links_dashboard_path)
+        expect(page).to have_current_path(dashboard_utm_links_path)
         expect(page).to have_table_row({ "Link" => "Existing UTM Link (copy)", "Source" => "newsletter", "Medium" => "email", "Campaign" => "summer-sale-2" })
         expect(UtmLink.pluck(:title)).to eq(["Existing UTM Link", "Existing UTM Link (copy)"])
         expect(UtmLink.last.permalink).to_not eq(existing_utm_link.permalink)
@@ -636,16 +636,16 @@ describe "UTM links", :js, type: :system do
         utm_link = create(:utm_link, seller:, utm_campaign: "summer-sale-1")
         old_permalink = utm_link.permalink
 
-        visit utm_links_dashboard_path
+        visit dashboard_utm_links_path
         within(:table_row, { "Link" => utm_link.title }) do
           select_disclosure "Open action menu"  do
             click_on "Edit"
           end
         end
 
-        expect(page).to have_current_path("#{utm_links_dashboard_path}/#{utm_link.external_id}/edit")
+        expect(page).to have_current_path("#{dashboard_utm_links_path}/#{utm_link.external_id}/edit")
         expect(page).to have_text("Edit link")
-        expect(page).to have_link("Cancel", href: utm_links_dashboard_path)
+        expect(page).to have_link("Cancel", href: dashboard_utm_links_path)
         expect(find("a", text: "Learn more")["href"]).to include("/help/")
 
         # Check that the form is pre-filled with the existing UTM link's values
@@ -716,7 +716,7 @@ describe "UTM links", :js, type: :system do
         click_on "Save changes"
         wait_for_ajax
         expect(page).to have_alert(text: "Link updated!")
-        expect(page).to have_current_path(utm_links_dashboard_path)
+        expect(page).to have_current_path(dashboard_utm_links_path)
         find(:table_row, { "Link" => "Updated UTM Link", "Source" => "instagram", "Medium" => "social", "Campaign" => "summer-sale-1" }).click
         within_modal "Updated UTM Link" do
           within_section "Details" do
@@ -766,7 +766,7 @@ describe "UTM links", :js, type: :system do
 
       login_as(seller)
 
-      visit utm_links_dashboard_path
+      visit dashboard_utm_links_path
       wait_for_ajax
       find(:table_row, { "Link" => utm_link.title, "Clicks" => "1", "Revenue" => "$10", "Conversion" => "100%" }).click
       within_section "Statistics" do

@@ -82,7 +82,8 @@ describe Collaborator::CreateService do
 
         expect do
           result = described_class.new(seller:, params:).process
-          expect(result).to eq({ success: false, message: "Product affiliates affiliate basis points must be greater than or equal to 100" })
+          expect(result[:success]).to eq false
+          expect(result[:collaborator].errors.to_hash[:base]).to eq(["Product affiliates affiliate basis points must be greater than or equal to 100"])
         end.to change { seller.collaborators.count }.by(0)
            .and change { ProductAffiliate.count }.by(0)
       end
@@ -100,7 +101,8 @@ describe Collaborator::CreateService do
     it "returns an error if the user cannot be found" do
       params[:email] = "foo@example.com"
       result = described_class.new(seller:, params:).process
-      expect(result).to eq({ success: false, message: "The email address isn't associated with a Gumroad account." })
+      expect(result[:success]).to eq false
+      expect(result[:collaborator].errors.to_hash).to eq({ base: ["The email address isn't associated with a Gumroad account."] })
     end
 
     it "returns an error if the user is already a collaborator, regardless of invitation status" do
@@ -112,24 +114,28 @@ describe Collaborator::CreateService do
       )
 
       result = described_class.new(seller:, params:).process
-      expect(result).to eq({ success: false, message: "The user is already a collaborator" })
+      expect(result[:success]).to eq false
+      expect(result[:collaborator].errors.to_hash).to eq({ base: ["The user is already a collaborator"] })
 
       collaborator.collaborator_invitation.destroy!
 
       result = described_class.new(seller:, params:).process
-      expect(result).to eq({ success: false, message: "The user is already a collaborator" })
+      expect(result[:success]).to eq false
+      expect(result[:collaborator].errors.to_hash).to eq({ base: ["The user is already a collaborator"] })
     end
 
     it "returns an error if product cannot be found" do
       params[:products] = [{ id: "abc123" }]
       result = described_class.new(seller:, params:).process
-      expect(result).to eq({ success: false, message: "Product not found" })
+      expect(result[:success]).to eq false
+      expect(result[:collaborator].errors.to_hash).to eq({ base: ["Product not found"] })
     end
 
     it "returns an error if the user requires approval of any collaborator requests" do
       collaborating_user.update!(require_collab_request_approval: true)
       result = described_class.new(seller:, params:).process
-      expect(result).to eq({ success: false, message: "You cannot add this user as a collaborator" })
+      expect(result[:success]).to eq false
+      expect(result[:collaborator].errors.to_hash).to eq({ base: ["You cannot add this user as a collaborator"] })
     end
 
     it "returns an error if the seller is using a Brazilian Stripe Connect account" do
@@ -138,7 +144,8 @@ describe Collaborator::CreateService do
       expect(seller.merchant_account(StripeChargeProcessor.charge_processor_id)).to eq brazilian_stripe_account
 
       result = described_class.new(seller:, params:).process
-      expect(result).to eq({ success: false, message: "You cannot add a collaborator because you are using a Brazilian Stripe account." })
+      expect(result[:success]).to eq false
+      expect(result[:collaborator].errors.to_hash).to eq({ base: ["You cannot add a collaborator because you are using a Brazilian Stripe account."] })
     end
 
     it "returns an error if the collaborating user is using a Brazilian Stripe Connect account" do
@@ -147,7 +154,8 @@ describe Collaborator::CreateService do
       expect(collaborating_user.merchant_account(StripeChargeProcessor.charge_processor_id)).to eq brazilian_stripe_account
 
       result = described_class.new(seller:, params:).process
-      expect(result).to eq({ success: false, message: "This user cannot be added as a collaborator because they use a Brazilian Stripe account." })
+      expect(result[:success]).to eq false
+      expect(result[:collaborator].errors.to_hash).to eq({ base: ["This user cannot be added as a collaborator because they use a Brazilian Stripe account."] })
     end
 
     describe "email notifications" do

@@ -1,5 +1,5 @@
 import { Link, usePage } from "@inertiajs/react";
-import { capitalize } from "lodash";
+import { capitalize } from "lodash-es";
 import React from "react";
 import { cast } from "ts-safe-cast";
 

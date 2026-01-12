@@ -215,7 +215,6 @@ module User::Compliance
         signed_up_from_saudi_arabia? ||
         signed_up_from_norway? ||
         signed_up_from_saudi_arabia? ||
-        signed_up_from_gibraltar? ||
         signed_up_from_mauritius? ||
         signed_up_from_tunisia? ||
         signed_up_from_el_salvador? ||

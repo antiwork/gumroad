@@ -41,7 +41,7 @@ import { showAlert } from "$app/components/server-components/Alert";
 import { Alert } from "$app/components/ui/Alert";
 import { PageHeader } from "$app/components/ui/PageHeader";
 import { Pill } from "$app/components/ui/Pill";
-import Placeholder from "$app/components/ui/Placeholder";
+import { Placeholder, PlaceholderImage } from "$app/components/ui/Placeholder";
 import { ProductCardGrid } from "$app/components/ui/ProductCardGrid";
 import { useIsAboveBreakpoint } from "$app/components/useIsAboveBreakpoint";
 import { useOriginalLocation } from "$app/components/useOriginalLocation";
@@ -389,9 +389,7 @@ export const Checkout = ({
       ) : (
         <div className="p-4 md:p-8">
           <Placeholder>
-            <figure>
-              <img src={placeholder} />
-            </figure>
+            <PlaceholderImage src={placeholder} />
             <h3>You haven't added anything...yet!</h3>
             <p>Once you do, it'll show up here so you can complete your purchases.</p>
             <a className="button accent" href={discoverUrl}>
@@ -491,8 +489,8 @@ const CartItemComponent = ({
               {item.product.bundle_products.map((bundleProduct) => (
                 <CartItem key={bundleProduct.product_id} isBundleItem>
                   <CartItemMedia className="h-20 w-20">
-                    <a href={item.product.url}>
-                      <Thumbnail url={item.product.thumbnail_url} nativeType={item.product.native_type} />
+                    <a href={bundleProduct.url}>
+                      <Thumbnail url={bundleProduct.thumbnail_url} nativeType={bundleProduct.native_type} />
                     </a>
                   </CartItemMedia>
                   <span className="sr-only">Qty: {bundleProduct.quantity || item.quantity}</span>
