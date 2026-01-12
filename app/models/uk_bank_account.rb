@@ -27,12 +27,6 @@ class UkBankAccount < BankAccount
     Currency::GBP
   end
 
-  def to_hash
-    super.merge(
-      sort_code:
-    )
-  end
-
   private
     def validate_sort_code
       errors.add :base, "The sort code is invalid." unless SORT_CODE_FORMAT_REGEX.match?(sort_code)

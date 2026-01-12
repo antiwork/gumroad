@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-OPEN_EXCHANGE_RATES_API_BASE_URL = "http://openexchangerates.org/api"
+OPEN_EXCHANGE_RATES_API_BASE_URL = "https://openexchangerates.org/api"
 OPEN_EXCHANGE_RATE_KEY           = GlobalConfig.get("OPEN_EXCHANGE_RATES_APP_ID")
 
 CURRENCY_SOURCE = if Rails.env.development? || Rails.env.test?
