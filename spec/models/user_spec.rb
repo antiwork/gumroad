@@ -1876,7 +1876,8 @@ describe User, :vcr do
         @user.suspend_for_fraud(author_id: @admin_user.id)
       end
 
-      it "does not suspend all the others sellers accounts if suspended for tos violation" do
+      it "does not suspend all the others sellers accounts if suspended for tos violation", :sidekiq_inline do
+        expect(@user).not_to receive(:suspend_sellers_other_accounts)
         @user.flag_for_tos_violation(author_id: @admin_user.id, product_id: @product_1.id)
         @user.suspend_for_tos_violation(author_id: @admin_user.id)
         expect(@user_2.reload.suspended?).to be(false)
