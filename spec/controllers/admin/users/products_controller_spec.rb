@@ -20,7 +20,7 @@ describe Admin::Users::ProductsController, inertia: true do
 
   describe "GET index" do
     before do
-      get :index, params: { user_id: user.id }
+      get :index, params: { user_external_id: user.external_id }
     end
 
     it "returns successful response with Inertia page data" do

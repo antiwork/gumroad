@@ -27,24 +27,35 @@ describe("Product Page - Shipping Scenarios Address verification", type: :system
     end
 
     it "shows that the address is missing some information" do
-      # have to mock EasyPost calls because the timeout throws before EasyPost responds in testing
-      easy_post = EasyPost::Client.new(api_key: GlobalConfig.get("EASYPOST_API_KEY"))
-      address = easy_post.address.create(
-        verify: ["delivery"],
+      # Build mock address objects that mimic EasyPost API response
+      address = OpenStruct.new(
         street1: "255 Nonexistent St",
         city: "San Francisco",
         state: "CA",
         zip: "94107",
-        country: "US"
+        country: "US",
+        verifications: OpenStruct.new(
+          delivery: OpenStruct.new(
+            success: false,
+            errors: [OpenStruct.new(code: "E.ADDRESS.NOT_FOUND", message: "Address not found")],
+            details: nil
+          )
+        )
       )
 
-      verified_address = easy_post.address.create(
-        verify: ["delivery"],
-        street1: "255 King St Apt 602",
-        city: "San Francisco",
+      verified_address = OpenStruct.new(
+        street1: "255 KING ST APT 602",
+        city: "SAN FRANCISCO",
         state: "CA",
         zip: "94107",
-        country: "US"
+        country: "US",
+        verifications: OpenStruct.new(
+          delivery: OpenStruct.new(
+            success: true,
+            errors: [],
+            details: OpenStruct.new(latitude: 37.77, longitude: -122.39, time_zone: "America/Los_Angeles")
+          )
+        )
       )
 
       allow_any_instance_of(EasyPost::Services::Address).to receive(:create).and_return(address)
@@ -68,15 +79,20 @@ describe("Product Page - Shipping Scenarios Address verification", type: :system
     end
 
     it "lets purchase with valid address through" do
-      # have to mock EasyPost calls because the timeout throws before EasyPost responds in testing
-      easy_post = EasyPost::Client.new(api_key: GlobalConfig.get("EASYPOST_API_KEY"))
-      address = easy_post.address.create(
-        verify: ["delivery"],
-        street1: "1640 17th St",
-        city: "San Francisco",
+      # Build mock address object that mimics EasyPost API response
+      address = OpenStruct.new(
+        street1: "1640 17TH ST",
+        city: "SAN FRANCISCO",
         state: "CA",
         zip: "94107",
-        country: "US"
+        country: "US",
+        verifications: OpenStruct.new(
+          delivery: OpenStruct.new(
+            success: true,
+            errors: [],
+            details: OpenStruct.new(latitude: 37.76493, longitude: -122.40005, time_zone: "America/Los_Angeles")
+          )
+        )
       )
       expect_any_instance_of(EasyPost::Services::Address).to receive(:create).and_return(address)
 
@@ -95,6 +111,24 @@ describe("Product Page - Shipping Scenarios Address verification", type: :system
     end
 
     describe "address verification confirmation prompt" do
+      before do
+        corrected_address = OpenStruct.new(
+          street1: "255 KING ST APT 602",
+          city: "SAN FRANCISCO",
+          state: "CA",
+          zip: "94107",
+          country: "US",
+          verifications: OpenStruct.new(
+            delivery: OpenStruct.new(
+              success: true,
+              errors: [],
+              details: OpenStruct.new(latitude: 37.77, longitude: -122.39, time_zone: "America/Los_Angeles")
+            )
+          )
+        )
+        allow_any_instance_of(EasyPost::Services::Address).to receive(:create).and_return(corrected_address)
+      end
+
       it "lets a buyer choose to use a verified address to complete their purchase" do
         visit "/l/#{@product.unique_permalink}"
         add_to_cart(@product)
@@ -177,15 +211,20 @@ describe("Product Page - Shipping Scenarios Address verification", type: :system
     end
 
     it "lets purchase with valid address through" do
-      # have to mock EasyPost calls because the timeout throws before EasyPost responds in testing
-      easy_post = EasyPost::Client.new(api_key: GlobalConfig.get("EASYPOST_API_KEY"))
-      address = easy_post.address.create(
-        verify: ["delivery"],
-        street1: "9384 Cardston Ct",
-        city: "Burnaby",
+      # Build mock address object that mimics EasyPost API response
+      address = OpenStruct.new(
+        street1: "9384 CARDSTON CT",
+        city: "BURNABY",
         state: "BC",
         zip: "V3N 4H4",
-        country: "CA"
+        country: "CA",
+        verifications: OpenStruct.new(
+          delivery: OpenStruct.new(
+            success: true,
+            errors: [],
+            details: OpenStruct.new(latitude: 49.25, longitude: -122.95, time_zone: "America/Vancouver")
+          )
+        )
       )
       expect_any_instance_of(EasyPost::Services::Address).to receive(:create).and_return(address)
 
