@@ -17,7 +17,7 @@ module Onetime
 
       Subscription.where.not(charge_occurrence_count: nil)
                   .where(ended_at: nil)
-                  .find_each(batch_size: 100) do |subscription|
+                  .find_each do |subscription|
         next unless subscription.charges_completed?
 
         begin
