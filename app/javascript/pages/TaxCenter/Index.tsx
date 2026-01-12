@@ -9,6 +9,7 @@ import { NavigationButton } from "$app/components/Button";
 import { Icon } from "$app/components/Icons";
 import { useLoggedInUser } from "$app/components/LoggedInUser";
 import { showAlert } from "$app/components/server-components/Alert";
+import { Card, CardContent } from "$app/components/ui/Card";
 import { PageHeader } from "$app/components/ui/PageHeader";
 import { Placeholder, PlaceholderImage } from "$app/components/ui/Placeholder";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "$app/components/ui/Table";
@@ -221,14 +222,18 @@ const TaxCenterIndex = () => {
 
       <section className="p-4 md:p-8">
         <h2 className="mb-4">Find answers to your tax questions</h2>
-        <div className="stack">
+        <Card>
           {FAQ_ITEMS.map((item) => (
-            <details key={item.id}>
-              <summary>{item.question}</summary>
-              <p className="text-sm">{item.answer}</p>
-            </details>
+            <CardContent asChild details key={item.id}>
+              <details>
+                <summary className="grow grid-flow-col grid-cols-[1fr_auto] before:col-start-2">
+                  {item.question}
+                </summary>
+                <p className="text-sm">{item.answer}</p>
+              </details>
+            </CardContent>
           ))}
-        </div>
+        </Card>
         <p className="mt-4 text-sm text-muted">
           Need more help? Search our <a href="/help">Help Center</a>.
         </p>

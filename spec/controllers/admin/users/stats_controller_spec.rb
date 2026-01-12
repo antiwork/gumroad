@@ -17,7 +17,7 @@ describe Admin::Users::StatsController do
     let(:product) { create(:product, user: user, price_cents: 10_000) }
 
     it "returns the user's stats as JSON" do
-      get :index, params: { user_id: user.id }, format: :json
+      get :index, params: { user_external_id: user.external_id }, format: :json
 
       expect(response).to have_http_status(:success)
 
