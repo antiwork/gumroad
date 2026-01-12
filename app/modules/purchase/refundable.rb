@@ -45,8 +45,21 @@ class Purchase
 
         amount_cents_to_refund = amount_cents.presence || amount_refundable_cents
         if amount_cents_to_refund > seller.unpaid_balance_cents && charged_using_gumroad_merchant_account?
-          errors.add :base, "Your balance is insufficient to process this refund."
-          return false
+          if seller.refund_funding_credit_card.present?
+            shortfall_cents = amount_cents_to_refund - seller.unpaid_balance_cents
+            charge_result = RefundFundingChargeService.new(
+              user: seller,
+              amount_cents: shortfall_cents
+            ).perform
+
+            unless charge_result[:success]
+              errors.add :base, charge_result[:error] || "Could not charge your backup card to cover the refund shortfall."
+              return false
+            end
+          else
+            errors.add :base, "Your balance is insufficient to process this refund."
+            return false
+          end
         end
       end
 

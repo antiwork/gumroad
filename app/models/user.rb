@@ -50,6 +50,7 @@ class User < ApplicationRecord
   has_many :devices
 
   belongs_to :credit_card, optional: true
+  belongs_to :refund_funding_credit_card, class_name: "CreditCard", optional: true
 
   # Associate with CustomDomain.alive objects
   has_one :custom_domain, -> { alive }

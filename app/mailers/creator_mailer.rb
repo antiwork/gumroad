@@ -34,4 +34,12 @@ class CreatorMailer < ApplicationMailer
     @bundles = bundles
     mail to: seller.form_email, subject: "Join top creators who have sold over $300,000 of bundles"
   end
+
+  def refund_funding_charge_confirmation(seller:, amount_cents:, card_visual:)
+    @seller = seller
+    @amount = Money.new(amount_cents, "USD").format
+    @card_visual = card_visual
+
+    mail to: seller.form_email, subject: "Your backup card was charged #{@amount} to cover a refund"
+  end
 end

@@ -1,0 +1,13 @@
+<div style="background-color: #f4f4f0">
+  <h2>Your backup card was charged <%= @amount %></h2>
+
+  <p>Hi <%= @seller.display_name.presence || "there" %>,</p>
+
+  <p>We successfully charged your backup payment method (<%= @card_visual %>) for <b><%= @amount %></b> to cover a refund.</p>
+
+  <p>This amount has been added to your Gumroad balance and the refund has been processed for your customer.</p>
+
+  <p>You can manage your backup payment method in your <%= link_to "Payments Settings", settings_payments_url %>.</p>
+
+  <p>Best,<br />The Gumroad Team</p>
+</div>
