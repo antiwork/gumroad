@@ -121,7 +121,7 @@ module User::Risk
   end
 
   def suspend_sellers_other_accounts(transition)
-    return if transition.args.first&.dig(:skip_transition) == __method__
+    return if transition.args.first&.dig(:skip_transition_callback) == __method__
 
     SuspendAccountsWithPaymentAddressWorker.perform_in(5.seconds, id)
   end
@@ -131,12 +131,12 @@ module User::Risk
   end
 
   def enable_sellers_other_accounts(transition)
-    return if transition.args.first&.dig(:skip_transition) == __method__
+    return if transition.args.first&.dig(:skip_transition_callback) == __method__
 
     return if payment_address.blank?
 
     User.where(payment_address:).where.not(id:).each do |user|
-      user.mark_compliant!(author_name: "enable_sellers_other_accounts", content: "Marked compliant automatically on #{Time.current.to_fs(:formatted_date_full_month)} as payment address #{payment_address} is now unblocked (from User##{id})", skip_transition: :enable_sellers_other_accounts)
+      user.mark_compliant!(author_name: "enable_sellers_other_accounts", content: "Marked compliant automatically on #{Time.current.to_fs(:formatted_date_full_month)} as payment address #{payment_address} is now unblocked (from User##{id})", skip_transition_callback: :enable_sellers_other_accounts)
     end
   end
 
