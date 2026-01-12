@@ -59,6 +59,7 @@ import { AbortError, assertResponseError } from "$app/utils/request";
 
 import { Button, NavigationButton } from "$app/components/Button";
 import { useCurrentSeller } from "$app/components/CurrentSeller";
+import { RefundPaymentMethodBanner } from "$app/components/CustomersPage/RefundPaymentMethodBanner";
 import { DateInput } from "$app/components/DateInput";
 import { DateRangePicker } from "$app/components/DateRangePicker";
 import { FileKindIcon } from "$app/components/FileRowContent";
@@ -104,6 +105,7 @@ export type CustomerPageProps = {
   countries: string[];
   can_ping: boolean;
   show_refund_fee_notice: boolean;
+  show_refund_payment_method_banner: boolean;
 };
 
 const year = new Date().getFullYear();
@@ -127,6 +129,7 @@ const CustomersPage = ({
   countries,
   can_ping,
   show_refund_fee_notice,
+  show_refund_payment_method_banner,
   ...initialState
 }: CustomerPageProps) => {
   const currentSeller = useCurrentSeller();
@@ -449,6 +452,7 @@ const CustomersPage = ({
         }
       />
       <section className="p-4 md:p-8">
+        <RefundPaymentMethodBanner show={show_refund_payment_method_banner} />
         {customers.length > 0 ? (
           <section className="flex flex-col gap-4">
             <Table aria-live="polite" className={cx(isLoading && "pointer-events-none opacity-50")}>

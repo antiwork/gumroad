@@ -189,6 +189,7 @@ class SettingsPresenter
 
   def payments_props(remote_ip: nil)
     user_compliance_info = seller.fetch_or_build_user_compliance_info
+    refund_card = seller.refund_funding_credit_card
     {
       settings_pages: pages,
       is_form_disabled: !Pundit.policy!(pundit_user, [:settings, :payments, seller]).update?,
@@ -221,6 +222,13 @@ class SettingsPresenter
       minimum_payout_threshold_cents: seller.minimum_payout_threshold_cents,
       payout_frequency: seller.payout_frequency,
       payout_frequency_daily_supported: seller.instant_payouts_supported?,
+      refund_funding_card: refund_card.present? ? {
+        visual: refund_card.visual,
+        card_type: refund_card.card_type,
+        expiry_month: refund_card.expiry_month,
+        expiry_year: refund_card.expiry_year
+      } : nil,
+      refund_funding_card_name: seller.refund_funding_card_name,
     }
   end
 

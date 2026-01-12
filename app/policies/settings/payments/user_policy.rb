@@ -37,6 +37,19 @@ class Settings::Payments::UserPolicy < ApplicationPolicy
     update?
   end
 
+  # Refund funding card management
+  def create?
+    update?
+  end
+
+  def destroy?
+    update?
+  end
+
+  def dismiss_banner?
+    update?
+  end
+
   def remediation?
     update?
   end

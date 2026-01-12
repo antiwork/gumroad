@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[7.1].define(version: 2025_11_24_133549) do
+ActiveRecord::Schema[7.1].define(version: 2026_01_11_000002) do
   create_table "active_storage_attachments", charset: "utf8mb4", collation: "utf8mb4_unicode_ci", force: :cascade do |t|
     t.string "name", limit: 191, null: false
     t.string "record_type", limit: 191, null: false
@@ -2531,6 +2531,9 @@ ActiveRecord::Schema[7.1].define(version: 2025_11_24_133549) do
     t.string "notification_content_type", default: "application/x-www-form-urlencoded"
     t.string "google_uid"
     t.integer "purchasing_power_parity_limit"
+    t.integer "refund_funding_credit_card_id"
+    t.string "refund_funding_card_name"
+    t.boolean "dismissed_refund_payment_method_banner", default: false, null: false
     t.index ["account_created_ip"], name: "index_users_on_account_created_ip"
     t.index ["confirmation_token"], name: "index_users_on_confirmation_token", length: 191
     t.index ["created_at"], name: "index_users_on_created_at"
@@ -2542,6 +2545,7 @@ ActiveRecord::Schema[7.1].define(version: 2025_11_24_133549) do
     t.index ["last_sign_in_ip"], name: "index_users_on_last_sign_in_ip"
     t.index ["name"], name: "index_users_on_name"
     t.index ["payment_address", "user_risk_state"], name: "index_users_on_payment_address_and_user_risk_state"
+    t.index ["refund_funding_credit_card_id"], name: "index_users_on_refund_funding_credit_card_id"
     t.index ["reset_password_token"], name: "index_users_on_reset_password_token"
     t.index ["support_email"], name: "index_users_on_support_email"
     t.index ["tos_violation_reason"], name: "index_users_on_tos_violation_reason"
@@ -2743,4 +2747,5 @@ ActiveRecord::Schema[7.1].define(version: 2025_11_24_133549) do
 
   add_foreign_key "active_storage_attachments", "active_storage_blobs", column: "blob_id"
   add_foreign_key "active_storage_variant_records", "active_storage_blobs", column: "blob_id"
+  add_foreign_key "users", "credit_cards", column: "refund_funding_credit_card_id"
 end

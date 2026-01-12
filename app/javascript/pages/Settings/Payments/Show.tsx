@@ -28,6 +28,7 @@ import BankAccountSection, {
 import DebitCardSection from "$app/components/Settings/PaymentsPage/DebitCardSection";
 import PayPalConnectSection, { PayPalConnect } from "$app/components/Settings/PaymentsPage/PayPalConnectSection";
 import PayPalEmailSection from "$app/components/Settings/PaymentsPage/PayPalEmailSection";
+import RefundFundingSection from "$app/components/Settings/PaymentsPage/RefundFundingSection";
 import StripeConnectSection, { StripeConnect } from "$app/components/Settings/PaymentsPage/StripeConnectSection";
 import { Toggle } from "$app/components/Toggle";
 import { TypeSafeOptionSelect } from "$app/components/TypeSafeOptionSelect";
@@ -86,6 +87,13 @@ type PaymentsPageProps = {
   minimum_payout_threshold_cents: number;
   payout_frequency: PayoutFrequency;
   payout_frequency_daily_supported: boolean;
+  refund_funding_card: {
+    visual: string;
+    card_type: string;
+    expiry_month: number;
+    expiry_year: number;
+  } | null;
+  refund_funding_card_name: string | null;
   errors?: {
     base?: string[];
     error_code?: string[];
@@ -1063,6 +1071,11 @@ export default function PaymentsPage() {
             connectAccountFeeInfoText={props.fee_info.connect_account_fee_info_text}
           />
         ) : null}
+        <RefundFundingSection
+          refundFundingCard={props.refund_funding_card}
+          nameOnCard={props.refund_funding_card_name}
+          isFormDisabled={props.is_form_disabled}
+        />
         {props.saved_card ? (
           <CreditCardForm
             card={props.saved_card}
