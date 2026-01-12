@@ -43,7 +43,7 @@ module Admin::Commentable
         only: %i[id author_name comment_type content updated_at],
         include: {
           author: {
-            only: %i[id name email],
+            only: %i[external_id name email],
           }
         },
       ).reverse_merge(author: nil)

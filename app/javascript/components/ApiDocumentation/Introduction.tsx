@@ -1,16 +1,18 @@
 import { Link } from "@inertiajs/react";
 import React from "react";
 
+import { Card, CardContent } from "$app/components/ui/Card";
+
 export const Introduction = () => (
-  <div className="stack" id="api-intro">
-    <div>
-      <p>
+  <Card id="api-intro">
+    <CardContent>
+      <p className="grow">
         The Gumroad OAuth API is based around REST. We return JSON for every request, including{" "}
         <a href="#api-errors">errors</a>.
       </p>
-    </div>
-    <div>
-      <div className="flex flex-col gap-4">
+    </CardContent>
+    <CardContent>
+      <div className="flex grow flex-col gap-4">
         <p>
           To start using the API, you'll need to{" "}
           <Link href="/settings/advanced#application-form">register your OAuth application</Link>. Note: The{" "}
@@ -18,6 +20,6 @@ export const Introduction = () => (
         </p>
         <p>After creating an application, you'll be given a unique application id and application secret.</p>
       </div>
-    </div>
-  </div>
+    </CardContent>
+  </Card>
 );

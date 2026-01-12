@@ -10,6 +10,7 @@ import { Icon } from "$app/components/Icons";
 import { useLoggedInUser } from "$app/components/LoggedInUser";
 import { Popover } from "$app/components/Popover";
 import { showAlert } from "$app/components/server-components/Alert";
+import { Card, CardContent } from "$app/components/ui/Card";
 import { PageHeader } from "$app/components/ui/PageHeader";
 import { Placeholder, PlaceholderImage } from "$app/components/ui/Placeholder";
 import { Sheet, SheetHeader } from "$app/components/ui/Sheet";
@@ -218,10 +219,10 @@ export default function FollowersPage() {
                 className={selectedFollower.can_update ? "" : "js-team-member-read-only"}
               >
                 <SheetHeader>Details</SheetHeader>
-                <div className="stack">
-                  <div>
-                    <div>
-                      <h4>Email</h4>
+                <Card>
+                  <CardContent>
+                    <div className="grow">
+                      <h4 className="font-bold">Email</h4>
                       <div>{selectedFollower.email}</div>
                       <Button
                         color="danger"
@@ -232,8 +233,8 @@ export default function FollowersPage() {
                         {deleteForm.processing ? "Removing..." : "Remove follower"}
                       </Button>
                     </div>
-                  </div>
-                </div>
+                  </CardContent>
+                </Card>
               </Sheet>
             ) : null}
           </div>

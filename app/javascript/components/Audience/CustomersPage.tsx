@@ -45,6 +45,7 @@ import {
   approveReviewVideo,
   rejectReviewVideo,
 } from "$app/data/customers";
+import { classNames } from "$app/utils/classNames";
 import {
   CurrencyCode,
   formatPriceCentsWithCurrencySymbol,
@@ -77,6 +78,7 @@ import { Select } from "$app/components/Select";
 import { showAlert } from "$app/components/server-components/Alert";
 import { Toggle } from "$app/components/Toggle";
 import { Alert } from "$app/components/ui/Alert";
+import { Card, CardContent } from "$app/components/ui/Card";
 import { PageHeader } from "$app/components/ui/PageHeader";
 import { Pill } from "$app/components/ui/Pill";
 import { Placeholder, PlaceholderImage } from "$app/components/ui/Placeholder";
@@ -283,6 +285,7 @@ const CustomersPage = ({
             </Popover>
             <Popover
               aria-label="Filter"
+              dropdownClassName="p-0!"
               trigger={
                 <WithTooltip tip="Filter">
                   <div className="button">
@@ -291,8 +294,8 @@ const CustomersPage = ({
                 </WithTooltip>
               }
             >
-              <div className="stack" style={{ width: "35rem" }}>
-                <div>
+              <Card className="w-140 border-none shadow-none">
+                <CardContent>
                   <ProductSelect
                     products={products.filter(
                       (product) => !excludedItems.find((excludedItem) => product.id === excludedItem.id),
@@ -300,9 +303,10 @@ const CustomersPage = ({
                     label="Customers who bought"
                     items={includedItems}
                     setItems={setIncludedItems}
+                    className="grow basis-0"
                   />
-                </div>
-                <div>
+                </CardContent>
+                <CardContent>
                   <ProductSelect
                     products={products.filter(
                       (product) => !includedItems.find((includedItem) => product.id === includedItem.id),
@@ -310,15 +314,17 @@ const CustomersPage = ({
                     label="Customers who have not bought"
                     items={excludedItems}
                     setItems={setExcludedItems}
+                    className="grow basis-0"
                   />
-                </div>
-                <div>
+                </CardContent>
+                <CardContent>
                   <div
                     style={{
                       display: "grid",
                       gap: "var(--spacer-4)",
                       gridTemplateColumns: "repeat(auto-fit, minmax(var(--dynamic-grid), 1fr))",
                     }}
+                    className="grow"
                   >
                     <fieldset>
                       <label htmlFor={`${uid}-minimum-amount`}>Paid more than</label>
@@ -341,14 +347,15 @@ const CustomersPage = ({
                       />
                     </fieldset>
                   </div>
-                </div>
-                <div>
+                </CardContent>
+                <CardContent>
                   <div
                     style={{
                       display: "grid",
                       gap: "var(--spacer-4)",
                       gridTemplateColumns: "repeat(auto-fit, minmax(var(--dynamic-grid), 1fr))",
                     }}
+                    className="grow"
                   >
                     <fieldset>
                       <label htmlFor={`${uid}-after-date`}>After</label>
@@ -371,9 +378,9 @@ const CustomersPage = ({
                       <small suppressHydrationWarning>{`11:59 ${timeZoneAbbreviation}`}</small>
                     </fieldset>
                   </div>
-                </div>
-                <div>
-                  <fieldset>
+                </CardContent>
+                <CardContent>
+                  <fieldset className="grow basis-0">
                     <label htmlFor={`${uid}-country`}>From</label>
                     <select
                       id={`${uid}-country`}
@@ -390,9 +397,9 @@ const CustomersPage = ({
                       ))}
                     </select>
                   </fieldset>
-                </div>
-                <div>
-                  <h4>
+                </CardContent>
+                <CardContent>
+                  <h4 className="font-bold">
                     <label htmlFor={`${uid}-active-customers-only`}>Show active customers only</label>
                   </h4>
                   <Toggle
@@ -400,8 +407,8 @@ const CustomersPage = ({
                     value={activeCustomersOnly}
                     onChange={(activeCustomersOnly) => updateQuery({ activeCustomersOnly })}
                   />
-                </div>
-              </div>
+                </CardContent>
+              </Card>
             </Popover>
             <Popover
               aria-label="Export"
@@ -607,15 +614,17 @@ const ProductSelect = ({
   products,
   items,
   setItems,
+  className,
 }: {
   label: string;
   products: Product[];
   items: Item[];
   setItems: (items: Item[]) => void;
+  className?: string;
 }) => {
   const uid = React.useId();
   return (
-    <fieldset>
+    <fieldset className={className}>
       <legend>
         <label htmlFor={uid}>{label}</label>
       </legend>
@@ -888,113 +897,125 @@ const CustomerDrawer = ({
           }
         />
       ) : null}
-      <section className="stack">
-        <h3 className="flex gap-1">
-          Order information
-          {!subscription && customer.transaction_url_for_seller ? (
-            <a href={customer.transaction_url_for_seller} target="_blank" rel="noreferrer" aria-label="Transaction">
-              <Icon name="arrow-up-right-square" />
-            </a>
+      <Card asChild>
+        <section>
+          <CardContent asChild>
+            <h3 className="flex gap-1">
+              Order information
+              {!subscription && customer.transaction_url_for_seller ? (
+                <a
+                  href={customer.transaction_url_for_seller}
+                  target="_blank"
+                  rel="noreferrer"
+                  aria-label="Transaction"
+                  className="grow"
+                >
+                  <Icon name="arrow-up-right-square" />
+                </a>
+              ) : null}
+            </h3>
+          </CardContent>
+          <CardContent>
+            <h5 className="grow font-bold">Customer name</h5>
+            {customer.name}
+          </CardContent>
+          <CardContent>
+            <h5 className="grow font-bold">{customer.is_multiseat_license ? "Seats" : "Quantity"}</h5>
+            {customer.quantity}
+          </CardContent>
+          {customer.download_count ? (
+            <CardContent>
+              <h5 className="grow font-bold">Download count</h5>
+              {customer.download_count}
+            </CardContent>
           ) : null}
-        </h3>
-        <div>
-          <h5>Customer name</h5>
-          {customer.name}
-        </div>
-        <div>
-          <h5>{customer.is_multiseat_license ? "Seats" : "Quantity"}</h5>
-          {customer.quantity}
-        </div>
-        {customer.download_count ? (
-          <div>
-            <h5>Download count</h5>
-            {customer.download_count}
-          </div>
-        ) : null}
-        <div>
-          <h5>Price</h5>
-          <div>
-            {customer.price.cents_before_offer_code > customer.price.cents ? (
-              <>
-                <s>
-                  {formatPrice(
-                    customer.price.cents_before_offer_code,
-                    customer.price.currency_type,
-                    customer.price.recurrence,
-                  )}
-                </s>{" "}
-              </>
-            ) : null}
-            {formatPrice(
-              customer.price.cents - (customer.price.tip_cents ?? 0),
-              customer.price.currency_type,
-              customer.price.recurrence,
-            )}
-          </div>
-        </div>
-        {customer.price.tip_cents ? (
-          <div>
-            <h5>Tip</h5>
-            {formatPrice(customer.price.tip_cents, customer.price.currency_type, customer.price.recurrence)}
-          </div>
-        ) : null}
-        {customer.discount && !customer.upsell ? (
-          <div>
-            <h5>Discount</h5>
-            {customer.discount.code ? (
-              <div>
-                {formatDiscount(customer.discount, customer.price.currency_type)} off with code{" "}
-                <Pill size="small">{customer.discount.code.toUpperCase()}</Pill>
+          <CardContent>
+            <h5 className="grow font-bold">Price</h5>
+            <div>
+              {customer.price.cents_before_offer_code > customer.price.cents ? (
+                <>
+                  <s>
+                    {formatPrice(
+                      customer.price.cents_before_offer_code,
+                      customer.price.currency_type,
+                      customer.price.recurrence,
+                    )}
+                  </s>{" "}
+                </>
+              ) : null}
+              {formatPrice(
+                customer.price.cents - (customer.price.tip_cents ?? 0),
+                customer.price.currency_type,
+                customer.price.recurrence,
+              )}
+            </div>
+          </CardContent>
+          {customer.price.tip_cents ? (
+            <CardContent>
+              <h5 className="grow font-bold">Tip</h5>
+              {formatPrice(customer.price.tip_cents, customer.price.currency_type, customer.price.recurrence)}
+            </CardContent>
+          ) : null}
+          {customer.discount && !customer.upsell ? (
+            <CardContent>
+              <h5 className="grow font-bold">Discount</h5>
+              {customer.discount.code ? (
+                <div>
+                  {formatDiscount(customer.discount, customer.price.currency_type)} off with code{" "}
+                  <Pill size="small">{customer.discount.code.toUpperCase()}</Pill>
+                </div>
+              ) : (
+                `${formatDiscount(customer.discount, customer.price.currency_type)} off`
+              )}
+            </CardContent>
+          ) : null}
+          {customer.upsell ? (
+            <CardContent>
+              <h5 className="grow font-bold">Upsell</h5>
+              {`${customer.upsell}${
+                customer.discount ? ` (${formatDiscount(customer.discount, customer.price.currency_type)} off)` : ""
+              }`}
+            </CardContent>
+          ) : null}
+          {subscription?.status ? (
+            <CardContent>
+              <h5 className="grow font-bold">
+                {subscription.is_installment_plan ? "Installment plan status" : "Membership status"}
+              </h5>
+              <div
+                style={{
+                  color:
+                    subscription.status === "alive" || subscription.status === "fixed_subscription_period_ended"
+                      ? undefined
+                      : "var(--red)",
+                }}
+              >
+                {subscription.is_installment_plan
+                  ? INSTALLMENT_PLAN_STATUS_LABELS[subscription.status]
+                  : MEMBERSHIP_STATUS_LABELS[subscription.status]}
               </div>
-            ) : (
-              `${formatDiscount(customer.discount, customer.price.currency_type)} off`
-            )}
-          </div>
-        ) : null}
-        {customer.upsell ? (
-          <div>
-            <h5>Upsell</h5>
-            {`${customer.upsell}${
-              customer.discount ? ` (${formatDiscount(customer.discount, customer.price.currency_type)} off)` : ""
-            }`}
-          </div>
-        ) : null}
-        {subscription?.status ? (
-          <div>
-            <h5>{subscription.is_installment_plan ? "Installment plan status" : "Membership status"}</h5>
-            <div
-              style={{
-                color:
-                  subscription.status === "alive" || subscription.status === "fixed_subscription_period_ended"
-                    ? undefined
-                    : "var(--red)",
-              }}
-            >
-              {subscription.is_installment_plan
-                ? INSTALLMENT_PLAN_STATUS_LABELS[subscription.status]
-                : MEMBERSHIP_STATUS_LABELS[subscription.status]}
-            </div>
-          </div>
-        ) : null}
-        {customer.referrer ? (
-          <div>
-            <h5>Referrer</h5>
-            {customer.referrer}
-          </div>
-        ) : null}
-        {customer.physical ? (
-          <>
-            <div>
-              <h5>SKU</h5>
-              {customer.physical.sku}
-            </div>
-            <div>
-              <h5>Order number</h5>
-              {customer.physical.order_number}
-            </div>
-          </>
-        ) : null}
-      </section>
+            </CardContent>
+          ) : null}
+          {customer.referrer ? (
+            <CardContent>
+              <h5 className="grow font-bold">Referrer</h5>
+              {customer.referrer}
+            </CardContent>
+          ) : null}
+          {customer.physical ? (
+            <>
+              <CardContent>
+                <h5 className="grow font-bold">SKU</h5>
+                {customer.physical.sku}
+              </CardContent>
+              <CardContent>
+                <h5 className="grow font-bold">Order number</h5>
+                {customer.physical.order_number}
+              </CardContent>
+            </>
+          ) : null}
+        </section>
+      </Card>
       {customer.utm_link ? <UtmLinkStack link={customer.utm_link} showHeader /> : null}
       {customer.review ? (
         <ReviewSection
@@ -1004,28 +1025,34 @@ const CustomerDrawer = ({
         />
       ) : null}
       {customer.custom_fields.length > 0 ? (
-        <section className="stack">
-          <header>
-            <h3>Information provided</h3>
-          </header>
-          {customer.custom_fields.map((field, idx) => {
-            const content = (
-              <section key={idx}>
-                <h5>{field.attribute}</h5>
-                {field.type === "text" ? (
-                  field.value
-                ) : (
-                  <Rows role="list" className="mt-2">
-                    {field.files.map((file) => (
-                      <FileRow file={file} key={file.key} />
-                    ))}
-                  </Rows>
-                )}
-              </section>
-            );
-            return field.type === "file" ? <div key={idx}>{content}</div> : content;
-          })}
-        </section>
+        <Card asChild>
+          <section>
+            <CardContent asChild>
+              <header>
+                <h3 className="grow">Information provided</h3>
+              </header>
+            </CardContent>
+            {customer.custom_fields.map((field, idx) => {
+              const content = (
+                <CardContent asChild>
+                  <section key={idx}>
+                    <h5 className="grow font-bold">{field.attribute}</h5>
+                    {field.type === "text" ? (
+                      field.value
+                    ) : (
+                      <Rows role="list" className="mt-2">
+                        {field.files.map((file) => (
+                          <FileRow file={file} key={file.key} />
+                        ))}
+                      </Rows>
+                    )}
+                  </section>
+                </CardContent>
+              );
+              return field.type === "file" ? <div key={idx}>{content}</div> : content;
+            })}
+          </section>
+        </Card>
       ) : null}
       {customer.has_options && !isCoffee && customer.product.native_type !== "call" ? (
         <OptionSection
@@ -1038,25 +1065,33 @@ const CustomerDrawer = ({
         />
       ) : null}
       {customer.is_bundle_purchase ? (
-        <section className="stack">
-          <header>
-            <h3>Content</h3>
-          </header>
-          {productPurchases.length > 0 ? (
-            productPurchases.map((customer) => (
-              <section key={customer.id}>
-                <h5>{customer.product.name}</h5>
-                <Button onClick={() => setSelectedProductPurchaseId(customer.id)}>Manage</Button>
-              </section>
-            ))
-          ) : (
-            <section>
-              <div className="text-center">
-                <LoadingSpinner className="size-8" />
-              </div>
-            </section>
-          )}
-        </section>
+        <Card asChild>
+          <section>
+            <CardContent asChild>
+              <header>
+                <h3 className="grow">Content</h3>
+              </header>
+            </CardContent>
+            {productPurchases.length > 0 ? (
+              productPurchases.map((customer) => (
+                <CardContent asChild key={customer.id}>
+                  <section>
+                    <h5 className="grow font-bold">{customer.product.name}</h5>
+                    <Button onClick={() => setSelectedProductPurchaseId(customer.id)}>Manage</Button>
+                  </section>
+                </CardContent>
+              ))
+            ) : (
+              <CardContent asChild>
+                <section>
+                  <div className="grow text-center">
+                    <LoadingSpinner className="size-8" />
+                  </div>
+                </section>
+              </CardContent>
+            )}
+          </section>
+        </Card>
       ) : null}
       {license ? (
         <LicenseSection
@@ -1130,29 +1165,36 @@ const CustomerDrawer = ({
       ) : null}
       {customer.call ? <CallSection call={customer.call} onChange={(call) => onChange({ ...customer, call })} /> : null}
       {!showCharges && !customer.refunded && !customer.chargedback && customer.price.cents_refundable > 0 ? (
-        <section className="stack">
-          <header>
-            <h3>Refund</h3>
-          </header>
+        <Card asChild>
           <section>
-            <RefundForm
-              purchaseId={customer.id}
-              currencyType={customer.price.currency_type}
-              amountRefundable={customer.price.cents_refundable}
-              showRefundFeeNotice={showRefundFeeNotice}
-              paypalRefundExpired={customer.paypal_refund_expired}
-              modalTitle="Purchase refund"
-              modalText="Would you like to confirm this purchase refund?"
-              onChange={(amountRefundable) =>
-                onChange({
-                  price: { ...customer.price, cents_refundable: amountRefundable },
-                  refunded: amountRefundable === 0,
-                  partially_refunded: amountRefundable > 0 && amountRefundable < customer.price.cents_refundable,
-                })
-              }
-            />
+            <CardContent asChild>
+              <header>
+                <h3 className="grow">Refund</h3>
+              </header>
+            </CardContent>
+            <CardContent asChild>
+              <section>
+                <RefundForm
+                  purchaseId={customer.id}
+                  currencyType={customer.price.currency_type}
+                  amountRefundable={customer.price.cents_refundable}
+                  showRefundFeeNotice={showRefundFeeNotice}
+                  paypalRefundExpired={customer.paypal_refund_expired}
+                  modalTitle="Purchase refund"
+                  modalText="Would you like to confirm this purchase refund?"
+                  onChange={(amountRefundable) =>
+                    onChange({
+                      price: { ...customer.price, cents_refundable: amountRefundable },
+                      refunded: amountRefundable === 0,
+                      partially_refunded: amountRefundable > 0 && amountRefundable < customer.price.cents_refundable,
+                    })
+                  }
+                  className="grow basis-0"
+                />
+              </section>
+            </CardContent>
           </section>
-        </section>
+        </Card>
       ) : null}
       {subscription?.status === "alive" ? (
         <SubscriptionCancellationSection
@@ -1172,11 +1214,13 @@ const CustomerDrawer = ({
         />
       ) : null}
       {canPing && !subscription ? (
-        <section className="stack">
-          <div>
-            <PingButton purchaseId={customer.id} />
-          </div>
-        </section>
+        <Card asChild>
+          <section>
+            <CardContent>
+              <PingButton purchaseId={customer.id} className="grow basis-0" />
+            </CardContent>
+          </section>
+        </Card>
       ) : null}
       {customer.is_access_revoked !== null && !isCoffee && !commission ? (
         <AccessSection
@@ -1200,114 +1244,138 @@ const CustomerDrawer = ({
         <CommissionSection commission={commission} onChange={(commission) => onChange({ commission })} />
       ) : null}
       {missedPosts?.length !== 0 ? (
-        <section className="stack">
-          <header>
-            <h3>Send missed posts</h3>
-          </header>
-          {missedPosts ? (
-            <>
-              {missedPosts.slice(0, shownMissedPosts).map((post) => (
-                <section key={post.id}>
-                  <div>
-                    <h5>
-                      <a href={post.url} target="_blank" rel="noreferrer">
-                        {post.name}
-                      </a>
-                    </h5>
-                    <small>{`Originally sent on ${formatDateWithoutTime(new Date(post.published_at))}`}</small>
-                  </div>
-                  <Button
-                    color="primary"
-                    disabled={!!loadingId || sentEmailIds.current.has(post.id)}
-                    onClick={() => void onSend(post.id, "post")}
-                  >
-                    {sentEmailIds.current.has(post.id) ? "Sent" : loadingId === post.id ? "Sending...." : "Send"}
-                  </Button>
-                </section>
-              ))}
-              {shownMissedPosts < missedPosts.length ? (
+        <Card asChild>
+          <section>
+            <CardContent asChild>
+              <header>
+                <h3 className="grow">Send missed posts</h3>
+              </header>
+            </CardContent>
+            {missedPosts ? (
+              <>
+                {missedPosts.slice(0, shownMissedPosts).map((post) => (
+                  <CardContent asChild key={post.id}>
+                    <section>
+                      <div className="grow">
+                        <h5 className="font-bold">
+                          <a href={post.url} target="_blank" rel="noreferrer">
+                            {post.name}
+                          </a>
+                        </h5>
+                        <small>{`Originally sent on ${formatDateWithoutTime(new Date(post.published_at))}`}</small>
+                      </div>
+                      <Button
+                        color="primary"
+                        disabled={!!loadingId || sentEmailIds.current.has(post.id)}
+                        onClick={() => void onSend(post.id, "post")}
+                      >
+                        {sentEmailIds.current.has(post.id) ? "Sent" : loadingId === post.id ? "Sending...." : "Send"}
+                      </Button>
+                    </section>
+                  </CardContent>
+                ))}
+                {shownMissedPosts < missedPosts.length ? (
+                  <CardContent asChild>
+                    <section>
+                      <Button
+                        onClick={() => setShownMissedPosts((prevShownMissedPosts) => prevShownMissedPosts + PAGE_SIZE)}
+                        className="grow basis-0"
+                      >
+                        Show more
+                      </Button>
+                    </section>
+                  </CardContent>
+                ) : null}
+              </>
+            ) : (
+              <CardContent asChild>
                 <section>
-                  <Button
-                    onClick={() => setShownMissedPosts((prevShownMissedPosts) => prevShownMissedPosts + PAGE_SIZE)}
-                  >
-                    Show more
-                  </Button>
+                  <div className="grow text-center">
+                    <LoadingSpinner className="size-8" />
+                  </div>
                 </section>
-              ) : null}
-            </>
-          ) : (
-            <section>
-              <div className="text-center">
-                <LoadingSpinner className="size-8" />
-              </div>
-            </section>
-          )}
-        </section>
+              </CardContent>
+            )}
+          </section>
+        </Card>
       ) : null}
       {emails?.length !== 0 ? (
-        <section className="stack">
-          <header>
-            <h3>Emails received</h3>
-          </header>
-          {emails ? (
-            <>
-              {emails.slice(0, shownEmails).map((email) => (
-                <section key={email.id}>
-                  <div>
-                    <h5>
+        <Card asChild>
+          <section>
+            <CardContent asChild>
+              <header>
+                <h3 className="grow">Emails received</h3>
+              </header>
+            </CardContent>
+            {emails ? (
+              <>
+                {emails.slice(0, shownEmails).map((email) => (
+                  <CardContent asChild key={email.id}>
+                    <section>
+                      <div className="grow">
+                        <h5>
+                          {email.type === "receipt" ? (
+                            <a href={email.url} target="_blank" rel="noreferrer">
+                              {email.name}
+                            </a>
+                          ) : (
+                            email.name
+                          )}
+                        </h5>
+                        <small>{`${email.state} ${formatDateWithoutTime(new Date(email.state_at))}`}</small>
+                      </div>
                       {email.type === "receipt" ? (
-                        <a href={email.url} target="_blank" rel="noreferrer">
-                          {email.name}
-                        </a>
+                        <Button
+                          color="primary"
+                          onClick={() => void onSend(email.id, "receipt")}
+                          disabled={!!loadingId || sentEmailIds.current.has(email.id)}
+                        >
+                          {sentEmailIds.current.has(email.id)
+                            ? "Receipt resent"
+                            : loadingId === email.id
+                              ? "Resending receipt..."
+                              : "Resend receipt"}
+                        </Button>
                       ) : (
-                        email.name
+                        <Button
+                          color="primary"
+                          onClick={() => void onSend(email.id, "post")}
+                          disabled={!!loadingId || sentEmailIds.current.has(email.id)}
+                        >
+                          {sentEmailIds.current.has(email.id)
+                            ? "Sent"
+                            : loadingId === email.id
+                              ? "Sending..."
+                              : "Resend email"}
+                        </Button>
                       )}
-                    </h5>
-                    <small>{`${email.state} ${formatDateWithoutTime(new Date(email.state_at))}`}</small>
-                  </div>
-                  {email.type === "receipt" ? (
-                    <Button
-                      color="primary"
-                      onClick={() => void onSend(email.id, "receipt")}
-                      disabled={!!loadingId || sentEmailIds.current.has(email.id)}
-                    >
-                      {sentEmailIds.current.has(email.id)
-                        ? "Receipt resent"
-                        : loadingId === email.id
-                          ? "Resending receipt..."
-                          : "Resend receipt"}
-                    </Button>
-                  ) : (
-                    <Button
-                      color="primary"
-                      onClick={() => void onSend(email.id, "post")}
-                      disabled={!!loadingId || sentEmailIds.current.has(email.id)}
-                    >
-                      {sentEmailIds.current.has(email.id)
-                        ? "Sent"
-                        : loadingId === email.id
-                          ? "Sending..."
-                          : "Resend email"}
-                    </Button>
-                  )}
-                </section>
-              ))}
-              {shownMissedPosts < emails.length ? (
+                    </section>
+                  </CardContent>
+                ))}
+                {shownMissedPosts < emails.length ? (
+                  <CardContent asChild>
+                    <section>
+                      <Button
+                        onClick={() => setShownEmails((prevShownEmails) => prevShownEmails + PAGE_SIZE)}
+                        className="grow basis-0"
+                      >
+                        Load more
+                      </Button>
+                    </section>
+                  </CardContent>
+                ) : null}
+              </>
+            ) : (
+              <CardContent>
                 <section>
-                  <Button onClick={() => setShownEmails((prevShownEmails) => prevShownEmails + PAGE_SIZE)}>
-                    Load more
-                  </Button>
+                  <div className="grow text-center">
+                    <LoadingSpinner className="size-8" />
+                  </div>
                 </section>
-              ) : null}
-            </>
-          ) : (
-            <section>
-              <div className="text-center">
-                <LoadingSpinner className="size-8" />
-              </div>
-            </section>
-          )}
-        </section>
+              </CardContent>
+            )}
+          </section>
+        </Card>
       ) : null}
     </Sheet>
   );
@@ -1353,127 +1421,131 @@ const AddressSection = ({
   };
 
   return (
-    <section className="stack">
-      <header>
-        <h3>Shipping address</h3>
-      </header>
-      {isEditing ? (
-        <div>
-          <div className="flex flex-col gap-4">
-            <fieldset>
-              <legend>
-                <label htmlFor={`${uid}-full-name`}>Full name</label>
-              </legend>
-              <input
-                id={`${uid}-full-name`}
-                type="text"
-                placeholder="Full name"
-                value={address.full_name}
-                onChange={(evt) => updateShipping({ full_name: evt.target.value })}
-              />
-            </fieldset>
-            <fieldset>
-              <legend>
-                <label htmlFor={`${uid}-street-address`}>Street address</label>
-              </legend>
-              <input
-                id={`${uid}-street-address`}
-                type="text"
-                placeholder="Street address"
-                value={address.street_address}
-                onChange={(evt) => updateShipping({ street_address: evt.target.value })}
-              />
-            </fieldset>
-            <div style={{ display: "grid", gridAutoFlow: "column", gridAutoColumns: "1fr", gap: "var(--spacer-2)" }}>
+    <Card asChild>
+      <section>
+        <CardContent asChild>
+          <header>
+            <h3 className="grow">Shipping address</h3>
+          </header>
+        </CardContent>
+        {isEditing ? (
+          <CardContent>
+            <div className="flex grow flex-col gap-4">
               <fieldset>
                 <legend>
-                  <label htmlFor={`${uid}-city`}>City</label>
+                  <label htmlFor={`${uid}-full-name`}>Full name</label>
                 </legend>
                 <input
-                  id={`${uid}-city`}
+                  id={`${uid}-full-name`}
                   type="text"
-                  placeholder="City"
-                  value={address.city}
-                  onChange={(evt) => updateShipping({ city: evt.target.value })}
+                  placeholder="Full name"
+                  value={address.full_name}
+                  onChange={(evt) => updateShipping({ full_name: evt.target.value })}
                 />
               </fieldset>
               <fieldset>
                 <legend>
-                  <label htmlFor={`${uid}-state`}>State</label>
+                  <label htmlFor={`${uid}-street-address`}>Street address</label>
                 </legend>
                 <input
-                  id={`${uid}-state`}
+                  id={`${uid}-street-address`}
                   type="text"
-                  placeholder="State"
-                  value={address.state}
-                  onChange={(evt) => updateShipping({ state: evt.target.value })}
+                  placeholder="Street address"
+                  value={address.street_address}
+                  onChange={(evt) => updateShipping({ street_address: evt.target.value })}
                 />
               </fieldset>
+              <div style={{ display: "grid", gridAutoFlow: "column", gridAutoColumns: "1fr", gap: "var(--spacer-2)" }}>
+                <fieldset>
+                  <legend>
+                    <label htmlFor={`${uid}-city`}>City</label>
+                  </legend>
+                  <input
+                    id={`${uid}-city`}
+                    type="text"
+                    placeholder="City"
+                    value={address.city}
+                    onChange={(evt) => updateShipping({ city: evt.target.value })}
+                  />
+                </fieldset>
+                <fieldset>
+                  <legend>
+                    <label htmlFor={`${uid}-state`}>State</label>
+                  </legend>
+                  <input
+                    id={`${uid}-state`}
+                    type="text"
+                    placeholder="State"
+                    value={address.state}
+                    onChange={(evt) => updateShipping({ state: evt.target.value })}
+                  />
+                </fieldset>
+                <fieldset>
+                  <legend>
+                    <label htmlFor={`${uid}-zip-code`}>ZIP code</label>
+                  </legend>
+                  <input
+                    id={`${uid}-zip-code`}
+                    type="text"
+                    placeholder="ZIP code"
+                    value={address.zip_code}
+                    onChange={(evt) => updateShipping({ zip_code: evt.target.value })}
+                  />
+                </fieldset>
+              </div>
               <fieldset>
-                <legend>
-                  <label htmlFor={`${uid}-zip-code`}>ZIP code</label>
-                </legend>
-                <input
-                  id={`${uid}-zip-code`}
-                  type="text"
-                  placeholder="ZIP code"
-                  value={address.zip_code}
-                  onChange={(evt) => updateShipping({ zip_code: evt.target.value })}
-                />
+                <label htmlFor={`${uid}-country`}>Country</label>
+                <select
+                  id={`${uid}-country`}
+                  value={address.country}
+                  onChange={(evt) => updateShipping({ country: evt.target.value })}
+                >
+                  {countries.map((country) => (
+                    <option value={country} key={country}>
+                      {country}
+                    </option>
+                  ))}
+                </select>
               </fieldset>
-            </div>
-            <fieldset>
-              <label htmlFor={`${uid}-country`}>Country</label>
-              <select
-                id={`${uid}-country`}
-                value={address.country}
-                onChange={(evt) => updateShipping({ country: evt.target.value })}
+              <div
+                style={{
+                  width: "100%",
+                  display: "grid",
+                  gap: "var(--spacer-2)",
+                  gridTemplateColumns: "repeat(auto-fit, minmax(var(--dynamic-grid), 1fr))",
+                }}
               >
-                {countries.map((country) => (
-                  <option value={country} key={country}>
-                    {country}
-                  </option>
-                ))}
-              </select>
-            </fieldset>
-            <div
-              style={{
-                width: "100%",
-                display: "grid",
-                gap: "var(--spacer-2)",
-                gridTemplateColumns: "repeat(auto-fit, minmax(var(--dynamic-grid), 1fr))",
-              }}
-            >
-              <Button onClick={() => setIsEditing(false)} disabled={isLoading}>
-                Cancel
-              </Button>
-              <Button color="primary" onClick={() => void handleSave()} disabled={isLoading}>
-                Save
-              </Button>
+                <Button onClick={() => setIsEditing(false)} disabled={isLoading}>
+                  Cancel
+                </Button>
+                <Button color="primary" onClick={() => void handleSave()} disabled={isLoading}>
+                  Save
+                </Button>
+              </div>
             </div>
-          </div>
-        </div>
-      ) : (
-        <div>
-          <p>
-            {currentAddress.full_name}
-            <br />
-            {currentAddress.street_address}
-            <br />
-            {`${currentAddress.city}, ${currentAddress.state} ${currentAddress.zip_code}`}
-            <br />
-            {currentAddress.country}
-          </p>
-          <button className="underline" onClick={() => setIsEditing(true)}>
-            Edit
-          </button>
-        </div>
-      )}
-      <div>
-        <h5>Shipping charged</h5>
-        {price}
-      </div>
-    </section>
+          </CardContent>
+        ) : (
+          <CardContent>
+            <p className="grow">
+              {currentAddress.full_name}
+              <br />
+              {currentAddress.street_address}
+              <br />
+              {`${currentAddress.city}, ${currentAddress.state} ${currentAddress.zip_code}`}
+              <br />
+              {currentAddress.country}
+            </p>
+            <button className="underline" onClick={() => setIsEditing(true)}>
+              Edit
+            </button>
+          </CardContent>
+        )}
+        <CardContent>
+          <h5 className="grow font-bold">Shipping charged</h5>
+          {price}
+        </CardContent>
+      </section>
+    </Card>
   );
 };
 
@@ -1494,38 +1566,42 @@ const TrackingSection = ({
   };
 
   return (
-    <section className="stack">
-      <h3>Tracking information</h3>
-      {tracking.shipped ? (
-        tracking.url ? (
-          <div>
-            <NavigationButton color="primary" href={tracking.url} target="_blank">
-              Track shipment
-            </NavigationButton>
-          </div>
+    <Card asChild>
+      <section>
+        <CardContent asChild>
+          <h3>Tracking information</h3>
+        </CardContent>
+        {tracking.shipped ? (
+          tracking.url ? (
+            <CardContent>
+              <NavigationButton color="primary" href={tracking.url} target="_blank" className="grow">
+                Track shipment
+              </NavigationButton>
+            </CardContent>
+          ) : (
+            <CardContent>
+              <Alert role="status" variant="success" className="grow">
+                Shipped
+              </Alert>
+            </CardContent>
+          )
         ) : (
-          <div>
-            <Alert role="status" variant="success">
-              Shipped
-            </Alert>
-          </div>
-        )
-      ) : (
-        <div>
-          <fieldset>
-            <input
-              type="text"
-              placeholder="Tracking URL (optional)"
-              value={url}
-              onChange={(evt) => setUrl(evt.target.value)}
-            />
-            <Button color="primary" disabled={isLoading} onClick={() => void handleSave()}>
-              Mark as shipped
-            </Button>
-          </fieldset>
-        </div>
-      )}
-    </section>
+          <CardContent>
+            <fieldset className="grow basis-0">
+              <input
+                type="text"
+                placeholder="Tracking URL (optional)"
+                value={url}
+                onChange={(evt) => setUrl(evt.target.value)}
+              />
+              <Button color="primary" disabled={isLoading} onClick={() => void handleSave()}>
+                Mark as shipped
+              </Button>
+            </fieldset>
+          </CardContent>
+        )}
+      </section>
+    </Card>
   );
 };
 
@@ -1564,73 +1640,92 @@ const EmailSection = ({
   };
 
   return (
-    <section className="stack">
-      <header>
-        <h3>{label}</h3>
-      </header>
-      {isEditing ? (
-        <fieldset>
-          <input
-            type="text"
-            value={email}
-            onChange={(evt) => setEmail(evt.target.value)}
-            disabled={isLoading}
-            placeholder={label}
-          />
-          <div
-            style={{
-              width: "100%",
-              display: "grid",
-              gap: "var(--spacer-2)",
-              gridTemplateColumns: "repeat(auto-fit, minmax(var(--dynamic-grid), 1fr))",
-            }}
-          >
-            <Button onClick={() => setIsEditing(false)} disabled={isLoading}>
-              Cancel
-            </Button>
-            <Button color="primary" onClick={() => void handleSave()} disabled={isLoading}>
-              Save
-            </Button>
-          </div>
-        </fieldset>
-      ) : (
-        <section>
-          <h5>{currentEmail}</h5>
-          {onSave ? (
-            <button className="underline" onClick={() => setIsEditing(true)}>
-              Edit
-            </button>
-          ) : (
-            <small>
-              You cannot change the email of this purchase, because it was made by an existing user. Please ask them to
-              go to gumroad.com/settings to update their email.
-            </small>
-          )}
-        </section>
-      )}
-      {onChangeCanContact ? (
-        <section>
-          <fieldset role="group">
-            <label>
-              Receives emails
+    <Card asChild>
+      <section>
+        <CardContent asChild>
+          <header>
+            <h3 className="grow">{label}</h3>
+          </header>
+        </CardContent>
+        {isEditing ? (
+          <CardContent asChild>
+            <fieldset>
               <input
-                type="checkbox"
-                checked={canContact}
-                onChange={(evt) => {
-                  setIsLoading(true);
-                  void onChangeCanContact(evt.target.checked).then(() => setIsLoading(false));
-                }}
+                type="text"
+                value={email}
+                onChange={(evt) => setEmail(evt.target.value)}
                 disabled={isLoading}
+                placeholder={label}
+                className="grow"
               />
-            </label>
-          </fieldset>
-        </section>
-      ) : null}
-    </section>
+              <div
+                style={{
+                  width: "100%",
+                  display: "grid",
+                  gap: "var(--spacer-2)",
+                  gridTemplateColumns: "repeat(auto-fit, minmax(var(--dynamic-grid), 1fr))",
+                }}
+              >
+                <Button onClick={() => setIsEditing(false)} disabled={isLoading}>
+                  Cancel
+                </Button>
+                <Button color="primary" onClick={() => void handleSave()} disabled={isLoading}>
+                  Save
+                </Button>
+              </div>
+            </fieldset>
+          </CardContent>
+        ) : (
+          <CardContent asChild>
+            <section>
+              <h5 className="grow font-bold">{currentEmail}</h5>
+              {onSave ? (
+                <button className="underline" onClick={() => setIsEditing(true)}>
+                  Edit
+                </button>
+              ) : (
+                <small>
+                  You cannot change the email of this purchase, because it was made by an existing user. Please ask them
+                  to go to gumroad.com/settings to update their email.
+                </small>
+              )}
+            </section>
+          </CardContent>
+        )}
+        {onChangeCanContact ? (
+          <CardContent asChild>
+            <section>
+              <fieldset role="group" className="grow basis-0">
+                <label>
+                  Receives emails
+                  <input
+                    type="checkbox"
+                    checked={canContact}
+                    onChange={(evt) => {
+                      setIsLoading(true);
+                      void onChangeCanContact(evt.target.checked).then(() => setIsLoading(false));
+                    }}
+                    disabled={isLoading}
+                  />
+                </label>
+              </fieldset>
+            </section>
+          </CardContent>
+        ) : null}
+      </section>
+    </Card>
   );
 };
 
-const ReviewVideosSubsections = ({ review, onChange }: { review: Review; onChange: (review: Review) => void }) => {
+const ReviewVideosSubsections = ({
+  review,
+  onChange,
+  className,
+}: {
+  review: Review;
+  className?: string;
+  onChange: (review: Review) => void;
+}) => {
   const [loading, setLoading] = React.useState(false);
   const [approvedVideoRemovalModalOpen, setApprovedVideoRemovalModalOpen] = React.useState(false);
 
@@ -1669,7 +1764,7 @@ const ReviewVideosSubsections = ({ review, onChange }: { review: Review; onChang
   };
 
   const approvedVideoSubsection = approvedVideo ? (
-    <section>
+    <section className={className}>
       <div className="flex flex-col gap-4">
         <h5>Approved video</h5>
         <ReviewVideoPlayer videoId={approvedVideo.id} thumbnail={approvedVideo.thumbnail_url} />
@@ -1740,33 +1835,47 @@ const ReviewSection = ({
   purchaseId: string;
   onChange: (review: Review) => void;
 }) => (
-  <section className="stack">
-    <h3>Review</h3>
+  <Card asChild>
     <section>
-      <h5>Rating</h5>
-      <div aria-label={`${review.rating} ${review.rating === 1 ? "star" : "stars"}`}>
-        <RatingStars rating={review.rating} />
-      </div>
+      <CardContent asChild>
+        <h3>Review</h3>
+      </CardContent>
+      <CardContent asChild>
+        <section>
+          <h5 className="grow font-bold">Rating</h5>
+          <div aria-label={`${review.rating} ${review.rating === 1 ? "star" : "stars"}`}>
+            <RatingStars rating={review.rating} />
+          </div>
+        </section>
+      </CardContent>
+      {review.message ? (
+        <CardContent asChild>
+          <section>
+            <h5 className="grow font-bold">Message</h5>
+            {review.message}
+          </section>
+        </CardContent>
+      ) : null}
+      <CardContent asChild>
+        <ReviewVideosSubsections review={review} onChange={onChange} className="grow" />
+      </CardContent>
+      {review.response ? (
+        <CardContent asChild>
+          <section>
+            <h5 className="grow font-bold">Response</h5>
+            {review.response.message}
+          </section>
+        </CardContent>
+      ) : null}
+      <CardContent asChild>
+        <ReviewResponseForm
+          message={review.response?.message}
+          purchaseId={purchaseId}
+          onChange={(response) => onChange({ ...review, response })}
+        />
+      </CardContent>
     </section>
-    {review.message ? (
-      <section>
-        <h5>Message</h5>
-        {review.message}
-      </section>
-    ) : null}
-    <ReviewVideosSubsections review={review} onChange={onChange} />
-    {review.response ? (
-      <section>
-        <h5>Response</h5>
-        {review.response.message}
-      </section>
-    ) : null}
-    <ReviewResponseForm
-      message={review.response?.message}
-      purchaseId={purchaseId}
-      onChange={(response) => onChange({ ...review, response })}
-    />
-  </section>
+  </Card>
 );
 
 const OptionSection = ({
@@ -1821,58 +1930,64 @@ const OptionSection = ({
   const title = isSubscription ? "Tier" : "Version";
 
   return (
-    <section className="stack">
-      <header>
-        <h3>{title}</h3>
-      </header>
+    <Card asChild>
       <section>
-        {options.length > 0 ? (
-          isEditing ? (
-            <fieldset className={cx({ danger: selectedOptionId.error })}>
-              <select
-                value={selectedOptionId.value ?? "None selected"}
-                name={title}
-                onChange={(evt) => setSelectedOptionId({ value: evt.target.value })}
-                aria-invalid={selectedOptionId.error}
-              >
-                {!selectedOptionId.value ? <option>None selected</option> : null}
-                {options.map((option) => (
-                  <option value={option.id} key={option.id}>
-                    {option.name}
-                  </option>
-                ))}
-              </select>
-              <div
-                style={{
-                  width: "100%",
-                  display: "grid",
-                  gap: "var(--spacer-2)",
-                  gridTemplateColumns: "repeat(auto-fit, minmax(var(--dynamic-grid), 1fr))",
-                }}
-              >
-                <Button onClick={() => setIsEditing(false)} disabled={isLoading}>
-                  Cancel
-                </Button>
-                <Button color="primary" onClick={() => void handleSave()} disabled={isLoading}>
-                  Save
-                </Button>
+        <CardContent asChild>
+          <header>
+            <h3 className="grow">{title}</h3>
+          </header>
+        </CardContent>
+        <CardContent asChild>
+          <section>
+            {options.length > 0 ? (
+              isEditing ? (
+                <fieldset className={classNames({ danger: selectedOptionId.error }, "grow basis-0")}>
+                  <select
+                    value={selectedOptionId.value ?? "None selected"}
+                    name={title}
+                    onChange={(evt) => setSelectedOptionId({ value: evt.target.value })}
+                    aria-invalid={selectedOptionId.error}
+                  >
+                    {!selectedOptionId.value ? <option>None selected</option> : null}
+                    {options.map((option) => (
+                      <option value={option.id} key={option.id}>
+                        {option.name}
+                      </option>
+                    ))}
+                  </select>
+                  <div
+                    style={{
+                      width: "100%",
+                      display: "grid",
+                      gap: "var(--spacer-2)",
+                      gridTemplateColumns: "repeat(auto-fit, minmax(var(--dynamic-grid), 1fr))",
+                    }}
+                  >
+                    <Button onClick={() => setIsEditing(false)} disabled={isLoading}>
+                      Cancel
+                    </Button>
+                    <Button color="primary" onClick={() => void handleSave()} disabled={isLoading}>
+                      Save
+                    </Button>
+                  </div>
+                </fieldset>
+              ) : (
+                <>
+                  <h5>{option?.name ?? "None selected"}</h5>
+                  <button className="underline" onClick={() => setIsEditing(true)}>
+                    Edit
+                  </button>
+                </>
+              )
+            ) : (
+              <div className="grow text-center">
+                <LoadingSpinner className="size-8" />
               </div>
-            </fieldset>
-          ) : (
-            <>
-              <h5>{option?.name ?? "None selected"}</h5>
-              <button className="underline" onClick={() => setIsEditing(true)}>
-                Edit
-              </button>
-            </>
-          )
-        ) : (
-          <div className="text-center">
-            <LoadingSpinner className="size-8" />
-          </div>
-        )}
+            )}
+          </section>
+        </CardContent>
       </section>
-    </section>
+    </Card>
   );
 };
 
@@ -1880,54 +1995,58 @@ const UtmLinkStack = ({ link, showHeader }: { link: Customer["utm_link"]; showHe
   if (!link) return null;
 
   return (
-    <section className="stack">
-      {showHeader ? (
-        <>
-          <section>
-            <h3>UTM link</h3>
-          </section>
-          <div>
-            <Alert className="text-sm" role="status" variant="info">
-              This sale was driven by a{" "}
-              <a href={link.utm_url} target="_blank" rel="noreferrer">
-                UTM link
-              </a>
-              .
-            </Alert>
-          </div>
-        </>
-      ) : null}
-      <div>
-        <h5>Title</h5>
-        <a href={Routes.dashboard_utm_links_path({ query: link.title })} target="_blank" rel="noreferrer">
-          {link.title}
-        </a>
-      </div>
-      <div>
-        <h5>Source</h5>
-        {link.source}
-      </div>
-      <div>
-        <h5>Medium</h5>
-        {link.medium}
-      </div>
-      <div>
-        <h5>Campaign</h5>
-        {link.campaign}
-      </div>
-      {link.term ? (
-        <div>
-          <h5>Term</h5>
-          {link.term}
-        </div>
-      ) : null}
-      {link.content ? (
-        <div>
-          <h5>Content</h5>
-          {link.content}
-        </div>
-      ) : null}
-    </section>
+    <Card asChild>
+      <section>
+        {showHeader ? (
+          <>
+            <CardContent asChild>
+              <section>
+                <h3 className="grow">UTM link</h3>
+              </section>
+            </CardContent>
+            <CardContent>
+              <Alert className="grow text-sm" role="status" variant="info">
+                This sale was driven by a{" "}
+                <a href={link.utm_url} target="_blank" rel="noreferrer">
+                  UTM link
+                </a>
+                .
+              </Alert>
+            </CardContent>
+          </>
+        ) : null}
+        <CardContent>
+          <h5 className="grow font-bold">Title</h5>
+          <a href={Routes.dashboard_utm_links_path({ query: link.title })} target="_blank" rel="noreferrer">
+            {link.title}
+          </a>
+        </CardContent>
+        <CardContent>
+          <h5 className="grow font-bold">Source</h5>
+          {link.source}
+        </CardContent>
+        <CardContent>
+          <h5 className="grow font-bold">Medium</h5>
+          {link.medium}
+        </CardContent>
+        <CardContent>
+          <h5 className="grow font-bold">Campaign</h5>
+          {link.campaign}
+        </CardContent>
+        {link.term ? (
+          <CardContent>
+            <h5 className="grow font-bold">Term</h5>
+            {link.term}
+          </CardContent>
+        ) : null}
+        {link.content ? (
+          <CardContent>
+            <h5 className="grow font-bold">Content</h5>
+            {link.content}
+          </CardContent>
+        ) : null}
+      </section>
+    </Card>
   );
 };
 
@@ -1941,27 +2060,31 @@ const LicenseSection = ({ license, onSave }: { license: License; onSave: (enable
   };
 
   return (
-    <section className="stack">
-      <header>
-        <h3>License key</h3>
-      </header>
-      <div>
-        <pre>
-          <code>{license.key}</code>
-        </pre>
-      </div>
-      <div>
-        {license.enabled ? (
-          <Button color="danger" disabled={isLoading} onClick={() => void handleSave(false)}>
-            Disable
-          </Button>
-        ) : (
-          <Button disabled={isLoading} onClick={() => void handleSave(true)}>
-            Enable
-          </Button>
-        )}
-      </div>
-    </section>
+    <Card asChild>
+      <section>
+        <CardContent asChild>
+          <header>
+            <h3 className="grow">License key</h3>
+          </header>
+        </CardContent>
+        <CardContent>
+          <pre className="grow">
+            <code>{license.key}</code>
+          </pre>
+        </CardContent>
+        <CardContent>
+          {license.enabled ? (
+            <Button color="danger" disabled={isLoading} onClick={() => void handleSave(false)} className="grow basis-0">
+              Disable
+            </Button>
+          ) : (
+            <Button disabled={isLoading} onClick={() => void handleSave(true)} className="grow basis-0">
+              Enable
+            </Button>
+          )}
+        </CardContent>
+      </section>
+    </Card>
   );
 };
 
@@ -1978,40 +2101,48 @@ const SeatSection = ({ seats: currentSeats, onSave }: { seats: number; onSave: (
   };
 
   return (
-    <section className="stack">
-      <header>
-        <h3>Seats</h3>
-      </header>
-      {isEditing ? (
-        <fieldset>
-          <NumberInput value={seats} onChange={(seats) => setSeats(seats ?? 0)}>
-            {(props) => <input type="number" {...props} min={1} aria-label="Seats" />}
-          </NumberInput>
-          <div
-            style={{
-              width: "100%",
-              display: "grid",
-              gap: "var(--spacer-2)",
-              gridTemplateColumns: "repeat(auto-fit, minmax(var(--dynamic-grid), 1fr))",
-            }}
-          >
-            <Button onClick={() => setIsEditing(false)} disabled={isLoading}>
-              Cancel
-            </Button>
-            <Button color="primary" onClick={() => void handleSave()} disabled={isLoading}>
-              Save
-            </Button>
-          </div>
-        </fieldset>
-      ) : (
-        <section>
-          <h5>{seats}</h5>
-          <button className="underline" onClick={() => setIsEditing(true)}>
-            Edit
-          </button>
-        </section>
-      )}
-    </section>
+    <Card asChild>
+      <section>
+        <CardContent asChild>
+          <header>
+            <h3 className="grow">Seats</h3>
+          </header>
+        </CardContent>
+        {isEditing ? (
+          <CardContent asChild>
+            <fieldset>
+              <NumberInput value={seats} onChange={(seats) => setSeats(seats ?? 0)}>
+                {(props) => <input type="number" {...props} min={1} aria-label="Seats" className="grow" />}
+              </NumberInput>
+              <div
+                style={{
+                  width: "100%",
+                  display: "grid",
+                  gap: "var(--spacer-2)",
+                  gridTemplateColumns: "repeat(auto-fit, minmax(var(--dynamic-grid), 1fr))",
+                }}
+              >
+                <Button onClick={() => setIsEditing(false)} disabled={isLoading}>
+                  Cancel
+                </Button>
+                <Button color="primary" onClick={() => void handleSave()} disabled={isLoading}>
+                  Save
+                </Button>
+              </div>
+            </fieldset>
+          </CardContent>
+        ) : (
+          <CardContent asChild>
+            <section>
+              <h5 className="grow font-bold">{seats}</h5>
+              <button className="underline" onClick={() => setIsEditing(true)}>
+                Edit
+              </button>
+            </section>
+          </CardContent>
+        )}
+      </section>
+    </Card>
   );
 };
 
@@ -2025,32 +2156,34 @@ const SubscriptionCancellationSection = ({
   const [open, setOpen] = React.useState(false);
   const constructor = isInstallmentPlan ? "installment plan" : "subscription";
   return (
-    <section className="stack">
-      <div>
-        <Button color="danger" onClick={() => setOpen(true)}>
-          Cancel {constructor}
-        </Button>
-        <Modal
-          open={open}
-          title={`Cancel ${constructor}`}
-          onClose={() => setOpen(false)}
-          footer={
-            <>
-              <Button onClick={() => setOpen(false)}>Cancel</Button>
-              <Button color="accent" onClick={onCancel}>
-                Cancel {constructor}
-              </Button>
-            </>
-          }
-        >
-          Would you like to cancel this {constructor}?
-        </Modal>
-      </div>
-    </section>
+    <Card asChild>
+      <section>
+        <CardContent>
+          <Button color="danger" onClick={() => setOpen(true)} className="grow basis-0">
+            Cancel {constructor}
+          </Button>
+          <Modal
+            open={open}
+            title={`Cancel ${constructor}`}
+            onClose={() => setOpen(false)}
+            footer={
+              <>
+                <Button onClick={() => setOpen(false)}>Cancel</Button>
+                <Button color="accent" onClick={onCancel}>
+                  Cancel {constructor}
+                </Button>
+              </>
+            }
+          >
+            Would you like to cancel this {constructor}?
+          </Modal>
+        </CardContent>
+      </section>
+    </Card>
   );
 };
 
-const PingButton = ({ purchaseId }: { purchaseId: string }) => {
+const PingButton = ({ purchaseId, className }: { purchaseId: string; className?: string }) => {
   const [isLoading, setIsLoading] = React.useState(false);
 
   const handleClick = async () => {
@@ -2067,7 +2200,7 @@ const PingButton = ({ purchaseId }: { purchaseId: string }) => {
   };
 
   return (
-    <Button color="primary" disabled={isLoading} onClick={() => void handleClick()}>
+    <Button color="primary" disabled={isLoading} onClick={() => void handleClick()} className={className}>
       {isLoading ? "Resending ping..." : "Resend ping"}
     </Button>
   );
@@ -2104,19 +2237,26 @@ const AccessSection = ({
   };
 
   return (
-    <section className="stack">
-      <div>
-        {isAccessRevoked ? (
-          <Button disabled={isLoading} onClick={() => void handleClick(false)}>
-            Re-enable access
-          </Button>
-        ) : (
-          <Button color="primary" disabled={isLoading} onClick={() => void handleClick(true)}>
-            Revoke access
-          </Button>
-        )}
-      </div>
-    </section>
+    <Card asChild>
+      <section>
+        <CardContent>
+          {isAccessRevoked ? (
+            <Button disabled={isLoading} onClick={() => void handleClick(false)} className="grow basis-0">
+              Re-enable access
+            </Button>
+          ) : (
+            <Button
+              color="primary"
+              disabled={isLoading}
+              onClick={() => void handleClick(true)}
+              className="grow basis-0"
+            >
+              Revoke access
+            </Button>
+          )}
+        </CardContent>
+      </section>
+    </Card>
   );
 };
 
@@ -2130,6 +2270,7 @@ const RefundForm = ({
   modalText,
   onChange,
   onClose,
+  className,
 }: {
   purchaseId: string;
   currencyType: CurrencyCode;
@@ -2140,6 +2281,7 @@ const RefundForm = ({
   modalText: string;
   onChange: (amountRefundable: number) => void;
   onClose?: () => void;
+  className?: string;
 }) => {
   const [isLoading, setIsLoading] = React.useState(false);
   const [isModalShowing, setIsModalShowing] = React.useState(false);
@@ -2178,7 +2320,7 @@ const RefundForm = ({
 
   return (
     <>
-      <fieldset className={cx({ danger: refundAmountCents.error })}>
+      <fieldset className={classNames({ danger: refundAmountCents.error }, className)}>
         <PriceInput
           cents={refundAmountCents.value}
           onChange={(value) => setRefundAmountCents({ value })}
@@ -2343,42 +2485,51 @@ const ChargesSection = ({
     onChange(charges.map((charge) => (charge.id === id ? { ...charge, ...update } : charge)));
 
   return (
-    <section className="stack">
-      <header>
-        <h3>Charges</h3>
-      </header>
-      {loading ? (
-        <section>
-          <div className="text-center">
-            <LoadingSpinner className="size-8" />
-          </div>
-        </section>
-      ) : charges.length > 0 ? (
-        <>
-          {remainingCharges !== null ? (
+    <Card asChild>
+      <section>
+        <CardContent asChild>
+          <header>
+            <h3 className="grow">Charges</h3>
+          </header>
+        </CardContent>
+        {loading ? (
+          <CardContent asChild>
             <section>
-              <Alert role="status" variant="info">
-                {`${remainingCharges} ${remainingCharges > 1 ? "charges" : "charge"} remaining`}
-              </Alert>
+              <div className="grow text-center">
+                <LoadingSpinner className="size-8" />
+              </div>
             </section>
-          ) : null}
-          {charges.map((charge) => (
-            <ChargeRow
-              key={charge.id}
-              purchase={charge}
-              customerEmail={customerEmail}
-              onChange={(update) => updateCharge(charge.id, update)}
-              showRefundFeeNotice={showRefundFeeNotice}
-              canPing={canPing}
-            />
-          ))}
-        </>
-      ) : (
-        <section>
-          <div>No charges yet</div>
-        </section>
-      )}
-    </section>
+          </CardContent>
+        ) : charges.length > 0 ? (
+          <>
+            {remainingCharges !== null ? (
+              <CardContent>
+                <section>
+                  <Alert role="status" variant="info" className="grow">
+                    {`${remainingCharges} ${remainingCharges > 1 ? "charges" : "charge"} remaining`}
+                  </Alert>
+                </section>
+              </CardContent>
+            ) : null}
+            {charges.map((charge) => (
+              <CardContent asChild key={charge.id}>
+                <ChargeRow
+                  purchase={charge}
+                  customerEmail={customerEmail}
+                  onChange={(update) => updateCharge(charge.id, update)}
+                  showRefundFeeNotice={showRefundFeeNotice}
+                  canPing={canPing}
+                />
+              </CardContent>
+            ))}
+          </>
+        ) : (
+          <section>
+            <div>No charges yet</div>
+          </section>
+        )}
+      </section>
+    </Card>
   );
 };
 
@@ -2400,39 +2551,50 @@ const CallSection = ({ call, onChange }: { call: Call; onChange: (call: Call) =>
   };
 
   return (
-    <section className="stack">
-      <header>
-        <h3>Call</h3>
-      </header>
+    <Card asChild>
       <section>
-        <h5>Start time</h5>
-        {formatCallDate(new Date(call.start_time), { timeZone: { userTimeZone: currentSeller?.timeZone.name } })}
+        <CardContent asChild>
+          <header>
+            <h3 className="grow">Call</h3>
+          </header>
+        </CardContent>
+        <CardContent asChild>
+          <section>
+            <h5 className="grow font-bold">Start time</h5>
+            {formatCallDate(new Date(call.start_time), { timeZone: { userTimeZone: currentSeller?.timeZone.name } })}
+          </section>
+        </CardContent>
+        <CardContent asChild>
+          <section>
+            <h5 className="grow font-bold">End time</h5>
+            {formatCallDate(new Date(call.end_time), { timeZone: { userTimeZone: currentSeller?.timeZone.name } })}
+          </section>
+        </CardContent>
+        <CardContent asChild>
+          <section>
+            <form
+              onSubmit={(evt) => {
+                evt.preventDefault();
+                void handleSave();
+              }}
+              className="grow"
+            >
+              <fieldset>
+                <input
+                  type="text"
+                  value={callUrl}
+                  onChange={(evt) => setCallUrl(evt.target.value)}
+                  placeholder="Call URL"
+                />
+                <Button color="primary" type="submit" disabled={isLoading}>
+                  {isLoading ? "Saving..." : "Save"}
+                </Button>
+              </fieldset>
+            </form>
+          </section>
+        </CardContent>
       </section>
-      <section>
-        <h5>End time</h5>
-        {formatCallDate(new Date(call.end_time), { timeZone: { userTimeZone: currentSeller?.timeZone.name } })}
-      </section>
-      <section>
-        <form
-          onSubmit={(evt) => {
-            evt.preventDefault();
-            void handleSave();
-          }}
-        >
-          <fieldset>
-            <input
-              type="text"
-              value={callUrl}
-              onChange={(evt) => setCallUrl(evt.target.value)}
-              placeholder="Call URL"
-            />
-            <Button color="primary" type="submit" disabled={isLoading}>
-              {isLoading ? "Saving..." : "Save"}
-            </Button>
-          </fieldset>
-        </form>
-      </section>
-    </section>
+    </Card>
   );
 };
 
@@ -2558,31 +2720,48 @@ const CommissionSection = ({
   };
 
   return (
-    <section className="stack">
-      <header>
-        <h3>Files</h3>
-      </header>
+    <Card asChild>
       <section>
-        <section className="grid gap-2">
-          {commission.files.length ? (
-            <Rows role="list">
-              {commission.files.map((file) => (
-                <FileRow key={file.id} file={file} onDelete={() => void handleDelete(file.id)} disabled={isLoading} />
-              ))}
-            </Rows>
-          ) : null}
-          <label className="button">
-            <input type="file" onChange={handleFileChange} disabled={isLoading} multiple style={{ display: "none" }} />
-            <Icon name="paperclip" /> Upload files
-          </label>
-          {commission.status === "in_progress" ? (
-            <Button color="primary" disabled={isLoading} onClick={() => void handleCompletion()}>
-              Submit and mark as complete
-            </Button>
-          ) : null}
-        </section>
+        <CardContent asChild>
+          <header>
+            <h3 className="grow">Files</h3>
+          </header>
+        </CardContent>
+        <CardContent asChild>
+          <section>
+            <section className="grid grow gap-2">
+              {commission.files.length ? (
+                <Rows role="list">
+                  {commission.files.map((file) => (
+                    <FileRow
+                      key={file.id}
+                      file={file}
+                      onDelete={() => void handleDelete(file.id)}
+                      disabled={isLoading}
+                    />
+                  ))}
+                </Rows>
+              ) : null}
+              <label className="button">
+                <input
+                  type="file"
+                  onChange={handleFileChange}
+                  disabled={isLoading}
+                  multiple
+                  style={{ display: "none" }}
+                />
+                <Icon name="paperclip" /> Upload files
+              </label>
+              {commission.status === "in_progress" ? (
+                <Button color="primary" disabled={isLoading} onClick={() => void handleCompletion()}>
+                  Submit and mark as complete
+                </Button>
+              ) : null}
+            </section>
+          </section>
+        </CardContent>
       </section>
-    </section>
+    </Card>
   );
 };
 
