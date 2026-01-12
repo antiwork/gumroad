@@ -20,9 +20,10 @@ describe("Password Reset", type: :system, js: true) do
           new_password = SecureRandom.hex(15)
           fill_in("Enter a new password", with: new_password)
           fill_in("Enter same password to confirm", with: new_password)
-          click_on("Reset")
+          click_on("Reset password")
 
-          expect(page).to have_text("Your password has been reset")
+          expect(page).to have_current_path(dashboard_path)
+          expect(page).to have_text("Your password has been reset, and you're now logged in.")
           expect(@user.reload.encrypted_password).not_to eq(@original_encrypted_password)
         end
       end
@@ -37,7 +38,7 @@ describe("Password Reset", type: :system, js: true) do
         with_real_pwned_password_check do
           fill_in("Enter a new password", with: "password")
           fill_in("Enter same password to confirm", with: "password")
-          click_on("Reset")
+          click_on("Reset password")
 
           expect(page).to have_text("Password has previously appeared in a data breach")
           expect(@user.reload.encrypted_password).to eq(@original_encrypted_password)
