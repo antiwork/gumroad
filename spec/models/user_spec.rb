@@ -1871,8 +1871,8 @@ describe User, :vcr do
       end
 
       it "suspends all the others sellers accounts if suspended for fraud", :sidekiq_inline do
-        user_3 = create(:user, payment_address: "sameuser@gmail.com")
         expect(@user).to receive(:suspend_sellers_other_accounts).and_call_original
+        user_3 = create(:user, payment_address: "sameuser@gmail.com")
         @user.flag_for_fraud(author_id: @admin_user.id)
         @user.suspend_for_fraud(author_id: @admin_user.id)
         expect(user_3.reload.suspended?).to be(true)
@@ -3823,5 +3823,4 @@ describe User, :vcr do
       expect(user.eligible_for_ai_product_generation?).to eq(true)
     end
   end
-
 end
