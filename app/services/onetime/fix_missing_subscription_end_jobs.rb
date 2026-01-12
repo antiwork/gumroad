@@ -38,16 +38,14 @@ module Onetime
               end
             end
             past_due += 1
+          elsif scheduled_jobs.include?(subscription.id)
+            puts "  Action: Worker already scheduled (skipped)"
           else
-            if scheduled_jobs.include?(subscription.id)
-              puts "  Action: Worker already scheduled (skipped)"
-            else
-              puts "  Action: Schedule EndSubscriptionWorker for #{should_end_at}"
-              unless dry_run
-                EndSubscriptionWorker.perform_at(should_end_at, subscription.id)
-              end
-              future_scheduled += 1
+            puts "  Action: Schedule EndSubscriptionWorker for #{should_end_at}"
+            unless dry_run
+              EndSubscriptionWorker.perform_at(should_end_at, subscription.id)
             end
+            future_scheduled += 1
           end
 
           processed += 1
