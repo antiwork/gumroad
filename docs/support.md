@@ -84,10 +84,22 @@ If it has not been triggered on Stripe/PayPal, can just mark it as failed:
 Payment.find(PAYMENT_ID).mark_failed!
 ```
 
+Or using payment external ID:
+
+```ruby
+Payment.find_by_external_id("abcdefghijklmno==").mark_failed!
+```
+
 ### Mark unclaimed/canceled payout as returned
 
 ```ruby
 Payment.find(PAYMENT_ID).mark_returned!
+```
+
+Or using payment external ID:
+
+```ruby
+Payment.find_by_external_id("abcdefghijklmno==").mark_returned!
 ```
 
 ### Find PayPal Connect email for a user

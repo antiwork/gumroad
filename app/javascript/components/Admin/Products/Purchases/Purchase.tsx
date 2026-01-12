@@ -15,6 +15,7 @@ export type ProductPurchase = {
   error_code: string | null;
   purchase_state: string;
   gumroad_responsible_for_tax: boolean;
+  className?: string;
 };
 
 const AdminProductPurchase = ({
@@ -32,6 +33,7 @@ const AdminProductPurchase = ({
     is_chargeback_reversed,
     email,
     created,
+    className,
   },
   isSelected,
   onToggleSelection,
@@ -43,8 +45,8 @@ const AdminProductPurchase = ({
   const isSelectable = stripe_refunded !== true;
 
   return (
-    <div>
-      <div className="flex items-start gap-2">
+    <div className={className}>
+      <div className="flex grow items-start gap-2">
         <input
           type="checkbox"
           aria-label={`Select purchase ${external_id}`}

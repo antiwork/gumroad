@@ -25,8 +25,8 @@ describe Admin::Users::PayoutsController, type: :controller, inertia: true do
       expect(response).to be_successful
       expect(inertia.component).to eq("Admin/Users/Payouts/Index")
       expect(inertia.props[:payouts]).to contain_exactly(
-        hash_including(id: payout_1.id),
-        hash_including(id: payout_2.id)
+        hash_including(external_id: payout_1.external_id),
+        hash_including(external_id: payout_2.external_id)
       )
     end
   end

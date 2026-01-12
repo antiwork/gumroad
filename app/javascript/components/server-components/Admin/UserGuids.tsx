@@ -7,6 +7,7 @@ import { register } from "$app/utils/serverComponentUtil";
 import { LoadingSpinner } from "$app/components/LoadingSpinner";
 import { showAlert } from "$app/components/server-components/Alert";
 import { Alert } from "$app/components/ui/Alert";
+import { Card, CardContent } from "$app/components/ui/Card";
 
 type UserGuids = { guid: string; user_ids: number[] }[];
 
@@ -35,16 +36,16 @@ const AdminUserGuids = ({ user_id }: { user_id: number }) => {
       </summary>
       {userGuids ? (
         userGuids.length > 0 ? (
-          <div className="stack">
+          <Card>
             {userGuids.map((guidData) => (
-              <div key={guidData.guid}>
-                <h5>
+              <CardContent key={guidData.guid}>
+                <h5 className="grow font-bold">
                   <a href={`/admin/guids/${guidData.guid}`}>{guidData.guid}</a>
                 </h5>
                 <span>{guidData.user_ids.length} users</span>
-              </div>
+              </CardContent>
             ))}
-          </div>
+          </Card>
         ) : (
           <Alert role="status" variant="info">
             No GUIDs found.
