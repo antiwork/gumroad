@@ -264,6 +264,7 @@ RSpec.configure do |config|
   end
 
   config.around(:each) do |example|
+    Thread.current[:_rspec_example_metadata] = example.metadata
     config.instance_variable_set(:@curr_file_path, example.metadata[:example_group][:file_path])
     Mongoid.purge!
     options = %w[caching js] # delegate all the before- and after- hooks for these values to metaprogramming "setup" and "teardown" methods, below
@@ -273,6 +274,8 @@ RSpec.configure do |config|
     options.each { |opt| send(:"teardown_#{ opt }", example.metadata[opt.to_sym]) }
     Rails.cache.clear
     travel_back
+  ensure
+    Thread.current[:_rspec_example_metadata] = nil
   end
 
   config.around(:each, :shipping) do |example|
@@ -366,7 +369,9 @@ end
 
 def setup_js(val = false)
   if val
-    VCR.turn_off!
+    metadata = Thread.current[:_rspec_example_metadata] || {}
+    # Opt-in escape hatch for specific flaky JS specs that still rely on VCR cassettes (e.g. TaxJar rate-of-the-day).
+    VCR.turn_off! unless metadata[:force_vcr_on]
     # See also https://github.com/teamcapybara/capybara#gotchas
     WebMock.allow_net_connect!(net_http_connect_on_start: true)
   else

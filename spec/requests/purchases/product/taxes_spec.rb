@@ -162,7 +162,7 @@ describe("Product Page - Tax Scenarios", type: :system, js: true) do
     end
   end
 
-  describe "US sales tax", taxjar: true do
+  describe "US sales tax", taxjar: true, force_vcr_on: true do
     it "calculates and charges sales tax when WI customer makes purchase" do
       product = create(:product, price_cents: 100_00)
       visit "/l/#{product.unique_permalink}"

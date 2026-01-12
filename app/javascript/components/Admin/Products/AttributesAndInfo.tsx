@@ -1,6 +1,7 @@
 import * as React from "react";
 
 import { Alert } from "$app/components/ui/Alert";
+import { Card, CardContent } from "$app/components/ui/Card";
 import { useUserAgentInfo } from "$app/components/UserAgent";
 
 type FileInfoAttribute = {
@@ -86,19 +87,19 @@ const ProductAttributesAndInfo = ({ productData }: Props) => {
         </>
       ) : null}
       {hasNoAttributes ? null : (
-        <div className="stack">
+        <Card>
           {custom_summary ? (
-            <div>
-              <p>{custom_summary}</p>
-            </div>
+            <CardContent>
+              <p className="grow">{custom_summary}</p>
+            </CardContent>
           ) : null}
           {file_info_attributes.concat(custom_attributes).map((fileInfoAttr, i) => (
-            <div key={i}>
-              <h5>{fileInfoAttr.name}</h5>
+            <CardContent key={i}>
+              <h5 className="grow font-bold">{fileInfoAttr.name}</h5>
               <div>{fileInfoAttr.value}</div>
-            </div>
+            </CardContent>
           ))}
-        </div>
+        </Card>
       )}
     </div>
   );

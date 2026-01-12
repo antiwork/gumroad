@@ -3809,4 +3809,48 @@ describe User, :vcr do
       expect(user.eligible_for_ai_product_generation?).to eq(true)
     end
   end
+
+  describe ".id?" do
+    context "with valid numeric values" do
+      it "returns true for integer 1" do
+        expect(User.id?(1)).to be(true)
+      end
+
+      it "returns true for string '1'" do
+        expect(User.id?("1")).to be(true)
+      end
+
+      it "returns true for large numeric string" do
+        expect(User.id?("7269625173515")).to be(true)
+      end
+
+      it "returns true for large integer" do
+        expect(User.id?(7269625173515)).to be(true)
+      end
+    end
+
+    context "with invalid non-numeric values" do
+      it "returns false for string '1gum'" do
+        expect(User.id?("1gum")).to be(false)
+      end
+
+      it "returns false for string with special characters" do
+        expect(User.id?("1test@gumroad.com")).to be(false)
+      end
+    end
+
+    context "with blank values" do
+      it "returns false for nil" do
+        expect(User.id?(nil)).to be(false)
+      end
+
+      it "returns false for empty string" do
+        expect(User.id?("")).to be(false)
+      end
+
+      it "returns false for blank string" do
+        expect(User.id?("   ")).to be(false)
+      end
+    end
+  end
 end

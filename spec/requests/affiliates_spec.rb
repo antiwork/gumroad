@@ -673,8 +673,8 @@ describe "Affiliates", type: :system, js: true do
         # Ignore Will's request
         expect do
           click_on("Ignore")
-          wait_for_ajax
-        end.to change { request_three.reload.state }.to eq("ignored")
+          wait_until_true { request_three.reload.state == "ignored" }
+        end.to change { request_three.reload.state }.to("ignored")
       end
       expect(page).to_not have_text("Will")
 
@@ -682,8 +682,8 @@ describe "Affiliates", type: :system, js: true do
       within all("tr")[1] do
         expect do
           click_on("Ignore")
-          wait_for_ajax
-        end.to change { request_two.reload.state }.to eq("ignored")
+          wait_until_true { request_two.reload.state == "ignored" }
+        end.to change { request_two.reload.state }.to("ignored")
       end
       expect(page).to_not have_text("Jane")
 
@@ -691,8 +691,8 @@ describe "Affiliates", type: :system, js: true do
       within all("tr")[1] do
         expect do
           click_on("Approve")
-          wait_for_ajax
-        end.to change { request_one.reload.state }.to eq("approved")
+          wait_until_true { request_one.reload.state == "approved" }
+        end.to change { request_one.reload.state }.to("approved")
       end
       expect(page).to_not have_text("John")
 
@@ -700,21 +700,23 @@ describe "Affiliates", type: :system, js: true do
       within all("tr")[1] do
         expect do
           click_on("Approve")
-          wait_for_ajax
-        end.to change { request_four.reload.state }.to eq("approved")
-
+          wait_until_true { request_four.reload.state == "approved" }
+        end.to change { request_four.reload.state }.to("approved")
         # But because Rob doesn't have an account yet, his request won't go away
-        expect(page).to have_text("Rob")
+        expect(page).to have_button("Approved", disabled: true)
+      end
 
-        # Ignore Rob's request
+      # Ignore Rob's request
+      within all("tr")[1] do
         expect do
           click_on("Ignore")
-          wait_for_ajax
-        end.to change { request_four.reload.state }.to eq("ignored")
+          wait_until_true { request_four.reload.state == "ignored" }
+        end.to change { request_four.reload.state }.to("ignored")
       end
       expect(page).to_not have_text("Rob")
 
-      expect(page).to have_text("No requests yet")
+      # After all requests are processed, redirects to onboarding since seller has no products
+      expect(page).to have_text("You need a published product to add affiliates.")
     end
   end
 

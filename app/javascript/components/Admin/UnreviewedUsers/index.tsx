@@ -9,7 +9,6 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "$
 type RevenueSource = "sales" | "collaborator" | "affiliate" | "credit";
 
 type UnreviewedUser = {
-  id: number;
   external_id: string;
   name: string;
   email: string;

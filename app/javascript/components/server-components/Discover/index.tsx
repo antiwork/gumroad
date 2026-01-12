@@ -20,6 +20,7 @@ import { Icon } from "$app/components/Icons";
 import { HorizontalCard } from "$app/components/Product/Card";
 import { CardGrid, useSearchReducer } from "$app/components/Product/CardGrid";
 import { RatingStars } from "$app/components/RatingStars";
+import { CardContent } from "$app/components/ui/Card";
 import { Tabs, Tab } from "$app/components/ui/Tabs";
 import { useOnChange } from "$app/components/useOnChange";
 import { useOriginalLocation } from "$app/components/useOriginalLocation";
@@ -432,43 +433,49 @@ const Discover = (props: Props) => {
             }}
             appendFilters={
               <>
-                <details>
-                  <summary>Rating</summary>
-                  <fieldset role="group">
-                    {range(4, 0).map((number) => (
-                      <label key={number}>
-                        <span className="flex shrink-0 items-center gap-1">
-                          <RatingStars rating={number} />
-                          and up
-                        </span>
-                        <input
-                          type="radio"
-                          value={number}
-                          aria-label={`${number} ${number === 1 ? "star" : "stars"} and up`}
-                          checked={number === state.params.rating}
-                          readOnly
-                          onClick={() =>
-                            updateParams(state.params.rating === number ? { rating: undefined } : { rating: number })
-                          }
-                        />
-                      </label>
-                    ))}
-                  </fieldset>
-                </details>
-                {hasOfferCode ? (
-                  <details open>
-                    <summary>Offer code</summary>
-                    <div className="flex items-center justify-between gap-2 py-1">
-                      <span>BLACKFRIDAY2025</span>
-                      <button
-                        onClick={() => updateParams({ offer_code: undefined })}
-                        className="flex items-center justify-center"
-                        aria-label="Remove offer code filter"
-                      >
-                        <Icon name="x" />
-                      </button>
-                    </div>
+                <CardContent asChild details>
+                  <details>
+                    <summary className="grow grid-flow-col grid-cols-[1fr_auto] before:col-start-2">Rating</summary>
+                    <fieldset role="group">
+                      {range(4, 0).map((number) => (
+                        <label key={number}>
+                          <span className="flex shrink-0 items-center gap-1">
+                            <RatingStars rating={number} />
+                            and up
+                          </span>
+                          <input
+                            type="radio"
+                            value={number}
+                            aria-label={`${number} ${number === 1 ? "star" : "stars"} and up`}
+                            checked={number === state.params.rating}
+                            readOnly
+                            onClick={() =>
+                              updateParams(state.params.rating === number ? { rating: undefined } : { rating: number })
+                            }
+                          />
+                        </label>
+                      ))}
+                    </fieldset>
                   </details>
+                </CardContent>
+                {hasOfferCode ? (
+                  <CardContent asChild details>
+                    <details open>
+                      <summary className="grow grid-flow-col grid-cols-[1fr_auto] before:col-start-2">
+                        Offer code
+                      </summary>
+                      <div className="flex items-center justify-between gap-2 py-1">
+                        <span>BLACKFRIDAY2025</span>
+                        <button
+                          onClick={() => updateParams({ offer_code: undefined })}
+                          className="flex items-center justify-center"
+                          aria-label="Remove offer code filter"
+                        >
+                          <Icon name="x" />
+                        </button>
+                      </div>
+                    </details>
+                  </CardContent>
                 ) : null}
               </>
             }

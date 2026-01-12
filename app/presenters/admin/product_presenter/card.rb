@@ -22,7 +22,7 @@ class Admin::ProductPresenter::Card
       price_formatted: product.price_formatted,
       created_at: product.created_at,
       user: {
-        id: product.user_id,
+        external_id: product.user.external_id,
         name: product.user.name,
         suspended: product.user.suspended?,
         flagged_for_tos_violation: product.user.flagged_for_tos_violation?

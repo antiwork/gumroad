@@ -7,12 +7,12 @@ type UndeleteActionProps = {
   user: User;
 };
 
-const UndeleteAction = ({ user: { id, deleted_at } }: UndeleteActionProps) =>
+const UndeleteAction = ({ user: { external_id, deleted_at } }: UndeleteActionProps) =>
   deleted_at && (
     <AdminAction
       label="Undelete"
-      url={Routes.enable_admin_user_path(id)}
-      confirm_message={`Are you sure you want to undelete the account of user ${id}?`}
+      url={Routes.enable_admin_user_path(external_id)}
+      confirm_message={`Are you sure you want to undelete the account of user ${external_id}?`}
       done="Undeleted."
       success_message="Undeleted"
     />
