@@ -6,17 +6,19 @@ import { request } from "$app/utils/request";
 
 import { LoadingSpinner } from "$app/components/LoadingSpinner";
 import { Alert } from "$app/components/ui/Alert";
+import { Card, CardContent } from "$app/components/ui/Card";
 
 type UserGuids = { guid: string; user_external_ids: string[] }[];
 
 type GuidProps = {
   guid: string;
   user_external_ids: string[];
+  className?: string;
 };
 
-const Guid = ({ guid, user_external_ids }: GuidProps) => (
-  <div>
-    <h5>
+const Guid = ({ guid, user_external_ids, className }: GuidProps) => (
+  <div className={className}>
+    <h5 className="grow font-bold">
       <Link href={Routes.admin_guid_path(guid)}>{guid}</Link>
     </h5>
     <span>{user_external_ids.length} users</span>
@@ -27,11 +29,13 @@ const UserGuidsContent = ({ userGuids, isLoading }: { userGuids: UserGuids; isLo
   if (isLoading) return <LoadingSpinner />;
   if (userGuids.length > 0)
     return (
-      <div className="stack">
+      <Card>
         {userGuids.map(({ guid, user_external_ids }) => (
-          <Guid key={guid} guid={guid} user_external_ids={user_external_ids} />
+          <CardContent key={guid} asChild>
+            <Guid guid={guid} user_external_ids={user_external_ids} />
+          </CardContent>
         ))}
-      </div>
+      </Card>
     );
   return (
     <Alert role="status" variant="info">

@@ -141,7 +141,7 @@ namespace :admin do
 
   # Payouts
   post "/paydays/pay_user/:id", to: "paydays#pay_user", as: :pay_user
-  resources :payouts, only: [:show] do
+  resources :payouts, only: [:show], param: :external_id do
     member do
       post :retry
       post :cancel
