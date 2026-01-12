@@ -20,7 +20,9 @@ const Membership = ({ membership, className }: MembershipProps) => (
       <img src={membership.seller.avatar_url} className="user-avatar" alt={membership.seller.display_name_or_email} />
       <div className="grid">
         <h5>
-          <Link href={Routes.admin_user_url(membership.seller.id)}>{membership.seller.display_name_or_email}</Link>
+          <Link href={Routes.admin_user_url(membership.seller.external_id)}>
+            {membership.seller.display_name_or_email}
+          </Link>
         </h5>
         <div>{membership.role}</div>
       </div>

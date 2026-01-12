@@ -1,12 +1,10 @@
-import { Link, router, usePage } from "@inertiajs/react";
+import { Link, router, useForm, usePage } from "@inertiajs/react";
 import cx from "classnames";
 import { parseISO } from "date-fns";
 import * as React from "react";
 
-import { approvePendingAffiliateRequests, updateAffiliateRequest } from "$app/data/affiliate_request";
-import { Affiliate, AffiliateRequest, AffiliateStatistics, getStatistics } from "$app/data/affiliates";
+import { type Affiliate, type AffiliateRequest, type AffiliateStatistics, getStatistics } from "$app/data/affiliates";
 import { formatPriceCentsWithCurrencySymbol } from "$app/utils/currency";
-import { asyncVoid } from "$app/utils/promise";
 import { assertResponseError } from "$app/utils/request";
 
 import { Button } from "$app/components/Button";
@@ -110,33 +108,21 @@ const SearchBoxPopover = ({ initialQuery, onSearch }: { initialQuery: string; on
   );
 };
 
-const ApproveAllButton = ({ onSuccess }: { onSuccess: () => void }) => {
-  const [isLoading, setIsLoading] = React.useState(false);
+const ApproveAllButton = () => {
+  const { post, processing } = useForm({});
   return (
     <Button
       color="primary"
-      onClick={asyncVoid(async () => {
-        setIsLoading(true);
-        try {
-          await approvePendingAffiliateRequests();
-          showAlert("Approved all pending affiliate requests!", "success");
-          onSuccess();
-        } catch (err) {
-          assertResponseError(err);
-          showAlert(err instanceof Error ? err.message : "Failed to approve requests", "error");
-        } finally {
-          setIsLoading(false);
-        }
-      })}
-      disabled={isLoading}
+      onClick={() => post(Routes.approve_all_affiliate_requests_path(), { preserveScroll: true })}
+      disabled={processing}
     >
-      {isLoading ? "Approving..." : "Approve all"}
+      {processing ? "Approving..." : "Approve all"}
     </Button>
   );
 };
 
 const AffiliateRequestsTable = ({
-  affiliateRequests: initialAffiliateRequests,
+  affiliateRequests,
   allowApproveAll,
 }: {
   affiliateRequests: AffiliateRequest[];
@@ -144,45 +130,21 @@ const AffiliateRequestsTable = ({
 }) => {
   const loggedInUser = useLoggedInUser();
   const userAgentInfo = useUserAgentInfo();
-
-  const [affiliateRequests, setAffiliateRequests] =
-    React.useState<(AffiliateRequest & { processingState?: "approve" | "ignore" })[]>(initialAffiliateRequests);
-
-  const handleApproveAllSuccess = () => {
-    setAffiliateRequests((requests) => requests.map((r) => ({ ...r, state: "approved" as const })));
-  };
-
-  const update = asyncVoid(async (request: AffiliateRequest, action: "approve" | "ignore") => {
-    const error =
-      action === "approve"
-        ? `An error occurred while approving affiliate request by ${request.name}`
-        : `An error occurred while ignoring affiliate request by ${request.name}`;
-    setAffiliateRequests((requests) => [
-      ...requests.filter((item) => item.id !== request.id),
-      { ...request, processingState: action },
-    ]);
-    try {
-      const response = await updateAffiliateRequest(request.id, action);
-      if (action === "ignore" || response.requester_has_existing_account) {
-        setAffiliateRequests((requests) => requests.filter((item) => item.id !== request.id));
-      } else {
-        setAffiliateRequests((requests) => [
-          ...requests.filter((item) => item.id !== request.id),
-          { ...request, state: "approved" },
-        ]);
-      }
-      showAlert(
-        action === "approve" ? `Approved ${request.name}'s request!` : `Ignored ${request.name}'s request!`,
-        "success",
-      );
-    } catch (e) {
-      assertResponseError(e);
-      showAlert(`${error} - ${e.message}`, "error");
-    }
-  });
-
   const { items, thProps } = useClientSortingTableDriver(affiliateRequests, { key: "date", direction: "asc" });
   const { items: visibleItems, showMoreItems } = useLocalPagination(items, 20);
+  const [processingId, setProcessingId] = React.useState<string | null>(null);
+
+  const updateAffiliateRequest = (id: string, action: "approve" | "ignore") => {
+    router.patch(
+      Routes.affiliate_request_path(id),
+      { affiliate_request: { action } },
+      {
+        preserveScroll: true,
+        onStart: () => setProcessingId(id),
+        onFinish: () => setProcessingId(null),
+      },
+    );
+  };
 
   return (
     <>
@@ -191,7 +153,7 @@ const AffiliateRequestsTable = ({
           <TableCaption>
             <div style={{ display: "flex", justifyContent: "space-between" }}>
               Requests
-              {allowApproveAll ? <ApproveAllButton onSuccess={handleApproveAllSuccess} /> : null}
+              {allowApproveAll ? <ApproveAllButton /> : null}
             </div>
           </TableCaption>
           <TableHeader>
@@ -218,10 +180,10 @@ const AffiliateRequestsTable = ({
                 <TableCell>
                   <div className="flex flex-wrap gap-3 lg:justify-end">
                     <Button
-                      disabled={!loggedInUser?.policies.direct_affiliate.update || !!affiliateRequest.processingState}
-                      onClick={() => update(affiliateRequest, "ignore")}
+                      disabled={!loggedInUser?.policies.direct_affiliate.update || processingId !== null}
+                      onClick={() => updateAffiliateRequest(affiliateRequest.id, "ignore")}
                     >
-                      {affiliateRequest.processingState === "ignore" ? "Ignoring" : "Ignore"}
+                      {processingId === affiliateRequest.id ? "Ignoring..." : "Ignore"}
                     </Button>
 
                     <WithTooltip
@@ -234,17 +196,17 @@ const AffiliateRequestsTable = ({
                     >
                       <Button
                         color="primary"
-                        onClick={() => update(affiliateRequest, "approve")}
+                        onClick={() => updateAffiliateRequest(affiliateRequest.id, "approve")}
                         disabled={
                           !loggedInUser?.policies.direct_affiliate.update ||
                           affiliateRequest.state === "approved" ||
-                          !!affiliateRequest.processingState
+                          processingId !== null
                         }
                       >
                         {affiliateRequest.state === "approved"
                           ? "Approved"
-                          : affiliateRequest.processingState === "approve"
-                            ? "Approving"
+                          : processingId === affiliateRequest.id
+                            ? "Approving..."
                             : "Approve"}
                       </Button>
                     </WithTooltip>
@@ -403,7 +365,7 @@ export default function AffiliatesIndex() {
           </div>
         ) : (
           <>
-            {affiliate_requests.length > 0 && !searchQuery && pagination.page === 1 ? (
+            {!searchQuery && pagination.page === 1 ? (
               <AffiliateRequestsTable
                 affiliateRequests={affiliate_requests}
                 allowApproveAll={allow_approve_all_requests}
