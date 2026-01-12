@@ -37,7 +37,7 @@ describe("Product Page - Shipping Scenarios Address verification", type: :system
         verifications: OpenStruct.new(
           delivery: OpenStruct.new(
             success: false,
-            errors: [OpenStruct.new(message: "Address not found")],
+            errors: [OpenStruct.new(code: "E.ADDRESS.NOT_FOUND", message: "Address not found")],
             details: nil
           )
         )
