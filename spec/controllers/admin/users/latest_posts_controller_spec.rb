@@ -18,7 +18,7 @@ describe Admin::Users::LatestPostsController do
       let!(:posts) { create_list(:post, 6, seller: user) }
 
       it "returns the user's last 5 created posts as JSON" do
-        get :index, params: { user_id: user.id }, format: :json
+        get :index, params: { user_external_id: user.external_id }, format: :json
 
         expect(response).to have_http_status(:success)
         expect(response.parsed_body.length).to eq(5)
@@ -27,7 +27,7 @@ describe Admin::Users::LatestPostsController do
 
     context "when user has no posts" do
       it "returns an empty array" do
-        get :index, params: { user_id: user.id }, format: :json
+        get :index, params: { user_external_id: user.external_id }, format: :json
 
         expect(response).to have_http_status(:success)
         expect(response.parsed_body).to eq([])

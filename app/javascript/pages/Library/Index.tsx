@@ -22,6 +22,7 @@ import { Thumbnail } from "$app/components/Product/Thumbnail";
 import { Select } from "$app/components/Select";
 import { showAlert } from "$app/components/server-components/Alert";
 import { Alert } from "$app/components/ui/Alert";
+import { Card as UICard, CardContent } from "$app/components/ui/Card";
 import { Placeholder, PlaceholderImage } from "$app/components/ui/Placeholder";
 import { ProductCard, ProductCardFigure, ProductCardHeader, ProductCardFooter } from "$app/components/ui/ProductCard";
 import { ProductCardGrid } from "$app/components/ui/ProductCardGrid";
@@ -171,7 +172,7 @@ export const DeleteProductModal = ({
 
 type Props = {
   results: Result[];
-  creators: { id: string; name: string; count: number; archived_count: number; non_archived_count: number }[];
+  creators: { id: string; name: string; archived_count: number; non_archived_count: number }[];
   bundles: { id: string; label: string }[];
   reviews_page_enabled: boolean;
   following_wishlists_enabled: boolean;
@@ -187,6 +188,7 @@ type Params = {
 
 type State = {
   results: Result[];
+  creators: { id: string; name: string; archived_count: number; non_archived_count: number }[];
   search: Params;
 };
 
@@ -207,15 +209,40 @@ const reducer: React.Reducer<State, Action> = produce((state, action) => {
       break;
     case "set-archived": {
       const result = state.results.find((result) => result.purchase.id === action.purchaseId);
-      if (result) result.purchase.is_archived = action.isArchived;
+      if (result) {
+        const wasArchived = result.purchase.is_archived;
+        result.purchase.is_archived = action.isArchived;
+
+        const creator = state.creators.find((c) => c.id === result.product.creator_id);
+        if (creator) {
+          if (wasArchived && !action.isArchived) {
+            creator.archived_count = Math.max(0, creator.archived_count - 1);
+            creator.non_archived_count += 1;
+          } else if (!wasArchived && action.isArchived) {
+            creator.archived_count += 1;
+            creator.non_archived_count = Math.max(0, creator.non_archived_count - 1);
+          }
+        }
+      }
       if (!state.results.some((result) => result.purchase.is_archived && state.search.showArchivedOnly))
         state.search.showArchivedOnly = false;
       updateUrl(state.search);
       break;
     }
     case "delete-purchase": {
-      const index = state.results.findIndex((result) => result.purchase.id === action.id);
-      if (index !== -1) state.results.splice(index, 1);
+      const result = state.results.find((result) => result.purchase.id === action.id);
+      if (result) {
+        const creator = state.creators.find((c) => c.id === result.product.creator_id);
+        if (creator) {
+          if (result.purchase.is_archived) {
+            creator.archived_count = Math.max(0, creator.archived_count - 1);
+          } else {
+            creator.non_archived_count = Math.max(0, creator.non_archived_count - 1);
+          }
+        }
+        const index = state.results.findIndex((r) => r.purchase.id === action.id);
+        if (index !== -1) state.results.splice(index, 1);
+      }
       break;
     }
   }
@@ -253,6 +280,7 @@ export default function LibraryPage() {
   const [state, dispatch] = React.useReducer(reducer, null, () => ({
     search: extractParams(new URL(originalLocation).searchParams),
     results,
+    creators,
   }));
   const [enteredQuery, setEnteredQuery] = React.useState(state.search.query);
   useGlobalEventListener("popstate", (e: PopStateEvent) => {
@@ -290,14 +318,14 @@ export default function LibraryPage() {
 
   const filteredCreators = React.useMemo(
     () =>
-      creators
+      state.creators
         .map((creator) => ({
           ...creator,
           count: state.search.showArchivedOnly ? creator.archived_count : creator.non_archived_count,
         }))
         .filter((creator) => creator.count > 0)
         .sort((a, b) => b.count - a.count),
-    [creators, state.search.showArchivedOnly],
+    [state.creators, state.search.showArchivedOnly],
   );
 
   const sortUid = React.useId();
@@ -408,26 +436,25 @@ export default function LibraryPage() {
           )}
         >
           {shouldShowFilter ? (
-            <div
-              className="stack overflow-y-auto lg:sticky lg:inset-y-4 lg:max-h-[calc(100vh-2rem)]"
-              aria-label="Filters"
-            >
-              <header>
-                <div>
-                  {filteredResults.length
-                    ? `Showing 1-${Math.min(filteredResults.length, resultsLimit)} of ${filteredResults.length} products`
-                    : "No products found"}
-                </div>
-                {isDesktop ? null : (
-                  <button className="underline" onClick={() => setMobileFiltersExpanded(!mobileFiltersExpanded)}>
-                    Filter
-                  </button>
-                )}
-              </header>
+            <UICard className="overflow-y-auto lg:sticky lg:inset-y-4 lg:max-h-[calc(100vh-2rem)]" aria-label="Filters">
+              <CardContent asChild>
+                <header>
+                  <div className="grow">
+                    {filteredResults.length
+                      ? `Showing 1-${Math.min(filteredResults.length, resultsLimit)} of ${filteredResults.length} products`
+                      : "No products found"}
+                  </div>
+                  {isDesktop ? null : (
+                    <button className="underline" onClick={() => setMobileFiltersExpanded(!mobileFiltersExpanded)}>
+                      Filter
+                    </button>
+                  )}
+                </header>
+              </CardContent>
               {isDesktop || mobileFiltersExpanded ? (
                 <>
-                  <div>
-                    <div className="input input-wrapper product-search__wrapper">
+                  <CardContent>
+                    <div className="input input-wrapper product-search__wrapper grow">
                       <Icon name="solid-search" />
                       <input
                         className="search-products"
@@ -438,9 +465,9 @@ export default function LibraryPage() {
                         onKeyDown={handleSearchKeyDown}
                       />
                     </div>
-                  </div>
-                  <div className="sort">
-                    <fieldset>
+                  </CardContent>
+                  <CardContent className="sort">
+                    <fieldset className="grow basis-0">
                       <legend>
                         <label className="filter-header" htmlFor={sortUid}>
                           Sort by
@@ -460,10 +487,10 @@ export default function LibraryPage() {
                         <option value="purchase_date">Purchase Date</option>
                       </select>
                     </fieldset>
-                  </div>
+                  </CardContent>
                   {bundles.length > 0 ? (
-                    <div>
-                      <fieldset>
+                    <CardContent>
+                      <fieldset className="grow basis-0">
                         <legend>
                           <label htmlFor={bundlesUid}>Bundles</label>
                         </legend>
@@ -482,10 +509,10 @@ export default function LibraryPage() {
                           isClearable
                         />
                       </fieldset>
-                    </div>
+                    </CardContent>
                   ) : null}
-                  <div className="creator">
-                    <fieldset role="group">
+                  <CardContent className="creator">
+                    <fieldset role="group" className="grow basis-0">
                       <legend className="filter-header">Creator</legend>
                       <label>
                         All Creators
@@ -525,10 +552,10 @@ export default function LibraryPage() {
                         ) : null}
                       </div>
                     </fieldset>
-                  </div>
+                  </CardContent>
                   {archivedCount > 0 ? (
-                    <div className="archived">
-                      <fieldset role="group">
+                    <CardContent className="archived">
+                      <fieldset role="group" className="grow basis-0">
                         <label className="filter-archived">
                           Show archived only
                           <input
@@ -544,11 +571,11 @@ export default function LibraryPage() {
                           />
                         </label>
                       </fieldset>
-                    </div>
+                    </CardContent>
                   ) : null}
                 </>
               ) : null}
-            </div>
+            </UICard>
           ) : null}
           <ProductCardGrid>
             {filteredResults.slice(0, resultsLimit).map((result) => (

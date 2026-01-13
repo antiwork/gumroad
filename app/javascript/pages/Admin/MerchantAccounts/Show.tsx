@@ -12,7 +12,7 @@ export type AdminMerchantAccountProps = {
   charge_processor_merchant_id: string | null;
   created_at: string;
   external_id: string;
-  user_id: number | null;
+  user_external_id: string | null;
   country: string;
   country_name: string | null;
   currency: string;
@@ -44,8 +44,10 @@ const AdminMerchantAccountsShow = () => {
 
           <dt>User</dt>
           <dd>
-            {merchant_account.user_id ? (
-              <Link href={Routes.admin_user_path(merchant_account.user_id)}>{merchant_account.user_id}</Link>
+            {merchant_account.user_external_id ? (
+              <Link href={Routes.admin_user_path(merchant_account.user_external_id)}>
+                {merchant_account.user_external_id}
+              </Link>
             ) : (
               "none"
             )}

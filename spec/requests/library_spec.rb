@@ -275,6 +275,7 @@ describe("Library Scenario", type: :system, js: true) do
     product4_active = create(:product, name: "Product 4 Active", user: creator2)
     product5_archived = create(:product, name: "Product 5 Archived", user: creator2)
     product6_archived = create(:product, name: "Product 6 Archived", user: creator2)
+    product7_archived = create(:product, name: "Product 7 Archived", user: creator2)
 
     create(:purchase, purchaser: @user, link: product1_active)
     create(:purchase, purchaser: @user, link: product2_active)
@@ -282,6 +283,7 @@ describe("Library Scenario", type: :system, js: true) do
     create(:purchase, purchaser: @user, link: product4_active)
     create(:purchase, purchaser: @user, link: product5_archived, is_archived: true)
     create(:purchase, purchaser: @user, link: product6_archived, is_archived: true)
+    create(:purchase, purchaser: @user, link: product7_archived, is_archived: true)
 
     Link.import(refresh: true, force: true)
 
@@ -291,14 +293,20 @@ describe("Library Scenario", type: :system, js: true) do
     expect(find("label", text: creator2.name)).to have_text("(1)")
 
     find_and_click("label", text: "Show archived only")
-    expect(page).to have_text("Showing 1-3 of 3 products")
+    expect(page).to have_text("Showing 1-4 of 4 products")
     expect(find("label", text: creator1.name)).to have_text("(1)")
-    expect(find("label", text: creator2.name)).to have_text("(2)")
+    expect(find("label", text: creator2.name)).to have_text("(3)")
+
+    find_product_card(product7_archived.link).hover
+    within find_product_card(product7_archived.link) do
+      find_and_click('[aria-label="Open product action menu"]')
+      click_on "Unarchive"
+    end
 
     find_and_click("label", text: "Show archived only")
-    expect(page).to have_text("Showing 1-3 of 3 products")
+    expect(page).to have_text("Showing 1-4 of 4 products")
     expect(find("label", text: creator1.name)).to have_text("(2)")
-    expect(find("label", text: creator2.name)).to have_text("(1)")
+    expect(find("label", text: creator2.name)).to have_text("(2)")
   end
 
   it "lists the same product several times if purchased several times" do
