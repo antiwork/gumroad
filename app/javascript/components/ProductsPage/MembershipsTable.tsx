@@ -183,20 +183,19 @@ export const ProductsPageMembershipsTable = (props: {
               </TableCell>
               {membership.can_duplicate || membership.can_destroy ? (
                 <TableCell>
-                  <ActionsPopover
-                    product={membership}
-                    onDuplicate={() => void loadMemberships(1)}
-                    onDelete={() => void reloadMemberships()}
-                    onArchive={() => {
-                      props.setEnableArchiveTab?.(true);
-                      void reloadMemberships();
-                    }}
-                    onUnarchive={(hasRemainingArchivedProducts) => {
-                      props.setEnableArchiveTab?.(hasRemainingArchivedProducts);
-                      if (!hasRemainingArchivedProducts) router.get(Routes.products_path());
-                      else void reloadMemberships();
-                    }}
-                  />
+                    <ActionsPopover
+                      product={membership}
+                      onDuplicate={() => void loadMemberships(1)}
+                      onArchive={() => {
+                        props.setEnableArchiveTab?.(true);
+                        router.get(Routes.products_path());
+                      }}
+                      onUnarchive={(hasRemainingArchivedProducts) => {
+                        props.setEnableArchiveTab?.(hasRemainingArchivedProducts);
+                        if (!hasRemainingArchivedProducts) router.get(Routes.products_path());
+                        else void reloadMemberships();
+                      }}
+                    />
                 </TableCell>
               ) : null}
             </TableRow>

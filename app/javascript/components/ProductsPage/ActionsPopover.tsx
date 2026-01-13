@@ -1,6 +1,7 @@
+import { router } from "@inertiajs/react";
 import * as React from "react";
 
-import { deleteProduct, archiveProduct, unarchiveProduct, duplicateProduct } from "$app/data/product_dashboard";
+import { archiveProduct, unarchiveProduct, duplicateProduct } from "$app/data/product_dashboard";
 import { Membership, Product } from "$app/data/products";
 import { assertResponseError } from "$app/utils/request";
 
@@ -13,13 +14,11 @@ import { showAlert } from "$app/components/server-components/Alert";
 const ActionsPopover = ({
   product,
   onDuplicate,
-  onDelete,
   onArchive,
   onUnarchive,
 }: {
   product: Product | Membership;
   onDuplicate: () => void;
-  onDelete: () => void;
   onArchive: () => void;
   onUnarchive: (hasRemainingArchivedProducts: boolean) => void;
 }) => {
@@ -45,17 +44,19 @@ const ActionsPopover = ({
     setIsDuplicating(false);
   };
 
-  const handleDelete = async () => {
-    setIsDeleting(true);
-    try {
-      await deleteProduct(product.permalink);
-      showAlert("Product deleted!", "success");
-      onDelete();
-    } catch (e) {
-      assertResponseError(e);
-      showAlert(e.message, "error");
-    }
-    setIsDeleting(false);
+  const handleDelete = () => {
+    router.delete(Routes.link_path(product.permalink), {
+      preserveScroll: true,
+      onStart: () => setIsDeleting(true),
+      onError: () => {
+        showAlert("Failed to delete product. Please try again.", "error");
+        setIsDeleting(false);
+      },
+      onFinish: () => {
+        setConfirmingDelete(false);
+        setIsDeleting(false);
+      },
+    });
   };
 
   const handleArchive = async () => {

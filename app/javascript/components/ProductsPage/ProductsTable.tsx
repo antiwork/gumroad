@@ -178,10 +178,9 @@ export const ProductsPageProductsTable = (props: {
                     <ActionsPopover
                       product={product}
                       onDuplicate={() => void loadProducts(1)}
-                      onDelete={() => void reloadProducts()}
                       onArchive={() => {
                         props.setEnableArchiveTab?.(true);
-                        void reloadProducts();
+                        router.get(Routes.products_path());
                       }}
                       onUnarchive={(hasRemainingArchivedProducts) => {
                         props.setEnableArchiveTab?.(hasRemainingArchivedProducts);

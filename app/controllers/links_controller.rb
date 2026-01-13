@@ -491,7 +491,7 @@ class LinksController < ApplicationController
     authorize @product
 
     @product.delete!
-    render json: { success: true }
+    redirect_to products_path, notice: "Product deleted!"
   end
 
   def update_sections
