@@ -77,11 +77,8 @@ export const ProductsPageProductsTable = (props: {
     if (props.query !== null) debouncedLoadProducts();
   }, [props.query]);
 
-  const reloadProducts = async () => {
-    const response = await loadProducts(pagination.page);
-    if (response?.entries.length === 0) {
-      router.get(Routes.products_path());
-    }
+  const reloadProducts = () => {
+    router.get(Routes.products_path());
   };
 
   if (!products.length) return null;
@@ -165,7 +162,6 @@ export const ProductsPageProductsTable = (props: {
                     <ActionsPopover
                       product={product}
                       onDuplicate={() => loadProducts()}
-                      onDelete={() => reloadProducts()}
                       onArchive={() => {
                         props.setEnableArchiveTab?.(true);
                         reloadProducts();

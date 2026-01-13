@@ -77,11 +77,8 @@ export const ProductsPageMembershipsTable = (props: {
     if (props.query !== null) debouncedLoadMemberships();
   }, [props.query]);
 
-  const reloadMemberships = async () => {
-    const response = await loadMemberships(pagination.page);
-    if (response?.entries.length === 0) {
-      router.get(Routes.products_path());
-    }
+  const reloadMemberships = () => {
+    router.get(Routes.products_path());
   };
 
   if (!memberships.length) return null;
@@ -174,7 +171,6 @@ export const ProductsPageMembershipsTable = (props: {
                   <ActionsPopover
                     product={membership}
                     onDuplicate={() => loadMemberships()}
-                    onDelete={() => reloadMemberships()}
                     onArchive={() => {
                       props.setEnableArchiveTab?.(true);
                       reloadMemberships();
