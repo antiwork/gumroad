@@ -655,8 +655,6 @@ Rails.application.routes.draw do
       resource :invalidate_active_sessions, only: :update
     end
 
-    get "/memberships/paged", to: "links#memberships_paged", as: :memberships_paged
-
     namespace :products do
       resources :affiliated, only: [:index]
       resources :collabs, only: [:index] do
@@ -665,12 +663,7 @@ Rails.application.routes.draw do
           get :memberships_paged
         end
       end
-      resources :archived, only: %i[index create destroy] do
-        collection do
-          get :products_paged
-          get :memberships_paged
-        end
-      end
+      resources :archived, only: %i[index create destroy]
     end
 
     resources :products, only: [:new], controller: "links" do
@@ -680,8 +673,6 @@ Rails.application.routes.draw do
       end
     end
 
-    # TODO: move these within resources :products block above
-    get "/products/paged", to: "links#products_paged", as: :products_paged
     get "/products/:id/edit", to: "links#edit", as: :edit_link
     get "/products/:id/edit/*other", to: "links#edit"
     get "/products/:id/card", to: "links#card", as: :product_card
