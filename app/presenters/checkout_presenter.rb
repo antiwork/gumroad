@@ -106,6 +106,7 @@ class CheckoutPresenter
             name: bundle_product.product.name,
             native_type: bundle_product.product.native_type,
             thumbnail_url: bundle_product.product.thumbnail_alive&.url,
+            url: bundle_product.product.long_url,
             quantity: bundle_product.quantity,
             variant: bundle_product.variant.present? ? { id: bundle_product.variant.external_id, name: bundle_product.variant.name } : nil,
             custom_fields: bundle_product.product.custom_field_descriptors,

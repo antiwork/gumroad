@@ -11,6 +11,6 @@ describe Admin::Users::CommentsController do
 
   it_behaves_like "Admin::Commentable" do
     let(:commentable_object) { user }
-    let(:route_params) { { user_id: user.id } }
+    let(:route_params) { { user_external_id: user.external_id } }
   end
 end

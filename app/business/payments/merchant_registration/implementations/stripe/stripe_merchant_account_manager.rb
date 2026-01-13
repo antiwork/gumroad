@@ -385,7 +385,11 @@ module StripeMerchantAccountManager
           currency: bank_account.currency,
           account_number: bank_account.account_number.decrypt(passphrase).gsub(/[ -]/, "")
         }
-        bank_account_hash[:routing_number] = bank_account.routing_number if bank_account.routing_number.present?
+        if bank_account.routing_number.present?
+          routing_number = bank_account.routing_number
+          routing_number = routing_number.gsub(/[ -]/, "") if country_code == Compliance::Countries::GIB.alpha2
+          bank_account_hash[:routing_number] = routing_number
+        end
         bank_account_hash[:account_type] = bank_account.account_type if [Compliance::Countries::CHL.alpha2, Compliance::Countries::COL.alpha2].include?(country_code) && bank_account.account_type.present?
         bank_account_hash[:account_holder_name] = bank_account.account_holder_full_name if [Compliance::Countries::JPN.alpha2, Compliance::Countries::VNM.alpha2, Compliance::Countries::IDN.alpha2].include?(country_code)
         bank_account_hash

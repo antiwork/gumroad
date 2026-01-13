@@ -16,7 +16,6 @@ describe "Signup Feature Scenario", js: true, type: :system do
     expect do
       click_on "Create account"
       expect(page).to have_selector("iframe[title*=recaptcha]", visible: false)
-      wait_for_ajax
       expect(page).to have_content("Dashboard")
     end.to change(User, :count).by(1)
   end
@@ -30,7 +29,6 @@ describe "Signup Feature Scenario", js: true, type: :system do
 
     expect do
       click_on "Create account"
-      wait_for_ajax
       expect(page).to have_content("Dashboard")
     end.not_to change(User, :count)
   end
@@ -43,7 +41,6 @@ describe "Signup Feature Scenario", js: true, type: :system do
     fill_in "Password", with: "someotherpassword"
     click_on "Create account"
 
-    wait_for_ajax
     expect(page).to have_alert("An account already exists with this email.")
     expect(page).to have_button("Create account")
   end
@@ -58,7 +55,6 @@ describe "Signup Feature Scenario", js: true, type: :system do
 
     expect do
       click_on "Create account"
-      wait_for_ajax
       expect(page).to have_content("Dashboard")
     end.to change(User, :count).by(1)
 
@@ -81,8 +77,6 @@ describe "Signup Feature Scenario", js: true, type: :system do
       fill_in "Email", with: user.email
       fill_in "Password", with: user.password
       click_on "Create account"
-
-      wait_for_ajax
 
       expect(page).to have_content("Authorize #{@oauth_application.name} to use your account?")
     end

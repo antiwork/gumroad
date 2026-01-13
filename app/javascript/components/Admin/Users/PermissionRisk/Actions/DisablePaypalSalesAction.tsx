@@ -11,7 +11,7 @@ const DisablePaypalSalesAction = ({ user }: DisablePaypalSalesActionProps) =>
   !user.disable_paypal_sales && (
     <AdminAction
       label="Disable PayPal sales"
-      url={Routes.disable_paypal_sales_admin_user_path(user.id)}
+      url={Routes.disable_paypal_sales_admin_user_path(user.external_id)}
       loading="Disabling PayPal sales..."
       done="PayPal sales disabled!"
       success_message="PayPal sales disabled!"
