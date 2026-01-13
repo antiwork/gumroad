@@ -179,10 +179,10 @@ export const ProductsPageMembershipsTable = (props: {
                   <ActionsPopover
                     product={membership}
                     onDuplicate={() => void loadMemberships(1)}
-                    onDelete={() => void reloadMemberships()}
+                    onDelete={() => router.get(Routes.products_path())}
                     onArchive={() => {
                       props.setEnableArchiveTab?.(true);
-                      void reloadMemberships();
+                      router.get(Routes.products_path());
                     }}
                     onUnarchive={(hasRemainingArchivedProducts) => {
                       props.setEnableArchiveTab?.(hasRemainingArchivedProducts);
