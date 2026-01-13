@@ -51,6 +51,7 @@ import { LoadingSpinner } from "$app/components/LoadingSpinner";
 import { useLoggedInUser } from "$app/components/LoggedInUser";
 import { showAlert } from "$app/components/server-components/Alert";
 import { Alert } from "$app/components/ui/Alert";
+import { Card, CardContent } from "$app/components/ui/Card";
 import { Tab, Tabs } from "$app/components/ui/Tabs";
 import { useIsDarkTheme } from "$app/components/useIsDarkTheme";
 import { useOnChangeSync } from "$app/components/useOnChange";
@@ -188,7 +189,7 @@ const ZipCodeInput = () => {
   );
 };
 
-const EmailAddress = () => {
+const EmailAddress = ({ card }: { card: boolean }) => {
   const uid = React.useId();
   const loggedInUser = useLoggedInUser();
   const [state, dispatch] = useState();
@@ -212,8 +213,8 @@ const EmailAddress = () => {
   };
 
   return (
-    <div>
-      <div className="flex flex-col gap-4">
+    <div className={card ? "flex flex-wrap items-center justify-between gap-4 p-4" : ""}>
+      <div className={`flex flex-col gap-4 ${card ? "grow" : ""}`}>
         <fieldset className={cx({ danger: errors.has("email") })}>
           <legend>
             <label htmlFor={`${uid}email`}>
@@ -249,7 +250,13 @@ const EmailAddress = () => {
   );
 };
 
-const SharedInputs = ({ showCustomFields }: { showCustomFields: boolean }) => {
+const SharedInputs = ({
+  showCustomFields,
+  className,
+}: {
+  showCustomFields: boolean;
+  className?: string | undefined;
+}) => {
   const uid = React.useId();
   const [state, dispatch] = useState();
   const errors = getErrors(state);
@@ -363,9 +370,9 @@ const SharedInputs = ({ showCustomFields }: { showCustomFields: boolean }) => {
   return (
     <>
       {showCountryInput || showVatIdInput ? (
-        <div>
-          <div className="flex flex-col gap-4">
-            <h4>Contact information</h4>
+        <div className={className}>
+          <div className="flex grow flex-col gap-4">
+            <h4 className="font-bold">Contact information</h4>
             {showCountryInput ? (
               <div
                 style={{
@@ -397,7 +404,7 @@ const SharedInputs = ({ showCustomFields }: { showCustomFields: boolean }) => {
           </div>
         </div>
       ) : null}
-      {showCustomFields ? <CustomFields /> : null}
+      {showCustomFields ? <CustomFields className={className} /> : null}
     </>
   );
 };
@@ -433,7 +440,7 @@ const useFail = () => {
   };
 };
 
-const CustomerDetails = ({ showCustomFields }: { showCustomFields: boolean }) => {
+const CustomerDetails = ({ showCustomFields, className }: { showCustomFields: boolean; className?: string }) => {
   const isLoggedIn = !!useLoggedInUser();
   const [state, dispatch] = useState();
   const uid = React.useId();
@@ -480,10 +487,10 @@ const CustomerDetails = ({ showCustomFields }: { showCustomFields: boolean }) =>
 
   return (
     <>
-      <SharedInputs showCustomFields={showCustomFields} />
+      <SharedInputs showCustomFields={showCustomFields} className={className} />
       {hasShipping(state) ? (
-        <div>
-          <div className="flex flex-col gap-4">
+        <div className={className}>
+          <div className="flex grow flex-col gap-4">
             <h4 style={{ display: "flex", justifyContent: "space-between" }}>
               Shipping information
               {isLoggedIn ? (
@@ -587,15 +594,20 @@ const CustomerDetails = ({ showCustomFields }: { showCustomFields: boolean }) =>
         </div>
       ) : null}
       {state.warning ? (
-        <div>
-          <Alert role="status" variant="warning">
+        <div className={className}>
+          <Alert role="status" variant="warning" className="grow">
             {state.warning}
           </Alert>
         </div>
       ) : null}
       {state.paymentMethod !== "paypal" && state.paymentMethod !== "stripePaymentRequest" ? (
-        <div>
-          <Button color="primary" onClick={() => dispatch({ type: "offer" })} disabled={isSubmitDisabled(state)}>
+        <div className={className}>
+          <Button
+            color="primary"
+            onClick={() => dispatch({ type: "offer" })}
+            disabled={isSubmitDisabled(state)}
+            className="grow basis-0"
+          >
             {payLabel}
           </Button>
         </div>
@@ -604,7 +616,7 @@ const CustomerDetails = ({ showCustomFields }: { showCustomFields: boolean }) =>
   );
 };
 
-const CreditCard = () => {
+const CreditCard = ({ card }: { card?: boolean }) => {
   const [state, dispatch] = useState();
   const fail = useFail();
   const isLoggedIn = !!useLoggedInUser();
@@ -676,8 +688,11 @@ const CreditCard = () => {
   if (state.paymentMethod !== "card") return null;
 
   return (
-    <div style={{ borderTop: "none", paddingTop: "0" }}>
-      <div className="flex flex-col gap-4">
+    <div
+      style={{ borderTop: "none", paddingTop: "0" }}
+      className={card ? "flex flex-wrap items-center justify-between gap-4 p-4" : ""}
+    >
+      <div className={`flex flex-col gap-4 ${card ? "grow" : ""}`}>
         {!useSavedCard ? (
           <fieldset>
             <legend>
@@ -877,7 +892,7 @@ const NativePayPal = ({ implementation }: { implementation: PayPalNamespace }) =
   );
 };
 
-const PayPal = () => {
+const PayPal = ({ className }: { className?: string | undefined }) => {
   const [state, dispatch] = useState();
 
   const [nativePaypal, setNativePaypal] = React.useState<PayPalNamespace | null>(null);
@@ -929,7 +944,7 @@ const PayPal = () => {
 
   if (state.paymentMethod !== "paypal" || !implementation) return null;
   return (
-    <div>
+    <div className={className}>
       {nativePaypal && implementation === "native" ? (
         <NativePayPal implementation={nativePaypal} />
       ) : braintreeToken.type === "available" ? (
@@ -939,7 +954,7 @@ const PayPal = () => {
   );
 };
 
-const StripePaymentRequest = () => {
+const StripePaymentRequest = ({ className }: { className?: string | undefined }) => {
   const [state, dispatch] = useState();
   const stripe = useStripe();
   const fail = useFail();
@@ -1072,8 +1087,13 @@ const StripePaymentRequest = () => {
   if (!canPay || state.paymentMethod !== "stripePaymentRequest") return null;
 
   return (
-    <div>
-      <Button color="primary" onClick={() => dispatch({ type: "offer" })} disabled={isSubmitDisabled(state)}>
+    <div className={className}>
+      <Button
+        color="primary"
+        onClick={() => dispatch({ type: "offer" })}
+        disabled={isSubmitDisabled(state)}
+        className="grow basis-0"
+      >
         {payLabel}
       </Button>
     </div>
@@ -1121,21 +1141,21 @@ export const PaymentForm = ({
   }, [state.status.type]);
 
   return (
-    <div ref={paymentFormRef} className={cx("stack", className)} aria-label="Payment form">
+    <Card ref={paymentFormRef} className={className} aria-label="Payment form">
       {isTestPurchase ? (
-        <div>
-          <Alert variant="info">
+        <CardContent>
+          <Alert variant="info" className="grow">
             This will be a test purchase as you are the creator of at least one of the products. Your payment method
             will not be charged.
           </Alert>
-        </div>
+        </CardContent>
       ) : null}
-      <EmailAddress />
+      <EmailAddress card />
       {!isFreePurchase ? (
         <>
-          <div>
-            <div className="flex flex-col gap-4">
-              <h4>Pay with</h4>
+          <CardContent>
+            <div className="flex grow flex-col gap-4">
+              <h4 className="font-bold">Pay with</h4>
               {state.availablePaymentMethods.length > 1 ? (
                 <Tabs variant="buttons" className="auto-cols-fr grid-flow-col">
                   {state.availablePaymentMethods.map((method) => (
@@ -1144,25 +1164,30 @@ export const PaymentForm = ({
                 </Tabs>
               ) : null}
             </div>
-          </div>
+          </CardContent>
           {notice ? (
-            <div>
-              <Alert variant="info">{notice}</Alert>
-            </div>
+            <CardContent>
+              <Alert variant="info" className="grow">
+                {notice}
+              </Alert>
+            </CardContent>
           ) : null}
-          <CreditCard />
+          <CreditCard card />
         </>
       ) : null}
-      <CustomerDetails showCustomFields={showCustomFields} />
+      <CustomerDetails
+        showCustomFields={showCustomFields}
+        className="flex flex-wrap items-center justify-between gap-4 p-4"
+      />
       {!isFreePurchase ? (
         <>
-          <PayPal />
+          <PayPal className="flex flex-wrap items-center justify-between gap-4 p-4" />
           <StripeElementsProvider>
-            <StripePaymentRequest />
+            <StripePaymentRequest className="flex flex-wrap items-center justify-between gap-4 p-4" />
           </StripeElementsProvider>
         </>
       ) : null}
       {recaptcha.container}
-    </div>
+    </Card>
   );
 };

@@ -13,7 +13,7 @@ export type ProductPurchase = {
   stripe_refunded: boolean | null;
   is_chargedback: boolean;
   is_chargeback_reversed: boolean;
-  refunded_by: { id: number; email: string }[];
+  refunded_by: { external_id: string; email: string }[];
   error_code: string | null;
   purchase_state: string;
   gumroad_responsible_for_tax: boolean;
@@ -29,7 +29,7 @@ export async function fetchProductPurchases(
   page: number,
   perPage: number,
   isAffiliateUser: boolean,
-  userId: number | null,
+  userExternalId: string | null,
 ) {
   const response = await request({
     method: "GET",
@@ -38,7 +38,7 @@ export async function fetchProductPurchases(
       page,
       per_page: perPage,
       is_affiliate_user: isAffiliateUser,
-      user_id: userId,
+      user_external_id: userExternalId,
     }),
     accept: "json",
   });
