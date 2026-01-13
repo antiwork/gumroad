@@ -1,7 +1,7 @@
 import { router } from "@inertiajs/react";
 import * as React from "react";
 
-import { archiveProduct, unarchiveProduct, duplicateProduct } from "$app/data/product_dashboard";
+import { unarchiveProduct, duplicateProduct } from "$app/data/product_dashboard";
 import { Membership, Product } from "$app/data/products";
 import { assertResponseError } from "$app/utils/request";
 
@@ -59,21 +59,23 @@ const ActionsPopover = ({
     });
   };
 
-  const handleArchive = async () => {
-    setIsArchiving(true);
-    try {
-      await archiveProduct(product.permalink);
-      const message =
-        product.status === "published"
-          ? "Product was archived and unpublished successfully"
-          : "Product was archived successfully";
-      showAlert(message, "success");
-      onArchive();
-    } catch (e) {
-      assertResponseError(e);
-      showAlert(e.message, "error");
-    }
-    setIsArchiving(false);
+  const handleArchive = () => {
+    router.post(
+      Routes.products_archived_index_path(),
+      { id: product.permalink },
+      {
+        preserveScroll: true,
+        onStart: () => setIsArchiving(true),
+        onFinish: () => {
+          setIsArchiving(false);
+          onArchive();
+        },
+        onError: () => {
+          showAlert("Failed to archive product. Please try again.", "error");
+          setIsArchiving(false);
+        },
+      }
+    );
   };
 
   const handleUnarchive = async () => {

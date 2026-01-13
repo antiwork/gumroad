@@ -36,12 +36,14 @@ class Products::ArchivedController < Sellers::BaseController
   def create
     authorize [:products, :archived, @product]
 
+    was_published = @product.published?
     @product.update!(
       archived: true,
       purchase_disabled_at: @product.purchase_disabled_at || Time.current
     )
 
-    render json: { success: true }
+    notice = was_published ? "Product was archived and unpublished successfully" : "Product was archived successfully"
+    redirect_to products_path, notice: notice
   end
 
   def destroy
