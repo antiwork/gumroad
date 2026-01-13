@@ -87,6 +87,7 @@ describe StripeMerchantAccountManager, :vcr do
         expect(stripe_account["metadata"]["user_compliance_info_id"]).to eq(user_compliance_info.external_id)
         expect(stripe_account["metadata"]["tos_agreement_id"]).to eq(tos_agreement.external_id)
         expect(stripe_account["metadata"]["bank_account_id"]).to eq(bank_account.external_id)
+        expect(FlagForFraudStripeFingerprintWorker).to have_enqueued_sidekiq_job(user.id)
       end
 
       it "returns a merchant account" do
@@ -240,7 +241,7 @@ describe StripeMerchantAccountManager, :vcr do
 
       it "creates an account at stripe with all the account params" do
         expect(Stripe::Account).to receive(:create).with(expected_account_params).and_call_original
-        subject.create_account(user, passphrase: "1234")
+        expect { subject.create_account(user, passphrase: "1234") }.not_to change(FlagForFraudStripeFingerprintWorker.jobs, :size)
       end
 
       it "returns a merchant account" do
@@ -350,6 +351,7 @@ describe StripeMerchantAccountManager, :vcr do
       it "creates an account at stripe with all the params" do
         expect(Stripe::Account).to receive(:create).with(expected_account_params).and_call_original
         subject.create_account(user, passphrase: "1234")
+        expect(FlagForFraudStripeFingerprintWorker).to have_enqueued_sidekiq_job(user.id)
       end
 
       it "returns a merchant account" do
@@ -472,6 +474,7 @@ describe StripeMerchantAccountManager, :vcr do
         expect(Stripe::Account).to receive(:create).with(expected_account_params).and_call_original
         expect(Stripe::Account).to receive(:create_person).with(anything, expected_person_params).and_call_original
         subject.create_account(user, passphrase: "1234")
+        expect(FlagForFraudStripeFingerprintWorker).to have_enqueued_sidekiq_job(user.id)
       end
 
       it "returns a merchant account" do
@@ -551,6 +554,7 @@ describe StripeMerchantAccountManager, :vcr do
       it "creates an account at stripe with all the params" do
         expect(Stripe::Account).to receive(:create).with(expected_account_params).and_call_original
         subject.create_account(user, passphrase: "1234")
+        expect(FlagForFraudStripeFingerprintWorker).to have_enqueued_sidekiq_job(user.id)
       end
 
       it "returns a merchant account" do
@@ -680,6 +684,7 @@ describe StripeMerchantAccountManager, :vcr do
         expect(Stripe::Account).to receive(:create).with(expected_account_params).and_call_original
         expect(Stripe::Account).to receive(:create_person).with(anything, expected_person_params).and_call_original
         subject.create_account(user, passphrase: "1234")
+        expect(FlagForFraudStripeFingerprintWorker).to have_enqueued_sidekiq_job(user.id)
       end
 
       it "returns a merchant account" do
@@ -8998,7 +9003,7 @@ describe StripeMerchantAccountManager, :vcr do
           expect(Stripe::Account).not_to receive(:update)
           stripe_account
         end
-        subject.update_bank_account(user, passphrase: "1234")
+        expect { subject.update_bank_account(user, passphrase: "1234") }.not_to change(FlagForFraudStripeFingerprintWorker.jobs, :size)
       end
     end
 
@@ -10462,6 +10467,7 @@ describe StripeMerchantAccountManager, :vcr do
           end.to_not have_enqueued_mail(ContactingCreatorMailer, :more_kyc_needed)
 
           expect(UserComplianceInfoRequest.count).to eq 0
+          expect(FlagForFraudStripeFingerprintWorker).to have_enqueued_sidekiq_job(user.id)
         end
       end
 
@@ -11199,14 +11205,14 @@ describe StripeMerchantAccountManager, :vcr do
 
         it "calls update account for the user" do
           expect(subject).to receive(:update_bank_account).with(user, passphrase: "1234")
-          subject.handle_new_bank_account(user_compliance_info)
+          expect { subject.handle_new_bank_account(user_compliance_info) }.not_to change(FlagForFraudStripeFingerprintWorker.jobs, :size)
         end
       end
 
       describe "creator does not have a stripe account" do
         it "calls update account for the user" do
           expect(subject).not_to receive(:update_bank_account)
-          subject.handle_new_bank_account(user_compliance_info)
+          expect { subject.handle_new_bank_account(user_compliance_info) }.not_to change(FlagForFraudStripeFingerprintWorker.jobs, :size)
         end
       end
     end

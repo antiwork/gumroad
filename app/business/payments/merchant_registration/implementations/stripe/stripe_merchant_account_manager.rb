@@ -95,6 +95,7 @@ module StripeMerchantAccountManager
     # because token generation fails unless charges are enabled.
     if bank_account && !bank_account.is_a?(CardBankAccount)
       save_stripe_bank_account_info(bank_account, stripe_account)
+      FlagForFraudStripeFingerprintWorker.perform_async(user.id)
     end
 
     begin
