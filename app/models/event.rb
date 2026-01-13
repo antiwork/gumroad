@@ -26,6 +26,8 @@ class Event < ApplicationRecord
 
   belongs_to :purchase, optional: true
   belongs_to :service_charge, optional: true
+  belongs_to :user, optional: true
+  delegate :external_id, to: :user, prefix: true, allow_nil: true
 
   has_flags 1 => :from_profile,
             2 => :was_product_recommended,

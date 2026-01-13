@@ -4,7 +4,7 @@ import { Form } from "$app/components/Admin/Form";
 import { showAlert } from "$app/components/server-components/Alert";
 
 type AdminSuspendForTosFormProps = {
-  user_id: number;
+  user_external_id: string;
   product_external_id: string;
   success_message: string;
   confirm_message: string;
@@ -14,7 +14,7 @@ type AdminSuspendForTosFormProps = {
 };
 
 export const AdminSuspendForTosForm = ({
-  user_id,
+  user_external_id,
   product_external_id,
   success_message,
   confirm_message,
@@ -29,7 +29,7 @@ export const AdminSuspendForTosForm = ({
 
   return (
     <Form
-      url={Routes.admin_user_product_tos_violation_flags_path(user_id, product_external_id)}
+      url={Routes.admin_user_product_tos_violation_flags_path(user_external_id, product_external_id)}
       method="POST"
       confirmMessage={confirm_message}
       onSuccess={onFormSuccess}

@@ -13,6 +13,7 @@ import { Thumbnail } from "$app/components/Product/Thumbnail";
 import { ProductIconCell } from "$app/components/ProductsPage/ProductIconCell";
 import { RatingStars } from "$app/components/RatingStars";
 import { ReviewForm } from "$app/components/ReviewForm";
+import { Card } from "$app/components/ui/Card";
 import { Placeholder, PlaceholderImage } from "$app/components/ui/Placeholder";
 import { Table, TableBody, TableCaption, TableCell, TableRow } from "$app/components/ui/Table";
 import { useOnChange } from "$app/components/useOnChange";
@@ -91,15 +92,16 @@ const Row = ({ review, onChange }: { review: Review; onChange: (review: Review) 
               </Button>
             </PopoverTrigger>
             <PopoverContent sideOffset={4} className="border-0 p-0 shadow-none">
-              <div className="stack">
+              <Card>
                 <ReviewForm
                   permalink={review.product.permalink}
                   purchaseId={review.purchase_id}
                   purchaseEmailDigest={review.purchase_email_digest}
                   review={review}
                   onChange={(newReview) => onChange({ ...review, ...newReview })}
+                  className="flex flex-wrap items-center justify-between gap-4 p-4"
                 />
-              </div>
+              </Card>
             </PopoverContent>
           </Popover>
         </div>

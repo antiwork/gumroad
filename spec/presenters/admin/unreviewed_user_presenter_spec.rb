@@ -18,12 +18,6 @@ describe Admin::UnreviewedUserPresenter do
       allow(user).to receive(:total_balance_cents).and_return(5000)
     end
 
-    it "returns user id" do
-      props = described_class.new(user).props
-
-      expect(props[:id]).to eq(user.id)
-    end
-
     it "returns external_id" do
       props = described_class.new(user).props
 

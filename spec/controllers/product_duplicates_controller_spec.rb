@@ -101,13 +101,8 @@ describe ProductDuplicatesController do
 
     it "successfully returns a recently duplicated product" do
       duplicated_product = ProductDuplicatorService.new(product.id).duplicate
-      duplicated_product = DashboardProductsPagePresenter.new(
-        pundit_user: SellerContext.new(user: user_with_role_for_seller, seller:),
-        memberships: [],
-        memberships_pagination: nil,
-        products: [duplicated_product],
-        products_pagination: nil
-      ).page_props[:products].first
+      presenter = DashboardProductsPagePresenter.new(pundit_user: SellerContext.new(user: user_with_role_for_seller, seller:))
+      duplicated_product = presenter.product_props(duplicated_product)
 
       get :show, params: { id: product.unique_permalink }
 

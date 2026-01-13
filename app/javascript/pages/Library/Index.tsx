@@ -22,6 +22,7 @@ import { Thumbnail } from "$app/components/Product/Thumbnail";
 import { Select } from "$app/components/Select";
 import { showAlert } from "$app/components/server-components/Alert";
 import { Alert } from "$app/components/ui/Alert";
+import { Card as UICard, CardContent } from "$app/components/ui/Card";
 import { Placeholder, PlaceholderImage } from "$app/components/ui/Placeholder";
 import { ProductCard, ProductCardFigure, ProductCardHeader, ProductCardFooter } from "$app/components/ui/ProductCard";
 import { ProductCardGrid } from "$app/components/ui/ProductCardGrid";
@@ -396,26 +397,25 @@ export default function LibraryPage() {
           )}
         >
           {shouldShowFilter ? (
-            <div
-              className="stack overflow-y-auto lg:sticky lg:inset-y-4 lg:max-h-[calc(100vh-2rem)]"
-              aria-label="Filters"
-            >
-              <header>
-                <div>
-                  {filteredResults.length
-                    ? `Showing 1-${Math.min(filteredResults.length, resultsLimit)} of ${filteredResults.length} products`
-                    : "No products found"}
-                </div>
-                {isDesktop ? null : (
-                  <button className="underline" onClick={() => setMobileFiltersExpanded(!mobileFiltersExpanded)}>
-                    Filter
-                  </button>
-                )}
-              </header>
+            <UICard className="overflow-y-auto lg:sticky lg:inset-y-4 lg:max-h-[calc(100vh-2rem)]" aria-label="Filters">
+              <CardContent asChild>
+                <header>
+                  <div className="grow">
+                    {filteredResults.length
+                      ? `Showing 1-${Math.min(filteredResults.length, resultsLimit)} of ${filteredResults.length} products`
+                      : "No products found"}
+                  </div>
+                  {isDesktop ? null : (
+                    <button className="underline" onClick={() => setMobileFiltersExpanded(!mobileFiltersExpanded)}>
+                      Filter
+                    </button>
+                  )}
+                </header>
+              </CardContent>
               {isDesktop || mobileFiltersExpanded ? (
                 <>
-                  <div>
-                    <div className="input input-wrapper product-search__wrapper">
+                  <CardContent>
+                    <div className="input input-wrapper product-search__wrapper grow">
                       <Icon name="solid-search" />
                       <input
                         className="search-products"
@@ -426,9 +426,9 @@ export default function LibraryPage() {
                         onKeyDown={handleSearchKeyDown}
                       />
                     </div>
-                  </div>
-                  <div className="sort">
-                    <fieldset>
+                  </CardContent>
+                  <CardContent className="sort">
+                    <fieldset className="grow basis-0">
                       <legend>
                         <label className="filter-header" htmlFor={sortUid}>
                           Sort by
@@ -448,10 +448,10 @@ export default function LibraryPage() {
                         <option value="purchase_date">Purchase Date</option>
                       </select>
                     </fieldset>
-                  </div>
+                  </CardContent>
                   {bundles.length > 0 ? (
-                    <div>
-                      <fieldset>
+                    <CardContent>
+                      <fieldset className="grow basis-0">
                         <legend>
                           <label htmlFor={bundlesUid}>Bundles</label>
                         </legend>
@@ -470,10 +470,10 @@ export default function LibraryPage() {
                           isClearable
                         />
                       </fieldset>
-                    </div>
+                    </CardContent>
                   ) : null}
-                  <div className="creator">
-                    <fieldset role="group">
+                  <CardContent className="creator">
+                    <fieldset role="group" className="grow basis-0">
                       <legend className="filter-header">Creator</legend>
                       <label>
                         All Creators
@@ -513,10 +513,10 @@ export default function LibraryPage() {
                         ) : null}
                       </div>
                     </fieldset>
-                  </div>
+                  </CardContent>
                   {archivedCount > 0 ? (
-                    <div className="archived">
-                      <fieldset role="group">
+                    <CardContent className="archived">
+                      <fieldset role="group" className="grow basis-0">
                         <label className="filter-archived">
                           Show archived only
                           <input
@@ -532,11 +532,11 @@ export default function LibraryPage() {
                           />
                         </label>
                       </fieldset>
-                    </div>
+                    </CardContent>
                   ) : null}
                 </>
               ) : null}
-            </div>
+            </UICard>
           ) : null}
           <ProductCardGrid>
             {filteredResults.slice(0, resultsLimit).map((result) => (
