@@ -70,6 +70,7 @@ import { PublicFileEmbed } from "$app/components/TiptapExtensions/PublicFileEmbe
 import { ReviewCard } from "$app/components/TiptapExtensions/ReviewCard";
 import { UpsellCard } from "$app/components/TiptapExtensions/UpsellCard";
 import { Alert } from "$app/components/ui/Alert";
+import { Card, CardContent } from "$app/components/ui/Card";
 import { useAddThirdPartyAnalytics } from "$app/components/useAddThirdPartyAnalytics";
 import { useOnChange } from "$app/components/useOnChange";
 import { useOriginalLocation } from "$app/components/useOriginalLocation";
@@ -387,7 +388,7 @@ export const Product = ({
           ) : null}
         </section>
         {purchase !== null ? (
-          <ExistingPurchaseStack
+          <ExistingPurchaseCard
             purchase={purchase}
             permalink={product.permalink}
             isPreorder={product.preorder !== null}
@@ -598,15 +599,19 @@ export const Product = ({
             </Alert>
           ) : null}
           {product.summary || product.attributes.length > 0 ? (
-            <div className="stack">
-              {product.summary ? <p>{product.summary}</p> : null}
+            <Card>
+              {product.summary ? (
+                <CardContent asChild>
+                  <p>{product.summary}</p>
+                </CardContent>
+              ) : null}
               {product.attributes.map(({ name, value }, idx) => (
-                <div key={idx}>
-                  <h5>{name}</h5>
+                <CardContent key={idx}>
+                  <h5 className="grow font-bold">{name}</h5>
                   <div>{value}</div>
-                </div>
+                </CardContent>
               ))}
-            </div>
+            </Card>
           ) : null}
           <ShareSection product={product} selection={selection} wishlists={wishlists} />
           {product.refund_policy ? (
@@ -633,7 +638,7 @@ const Covers = ({ covers, mainCoverId }: { covers: AssetPreview[]; mainCoverId: 
   );
 };
 
-const ExistingPurchaseStack = ({
+const ExistingPurchaseCard = ({
   permalink,
   isPreorder,
   isBundle,
@@ -664,14 +669,14 @@ const ExistingPurchaseStack = ({
 
   return (
     <section className="border-t border-border p-6">
-      <div className="stack">
+      <Card>
         {purchase.membership ? (
           <>
-            <div>
-              <h5>{purchase.membership.tier_name}</h5>
+            <CardContent>
+              <h5 className="grow font-bold">{purchase.membership.tier_name}</h5>
               {purchase.total_price_including_tax_and_shipping}
-            </div>
-            <div>
+            </CardContent>
+            <CardContent>
               <NavigationButton
                 href={purchase.membership.manage_url}
                 target="_blank"
@@ -681,25 +686,28 @@ const ExistingPurchaseStack = ({
                     permalink,
                   }).catch(assertResponseError)
                 }
+                className="grow basis-0"
               >
                 {purchase.subscription_has_lapsed ? "Restart membership" : "Manage membership"}
               </NavigationButton>
               {viewContentButton}
-            </div>
+            </CardContent>
           </>
         ) : (
-          <li>
-            <h3>
-              {isBundle
-                ? purchase.is_gift_receiver_purchase
-                  ? "You've received this bundle as a gift"
-                  : "You've purchased this bundle"
-                : purchase.is_gift_receiver_purchase
-                  ? "You've received this product as a gift"
-                  : "You've purchased this product"}
-            </h3>
-            {viewContentButton}
-          </li>
+          <CardContent asChild>
+            <li>
+              <h3 className="grow">
+                {isBundle
+                  ? purchase.is_gift_receiver_purchase
+                    ? "You've received this bundle as a gift"
+                    : "You've purchased this bundle"
+                  : purchase.is_gift_receiver_purchase
+                    ? "You've received this product as a gift"
+                    : "You've purchased this product"}
+              </h3>
+              {viewContentButton}
+            </li>
+          </CardContent>
         )}
         {!isPreorder && !isBundle && allowRating ? (
           <ReviewForm
@@ -707,9 +715,10 @@ const ExistingPurchaseStack = ({
             purchaseId={purchase.id}
             review={purchase.review}
             purchaseEmailDigest={purchase.email_digest}
+            className="flex flex-wrap items-center justify-between gap-4 p-4"
           />
         ) : null}
-      </div>
+      </Card>
     </section>
   );
 };

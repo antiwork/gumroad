@@ -23,7 +23,7 @@ export type ActiveIntegration = {
 };
 
 export type ProductUser = {
-  id: number;
+  external_id: string;
   name: string | null;
   suspended: boolean;
   flagged_for_tos_violation: boolean;
@@ -79,7 +79,7 @@ const AdminUsersProductsProduct = ({ product, isAffiliateUser = false }: AdminUs
       <AdminProductPurchases
         productExternalId={product.external_id}
         isAffiliateUser={isAffiliateUser}
-        userId={product.user.id}
+        userExternalId={product.user.external_id}
       />
       <AdminProductComments product={product} />
       <AdminProductFooter product={product} />

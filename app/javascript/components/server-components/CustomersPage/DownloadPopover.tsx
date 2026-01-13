@@ -28,7 +28,7 @@ export const DownloadPopover = ({ authenticityToken }: Props) => {
       <form
         id="customer-csv-download-form"
         className="js-download-box customer-popover--export grid gap-3"
-        action={Routes.export_purchases_path({ format: "csv" })}
+        action={Routes.export_purchases_path()}
         acceptCharset="UTF-8"
         method="post"
       >

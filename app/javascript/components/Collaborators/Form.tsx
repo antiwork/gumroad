@@ -1,150 +1,111 @@
+import { useForm } from "@inertiajs/react";
 import cx from "classnames";
 import * as React from "react";
-import { Link, useNavigation, useNavigate, useLoaderData } from "react-router-dom";
-import { cast } from "ts-safe-cast";
 
-import {
-  addCollaborator,
-  updateCollaborator,
-  CollaboratorFormProduct,
-  CollaboratorFormData,
-} from "$app/data/collaborators";
+import type { CollaboratorFormProduct, EditPageProps, NewPageProps } from "$app/data/collaborators";
 import { isValidEmail } from "$app/utils/email";
-import { asyncVoid } from "$app/utils/promise";
-import { assertResponseError } from "$app/utils/request";
 
 import { Button } from "$app/components/Button";
 import { Layout } from "$app/components/Collaborators/Layout";
 import { Icon } from "$app/components/Icons";
 import { Modal } from "$app/components/Modal";
+import { NavigationButtonInertia } from "$app/components/NavigationButton";
 import { NumberInput } from "$app/components/NumberInput";
 import { showAlert } from "$app/components/server-components/Alert";
 import { Pill } from "$app/components/ui/Pill";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "$app/components/ui/Table";
 import { WithTooltip } from "$app/components/WithTooltip";
 
-const DEFAULT_PERCENT_COMMISSION = 50;
-const MIN_PERCENT_COMMISSION = 1;
-const MAX_PERCENT_COMMISSION = 50;
-const MAX_PRODUCTS_WITH_AFFILIATES_TO_SHOW = 10;
+const WITH_CONFIRMED_ACKNOWLEDGEMENT = "withConfirmedAcknowledgement";
 
-const validCommission = (percentCommission: number | null) =>
-  percentCommission !== null &&
-  percentCommission >= MIN_PERCENT_COMMISSION &&
-  percentCommission <= MAX_PERCENT_COMMISSION;
+const validCommission = (
+  percentCommission: number | null,
+  minPercentCommission: number,
+  maxPercentCommission: number,
+) =>
+  percentCommission !== null && percentCommission >= minPercentCommission && percentCommission <= maxPercentCommission;
 
-type CollaboratorProduct = CollaboratorFormProduct & {
-  has_error: boolean;
-};
-
-const CollaboratorForm = () => {
-  const navigate = useNavigate();
-  const navigation = useNavigation();
-
+const CollaboratorForm = ({
+  form_data: formData,
+  collaborators_disabled_reason: collaboratorsDisabledReason,
+  page_metadata: pageMetadata,
+}: NewPageProps | EditPageProps) => {
   const [isConfirmationModalOpen, setIsConfirmationModalOpen] = React.useState(false);
-  const [isConfirmed, setIsConfirmed] = React.useState(false);
-  const [isSaving, setIsSaving] = React.useState(false);
-  const formData = cast<CollaboratorFormData>(useLoaderData());
+  const form = useForm(formData);
   const emailInputRef = React.useRef<HTMLInputElement>(null);
-  const isEditing = "id" in formData;
+  const isEditPage = "id" in formData;
 
-  const hasEnabledUnpublishedOrIneligibleProducts =
-    isEditing &&
-    formData.products.some((product) => product.enabled && (!product.published || product.has_another_collaborator));
-
-  const [showIneligibleProducts, setShowIneligibleProducts] = React.useState(hasEnabledUnpublishedOrIneligibleProducts);
-  const [collaboratorEmail, setCollaboratorEmail] = React.useState<{ value: string; error?: string }>({
-    value: "",
-  });
-
-  const [applyToAllProducts, setApplyToAllProducts] = React.useState(isEditing ? formData.apply_to_all_products : true);
-  const [defaultPercentCommission, setDefaultPercentCommission] = React.useState<{
-    value: number | null;
-    hasError: boolean;
-  }>({
-    value: isEditing ? formData.percent_commission || DEFAULT_PERCENT_COMMISSION : DEFAULT_PERCENT_COMMISSION,
-    hasError: false,
-  });
-  const [dontShowAsCoCreator, setDontShowAsCoCreator] = React.useState(
-    isEditing ? formData.dont_show_as_co_creator : false,
+  const [showUnpublishedOrIneligibleProducts, setShowUnpublishedOrIneligibleProducts] = React.useState(
+    () =>
+      isEditPage &&
+      formData.products.some((product) => product.enabled && (!product.published || product.has_another_collaborator)),
   );
 
   const shouldEnableProduct = (product: CollaboratorFormProduct) => {
     if (product.has_another_collaborator) return false;
-    return showIneligibleProducts || product.published;
+    return showUnpublishedOrIneligibleProducts || product.published;
   };
 
   const shouldShowProduct = (product: CollaboratorFormProduct) => {
-    if (showIneligibleProducts) return true;
+    if (showUnpublishedOrIneligibleProducts) return true;
     return !product.has_another_collaborator && product.published;
   };
 
-  const [products, setProducts] = React.useState<CollaboratorProduct[]>(() =>
-    formData.products.map((product) =>
-      isEditing
-        ? {
-            ...product,
-            percent_commission: product.percent_commission || defaultPercentCommission.value,
-            dont_show_as_co_creator: applyToAllProducts ? dontShowAsCoCreator : product.dont_show_as_co_creator,
-            has_error: false,
-          }
-        : {
-            ...product,
-            enabled: shouldEnableProduct(product),
-            percent_commission: defaultPercentCommission.value,
-            has_error: false,
-          },
-    ),
-  );
-
-  const productsWithAffiliates = products.filter((product) => product.enabled && product.has_affiliates);
+  const productsWithAffiliates = form.data.products.filter((product) => product.enabled && product.has_affiliates);
   const listedProductsWithAffiliatesCount =
-    productsWithAffiliates.length <= MAX_PRODUCTS_WITH_AFFILIATES_TO_SHOW + 1
+    productsWithAffiliates.length <= pageMetadata.max_products_with_affiliates_to_show + 1
       ? productsWithAffiliates.length
-      : MAX_PRODUCTS_WITH_AFFILIATES_TO_SHOW;
+      : pageMetadata.max_products_with_affiliates_to_show;
 
-  const handleProductChange = (id: string, attrs: Partial<CollaboratorProduct>) => {
-    setProducts((prevProducts) =>
-      prevProducts.map((item) => (item.id === id ? { ...item, ...attrs, has_error: false } : item)),
-    );
-  };
+  const submitForm = (acknowledgement?: typeof WITH_CONFIRMED_ACKNOWLEDGEMENT) => {
+    let commissionErrorMessage: string | null = null;
+    if (
+      form.data.apply_to_all_products &&
+      !validCommission(
+        form.data.percent_commission,
+        pageMetadata.min_percent_commission,
+        pageMetadata.max_percent_commission,
+      )
+    ) {
+      commissionErrorMessage = `Collaborator cut must be ${pageMetadata.max_percent_commission}% or less`;
+      form.setError("percent_commission", commissionErrorMessage);
+    } else form.clearErrors("percent_commission");
 
-  const handleDefaultCommissionChange = (percent_commission: number | null) => {
-    setDefaultPercentCommission({ value: percent_commission, hasError: false });
-    setProducts((prevProducts) => prevProducts.map((item) => ({ ...item, percent_commission, has_error: false })));
-  };
-
-  const handleSubmit = asyncVoid(async () => {
-    setProducts((prevProducts) =>
-      prevProducts.map((product) => ({
-        ...product,
-        has_error: product.enabled && !applyToAllProducts && !validCommission(product.percent_commission),
-      })),
-    );
-    setDefaultPercentCommission({
-      ...defaultPercentCommission,
-      hasError: applyToAllProducts && !validCommission(defaultPercentCommission.value),
+    form.data.products.forEach((product, index) => {
+      if (
+        product.enabled &&
+        !form.data.apply_to_all_products &&
+        !validCommission(
+          product.percent_commission,
+          pageMetadata.min_percent_commission,
+          pageMetadata.max_percent_commission,
+        )
+      ) {
+        commissionErrorMessage = `Collaborator cut must be ${pageMetadata.max_percent_commission}% or less`;
+        form.setError(`products.${index}.percent_commission`, commissionErrorMessage);
+      } else form.clearErrors(`products.${index}.percent_commission`);
     });
 
-    if (!isEditing) {
+    if (!isEditPage) {
       const emailError =
-        collaboratorEmail.value.length === 0
+        form.data.email?.length === 0
           ? "Collaborator email must be provided"
-          : !isValidEmail(collaboratorEmail.value)
+          : !isValidEmail(form.data.email ?? "")
             ? "Please enter a valid email"
             : null;
-      setCollaboratorEmail(
-        emailError ? { value: collaboratorEmail.value, error: emailError } : { value: collaboratorEmail.value },
-      );
       if (emailError) {
+        form.setError("email", emailError);
         showAlert(emailError, "error");
         emailInputRef.current?.focus();
         return;
       }
+
+      form.clearErrors("email");
     }
 
-    const enabledProducts = products.flatMap(({ id, enabled, percent_commission, dont_show_as_co_creator }) =>
-      enabled ? { id, percent_commission, dont_show_as_co_creator } : [],
+    const enabledProducts = form.data.products.flatMap(
+      ({ id, enabled, percent_commission, dont_show_as_co_creator }) =>
+        enabled ? { id, percent_commission, dont_show_as_co_creator } : [],
     );
 
     if (enabledProducts.length === 0) {
@@ -152,65 +113,56 @@ const CollaboratorForm = () => {
       return;
     }
 
-    if (
-      defaultPercentCommission.hasError ||
-      enabledProducts.some((product) => !validCommission(product.percent_commission))
-    ) {
-      showAlert("Collaborator cut must be 50% or less", "error");
+    if (commissionErrorMessage) {
+      showAlert(commissionErrorMessage, "error");
       return;
     }
 
-    if (products.some((product) => product.enabled && product.has_affiliates) && !isConfirmed) {
+    if (
+      acknowledgement !== WITH_CONFIRMED_ACKNOWLEDGEMENT &&
+      form.data.products.some((product) => product.enabled && product.has_affiliates) &&
+      !isConfirmationModalOpen
+    ) {
       setIsConfirmationModalOpen(true);
       return;
     }
-    setIsSaving(true);
-    const data = {
-      apply_to_all_products: applyToAllProducts,
-      percent_commission: defaultPercentCommission.value,
-      products: enabledProducts,
-      dont_show_as_co_creator: dontShowAsCoCreator,
-    };
-    try {
-      await ("id" in formData
-        ? updateCollaborator({
-            ...data,
-            id: formData.id,
-          })
-        : addCollaborator({
-            ...data,
-            email: collaboratorEmail.value,
-          }));
-      showAlert("Changes saved!", "success");
-      navigate("/collaborators");
-    } catch (e) {
-      assertResponseError(e);
-      showAlert(e.message, "error");
-    } finally {
-      setIsSaving(false);
+
+    form.clearErrors();
+
+    form.transform((data) => ({
+      collaborator: {
+        ...data,
+        products: enabledProducts,
+      },
+    }));
+
+    if (isEditPage) {
+      form.patch(Routes.collaborator_path(formData.id), {
+        only: ["errors", "flash"],
+      });
+    } else {
+      form.post(Routes.collaborators_path(), {
+        only: ["errors", "flash"],
+      });
     }
-  });
-  React.useEffect(() => {
-    if (!isConfirmed) return;
-    handleSubmit();
-  }, [isConfirmed]);
+  };
 
   return (
     <Layout
-      title={isEditing ? formData.name : "New collaborator"}
+      title={pageMetadata.title}
       headerActions={
         <>
-          <Link to="/collaborators" className="button" inert={navigation.state !== "idle"}>
+          <NavigationButtonInertia disabled={form.processing} href={Routes.collaborators_path()}>
             <Icon name="x-square" />
             Cancel
-          </Link>
-          <WithTooltip position="bottom" tip={formData.collaborators_disabled_reason}>
+          </NavigationButtonInertia>
+          <WithTooltip position="bottom" tip={collaboratorsDisabledReason}>
             <Button
               color="accent"
-              onClick={handleSubmit}
-              disabled={formData.collaborators_disabled_reason !== null || isSaving}
+              onClick={() => submitForm()}
+              disabled={collaboratorsDisabledReason !== null || form.processing}
             >
-              {isSaving ? "Saving..." : isEditing ? "Save changes" : "Add collaborator"}
+              {form.processing ? "Saving..." : isEditPage ? "Save changes" : "Add collaborator"}
             </Button>
           </WithTooltip>
         </>
@@ -219,14 +171,14 @@ const CollaboratorForm = () => {
       <form>
         <section className="p-8!">
           <header>
-            {isEditing ? <h2>Products</h2> : null}
+            {isEditPage ? <h2>Products</h2> : null}
             <div>Collaborators will receive a cut from the revenue generated by the selected products.</div>
             <a href="/help/article/341-collaborations" target="_blank" rel="noreferrer">
               Learn more
             </a>
           </header>
-          {!isEditing ? (
-            <fieldset className={cx({ danger: collaboratorEmail.error })}>
+          {!isEditPage ? (
+            <fieldset className={cx({ danger: form.errors.email })}>
               <legend>
                 <label htmlFor="email">Email</label>
               </legend>
@@ -236,9 +188,12 @@ const CollaboratorForm = () => {
                   ref={emailInputRef}
                   id="email"
                   type="email"
-                  value={collaboratorEmail.value}
+                  value={form.data.email}
                   placeholder="Collaborator's Gumroad account email"
-                  onChange={(e) => setCollaboratorEmail({ value: e.target.value.trim() })}
+                  onChange={(evt) => {
+                    form.setData("email", evt.target.value.trim());
+                    form.clearErrors("email");
+                  }}
                 />
               </div>
             </fieldset>
@@ -260,13 +215,13 @@ const CollaboratorForm = () => {
                       id="all-products-cut"
                       type="checkbox"
                       role="switch"
-                      checked={applyToAllProducts}
+                      checked={form.data.apply_to_all_products}
                       onChange={(evt) => {
                         const enabled = evt.target.checked;
-                        setApplyToAllProducts(enabled);
-                        setProducts((prevProducts) =>
-                          prevProducts.map((item) => (shouldEnableProduct(item) ? { ...item, enabled } : item)),
-                        );
+                        form.setData("apply_to_all_products", enabled);
+                        form.data.products.forEach((item, index) => {
+                          if (shouldEnableProduct(item)) form.setData(`products.${index}.enabled`, enabled);
+                        });
                       }}
                       aria-label="All products"
                     />
@@ -275,14 +230,24 @@ const CollaboratorForm = () => {
                     <label htmlFor="all-products-cut">All products</label>
                   </TableCell>
                   <TableCell>
-                    <fieldset className={cx({ danger: defaultPercentCommission.hasError })}>
-                      <NumberInput value={defaultPercentCommission.value} onChange={handleDefaultCommissionChange}>
+                    <fieldset className={cx({ danger: form.errors.percent_commission })}>
+                      <NumberInput
+                        value={form.data.percent_commission}
+                        onChange={(percentCommissionValue) => {
+                          form.setData("percent_commission", percentCommissionValue);
+                          form.clearErrors("percent_commission");
+                          form.data.products.forEach((_, index) => {
+                            form.setData(`products.${index}.percent_commission`, percentCommissionValue);
+                            form.clearErrors(`products.${index}.percent_commission`);
+                          });
+                        }}
+                      >
                         {(inputProps) => (
-                          <div className={cx("input", { disabled: !applyToAllProducts })}>
+                          <div className={cx("input", { disabled: !form.data.apply_to_all_products })}>
                             <input
                               type="text"
-                              disabled={!applyToAllProducts}
-                              placeholder={`${defaultPercentCommission.value || DEFAULT_PERCENT_COMMISSION}`}
+                              disabled={!form.data.apply_to_all_products}
+                              placeholder={`${form.data.percent_commission || pageMetadata.default_percent_commission}`}
                               aria-label="Percentage"
                               {...inputProps}
                             />
@@ -296,22 +261,23 @@ const CollaboratorForm = () => {
                     <label>
                       <input
                         type="checkbox"
-                        checked={!dontShowAsCoCreator}
+                        checked={!form.data.dont_show_as_co_creator}
                         onChange={(evt) => {
                           const value = !evt.target.checked;
-                          setDontShowAsCoCreator(value);
-                          setProducts((prevProducts) =>
-                            prevProducts.map((item) => ({ ...item, dont_show_as_co_creator: value, has_error: false })),
-                          );
+                          form.setData("dont_show_as_co_creator", value);
+                          form.data.products.forEach((_, index) => {
+                            form.setData(`products.${index}.dont_show_as_co_creator`, value);
+                            form.clearErrors(`products.${index}.percent_commission`);
+                          });
                         }}
-                        disabled={!applyToAllProducts}
+                        disabled={!form.data.apply_to_all_products}
                       />
                       Show as co-creator
                     </label>
                   </TableCell>
                 </TableRow>
-                {products.map((product) => {
-                  const disabled = applyToAllProducts || !product.enabled;
+                {form.data.products.map((product, index) => {
+                  const disabled = form.data.apply_to_all_products || !product.enabled;
 
                   return shouldShowProduct(product) ? (
                     <TableRow key={product.id}>
@@ -322,7 +288,10 @@ const CollaboratorForm = () => {
                           role="switch"
                           disabled={product.has_another_collaborator}
                           checked={product.enabled}
-                          onChange={(evt) => handleProductChange(product.id, { enabled: evt.target.checked })}
+                          onChange={(evt) => {
+                            form.setData(`products.${index}.enabled`, evt.target.checked);
+                            form.clearErrors(`products.${index}.enabled`);
+                          }}
                           aria-label="Enable all products"
                         />
                       </TableCell>
@@ -337,17 +306,20 @@ const CollaboratorForm = () => {
                         ) : null}
                       </TableCell>
                       <TableCell>
-                        <fieldset className={cx({ danger: product.has_error })}>
+                        <fieldset className={cx({ danger: form.errors[`products.${index}.percent_commission`] })}>
                           <NumberInput
                             value={product.percent_commission}
-                            onChange={(value) => handleProductChange(product.id, { percent_commission: value })}
+                            onChange={(value) => {
+                              form.setData(`products.${index}.percent_commission`, value);
+                              form.clearErrors(`products.${index}.percent_commission`);
+                            }}
                           >
                             {(inputProps) => (
                               <div className={cx("input", { disabled })}>
                                 <input
                                   disabled={disabled}
                                   type="text"
-                                  placeholder={`${defaultPercentCommission.value || DEFAULT_PERCENT_COMMISSION}`}
+                                  placeholder={`${product.percent_commission || pageMetadata.default_percent_commission}`}
                                   aria-label="Percentage"
                                   {...inputProps}
                                 />
@@ -362,9 +334,10 @@ const CollaboratorForm = () => {
                           <input
                             type="checkbox"
                             checked={!product.dont_show_as_co_creator}
-                            onChange={(evt) =>
-                              handleProductChange(product.id, { dont_show_as_co_creator: !evt.target.checked })
-                            }
+                            onChange={(evt) => {
+                              form.setData(`products.${index}.dont_show_as_co_creator`, !evt.target.checked);
+                              form.clearErrors(`products.${index}.percent_commission`);
+                            }}
                             disabled={disabled}
                           />
                           Show as co-creator
@@ -379,16 +352,16 @@ const CollaboratorForm = () => {
           <label>
             <input
               type="checkbox"
-              checked={showIneligibleProducts}
+              checked={showUnpublishedOrIneligibleProducts}
               onChange={(evt) => {
                 const enabled = evt.target.checked;
-                setShowIneligibleProducts(enabled);
-                if (applyToAllProducts) {
-                  setProducts((prevProducts) =>
-                    prevProducts.map((item) =>
-                      !item.has_another_collaborator && enabled && !item.published ? { ...item, enabled } : item,
-                    ),
-                  );
+                setShowUnpublishedOrIneligibleProducts(enabled);
+                if (form.data.apply_to_all_products) {
+                  form.data.products.forEach((item, index) => {
+                    if (!item.has_another_collaborator && enabled && !item.published) {
+                      form.setData(`products.${index}.enabled`, enabled);
+                    }
+                  });
                 }
               }}
             />
@@ -420,7 +393,7 @@ const CollaboratorForm = () => {
               className="grow"
               onClick={() => {
                 setIsConfirmationModalOpen(false);
-                setIsConfirmed(true);
+                submitForm(WITH_CONFIRMED_ACKNOWLEDGEMENT);
               }}
             >
               Yes, continue

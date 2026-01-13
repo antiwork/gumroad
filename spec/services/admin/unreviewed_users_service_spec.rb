@@ -118,7 +118,7 @@ describe Admin::UnreviewedUsersService do
       result = described_class.cache_users_data!
 
       expect(result[:users].size).to eq(1)
-      expect(result[:users].first[:id]).to eq(user.id)
+      expect(result[:users].first[:external_id]).to eq(user.external_id)
       expect(result[:total_count]).to eq(1)
       expect(result[:cutoff_date]).to eq("2024-01-01")
       expect(result[:cached_at]).to be_present
@@ -131,7 +131,7 @@ describe Admin::UnreviewedUsersService do
       described_class.cache_users_data!
 
       cached = described_class.cached_users_data
-      expect(cached[:users].first[:id]).to eq(user.id)
+      expect(cached[:users].first[:external_id]).to eq(user.external_id)
     end
 
     it "limits cached users to MAX_CACHED_USERS but total_count reflects true total" do

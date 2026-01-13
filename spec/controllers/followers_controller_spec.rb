@@ -25,27 +25,62 @@ describe FollowersController, inertia: true do
         expect(inertia.component).to eq("Followers/Index")
         expect(inertia.props).to match(hash_including(
           followers: followers.map { _1.as_json(pundit_user:) },
-          per_page: FollowersController::FOLLOWERS_PER_PAGE,
-          total: 21,
+          total_count: 21,
+          page: 1,
+          has_more: true,
+          email: "",
         ))
+      end
+
+      it "supports search via email query parameter" do
+        create(:follower, user: seller, email: "test@example.com", confirmed_at: Time.current)
+        create(:follower, user: seller, email: "other@example.com", confirmed_at: Time.current)
+        get :index, params: { email: "test" }
+        expect(response).to be_successful
+        expect(inertia.component).to eq("Followers/Index")
+        expect(inertia.props).to match(hash_including(
+          total_count: 2,
+          email: "test",
+        ))
+        expect(inertia.props[:followers].length).to eq(1)
+        expect(inertia.props[:followers].first).to match(hash_including(email: "test@example.com"))
+      end
+
+      it "supports pagination via page query parameter" do
+        create_list(:follower, 25, user: seller) do |follower|
+          follower.update!(confirmed_at: Time.current)
+        end
+        get :index, params: { page: 2 }
+        expect(response).to be_successful
+        expect(inertia.props[:page]).to eq(2)
+        expect(inertia.props[:followers].length).to eq(5)
+        expect(inertia.props[:has_more]).to be(false)
+      end
+
+      it "combines search and pagination" do
+        create_list(:follower, 25, user: seller) do |follower, index|
+          follower.update!(email: "test#{index}@example.com", confirmed_at: Time.current)
+        end
+        get :index, params: { email: "test", page: 2 }
+        expect(response).to be_successful
+        expect(inertia.props[:email]).to eq("test")
+        expect(inertia.props[:page]).to eq(2)
+        expect(inertia.props[:total_count]).to eq(25)
       end
     end
 
-    describe "GET search" do
-      context "logged in" do
-        it "returns followers with matching emails" do
-          follower = create(:active_follower, user: seller)
-          get :search, params: { email: follower.email }
-          expect(response.parsed_body["paged_followers"][0]["email"]).to eq(follower.email)
-        end
+    describe "DELETE destroy" do
+      let(:follower) { create(:active_follower, user: seller) }
+
+      it "marks follower as deleted and redirects with notice" do
+        delete :destroy, params: { id: follower.external_id }
+        expect(response).to redirect_to(followers_path)
+        expect(flash[:notice]).to eq("Follower removed!")
+        expect(follower.reload.deleted?).to be(true)
       end
 
-      context "logged out" do
-        it "redirects user to login" do
-          sign_out(seller)
-          get :search, params: { email: "sample" }
-          expect(response).to redirect_to(login_path(next: "/followers/search?email=sample"))
-        end
+      it "returns 404 when follower is invalid" do
+        expect { delete :destroy, params: { id: "invalid follower" } }.to raise_error(ActionController::RoutingError)
       end
     end
   end
@@ -134,23 +169,23 @@ describe FollowersController, inertia: true do
       end
     end
 
-    describe "POST confirm" do
+    describe "GET confirm" do
       let(:unconfirmed_follower) { create(:follower, user: seller) }
 
       it "confirms the follow" do
-        post :confirm, params: { id: unconfirmed_follower.external_id }
+        get :confirm, params: { id: unconfirmed_follower.external_id }
         expect(response).to redirect_to(seller.profile_url)
         expect(unconfirmed_follower.reload.confirmed_at).to_not eq(nil)
       end
 
       it "returns 404 when follower is invalid" do
-        expect { post :confirm, params: { id: "invalid follower" } }.to raise_error(ActionController::RoutingError)
+        expect { get :confirm, params: { id: "invalid follower" } }.to raise_error(ActionController::RoutingError)
       end
 
       it "returns 404 when seller is inactive" do
         seller.deactivate!
         expect do
-          post :confirm, params: { id: unconfirmed_follower.external_id }
+          get :confirm, params: { id: unconfirmed_follower.external_id }
         end.to raise_error(ActionController::RoutingError)
       end
     end
@@ -189,16 +224,16 @@ describe FollowersController, inertia: true do
       end
     end
 
-    describe "POST cancel" do
+    describe "GET cancel" do
       it "cancels the follow" do
         follower = create(:follower)
-        expect { post :cancel, params: { id: follower.external_id } }.to change {
+        expect { get :cancel, params: { id: follower.external_id } }.to change {
           follower.reload.deleted?
         }.from(false).to(true)
       end
 
       it "returns 404 when follower is invalid" do
-        expect { post :cancel, params: { id: "invalid follower" } }.to raise_error(ActionController::RoutingError)
+        expect { get :cancel, params: { id: "invalid follower" } }.to raise_error(ActionController::RoutingError)
       end
     end
   end
