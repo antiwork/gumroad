@@ -18,7 +18,7 @@ describe Products::CollabsPolicy do
     create(:team_membership, user: support_for_seller, seller:, role: TeamMembership::ROLE_SUPPORT)
   end
 
-  permissions :index?, :products_paged?, :memberships_paged? do
+  permissions :index? do
     it "grants access to owner" do
       seller_context = SellerContext.new(user: seller, seller:)
       expect(subject).to permit(seller_context, :collabs)

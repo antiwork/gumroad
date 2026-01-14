@@ -657,12 +657,7 @@ Rails.application.routes.draw do
 
     namespace :products do
       resources :affiliated, only: [:index]
-      resources :collabs, only: [:index] do
-        collection do
-          get :products_paged
-          get :memberships_paged
-        end
-      end
+      resources :collabs, only: [:index]
       resources :archived, only: %i[index create destroy]
     end
 
