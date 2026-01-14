@@ -25,7 +25,7 @@ describe Admin::ProductPresenter::Card do
           price_formatted: product.price_formatted,
           created_at: product.created_at,
           user: {
-            id: product.user_id,
+            external_id: product.user.external_id,
             name: product.user.name,
             suspended: false,
             flagged_for_tos_violation: false
@@ -173,7 +173,7 @@ describe Admin::ProductPresenter::Card do
     describe "user object" do
       it "includes all required user fields" do
         expect(props[:user]).to include(
-          :id,
+          :external_id,
           :name,
           :suspended,
           :flagged_for_tos_violation
@@ -181,7 +181,7 @@ describe Admin::ProductPresenter::Card do
       end
 
       it "returns correct user values" do
-        expect(props[:user][:id]).to eq(product.user_id)
+        expect(props[:user][:external_id]).to eq(product.user.external_id)
         expect(props[:user][:name]).to eq(product.user.name)
         expect(props[:user][:suspended]).to eq(false)
         expect(props[:user][:flagged_for_tos_violation]).to eq(false)

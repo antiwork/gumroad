@@ -3,8 +3,6 @@
 class Products::ArchivedController < Sellers::BaseController
   include ProductsHelper
 
-  PER_PAGE = 50
-
   before_action :fetch_product_and_enforce_ownership, only: %i[create destroy]
 
   layout "inertia", only: [:index]
@@ -12,59 +10,26 @@ class Products::ArchivedController < Sellers::BaseController
   def index
     authorize [:products, :archived, Link]
 
-    memberships_pagination, memberships = paginated_memberships(page: 1)
-    products_pagination, products = paginated_products(page: 1)
-
-    return redirect_to products_url if memberships.none? && products.none?
-
-    props = DashboardProductsPagePresenter.new(
-      pundit_user:,
-      memberships:,
-      memberships_pagination:,
-      products:,
-      products_pagination:
-    ).page_props
+    return redirect_to products_url if archived_products_page_presenter.empty?
 
     @title = "Archived products"
 
-    render inertia: "Products/Archived/Index", props:
-  end
-
-  def products_paged
-    authorize [:products, :archived, Link], :index?
-
-    products_pagination, products = paginated_products(page: params[:page].to_i, query: params[:query])
-
-    react_products_page_props = DashboardProductsPagePresenter.new(
-      pundit_user:,
-      products:,
-      products_pagination:,
-      memberships: nil,
-      memberships_pagination: nil
-    ).products_table_props
-
-    render json: {
-      pagination: react_products_page_props[:products_pagination],
-      entries: react_products_page_props[:products]
-    }
-  end
-
-  def memberships_paged
-    authorize [:products, :archived, Link], :index?
-
-    memberships_pagination, memberships = paginated_memberships(page: paged_params[:page].to_i, query: params[:query])
-
-    react_products_page_props = DashboardProductsPagePresenter.new(
-      pundit_user:,
-      products: nil,
-      products_pagination: nil,
-      memberships:,
-      memberships_pagination:
-    ).memberships_table_props
-
-    render json: {
-      pagination: react_products_page_props[:memberships_pagination],
-      entries: react_products_page_props[:memberships]
+    render inertia: "Products/Archived/Index", props: {
+      can_create_product: -> { archived_products_page_presenter.page_props[:can_create_product] },
+      products_data: -> {
+        {
+          products: archived_products_page_presenter.products_table_props[:products],
+          pagination: archived_products_page_presenter.products_table_props[:products_pagination],
+          sort: archived_products_page_presenter.products_sort,
+        }
+      },
+      memberships_data: -> {
+        {
+          memberships: archived_products_page_presenter.memberships_table_props[:memberships],
+          pagination: archived_products_page_presenter.memberships_table_props[:memberships_pagination],
+          sort: archived_products_page_presenter.memberships_sort,
+        }
+      },
     }
   end
 
@@ -87,21 +52,40 @@ class Products::ArchivedController < Sellers::BaseController
   end
 
   private
-    def paged_params
-      params.permit(:page, sort: [:key, :direction])
+    def archived_products_page_presenter
+      @archived_products_page_presenter ||= DashboardProductsPagePresenter.new(
+        pundit_user:,
+        archived: true,
+        query: index_params[:query],
+        products_page: index_params[:products_page],
+        products_sort: index_params[:products_sort],
+        memberships_page: index_params[:memberships_page],
+        memberships_sort: index_params[:memberships_sort]
+      )
     end
 
-    def paginated_memberships(page:, query: nil)
-      memberships = current_seller.products.membership.visible.archived
-      memberships = memberships.where("name like ?", "%#{query}%") if query.present?
+    def index_params
+      @index_params ||= begin
+        permitted = params.permit(
+          :query, :products_page, :memberships_page,
+          :products_sort_key, :products_sort_direction,
+          :memberships_sort_key, :memberships_sort_direction
+        )
 
-      sort_and_paginate_products(**paged_params[:sort].to_h.symbolize_keys, page:, collection: memberships, per_page: PER_PAGE, user_id: current_seller.id)
+        {
+          query: permitted[:query],
+          products_page: permitted[:products_page],
+          products_sort: extract_sort_params(:products, permitted),
+          memberships_page: permitted[:memberships_page],
+          memberships_sort: extract_sort_params(:memberships, permitted)
+        }
+      end
     end
 
-    def paginated_products(page:, query: nil)
-      products = current_seller.products.non_membership.visible.archived
-      products = products.where("name like ?", "%#{query}%") if query.present?
-
-      sort_and_paginate_products(**paged_params[:sort].to_h.symbolize_keys, page:, collection: products, per_page: PER_PAGE, user_id: current_seller.id)
+    def extract_sort_params(prefix, permitted)
+      key = permitted[:"#{prefix}_sort_key"]
+      direction = permitted[:"#{prefix}_sort_direction"]
+      return nil unless %w[name display_price_cents successful_sales_count revenue status].include?(key)
+      { key:, direction: direction == "desc" ? "desc" : "asc" }
     end
 end

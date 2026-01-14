@@ -489,8 +489,8 @@ const CartItemComponent = ({
               {item.product.bundle_products.map((bundleProduct) => (
                 <CartItem key={bundleProduct.product_id} isBundleItem>
                   <CartItemMedia className="h-20 w-20">
-                    <a href={item.product.url}>
-                      <Thumbnail url={item.product.thumbnail_url} nativeType={item.product.native_type} />
+                    <a href={bundleProduct.url}>
+                      <Thumbnail url={bundleProduct.thumbnail_url} nativeType={bundleProduct.native_type} />
                     </a>
                   </CartItemMedia>
                   <span className="sr-only">Qty: {bundleProduct.quantity || item.quantity}</span>

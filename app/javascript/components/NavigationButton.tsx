@@ -9,7 +9,23 @@ import { buttonVariants, NavigationButtonProps, useValidateClassName } from "$ap
     This component is for inertia specific navigation button,
     since the other NavigationButton is used in a lot of ssr pages  and we can't import inertia Link there
 */
-export const NavigationButtonInertia = React.forwardRef<HTMLAnchorElement, NavigationButtonProps>(
+
+type NavigationButtonInertiaProps = NavigationButtonProps & {
+  data?: Record<string, string | number | boolean | null | undefined | string[] | number[] | boolean[]>;
+  method?: "get" | "post" | "patch" | "put" | "delete";
+  only?: string[];
+  except?: string[];
+  preserveScroll?: boolean;
+  preserveState?: boolean;
+  preserveUrl?: boolean;
+  onStart?: (event: DocumentEventMap["inertia:start"]) => void;
+  onSuccess?: (event: DocumentEventMap["inertia:success"]) => void;
+  onError?: (event: DocumentEventMap["inertia:error"]) => void;
+  onProgress?: (event: DocumentEventMap["inertia:progress"]) => void;
+  onFinish?: (event: DocumentEventMap["inertia:finish"]) => void;
+};
+
+export const NavigationButtonInertia = React.forwardRef<HTMLAnchorElement, NavigationButtonInertiaProps>(
   ({ className, color, outline, small, disabled, children, onClick, style, inert, ...props }, ref) => {
     useValidateClassName(className);
 

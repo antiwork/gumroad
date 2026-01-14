@@ -151,7 +151,7 @@ export const Nav = (props: Props) => {
             text="Library"
             icon="bookmark-heart-fill"
             href={Routes.library_url(routeParams)}
-            additionalPatterns={[Routes.wishlists_url(routeParams)]}
+            additionalPatterns={[Routes.wishlists_url(routeParams), Routes.reviews_url(routeParams)]}
           />
         ) : null}
       </NavSection>
