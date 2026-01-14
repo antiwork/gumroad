@@ -5,6 +5,6 @@ class Admin::Users::BaseController < Admin::BaseController
 
   protected
     def user_param
-      params[:user_id]
+      params[:user_external_id]
     end
 end
