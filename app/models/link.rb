@@ -1162,25 +1162,6 @@ class Link < ApplicationRecord
     support_email || user.support_or_form_email
   end
 
-  def restartable_subscription_for(requested_user)
-    return nil unless is_recurring_billing?
-    return nil if requested_user.nil?
-    return nil if requested_user.id == user_id  # Seller shouldn't see restart modal
-
-    query = subscriptions
-      .not_is_test_subscription
-      .where("(subscriptions.flags & ?) = 0", Subscription.flag_mapping["flags"][:cancelled_by_admin])  # Exclude seller-cancelled subscriptions
-      .where(ended_at: nil)  # Not ended
-
-    query = query.where(user: requested_user)
-
-    # Must be deactivated OR have pending cancellation (cancelled but not yet deactivated)
-    # Note: bit operator check above already filters out admin-cancelled subscriptions
-    query.where("deactivated_at IS NOT NULL OR (cancelled_at IS NOT NULL AND deactivated_at IS NULL)")
-      .order(Arel.sql("COALESCE(deactivated_at, cancelled_at) DESC"))
-      .first
-  end
-
   protected
     def downcase_filetype
       self.filetype = filetype.downcase if filetype.present?

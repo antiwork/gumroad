@@ -30,6 +30,12 @@ class Purchase::BaseService
     def create_subscription(giftee_purchase)
       return if purchase.subscription.present?
 
+      existing_subscription = find_restartable_subscription(giftee_purchase)
+      if existing_subscription
+        restart_existing_subscription(existing_subscription, giftee_purchase)
+        return
+      end
+
       is_gift = purchase.is_gift_sender_purchase
       charge_occurrence_count =
         if purchase.is_installment_payment
@@ -65,6 +71,41 @@ class Purchase::BaseService
       subscription.payment_options << payment_option
       subscription.save!
       subscription.purchases << [purchase, giftee_purchase].compact
+    end
+
+    def find_restartable_subscription(giftee_purchase)
+      return nil if purchase.is_installment_payment
+      return nil if purchase.is_test_purchase?
+      return nil if purchase.link.deleted?
+
+      is_gift = purchase.is_gift_sender_purchase
+      user = is_gift ? giftee_purchase&.purchaser : purchase.purchaser
+      email = is_gift ? giftee_purchase&.email : purchase.email
+
+      base_scope = purchase.link.subscriptions
+        .not_is_test_subscription
+        .where.not(deactivated_at: nil)
+        .where(ended_at: nil)
+        .where("cancelled_at IS NULL OR (subscriptions.flags & ?) != 0", Subscription.flag_mapping["flags"][:cancelled_by_buyer])
+        .order(deactivated_at: :desc)
+
+      if user.present?
+        subscription = base_scope.find_by(user: user)
+        return subscription if subscription
+      end
+
+      return nil if email.blank?
+
+      base_scope.find { |s| s.email&.downcase == email.downcase }
+    end
+
+    def restart_existing_subscription(subscription, giftee_purchase)
+      is_gift = purchase.is_gift_sender_purchase
+
+      subscription.credit_card = purchase.credit_card unless is_gift
+      subscription.resubscribe!
+      subscription.purchases << [purchase, giftee_purchase].compact
+      subscription.send_restart_notifications!
     end
 
     def handle_purchase_failure

@@ -1,6 +1,5 @@
 import * as React from "react";
 
-import { RestartableSubscription } from "$app/data/subscription";
 import { assertDefined } from "$app/utils/assert";
 import { classNames } from "$app/utils/classNames";
 import { assertResponseError, request, ResponseError } from "$app/utils/request";
@@ -145,7 +144,6 @@ export const Layout = (
     product,
     purchase,
     discount_code: discountCode,
-    restartable_subscription: restartableSubscription,
     cart,
     hasHero,
     wishlists,
@@ -170,7 +168,6 @@ export const Layout = (
         ctaButtonRef={ctaButtonRef}
         configurationSelectorRef={configurationSelectorRef}
         wishlists={wishlists}
-        restartableSubscription={restartableSubscription || null}
       />
     </>
   );
@@ -199,7 +196,6 @@ export const Layout = (
         ctaButtonRef={ctaButtonRef}
         configurationSelectorRef={configurationSelectorRef}
         hasHero={!!hasHero}
-        restartableSubscription={restartableSubscription || null}
       />
       {"products" in props ? (
         <SectionEditor props={props}>{productView}</SectionEditor>
@@ -227,7 +223,6 @@ const CtaBar = ({
   ctaLabel,
   selection,
   hasHero,
-  restartableSubscription,
 }: {
   product: Product;
   purchase: Purchase | null;
@@ -237,7 +232,6 @@ const CtaBar = ({
   ctaLabel?: string | undefined;
   selection: PriceSelection;
   hasHero: boolean;
-  restartableSubscription?: RestartableSubscription | null;
 }) => {
   const selectionAttributes = applySelection(product, discountCode?.valid ? discountCode.discount : null, selection);
   let { priceCents } = selectionAttributes;
@@ -323,7 +317,6 @@ const CtaBar = ({
           discountCode={discountCode ?? null}
           selection={selection}
           label={ctaLabel}
-          restartableSubscription={restartableSubscription || null}
           onClick={(evt) => {
             if (
               isPWYW ||

@@ -1,6 +1,5 @@
 import * as React from "react";
 
-import { RestartableSubscription } from "$app/data/subscription";
 import { trackUserProductAction } from "$app/data/user_action_event";
 import { CustomButtonTextOption } from "$app/parsers/product";
 import { formatInstallmentPaymentSchedule } from "$app/utils/price";
@@ -14,7 +13,6 @@ import {
   hasMetDiscountConditions,
   PriceSelection,
 } from "$app/components/Product/ConfigurationSelector";
-import { RestartSubscriptionModal } from "$app/components/Product/RestartSubscriptionModal";
 import { useOriginalLocation } from "$app/components/useOriginalLocation";
 import { useRunOnce } from "$app/components/useRunOnce";
 
@@ -26,7 +24,6 @@ type Props = {
   label: string | undefined;
   showInstallmentPlanNotes?: boolean;
   onClick?: React.MouseEventHandler<HTMLAnchorElement>;
-  restartableSubscription?: RestartableSubscription | null;
 };
 
 export const trackCtaClick = ({
@@ -90,32 +87,13 @@ export const CtaButton = React.forwardRef<HTMLAnchorElement, Props>(
       label,
       onClick,
       showInstallmentPlanNotes = false,
-      restartableSubscription,
     },
     ref,
   ) => {
     const { searchParams } = new URL(useOriginalLocation());
 
     const [referrer, setReferrer] = React.useState("");
-    const [showRestartModal, setShowRestartModal] = React.useState(false);
-    const checkoutUrlRef = React.useRef<string>("");
     useRunOnce(() => setReferrer(document.referrer));
-
-    const handleResumeSubscription = () => {
-      if (restartableSubscription) {
-        window.location.href = restartableSubscription.manage_url;
-      }
-    };
-
-    const handleStartNewSubscription = () => {
-      setShowRestartModal(false);
-      trackCtaClick({
-        sellerId: product.seller?.id,
-        name: product.name,
-        permalink: product.permalink,
-      });
-      window.open(checkoutUrlRef.current, "_top");
-    };
 
     const { selectedOption, pppDiscounted, discountedPriceCents } = applySelection(
       product,
@@ -166,14 +144,6 @@ export const CtaButton = React.forwardRef<HTMLAnchorElement, Props>(
         onClick?.(evt);
         if (evt.defaultPrevented) return;
 
-        // Check for restartable subscription before allowing checkout
-        if (restartableSubscription && product.recurrences && !purchase) {
-          evt.preventDefault();
-          checkoutUrlRef.current = evt.currentTarget.href;
-          setShowRestartModal(true);
-          return;
-        }
-
         trackCtaClick({
           sellerId: product.seller?.id,
           name: product.name,
@@ -214,16 +184,6 @@ export const CtaButton = React.forwardRef<HTMLAnchorElement, Props>(
               </small>
             ) : null}
           </>
-        ) : null}
-
-        {restartableSubscription ? (
-          <RestartSubscriptionModal
-            isOpen={showRestartModal}
-            onClose={() => setShowRestartModal(false)}
-            onResumeSubscription={handleResumeSubscription}
-            onStartNewSubscription={handleStartNewSubscription}
-            subscription={restartableSubscription}
-          />
         ) : null}
       </>
     );
