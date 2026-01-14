@@ -175,7 +175,7 @@ module Charge::Disputable
     mark_as_dispute_reversed!(dispute_reversed_at: event.created_at)
 
     disputed_purchases.each do |purchase|
-      purchase.chargeback_reversed = true
+      purchase.update!(chargeback_reversed: true)
       purchase.mark_giftee_purchase_as_chargeback_reversed if purchase.is_gift_sender_purchase
 
       purchase.mark_product_purchases_as_chargeback_reversed!
