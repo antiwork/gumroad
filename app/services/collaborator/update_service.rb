@@ -34,7 +34,8 @@ class Collaborator::UpdateService
       AffiliateMailer.collaborator_update(collaborator.id).deliver_later
       { success: true }
     else
-      { success: false, message: collaborator.errors.full_messages.first }
+      collaborator.errors.add(:base, collaborator.errors.full_messages.first) if collaborator.errors[:base].blank? && collaborator.errors.any?
+      { success: false, collaborator: collaborator }
     end
   end
 

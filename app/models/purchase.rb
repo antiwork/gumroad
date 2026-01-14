@@ -814,7 +814,7 @@ class Purchase < ApplicationRecord
       "stripe_refunded" => stripe_refunded,
       "is_chargedback" => chargedback?,
       "is_chargeback_reversed" => chargeback_reversed,
-      "refunded_by" => refunding_users.map { |u| { id: u.id, email: u.email } },
+      "refunded_by" => refunding_users.map { |u| { external_id: u.external_id, email: u.email } },
       "error_code" => error_code,
       "purchase_state" => purchase_state,
       "gumroad_responsible_for_tax" => gumroad_responsible_for_tax?
@@ -3736,8 +3736,8 @@ class Purchase < ApplicationRecord
       card_and_ip_country_are_taxable ||= (ip_and_card_locations.uniq & taxable_countries).size == 1
       return true if !country_code.in?(taxable_countries) && !card_and_ip_country_are_taxable
 
-      # Reset taxes if we see an election of a taxable country and our basis locations aren't in those countries - final safety measure
-      return false if country_code.in?(taxable_countries) && (ip_and_card_locations & taxable_countries).empty?
+      # Trust buyer's country selection when IP/card are from non-taxable countries
+      return true if country_code.in?(taxable_countries) && (ip_and_card_locations & taxable_countries).empty?
 
       # Country matched
       return true if country_code.in?(ip_and_card_locations)
