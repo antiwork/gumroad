@@ -27,7 +27,7 @@ export default function WishlistShowPage() {
 
   if (layout === "discover" && taxonomies_for_nav) {
     return (
-      <DiscoverLayout taxonomiesForNav={taxonomies_for_nav}>
+      <DiscoverLayout taxonomiesForNav={taxonomies_for_nav} forceDomain>
         <Wishlist layout="discover" {...wishlistProps} />
       </DiscoverLayout>
     );
@@ -35,4 +35,4 @@ export default function WishlistShowPage() {
 
   return <Wishlist {...wishlistProps} />;
 }
-WishlistShowPage.layout = (page: React.ReactNode) => page;
+WishlistShowPage.loggedInUserLayout = true;

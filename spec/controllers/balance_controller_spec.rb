@@ -9,7 +9,6 @@ describe BalanceController, type: :controller, inertia: true do
   it_behaves_like "inherits from Sellers::BaseController"
 
   let(:seller) { create(:named_seller) }
-  let(:payout) { create(:payment, user: seller) }
 
   before do
     create_list(:payment_completed, 5, user: seller)
@@ -29,39 +28,32 @@ describe BalanceController, type: :controller, inertia: true do
       get :index
       expect(response).to be_successful
       expect(inertia.component).to eq("Payouts/Index")
-      expect(inertia.props[:payout_presenter][:next_payout_period_data]).to eq({
-                                                                                 should_be_shown_currencies_always: false,
-                                                                                 minimum_payout_amount_cents: 1000,
-                                                                                 is_user_payable: false,
-                                                                                 status: "not_payable",
-                                                                                 payout_note: nil,
-                                                                                 has_stripe_connect: false
-                                                                               })
-    end
-  end
-
-  describe "GET payments_paged" do
-    let(:payments_per_page) { 2 }
-
-    before do
-      stub_const("BalanceController::PAST_PAYMENTS_PER_PAGE", payments_per_page)
+      expect(inertia.props[:next_payout_period_data]).to eq({
+                                                              should_be_shown_currencies_always: false,
+                                                              minimum_payout_amount_cents: 1000,
+                                                              is_user_payable: false,
+                                                              status: "not_payable",
+                                                              payout_note: nil,
+                                                              has_stripe_connect: false
+                                                            })
+      expect(inertia.props[:past_payout_period_data]).to be_present
+      expect(inertia.props[:pagination]).to be_present
     end
 
-    include_context "with user signed in as admin for seller"
+    context "with pagination" do
+      let(:payments_per_page) { 2 }
 
-    it_behaves_like "authorize called for action", :get, :payments_paged do
-      let(:record) { :balance }
-      let(:policy_method) { :index? }
-    end
+      before do
+        stub_const("PayoutsPresenter::PAST_PAYMENTS_PER_PAGE", payments_per_page)
+      end
 
-    it "renders JSON response" do
-      get :payments_paged, xhr: true
-      expect(response).to be_successful
+      it "returns correct payouts for subsequent pages" do
+        get :index, params: { page: 2 }
 
-      json_response = response.parsed_body
-      expect(json_response["payouts"].count).to eq(payments_per_page)
-      expect(json_response["payouts"].first.keys).to include("payout_currency", "payout_cents", "payout_displayed_amount")
-      expect(json_response["pagination"]).to be_present
+        expect(response).to be_successful
+        expect(inertia.props[:past_payout_period_data]).to be_an(Array)
+        expect(inertia.props[:past_payout_period_data].length).to eq(payments_per_page)
+      end
     end
   end
 end

@@ -1,6 +1,6 @@
 import CharacterCount from "@tiptap/extension-character-count";
 import { EditorContent, useEditor } from "@tiptap/react";
-import isEqual from "lodash/isEqual";
+import { isEqual } from "lodash-es";
 import * as React from "react";
 import { ReactSortable as Sortable } from "react-sortablejs";
 

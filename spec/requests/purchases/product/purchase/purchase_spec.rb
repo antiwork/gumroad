@@ -34,7 +34,8 @@ describe("Purchases from the product page", type: :system, js: true) do
 
     it "shows custom view content text for already bought notice" do
       @product = create(:product_with_pdf_file)
-      @product.save_custom_view_content_button_text("Custom Text")
+      @product.custom_view_content_button_text = "Custom Text"
+      @product.save!
       @user = create(:user, email: "bought@gumroad.com")
       @purchase = create(:purchase, link: @product, email: "bought@gumroad.com", purchaser: @user)
       @url_redirect = create(:url_redirect, purchase: @purchase)
@@ -271,7 +272,8 @@ describe("Purchases from the product page", type: :system, js: true) do
   it "shows custom view content button text on receipt after successful purchase" do
     product = create(:product_with_files)
     product2 = create(:product)
-    product.save_custom_view_content_button_text("Custom Text")
+    product.custom_view_content_button_text = "Custom Text"
+    product.save!
     visit product.long_url
     add_to_cart(product)
     visit product2.long_url

@@ -13,7 +13,8 @@ import { Thumbnail } from "$app/components/Product/Thumbnail";
 import { ProductIconCell } from "$app/components/ProductsPage/ProductIconCell";
 import { RatingStars } from "$app/components/RatingStars";
 import { ReviewForm } from "$app/components/ReviewForm";
-import Placeholder from "$app/components/ui/Placeholder";
+import { Card } from "$app/components/ui/Card";
+import { Placeholder, PlaceholderImage } from "$app/components/ui/Placeholder";
 import { Table, TableBody, TableCaption, TableCell, TableRow } from "$app/components/ui/Table";
 import { useOnChange } from "$app/components/useOnChange";
 
@@ -93,15 +94,16 @@ const Row = ({ review, onChange }: { review: Review; onChange: (review: Review) 
               </Button>
             }
           >
-            <div className="stack">
+            <Card>
               <ReviewForm
                 permalink={review.product.permalink}
                 purchaseId={review.purchase_id}
                 purchaseEmailDigest={review.purchase_email_digest}
                 review={review}
                 onChange={(newReview) => onChange({ ...review, ...newReview })}
+                className="flex flex-wrap items-center justify-between gap-4 p-4"
               />
-            </div>
+            </Card>
           </Popover>
         </div>
       </TableCell>
@@ -194,9 +196,7 @@ export default function ReviewsIndex({
       <section className="p-4 md:p-8">
         {reviews.length === 0 && purchases.length === 0 ? (
           <Placeholder>
-            <figure>
-              <img src={placeholderImage} />
-            </figure>
+            <PlaceholderImage src={placeholderImage} />
             <h2>You haven't bought anything... yet!</h2>
             Once you do, it'll show up here so you can review them.
             <NavigationButton href={discoverUrl} color="accent">
