@@ -11,7 +11,6 @@ import { Button } from "$app/components/Button";
 import { TrackClick } from "$app/components/Download/Interactions";
 import { Icon } from "$app/components/Icons";
 import { LoadingSpinner } from "$app/components/LoadingSpinner";
-import { newEmailPath } from "$app/components/server-components/EmailsPage";
 import { Drawer } from "$app/components/SortableList";
 import { NodeActionsMenu } from "$app/components/TiptapExtensions/NodeActionsMenu";
 import { createInsertCommand } from "$app/components/TiptapExtensions/utils";
@@ -89,9 +88,7 @@ const PostsNodeView = ({ editor, selected }: NodeViewProps) => {
               ) : (
                 <>
                   <h4 className="text-muted">Posts (emails) sent to customers of this product will appear here</h4>
-                  <a href={`${newEmailPath}?product=${productPermalink}`} target="_blank" rel="noreferrer">
-                    Create an email
-                  </a>
+                  <a href={Routes.new_email_path({ product: productPermalink })}>Create an email</a>
                 </>
               )}
             </div>

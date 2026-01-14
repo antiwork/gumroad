@@ -5,19 +5,23 @@ class TwoFactorAuthenticationController < ApplicationController
   before_action :fetch_user
   before_action :check_presence_of_user, except: :verify
   before_action :redirect_to_login_path, only: :verify, if: -> { @user.blank? }
-  before_action :validate_user_id_from_params, except: :new
+  before_action :validate_user_id_from_params, except: :show
 
-  # Get /two-factor
-  def new
-    @hide_layouts = true
+  layout "inertia", only: [:show]
+
+  def show
+    @title = "Two-Factor Authentication"
+    render inertia: "TwoFactorAuthentication/Show", props: {
+      user_id: @user.encrypted_external_id,
+      email: @user.email,
+      token: (User::DEFAULT_AUTH_TOKEN unless Rails.env.production?)
+    }
   end
 
-  # POST /two-factor.json
   def create
     verify_auth_token_and_redirect(params[:token])
   end
 
-  # GET /two-factor/verify.html
   def verify
     verify_auth_token_and_redirect(params[:token])
   end
@@ -25,32 +29,21 @@ class TwoFactorAuthenticationController < ApplicationController
   def resend_authentication_token
     @user.send_authentication_token!
 
-    head :no_content
+    redirect_to two_factor_authentication_path, notice: "Resent the authentication token, please check your inbox.", status: :see_other
   end
 
   private
     def redirect_to_login_path
-      redirect_to login_url(next: request.fullpath)
+      redirect_to login_path(next: request.fullpath)
     end
 
     def verify_auth_token_and_redirect(token)
       if @user.token_authenticated?(token)
         sign_in_with_two_factor_authentication(@user)
 
-        flash[:notice] = "Successfully logged in!"
-
-        respond_to do |format|
-          format.html { redirect_to login_path_for(@user) }
-          format.json { render json: { redirect_location: login_path_for(@user) } }
-        end
+        redirect_to login_path_for(@user), notice: "Successfully logged in!", status: :see_other
       else
-        respond_to do |format|
-          format.html do
-            flash[:alert] = "Invalid token, please try again."
-            redirect_to two_factor_authentication_path
-          end
-          format.json { render json: { error_message: "Invalid token, please try again." }, status: :unprocessable_entity }
-        end
+        redirect_to two_factor_authentication_path, warning: "Invalid token, please try again."
       end
     end
 
@@ -58,19 +51,11 @@ class TwoFactorAuthenticationController < ApplicationController
       # We require params[:user_id] to be present in the request. This param is used in Rack::Attack to
       # throttle token verification and resend token attempts.
 
-      unless User.find_by_encrypted_external_id(params[:user_id]) == @user
-        respond_to do |format|
-          format.html { e404 }
-          format.json { e404_json }
-        end
-      end
+      e404 unless User.find_by_encrypted_external_id(params[:user_id]) == @user
     end
 
     def redirect_to_signed_in_path
-      respond_to do |format|
-        format.html { redirect_to login_path_for(logged_in_user) }
-        format.json { render json: { success: true, redirect_location: login_path_for(logged_in_user) } }
-      end
+      redirect_to login_path_for(logged_in_user), status: :see_other
     end
 
     def fetch_user
@@ -78,12 +63,7 @@ class TwoFactorAuthenticationController < ApplicationController
     end
 
     def check_presence_of_user
-      if @user.blank?
-        respond_to do |format|
-          format.html { e404 }
-          format.json { e404_json }
-        end
-      end
+      e404 if @user.blank?
     end
 
     def sign_in_with_two_factor_authentication(user)

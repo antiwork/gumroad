@@ -10,11 +10,12 @@ export type Wishlist = {
   name: string;
 };
 
-export const createWishlist = async () => {
+export const createWishlist = async (name: string) => {
   const response = await request({
     method: "POST",
     url: Routes.wishlists_path(),
     accept: "json",
+    data: { wishlist: { name } },
   });
   return cast<{ wishlist: Wishlist }>(await response.json());
 };

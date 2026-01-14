@@ -24,7 +24,7 @@ describe "User profile page", type: :system, js: true do
       sign_in admin
       visit "/#{creator.username}"
       click_on "Impersonate"
-      expect(page).to have_current_path("/dashboard")
+      expect(page).to have_current_path("/products")
       select_disclosure "#{creator.display_name}" do
         expect(page).to have_menuitem("Unbecome")
         click_on "Profile"

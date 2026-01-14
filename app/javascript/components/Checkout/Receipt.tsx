@@ -3,6 +3,7 @@ import * as React from "react";
 import { createAccount, CreateAccountPayload } from "$app/data/account";
 import { ErrorLineItemResult, LineItemResult, SuccessfulLineItemResult } from "$app/data/purchase";
 import { trackUserProductAction } from "$app/data/user_action_event";
+import { classNames } from "$app/utils/classNames";
 import { assertResponseError } from "$app/utils/request";
 
 import { Button, NavigationButton } from "$app/components/Button";
@@ -13,18 +14,21 @@ import { Icon } from "$app/components/Icons";
 import { useLoggedInUser } from "$app/components/LoggedInUser";
 import { showAlert } from "$app/components/server-components/Alert";
 import { Alert } from "$app/components/ui/Alert";
+import { Card, CardContent } from "$app/components/ui/Card";
 
 export const LineItem = ({
   name,
   price,
   quantity,
+  card,
 }: {
   name: string;
   price?: string | undefined;
   quantity?: number | undefined;
+  card?: boolean;
 }) => (
   <>
-    <h4 className="product-details">
+    <h4 className={classNames("product-details", card ? "grow font-bold" : "")}>
       <div className="product-name">
         {name}
         {quantity ? <span className="quantity">× {quantity}</span> : null}
@@ -45,21 +49,24 @@ const FailedLineItemResultEntry = ({ name, result }: { name: string; result: Err
   const message = result.error_message ?? "Sorry, something went wrong.";
   return (
     <>
-      <div>
-        <section className="stack borderless">
-          <div>
-            <LineItem
-              name={name}
-              price={"formatted_price" in result ? (result.formatted_price ?? undefined) : undefined}
-            />
-          </div>
-        </section>
-      </div>
-      <div>
+      <CardContent>
+        <Card borderless asChild>
+          <section>
+            <CardContent>
+              <LineItem
+                name={name}
+                price={"formatted_price" in result ? (result.formatted_price ?? undefined) : undefined}
+                card
+              />
+            </CardContent>
+          </section>
+        </Card>
+      </CardContent>
+      <CardContent>
         <Alert variant="warning">
           <div dangerouslySetInnerHTML={{ __html: message }} />
         </Alert>
-      </div>
+      </CardContent>
     </>
   );
 };
@@ -75,97 +82,105 @@ const SuccessfulLineItemResultEntry = ({ name, result }: { name: string; result:
 
   return (
     <>
-      <div>
-        <section className="stack borderless">
-          <div>
-            <LineItem
-              name={`${name} ${result.variants_displayable}`}
-              quantity={result.show_quantity ? result.quantity : undefined}
-              price={result.price}
-            />
-          </div>
-          {result.enabled_integrations.discord ? (
-            <div>
-              <DiscordButton
-                purchaseId={result.id}
-                connected={false}
-                redirectSettings={{ host: result.domain, protocol: result.protocol }}
-                customState={JSON.stringify({
-                  seller_id: result.seller_id,
-                  is_custom_domain: !window.location.hostname.endsWith(result.domain.replace("app.", "")),
-                })}
+      <CardContent>
+        <Card borderless asChild>
+          <section>
+            <CardContent>
+              <LineItem
+                name={`${name} ${result.variants_displayable}`}
+                quantity={result.show_quantity ? result.quantity : undefined}
+                price={result.price}
+                card
               />
-            </div>
-          ) : null}
-          {result.content_url ? (
-            <div>
-              <NavigationButton
-                href={result.content_url}
-                color="accent"
-                target="_blank"
-                onClick={trackViewContentClick}
-              >
-                {result.view_content_button_text}
-              </NavigationButton>
-            </div>
-          ) : null}
-          {result.is_gift_sender_purchase ? (
-            <div>
-              <div className="text-muted">
-                {result.gift_sender_text}
-                {result.has_files
-                  ? "They'll get an email with your note and a download link."
-                  : "They'll get an email with your note."}
+            </CardContent>
+            {result.enabled_integrations.discord ? (
+              <CardContent>
+                <DiscordButton
+                  purchaseId={result.id}
+                  connected={false}
+                  redirectSettings={{ host: result.domain, protocol: result.protocol }}
+                  customState={JSON.stringify({
+                    seller_id: result.seller_id,
+                    is_custom_domain: !window.location.hostname.endsWith(result.domain.replace("app.", "")),
+                  })}
+                />
+              </CardContent>
+            ) : null}
+            {result.content_url ? (
+              <CardContent>
+                <NavigationButton
+                  href={result.content_url}
+                  color="accent"
+                  target="_blank"
+                  onClick={trackViewContentClick}
+                  className="grow basis-0"
+                >
+                  {result.view_content_button_text}
+                </NavigationButton>
+              </CardContent>
+            ) : null}
+            {result.is_gift_sender_purchase ? (
+              <CardContent>
+                <div className="grow text-muted">
+                  {result.gift_sender_text}
+                  {result.has_files
+                    ? "They'll get an email with your note and a download link."
+                    : "They'll get an email with your note."}
+                </div>
+              </CardContent>
+            ) : result.extra_purchase_notice ? (
+              <CardContent>
+                <div className="grow text-muted">{result.extra_purchase_notice}</div>
+              </CardContent>
+            ) : null}
+            {result.is_gift_receiver_purchase ? (
+              <CardContent>
+                <div className="grow text-muted">{result.gift_receiver_text}</div>
+              </CardContent>
+            ) : null}
+            {result.test_purchase_notice ? (
+              <CardContent>
+                <div className="grow text-muted">{result.test_purchase_notice}</div>
+              </CardContent>
+            ) : null}
+            <CardContent>
+              <div className="generate-invoice grow text-muted">
+                Need an invoice for this?{" "}
+                <a
+                  target="_blank"
+                  href={Routes.generate_invoice_by_buyer_path(result.id, { email: result.email })}
+                  rel="noreferrer"
+                >
+                  Generate
+                </a>
               </div>
-            </div>
-          ) : result.extra_purchase_notice ? (
-            <div>
-              <div className="text-muted">{result.extra_purchase_notice}</div>
-            </div>
-          ) : null}
-          {result.is_gift_receiver_purchase ? (
-            <div>
-              <div className="text-muted">{result.gift_receiver_text}</div>
-            </div>
-          ) : null}
-          {result.test_purchase_notice ? (
-            <div>
-              <div className="text-muted">{result.test_purchase_notice}</div>
-            </div>
-          ) : null}
-          <div>
-            <div className="generate-invoice text-muted">
-              Need an invoice for this?{" "}
-              <a
-                target="_blank"
-                href={Routes.generate_invoice_by_buyer_path(result.id, { email: result.email })}
-                rel="noreferrer"
-              >
-                Generate
-              </a>
-            </div>
-          </div>
-        </section>
-      </div>
+            </CardContent>
+          </section>
+        </Card>
+      </CardContent>
 
       {result.has_shipping_to_show ? (
-        <div>
-          <section className="stack borderless">
-            <div>
-              <LineItem name="Shipping" price={result.shipping_amount} />
-            </div>
-          </section>
-        </div>
+        <CardContent>
+          <Card borderless asChild>
+            <section>
+              <CardContent>
+                <LineItem name="Shipping" price={result.shipping_amount} card />
+              </CardContent>
+            </section>
+          </Card>
+        </CardContent>
       ) : null}
 
       {result.has_sales_tax_to_show ? (
-        <div>
-          <section className="stack borderless">
-            <div>
-              <LineItem name={result.sales_tax_label ?? ""} price={result.sales_tax_amount} />
-            </div>
-          </section>
-        </div>
+        <CardContent>
+          <Card borderless asChild>
+            <section>
+              <CardContent>
+                <LineItem name={result.sales_tax_label ?? ""} price={result.sales_tax_amount} card />
+              </CardContent>
+            </section>
+          </Card>
+        </CardContent>
       ) : null}
     </>
   );
@@ -173,8 +188,10 @@ const SuccessfulLineItemResultEntry = ({ name, result }: { name: string; result:
 
 export const CreateAccountForm = ({
   createAccountData,
+  className,
 }: {
   createAccountData: Pick<CreateAccountPayload, "email" | "cardParams" | "purchaseId">;
+  className?: string | undefined;
 }) => {
   const [password, setPassword] = React.useState("");
   const [status, setStatus] = React.useState<"idle" | "processing" | "success">("idle");
@@ -205,7 +222,7 @@ export const CreateAccountForm = ({
         evt.preventDefault();
         void startAccountCreation();
       }}
-      className="flex flex-col gap-4"
+      className={`flex flex-col gap-4 ${className}`}
     >
       {status === "success" ? (
         <Alert variant="success">Done! Your account has been created. You'll get a confirmation email shortly.</Alert>
@@ -260,46 +277,54 @@ export const Receipt = ({
   const [state] = useState();
   if (state.status.type !== "finished") return null;
   return (
-    <div className="stack mx-auto my-8 max-w-2xl">
-      <header>
-        <h4 className="relative">
-          Checkout
-          <a href={discoverUrl} style={{ position: "absolute", right: 0 }} aria-label="Close">
-            <Icon name="x-circle" />
-          </a>
-        </h4>
-      </header>
-      <header>
-        <h2>{results.some(({ result }) => !result.success) ? "Summary" : "Your purchase was successful!"}</h2>
+    <Card className="mx-auto my-8 max-w-2xl">
+      <CardContent asChild>
+        <header>
+          <h4 className="relative grow font-bold">
+            Checkout
+            <a href={discoverUrl} style={{ position: "absolute", right: 0 }} aria-label="Close">
+              <Icon name="x-circle" />
+            </a>
+          </h4>
+        </header>
+      </CardContent>
+      <CardContent asChild>
+        <header>
+          <h2 className="grow">
+            {results.some(({ result }) => !result.success) ? "Summary" : "Your purchase was successful!"}
+          </h2>
 
-        {results.some(({ result }) => result.success) ? (
-          <div>
-            {results.some(
-              ({ result, item }) =>
-                result.success &&
-                result.non_formatted_price > 0 &&
-                !item.product.is_preorder &&
-                !item.product.free_trial,
-            )
-              ? `We charged your card and sent a receipt to ${state.email}`
-              : `We sent a receipt to ${state.email}`}
-          </div>
-        ) : null}
-      </header>
+          {results.some(({ result }) => result.success) ? (
+            <div>
+              {results.some(
+                ({ result, item }) =>
+                  result.success &&
+                  result.non_formatted_price > 0 &&
+                  !item.product.is_preorder &&
+                  !item.product.free_trial,
+              )
+                ? `We charged your card and sent a receipt to ${state.email}`
+                : `We sent a receipt to ${state.email}`}
+            </div>
+          ) : null}
+        </header>
+      </CardContent>
       {results.map(({ result, item }, key) => (
         <LineItemResultEntry key={key} result={result} name={item.product.name} />
       ))}
       {!user && canBuyerSignUp ? (
-        <CreateAccountForm
-          createAccountData={{
-            email: state.email,
-            cardParams:
-              state.status.paymentMethod.type === "not-applicable" || state.status.paymentMethod.type === "saved"
-                ? null
-                : state.status.paymentMethod.cardParamsResult.cardParams,
-          }}
-        />
+        <CardContent asChild>
+          <CreateAccountForm
+            createAccountData={{
+              email: state.email,
+              cardParams:
+                state.status.paymentMethod.type === "not-applicable" || state.status.paymentMethod.type === "saved"
+                  ? null
+                  : state.status.paymentMethod.cardParamsResult.cardParams,
+            }}
+          />
+        </CardContent>
       ) : null}
-    </div>
+    </Card>
   );
 };

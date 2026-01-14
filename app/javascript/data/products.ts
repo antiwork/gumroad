@@ -3,16 +3,7 @@ import { cast } from "ts-safe-cast";
 import { RecurrenceId } from "$app/utils/recurringPricing";
 import { ResponseError, request } from "$app/utils/request";
 
-import { PaginationProps } from "$app/components/Pagination";
-import { Sort } from "$app/components/useSortingTableDriver";
-
 export type SortKey = "name" | "successful_sales_count" | "revenue" | "display_price_cents" | "status" | "cut";
-
-export type MembershipsParams = {
-  page: number | null;
-  query: string | null;
-  sort?: Sort<SortKey> | null;
-};
 
 export type Membership = {
   id: number;
@@ -37,12 +28,6 @@ export type Membership = {
   can_destroy: boolean;
   can_archive: boolean;
   can_unarchive: boolean;
-};
-
-export type ProductsParams = {
-  page: number | null;
-  query: string | null;
-  sort?: Sort<SortKey> | null;
 };
 
 export type Product = {
@@ -138,60 +123,6 @@ export async function createProduct(requestData: CreateProductRequest) {
   if (!res.ok) throw new ResponseError();
   const jsonResponse = cast<CreateProductResponse>(await res.json());
   return jsonResponse;
-}
-
-export function getPagedProducts({
-  forArchivedProducts,
-  ...params
-}: ProductsParams & { forArchivedProducts: boolean }) {
-  const abort = new AbortController();
-
-  const url = forArchivedProducts
-    ? Routes.products_paged_products_archived_index_path(params)
-    : Routes.products_paged_path(params);
-  const response = request({
-    method: "GET",
-    accept: "json",
-    url,
-    abortSignal: abort.signal,
-  })
-    .then((res) => {
-      if (!res.ok) throw new ResponseError();
-      return res.json();
-    })
-    .then((json) => cast<{ entries: Product[]; pagination: PaginationProps }>(json));
-
-  return {
-    response,
-    cancel: () => abort.abort(),
-  };
-}
-
-export function getPagedMemberships({
-  forArchivedMemberships,
-  ...params
-}: MembershipsParams & { forArchivedMemberships: boolean }) {
-  const abort = new AbortController();
-
-  const url = forArchivedMemberships
-    ? Routes.memberships_paged_products_archived_index_path(params)
-    : Routes.memberships_paged_path(params);
-  const response = request({
-    method: "GET",
-    accept: "json",
-    url,
-    abortSignal: abort.signal,
-  })
-    .then((res) => {
-      if (!res.ok) throw new ResponseError();
-      return res.json();
-    })
-    .then((json) => cast<{ entries: Membership[]; pagination: PaginationProps }>(json));
-
-  return {
-    response,
-    cancel: () => abort.abort(),
-  };
 }
 
 export async function getFolderArchiveDownloadUrl(request_url: string) {

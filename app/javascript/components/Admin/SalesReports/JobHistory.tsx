@@ -3,7 +3,7 @@ import * as React from "react";
 import AdminSalesReportsForm from "$app/components/Admin/SalesReports/Form";
 import { Button } from "$app/components/Button";
 import { Icon } from "$app/components/Icons";
-import Placeholder from "$app/components/ui/Placeholder";
+import { Placeholder } from "$app/components/ui/Placeholder";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "$app/components/ui/Table";
 
 export type JobHistoryItem = {

@@ -4,7 +4,8 @@ import { formatPriceCentsWithCurrencySymbol } from "$app/utils/currency";
 
 import { Icon } from "$app/components/Icons";
 import { useLoggedInUser } from "$app/components/LoggedInUser";
-import Placeholder from "$app/components/ui/Placeholder";
+import { Card, CardContent } from "$app/components/ui/Card";
+import { Placeholder } from "$app/components/ui/Placeholder";
 import { useUserAgentInfo } from "$app/components/UserAgent";
 type SaleItemDetails = {
   price_cents: number;
@@ -66,10 +67,10 @@ export const ActivityFeed = ({ items }: { items: ActivityItem[] }) => {
   }
 
   return (
-    <div className="stack">
+    <Card>
       {items.map(({ type, timestamp, details }, i) => (
-        <div key={i}>
-          <span className="flex gap-3">
+        <CardContent key={i}>
+          <span className="flex grow gap-3">
             {type === "new_sale" && <Sale details={details} />}
             {type === "follower_added" && <Follow details={details} />}
             {type === "follower_removed" && <FollowRemoved details={details} />}
@@ -77,8 +78,8 @@ export const ActivityFeed = ({ items }: { items: ActivityItem[] }) => {
           <span className="text-muted" suppressHydrationWarning>
             {new Date(timestamp).toLocaleString(userAgentInfo.locale, { dateStyle: "medium", timeStyle: "short" })}
           </span>
-        </div>
+        </CardContent>
       ))}
-    </div>
+    </Card>
   );
 };

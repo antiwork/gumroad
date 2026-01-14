@@ -1594,6 +1594,7 @@ describe("Workflows", js: true, type: :system) do
         fill_in "Subject", with: "Thank you!"
         message_editor = find("[aria-label='Email message']")
         set_rich_text_editor_input(message_editor, to_text: "An important message")
+        sleep 0.5 # wait for the message editor to update
       end
       select_disclosure "Publish" do
         check "Also send to past customers"

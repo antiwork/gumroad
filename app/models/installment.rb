@@ -130,7 +130,9 @@ class Installment < ApplicationRecord
   }
 
   scope :missed_for_purchase, -> (purchase) {
-    product_installment_ids = purchase.link.installments.where(seller_id: purchase.seller_id).alive.published.pluck(:id)
+    product_installment_ids = purchase.link.installments.where(seller_id: purchase.seller_id).alive.published.filter_map do |post|
+      post.id if post.purchase_passes_filters(purchase)
+    end
     seller_installment_ids = purchase.seller.installments.alive.published.filter_map do |post|
       post.id if post.purchase_passes_filters(purchase)
     end
@@ -837,7 +839,14 @@ class Installment < ApplicationRecord
     # message, no name or file is ok
     # if name or file, then need the other
     def message_must_be_provided
-      errors.add(:base, "Please include a message as part of the update.") if message.blank?
+      errors.add(:base, "Please include a message as part of the update.") if scrubbed_message.blank?
+    end
+
+    def scrubbed_message
+      # Default empty message from TipTap editor is "<p><br></p>", so we need check the scrubbed version of the message for validation
+      scrubber = Rails::HTML::TargetScrubber.new
+      scrubber.tags = %w[br p]
+      sanitize(message, scrubber:)
     end
 
     def validate_call_to_action_url_and_text

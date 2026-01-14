@@ -3023,6 +3023,26 @@ describe Purchase, :vcr do
     end
   end
 
+  describe "#mark_product_purchases_as_refunded!" do
+    let(:purchase) { create(:purchase, link: create(:product, :bundle)) }
+
+    before do
+      purchase.create_artifacts_and_send_receipt!
+    end
+
+    it "marks all bundle product purchases as fully refunded" do
+      expect(purchase.product_purchases.pluck(:stripe_refunded)).to all(be_nil)
+      purchase.mark_product_purchases_as_refunded!(is_partially_refunded: false)
+      expect(purchase.product_purchases.pluck(:stripe_refunded)).to all(eq(true))
+    end
+
+    it "marks all bundle product purchases as partially refunded" do
+      expect(purchase.product_purchases.pluck(:stripe_partially_refunded)).to all(eq(false))
+      purchase.mark_product_purchases_as_refunded!(is_partially_refunded: true)
+      expect(purchase.product_purchases.pluck(:stripe_partially_refunded)).to all(eq(true))
+    end
+  end
+
   describe "#has_content?" do
     before :each do
       allow(purchase).to receive(:webhook_failed).and_return false
@@ -4159,7 +4179,7 @@ describe Purchase, :vcr do
 
     context "when purchase record is invalid" do
       before do
-        @purchase_of_product_1.update_column(:merchant_account_id, nil)
+        @purchase_of_product_1.update_column(:price_cents, nil)
         expect(@purchase_of_product_1.valid?).to eq(false) # Ensure that the record currently fails validation
       end
 

@@ -7,6 +7,7 @@ import { Button } from "$app/components/Button";
 import { LoadingSpinner } from "$app/components/LoadingSpinner";
 import { showAlert } from "$app/components/server-components/Alert";
 import { Alert } from "$app/components/ui/Alert";
+import { Card, CardContent } from "$app/components/ui/Card";
 
 import AdminProductPurchase, { ProductPurchase } from "./Purchase";
 
@@ -15,7 +16,7 @@ type AdminProductPurchasesContentProps = {
   isLoading: boolean;
   hasMore: boolean;
   onLoadMore: () => void;
-  productId: number;
+  productExternalId: string;
 };
 
 const AdminProductPurchasesContent = ({
@@ -23,7 +24,7 @@ const AdminProductPurchasesContent = ({
   isLoading,
   hasMore,
   onLoadMore,
-  productId,
+  productExternalId,
 }: AdminProductPurchasesContentProps) => {
   const [selectedPurchaseExternalIds, setSelectedPurchaseExternalIds] = React.useState<string[]>([]);
   const [isMassRefunding, setIsMassRefunding] = React.useState(false);
@@ -58,7 +59,7 @@ const AdminProductPurchasesContent = ({
 
     try {
       const response = await request({
-        url: Routes.mass_refund_for_fraud_admin_product_purchases_path(productId, { format: "json" }),
+        url: Routes.mass_refund_for_fraud_admin_product_purchases_path(productExternalId, { format: "json" }),
         method: "POST",
         accept: "json",
         data: {
@@ -80,7 +81,7 @@ const AdminProductPurchasesContent = ({
     } finally {
       setIsMassRefunding(false);
     }
-  }, [isMassRefunding, productId, selectedPurchaseExternalIds]);
+  }, [isMassRefunding, productExternalId, selectedPurchaseExternalIds]);
 
   if (purchases.length === 0 && !isLoading)
     return (
@@ -118,16 +119,17 @@ const AdminProductPurchasesContent = ({
         </div>
       </div>
 
-      <div className="stack">
+      <Card>
         {purchases.map((purchase) => (
-          <AdminProductPurchase
-            key={purchase.external_id}
-            purchase={purchase}
-            isSelected={selectedPurchaseExternalIds.includes(purchase.external_id)}
-            onToggleSelection={togglePurchaseSelection}
-          />
+          <CardContent asChild key={purchase.external_id}>
+            <AdminProductPurchase
+              purchase={purchase}
+              isSelected={selectedPurchaseExternalIds.includes(purchase.external_id)}
+              onToggleSelection={togglePurchaseSelection}
+            />
+          </CardContent>
         ))}
-      </div>
+      </Card>
 
       {isLoading ? <LoadingSpinner /> : null}
 

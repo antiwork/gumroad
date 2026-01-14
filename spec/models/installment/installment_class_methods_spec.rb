@@ -343,5 +343,32 @@ describe "InstallmentClassMethods"  do
 
       expect(missed_posts).to eq []
     end
+
+    it "does not include workflow installments for different variants" do
+      variant_basic = create(:variant, variant_category: create(:variant_category, link: @product))
+      variant_power = create(:variant, variant_category: create(:variant_category, link: @product))
+
+      workflow_for_basic = create(:workflow, link: @product, seller: @creator, base_variant: variant_basic, workflow_type: Workflow::VARIANT_TYPE, bought_variants: [variant_basic.external_id])
+      workflow_installment = create(:workflow_installment, workflow: workflow_for_basic, link: @product, seller: @creator, published_at: 1.day.ago)
+
+      purchase_with_power_variant = create(:purchase, link: @product, seller: @creator, variant_attributes: [variant_power])
+
+      missed_posts = Installment.missed_for_purchase(purchase_with_power_variant)
+
+      expect(missed_posts).not_to include(workflow_installment)
+    end
+
+    it "includes workflow installments for matching variants" do
+      variant_basic = create(:variant, variant_category: create(:variant_category, link: @product))
+
+      workflow_for_basic = create(:workflow, link: @product, seller: @creator, base_variant: variant_basic, workflow_type: Workflow::VARIANT_TYPE, bought_variants: [variant_basic.external_id])
+      workflow_installment = create(:workflow_installment, workflow: workflow_for_basic, link: @product, seller: @creator, published_at: 1.day.ago)
+
+      purchase_with_basic_variant = create(:purchase, link: @product, seller: @creator, variant_attributes: [variant_basic])
+
+      missed_posts = Installment.missed_for_purchase(purchase_with_basic_variant)
+
+      expect(missed_posts).to include(workflow_installment)
+    end
   end
 end
