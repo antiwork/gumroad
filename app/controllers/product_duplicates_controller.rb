@@ -30,27 +30,9 @@ class ProductDuplicatesController < Sellers::BaseController
       render(json: { success: false, status: ProductDuplicatorService::DUPLICATION_FAILED }) && return
     end
 
-    if duplicated_product.is_recurring_billing?
-      page_props = DashboardProductsPagePresenter.new(
-        pundit_user:,
-        memberships: [duplicated_product],
-        memberships_pagination: nil,
-        products: [],
-        products_pagination: nil
-      ).page_props
-      duplicated_product = page_props[:memberships].first
-      is_membership = true
-    else
-      page_props = DashboardProductsPagePresenter.new(
-        pundit_user:,
-        memberships: [],
-        memberships_pagination: nil,
-        products: [duplicated_product],
-        products_pagination: nil
-      ).page_props
-      duplicated_product = page_props[:products].first
-      is_membership = false
-    end
+    is_membership = duplicated_product.is_recurring_billing?
+    presenter = DashboardProductsPagePresenter.new(pundit_user:)
+    duplicated_product = presenter.product_props(duplicated_product)
 
     render json: {
       success: true,

@@ -39,12 +39,12 @@ type ManualPayoutInfoProps = {
 };
 
 type PayoutInfoComponentProps = {
-  user_id: number;
+  user_external_id: string;
   isLoading: boolean;
   payoutInfo: PayoutInfoProps | null;
 };
 
-const PayoutInfo = ({ user_id, payoutInfo, isLoading }: PayoutInfoComponentProps) => {
+const PayoutInfo = ({ user_external_id, payoutInfo, isLoading }: PayoutInfoComponentProps) => {
   if (isLoading) return <LoadingSpinner />;
   if (!payoutInfo) return <div>No payout info found.</div>;
 
@@ -61,11 +61,13 @@ const PayoutInfo = ({ user_id, payoutInfo, isLoading }: PayoutInfoComponentProps
       <Header active_bank_account={active_bank_account} payment_address={payment_address} />
       <hr />
       <AdminTogglePayoutsForm
-        user_id={user_id}
+        user_external_id={user_external_id}
         payouts_paused_by={payouts_paused_by_source}
         reason={payouts_paused_for_reason}
       />
-      {manual_payout_info ? <AdminManualPayoutForm user_id={user_id} {...manual_payout_info} /> : null}
+      {manual_payout_info ? (
+        <AdminManualPayoutForm user_external_id={user_external_id} {...manual_payout_info} />
+      ) : null}
     </div>
   );
 };

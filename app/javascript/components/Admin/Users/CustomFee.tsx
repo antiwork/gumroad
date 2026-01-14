@@ -20,7 +20,7 @@ const AdminUserCustomFee = ({ user }: AdminUserCustomFeeProps) => {
           <h3>Custom fee</h3>
         </summary>
         <Form
-          url={Routes.set_custom_fee_admin_user_path(user.id)}
+          url={Routes.set_custom_fee_admin_user_path(user.external_id)}
           method="POST"
           confirmMessage={`Are you sure you want to update this user's custom fee?`}
           onSuccess={() => showAlert("Custom fee updated.", "success")}

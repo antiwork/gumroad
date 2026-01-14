@@ -22,7 +22,7 @@ const AdminUserPayoutInfo = ({ user }: AdminUserPayoutInfoProps) => {
       setIsLoading(true);
       const response = await request({
         method: "GET",
-        url: Routes.admin_user_payout_info_path(user.id),
+        url: Routes.admin_user_payout_info_path(user.external_id),
         accept: "json",
       });
       setData(cast<PayoutInfoProps>(await response.json()));
@@ -35,7 +35,7 @@ const AdminUserPayoutInfo = ({ user }: AdminUserPayoutInfoProps) => {
   return (
     <div ref={elementRef}>
       <h3>Payout Info</h3>
-      <PayoutInfo user_id={user.id} payoutInfo={data} isLoading={isLoading} />
+      <PayoutInfo user_external_id={user.external_id} payoutInfo={data} isLoading={isLoading} />
     </div>
   );
 };

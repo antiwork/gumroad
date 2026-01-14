@@ -23,7 +23,6 @@ import AdminSuspendForFraudForm from "$app/components/server-components/Admin/Su
 import AdminSuspendForTosForm from "$app/components/server-components/Admin/SuspendForTosForm";
 import AdminUserGuids from "$app/components/server-components/Admin/UserGuids";
 import AdminUserStats from "$app/components/server-components/Admin/UserStats";
-import AffiliateRequestPage from "$app/components/server-components/AffiliateRequestPage";
 import Alert from "$app/components/server-components/Alert";
 import BundleEditPage from "$app/components/server-components/BundleEditPage";
 import CheckoutPage from "$app/components/server-components/CheckoutPage";
@@ -50,8 +49,6 @@ import ProfileCoffeePage from "$app/components/server-components/Profile/CoffeeP
 import ProfilePostPage from "$app/components/server-components/Profile/PostPage";
 import ProfileProductPage from "$app/components/server-components/Profile/ProductPage";
 import ProfileWishlistPage from "$app/components/server-components/Profile/WishlistPage";
-import PublicChargePage from "$app/components/server-components/Public/ChargePage";
-import PublicLicenseKeyPage from "$app/components/server-components/Public/LicenseKeyPage";
 import DisputeEvidencePage from "$app/components/server-components/Purchase/DisputeEvidencePage";
 import PurchaseProductPage from "$app/components/server-components/Purchase/ProductPage";
 import SubscribeReviewReminders from "$app/components/server-components/ReviewReminders/SubscribeReviewReminders";
@@ -88,7 +85,6 @@ ReactOnRails.register({
   AdminSuspendForTosForm,
   AdminUserGuids,
   AdminUserStats,
-  AffiliateRequestPage,
   Alert,
   AdminAddCreditForm,
   HelpCenterArticlesIndexPage,
@@ -121,8 +117,6 @@ ReactOnRails.register({
   ProfilePostPage,
   ProfileProductPage,
   ProfileWishlistPage,
-  PublicChargePage,
-  PublicLicenseKeyPage,
   SecureRedirectPage,
   SubscribePage,
   SubscribePreview,

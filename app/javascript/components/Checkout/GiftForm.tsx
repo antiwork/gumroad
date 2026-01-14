@@ -6,7 +6,7 @@ import { useState, getErrors } from "$app/components/Checkout/payment";
 import { Modal } from "$app/components/Modal";
 import { Alert } from "$app/components/ui/Alert";
 
-export const GiftForm = ({ isMembership }: { isMembership: boolean }) => {
+export const GiftForm = ({ isMembership, className }: { isMembership: boolean; className?: string | undefined }) => {
   const giftEmailUID = React.useId();
   const giftNoteUID = React.useId();
   const [cancellingPresetGift, setCancellingPresetGift] = React.useState(false);
@@ -16,8 +16,8 @@ export const GiftForm = ({ isMembership }: { isMembership: boolean }) => {
   const hasError = getErrors(state).has("gift");
 
   return (
-    <div className="flex flex-col gap-4">
-      <label className="flex w-full items-center gap-4">
+    <div className={`flex flex-col gap-4 ${className}`}>
+      <label className="flex w-full grow items-center gap-4">
         <input
           type="checkbox"
           role="switch"
