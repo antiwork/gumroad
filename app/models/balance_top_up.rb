@@ -1,6 +1,8 @@
 # frozen_string_literal: true
 
 class BalanceTopUp < ApplicationRecord
+  has_paper_trail
+
   include ExternalId
   include CurrencyHelper
 
@@ -21,6 +23,8 @@ class BalanceTopUp < ApplicationRecord
   scope :failed, -> { where(state: "failed") }
 
   state_machine :state, initial: :pending do
+    after_transition any => any, do: :log_transition
+
     event :mark_processing do
       transition pending: :processing
     end
@@ -52,5 +56,11 @@ class BalanceTopUp < ApplicationRecord
 
   def processing?
     state == "processing"
+  end
+
+  private
+
+  def log_transition
+    Rails.logger.info("BalanceTopUp: #{id} transitioned to #{state}")
   end
 end

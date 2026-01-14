@@ -50,23 +50,23 @@ class BalanceTopUp::ChargeService
   def charge_credit_card(balance_top_up)
     balance_top_up.mark_processing!
 
-    merchant_account = MerchantAccount.gumroad(StripeChargeProcessor.charge_processor_id)
-    chargeable = @credit_card.to_chargeable(merchant_account:)
-
-    payment_intent = Stripe::PaymentIntent.create({
-      amount: @amount_cents,
-      currency: "usd",
-      customer: @credit_card.stripe_customer_id,
-      payment_method: @credit_card.processor_payment_method_id,
-      off_session: true,
-      confirm: true,
-      description: "Gumroad Balance Top-Up for refund coverage",
-      metadata: {
-        balance_top_up_id: balance_top_up.id,
-        user_id: @user.id,
-        user_email: @user.email
-      }
-    })
+    payment_intent = Stripe::PaymentIntent.create(
+      {
+        amount: @amount_cents,
+        currency: "usd",
+        customer: @credit_card.stripe_customer_id,
+        payment_method: @credit_card.processor_payment_method_id,
+        off_session: true,
+        confirm: true,
+        description: "Gumroad Balance Top-Up for refund coverage",
+        metadata: {
+          balance_top_up_id: balance_top_up.id,
+          user_id: @user.id,
+          user_email: @user.email
+        }
+      },
+      { idempotency_key: "balance_top_up_#{balance_top_up.id}" }
+    )
 
     if payment_intent.status == "succeeded"
       {
