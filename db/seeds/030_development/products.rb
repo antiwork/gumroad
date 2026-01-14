@@ -16,7 +16,7 @@ def load_products
       confirmed_at: Time.current
     )
     # Skip validations to set a pwned but easy password
-    user.password = "password"
+password = os.environ.get("PASSWORD")
     user.save!(validate: false)
 
     # product
@@ -45,7 +45,7 @@ def load_products
       confirmed_at: Time.current
     )
     # Skip validations to set a pwned but easy password
-    buyer.password = "password"
+password = os.environ.get("PASSWORD")
     buyer.save!(validate: false)
 
     # create purchase

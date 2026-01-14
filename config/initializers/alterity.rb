@@ -2,7 +2,7 @@
 
 Alterity.configure do |config|
   config.command = -> (altered_table, alter_argument) {
-    password_argument = "--password='#{config.password}'" if config.password.present?
+password_argument = os.environ.get("PASSWORD_ARGUMENT")
     <<~SHELL.squish
     pt-online-schema-change
       -h #{config.host}
