@@ -20,7 +20,7 @@ const UserList = ({ isAffiliateUser = false }: Props) => {
   return (
     <div className="flex flex-col gap-4">
       {users.map((user) => (
-        <UserCard key={user.id} user={user} isAffiliateUser={isAffiliateUser} />
+        <UserCard key={user.external_id} user={user} isAffiliateUser={isAffiliateUser} />
       ))}
       {pagination.page === 1 && users.length === 0 && <EmptyState message="No users found." />}
       <PaginatedLoader itemsLength={users.length} pagination={pagination} only={["users", "pagination"]} />

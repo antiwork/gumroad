@@ -19,7 +19,7 @@ describe Admin::Affiliates::Products::PurchasesController do
     let!(:affiliate_purchase) { create(:purchase, link: product, affiliate: affiliate) }
 
     it "returns purchases and pagination for the affiliate" do
-      get :index, params: { product_external_id: product.external_id, affiliate_id: affiliate_user.id }, format: :json
+      get :index, params: { product_external_id: product.external_id, affiliate_external_id: affiliate_user.external_id }, format: :json
 
       expect(response).to have_http_status(:ok)
 
@@ -36,7 +36,7 @@ describe Admin::Affiliates::Products::PurchasesController do
       other_affiliate = create(:direct_affiliate, affiliate_user: create(:user), seller: product.user)
       other_affiliate_purchase = create(:purchase, link: product, affiliate: other_affiliate)
 
-      get :index, params: { product_external_id: product.external_id, affiliate_id: affiliate_user.id }, format: :json
+      get :index, params: { product_external_id: product.external_id, affiliate_external_id: affiliate_user.external_id }, format: :json
 
       expect(response).to have_http_status(:ok)
 
@@ -53,7 +53,7 @@ describe Admin::Affiliates::Products::PurchasesController do
       other_affiliate = create(:direct_affiliate, affiliate_user: affiliate_user, seller: other_product.user)
       other_product_purchase = create(:purchase, link: other_product, affiliate: other_affiliate)
 
-      get :index, params: { product_external_id: product.external_id, affiliate_id: affiliate_user.id }, format: :json
+      get :index, params: { product_external_id: product.external_id, affiliate_external_id: affiliate_user.external_id }, format: :json
 
       expect(response).to have_http_status(:ok)
 
@@ -70,7 +70,7 @@ describe Admin::Affiliates::Products::PurchasesController do
       end
 
       it "accepts per_page and page parameters" do
-        get :index, params: { product_external_id: product.external_id, affiliate_id: affiliate_user.id, per_page: 5, page: 1 }, format: :json
+        get :index, params: { product_external_id: product.external_id, affiliate_external_id: affiliate_user.external_id, per_page: 5, page: 1 }, format: :json
 
         expect(response).to have_http_status(:ok)
 
@@ -83,7 +83,7 @@ describe Admin::Affiliates::Products::PurchasesController do
       end
 
       it "returns the correct page of results" do
-        get :index, params: { product_external_id: product.external_id, affiliate_id: affiliate_user.id, per_page: 5, page: 2 }, format: :json
+        get :index, params: { product_external_id: product.external_id, affiliate_external_id: affiliate_user.external_id, per_page: 5, page: 2 }, format: :json
 
         expect(response).to have_http_status(:ok)
 
@@ -93,7 +93,7 @@ describe Admin::Affiliates::Products::PurchasesController do
       end
 
       it "respects per_page limit" do
-        get :index, params: { product_external_id: product.external_id, affiliate_id: affiliate_user.id, per_page: 3, page: 1 }, format: :json
+        get :index, params: { product_external_id: product.external_id, affiliate_external_id: affiliate_user.external_id, per_page: 3, page: 1 }, format: :json
 
         expect(response).to have_http_status(:ok)
 

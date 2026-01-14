@@ -11,10 +11,11 @@ export type ProductPurchase = {
   stripe_refunded: boolean | null;
   is_chargedback: boolean;
   is_chargeback_reversed: boolean;
-  refunded_by: { id: number; email: string }[];
+  refunded_by: { external_id: string; email: string }[];
   error_code: string | null;
   purchase_state: string;
   gumroad_responsible_for_tax: boolean;
+  className?: string;
 };
 
 const AdminProductPurchase = ({
@@ -32,6 +33,7 @@ const AdminProductPurchase = ({
     is_chargeback_reversed,
     email,
     created,
+    className,
   },
   isSelected,
   onToggleSelection,
@@ -43,8 +45,8 @@ const AdminProductPurchase = ({
   const isSelectable = stripe_refunded !== true;
 
   return (
-    <div>
-      <div className="flex items-start gap-2">
+    <div className={className}>
+      <div className="flex grow items-start gap-2">
         <input
           type="checkbox"
           aria-label={`Select purchase ${external_id}`}
@@ -67,9 +69,9 @@ const AdminProductPurchase = ({
                 <li>
                   (refunded
                   {refunded_by.map((refunder) => (
-                    <React.Fragment key={refunder.id}>
+                    <React.Fragment key={refunder.external_id}>
                       {" "}
-                      by <a href={Routes.admin_user_path(refunder.id)}>{refunder.email}</a>
+                      by <a href={Routes.admin_user_path(refunder.external_id)}>{refunder.email}</a>
                     </React.Fragment>
                   ))}
                   )

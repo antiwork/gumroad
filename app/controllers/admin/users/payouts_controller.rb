@@ -51,6 +51,6 @@ class Admin::Users::PayoutsController < Admin::BaseController
 
   private
     def fetch_user
-      @user = User.find_by(id: params[:user_id]) || e404
+      @user = User.find_by_external_id(params[:user_external_id]) || e404
     end
 end

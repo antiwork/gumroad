@@ -63,4 +63,45 @@ describe HealthcheckController do
       end
     end
   end
+
+  describe "GET 'paypal_balance'" do
+    context "when PayPal topup is not needed (Redis key is false)" do
+      before do
+        $redis.set(RedisKey.paypal_topup_needed, "false")
+      end
+
+      it "returns HTTP success" do
+        get :paypal_balance
+
+        expect(response.status).to eq(200)
+        expect(response.body).to eq("PayPal balance: topup not required")
+      end
+    end
+
+    context "when Redis key is not set" do
+      before do
+        $redis.del(RedisKey.paypal_topup_needed)
+      end
+
+      it "returns HTTP service_unavailable" do
+        get :paypal_balance
+
+        expect(response.status).to eq(503)
+        expect(response.body).to eq("PayPal balance: topup required")
+      end
+    end
+
+    context "when PayPal topup is needed (Redis key is true)" do
+      before do
+        $redis.set(RedisKey.paypal_topup_needed, "true")
+      end
+
+      it "returns HTTP service_unavailable" do
+        get :paypal_balance
+
+        expect(response.status).to eq(503)
+        expect(response.body).to eq("PayPal balance: topup required")
+      end
+    end
+  end
 end
