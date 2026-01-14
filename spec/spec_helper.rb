@@ -112,12 +112,10 @@ def configure_vcr
       Base64.strict_encode64("#{GlobalConfig.get('EASYPOST_API_KEY')}:")
     end
 
-    # Filter PayPal Partner credentials (Base64-encoded for Basic Auth headers)
     config.filter_sensitive_data("<PAYPAL_PARTNER_CREDENTIALS_BASE64>") do
       Base64.strict_encode64("#{GlobalConfig.get('PAYPAL_PARTNER_CLIENT_ID')}:#{GlobalConfig.get('PAYPAL_PARTNER_CLIENT_SECRET')}")
     end
 
-    # Filter PayPal OAuth access tokens (dynamically generated)
     config.before_record do |interaction|
       if interaction.response.body.present?
         interaction.response.body = interaction.response.body.gsub(
