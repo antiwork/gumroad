@@ -121,11 +121,11 @@ const useChurnRangeSync = (
     }
 
     inFlightRange.current = { from: fromDate, to: toDate };
-    setIsReloading(true);
     router.reload({
       only: ["churn"],
       data: { from: fromDate, to: toDate },
       preserveUrl: true,
+      onStart: () => setIsReloading(true),
       onFinish: () => setIsReloading(false),
       onError: () => {
         inFlightRange.current = null;
