@@ -22,7 +22,7 @@ describe("ProductShowScenario", type: :system, js: true) do
     expect(product.sales.successful.last.price_cents).to eq(total_price * 100)
   end
 
-  it "preselects and allows purchase of a physical product sku as specified in the variant query string parameter" do
+  it "preselects and allows purchase of a physical product sku as specified in the variant query string parameter", :mock_easypost do
     product = create(:product, is_physical: true, require_shipping: true, skus_enabled: true)
     product.shipping_destinations << ShippingDestination.new(country_code: Compliance::Countries::USA.alpha2,
                                                              one_item_rate_cents: 4_00,

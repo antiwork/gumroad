@@ -1,5 +1,7 @@
 import React from "react";
 
+import { Card, CardContent } from "$app/components/ui/Card";
+
 const RESOURCES = [
   {
     title: "Create an OAuth application",
@@ -34,12 +36,12 @@ const OAUTH_READING_LINKS = [
 
 export const Resources = () => (
   <>
-    <div className="stack" id="api-resources">
-      <div>
-        <h2>Resources</h2>
-      </div>
-      <div>
-        <div className="flex flex-col gap-4">
+    <Card id="api-resources">
+      <CardContent>
+        <h2 className="grow">Resources</h2>
+      </CardContent>
+      <CardContent>
+        <div className="flex grow flex-col gap-4">
           {RESOURCES.map((resource, index) => (
             <p key={index}>
               {resource.url ? (
@@ -55,15 +57,15 @@ export const Resources = () => (
             </p>
           ))}
         </div>
-      </div>
-    </div>
+      </CardContent>
+    </Card>
 
-    <div className="stack" id="api-more">
-      <div>
-        <h2>More reading</h2>
-      </div>
-      <div>
-        <div className="flex flex-col gap-4">
+    <Card id="api-more">
+      <CardContent>
+        <h2 className="grow">More reading</h2>
+      </CardContent>
+      <CardContent>
+        <div className="flex grow flex-col gap-4">
           <p>If you're interested in learning more about OAuth, here are some links that might be useful:</p>
           <ul>
             {OAUTH_READING_LINKS.map((link, index) => (
@@ -75,7 +77,7 @@ export const Resources = () => (
             ))}
           </ul>
         </div>
-      </div>
-    </div>
+      </CardContent>
+    </Card>
   </>
 );

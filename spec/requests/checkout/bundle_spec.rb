@@ -70,7 +70,7 @@ describe "Checkout bundles", :js, type: :system do
     end
   end
 
-  context "when the bundle has a physical product" do
+  context "when the bundle has a physical product", :mock_easypost do
     let(:physical_bundle) { create(:product, :bundle, user: seller) }
 
     let(:physical_product) { create(:physical_product, user: seller, name: "Physical product", skus: [create(:sku)]) }

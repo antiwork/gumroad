@@ -7,6 +7,7 @@ import { Button } from "$app/components/Button";
 import { LoadingSpinner } from "$app/components/LoadingSpinner";
 import { showAlert } from "$app/components/server-components/Alert";
 import { Alert } from "$app/components/ui/Alert";
+import { Card, CardContent } from "$app/components/ui/Card";
 
 import AdminProductPurchase, { ProductPurchase } from "./Purchase";
 
@@ -118,16 +119,17 @@ const AdminProductPurchasesContent = ({
         </div>
       </div>
 
-      <div className="stack">
+      <Card>
         {purchases.map((purchase) => (
-          <AdminProductPurchase
-            key={purchase.external_id}
-            purchase={purchase}
-            isSelected={selectedPurchaseExternalIds.includes(purchase.external_id)}
-            onToggleSelection={togglePurchaseSelection}
-          />
+          <CardContent asChild key={purchase.external_id}>
+            <AdminProductPurchase
+              purchase={purchase}
+              isSelected={selectedPurchaseExternalIds.includes(purchase.external_id)}
+              onToggleSelection={togglePurchaseSelection}
+            />
+          </CardContent>
         ))}
-      </div>
+      </Card>
 
       {isLoading ? <LoadingSpinner /> : null}
 
