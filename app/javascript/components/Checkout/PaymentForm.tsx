@@ -1240,7 +1240,7 @@ export const PaymentForm = ({
       <EmailAddress card />
       {!isFreePurchase ? (
         <>
-          <CardContent className="border-b-0">
+          <CardContent className={state.paymentMethod === "card" ? "border-b-0" : ""}>
             <div className="flex grow flex-col gap-4">
               <h4 className="font-bold">Pay with</h4>
               {state.availablePaymentMethods.length > 1 ? (
