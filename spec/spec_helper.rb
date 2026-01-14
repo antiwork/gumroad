@@ -85,6 +85,7 @@ def configure_vcr
     config.filter_sensitive_data("<PAYPAL_PARTNER_MERCHANT_ID>") { GlobalConfig.get("PAYPAL_PARTNER_MERCHANT_ID") }
     config.filter_sensitive_data("<PAYPAL_PARTNER_MERCHANT_EMAIL>") { GlobalConfig.get("PAYPAL_PARTNER_MERCHANT_EMAIL") }
     config.filter_sensitive_data("<PAYPAL_BN_CODE>") { GlobalConfig.get("PAYPAL_BN_CODE") }
+    config.filter_sensitive_data("<PAYPAL_PARTNER_CLIENT_SECRET>") { GlobalConfig.get("PAYPAL_PARTNER_CLIENT_SECRET") }
     config.filter_sensitive_data("<VATSTACK_API_KEY>") { GlobalConfig.get("VATSTACK_API_KEY") }
     config.filter_sensitive_data("<IRAS_API_ID>") { GlobalConfig.get("IRAS_API_ID") }
     config.filter_sensitive_data("<IRAS_API_SECRET>") { GlobalConfig.get("IRAS_API_SECRET") }
@@ -109,6 +110,26 @@ def configure_vcr
     # Filter EasyPost API key (Base64-encoded for Basic Auth headers)
     config.filter_sensitive_data("<EASYPOST_API_KEY_BASE64>") do
       Base64.strict_encode64("#{GlobalConfig.get('EASYPOST_API_KEY')}:")
+    end
+
+    # Filter PayPal Partner credentials (Base64-encoded for Basic Auth headers)
+    config.filter_sensitive_data("<PAYPAL_PARTNER_CREDENTIALS_BASE64>") do
+      Base64.strict_encode64("#{GlobalConfig.get('PAYPAL_PARTNER_CLIENT_ID')}:#{GlobalConfig.get('PAYPAL_PARTNER_CLIENT_SECRET')}")
+    end
+
+    # Filter PayPal OAuth access tokens (dynamically generated)
+    config.before_record do |interaction|
+      if interaction.response.body.present?
+        interaction.response.body = interaction.response.body.gsub(
+          /"access_token":"A21AA[^"]+"/,
+          '"access_token":"<PAYPAL_OAUTH_ACCESS_TOKEN>"'
+        )
+      end
+      if interaction.request.headers["Authorization"]
+        interaction.request.headers["Authorization"] = interaction.request.headers["Authorization"].map do |auth|
+          auth.gsub(/Bearer A21AA[A-Za-z0-9_-]+/, "Bearer <PAYPAL_OAUTH_ACCESS_TOKEN>")
+        end
+      end
     end
   end
 end
