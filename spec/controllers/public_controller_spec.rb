@@ -27,6 +27,24 @@ describe PublicController, type: :controller, inertia: true do
     end
   end
 
+  describe "GET charge", inertia: true do
+    it "succeeds and renders with Inertia" do
+      get :charge
+      expect(response).to be_successful
+      expect(assigns(:title)).to eq("Why is there a charge on my account?")
+      expect(inertia).to render_component("Public/Charge")
+    end
+  end
+
+  describe "GET license_key_lookup", inertia: true do
+    it "succeeds and renders with Inertia" do
+      get :license_key_lookup
+      expect(response).to be_successful
+      expect(assigns(:title)).to eq("What is my license key?")
+      expect(inertia).to render_component("Public/LicenseKeyLookup")
+    end
+  end
+
   describe "GET home" do
     context "when not authenticated" do
       it "redirects to the login page" do
