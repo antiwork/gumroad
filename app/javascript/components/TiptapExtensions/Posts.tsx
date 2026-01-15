@@ -121,7 +121,7 @@ const PostsNodeView = ({ editor, selected }: NodeViewProps) => {
                         <strong>{post.name}</strong>
                       </a>
                     ) : (
-                      <TrackClick eventName="post_click" resourceId={post.id}>
+                      <TrackClick eventName="post_click" post={post}>
                         <a href={post.url} target="_blank" rel="noreferrer">
                           <strong>{post.name}</strong>
                         </a>

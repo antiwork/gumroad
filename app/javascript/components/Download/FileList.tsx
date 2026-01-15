@@ -1,7 +1,7 @@
 import cx from "classnames";
 import { throttle } from "lodash-es";
 import * as React from "react";
-import { cast } from "ts-safe-cast";
+import { cast, is } from "ts-safe-cast";
 
 import { createConsumptionEvent } from "$app/data/consumption_analytics";
 import { trackMediaLocationChanged } from "$app/data/media_location";
@@ -26,6 +26,7 @@ import {
   usePurchaseInfo,
 } from "$app/components/server-components/DownloadPage/WithContent";
 import { Row, RowActions, RowContent, RowDetails, Rows } from "$app/components/ui/Rows";
+import { useGlobalEventListener } from "$app/components/useGlobalEventListener";
 import { useOnOutsideClick } from "$app/components/useOnOutsideClick";
 import { useRefToLatest } from "$app/components/useRefToLatest";
 import { WithTooltip } from "$app/components/WithTooltip";
@@ -157,7 +158,7 @@ export const FileRow = ({
   const [isCollapsed, setIsCollapsed] = React.useState(initialCollapsed);
   const downloadUrl = file.download_url;
   const downloadButton = downloadUrl ? (
-    <TrackClick eventName="download_click" resourceId={file.id}>
+    <TrackClick eventName="download_click" file={file}>
       <NavigationButton href={downloadUrl}>Download</NavigationButton>
     </TrackClick>
   ) : null;
@@ -260,7 +261,7 @@ export const FileRow = ({
         {downloadButton}
 
         {!isEmbed && streamUrl != null ? (
-          <TrackClick eventName="stream_click" resourceId={file.id}>
+          <TrackClick eventName="stream_click" file={file}>
             <NavigationButton color="primary" href={streamUrl} target="_blank">
               {file.latest_media_location != null && file.latest_media_location.location === file.content_length
                 ? "Watch again"
@@ -276,7 +277,7 @@ export const FileRow = ({
         ) : null}
 
         {externalLinkUrl !== null ? (
-          <TrackClick eventName="external_link_click" resourceId={file.id}>
+          <TrackClick eventName="external_link_click" file={file}>
             <NavigationButton color="primary" href={externalLinkUrl} target="_blank">
               Open
             </NavigationButton>
@@ -284,7 +285,7 @@ export const FileRow = ({
         ) : null}
 
         {FileUtils.isAudioExtension(file.extension) ? (
-          <TrackClick eventName="play_click" resourceId={file.id}>
+          <TrackClick eventName="play_click" file={file}>
             <Button
               color={isShowingAudioDrawer ? undefined : "primary"}
               aria-label="Play Button"
@@ -315,7 +316,7 @@ export const FileRow = ({
         {!file.processing ? (
           <>
             {file.kindle_data != null ? (
-              <TrackClick eventName="send_to_kindle_click" resourceId={file.id}>
+              <TrackClick eventName="send_to_kindle_click" file={file}>
                 <Button className="button-kindle" onClick={toggleKindleDrawer}>
                   Send to Kindle
                 </Button>
@@ -323,7 +324,7 @@ export const FileRow = ({
             ) : null}
 
             {file.read_url != null ? (
-              <NativeAppLink resourceId={file.id}>
+              <NativeAppLink file={file}>
                 <NavigationButton color="primary" href={file.read_url}>
                   {file.latest_media_location != null && file.latest_media_location.location === file.content_length
                     ? "Read again"
@@ -439,6 +440,16 @@ const MobileAppAudioFileRow = ({ file }: { file: FileItem }) => {
     }
   });
 
+  useGlobalEventListener("message", (event) => {
+    if (typeof event.data !== "string" || !event.data.startsWith("{")) return;
+    const data: unknown = JSON.parse(event.data);
+    if (is<{ type: "mobileAppAudioPlayerInfo"; payload: MobileAppAudioPlayerInfo }>(data)) {
+      if (data.payload.fileId !== file.id) return;
+      setIsPlaying(data.payload.isPlaying);
+      setLatestMediaLocation(parseFloat(data.payload.latestMediaLocation ?? "0"));
+    }
+  });
+
   const [showTooltip, setShowTooltip] = React.useState(false);
   const touchAndHoldEventListeners = useTouchAndHold({
     onFinish: () => setShowTooltip(true),
@@ -457,7 +468,7 @@ const MobileAppAudioFileRow = ({ file }: { file: FileItem }) => {
       <WithTooltip tip={showTooltip ? file.file_name : null} position="top">
         <TrackClick
           eventName="play_click"
-          resourceId={isProcessing || showTooltip ? null : file.id} // Prevent playback when processing or showing tooltip
+          file={isProcessing || showTooltip ? null : file} // Prevent playback when processing or showing tooltip
           type="audio"
           isPlaying={isPlaying}
           resumeAt={latestMediaLocation || 0}
@@ -501,7 +512,7 @@ const MobileAppAudioFileRow = ({ file }: { file: FileItem }) => {
         style={{ gridColumn: "4", gap: "var(--spacer-4)", flexWrap: "nowrap" }}
       >
         {file.download_url ? (
-          <TrackClick eventName="download_click" resourceId={file.id}>
+          <TrackClick eventName="download_click" file={file}>
             <button aria-label="Download">
               <Icon name="download" className="type-icon" />
             </button>
@@ -509,7 +520,7 @@ const MobileAppAudioFileRow = ({ file }: { file: FileItem }) => {
         ) : null}
         <TrackClick
           eventName="play_click"
-          resourceId={isProcessing ? null : file.id}
+          file={isProcessing ? null : file}
           type="audio"
           isPlaying={isPlaying}
           resumeAt={latestMediaLocation || 0}
@@ -684,7 +695,7 @@ const VideoEmbedPreview = ({
           borderRadius: "var(--border-radius-1) var(--border-radius-1) 0 0",
         }}
       />
-      <TrackClick eventName="watch" resourceId={file.id}>
+      <TrackClick eventName="watch" file={file}>
         <button
           className="underline"
           style={{
