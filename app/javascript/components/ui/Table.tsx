@@ -172,7 +172,7 @@ export const TableCell = ({
       {...props}
     >
       {label || cellContext?.label ? (
-        <div className={classNames("mb-2 font-bold lg:hidden", hideLabel && "sr-only")}>
+        <div className={classNames("mb-2 font-bold lg:hidden", hideLabel && "relative sr-only")}>
           {label ?? cellContext?.label}
         </div>
       ) : null}
