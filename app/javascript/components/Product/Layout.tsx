@@ -140,15 +140,7 @@ export const Layout = (
     hasHero?: boolean;
   },
 ) => {
-  const {
-    product,
-    purchase,
-    discount_code: discountCode,
-    cart,
-    hasHero,
-    wishlists,
-    main_section_index,
-  } = props;
+  const { product, purchase, discount_code: discountCode, cart, hasHero, wishlists, main_section_index } = props;
   const [selection, setSelection] = useSelectionFromUrl(product);
   const ctaButtonRef = React.useRef<HTMLAnchorElement>(null);
   const ctaLabel = cart ? "Add to cart" : undefined;

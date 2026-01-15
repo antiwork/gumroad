@@ -78,18 +78,7 @@ const PARAMETERS_NOT_INHERITED_FROM_URL = new Set([
 ]);
 
 export const CtaButton = React.forwardRef<HTMLAnchorElement, Props>(
-  (
-    {
-      product,
-      purchase,
-      discountCode,
-      selection,
-      label,
-      onClick,
-      showInstallmentPlanNotes = false,
-    },
-    ref,
-  ) => {
+  ({ product, purchase, discountCode, selection, label, onClick, showInstallmentPlanNotes = false }, ref) => {
     const { searchParams } = new URL(useOriginalLocation());
 
     const [referrer, setReferrer] = React.useState("");
@@ -143,7 +132,6 @@ export const CtaButton = React.forwardRef<HTMLAnchorElement, Props>(
       onClick: (evt: React.MouseEvent<HTMLAnchorElement>) => {
         onClick?.(evt);
         if (evt.defaultPrevented) return;
-
         trackCtaClick({
           sellerId: product.seller?.id,
           name: product.name,
