@@ -541,7 +541,7 @@ describe("Payments Settings Scenario", type: :system, js: true) do
 
         expect(page).to have_section("Verification")
 
-        expect(page).to have_status(text: "Your account details have been verified!")
+        expect(page).to have_status(text: "Your identity has been verified!")
       end
 
       it "does not show the verification section if Stripe account is not active" do
@@ -562,7 +562,7 @@ describe("Payments Settings Scenario", type: :system, js: true) do
 
         merchant_account.mark_deleted!
         visit settings_payments_path
-        expect(page).to have_status(text: "Your account details have been verified!")
+        expect(page).to have_status(text: "Your identity has been verified!")
       end
 
       context "when the creator has a business account" do
