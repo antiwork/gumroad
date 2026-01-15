@@ -165,7 +165,7 @@ export const TableCell = ({
   return (
     <td
       className={classNames(
-        "block p-4 text-left align-middle not-first:border-t not-first:border-border lg:table-cell lg:border-t lg:border-border",
+        "relative block p-4 text-left align-middle not-first:border-t not-first:border-border lg:table-cell lg:border-t lg:border-border",
         cellRoundingClasses,
         className,
       )}
