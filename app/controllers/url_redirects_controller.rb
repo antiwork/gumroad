@@ -356,6 +356,11 @@ class UrlRedirectsController < ApplicationController
         return redirect_to url_redirect_membership_inactive_page_path(@url_redirect.token)
       end
 
+      if params[:access_token].present? && params[:mobile_token] == Api::Mobile::BaseController::MOBILE_TOKEN
+        doorkeeper_authorize! :mobile_api
+        return if purchase && purchase.purchaser && purchase.purchaser == current_api_user
+      end
+
       if cookies.encrypted[:confirmed_redirect] == @url_redirect.token ||
          (purchase && ((purchase.purchaser && purchase.purchaser == logged_in_user) || purchase.ip_address == request.remote_ip))
         return

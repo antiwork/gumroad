@@ -135,7 +135,11 @@ export const Nav = (props: Props) => {
           text="Analytics"
           icon="bar-chart-fill"
           href={Routes.sales_dashboard_url(routeParams)}
-          additionalPatterns={[Routes.audience_dashboard_url(routeParams), Routes.dashboard_utm_links_url(routeParams)]}
+          additionalPatterns={[
+            Routes.audience_dashboard_url(routeParams),
+            Routes.dashboard_utm_links_url(routeParams),
+            Routes.churn_dashboard_url(routeParams),
+          ]}
         />
         {loggedInUser?.policies.balance.index ? (
           <ClientNavLink text="Payouts" icon="bank" href={Routes.balance_url(routeParams)} />
