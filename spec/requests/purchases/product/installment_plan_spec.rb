@@ -341,7 +341,7 @@ describe "Product with installment plan", type: :system, js: true do
     end
   end
 
-  describe "tax" do
+  describe "tax", :taxjar, :force_vcr_on do
     it "calculates and charges sales tax for all installment payments when applicable" do
       visit product.long_url
 
