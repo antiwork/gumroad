@@ -75,18 +75,6 @@ class ProductPresenter::Card
       offer_code = product.default_offer_code
       return base_price_cents unless offer_code.present?
 
-      response = OfferCodeDiscountComputingService.new(
-        offer_code.code,
-        {
-          product.unique_permalink => {
-            permalink: product.unique_permalink,
-            quantity: 1
-          }
-        }
-      ).process
-
-      return base_price_cents if response[:error_code].present?
-
       discount_amount_cents = offer_code.amount_off(base_price_cents)
       [base_price_cents - discount_amount_cents, 0].max
     end
