@@ -94,7 +94,14 @@ class SignupController < Devise::RegistrationsController
     end
 
     def permitted_params
-      params.require(:user).permit(UsersController::USER_PERMITTED_ATTRS)
+      params.require(:user).permit(
+        :email,
+        :password,
+        :password_confirmation,
+        :terms_accepted,
+        :buyer_signup,
+        :remember_me
+      )
     end
 
     def verify_captcha_and_handle_existing_users

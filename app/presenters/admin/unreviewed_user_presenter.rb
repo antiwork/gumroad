@@ -11,7 +11,6 @@ class Admin::UnreviewedUserPresenter
 
   def props
     {
-      id: user.id,
       external_id: user.external_id,
       name: user.display_name,
       email: user.email,

@@ -1,4 +1,4 @@
-import range from "lodash/range";
+import { range } from "lodash-es";
 import * as React from "react";
 
 import { Icon } from "$app/components/Icons";

@@ -953,7 +953,7 @@ describe("Email Creation Flow", :js, type: :system) do
     expect(upsell.offer_code.product_ids).to eq([product.id])
 
     installment = Installment.last
-    expect(installment.message).to eq("<p><br></p><upsell-card productid=\"#{product.external_id}\" discount='{\"type\":\"fixed\",\"cents\":100}' id=\"#{upsell.external_id}\"></upsell-card><p>Hi there!</p>")
+    expect(installment.message).to eq("<p>Hi there!</p><upsell-card productid=\"#{product.external_id}\" discount='{\"type\":\"fixed\",\"cents\":100}' id=\"#{upsell.external_id}\"></upsell-card>")
 
     set_rich_text_editor_input(find("[aria-label='Email message']"), to_text: "")
     sleep 0.5 # wait for the message editor to update

@@ -1,11 +1,12 @@
 import cx from "classnames";
-import uniqBy from "lodash/uniqBy";
+import { uniqBy } from "lodash-es";
 import * as React from "react";
 
 import { CustomFieldDescriptor } from "$app/parsers/product";
 
 import { Creator } from "$app/components/Checkout/cartState";
 import { Product, getCustomFieldKey, getErrors, isProcessing, useState } from "$app/components/Checkout/payment";
+import { Card, CardContent } from "$app/components/ui/Card";
 
 const CustomField = ({ field, fieldKey }: { field: CustomFieldDescriptor; fieldKey: string }) => {
   const [state, dispatch] = useState();
@@ -127,16 +128,16 @@ const getCustomFields = (products: Product[]) => {
   return { sharedCustomFields, customFieldGroups };
 };
 
-const SellerCustomFields = ({ seller }: { seller: Creator }) => {
+const SellerCustomFields = ({ seller, className }: { seller: Creator; className?: string | undefined }) => {
   const [state] = useState();
   const { sharedCustomFields, customFieldGroups } = getCustomFields(
     state.products.filter(({ creator }) => creator.id === seller.id),
   );
 
   return sharedCustomFields.length > 0 ? (
-    <div>
-      <section className="flex flex-col gap-4">
-        <h4>
+    <div className={className}>
+      <section className="flex grow flex-col gap-4">
+        <h4 className="font-bold">
           <img className="user-avatar" src={seller.avatar_url} />
           &ensp;
           {seller.name}
@@ -149,24 +150,24 @@ const SellerCustomFields = ({ seller }: { seller: Creator }) => {
             <legend>
               <label>{product.name}</label>
             </legend>
-            <div className="stack">
-              <div>
-                <section className="flex flex-col gap-4">
+            <Card>
+              <CardContent>
+                <section className="flex grow flex-col gap-4">
                   {customFields.map((field) => (
                     <CustomField key={field.id} field={field} fieldKey={getCustomFieldKey(field, product)} />
                   ))}
                 </section>
-              </div>
-            </div>
+              </CardContent>
+            </Card>
           </fieldset>
         ))}
       </section>
     </div>
   ) : (
     customFieldGroups.map(({ product, customFields }) => (
-      <div key={`${product.permalink}-${product.bundleProductId}`}>
-        <section className="flex flex-col gap-4">
-          <h4>{product.name}</h4>
+      <div key={`${product.permalink}-${product.bundleProductId}`} className={className}>
+        <section className="flex grow flex-col gap-4">
+          <h4 className="font-bold">{product.name}</h4>
           {customFields.map((field) => (
             <CustomField key={field.id} field={field} fieldKey={getCustomFieldKey(field, product)} />
           ))}
@@ -176,7 +177,7 @@ const SellerCustomFields = ({ seller }: { seller: Creator }) => {
   );
 };
 
-export const CustomFields = () => {
+export const CustomFields = ({ className }: { className?: string | undefined }) => {
   const [state] = useState();
 
   const sellers = uniqBy(
@@ -184,5 +185,5 @@ export const CustomFields = () => {
     "id",
   );
 
-  return sellers.map((seller) => <SellerCustomFields key={seller.id} seller={seller} />);
+  return sellers.map((seller) => <SellerCustomFields key={seller.id} seller={seller} className={className} />);
 };

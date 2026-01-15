@@ -182,6 +182,7 @@ describe "Checkout cart", :js, type: :system do
         click_on "Back to Library"
         toggle_disclosure buyer.username
         click_on "Logout"
+        expect(page).to have_content("Log in")
 
         visit @membership_product.long_url
         add_to_cart(@membership_product, recurrence: "Yearly", option: @membership_product.variants.first.name)
@@ -339,7 +340,7 @@ describe "Checkout cart", :js, type: :system do
             create(:cart_product, cart: another_cart, product: create(:product, name: "Product 2"))
 
             login_as buyer
-            visit checkout_index_path(cart_id: another_cart.external_id)
+            visit checkout_index_path(cart_id: another_cart.secure_external_id(scope: "cart_login"))
             expect(page).to have_current_path(checkout_index_path)
             expect(page).to have_text("Product 1")
             expect(page).to_not have_text("Product 2")
@@ -361,7 +362,7 @@ describe "Checkout cart", :js, type: :system do
               wait.until { Cart.alive.count == 2 }
               guest_cart = Cart.alive.last
 
-              visit checkout_index_path(cart_id: user_cart.external_id)
+              visit checkout_index_path(cart_id: user_cart.secure_external_id(scope: "cart_login"))
               expect(page).to have_current_path(login_path(email: user_cart.user.email, next: checkout_index_path(referrer: UrlService.discover_domain_with_protocol)))
               fill_in "Password", with: user_cart.user.password
               click_on "Login"
@@ -388,7 +389,7 @@ describe "Checkout cart", :js, type: :system do
               current_browser_guid = Capybara.current_session.driver.browser.manage.all_cookies.find { _1[:name] == "_gumroad_guid" }&.[](:value)
               current_guest_cart.update!(browser_guid: current_browser_guid)
 
-              visit checkout_index_path(cart_id: cart.external_id)
+              visit checkout_index_path(cart_id: cart.secure_external_id(scope: "cart_login"))
               expect(page).to have_current_path(checkout_index_path)
               expect(page).to have_text("Product 1")
               expect(page).to have_text("Product 2")

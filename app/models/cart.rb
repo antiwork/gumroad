@@ -1,7 +1,7 @@
 # frozen_string_literal: true
 
 class Cart < ApplicationRecord
-  include ExternalId
+  include SecureExternalId
   include Deletable
 
   DISCOUNT_CODES_SCHEMA = {

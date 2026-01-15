@@ -47,7 +47,7 @@ const AdminUserMerchantAccounts = ({ user }: AdminUserMerchantAccountsProps) => 
       setIsLoading(true);
       const response = await request({
         method: "GET",
-        url: Routes.admin_user_merchant_accounts_path(user.id),
+        url: Routes.admin_user_merchant_accounts_path(user.external_id),
         accept: "json",
       });
       setData(cast<AdminUserMerchantAccountsData>(await response.json()));
@@ -79,8 +79,8 @@ const AdminUserMerchantAccounts = ({ user }: AdminUserMerchantAccountsProps) => 
         <div className="mt-2 flex flex-wrap gap-2">
           <AdminActionButton
             label="Create Managed Account"
-            url={Routes.create_stripe_managed_account_admin_user_path(user.id)}
-            confirm_message={`Are you sure you want to create a Stripe Managed Account for user ${user.id}?`}
+            url={Routes.create_stripe_managed_account_admin_user_path(user.external_id)}
+            confirm_message={`Are you sure you want to create a Stripe Managed Account for user ${user.external_id}?`}
             class="button-stripe"
           />
         </div>
