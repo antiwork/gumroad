@@ -4381,7 +4381,7 @@ describe("Product Page - Tax Scenarios", type: :system, js: true) do
       expect(purchase.was_purchase_taxable).to be(false)
     end
 
-    it "resets the tax and allows the purchase when the EU-elected country doesn't match the non-EU card country or non-EU detected country" do
+    it "trusts the EU-elected country and charges VAT when the non-EU card country and non-EU detected country don't contradict it" do
       create(:zip_tax_rate, country: "AT", zip_code: nil, state: nil, combined_rate: 0.20, is_seller_responsible: false)
       allow_any_instance_of(ActionDispatch::Request).to receive(:remote_ip).and_return("189.144.240.120") # Mexico
 
@@ -4397,11 +4397,11 @@ describe("Product Page - Tax Scenarios", type: :system, js: true) do
       expect(purchase.country).to eq("Austria")
       expect(purchase.ip_country).to eq("Mexico")
       expect(purchase.card_country).to eq("MX")
-      expect(purchase.total_transaction_cents).to eq(100_00)
+      expect(purchase.total_transaction_cents).to eq(120_00)
       expect(purchase.price_cents).to eq(100_00)
       expect(purchase.tax_cents).to eq(0)
-      expect(purchase.gumroad_tax_cents).to eq(0)
-      expect(purchase.was_purchase_taxable).to be(false)
+      expect(purchase.gumroad_tax_cents).to eq(20_00)
+      expect(purchase.was_purchase_taxable).to be(true)
     end
   end
 end
