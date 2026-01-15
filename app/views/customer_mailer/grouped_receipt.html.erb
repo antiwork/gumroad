@@ -1,3 +1,0 @@
-<% @chargeables.each do |chargeable| %>
-  <%= render("customer_mailer/receipt", receipt_presenter: ReceiptPresenter.new(chargeable, for_email: true), chargeable: chargeable) %>
-<% end %>

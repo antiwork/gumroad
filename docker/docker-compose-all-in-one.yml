@@ -1,0 +1,122 @@
+version: '3.8'
+
+services:
+  mysql:
+    image: mysql:8.0
+    environment:
+      MYSQL_ROOT_PASSWORD: root
+      MYSQL_DATABASE: gumroad_development
+    ports:
+      - "3306:3306"
+    volumes:
+      - mysql_data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+
+  mongodb:
+    image: mongo:7
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongodb_data:/data/db
+    healthcheck:
+      test: ["CMD", "mongosh", "--eval", "db.adminCommand('ping')"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  elasticsearch:
+    image: docker.elastic.co/elasticsearch/elasticsearch:8.11.0
+    environment:
+      - discovery.type=single-node
+      - xpack.security.enabled=false
+      - "ES_JAVA_OPTS=-Xms512m -Xmx512m"
+    ports:
+      - "9200:9200"
+    volumes:
+      - elasticsearch_data:/usr/share/elasticsearch/data
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:9200/_cluster/health || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+
+  memcached:
+    image: memcached:1.6-alpine
+    ports:
+      - "11211:11211"
+    healthcheck:
+      test: ["CMD", "nc", "-z", "localhost", "11211"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+
+  app:
+    build:
+      context: ..
+      dockerfile: docker/app/Dockerfile
+    depends_on:
+      mysql:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      mongodb:
+        condition: service_healthy
+      elasticsearch:
+        condition: service_healthy
+      memcached:
+        condition: service_healthy
+    ports:
+      - "3000:3000"
+    volumes:
+      - ..:/app
+      - bundle_cache:/usr/local/bundle
+      - node_modules:/app/node_modules
+    environment:
+      - DATABASE_URL=mysql2://root:root@mysql:3306/gumroad_development
+      - REDIS_URL=redis://redis:6379/0
+      - MONGODB_URL=mongodb://mongodb:27017/gumroad_development
+      - ELASTICSEARCH_URL=http://elasticsearch:9200
+      - MEMCACHED_SERVERS=memcached:11211
+      - RAILS_ENV=development
+      - ANYCABLE_HOST=0.0.0.0
+      - SHAKAPACKER_DEV_SERVER_HOST=0.0.0.0
+
+  nginx:
+    image: nginx:alpine
+    depends_on:
+      - app
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./local-nginx/gumroad_dev_all_in_one.conf:/etc/nginx/conf.d/default.conf:ro
+      - ./local-nginx/ssl:/etc/nginx/ssl:ro
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost/health"]
+      interval: 10s
+      timeout: 3s
+      retries: 3
+
+volumes:
+  mysql_data:
+  redis_data:
+  mongodb_data:
+  elasticsearch_data:
+  bundle_cache:
+  node_modules:
