@@ -27,23 +27,7 @@ describe EmailRouterFallbackService do
         expect(EmailRouterFallbackService.email_provider_for_two_factor(user:)).to be_nil
       end
 
-      it "returns nil when previous email was sent more than 30 seconds ago" do
-        travel_to(35.seconds.ago) do
-          EmailRouterFallbackService.record_email_sent(user:)
-        end
-
-        expect(EmailRouterFallbackService.email_provider_for_two_factor(user:)).to be_nil
-      end
-
-      it "returns Resend provider when previous email was sent within 30 seconds" do
-        travel_to(20.seconds.ago) do
-          EmailRouterFallbackService.record_email_sent(user:)
-        end
-
-        expect(EmailRouterFallbackService.email_provider_for_two_factor(user:)).to eq MailerInfo::EMAIL_PROVIDER_RESEND
-      end
-
-      it "returns Resend provider when previous email was sent just now" do
+      it "returns Resend provider when Redis key exists" do
         EmailRouterFallbackService.record_email_sent(user:)
 
         expect(EmailRouterFallbackService.email_provider_for_two_factor(user:)).to eq MailerInfo::EMAIL_PROVIDER_RESEND
@@ -69,23 +53,11 @@ describe EmailRouterFallbackService do
       end
     end
 
-    it "sets appropriate TTL on the key" do
+    it "sets 5 minute TTL on the key" do
       EmailRouterFallbackService.record_email_sent(user:)
 
       ttl = $redis.ttl(RedisKey.email_router_fallback(user.id))
-      expect(ttl).to be_between(110, 120)
-    end
-
-    it "updates the timestamp on subsequent calls" do
-      EmailRouterFallbackService.record_email_sent(user:)
-      first_value = Time.zone.parse($redis.get(RedisKey.email_router_fallback(user.id)))
-
-      travel_to(10.seconds.from_now) do
-        EmailRouterFallbackService.record_email_sent(user:)
-        second_value = Time.zone.parse($redis.get(RedisKey.email_router_fallback(user.id)))
-
-        expect(second_value).to be > first_value
-      end
+      expect(ttl).to be_between(290, 300)
     end
   end
 
