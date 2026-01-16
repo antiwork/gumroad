@@ -29,8 +29,20 @@ This starts all required services (MySQL, Redis, MongoDB, Elasticsearch, Memcach
    ```
 
 3. **Start Gumroad**
+   
+   **macOS/Linux (using Make):**
    ```bash
    make docker-start
+   ```
+   
+   **Windows (PowerShell):**
+   ```powershell
+   .\docker-start.ps1
+   ```
+   
+   **Or use Docker Compose directly:**
+   ```bash
+   docker compose -f docker/docker-compose-all-in-one.yml up --build
    ```
 
 4. **Open in browser**
@@ -41,12 +53,24 @@ That's it! Gumroad is now running with all services configured automatically.
 
 ### Docker Commands
 
+**macOS/Linux (using Make):**
 - `make docker-start` - Start all services
 - `make docker-stop` - Stop all services
 - `make docker-restart` - Restart all services
 - `make docker-logs` - View logs from all services
 - `make docker-shell` - Open bash shell in app container
 - `make docker-clean` - Stop and remove all volumes (clean start)
+
+**Windows (PowerShell):**
+- `.\docker-start.ps1` - Start all services
+- `.\docker-stop.ps1` - Stop all services
+- `docker compose -f docker/docker-compose-all-in-one.yml logs -f` - View logs
+- `docker compose -f docker/docker-compose-all-in-one.yml exec app bash` - Open shell in app container
+- `docker compose -f docker/docker-compose-all-in-one.yml down -v` - Stop and remove all volumes
+
+**Or use Docker Compose directly (all platforms):**
+- `docker compose -f docker/docker-compose-all-in-one.yml up --build` - Start all services
+- `docker compose -f docker/docker-compose-all-in-one.yml down` - Stop all services
 
 ### Troubleshooting
 
