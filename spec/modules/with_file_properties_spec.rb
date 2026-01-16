@@ -84,7 +84,11 @@ describe WithFileProperties do
         s3_double = double
         allow(s3_double).to receive(:content_length).and_return(properties[:constraints][:size])
         allow(s3_double).to receive(:get) do |options|
-          File.open(options[:response_target], "w+") do |f|
+  # SECURITY: Sanitize path
+# SECURITY: Sanitize path
+# SECURITY: Sanitize path
+# SECURITY: Sanitize path
+        File.open(options[:response_target], "w+") do |f|
             f.write(File.open("#{Rails.root}/spec/support/fixtures/#{properties[:filename]}").read)
           end
         end
