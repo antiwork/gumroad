@@ -282,11 +282,14 @@ class UrlRedirectsController < ApplicationController
   def update_last_visited_page
     fetch_url_redirect
     page_id = params[:page_id]&.to_s
-    if page_id.present?
-      @url_redirect.update(last_visited_page_id: page_id)
+    if page_id.present? && @url_redirect.purchase.present?
+      @url_redirect.purchase.update!(
+        last_content_page_id: page_id,
+        last_content_page_viewed_at: Time.current
+      )
       render json: { success: true }
     else
-      render json: { success: false, error: "Invalid page_id" }, status: :bad_request
+      render json: { success: false, error: "Invalid page_id or missing purchase" }, status: :bad_request
     end
   end
 

@@ -5,7 +5,7 @@ import { getFolderArchiveDownloadUrl, getProductFileDownloadInfos } from "$app/d
 import { RichContent, RichContentPage } from "$app/parsers/richContent";
 import { assertDefined } from "$app/utils/assert";
 import FileUtils from "$app/utils/file";
-import { request } from "$app/utils/request";
+import { assertResponseError, request } from "$app/utils/request";
 import { generatePageIcon } from "$app/utils/rich_content_page";
 import { register } from "$app/utils/serverComponentUtil";
 
@@ -264,25 +264,26 @@ const WithContent = ({
   );
   const purchaseInfo = { purchaseId: props.purchase?.id ?? null, redirectId: props.redirect_id, token: props.token };
 
-  const isInitialMountRef = React.useRef(true);
-  React.useEffect(() => {
-    if (isInitialMountRef.current) {
-      isInitialMountRef.current = false;
-      return;
-    }
+  const handlePageChange = React.useCallback(
+    async (newIndex: number) => {
+      setActivePageIndex(newIndex);
 
-    if (pages.length === 0) return;
+      const newPage = pages[newIndex];
+      if (!newPage || !props.purchase) return;
 
-    const activePageId = activePage?.page_id;
-    if (!activePageId) return;
-
-    void request({
-      url: Routes.url_redirect_update_last_visited_page_path(props.token),
-      method: "PATCH",
-      accept: "json",
-      data: { page_id: activePageId },
-    });
-  }, [activePageIndex, pages.length, props.token, activePage?.page_id]);
+      try {
+        await request({
+          url: Routes.url_redirect_update_last_visited_page_path(props.token),
+          method: "PATCH",
+          accept: "json",
+          data: { page_id: newPage.page_id },
+        });
+      } catch (e) {
+        assertResponseError(e);
+      }
+    },
+    [pages, props.token, props.purchase],
+  );
 
   return (
     <Layout
@@ -313,7 +314,7 @@ const WithContent = ({
               <PageListItem
                 key={page.page_id}
                 isSelected={index === activePageIndex}
-                onClick={() => setActivePageIndex(index)}
+                onClick={() => handlePageChange(index)}
                 role="tab"
               >
                 <Icon
@@ -382,7 +383,7 @@ const WithContent = ({
                       role="menuitemradio"
                       aria-checked={index === activePageIndex}
                       onClick={() => {
-                        setActivePageIndex(index);
+                        handlePageChange(index);
                         close();
                       }}
                     >
@@ -401,7 +402,7 @@ const WithContent = ({
           <WithTooltip position="top" tip={hasPreviousPage ? null : "No more pages"}>
             <Button
               disabled={!hasPreviousPage}
-              onClick={() => setActivePageIndex(activePageIndex - 1)}
+              onClick={() => handlePageChange(activePageIndex - 1)}
               className="flex-1 lg:flex-none"
             >
               <Icon name="arrow-left" />
@@ -411,7 +412,7 @@ const WithContent = ({
           <WithTooltip position="top" tip={hasNextPage ? null : "No more pages"}>
             <Button
               disabled={!hasNextPage}
-              onClick={() => setActivePageIndex(activePageIndex + 1)}
+              onClick={() => handlePageChange(activePageIndex + 1)}
               className="flex-1 lg:flex-none"
             >
               Next
