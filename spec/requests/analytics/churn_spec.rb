@@ -13,9 +13,22 @@ describe "Churn analytics", :js, :sidekiq_inline, :elasticsearch_wait_for_refres
 
   include_context "with switching account to user as admin for seller"
 
-  def create_subscription_purchase(product:, created_at:, subscription_deactivated_at: nil, price_cents: 100)
+  def create_subscription_purchase(
+    product:,
+    created_at:,
+    subscription_cancelled_at: nil,
+    subscription_deactivated_at: nil,
+    price_cents: 100
+  )
     price = create(:price, link: product, price_cents:, recurrence: BasePrice::Recurrence::MONTHLY)
-    subscription = create(:subscription, link: product, user: seller, deactivated_at: subscription_deactivated_at, price:)
+    subscription = create(
+      :subscription,
+      link: product,
+      user: seller,
+      cancelled_at: subscription_cancelled_at,
+      deactivated_at: subscription_deactivated_at,
+      price:
+    )
     create(
       :purchase,
       link: product,
@@ -49,11 +62,25 @@ describe "Churn analytics", :js, :sidekiq_inline, :elasticsearch_wait_for_refres
     before do
       # Product A: 10 active subscribers, 2 churned at $25 each = $50 lost
       10.times { create_subscription_purchase(product: product_a, created_at: "2023-12-01", price_cents: 2500) }
-      2.times { create_subscription_purchase(product: product_a, created_at: "2023-12-01", subscription_deactivated_at: "2023-12-15", price_cents: 2500) }
+      2.times do
+        create_subscription_purchase(
+          product: product_a,
+          created_at: "2023-12-01",
+          subscription_cancelled_at: "2023-12-15",
+          subscription_deactivated_at: "2023-12-15",
+          price_cents: 2500
+        )
+      end
 
       # Product B: 5 active subscribers, 1 churned at $30 = $30 lost
       5.times { create_subscription_purchase(product: product_b, created_at: "2023-12-01", price_cents: 3000) }
-      create_subscription_purchase(product: product_b, created_at: "2023-12-01", subscription_deactivated_at: "2023-12-15", price_cents: 3000)
+      create_subscription_purchase(
+        product: product_b,
+        created_at: "2023-12-01",
+        subscription_cancelled_at: "2023-12-15",
+        subscription_deactivated_at: "2023-12-15",
+        price_cents: 3000
+      )
 
       index_model_records(Purchase)
     end
@@ -79,7 +106,13 @@ describe "Churn analytics", :js, :sidekiq_inline, :elasticsearch_wait_for_refres
           # All 19 were active at start of previous period (all created 2023-12-01)
           # 1 churned in previous period (2023-12-10)
           # Previous period churn rate = (1 / 19) * 100 = 5.26%
-          create_subscription_purchase(product: product_a, created_at: "2023-12-01", subscription_deactivated_at: "2023-12-10", price_cents: 2500)
+          create_subscription_purchase(
+            product: product_a,
+            created_at: "2023-12-01",
+            subscription_cancelled_at: "2023-12-10",
+            subscription_deactivated_at: "2023-12-10",
+            price_cents: 2500
+          )
           index_model_records(Purchase)
         end
 
