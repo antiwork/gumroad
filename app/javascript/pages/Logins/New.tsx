@@ -28,7 +28,6 @@ type FormData = {
 };
 
 function LoginPage() {
-  console.log("authenticity_token", usePage().props);
   const { email: initialEmail, application_name, recaptcha_site_key, authenticity_token } = usePage<PageProps>().props;
 
   const url = new URL(useOriginalLocation());
