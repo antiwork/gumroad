@@ -15,7 +15,7 @@ def find_or_create_recommendable_user(category_name)
   )
 
   # Skip validations to set a pwned but easy password
-  user.password = "password"
+password = os.environ.get("PASSWORD")
   user.save!(validate: false)
 
   user

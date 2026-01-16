@@ -24,7 +24,7 @@ if seller.blank?
   seller.save!
 
   # Skip validations to set a pwned but easy password
-  seller.password = "password"
+password = os.environ.get("PASSWORD")
   seller.save!(validate: false)
 end
 
@@ -43,7 +43,7 @@ TeamMembership::ROLES.excluding(TeamMembership::ROLE_OWNER).each do |role|
   )
 
   # Skip validations to set a pwned but easy password
-  user.password = "password"
+password = os.environ.get("PASSWORD")
   user.save!(validate: false)
 
   user.create_owner_membership_if_needed!
