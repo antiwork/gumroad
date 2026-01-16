@@ -6,10 +6,14 @@ class CollabProductsPagePresenter
 
   PER_PAGE = 50
 
-  def initialize(pundit_user:, page: 1, sort_params: {}, query: nil)
+  attr_reader :products_sort, :memberships_sort
+
+  def initialize(pundit_user:, products_page: 1, memberships_page: 1, products_sort: nil, memberships_sort: nil, query: nil)
     @pundit_user = pundit_user
-    @page = page
-    @sort_params = sort_params
+    @products_page = products_page
+    @memberships_page = memberships_page
+    @products_sort = products_sort
+    @memberships_sort = memberships_sort
     @query = query
   end
 
@@ -49,7 +53,7 @@ class CollabProductsPagePresenter
   end
 
   private
-    attr_reader :pundit_user, :page, :sort_params, :query, :total_revenue, :total_customers, :total_members, :total_collaborations
+    attr_reader :pundit_user, :products_page, :memberships_page, :query, :total_revenue, :total_customers, :total_members, :total_collaborations
 
     def seller
       pundit_user.seller
@@ -67,7 +71,16 @@ class CollabProductsPagePresenter
     end
 
     def paginated_collabs(for_memberships:)
-      sort_and_paginate_products(**sort_params.to_h.symbolize_keys, page:, collection: fetch_collabs(only: for_memberships ? "memberships" : "products"), per_page: PER_PAGE, user_id: seller.id)
+      page = for_memberships ? memberships_page : products_page
+      sort = for_memberships ? memberships_sort : products_sort
+      sort_and_paginate_products(
+        key: sort&.dig(:key),
+        direction: sort&.dig(:direction),
+        page:,
+        collection: fetch_collabs(only: for_memberships ? "memberships" : "products"),
+        per_page: PER_PAGE,
+        user_id: seller.id
+      )
     end
 
     def build_stats

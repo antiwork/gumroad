@@ -646,6 +646,76 @@ describe UrlRedirectsController do
         expect(response).to redirect_to(custom_domain_coffee_url(host: url_redirect.seller.subdomain_with_protocol, purchase_email: "test@gumroad.com"))
       end
     end
+
+    describe "mobile app webview" do
+      let(:purchaser) { create(:user) }
+      let(:oauth_app) { create(:oauth_application, owner: purchaser) }
+
+      before do
+        @url_redirect.purchase.update!(purchaser:)
+      end
+
+      context "with valid mobile_api token for the purchaser" do
+        let(:access_token) { create("doorkeeper/access_token", application: oauth_app, resource_owner_id: purchaser.id, scopes: "mobile_api") }
+
+        it "grants access when the token owner is the purchaser and mobile_token is present" do
+          get :download_page, params: { id: @token, access_token: access_token.token, mobile_token: Api::Mobile::BaseController::MOBILE_TOKEN }
+
+          expect(response).to be_successful
+        end
+
+        it "requires mobile_token to match the expected value" do
+          @url_redirect.update!(has_been_seen: true)
+
+          get :download_page, params: { id: @token, access_token: access_token.token, mobile_token: "wrong_token" }
+
+          expect(response).to redirect_to(confirm_page_path(id: @url_redirect.token, destination: "download_page"))
+        end
+      end
+
+      context "with valid token but user is not the purchaser" do
+        let(:other_user) { create(:user) }
+        let(:access_token) { create("doorkeeper/access_token", application: oauth_app, resource_owner_id: other_user.id, scopes: "mobile_api") }
+
+        it "redirects to confirm page" do
+          @url_redirect.update!(has_been_seen: true)
+
+          get :download_page, params: { id: @token, access_token: access_token.token, mobile_token: Api::Mobile::BaseController::MOBILE_TOKEN }
+
+          expect(response).to redirect_to(confirm_page_path(id: @url_redirect.token, destination: "download_page"))
+        end
+      end
+
+      context "with invalid token" do
+        it "returns 401" do
+          get :download_page, params: { id: @token, access_token: "invalid_token", mobile_token: Api::Mobile::BaseController::MOBILE_TOKEN }
+
+          expect(response).to have_http_status(:unauthorized)
+        end
+      end
+
+      context "with token that has wrong scope" do
+        let(:access_token) { create("doorkeeper/access_token", application: oauth_app, resource_owner_id: purchaser.id, scopes: "creator_api") }
+
+        it "returns 403" do
+          get :download_page, params: { id: @token, access_token: access_token.token, mobile_token: Api::Mobile::BaseController::MOBILE_TOKEN }
+
+          expect(response).to have_http_status(:forbidden)
+        end
+      end
+
+      context "with valid token but no purchase is attached to the url redirect" do
+        let(:access_token) { create("doorkeeper/access_token", application: oauth_app, resource_owner_id: purchaser.id, scopes: "mobile_api") }
+
+        it "does not require redirect" do
+          @url_redirect.update!(purchase: nil, has_been_seen: true)
+
+          get :download_page, params: { id: @url_redirect.token, access_token: access_token.token, mobile_token: Api::Mobile::BaseController::MOBILE_TOKEN }
+
+          expect(response).to be_successful
+        end
+      end
+    end
   end
 
   describe "GET download_archive" do
