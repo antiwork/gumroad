@@ -317,4 +317,4 @@ class OfferCode < ApplicationRecord
         errors.add(:base, "This discount code is currently set as the default discount for one or more active or archived products. Please remove it from all products before deleting.")
       end
     end
-  end
+end
