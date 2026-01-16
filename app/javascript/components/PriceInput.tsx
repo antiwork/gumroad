@@ -26,7 +26,6 @@ export const PriceInput = React.forwardRef<
     onBlur?: () => void;
     disabled?: boolean;
     suffix?: React.ReactNode;
-    className?: { pill?: string };
   }
 >(
   (
@@ -42,7 +41,6 @@ export const PriceInput = React.forwardRef<
       onBlur,
       disabled,
       suffix,
-      className,
     },
     ref,
   ) => {
@@ -65,7 +63,7 @@ export const PriceInput = React.forwardRef<
     return (
       <div className={cx("input", { disabled })}>
         {currencyCodeSelector ? (
-          <Pill className={cx("relative -ml-2 shrink-0 cursor-pointer", className?.pill)}>
+          <Pill className={cx("relative -ml-2 shrink-0 cursor-pointer")}>
             {getLongCurrencySymbol(currencyCode)}
             <TypeSafeOptionSelect
               name="Currency"
@@ -80,7 +78,7 @@ export const PriceInput = React.forwardRef<
             <Icon name="outline-cheveron-down" className="ml-auto" />
           </Pill>
         ) : (
-          <Pill className={cx("-ml-2 shrink-0", className?.pill)}>{getLongCurrencySymbol(currencyCode)}</Pill>
+          <Pill className={cx("-ml-2 shrink-0")}>{getLongCurrencySymbol(currencyCode)}</Pill>
         )}
         <input
           type="text"

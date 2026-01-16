@@ -1,4 +1,3 @@
-import cx from "classnames";
 import * as React from "react";
 
 import { computeOfferDiscount } from "$app/data/offer_code";
@@ -242,12 +241,12 @@ export const Checkout = ({
   return (
     <div className="mx-auto w-full max-w-400">
       <PageHeader
-        className="border-none pb-2 md:px-16 md:pb-0"
-        classNames={{ title: "block!", actionsContainer: "my-0!" }}
+        className="border-none pb-0 md:px-16 md:pb-0 lg:mb-2"
         title="Checkout"
         actions={
           isDesktop ? <NavigationButton href={cart.returnUrl ?? discoverUrl}>Continue shopping</NavigationButton> : null
         }
+        showTitleOnMobile
       />
       {isOpenTuple(cart.items, 1) ? (
         <div className="grid gap-8 p-4 md:p-8 md:px-16">
@@ -269,13 +268,13 @@ export const Checkout = ({
                   </div>
                 ) : null}
               </CartItemList>
-              {displayTipSelector ? (
-                <CartItemList className="rounded-b-none p-3 sm:p-5">
-                  <TipSelector />
-                </CartItemList>
-              ) : null}
-              <CartItemList className={classNames(displayTipSelector && "-mt-6 rounded-t-none border-t-0")}>
-                <div className="grid gap-4 border-border p-4">
+              <CartItemList>
+                {displayTipSelector ? (
+                  <div className="p-3 sm:p-5">
+                    <TipSelector />
+                  </div>
+                ) : null}
+                <div className={classNames("grid gap-4 p-4", displayTipSelector && "border-t border-border")}>
                   {state.surcharges.type === "loaded" ? (
                     <>
                       <CartPriceItem title="Subtotal" price={formatPrice(subtotal)} />
@@ -362,7 +361,7 @@ export const Checkout = ({
                 {total != null ? (
                   <>
                     <footer className="grid gap-4 border-t border-border p-4">
-                      <CartPriceItem title="Total" price={formatPrice(total)} large />
+                      <CartPriceItem title="Total" price={formatPrice(total)} variant="large" />
                     </footer>
                     {commissionCompletionTotal > 0 || futureInstallmentsWithoutTipsTotal > 0 ? (
                       <div className="grid gap-4 border-t border-border p-4">
@@ -433,11 +432,7 @@ const TipSelector = () => {
 
   return (
     <div className="@container flex flex-col gap-2 sm:gap-3">
-      <CartPriceItem
-        className={{ priceField: "font-bold" }}
-        title="Add a tip?"
-        price={formatPrice(computeTip(state))}
-      />
+      <CartPriceItem title="Add a tip?" price={formatPrice(computeTip(state))} variant="tip" />
       <div className="flex flex-wrap gap-4">
         {showPercentageOptions ? (
           <div
@@ -466,9 +461,8 @@ const TipSelector = () => {
             ))}
           </div>
         ) : null}
-        <fieldset className={cx("flex-1 basis-38", { danger: errors.has("tip") })}>
+        <fieldset className={classNames("flex-1 basis-38", { danger: errors.has("tip") })}>
           <PriceInput
-            className={{ pill: "rounded-full text-sm" }}
             hasError={errors.has("tip")}
             ariaLabel="Tip"
             currencyCode="usd"
@@ -494,26 +488,29 @@ const TipSelector = () => {
 const CartPriceItem = ({
   title,
   price,
-  large = false,
-  className,
+  variant = "default",
 }: {
   title: React.ReactNode;
   price: string | number | null;
-  large?: boolean;
-  className?: { priceField?: string };
-}) => (
-  <div className={classNames("grid grid-flow-col justify-between gap-4")}>
-    <h4
-      className={classNames(
-        "inline-flex flex-wrap gap-2",
-        large ? "text-base font-bold sm:text-xl" : "text-sm sm:text-base",
-      )}
-    >
-      {title}
-    </h4>
-    <div className={classNames("text-base sm:text-lg", large && "font-bold", className?.priceField)}>{price}</div>
-  </div>
-);
+  variant?: "default" | "large" | "tip";
+}) => {
+  const isLarge = variant === "large";
+  const isDefault = variant === "default";
+
+  return (
+    <div className={classNames("grid grid-flow-col justify-between gap-4")}>
+      <h4
+        className={classNames(
+          "inline-flex flex-wrap gap-2",
+          isLarge ? "text-base font-bold sm:text-xl" : "text-sm sm:text-base",
+        )}
+      >
+        {title}
+      </h4>
+      <div className={classNames("text-base sm:text-lg", !isDefault && "font-bold")}>{price}</div>
+    </div>
+  );
+};
 
 const CartItemComponent = ({
   item,
