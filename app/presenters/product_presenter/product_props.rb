@@ -81,54 +81,52 @@ class ProductPresenter::ProductProps
     attr_reader :product, :seller
 
     def discount_code_props(discount_code_from_url, quantity)
-      candidates = []
-      candidates << discount_code_from_url if discount_code_from_url.present?
-      candidates << product.default_offer_code.code if product.default_offer_code.present?
-      candidates.uniq!
+      url_code = discount_code_from_url.present? ? discount_code_from_url : nil
+      default_code = product.default_offer_code&.code
 
-      return if candidates.empty?
+      return evaluate_code(url_code || default_code, quantity) if url_code == default_code
 
-      best_candidate = nil
-      last_error = nil
+      url_code_result = evaluate_code(url_code, quantity)
+      default_code_result = evaluate_code(default_code, quantity)
 
-      candidates.each do |code|
-        offer_code = product.find_offer_code(code: code)
-        unless offer_code
-          last_error ||= { valid: false, error_code: :invalid_offer }
-          next
-        end
+      return url_code_result if url_code_result&.dig(:valid) == true && default_code_result&.dig(:valid) != true
+      return default_code_result if default_code_result&.dig(:valid) == true && url_code_result&.dig(:valid) != true
 
-        response = OfferCodeDiscountComputingService.new(
-          code,
-          {
-            product.unique_permalink => {
-              permalink: product.unique_permalink,
-              quantity: [quantity, offer_code.minimum_quantity || 0].max
-            }
-          }
-        ).process
+      return url_code_result if url_code_result&.dig(:valid) == false && default_code_result&.dig(:valid) == false
 
-        if response[:error_code].present?
-          last_error ||= { valid: false, error_code: response[:error_code] }
-          next
-        end
+      url_code_amount = url_code_result[:amount_off_cents]
+      default_code_amount = default_code_result[:amount_off_cents]
 
-        amount_off_cents = offer_code.amount_off(product.price_cents)
-        if best_candidate.nil? || amount_off_cents > best_candidate[:amount_off_cents]
-          best_candidate = {
-            code: code,
-            discount: offer_code.discount,
-            amount_off_cents: amount_off_cents
-          }
-        end
+      url_code_amount > default_code_amount ? url_code_result : default_code_result
+    end
+
+    def evaluate_code(code, quantity)
+      return if code.blank?
+
+      offer_code = product.find_offer_code(code: code)
+      unless offer_code
+        return { valid: false, error_code: :invalid_offer }
       end
 
-      return last_error if best_candidate.nil?
+      response = OfferCodeDiscountComputingService.new(
+        code,
+        {
+          product.unique_permalink => {
+            permalink: product.unique_permalink,
+            quantity: [quantity, offer_code.minimum_quantity || 0].max
+          }
+        }
+      ).process
+
+      if response[:error_code].present?
+        return { valid: false, error_code: response[:error_code] }
+      end
 
       {
         valid: true,
-        code: best_candidate[:code],
-        discount: best_candidate[:discount]
+        code: code,
+        discount: offer_code.discount,
+        amount_off_cents: offer_code.amount_off(product.price_cents)
       }
     end
 
