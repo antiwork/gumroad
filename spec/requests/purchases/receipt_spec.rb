@@ -33,6 +33,15 @@ describe("Viewing a purchase receipt", type: :system, js: true) do
       expect(page).to have_content("Wrong email. Please try again.")
       expect(page).to have_content("Confirm your email address")
     end
+
+    it "centers the Powered by Gumroad footer on confirm_receipt_email page" do
+      visit confirm_receipt_email_purchase_url(purchase.external_id, host: "#{PROTOCOL}://#{DOMAIN}")
+      expect(page).to have_content("Confirm your email address")
+
+      footer = page.find("footer")
+      footer_content = footer.find("div.text-center", match: :first)
+      expect(footer_content).to have_text("Powered by")
+    end
   end
 
   describe "when user is a team member" do
