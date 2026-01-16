@@ -876,11 +876,6 @@ Rails.application.routes.draw do
       api_routes
     end
 
-    # developers pages
-    scope "developers" do
-      get "/", to: "public#developers", as: "developers"
-    end
-
     scope "api" do
       get "/", to: "public#api"
     end
