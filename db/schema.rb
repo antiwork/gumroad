@@ -146,24 +146,6 @@ ActiveRecord::Schema[7.1].define(version: 2026_01_16_163451) do
     t.index ["link_id"], name: "index_asset_previews_on_link_id"
   end
 
-  create_table "audience_export_chunks", charset: "utf8mb4", collation: "utf8mb4_unicode_ci", force: :cascade do |t|
-    t.bigint "export_id", null: false
-    t.text "member_ids", size: :long
-    t.text "members_data", size: :long
-    t.boolean "processed", default: false, null: false
-    t.datetime "created_at", null: false
-    t.datetime "updated_at", null: false
-    t.index ["export_id"], name: "index_audience_export_chunks_on_export_id"
-  end
-
-  create_table "audience_exports", charset: "utf8mb4", collation: "utf8mb4_unicode_ci", force: :cascade do |t|
-    t.bigint "recipient_id", null: false
-    t.text "audience_options"
-    t.datetime "created_at", null: false
-    t.datetime "updated_at", null: false
-    t.index ["recipient_id"], name: "index_audience_exports_on_recipient_id"
-  end
-
   create_table "audience_members", charset: "utf8mb4", collation: "utf8mb4_unicode_ci", force: :cascade do |t|
     t.bigint "seller_id", null: false
     t.string "email", null: false
