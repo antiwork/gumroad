@@ -10,13 +10,15 @@ module ApplicationHelper
   end
 
   def default_footer_content
-    safe_join(
-      [
-        "Powered by",
-        tag.span("Gumroad", class: "logo-full", aria: { label: "Gumroad" })
-      ],
-      " "
-    )
+    tag.div(style: "text-align: center; padding: 20px 0;") do
+      safe_join(
+        [
+          "Powered by",
+          tag.span("Gumroad", class: "logo-full", aria: { label: "Gumroad" })
+        ],
+        " "
+      )
+    end
   end
 
   def current_user_props(current_user, impersonated_user)
