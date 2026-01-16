@@ -26,7 +26,7 @@ describe "Two-Factor Authentication", js: true, type: :system do
       expect(page).to have_content "Two-Factor Authentication"
       expect(page).to have_content "To protect your account, we have sent an Authentication Token to #{user.email}. Please enter it here to continue."
       expect(page.current_url).to eq two_factor_authentication_url(next: dashboard_path, host: Capybara.app_host)
-    end.to have_enqueued_mail(TwoFactorAuthenticationMailer, :authentication_token).once.with(user.id)
+    end.to have_enqueued_mail(TwoFactorAuthenticationMailer, :authentication_token).once.with(user.id, email_provider: nil)
   end
 
   describe "Submit authentication token" do
@@ -90,7 +90,7 @@ describe "Two-Factor Authentication", js: true, type: :system do
 
         # Wait for the success message to appear (flash notice from the redirect)
         expect(page).to have_content "Resent the authentication token"
-      end.to have_enqueued_mail(TwoFactorAuthenticationMailer, :authentication_token).twice.with(user.id)
+      end.to have_enqueued_mail(TwoFactorAuthenticationMailer, :authentication_token).twice.with(user.id, email_provider: nil)
     end
   end
 
@@ -125,7 +125,7 @@ describe "Two-Factor Authentication", js: true, type: :system do
         # It directly navigates to logged in page since 2FA is verified through the link between the redirects.
         expect(page).to have_text("Dashboard")
         expect(page).to have_current_path(dashboard_path)
-      end.not_to have_enqueued_mail(TwoFactorAuthenticationMailer, :authentication_token).with(user.id)
+      end.not_to have_enqueued_mail(TwoFactorAuthenticationMailer, :authentication_token).with(user.id, email_provider: nil)
     end
 
     it "allows to login with a valid 2FA token when an expired login link is clicked" do
