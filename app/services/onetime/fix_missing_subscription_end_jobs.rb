@@ -17,7 +17,7 @@ module Onetime
 
       Subscription.where.not(charge_occurrence_count: nil)
                   .not_is_installment_plan
-                  .where(ended_at: nil, cancelled_at: nil)
+                  .where(ended_at: nil, cancelled_at: nil, failed_at: nil)
                   .find_each do |subscription|
         next unless subscription.charges_completed?
 
