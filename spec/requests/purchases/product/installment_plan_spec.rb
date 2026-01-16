@@ -342,7 +342,7 @@ describe "Product with installment plan", type: :system, js: true do
   end
 
   describe "tax" do
-    it "calculates and charges sales tax for all installment payments when applicable" do
+    it "calculates and charges sales tax for all installment payments when applicable", :taxjar do
       visit product.long_url
 
       click_on "Pay in 3 installments"
