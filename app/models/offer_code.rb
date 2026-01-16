@@ -50,10 +50,11 @@ class OfferCode < ApplicationRecord
   # nil currency_type is a percentage offer code
   scope :universal_with_matching_currency, ->(currency_type) { where("universal = 1 and (currency_type = ? or currency_type is null)", currency_type) }
 
-  # Public: Search offer codes by name or code
-  scope :search_by_name_or_code, ->(query) {
+  # Public: Search offer codes by name
+  scope :search_by_name, ->(query) {
     query = query.to_s.strip.downcase
-    where("LOWER(name) LIKE ? OR LOWER(code) LIKE ?", "%#{query}%", "%#{query}%")
+    return none if query.blank?
+    where("LOWER(name) LIKE ?", "%#{query}%")
   }
   scope :universal, -> { where(universal: true) }
 

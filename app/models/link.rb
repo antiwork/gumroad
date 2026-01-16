@@ -826,8 +826,8 @@ class Link < ApplicationRecord
     universal_codes = user.offer_codes.universal_with_matching_currency(price_currency_type).alive
 
     if query.present?
-      product_codes = product_codes.search_by_name_or_code(query)
-      universal_codes = universal_codes.search_by_name_or_code(query)
+      product_codes = product_codes.search_by_name(query)
+      universal_codes = universal_codes.search_by_name(query)
     end
 
     combined_codes = (product_codes + universal_codes).sort_by(&:created_at)

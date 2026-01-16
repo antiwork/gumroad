@@ -196,7 +196,6 @@ class ProductPresenter
             { type: "percent", percents: cancellation_discount.amount_percentage },
           duration_in_billing_cycles: cancellation_discount.duration_in_billing_cycles,
         } : nil,
-        default_offer_code_id: product.default_offer_code&.external_id,
         default_offer_code: product.default_offer_code ? {
           id: product.default_offer_code.external_id,
           code: product.default_offer_code.code,

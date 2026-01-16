@@ -377,7 +377,7 @@ describe ProductPresenter do
             native_type: "ebook",
             require_shipping: false,
             cancellation_discount: nil,
-            default_offer_code_id: nil,
+            default_offer_code: nil,
             public_files: [],
             audio_previews_enabled: false,
             community_chat_enabled: nil,
@@ -443,8 +443,8 @@ describe ProductPresenter do
         product.update!(default_offer_code: offer_code)
       end
 
-      it "includes default_offer_code_id in edit_props" do
-        expect(presenter.edit_props[:product][:default_offer_code_id]).to eq(offer_code.external_id)
+      it "includes default_offer_code with id in edit_props" do
+        expect(presenter.edit_props[:product][:default_offer_code][:id]).to eq(offer_code.external_id)
       end
 
       it "includes default_offer_code in product data" do
@@ -626,7 +626,7 @@ describe ProductPresenter do
                 },
                 duration_in_billing_cycles: 3
               },
-              default_offer_code_id: nil,
+              default_offer_code: nil,
               public_files: [],
               audio_previews_enabled: false,
               community_chat_enabled: nil,
@@ -836,7 +836,7 @@ describe ProductPresenter do
               native_type: "digital",
               require_shipping: false,
               cancellation_discount: nil,
-              default_offer_code_id: nil,
+              default_offer_code: nil,
               public_files: [],
               audio_previews_enabled: false,
               community_chat_enabled: nil,

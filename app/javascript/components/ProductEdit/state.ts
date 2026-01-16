@@ -151,7 +151,7 @@ export type Product = {
   call_limitation_info: CallLimitationInfo | null;
   require_shipping: boolean;
   cancellation_discount: CancellationDiscount | null;
-  default_offer_code_id: string | null;
+  default_offer_code_id?: string | null;
   default_offer_code: OfferCode | null;
   public_files: PublicFileWithStatus[];
   audio_previews_enabled: boolean;
