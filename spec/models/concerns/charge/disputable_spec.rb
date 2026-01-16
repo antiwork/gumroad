@@ -926,6 +926,23 @@ describe Charge::Disputable, :vcr do
         end
       end
 
+      context "when dispute won for a charge" do
+        let(:user) { create(:user) }
+        let(:product) { create(:product, user:) }
+        let(:transaction_id) { "ch_charge_123" }
+        let!(:purchase) { create(:purchase, link: product, stripe_transaction_id: transaction_id, chargeback_date: 10.days.ago) }
+        let!(:charge) { create(:charge, processor_transaction_id: transaction_id, amount_cents: 111, disputed_at: 10.days.ago, purchases: [purchase]) }
+
+        let(:event) { build(:charge_event_dispute_won, charge_id: transaction_id) }
+
+        it "persists chargeback_reversed flag on the disputed purchases" do
+          expect do
+            charge.handle_event(event)
+          end.to change { charge.reload.dispute_reversed_at }.from(nil).to(be_present)
+             .and change { purchase.reload.chargeback_reversed }.from(false).to(true)
+        end
+      end
+
       describe "dispute lost" do
         let(:initial_balance) { 200 }
         let(:seller) { create(:user, unpaid_balance_cents: initial_balance) }

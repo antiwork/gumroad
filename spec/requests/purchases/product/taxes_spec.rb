@@ -162,7 +162,7 @@ describe("Product Page - Tax Scenarios", type: :system, js: true) do
     end
   end
 
-  describe "US sales tax", taxjar: true do
+  describe "US sales tax", taxjar: true, force_vcr_on: true do
     it "calculates and charges sales tax when WI customer makes purchase" do
       product = create(:product, price_cents: 100_00)
       visit "/l/#{product.unique_permalink}"
@@ -183,7 +183,7 @@ describe("Product Page - Tax Scenarios", type: :system, js: true) do
       expect(purchase.was_purchase_taxable).to be(true)
     end
 
-    it "calculates and charges sales tax when WI customer makes purchase of a physical product" do
+    it "calculates and charges sales tax when WI customer makes purchase of a physical product", :mock_easypost do
       product = create(:physical_product, price_cents: 100_00)
       visit "/l/#{product.unique_permalink}"
       expect(page).to have_text("$100")
@@ -223,7 +223,7 @@ describe("Product Page - Tax Scenarios", type: :system, js: true) do
       expect(purchase.was_purchase_taxable).to be(true)
     end
 
-    it "calculates and charges sales tax when WA customer makes purchase of a physical product" do
+    it "calculates and charges sales tax when WA customer makes purchase of a physical product", :mock_easypost do
       product = create(:physical_product, price_cents: 100_00)
       visit "/l/#{product.unique_permalink}"
       expect(page).to have_text("$100")
@@ -309,7 +309,7 @@ describe("Product Page - Tax Scenarios", type: :system, js: true) do
       expect(purchase.was_purchase_taxable).to be(true)
     end
 
-    it "allows entry of VAT ID and doesn't charge VAT" do
+    it "allows entry of VAT ID and doesn't charge VAT", :stub_tax_id_validation do
       visit "/l/#{@vat_link.unique_permalink}"
       expect(page).to have_selector("[itemprop='offers']", text: "$100")
 
@@ -351,7 +351,7 @@ describe("Product Page - Tax Scenarios", type: :system, js: true) do
         expect(purchase.was_purchase_taxable).to be(true)
       end
 
-      it "allows entry of VAT ID and doesn't charge VAT" do
+      it "allows entry of VAT ID and doesn't charge VAT", :stub_tax_id_validation do
         visit "/l/#{product.unique_permalink}"
         add_to_cart(product, option: "First Tier")
         expect(page).to(have_text("VAT US$0.66", normalize_ws: true))
@@ -394,7 +394,7 @@ describe("Product Page - Tax Scenarios", type: :system, js: true) do
       expect(purchase.was_purchase_taxable).to be(true)
     end
 
-    it "charges VAT for a physical product" do
+    it "charges VAT for a physical product", :mock_easypost do
       product = create(:physical_product, price_cents: 100_00)
       visit "/l/#{product.unique_permalink}"
       expect(page).to have_text("$100")
@@ -410,7 +410,7 @@ describe("Product Page - Tax Scenarios", type: :system, js: true) do
       expect(purchase.was_purchase_taxable).to be(true)
     end
 
-    it "displays the correct VAT and charges the right amount" do
+    it "displays the correct VAT and charges the right amount", :mock_easypost do
       product = create(:physical_product, price_cents: 100_00)
       visit "/l/#{product.unique_permalink}"
       expect(page).to have_text("$100")
@@ -458,12 +458,12 @@ describe("Product Page - Tax Scenarios", type: :system, js: true) do
       expect(purchase.was_purchase_taxable).to be(true)
     end
 
-    it "allows entry of ABN ID and doesn't charge GST" do
+    it "allows entry of ABN ID and doesn't charge GST", :stub_tax_id_validation do
       visit "/l/#{@product.unique_permalink}"
       expect(page).to have_selector("[itemprop='offers']", text: "$100")
 
       add_to_cart(@product)
-      expect(page).to have_text("GST")
+      expect(page).to have_text("Total US$110", normalize_ws: true)
       check_out(@product, abn_id: "51824753556", zip_code: nil, credit_card: { number: "4000000360000006" }) do
         expect(page).not_to have_text("GST")
       end
@@ -483,7 +483,7 @@ describe("Product Page - Tax Scenarios", type: :system, js: true) do
       expect(page).to(have_text("51824753556"))
     end
 
-    it "applies GST for physical products" do
+    it "applies GST for physical products", :mock_easypost do
       @product = create(:physical_product, price_cents: 100_00)
 
       create(:user_compliance_info_empty, user: @product.user,
@@ -508,7 +508,7 @@ describe("Product Page - Tax Scenarios", type: :system, js: true) do
       expect(purchase.was_purchase_taxable).to be(true)
     end
 
-    it "applies GST for physical products" do
+    it "applies GST for physical products", :mock_easypost do
       product = create(:physical_product, price_cents: 100_00)
 
       create(:user_compliance_info_empty, user: product.user,
@@ -603,7 +603,7 @@ describe("Product Page - Tax Scenarios", type: :system, js: true) do
       end
     end
 
-    it "applies GST for physical products" do
+    it "applies GST for physical products", :mock_easypost do
       travel_to(Time.find_zone("UTC").local(2023, 4, 1)) do
         @product = create(:physical_product, price_cents: 100_00)
 
@@ -631,7 +631,7 @@ describe("Product Page - Tax Scenarios", type: :system, js: true) do
       end
     end
 
-    it "applies GST for physical products" do
+    it "applies GST for physical products", :mock_easypost do
       travel_to(Time.find_zone("UTC").local(2023, 4, 1)) do
         product = create(:physical_product, price_cents: 100_00)
 
@@ -715,7 +715,7 @@ describe("Product Page - Tax Scenarios", type: :system, js: true) do
       expect(purchase.was_purchase_taxable).to be(false)
     end
 
-    it "allows entry of MVA ID and doesn't charge tax" do
+    it "allows entry of MVA ID and doesn't charge tax", :stub_tax_id_validation do
       visit "/l/#{@product.unique_permalink}"
       expect(page).to have_text("$100")
       add_to_cart(@product)
@@ -820,7 +820,7 @@ describe("Product Page - Tax Scenarios", type: :system, js: true) do
         expect(purchase.was_purchase_taxable).to be(true)
       end
 
-      it "allows entry of the Tax ID and doesn't charge tax" do
+      it "allows entry of the Tax ID and doesn't charge tax", :stub_tax_id_validation do
         visit "/l/#{@product.unique_permalink}"
         expect(page).to have_text("$100")
         add_to_cart(@product)
@@ -902,7 +902,7 @@ describe("Product Page - Tax Scenarios", type: :system, js: true) do
         expect(purchase.was_purchase_taxable).to be(true)
       end
 
-      it "allows entry of the Tax ID and doesn't charge tax" do
+      it "allows entry of the Tax ID and doesn't charge tax", :stub_tax_id_validation do
         visit "/l/#{@product.unique_permalink}"
         expect(page).to have_text("$100")
         add_to_cart(@product)
@@ -984,7 +984,7 @@ describe("Product Page - Tax Scenarios", type: :system, js: true) do
         expect(purchase.was_purchase_taxable).to be(true)
       end
 
-      it "allows entry of the Tax ID and doesn't charge tax" do
+      it "allows entry of the Tax ID and doesn't charge tax", :stub_tax_id_validation do
         visit "/l/#{@product.unique_permalink}"
         expect(page).to have_text("$100")
         add_to_cart(@product)
@@ -1066,7 +1066,7 @@ describe("Product Page - Tax Scenarios", type: :system, js: true) do
         expect(purchase.was_purchase_taxable).to be(true)
       end
 
-      it "allows entry of the Tax ID and doesn't charge tax" do
+      it "allows entry of the Tax ID and doesn't charge tax", :stub_tax_id_validation do
         visit "/l/#{@product.unique_permalink}"
         expect(page).to have_text("$100")
         add_to_cart(@product)
@@ -1169,7 +1169,7 @@ describe("Product Page - Tax Scenarios", type: :system, js: true) do
         expect(purchase.was_purchase_taxable).to be(true)
       end
 
-      it "allows entry of the Tax ID and doesn't charge tax" do
+      it "allows entry of the Tax ID and doesn't charge tax", :stub_tax_id_validation do
         visit "/l/#{@product.unique_permalink}"
         expect(page).to have_text("$100")
         add_to_cart(@product)
@@ -1251,7 +1251,7 @@ describe("Product Page - Tax Scenarios", type: :system, js: true) do
         expect(purchase.was_purchase_taxable).to be(true)
       end
 
-      it "allows entry of the Tax ID and doesn't charge tax" do
+      it "allows entry of the Tax ID and doesn't charge tax", :stub_tax_id_validation do
         visit "/l/#{@product.unique_permalink}"
         expect(page).to have_text("$100")
         add_to_cart(@product)
@@ -1333,7 +1333,7 @@ describe("Product Page - Tax Scenarios", type: :system, js: true) do
         expect(purchase.was_purchase_taxable).to be(true)
       end
 
-      it "allows entry of the Tax ID and doesn't charge tax" do
+      it "allows entry of the Tax ID and doesn't charge tax", :stub_tax_id_validation do
         visit "/l/#{@product.unique_permalink}"
         expect(page).to have_text("$100")
         add_to_cart(@product)
@@ -1415,7 +1415,7 @@ describe("Product Page - Tax Scenarios", type: :system, js: true) do
         expect(purchase.was_purchase_taxable).to be(true)
       end
 
-      it "does not apply tax for physical products" do
+      it "does not apply tax for physical products", :mock_easypost do
         physical_product = create(:physical_product, price_cents: 100_00)
 
         visit "/l/#{physical_product.unique_permalink}"
@@ -1513,7 +1513,7 @@ describe("Product Page - Tax Scenarios", type: :system, js: true) do
         expect(purchase.was_purchase_taxable).to be(true)
       end
 
-      it "does not apply tax for physical products" do
+      it "does not apply tax for physical products", :mock_easypost do
         physical_product = create(:physical_product, price_cents: 100_00)
 
         visit "/l/#{physical_product.unique_permalink}"
@@ -1532,7 +1532,7 @@ describe("Product Page - Tax Scenarios", type: :system, js: true) do
         expect(purchase.was_purchase_taxable).to be(false)
       end
 
-      it "allows entry of the Tax ID and doesn't charge tax" do
+      it "allows entry of the Tax ID and doesn't charge tax", :stub_tax_id_validation do
         visit "/l/#{@product.unique_permalink}"
         expect(page).to have_text("$100")
         add_to_cart(@product)
@@ -1613,7 +1613,7 @@ describe("Product Page - Tax Scenarios", type: :system, js: true) do
         expect(purchase.was_purchase_taxable).to be(true)
       end
 
-      it "does not apply tax for physical products" do
+      it "does not apply tax for physical products", :mock_easypost do
         physical_product = create(:physical_product, price_cents: 100_00)
 
         visit "/l/#{physical_product.unique_permalink}"
@@ -1632,7 +1632,7 @@ describe("Product Page - Tax Scenarios", type: :system, js: true) do
         expect(purchase.was_purchase_taxable).to be(false)
       end
 
-      it "allows entry of the Tax ID and doesn't charge tax" do
+      it "allows entry of the Tax ID and doesn't charge tax", :stub_tax_id_validation do
         visit "/l/#{@product.unique_permalink}"
         expect(page).to have_text("$100")
         add_to_cart(@product)
@@ -1713,7 +1713,7 @@ describe("Product Page - Tax Scenarios", type: :system, js: true) do
         expect(purchase.was_purchase_taxable).to be(true)
       end
 
-      it "does not apply tax for physical products" do
+      it "does not apply tax for physical products", :mock_easypost do
         physical_product = create(:physical_product, price_cents: 100_00)
 
         visit "/l/#{physical_product.unique_permalink}"
@@ -1732,7 +1732,7 @@ describe("Product Page - Tax Scenarios", type: :system, js: true) do
         expect(purchase.was_purchase_taxable).to be(false)
       end
 
-      it "allows entry of the Tax ID and doesn't charge tax" do
+      it "allows entry of the Tax ID and doesn't charge tax", :stub_tax_id_validation do
         visit "/l/#{@product.unique_permalink}"
         expect(page).to have_text("$100")
         add_to_cart(@product)
@@ -1813,7 +1813,7 @@ describe("Product Page - Tax Scenarios", type: :system, js: true) do
         expect(purchase.was_purchase_taxable).to be(true)
       end
 
-      it "does not apply tax for physical products" do
+      it "does not apply tax for physical products", :mock_easypost do
         physical_product = create(:physical_product, price_cents: 100_00)
 
         visit "/l/#{physical_product.unique_permalink}"
@@ -1832,7 +1832,7 @@ describe("Product Page - Tax Scenarios", type: :system, js: true) do
         expect(purchase.was_purchase_taxable).to be(false)
       end
 
-      it "allows entry of the Tax ID and doesn't charge tax" do
+      it "allows entry of the Tax ID and doesn't charge tax", :stub_tax_id_validation do
         visit "/l/#{@product.unique_permalink}"
         expect(page).to have_text("$100")
         add_to_cart(@product)
@@ -1913,7 +1913,7 @@ describe("Product Page - Tax Scenarios", type: :system, js: true) do
         expect(purchase.was_purchase_taxable).to be(true)
       end
 
-      it "does not apply tax for physical products" do
+      it "does not apply tax for physical products", :mock_easypost do
         physical_product = create(:physical_product, price_cents: 100_00)
 
         visit "/l/#{physical_product.unique_permalink}"
@@ -1932,7 +1932,7 @@ describe("Product Page - Tax Scenarios", type: :system, js: true) do
         expect(purchase.was_purchase_taxable).to be(false)
       end
 
-      it "allows entry of the Tax ID and doesn't charge tax" do
+      it "allows entry of the Tax ID and doesn't charge tax", :stub_tax_id_validation do
         visit "/l/#{@product.unique_permalink}"
         expect(page).to have_text("$100")
         add_to_cart(@product)
@@ -2013,7 +2013,7 @@ describe("Product Page - Tax Scenarios", type: :system, js: true) do
         expect(purchase.was_purchase_taxable).to be(true)
       end
 
-      it "does not apply tax for physical products" do
+      it "does not apply tax for physical products", :mock_easypost do
         physical_product = create(:physical_product, price_cents: 100_00)
 
         visit "/l/#{physical_product.unique_permalink}"
@@ -2032,7 +2032,7 @@ describe("Product Page - Tax Scenarios", type: :system, js: true) do
         expect(purchase.was_purchase_taxable).to be(false)
       end
 
-      it "allows entry of the Tax ID and doesn't charge tax" do
+      it "allows entry of the Tax ID and doesn't charge tax", :stub_tax_id_validation do
         visit "/l/#{@product.unique_permalink}"
         expect(page).to have_text("$100")
         add_to_cart(@product)
@@ -2113,7 +2113,7 @@ describe("Product Page - Tax Scenarios", type: :system, js: true) do
         expect(purchase.was_purchase_taxable).to be(true)
       end
 
-      it "does not apply tax for physical products" do
+      it "does not apply tax for physical products", :mock_easypost do
         physical_product = create(:physical_product, price_cents: 100_00)
 
         visit "/l/#{physical_product.unique_permalink}"
@@ -2132,7 +2132,7 @@ describe("Product Page - Tax Scenarios", type: :system, js: true) do
         expect(purchase.was_purchase_taxable).to be(false)
       end
 
-      it "allows entry of the Tax ID and doesn't charge tax" do
+      it "allows entry of the Tax ID and doesn't charge tax", :stub_tax_id_validation do
         visit "/l/#{@product.unique_permalink}"
         expect(page).to have_text("$100")
         add_to_cart(@product)
@@ -2213,7 +2213,7 @@ describe("Product Page - Tax Scenarios", type: :system, js: true) do
         expect(purchase.was_purchase_taxable).to be(true)
       end
 
-      it "does not apply tax for physical products" do
+      it "does not apply tax for physical products", :mock_easypost do
         physical_product = create(:physical_product, price_cents: 100_00)
 
         visit "/l/#{physical_product.unique_permalink}"
@@ -2232,7 +2232,7 @@ describe("Product Page - Tax Scenarios", type: :system, js: true) do
         expect(purchase.was_purchase_taxable).to be(false)
       end
 
-      it "allows entry of the Tax ID and doesn't charge tax" do
+      it "allows entry of the Tax ID and doesn't charge tax", :stub_tax_id_validation do
         visit "/l/#{@product.unique_permalink}"
         expect(page).to have_text("$100")
         add_to_cart(@product)
@@ -2313,7 +2313,7 @@ describe("Product Page - Tax Scenarios", type: :system, js: true) do
         expect(purchase.was_purchase_taxable).to be(true)
       end
 
-      it "does not apply tax for physical products" do
+      it "does not apply tax for physical products", :mock_easypost do
         physical_product = create(:physical_product, price_cents: 100_00)
 
         visit "/l/#{physical_product.unique_permalink}"
@@ -2411,7 +2411,7 @@ describe("Product Page - Tax Scenarios", type: :system, js: true) do
         expect(purchase.was_purchase_taxable).to be(true)
       end
 
-      it "does not apply tax for physical products" do
+      it "does not apply tax for physical products", :mock_easypost do
         physical_product = create(:physical_product, price_cents: 100_00)
 
         visit "/l/#{physical_product.unique_permalink}"
@@ -2430,7 +2430,7 @@ describe("Product Page - Tax Scenarios", type: :system, js: true) do
         expect(purchase.was_purchase_taxable).to be(false)
       end
 
-      it "allows entry of the Tax ID and doesn't charge tax" do
+      it "allows entry of the Tax ID and doesn't charge tax", :stub_tax_id_validation do
         visit "/l/#{@product.unique_permalink}"
         expect(page).to have_text("$100")
         add_to_cart(@product)
@@ -2531,7 +2531,7 @@ describe("Product Page - Tax Scenarios", type: :system, js: true) do
         expect(purchase.was_purchase_taxable).to be(false)
       end
 
-      it "does not apply tax for physical products" do
+      it "does not apply tax for physical products", :mock_easypost do
         physical_product = create(:physical_product, price_cents: 100_00)
 
         visit "/l/#{physical_product.unique_permalink}"
@@ -2550,7 +2550,7 @@ describe("Product Page - Tax Scenarios", type: :system, js: true) do
         expect(purchase.was_purchase_taxable).to be(false)
       end
 
-      it "allows entry of the Tax ID and doesn't charge tax" do
+      it "allows entry of the Tax ID and doesn't charge tax", :stub_tax_id_validation do
         visit "/l/#{@product.unique_permalink}"
         expect(page).to have_text("$100")
         add_to_cart(@product)
@@ -2631,7 +2631,7 @@ describe("Product Page - Tax Scenarios", type: :system, js: true) do
         expect(purchase.was_purchase_taxable).to be(true)
       end
 
-      it "does not apply tax for physical products" do
+      it "does not apply tax for physical products", :mock_easypost do
         physical_product = create(:physical_product, price_cents: 100_00)
 
         visit "/l/#{physical_product.unique_permalink}"
@@ -2650,7 +2650,7 @@ describe("Product Page - Tax Scenarios", type: :system, js: true) do
         expect(purchase.was_purchase_taxable).to be(false)
       end
 
-      it "allows entry of the Tax ID and doesn't charge tax" do
+      it "allows entry of the Tax ID and doesn't charge tax", :stub_tax_id_validation do
         visit "/l/#{@product.unique_permalink}"
         expect(page).to have_text("$100")
         add_to_cart(@product)
@@ -2731,7 +2731,7 @@ describe("Product Page - Tax Scenarios", type: :system, js: true) do
         expect(purchase.was_purchase_taxable).to be(true)
       end
 
-      it "does not apply tax for physical products" do
+      it "does not apply tax for physical products", :mock_easypost do
         physical_product = create(:physical_product, price_cents: 100_00)
 
         visit "/l/#{physical_product.unique_permalink}"
@@ -2750,7 +2750,7 @@ describe("Product Page - Tax Scenarios", type: :system, js: true) do
         expect(purchase.was_purchase_taxable).to be(false)
       end
 
-      it "allows entry of the Tax ID and doesn't charge tax" do
+      it "allows entry of the Tax ID and doesn't charge tax", :stub_tax_id_validation do
         visit "/l/#{@product.unique_permalink}"
         expect(page).to have_text("$100")
         add_to_cart(@product)
@@ -2831,7 +2831,7 @@ describe("Product Page - Tax Scenarios", type: :system, js: true) do
         expect(purchase.was_purchase_taxable).to be(true)
       end
 
-      it "does not apply tax for physical products" do
+      it "does not apply tax for physical products", :mock_easypost do
         physical_product = create(:physical_product, price_cents: 100_00)
 
         visit "/l/#{physical_product.unique_permalink}"
@@ -2929,7 +2929,7 @@ describe("Product Page - Tax Scenarios", type: :system, js: true) do
         expect(purchase.was_purchase_taxable).to be(true)
       end
 
-      it "does not apply tax for physical products" do
+      it "does not apply tax for physical products", :mock_easypost do
         physical_product = create(:physical_product, price_cents: 100_00)
 
         visit "/l/#{physical_product.unique_permalink}"
@@ -3026,7 +3026,7 @@ describe("Product Page - Tax Scenarios", type: :system, js: true) do
         expect(purchase.was_purchase_taxable).to be(true)
       end
 
-      it "does not apply tax for physical products" do
+      it "does not apply tax for physical products", :mock_easypost do
         physical_product = create(:physical_product, price_cents: 100_00)
 
         visit "/l/#{physical_product.unique_permalink}"
@@ -3045,7 +3045,7 @@ describe("Product Page - Tax Scenarios", type: :system, js: true) do
         expect(purchase.was_purchase_taxable).to be(false)
       end
 
-      it "allows entry of the Tax ID and doesn't charge tax" do
+      it "allows entry of the Tax ID and doesn't charge tax", :stub_tax_id_validation do
         visit "/l/#{@product.unique_permalink}"
         expect(page).to have_text("$100")
         add_to_cart(@product)
@@ -3126,7 +3126,7 @@ describe("Product Page - Tax Scenarios", type: :system, js: true) do
         expect(purchase.was_purchase_taxable).to be(true)
       end
 
-      it "does not apply tax for physical products" do
+      it "does not apply tax for physical products", :mock_easypost do
         physical_product = create(:physical_product, price_cents: 100_00)
 
         visit "/l/#{physical_product.unique_permalink}"
@@ -3145,7 +3145,7 @@ describe("Product Page - Tax Scenarios", type: :system, js: true) do
         expect(purchase.was_purchase_taxable).to be(false)
       end
 
-      it "allows entry of the Tax ID and doesn't charge tax" do
+      it "allows entry of the Tax ID and doesn't charge tax", :stub_tax_id_validation do
         visit "/l/#{@product.unique_permalink}"
         expect(page).to have_text("$100")
         add_to_cart(@product)
@@ -3226,7 +3226,7 @@ describe("Product Page - Tax Scenarios", type: :system, js: true) do
         expect(purchase.was_purchase_taxable).to be(true)
       end
 
-      it "does not apply tax for physical products" do
+      it "does not apply tax for physical products", :mock_easypost do
         physical_product = create(:physical_product, price_cents: 100_00)
 
         visit "/l/#{physical_product.unique_permalink}"
@@ -3245,7 +3245,7 @@ describe("Product Page - Tax Scenarios", type: :system, js: true) do
         expect(purchase.was_purchase_taxable).to be(false)
       end
 
-      it "allows entry of the Tax ID and doesn't charge tax" do
+      it "allows entry of the Tax ID and doesn't charge tax", :stub_tax_id_validation do
         visit "/l/#{@product.unique_permalink}"
         expect(page).to have_text("$100")
         add_to_cart(@product)
@@ -3326,7 +3326,7 @@ describe("Product Page - Tax Scenarios", type: :system, js: true) do
         expect(purchase.was_purchase_taxable).to be(true)
       end
 
-      it "does not apply tax for physical products" do
+      it "does not apply tax for physical products", :mock_easypost do
         physical_product = create(:physical_product, price_cents: 100_00)
 
         visit "/l/#{physical_product.unique_permalink}"
@@ -3345,7 +3345,7 @@ describe("Product Page - Tax Scenarios", type: :system, js: true) do
         expect(purchase.was_purchase_taxable).to be(false)
       end
 
-      it "allows entry of the Tax ID and doesn't charge tax" do
+      it "allows entry of the Tax ID and doesn't charge tax", :stub_tax_id_validation do
         visit "/l/#{@product.unique_permalink}"
         expect(page).to have_text("$100")
         add_to_cart(@product)
@@ -3426,7 +3426,7 @@ describe("Product Page - Tax Scenarios", type: :system, js: true) do
         expect(purchase.was_purchase_taxable).to be(true)
       end
 
-      it "does not apply tax for physical products" do
+      it "does not apply tax for physical products", :mock_easypost do
         physical_product = create(:physical_product, price_cents: 100_00)
 
         visit "/l/#{physical_product.unique_permalink}"
@@ -3524,7 +3524,7 @@ describe("Product Page - Tax Scenarios", type: :system, js: true) do
         expect(purchase.was_purchase_taxable).to be(true)
       end
 
-      it "does not apply tax for physical products" do
+      it "does not apply tax for physical products", :mock_easypost do
         physical_product = create(:physical_product, price_cents: 100_00)
 
         visit "/l/#{physical_product.unique_permalink}"
@@ -3543,7 +3543,7 @@ describe("Product Page - Tax Scenarios", type: :system, js: true) do
         expect(purchase.was_purchase_taxable).to be(false)
       end
 
-      it "allows entry of the Tax ID and doesn't charge tax" do
+      it "allows entry of the Tax ID and doesn't charge tax", :stub_tax_id_validation do
         visit "/l/#{@product.unique_permalink}"
         expect(page).to have_text("$100")
         add_to_cart(@product)
@@ -3624,7 +3624,7 @@ describe("Product Page - Tax Scenarios", type: :system, js: true) do
         expect(purchase.was_purchase_taxable).to be(true)
       end
 
-      it "does not apply tax for physical products" do
+      it "does not apply tax for physical products", :mock_easypost do
         physical_product = create(:physical_product, price_cents: 100_00)
 
         visit "/l/#{physical_product.unique_permalink}"
@@ -3643,7 +3643,7 @@ describe("Product Page - Tax Scenarios", type: :system, js: true) do
         expect(purchase.was_purchase_taxable).to be(false)
       end
 
-      it "allows entry of the Tax ID and doesn't charge tax" do
+      it "allows entry of the Tax ID and doesn't charge tax", :stub_tax_id_validation do
         visit "/l/#{@product.unique_permalink}"
         expect(page).to have_text("$100")
         add_to_cart(@product)
@@ -3724,7 +3724,7 @@ describe("Product Page - Tax Scenarios", type: :system, js: true) do
         expect(purchase.was_purchase_taxable).to be(true)
       end
 
-      it "does not apply tax for physical products" do
+      it "does not apply tax for physical products", :mock_easypost do
         physical_product = create(:physical_product, price_cents: 100_00)
 
         visit "/l/#{physical_product.unique_permalink}"
@@ -3743,7 +3743,7 @@ describe("Product Page - Tax Scenarios", type: :system, js: true) do
         expect(purchase.was_purchase_taxable).to be(false)
       end
 
-      it "allows entry of the Tax ID and doesn't charge tax" do
+      it "allows entry of the Tax ID and doesn't charge tax", :stub_tax_id_validation do
         visit "/l/#{@product.unique_permalink}"
         expect(page).to have_text("$100")
         add_to_cart(@product)
@@ -3824,7 +3824,7 @@ describe("Product Page - Tax Scenarios", type: :system, js: true) do
         expect(purchase.was_purchase_taxable).to be(true)
       end
 
-      it "does not apply tax for physical products" do
+      it "does not apply tax for physical products", :mock_easypost do
         physical_product = create(:physical_product, price_cents: 100_00)
 
         visit "/l/#{physical_product.unique_permalink}"
@@ -3843,7 +3843,7 @@ describe("Product Page - Tax Scenarios", type: :system, js: true) do
         expect(purchase.was_purchase_taxable).to be(false)
       end
 
-      it "allows entry of the Tax ID and doesn't charge tax" do
+      it "allows entry of the Tax ID and doesn't charge tax", :stub_tax_id_validation do
         visit "/l/#{@product.unique_permalink}"
         expect(page).to have_text("$100")
         add_to_cart(@product)
@@ -3924,7 +3924,7 @@ describe("Product Page - Tax Scenarios", type: :system, js: true) do
         expect(purchase.was_purchase_taxable).to be(true)
       end
 
-      it "does not apply tax for physical products" do
+      it "does not apply tax for physical products", :mock_easypost do
         physical_product = create(:physical_product, price_cents: 100_00)
 
         visit "/l/#{physical_product.unique_permalink}"
@@ -3943,7 +3943,7 @@ describe("Product Page - Tax Scenarios", type: :system, js: true) do
         expect(purchase.was_purchase_taxable).to be(false)
       end
 
-      it "allows entry of the Tax ID and doesn't charge tax" do
+      it "allows entry of the Tax ID and doesn't charge tax", :stub_tax_id_validation do
         visit "/l/#{@product.unique_permalink}"
         expect(page).to have_text("$100")
         add_to_cart(@product)
@@ -4381,7 +4381,7 @@ describe("Product Page - Tax Scenarios", type: :system, js: true) do
       expect(purchase.was_purchase_taxable).to be(false)
     end
 
-    it "resets the tax and allows the purchase when the EU-elected country doesn't match the non-EU card country or non-EU detected country" do
+    it "trusts the EU-elected country and charges VAT when the non-EU card country and non-EU detected country don't contradict it" do
       create(:zip_tax_rate, country: "AT", zip_code: nil, state: nil, combined_rate: 0.20, is_seller_responsible: false)
       allow_any_instance_of(ActionDispatch::Request).to receive(:remote_ip).and_return("189.144.240.120") # Mexico
 
@@ -4397,11 +4397,11 @@ describe("Product Page - Tax Scenarios", type: :system, js: true) do
       expect(purchase.country).to eq("Austria")
       expect(purchase.ip_country).to eq("Mexico")
       expect(purchase.card_country).to eq("MX")
-      expect(purchase.total_transaction_cents).to eq(100_00)
+      expect(purchase.total_transaction_cents).to eq(120_00)
       expect(purchase.price_cents).to eq(100_00)
       expect(purchase.tax_cents).to eq(0)
-      expect(purchase.gumroad_tax_cents).to eq(0)
-      expect(purchase.was_purchase_taxable).to be(false)
+      expect(purchase.gumroad_tax_cents).to eq(20_00)
+      expect(purchase.was_purchase_taxable).to be(true)
     end
   end
 end

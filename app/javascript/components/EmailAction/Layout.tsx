@@ -1,18 +1,23 @@
 import * as React from "react";
 
 import { useDomains } from "$app/components/DomainSettings";
+import { Card, CardContent } from "$app/components/ui/Card";
 
 export const Layout = ({ heading, children }: { heading: string; children: React.ReactNode }) => {
   const { rootDomain } = useDomains();
 
   return (
     <>
-      <div className="stack">
-        <header>
-          <h2>{heading}</h2>
-        </header>
-        <p>{children}</p>
-      </div>
+      <Card>
+        <CardContent asChild>
+          <header>
+            <h2 className="grow">{heading}</h2>
+          </header>
+        </CardContent>
+        <CardContent asChild>
+          <p>{children}</p>
+        </CardContent>
+      </Card>
       <footer
         style={{
           textAlign: "center",
