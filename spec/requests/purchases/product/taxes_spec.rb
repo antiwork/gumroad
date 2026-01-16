@@ -271,7 +271,7 @@ describe("Product Page - Tax Scenarios", type: :system, js: true) do
       add_to_cart(product)
       check_out(product, zip_code: "98121") do
         expect(page).to have_text("Subtotal US$100", normalize_ws: true)
-        expect(page).to have_text("Sales tax US$10.35", normalize_ws: true)
+        expect(page).to have_text("Sales tax US$10.35", normalize_ws: true, wait: 10)
         expect(page).to have_text("Total US$110.35", normalize_ws: true)
       end
 
