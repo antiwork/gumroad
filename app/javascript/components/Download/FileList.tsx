@@ -26,7 +26,6 @@ import {
   usePurchaseInfo,
 } from "$app/components/server-components/DownloadPage/WithContent";
 import { Row, RowActions, RowContent, RowDetails, Rows } from "$app/components/ui/Rows";
-import { useGlobalEventListener } from "$app/components/useGlobalEventListener";
 import { useOnOutsideClick } from "$app/components/useOnOutsideClick";
 import { useRefToLatest } from "$app/components/useRefToLatest";
 import { WithTooltip } from "$app/components/WithTooltip";
@@ -440,7 +439,7 @@ const MobileAppAudioFileRow = ({ file }: { file: FileItem }) => {
     }
   });
 
-  useGlobalEventListener("message", (event) => {
+  const messageListener = useRefToLatest((event: MessageEvent) => {
     if (typeof event.data !== "string" || !event.data.startsWith("{")) return;
     const data: unknown = JSON.parse(event.data);
     if (is<{ type: "mobileAppAudioPlayerInfo"; payload: MobileAppAudioPlayerInfo }>(data)) {
@@ -449,6 +448,14 @@ const MobileAppAudioFileRow = ({ file }: { file: FileItem }) => {
       setLatestMediaLocation(parseFloat(data.payload.latestMediaLocation ?? "0"));
     }
   });
+
+  React.useEffect(() => {
+    const listener = (e: MessageEvent) => messageListener.current(e);
+    // @ts-expect-error - React Native sends message events to embedded webviews via the document object, not window
+    document.addEventListener("message", listener);
+    // @ts-expect-error - React Native sends message events to embedded webviews via the document object, not window
+    return () => document.removeEventListener("message", listener);
+  }, []);
 
   const [showTooltip, setShowTooltip] = React.useState(false);
   const touchAndHoldEventListeners = useTouchAndHold({
