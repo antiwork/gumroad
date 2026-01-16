@@ -4060,7 +4060,9 @@ describe("Product Page - Tax Scenarios", type: :system, js: true) do
         expect(page).to have_select("Country", selected: "Canada")
         expect(page).to have_select("Province", selected: "ON")
 
-        check_out(product, address: { street: "568 Beatty St", city: "Vancouver", state: "BC", zip_code: "V6B 2L3" }, should_verify_address: true)
+        check_out(product, address: { street: "568 Beatty St", city: "Vancouver", state: "BC", zip_code: "V6B 2L3" }, should_verify_address: true) do
+          expect(page).to have_text("Tax US$12", normalize_ws: true)
+        end
 
         purchase = Purchase.last
         expect(purchase.total_transaction_cents).to eq(112_00)
