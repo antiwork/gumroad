@@ -85,7 +85,7 @@ class Checkout::DiscountsController < Sellers::BaseController
     if offer_code.mark_deleted
       render json: { success: true }
     else
-      render json: { success: false, error_message: offer_code.errors.full_messages.first }
+      render json: { success: false, error_message: offer_code.errors.full_messages.first }, status: :unprocessable_entity
     end
   end
 
