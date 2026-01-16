@@ -1807,4 +1807,57 @@ describe UrlRedirectsController do
       end
     end
   end
+
+  describe "PATCH 'update_last_visited_page'" do
+    let(:product) { create(:product_with_pdf_file, price_cents: 0) }
+    let(:purchase) { create(:free_purchase, link: product) }
+    let!(:url_redirect) { create(:url_redirect, link: product, purchase:) }
+
+    it "saves the last content page id for the purchase" do
+      freeze_time do
+        expect do
+          patch :update_last_visited_page, params: { id: url_redirect.token, page_id: "page_123" }
+        end.to change { purchase.reload.last_content_page_id }.from(nil).to("page_123")
+
+        expect(response).to be_successful
+        expect(response.parsed_body).to eq("success" => true)
+        expect(purchase.reload.last_content_page_viewed_at).to eq(Time.current)
+      end
+    end
+
+    it "updates an existing last content page id" do
+      purchase.update!(last_content_page_id: "page_old")
+
+      expect do
+        patch :update_last_visited_page, params: { id: url_redirect.token, page_id: "page_new" }
+      end.to change { purchase.reload.last_content_page_id }.from("page_old").to("page_new")
+
+      expect(response).to be_successful
+    end
+
+    it "returns error when page_id is missing" do
+      patch :update_last_visited_page, params: { id: url_redirect.token }
+
+      expect(response).to have_http_status(:bad_request)
+      expect(response.parsed_body).to eq("success" => false, "error" => "Invalid page_id or missing purchase")
+    end
+
+    it "returns error when page_id is blank" do
+      patch :update_last_visited_page, params: { id: url_redirect.token, page_id: "" }
+
+      expect(response).to have_http_status(:bad_request)
+      expect(response.parsed_body).to eq("success" => false, "error" => "Invalid page_id or missing purchase")
+    end
+
+    context "when url_redirect has no purchase" do
+      let(:url_redirect_without_purchase) { create(:url_redirect, link: product, purchase: nil) }
+
+      it "returns error" do
+        patch :update_last_visited_page, params: { id: url_redirect_without_purchase.token, page_id: "page_123" }
+
+        expect(response).to have_http_status(:bad_request)
+        expect(response.parsed_body).to eq("success" => false, "error" => "Invalid page_id or missing purchase")
+      end
+    end
+  end
 end

@@ -149,6 +149,7 @@ describe UrlRedirectPresenter do
           avatar_url: @user.avatar_url,
         },
         product_has_third_party_analytics: false,
+        last_visited_page_id: nil,
         installment: nil,
         purchase: {
           id: @purchase.external_id,
@@ -333,6 +334,28 @@ describe UrlRedirectPresenter do
       instance = described_class.new(url_redirect:, logged_in_user: @user)
 
       expect(instance.download_page_with_content_props[:content][:license]).to eq({ license_key: purchase.license_key, is_multiseat_license: false, seats: 1 })
+    end
+
+    describe "last_visited_page_id" do
+      it "returns nil when purchase has no last_content_page_id" do
+        instance = described_class.new(url_redirect: @url_redirect, logged_in_user: @user)
+
+        expect(instance.download_page_with_content_props[:last_visited_page_id]).to be_nil
+      end
+
+      it "returns last_content_page_id when purchase has last_content_page_id" do
+        @purchase.update!(last_content_page_id: "page_123")
+        instance = described_class.new(url_redirect: @url_redirect, logged_in_user: @user)
+
+        expect(instance.download_page_with_content_props[:last_visited_page_id]).to eq("page_123")
+      end
+
+      it "returns nil when url_redirect has no purchase" do
+        url_redirect_without_purchase = create(:url_redirect, purchase: nil, link: @product)
+        instance = described_class.new(url_redirect: url_redirect_without_purchase, logged_in_user: @user)
+
+        expect(instance.download_page_with_content_props[:last_visited_page_id]).to be_nil
+      end
     end
 
     describe "video_transcoding_info" do
