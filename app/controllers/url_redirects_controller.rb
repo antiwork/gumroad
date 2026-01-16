@@ -281,12 +281,12 @@ class UrlRedirectsController < ApplicationController
 
   def update_last_visited_page
     fetch_url_redirect
-    page_index = params[:page_index]&.to_i
-    if page_index.present? && page_index >= 0
-      @url_redirect.update(last_visited_page_index: page_index)
+    page_id = params[:page_id]&.to_s
+    if page_id.present?
+      @url_redirect.update(last_visited_page_id: page_id)
       render json: { success: true }
     else
-      render json: { success: false, error: "Invalid page_index" }, status: :bad_request
+      render json: { success: false, error: "Invalid page_id" }, status: :bad_request
     end
   end
 

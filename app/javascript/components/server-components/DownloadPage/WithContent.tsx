@@ -92,7 +92,7 @@ export type License = {
 const WithContent = ({
   content,
   product_has_third_party_analytics,
-  last_visited_page_index,
+  last_visited_page_id,
   ...props
 }: LayoutProps & {
   content: {
@@ -109,7 +109,7 @@ const WithContent = ({
     community_chat_url: string | null;
   };
   product_has_third_party_analytics: boolean | null;
-  last_visited_page_index: number | null;
+  last_visited_page_id: string | null;
 }) => {
   const url = new URL(useOriginalLocation());
   const addThirdPartyAnalytics = useAddThirdPartyAnalytics();
@@ -210,10 +210,12 @@ const WithContent = ({
   });
   const isDesktop = useIsAboveBreakpoint("lg");
   const pages = content.rich_content_pages ?? [];
-  const initialPageIndex =
-    last_visited_page_index != null && last_visited_page_index >= 0 && last_visited_page_index < pages.length
-      ? last_visited_page_index
-      : 0;
+  const findPageIndexById = (pageId: string | null): number => {
+    if (!pageId) return 0;
+    const foundIndex = pages.findIndex((page) => page.page_id === pageId);
+    return foundIndex >= 0 ? foundIndex : 0;
+  };
+  const initialPageIndex = findPageIndexById(last_visited_page_id);
   const [activePageIndex, setActivePageIndex] = React.useState(initialPageIndex);
   const activePage = pages[activePageIndex];
   const showPageList = pages.length > 1 || (pages.length === 1 && (pages[0]?.title ?? "").trim() !== "");
@@ -271,13 +273,16 @@ const WithContent = ({
 
     if (pages.length === 0) return;
 
+    const activePageId = activePage?.page_id;
+    if (!activePageId) return;
+
     void request({
       url: Routes.url_redirect_update_last_visited_page_path(props.token),
       method: "PATCH",
       accept: "json",
-      data: { page_index: activePageIndex },
+      data: { page_id: activePageId },
     });
-  }, [activePageIndex, pages.length, props.token]);
+  }, [activePageIndex, pages.length, props.token, activePage?.page_id]);
 
   return (
     <Layout

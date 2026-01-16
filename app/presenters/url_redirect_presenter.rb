@@ -46,7 +46,7 @@ class UrlRedirectPresenter
     {
       content: content_props,
       product_has_third_party_analytics: purchase&.link&.has_third_party_analytics?("receipt"),
-      last_visited_page_index: url_redirect.last_visited_page_index,
+      last_visited_page_id: url_redirect.last_visited_page_id,
     }.merge(download_page_layout_props).merge(extra_props)
   end
 

@@ -2396,7 +2396,7 @@ ActiveRecord::Schema[7.1].define(version: 2026_01_16_163451) do
     t.bigint "preorder_id"
     t.bigint "imported_customer_id"
     t.datetime "rental_first_viewed_at", precision: nil
-    t.integer "last_visited_page_index"
+    t.string "last_visited_page_id"
     t.index ["imported_customer_id"], name: "index_url_redirects_on_imported_customer_id"
     t.index ["installment_id", "imported_customer_id"], name: "index_url_redirects_on_installment_id_and_imported_customer_id"
     t.index ["installment_id", "purchase_id"], name: "index_url_redirects_on_installment_id_and_purchase_id"
