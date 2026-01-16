@@ -4,5 +4,7 @@
 <%= react_component "SecureRedirectPage", props: @react_component_props, prerender: true %>
 
 <% content_for :footer do %>
-  <%= default_footer_content %>
+  <div class="flex justify-center">
+    <%= default_footer_content %>
+  </div>
 <% end %>

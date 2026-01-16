@@ -8,5 +8,7 @@
 </main>
 
 <% content_for :footer do %>
-  <%= render("doorkeeper/authorizations/footer", logged_in_user: logged_in_user) %>
+  <div class="flex justify-center space-x-2">
+    <%= render("doorkeeper/authorizations/footer", logged_in_user: logged_in_user) %>
+  </div>
 <% end %>
