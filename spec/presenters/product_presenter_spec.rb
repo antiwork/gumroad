@@ -432,7 +432,6 @@ describe ProductPresenter do
             fine_print: nil,
           },
           cancellation_discounts_enabled: false,
-          available_discount_codes: [],
         }
       )
     end
@@ -664,7 +663,6 @@ describe ProductPresenter do
               fine_print: nil,
             },
             cancellation_discounts_enabled: true,
-            available_discount_codes: [],
           }
         )
       end
@@ -875,7 +873,6 @@ describe ProductPresenter do
               fine_print: nil,
             },
             cancellation_discounts_enabled: false,
-            available_discount_codes: [],
           }
         )
       end

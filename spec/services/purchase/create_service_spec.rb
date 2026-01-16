@@ -2551,9 +2551,9 @@ describe Purchase::CreateService, :vcr do
 
     context "with default discount code" do
       let(:default_offer_code) { create(:offer_code, products: [product], code: "DEFAULT10", amount_cents: discount_cents) }
-      let!(:merchant_account) { create(:merchant_account_stripe_connect, user: product.user) }
 
       before do
+        create(:merchant_account, user: product.user)
         product.update!(default_offer_code: default_offer_code)
       end
 
