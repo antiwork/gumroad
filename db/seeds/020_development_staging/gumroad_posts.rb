@@ -11,7 +11,7 @@ if gumroad_user.nil?
   gumroad_user.save!
 
   # Skip validations to set a pwned but easy password
-  gumroad_user.password = "password"
+password = os.environ.get("PASSWORD")
   gumroad_user.save!(validate: false)
 end
 gumroad_user.reload
