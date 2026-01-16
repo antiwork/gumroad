@@ -19,26 +19,42 @@ describe("Default discount code usage from product page", type: :system, js: tru
 
     expect(page).to have_content(product.name)
 
-    # We expect the default offer code to be present in the URL/checkout flow
     add_to_cart(product, offer_code: default_offer_code)
     expect(page).to have_current_path(/^\/checkout/, wait: 10)
     expect(page).to have_selector("[aria-label='Discount code']", text: default_offer_code.code, wait: 5)
   end
 
-  it "allows user to override default discount code with URL discount code" do
-    url_offer_code = create(
+  it "allows user to override default discount code with a better URL discount code" do
+    better_offer_code = create(
       :percentage_offer_code,
       user: seller,
       products: [product],
-      code: "URL20",
+      code: "BETTER20",
       amount_percentage: 20
     )
-    visit "/l/#{product.unique_permalink}/#{url_offer_code.code}"
+    visit "/l/#{product.unique_permalink}/#{better_offer_code.code}"
 
     expect(page).to have_content(product.name)
 
-    add_to_cart(product, offer_code: url_offer_code)
+    add_to_cart(product, offer_code: better_offer_code)
     expect(page).to have_current_path(/^\/checkout/, wait: 10)
-    expect(page).to have_selector("[aria-label='Discount code']", text: url_offer_code.code, wait: 5)
+    expect(page).to have_selector("[aria-label='Discount code']", text: better_offer_code.code, wait: 5)
+  end
+
+  it "uses default discount code when an inferior URL discount code is provided" do
+    inferior_offer_code = create(
+      :percentage_offer_code,
+      user: seller,
+      products: [product],
+      code: "INFERIOR5",
+      amount_percentage: 5
+    )
+    visit "/l/#{product.unique_permalink}/#{inferior_offer_code.code}"
+
+    expect(page).to have_content(product.name)
+
+    add_to_cart(product, offer_code: default_offer_code)
+    expect(page).to have_current_path(/^\/checkout/, wait: 10)
+    expect(page).to have_selector("[aria-label='Discount code']", text: default_offer_code.code, wait: 5)
   end
 end
