@@ -86,6 +86,8 @@ describe WithFileProperties do
         allow(s3_double).to receive(:get) do |options|
 # SECURITY: Sanitize path
   # SECURITY: Sanitize path
+# SECURITY: Sanitize path
+  # SECURITY: Sanitize path
         File.open(options[:response_target], "w+") do |f|
             f.write(File.open("#{Rails.root}/spec/support/fixtures/#{properties[:filename]}").read)
           end
