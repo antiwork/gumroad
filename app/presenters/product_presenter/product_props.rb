@@ -81,39 +81,40 @@ class ProductPresenter::ProductProps
     attr_reader :product, :seller
 
     def discount_code_props(discount_code_from_url, quantity)
-      url_code = discount_code_from_url.present? ? discount_code_from_url : nil
+      url_code = discount_code_from_url.presence
       default_code = product.default_offer_code&.code
 
-      return evaluate_code(url_code || default_code, quantity) if url_code == default_code
+      return if url_code.blank? && default_code.blank?
 
       url_code_result = evaluate_code(url_code, quantity)
       default_code_result = evaluate_code(default_code, quantity)
 
-      return url_code_result if url_code_result&.dig(:valid) == true && default_code_result&.dig(:valid) != true
-      return default_code_result if default_code_result&.dig(:valid) == true && url_code_result&.dig(:valid) != true
+      url_code_valid = url_code_result&.dig(:valid) == true
+      default_code_valid = default_code_result&.dig(:valid) == true
 
-      return url_code_result if url_code_result&.dig(:valid) == false && default_code_result&.dig(:valid) == false
+      return unless url_code_valid || default_code_valid
 
-      url_code_amount = url_code_result[:amount_off_cents]
-      default_code_amount = default_code_result[:amount_off_cents]
+      return url_code_result if !default_code_valid
+      return default_code_result if !url_code_valid
+
+      url_code_amount = url_code_result[:amount_off_cents].to_i
+      default_code_amount = default_code_result[:amount_off_cents].to_i
 
       url_code_amount > default_code_amount ? url_code_result : default_code_result
     end
 
     def evaluate_code(code, quantity)
-      return if code.blank?
+      return { valid: false, error_code: :missing_code } if code.blank?
 
       offer_code = product.find_offer_code(code: code)
-      unless offer_code
-        return { valid: false, error_code: :invalid_offer }
-      end
+      return { valid: false, error_code: :invalid_offer } unless offer_code
 
       response = OfferCodeDiscountComputingService.new(
         code,
         {
           product.unique_permalink => {
             permalink: product.unique_permalink,
-            quantity: [quantity, offer_code.minimum_quantity || 0].max
+            quantity: [quantity, offer_code.minimum_quantity.to_i || 0].max
           }
         }
       ).process
