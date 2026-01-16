@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[7.1].define(version: 2025_11_24_133549) do
+ActiveRecord::Schema[7.1].define(version: 2026_01_16_163451) do
   create_table "active_storage_attachments", charset: "utf8mb4", collation: "utf8mb4_unicode_ci", force: :cascade do |t|
     t.string "name", limit: 191, null: false
     t.string "record_type", limit: 191, null: false
@@ -144,6 +144,24 @@ ActiveRecord::Schema[7.1].define(version: 2025_11_24_133549) do
     t.string "unsplash_url"
     t.index ["deleted_at"], name: "index_asset_previews_on_deleted_at"
     t.index ["link_id"], name: "index_asset_previews_on_link_id"
+  end
+
+  create_table "audience_export_chunks", charset: "utf8mb4", collation: "utf8mb4_unicode_ci", force: :cascade do |t|
+    t.bigint "export_id", null: false
+    t.text "member_ids", size: :long
+    t.text "members_data", size: :long
+    t.boolean "processed", default: false, null: false
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.index ["export_id"], name: "index_audience_export_chunks_on_export_id"
+  end
+
+  create_table "audience_exports", charset: "utf8mb4", collation: "utf8mb4_unicode_ci", force: :cascade do |t|
+    t.bigint "recipient_id", null: false
+    t.text "audience_options"
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.index ["recipient_id"], name: "index_audience_exports_on_recipient_id"
   end
 
   create_table "audience_members", charset: "utf8mb4", collation: "utf8mb4_unicode_ci", force: :cascade do |t|
@@ -2396,6 +2414,7 @@ ActiveRecord::Schema[7.1].define(version: 2025_11_24_133549) do
     t.bigint "preorder_id"
     t.bigint "imported_customer_id"
     t.datetime "rental_first_viewed_at", precision: nil
+    t.integer "last_visited_page_index"
     t.index ["imported_customer_id"], name: "index_url_redirects_on_imported_customer_id"
     t.index ["installment_id", "imported_customer_id"], name: "index_url_redirects_on_installment_id_and_imported_customer_id"
     t.index ["installment_id", "purchase_id"], name: "index_url_redirects_on_installment_id_and_purchase_id"

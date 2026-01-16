@@ -866,6 +866,7 @@ Rails.application.routes.draw do
     post "/confirm-redirect", to: "url_redirects#confirm"
     post "/r/:id/send_to_kindle", to: "url_redirects#send_to_kindle", as: :send_to_kindle
     post "/r/:id/change_purchaser", to: "url_redirects#change_purchaser", as: :url_redirect_change_purchaser
+    patch "/r/:id/last_visited_page", to: "url_redirects#update_last_visited_page", as: :url_redirect_update_last_visited_page
 
     get "crossdomain", to: "public#crossdomain"
 

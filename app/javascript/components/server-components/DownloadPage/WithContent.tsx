@@ -92,6 +92,7 @@ export type License = {
 const WithContent = ({
   content,
   product_has_third_party_analytics,
+  last_visited_page_index,
   ...props
 }: LayoutProps & {
   content: {
@@ -108,6 +109,7 @@ const WithContent = ({
     community_chat_url: string | null;
   };
   product_has_third_party_analytics: boolean | null;
+  last_visited_page_index: number | null;
 }) => {
   const url = new URL(useOriginalLocation());
   const addThirdPartyAnalytics = useAddThirdPartyAnalytics();
@@ -208,7 +210,11 @@ const WithContent = ({
   });
   const isDesktop = useIsAboveBreakpoint("lg");
   const pages = content.rich_content_pages ?? [];
-  const [activePageIndex, setActivePageIndex] = React.useState(0);
+  const initialPageIndex =
+    last_visited_page_index != null && last_visited_page_index >= 0 && last_visited_page_index < pages.length
+      ? last_visited_page_index
+      : 0;
+  const [activePageIndex, setActivePageIndex] = React.useState(initialPageIndex);
   const activePage = pages[activePageIndex];
   const showPageList = pages.length > 1 || (pages.length === 1 && (pages[0]?.title ?? "").trim() !== "");
   const hasPreviousPage = activePageIndex > 0;
@@ -255,6 +261,23 @@ const WithContent = ({
     [pages],
   );
   const purchaseInfo = { purchaseId: props.purchase?.id ?? null, redirectId: props.redirect_id, token: props.token };
+
+  const isInitialMountRef = React.useRef(true);
+  React.useEffect(() => {
+    if (isInitialMountRef.current) {
+      isInitialMountRef.current = false;
+      return;
+    }
+
+    if (pages.length === 0) return;
+
+    void request({
+      url: Routes.url_redirect_update_last_visited_page_path(props.token),
+      method: "PATCH",
+      accept: "json",
+      data: { page_index: activePageIndex },
+    });
+  }, [activePageIndex, pages.length, props.token]);
 
   return (
     <Layout
