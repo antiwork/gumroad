@@ -433,11 +433,11 @@ const TipSelector = () => {
   return (
     <div className="@container flex flex-col gap-2 sm:gap-3">
       <CartPriceItem title="Add a tip?" price={formatPrice(computeTip(state))} variant="tip" />
-      <div className="flex flex-wrap gap-4">
+      <div className="grid grid-cols-1 gap-4 @[52rem]:grid-cols-5">
         {showPercentageOptions ? (
           <div
             role="radiogroup"
-            className="radio-buttons flex-1 basis-174 grid-cols-1! gap-2 @3xs:grid-cols-2! @sm:grid-cols-4!"
+            className="radio-buttons col-span-full grid-cols-1! @3xs:grid-cols-2! @sm:grid-cols-4! @[52rem]:col-span-4!"
           >
             {tipPercentages.map((percentage) => (
               <Button
@@ -461,7 +461,7 @@ const TipSelector = () => {
             ))}
           </div>
         ) : null}
-        <fieldset className={classNames("flex-1 basis-38", { danger: errors.has("tip") })}>
+        <fieldset className={classNames("col-span-full @[52rem]:col-span-1!", { danger: errors.has("tip") })}>
           <PriceInput
             hasError={errors.has("tip")}
             ariaLabel="Tip"
