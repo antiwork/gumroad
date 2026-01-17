@@ -107,6 +107,7 @@ describe Admin::UsersController, type: :controller, inertia: true do
         get :show, params: { external_id: user.id }
 
         expect(response).to redirect_to(admin_user_path(user.external_id))
+        expect(response).to have_http_status(:see_other)
       end
     end
   end
