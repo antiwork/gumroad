@@ -83,7 +83,8 @@ export const NativeAppLink = <Element extends HTMLElement>({
         e.stopPropagation();
         e.preventDefault();
         // Open in the iOS app
-        window.webkit.messageHandlers.jsMessage.postMessage({ type: "click", payload: appPayload });
+        const { extension, ...rest } = appPayload;
+        window.webkit.messageHandlers.jsMessage.postMessage({ type: "click", payload: rest });
       } else if (window.CustomJavaScriptInterface && appPayload) {
         e.stopPropagation();
         e.preventDefault();
