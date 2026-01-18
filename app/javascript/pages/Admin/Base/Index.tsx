@@ -3,7 +3,6 @@ import React from "react";
 
 import { buttonVariants } from "$app/components/Button";
 
-
 const AdminDashboard = () => {
   const [userIdentifier, setUserIdentifier] = React.useState("");
 
