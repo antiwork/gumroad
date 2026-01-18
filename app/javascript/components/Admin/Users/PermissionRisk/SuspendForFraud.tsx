@@ -2,6 +2,7 @@ import * as React from "react";
 
 import { Form } from "$app/components/Admin/Form";
 import type { User } from "$app/components/Admin/Users/User";
+import { Button } from "$app/components/Button";
 import { showAlert } from "$app/components/server-components/Alert";
 
 type SuspendForFraudProps = {
@@ -34,9 +35,9 @@ const SuspendForFraud = ({ user }: SuspendForFraudProps) => {
                     className="flex-1"
                     placeholder="Add suspension note (optional)"
                   />
-                  <button type="submit" className="button" disabled={isLoading}>
+                  <Button type="submit" disabled={isLoading}>
                     {isLoading ? "Submitting..." : "Submit"}
-                  </button>
+                  </Button>
                 </div>
               </fieldset>
             )}

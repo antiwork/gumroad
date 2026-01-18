@@ -2,53 +2,120 @@
 
 class DashboardProductsPagePresenter
   include Product::Caching
+  include ProductsHelper
   include ActionView::Helpers::NumberHelper
   include ActionView::Helpers::TextHelper
   include Rails.application.routes.url_helpers
 
-  attr_reader :memberships, :memberships_pagination, :products, :products_pagination, :pundit_user
+  PER_PAGE = 50
 
-  def initialize(pundit_user:, memberships:, memberships_pagination:, products:, products_pagination:)
+  attr_reader :products_sort, :memberships_sort
+
+  def initialize(pundit_user:, archived: false, products_page: 1, memberships_page: 1, products_sort: nil, memberships_sort: nil, query: nil)
     @pundit_user = pundit_user
-    @memberships = memberships
-    @memberships_pagination = memberships_pagination
-    @products = products
-    @products_pagination = products_pagination
+    @archived = archived
+    @products_page = products_page
+    @memberships_page = memberships_page
+    @products_sort = products_sort
+    @memberships_sort = memberships_sort
+    @query = query
+  end
+
+  def empty?
+    return nil unless archived?
+    products_table_props[:products].empty? && memberships_table_props[:memberships].empty?
   end
 
   def page_props
-    {
-      memberships: memberships_data,
-      memberships_pagination:,
-      products: products_data,
-      products_pagination:,
-      archived_products_count: @pundit_user.seller.archived_products_count,
-      can_create_product: Pundit.policy!(@pundit_user, Link).create?,
-    }
+    @page_props ||= if archived?
+      { can_create_product: Pundit.policy!(@pundit_user, Link).create? }
+    else
+      {
+        archived_products_count: seller.archived_products_count,
+        can_create_product: Pundit.policy!(@pundit_user, Link).create?,
+      }
+    end
   end
 
   def memberships_table_props
-    {
-      memberships: memberships_data,
-      memberships_pagination:,
-    }
+    @memberships_table_props ||= begin
+      memberships_pagination, memberships = paginated_memberships
+
+      {
+        memberships: memberships_data(memberships),
+        memberships_pagination:,
+      }
+    end
   end
 
   def products_table_props
-    {
-      products: products_data,
-      products_pagination:,
-    }
+    @products_table_props ||= begin
+      products_pagination, products = paginated_products
+
+      {
+        products: products_data(products),
+        products_pagination:,
+      }
+    end
+  end
+
+  def product_props(product)
+    product_base_data(product, pundit_user:)
   end
 
   private
-    def memberships_data
+    attr_reader :pundit_user, :products_page, :memberships_page, :query
+
+    def archived? = @archived
+
+    def seller
+      pundit_user.seller
+    end
+
+    def paginated_memberships
+      memberships = seller.products.membership.visible
+      memberships = archived? ? memberships.archived : memberships.not_archived
+      memberships = memberships.where("name like ?", "%#{query}%") if query.present?
+
+      sort_and_paginate_products(
+        key: memberships_sort&.dig(:key),
+        direction: memberships_sort&.dig(:direction),
+        page: memberships_page,
+        collection: memberships,
+        per_page: PER_PAGE,
+        user_id: seller.id
+      )
+    end
+
+    def paginated_products
+      products = seller
+        .products
+        .includes([
+                    thumbnail: { file_attachment: { blob: { variant_records: { image_attachment: :blob } } } },
+                    thumbnail_alive: { file_attachment: { blob: { variant_records: { image_attachment: :blob } } } },
+                  ])
+        .non_membership
+        .visible
+      products = archived? ? products.archived : products.not_archived
+      products = products.where("links.name like ?", "%#{query}%") if query.present?
+
+      sort_and_paginate_products(
+        key: products_sort&.dig(:key),
+        direction: products_sort&.dig(:direction),
+        page: products_page,
+        collection: products,
+        per_page: PER_PAGE,
+        user_id: seller.id
+      )
+    end
+
+    def memberships_data(memberships)
       Product::Caching.dashboard_collection_data(memberships, cache: true) do |membership|
         product_base_data(membership, pundit_user:)
       end
     end
 
-    def products_data
+    def products_data(products)
       Product::Caching.dashboard_collection_data(products, cache: true) do |product|
         product_base_data(product, pundit_user:)
       end

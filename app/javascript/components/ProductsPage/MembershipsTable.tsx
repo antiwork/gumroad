@@ -1,16 +1,14 @@
 import { router } from "@inertiajs/react";
 import * as React from "react";
 
-import { getPagedMemberships, Membership, SortKey } from "$app/data/products";
+import { Membership, SortKey } from "$app/data/products";
 import { classNames } from "$app/utils/classNames";
 import { formatPriceCentsWithCurrencySymbol } from "$app/utils/currency";
-import { AbortError, assertResponseError } from "$app/utils/request";
 
 import { Pagination, PaginationProps } from "$app/components/Pagination";
 import { Tab } from "$app/components/ProductsLayout";
 import ActionsPopover from "$app/components/ProductsPage/ActionsPopover";
 import { ProductIconCell } from "$app/components/ProductsPage/ProductIconCell";
-import { showAlert } from "$app/components/server-components/Alert";
 import {
   Table,
   TableBody,
@@ -25,63 +23,55 @@ import { useDebouncedCallback } from "$app/components/useDebouncedCallback";
 import { useUserAgentInfo } from "$app/components/UserAgent";
 import { Sort, useSortingTableDriver } from "$app/components/useSortingTableDriver";
 
-type State = {
-  entries: readonly Membership[];
-  pagination: PaginationProps;
-  isLoading: boolean;
-};
-
 export const ProductsPageMembershipsTable = (props: {
   entries: Membership[];
   pagination: PaginationProps;
   selectedTab: Tab;
   query: string | null;
+  sort?: Sort<SortKey> | null | undefined;
   setEnableArchiveTab: ((enable: boolean) => void) | undefined;
 }) => {
-  const [{ entries: memberships, pagination, isLoading }, setState] = React.useState<State>({
-    entries: props.entries,
-    pagination: props.pagination,
-    isLoading: false,
-  });
-
+  const [isLoading, setIsLoading] = React.useState(false);
+  const tableRef = React.useRef<HTMLTableElement>(null);
   const userAgentInfo = useUserAgentInfo();
+  const [sort, setSort] = React.useState<Sort<SortKey> | null>(props.sort ?? null);
+  const memberships = props.entries;
+  const pagination = props.pagination;
 
-  const [sort, setSort] = React.useState<Sort<SortKey> | null>(null);
-  const thProps = useSortingTableDriver<SortKey>(sort, setSort);
-
-  React.useEffect(() => {
-    if (sort) void loadMemberships(1);
-  }, [sort]);
-
-  const activeRequest = React.useRef<{ cancel: () => void } | null>(null);
-  const loadMemberships = async (page: number) => {
-    setState((prevState) => ({ ...prevState, isLoading: true }));
-    try {
-      activeRequest.current?.cancel();
-      const request = getPagedMemberships({
-        forArchivedMemberships: props.selectedTab === "archived",
-        page,
-        query: props.query,
-        sort,
-      });
-      activeRequest.current = request;
-
-      const response = await request.response;
-
-      setState((prevState) => ({
-        ...prevState,
-        ...response,
-        isLoading: false,
-      }));
-      activeRequest.current = null;
-    } catch (e) {
-      if (e instanceof AbortError) return;
-      assertResponseError(e);
-      showAlert(e.message, "error");
-      setState((prevState) => ({ ...prevState, isLoading: false }));
-    }
+  const onSetSort = (newSort: Sort<SortKey> | null) => {
+    router.reload({
+      data: {
+        memberships_sort_key: newSort?.key,
+        memberships_sort_direction: newSort?.direction,
+        memberships_page: undefined,
+      },
+      only: ["memberships_data"],
+      onBefore: () => setSort(newSort),
+      onStart: () => setIsLoading(true),
+      onFinish: () => setIsLoading(false),
+    });
   };
-  const debouncedLoadMemberships = useDebouncedCallback(() => void loadMemberships(1), 300);
+
+  const thProps = useSortingTableDriver<SortKey>(sort, onSetSort);
+
+  const loadMemberships = (page = 1) => {
+    router.reload({
+      data: {
+        memberships_page: page,
+        memberships_sort_key: sort?.key,
+        memberships_sort_direction: sort?.direction,
+        query: props.query || undefined,
+      },
+      only: ["memberships_data"],
+      onStart: () => setIsLoading(true),
+      onFinish: () => {
+        setIsLoading(false);
+        tableRef.current?.scrollIntoView({ behavior: "smooth" });
+      },
+    });
+  };
+
+  const debouncedLoadMemberships = useDebouncedCallback(() => loadMemberships(1), 300);
 
   React.useEffect(() => {
     if (props.query !== null) debouncedLoadMemberships();
@@ -93,7 +83,7 @@ export const ProductsPageMembershipsTable = (props: {
 
   return (
     <section className="flex flex-col gap-4">
-      <Table aria-live="polite" className={classNames(isLoading && "pointer-events-none opacity-50")}>
+      <Table ref={tableRef} aria-live="polite" className={classNames(isLoading && "pointer-events-none opacity-50")}>
         <TableCaption>Memberships</TableCaption>
         <TableHeader>
           <TableRow>
@@ -178,16 +168,16 @@ export const ProductsPageMembershipsTable = (props: {
                 <TableCell>
                   <ActionsPopover
                     product={membership}
-                    onDuplicate={() => void loadMemberships(1)}
-                    onDelete={() => void reloadMemberships()}
+                    onDuplicate={() => loadMemberships()}
+                    onDelete={() => reloadMemberships()}
                     onArchive={() => {
                       props.setEnableArchiveTab?.(true);
-                      void reloadMemberships();
+                      reloadMemberships();
                     }}
                     onUnarchive={(hasRemainingArchivedProducts) => {
                       props.setEnableArchiveTab?.(hasRemainingArchivedProducts);
                       if (!hasRemainingArchivedProducts) router.get(Routes.products_path());
-                      else void reloadMemberships();
+                      else reloadMemberships();
                     }}
                   />
                 </TableCell>
@@ -218,7 +208,7 @@ export const ProductsPageMembershipsTable = (props: {
       </Table>
 
       {pagination.pages > 1 ? (
-        <Pagination onChangePage={(page) => void loadMemberships(page)} pagination={pagination} />
+        <Pagination onChangePage={(page) => loadMemberships(page)} pagination={pagination} />
       ) : null}
     </section>
   );

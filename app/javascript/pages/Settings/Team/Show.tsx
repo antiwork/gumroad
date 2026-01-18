@@ -268,7 +268,7 @@ const TeamMembersSection = ({
           <div className="flex flex-col justify-between sm:flex-row">
             {deletedMember.name !== "" ? deletedMember.name : deletedMember.email} was removed from team members
             <button
-              className="underline"
+              className="cursor-pointer underline all-unset"
               type="button"
               onClick={asyncVoid(async () => {
                 try {

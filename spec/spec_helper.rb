@@ -105,6 +105,11 @@ def configure_vcr
     config.filter_sensitive_data("<RPUSH_CONSUMER_FCM_FIREBASE_PROJECT_ID>") { GlobalConfig.get("RPUSH_CONSUMER_FCM_FIREBASE_PROJECT_ID") }
     config.filter_sensitive_data("<SLACK_WEBHOOK_URL>") { GlobalConfig.get("SLACK_WEBHOOK_URL") }
     config.filter_sensitive_data("<CLOUDFRONT_KEYPAIR_ID>") { GlobalConfig.get("CLOUDFRONT_KEYPAIR_ID") }
+
+    # Filter EasyPost API key (Base64-encoded for Basic Auth headers)
+    config.filter_sensitive_data("<EASYPOST_API_KEY_BASE64>") do
+      Base64.strict_encode64("#{GlobalConfig.get('EASYPOST_API_KEY')}:")
+    end
   end
 end
 
@@ -302,6 +307,30 @@ RSpec.configure do |config|
           example.run
         end
       end
+    end
+  end
+
+  # Mock EasyPost address verification for physical product tests without VCR
+  config.before(:each, :mock_easypost) do
+    allow_any_instance_of(EasyPost::Services::Address).to receive(:create) do |_instance, params|
+      # Echo back the input address with successful verification
+      OpenStruct.new(
+        id: "adr_mock_#{SecureRandom.hex(8)}",
+        object: "Address",
+        street1: params[:street1]&.upcase || "1640 17TH ST",
+        street2: params[:street2] || "",
+        city: params[:city]&.upcase || "SAN FRANCISCO",
+        state: params[:state]&.upcase || "CA",
+        zip: params[:zip] || "94107",
+        country: params[:country] || "US",
+        verifications: OpenStruct.new(
+          delivery: OpenStruct.new(
+            success: true,
+            errors: [],
+            details: OpenStruct.new(latitude: 37.76493, longitude: -122.40005, time_zone: "America/Los_Angeles")
+          )
+        )
+      )
     end
   end
 

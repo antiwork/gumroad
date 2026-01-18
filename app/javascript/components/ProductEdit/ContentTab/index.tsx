@@ -601,7 +601,7 @@ const ContentTabContent = ({ selectedVariantId }: { selectedVariantId: string | 
                   <p>Paste a video link or upload images or videos.</p>
                   <Tabs variant="buttons">
                     <Tab isSelected aria-controls={`${uid}-embed-tab`} asChild>
-                      <button type="button">
+                      <button type="button" className="cursor-pointer all-unset">
                         <Icon name="link" />
                         <h4>Embed link</h4>
                       </button>
@@ -740,7 +740,7 @@ const ContentTabContent = ({ selectedVariantId }: { selectedVariantId: string | 
                 </Popover>
                 <>
                   <Separator aria-orientation="vertical" />
-                  <button className="toolbar-item" onClick={handleCreatePageClick}>
+                  <button className="toolbar-item cursor-pointer all-unset" onClick={handleCreatePageClick}>
                     <Icon name="plus" /> Page
                   </button>
                 </>
@@ -764,7 +764,7 @@ const ContentTabContent = ({ selectedVariantId }: { selectedVariantId: string | 
                     <>
                       {isDesktop ? null : (
                         <PageListItem asChild className="tailwind-override text-left">
-                          <button onClick={() => setPagesExpanded(!pagesExpanded)}>
+                          <button className="cursor-pointer all-unset" onClick={() => setPagesExpanded(!pagesExpanded)}>
                             <span className="flex-1">
                               <strong>Table of contents:</strong> {titleWithFallback(selectedPage?.title)}
                             </span>
@@ -825,7 +825,7 @@ const ContentTabContent = ({ selectedVariantId }: { selectedVariantId: string | 
                               />
                             </WithTooltip>
                           ) : null}
-                          <PageListItem asChild className="tailwind-override text-left">
+                          <PageListItem asChild className="text-left">
                             <button
                               className="add-page"
                               onClick={(e) => {

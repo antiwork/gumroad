@@ -1,16 +1,14 @@
 import { router } from "@inertiajs/react";
 import * as React from "react";
 
-import { getPagedProducts, Product, SortKey } from "$app/data/products";
+import { Product, SortKey } from "$app/data/products";
 import { classNames } from "$app/utils/classNames";
 import { formatPriceCentsWithCurrencySymbol } from "$app/utils/currency";
-import { AbortError, assertResponseError } from "$app/utils/request";
 
 import { Pagination, PaginationProps } from "$app/components/Pagination";
 import { Tab } from "$app/components/ProductsLayout";
 import ActionsPopover from "$app/components/ProductsPage/ActionsPopover";
 import { ProductIconCell } from "$app/components/ProductsPage/ProductIconCell";
-import { showAlert } from "$app/components/server-components/Alert";
 import {
   Table,
   TableBody,
@@ -25,64 +23,55 @@ import { useDebouncedCallback } from "$app/components/useDebouncedCallback";
 import { useUserAgentInfo } from "$app/components/UserAgent";
 import { Sort, useSortingTableDriver } from "$app/components/useSortingTableDriver";
 
-type State = {
-  entries: readonly Product[];
-  pagination: PaginationProps;
-  isLoading: boolean;
-};
-
 export const ProductsPageProductsTable = (props: {
   entries: Product[];
   pagination: PaginationProps;
   selectedTab: Tab;
   query: string | null;
+  sort?: Sort<SortKey> | null | undefined;
   setEnableArchiveTab: ((enable: boolean) => void) | undefined;
 }) => {
-  const [{ entries: products, pagination, isLoading }, setState] = React.useState<State>({
-    entries: props.entries,
-    pagination: props.pagination,
-    isLoading: false,
-  });
-  const activeRequest = React.useRef<{ cancel: () => void } | null>(null);
+  const [isLoading, setIsLoading] = React.useState(false);
   const tableRef = React.useRef<HTMLTableElement>(null);
   const { locale } = useUserAgentInfo();
+  const [sort, setSort] = React.useState<Sort<SortKey> | null>(props.sort ?? null);
+  const products = props.entries;
+  const pagination = props.pagination;
 
-  const [sort, setSort] = React.useState<Sort<SortKey> | null>(null);
-  const thProps = useSortingTableDriver<SortKey>(sort, setSort);
-
-  React.useEffect(() => {
-    if (sort) void loadProducts(1);
-  }, [sort]);
-
-  const loadProducts = async (page: number) => {
-    setState((prevState) => ({ ...prevState, isLoading: true }));
-    try {
-      activeRequest.current?.cancel();
-
-      const request = getPagedProducts({
-        page,
-        query: props.query,
-        sort,
-        forArchivedProducts: props.selectedTab === "archived",
-      });
-      activeRequest.current = request;
-
-      const response = await request.response;
-      setState((prevState) => ({
-        ...prevState,
-        ...response,
-        isLoading: false,
-      }));
-      activeRequest.current = null;
-      tableRef.current?.scrollIntoView({ behavior: "smooth" });
-    } catch (e) {
-      if (e instanceof AbortError) return;
-      assertResponseError(e);
-      setState((prevState) => ({ ...prevState, isLoading: false }));
-      showAlert(e.message, "error");
-    }
+  const onSetSort = (newSort: Sort<SortKey> | null) => {
+    router.reload({
+      data: {
+        products_sort_key: newSort?.key,
+        products_sort_direction: newSort?.direction,
+        products_page: undefined,
+      },
+      only: ["products_data"],
+      onBefore: () => setSort(newSort),
+      onStart: () => setIsLoading(true),
+      onFinish: () => setIsLoading(false),
+    });
   };
-  const debouncedLoadProducts = useDebouncedCallback(() => void loadProducts(1), 300);
+
+  const thProps = useSortingTableDriver<SortKey>(sort, onSetSort);
+
+  const loadProducts = (page = 1) => {
+    router.reload({
+      data: {
+        products_page: page,
+        products_sort_key: sort?.key,
+        products_sort_direction: sort?.direction,
+        query: props.query || undefined,
+      },
+      only: ["products_data"],
+      onStart: () => setIsLoading(true),
+      onFinish: () => {
+        setIsLoading(false);
+        tableRef.current?.scrollIntoView({ behavior: "smooth" });
+      },
+    });
+  };
+
+  const debouncedLoadProducts = useDebouncedCallback(() => loadProducts(1), 300);
 
   React.useEffect(() => {
     if (props.query !== null) debouncedLoadProducts();
@@ -170,16 +159,16 @@ export const ProductsPageProductsTable = (props: {
                   <div className="flex flex-wrap gap-3 lg:justify-end">
                     <ActionsPopover
                       product={product}
-                      onDuplicate={() => void loadProducts(1)}
-                      onDelete={() => void reloadProducts()}
+                      onDuplicate={() => loadProducts()}
+                      onDelete={() => reloadProducts()}
                       onArchive={() => {
                         props.setEnableArchiveTab?.(true);
-                        void reloadProducts();
+                        reloadProducts();
                       }}
                       onUnarchive={(hasRemainingArchivedProducts) => {
                         props.setEnableArchiveTab?.(hasRemainingArchivedProducts);
                         if (!hasRemainingArchivedProducts) router.get(Routes.products_path());
-                        else void reloadProducts();
+                        else reloadProducts();
                       }}
                     />
                   </div>
@@ -207,9 +196,7 @@ export const ProductsPageProductsTable = (props: {
         </TableFooter>
       </Table>
 
-      {pagination.pages > 1 ? (
-        <Pagination onChangePage={(page) => void loadProducts(page)} pagination={pagination} />
-      ) : null}
+      {pagination.pages > 1 ? <Pagination onChangePage={(page) => loadProducts(page)} pagination={pagination} /> : null}
     </div>
   );
 };
