@@ -18,10 +18,10 @@ class CreatorAnalytics::Churn::ElasticsearchFetcher
     return {} if product_ids.empty?
 
     query = base_query
-    query[:bool][:must] << { exists: { field: "subscription_deactivated_at" } }
+    query[:bool][:must] << { exists: { field: "subscription_cancelled_at" } }
     query[:bool][:filter] << {
       range: {
-        subscription_deactivated_at: {
+        subscription_cancelled_at: {
           time_zone: date_window.timezone_id,
           gte: date_window.start_date.to_s,
           lte: date_window.end_date.to_s
@@ -29,7 +29,7 @@ class CreatorAnalytics::Churn::ElasticsearchFetcher
       }
     }
 
-    sources = composite_sources(field: "subscription_deactivated_at")
+    sources = composite_sources(field: "subscription_cancelled_at")
     aggs = {
       churned_customers: { cardinality: { field: "subscription_id" } },
       revenue_lost_cents: { sum: { field: "monthly_recurring_revenue" } }

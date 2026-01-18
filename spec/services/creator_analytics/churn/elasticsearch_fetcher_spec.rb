@@ -19,9 +19,23 @@ describe CreatorAnalytics::Churn::ElasticsearchFetcher do
   end
   let(:service) { described_class.new(seller:, products:, date_window:) }
 
-  def create_subscription_purchase(product:, created_at:, subscription_deactivated_at: nil, price_cents: 100, recurrence: BasePrice::Recurrence::MONTHLY)
+  def create_subscription_purchase(
+    product:,
+    created_at:,
+    subscription_cancelled_at: nil,
+    subscription_deactivated_at: nil,
+    price_cents: 100,
+    recurrence: BasePrice::Recurrence::MONTHLY
+  )
     price = create(:price, link: product, price_cents:, recurrence:)
-    subscription = create(:subscription, link: product, user: seller, deactivated_at: subscription_deactivated_at, price:)
+    subscription = create(
+      :subscription,
+      link: product,
+      user: seller,
+      cancelled_at: subscription_cancelled_at,
+      deactivated_at: subscription_deactivated_at,
+      price:
+    )
     purchase = create(
       :purchase,
       link: product,
@@ -45,13 +59,13 @@ describe CreatorAnalytics::Churn::ElasticsearchFetcher do
         create_subscription_purchase(
           product: product1,
           created_at: Time.utc(2020, 5, 1),
-          subscription_deactivated_at: Time.utc(2020, 6, 1, 7, 30),
+          subscription_cancelled_at: Time.utc(2020, 6, 1, 7, 30),
           price_cents: 100
         )
         create_subscription_purchase(
           product: product2,
           created_at: Time.utc(2020, 5, 1),
-          subscription_deactivated_at: Time.utc(2020, 6, 1, 6, 30),
+          subscription_cancelled_at: Time.utc(2020, 6, 1, 6, 30),
           price_cents: 200
         )
         index_model_records(Purchase)
@@ -84,34 +98,34 @@ describe CreatorAnalytics::Churn::ElasticsearchFetcher do
         create_subscription_purchase(
           product: product1,
           created_at: Time.utc(2020, 1, 10),
-          subscription_deactivated_at: Time.utc(2020, 1, 15, 10)
+          subscription_cancelled_at: Time.utc(2020, 1, 15, 10)
         )
         create_subscription_purchase(
           product: product1,
           created_at: Time.utc(2020, 1, 10),
-          subscription_deactivated_at: Time.utc(2020, 1, 15, 14),
+          subscription_cancelled_at: Time.utc(2020, 1, 15, 14),
           price_cents: 1200,
           recurrence: BasePrice::Recurrence::YEARLY
         )
         create_subscription_purchase(
           product: product1,
           created_at: Time.utc(2020, 1, 10),
-          subscription_deactivated_at: Time.utc(2020, 1, 16, 10)
+          subscription_cancelled_at: Time.utc(2020, 1, 16, 10)
         )
         create_subscription_purchase(
           product: product2,
           created_at: Time.utc(2020, 1, 10),
-          subscription_deactivated_at: Time.utc(2020, 1, 15, 12)
+          subscription_cancelled_at: Time.utc(2020, 1, 15, 12)
         )
         create_subscription_purchase(
           product: product2,
           created_at: Time.utc(2020, 1, 10),
-          subscription_deactivated_at: Time.utc(2020, 1, 15, 16)
+          subscription_cancelled_at: Time.utc(2020, 1, 15, 16)
         )
         create_subscription_purchase(
           product: product2,
           created_at: Time.utc(2020, 1, 10),
-          subscription_deactivated_at: Time.utc(2020, 1, 15, 18)
+          subscription_cancelled_at: Time.utc(2020, 1, 15, 18)
         )
         index_model_records(Purchase)
       end
@@ -140,6 +154,32 @@ describe CreatorAnalytics::Churn::ElasticsearchFetcher do
         result = service.churn_events
 
         expect(result.keys.length).to eq(3)
+      end
+    end
+
+    context "when cancellations and deactivations diverge" do
+      let(:products) { [product1] }
+
+      it "counts churn based on cancellations, not deactivations" do
+        create_subscription_purchase(
+          product: product1,
+          created_at: Time.utc(2020, 1, 10),
+          subscription_cancelled_at: Time.utc(2020, 1, 16, 10)
+        )
+        create_subscription_purchase(
+          product: product1,
+          created_at: Time.utc(2020, 1, 10),
+          subscription_deactivated_at: Time.utc(2020, 1, 17, 10)
+        )
+        index_model_records(Purchase)
+
+        result = service.churn_events
+
+        expect(result[[product1.id, Date.new(2020, 1, 16)]]).to include(
+          churned_count: 1,
+          revenue_lost_cents: 100
+        )
+        expect(result).not_to have_key([product1.id, Date.new(2020, 1, 17)])
       end
     end
 
@@ -177,7 +217,7 @@ describe CreatorAnalytics::Churn::ElasticsearchFetcher do
           created_at: Time.utc(2020, 4, 5),
           price_cents: new_price.price_cents
         )
-        subscription.update!(deactivated_at: Time.utc(2020, 4, 10, 12))
+        subscription.update!(cancelled_at: Time.utc(2020, 4, 10, 12))
         index_model_records(Purchase)
       end
 
