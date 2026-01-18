@@ -13,6 +13,7 @@ import { NavigationButtonInertia } from "$app/components/NavigationButton";
 import { NumberInput } from "$app/components/NumberInput";
 import { showAlert } from "$app/components/server-components/Alert";
 import { ToggleSettingRow } from "$app/components/SettingRow";
+import { Alert } from "$app/components/ui/Alert";
 import { PageHeader } from "$app/components/ui/PageHeader";
 import { Placeholder, PlaceholderImage } from "$app/components/ui/Placeholder";
 import { Table, TableBody, TableCaption, TableCell, TableHead, TableHeader, TableRow } from "$app/components/ui/Table";
@@ -172,9 +173,9 @@ export default function AffiliatesOnboarding() {
                 ) : null}
               </div>
               {enableAffiliateLink ? null : (
-                <div role="alert" className="warning">
+                <Alert variant="warning">
                   You must enable and set up the commission for at least one product before sharing your affiliate link.
-                </div>
+                </Alert>
               )}
             </fieldset>
           </section>
