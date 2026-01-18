@@ -24,7 +24,15 @@ class FightDisputeJob
   end
 
   private
+    REJECTION_PATTERNS = [
+      "This dispute is already closed",
+      "DISPUTE_NOT_ELIGIBLE_FOR_EVIDENCE",
+      "DISPUTE_ALREADY_RESOLVED",
+      "EVIDENCE_ALREADY_PROVIDED",
+      "DISPUTE_LIFE_CYCLE_STAGE_INVALID",
+    ].freeze
+
     def rejected?(message)
-      message.include?("This dispute is already closed")
+      REJECTION_PATTERNS.any? { |pattern| message.include?(pattern) }
     end
 end

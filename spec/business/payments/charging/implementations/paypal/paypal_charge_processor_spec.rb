@@ -1535,19 +1535,38 @@ describe PaypalChargeProcessor, :vcr do
 
   describe "#fight_chargeback" do
     let(:processor) { described_class.new }
-    let(:dispute_evidence) { create(:dispute_evidence) }
-    let(:dispute) { dispute_evidence.dispute }
     let(:paypal_rest_api) { instance_double(PaypalRestApi) }
+    let(:dispute) { instance_double(Dispute, charge_processor_dispute_id: "PP-D-12345", reason: Dispute::REASON_PRODUCT_NOT_RECEIVED, purchases: [], event_created_at: nil) }
+    let(:dispute_evidence) do
+      instance_double(DisputeEvidence,
+        dispute: dispute,
+        customer_name: "John Doe",
+        customer_email: "john@example.com",
+        customer_purchase_ip: "192.168.1.1",
+        product_description: "Digital Product",
+        reason_for_winning: "Customer received product",
+        uncategorized_text: nil,
+        access_activity_log: nil,
+        refund_policy_disclosure: nil,
+        refund_refusal_explanation: nil,
+        cancellation_policy_disclosure: nil,
+        cancellation_rebuttal: nil,
+        billing_address: nil,
+        shipping_address: nil,
+        shipping_carrier: nil,
+        shipping_tracking_number: nil,
+        shipped_at: nil
+      )
+    end
 
     before do
-      dispute.update!(charge_processor_dispute_id: "PP-D-12345", reason: Dispute::REASON_PRODUCT_NOT_RECEIVED)
+      allow(dispute).to receive(:purchase).and_return(nil)
+      allow(dispute).to receive(:charge).and_return(nil)
       allow(PaypalRestApi).to receive(:new).and_return(paypal_rest_api)
     end
 
     context "when dispute has no charge_processor_dispute_id" do
-      before do
-        dispute.update!(charge_processor_dispute_id: nil)
-      end
+      let(:dispute) { instance_double(Dispute, charge_processor_dispute_id: nil, reason: Dispute::REASON_PRODUCT_NOT_RECEIVED, purchases: [], event_created_at: nil) }
 
       it "returns early without submitting evidence" do
         expect(paypal_rest_api).not_to receive(:provide_evidence)
@@ -1609,11 +1628,27 @@ describe PaypalChargeProcessor, :vcr do
 
   describe "#build_paypal_evidences" do
     let(:processor) { described_class.new }
-    let(:dispute_evidence) { create(:dispute_evidence) }
-    let(:dispute) { dispute_evidence.dispute }
-
-    before do
-      dispute.update!(reason: Dispute::REASON_PRODUCT_NOT_RECEIVED)
+    let(:dispute) { instance_double(Dispute, reason: Dispute::REASON_PRODUCT_NOT_RECEIVED, purchases: [], event_created_at: nil) }
+    let(:dispute_evidence) do
+      instance_double(DisputeEvidence,
+        dispute: dispute,
+        product_description: "Digital Product",
+        access_activity_log: nil,
+        reason_for_winning: "Customer received product",
+        uncategorized_text: nil,
+        refund_refusal_explanation: nil,
+        refund_policy_disclosure: nil,
+        shipping_carrier: nil,
+        shipping_tracking_number: nil,
+        customer_name: nil,
+        customer_email: nil,
+        customer_purchase_ip: nil,
+        billing_address: nil,
+        shipping_address: nil,
+        shipped_at: nil,
+        cancellation_policy_disclosure: nil,
+        cancellation_rebuttal: nil
+      )
     end
 
     it "returns an array of evidence hashes" do
@@ -1625,24 +1660,22 @@ describe PaypalChargeProcessor, :vcr do
     end
 
     it "uses correct evidence type based on dispute reason" do
-      dispute.update!(reason: Dispute::REASON_PRODUCT_NOT_RECEIVED)
+      allow(dispute).to receive(:reason).and_return(Dispute::REASON_PRODUCT_NOT_RECEIVED)
       evidences = processor.send(:build_paypal_evidences, dispute_evidence, dispute)
       expect(evidences.first[:evidence_type]).to eq("PROOF_OF_FULFILLMENT")
 
-      dispute.update!(reason: Dispute::REASON_CREDIT_NOT_PROCESSED)
+      allow(dispute).to receive(:reason).and_return(Dispute::REASON_CREDIT_NOT_PROCESSED)
       evidences = processor.send(:build_paypal_evidences, dispute_evidence, dispute)
       expect(evidences.first[:evidence_type]).to eq("PROOF_OF_REFUND")
 
-      dispute.update!(reason: Dispute::REASON_FRAUDULENT)
+      allow(dispute).to receive(:reason).and_return(Dispute::REASON_FRAUDULENT)
       evidences = processor.send(:build_paypal_evidences, dispute_evidence, dispute)
       expect(evidences.first[:evidence_type]).to eq("OTHER")
     end
 
     it "includes tracking info when available" do
-      dispute_evidence.update!(
-        shipping_carrier: "fedex",
-        shipping_tracking_number: "123456789"
-      )
+      allow(dispute_evidence).to receive(:shipping_carrier).and_return("fedex")
+      allow(dispute_evidence).to receive(:shipping_tracking_number).and_return("123456789")
 
       evidences = processor.send(:build_paypal_evidences, dispute_evidence, dispute)
       primary = evidences.first
@@ -1673,15 +1706,25 @@ describe PaypalChargeProcessor, :vcr do
 
   describe "#build_comprehensive_notes" do
     let(:processor) { described_class.new }
-    let(:dispute_evidence) { create(:dispute_evidence) }
-
-    before do
-      dispute_evidence.update!(
+    let(:dispute) { instance_double(Dispute, purchases: [], event_created_at: nil) }
+    let(:dispute_evidence) do
+      instance_double(DisputeEvidence,
         customer_name: "John Doe",
         customer_email: "john@example.com",
         customer_purchase_ip: "192.168.1.1",
         product_description: "Online Course",
-        reason_for_winning: "Customer used the product"
+        reason_for_winning: "Customer used the product",
+        uncategorized_text: nil,
+        access_activity_log: nil,
+        refund_policy_disclosure: nil,
+        refund_refusal_explanation: nil,
+        cancellation_policy_disclosure: nil,
+        cancellation_rebuttal: nil,
+        billing_address: nil,
+        shipping_address: nil,
+        shipping_carrier: nil,
+        shipping_tracking_number: nil,
+        shipped_at: nil
       )
     end
 
@@ -1705,6 +1748,21 @@ describe PaypalChargeProcessor, :vcr do
 
       expect(notes).to include("MERCHANT STATEMENT:")
       expect(notes).to include("Customer used the product")
+    end
+
+    context "when dispute has purchases with licenses" do
+      let(:link) { instance_double(Link, name: "Test Product") }
+      let(:license) { instance_double(License, serial: "ABC-123-XYZ", uses: 3) }
+      let(:purchase) { instance_double(Purchase, license: license, stripe_transaction_id: "txn_123", created_at: Time.current, link: link) }
+      let(:dispute) { instance_double(Dispute, purchases: [purchase], event_created_at: Time.current) }
+
+      it "includes license key evidence" do
+        notes = processor.send(:build_comprehensive_notes, dispute_evidence, dispute)
+
+        expect(notes).to include("LICENSE KEY EVIDENCE:")
+        expect(notes).to include("Serial: ABC-123-XYZ")
+        expect(notes).to include("(3 activations)")
+      end
     end
   end
 end
