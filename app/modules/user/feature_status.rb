@@ -53,7 +53,7 @@ class User
     end
 
     def can_publish_products?
-      is_team_member? || stripe_account.present? || stripe_connect_account.present? || paypal_connect_account.present? || payment_address.present?
+      is_team_member? || stripe_account.present? || stripe_connect_account.present? || paypal_connect_account.present? || payment_address.present? || active_bank_account.present?
     end
 
     def pay_with_paypal_enabled?

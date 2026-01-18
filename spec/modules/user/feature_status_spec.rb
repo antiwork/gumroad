@@ -174,6 +174,12 @@ describe User::FeatureStatus do
 
       expect(seller.can_publish_products?).to be true
     end
+
+    it "returns true if user has only active bank account (Native Payouts)" do
+      create(:ach_account_stripe_succeed, user: seller)
+
+      expect(seller.can_publish_products?).to be true
+    end
   end
 
   describe "can_setup_bank_payouts?" do
