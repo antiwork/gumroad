@@ -36,6 +36,7 @@ class PurchaseProductPresenter
         ratings: product.display_product_reviews? ? product.rating_stats : nil,
         is_legacy_subscription: product.is_legacy_subscription?,
         is_tiered_membership: product.is_tiered_membership,
+        is_recurring_billing: product.is_recurring_billing,
         is_physical: product.is_physical,
         custom_view_content_button_text: product.custom_view_content_button_text.presence,
         custom_button_text_option: product.custom_button_text_option,
