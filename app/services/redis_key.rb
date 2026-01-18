@@ -49,5 +49,6 @@ class RedisKey
     def unreviewed_users_data = "admin:unreviewed_users_data"
     def unreviewed_users_cutoff_date = "admin:unreviewed_users_cutoff_date"
     def paypal_topup_needed = "paypal:topup_needed"
+    def email_router_fallback(user_id) = "email_router_fallback:#{user_id}"
   end
 end

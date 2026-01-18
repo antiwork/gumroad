@@ -1,6 +1,7 @@
 import { useForm, usePage } from "@inertiajs/react";
 import React from "react";
 
+import { Button } from "$app/components/Button";
 import CodeSnippet from "$app/components/ui/CodeSnippet";
 
 export type Props = {
@@ -63,9 +64,9 @@ const Form = ({ action, header, buttonLabel }: Props) => {
           autoComplete="off"
         />
 
-        <button type="submit" className="button primary">
+        <Button type="submit" color="primary">
           {buttonLabel}
-        </button>
+        </Button>
       </section>
     </form>
   );
