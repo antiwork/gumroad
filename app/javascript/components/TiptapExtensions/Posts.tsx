@@ -61,7 +61,7 @@ const PostsNodeView = ({ editor, selected }: NodeViewProps) => {
     <NodeViewWrapper>
       <Row className={cx("embed", { selected })}>
         {editor.isEditable ? <NodeActionsMenu editor={editor} /> : null}
-        <RowContent className="content" asChild>
+        <RowContent className="content cursor-pointer all-unset" asChild>
           <button
             onClick={(e) => {
               if (e.target instanceof HTMLAnchorElement) return;

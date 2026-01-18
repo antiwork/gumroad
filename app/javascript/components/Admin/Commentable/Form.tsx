@@ -5,6 +5,7 @@ import { cast } from "ts-safe-cast";
 import { request } from "$app/utils/request";
 
 import type { CommentProps } from "$app/components/Admin/Commentable/Comment";
+import { Button } from "$app/components/Button";
 import { showAlert } from "$app/components/server-components/Alert";
 
 type AdminCommentableFormProps = {
@@ -74,9 +75,9 @@ const AdminCommentableForm = ({ endpoint, onCommentAdded, commentableType }: Adm
             value={content}
             onChange={onContentChange}
           />
-          <button type="submit" className="button" disabled={processing}>
+          <Button type="submit" disabled={processing}>
             {processing ? "Saving..." : "Add comment"}
-          </button>
+          </Button>
         </div>
       </fieldset>
     </form>

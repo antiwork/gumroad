@@ -32,7 +32,7 @@ export const Sheet = ({
 export const SheetHeader = ({ children }: { children: React.ReactNode }) => (
   <div className="flex items-start gap-4">
     <Dialog.Title>{children}</Dialog.Title>
-    <Dialog.Close className="ml-auto" aria-label="Close">
+    <Dialog.Close className="ml-auto cursor-pointer all-unset" aria-label="Close">
       <Icon name="x" />
     </Dialog.Close>
   </div>

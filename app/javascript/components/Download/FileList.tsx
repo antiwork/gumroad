@@ -316,7 +316,8 @@ export const FileRow = ({
           <>
             {file.kindle_data != null ? (
               <TrackClick eventName="send_to_kindle_click" file={file}>
-                <Button className="button-kindle" onClick={toggleKindleDrawer}>
+                <Button color="kindle" onClick={toggleKindleDrawer}>
+                  <span className="brand-icon brand-icon-kindle" />
                   Send to Kindle
                 </Button>
               </TrackClick>
@@ -483,7 +484,7 @@ const MobileAppAudioFileRow = ({ file }: { file: FileItem }) => {
         >
           <RowContent asChild>
             <button
-              className={classNames("content", { "text-muted": isProcessing })}
+              className={classNames("content all-unset", { "text-muted": isProcessing })}
               style={{
                 gridColumn: "3 span",
                 userSelect: "none",
@@ -520,7 +521,7 @@ const MobileAppAudioFileRow = ({ file }: { file: FileItem }) => {
       >
         {file.download_url ? (
           <TrackClick eventName="download_click" file={file}>
-            <button aria-label="Download">
+            <button aria-label="Download" className="cursor-pointer all-unset">
               <Icon name="download" className="type-icon" />
             </button>
           </TrackClick>
@@ -534,7 +535,7 @@ const MobileAppAudioFileRow = ({ file }: { file: FileItem }) => {
           contentLength={file.duration || 0}
         >
           {isPlaying ? (
-            <button aria-label="Pause" disabled={isProcessing}>
+            <button aria-label="Pause" disabled={isProcessing} className="cursor-pointer all-unset">
               <Icon
                 className="type-icon"
                 name="circle-pause"
@@ -542,7 +543,7 @@ const MobileAppAudioFileRow = ({ file }: { file: FileItem }) => {
               />
             </button>
           ) : isCompleted ? (
-            <button aria-label="Play" disabled={isProcessing}>
+            <button aria-label="Play" disabled={isProcessing} className="cursor-pointer all-unset">
               <Icon
                 className="type-icon text-muted"
                 name="outline-check-circle"
@@ -550,7 +551,7 @@ const MobileAppAudioFileRow = ({ file }: { file: FileItem }) => {
               />
             </button>
           ) : (
-            <button aria-label="Play" disabled={isProcessing}>
+            <button aria-label="Play" disabled={isProcessing} className="cursor-pointer all-unset">
               <Icon
                 className="type-icon"
                 name={latestMediaLocation && latestMediaLocation > 0 ? "outline-circle-play" : "circle-play"}
@@ -704,7 +705,7 @@ const VideoEmbedPreview = ({
       />
       <TrackClick eventName="watch" file={file}>
         <button
-          className="underline"
+          className="cursor-pointer underline all-unset"
           style={{
             position: "absolute",
             top: "50%",

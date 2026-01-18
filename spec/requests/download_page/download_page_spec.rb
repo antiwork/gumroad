@@ -320,7 +320,7 @@ describe("Download Page", type: :system, js: true) do
     it "displays a link to manage membership if active" do
       visit "/d/#{@url_redirect.token}"
       select_disclosure "Membership" do
-        button = find("a.button[href='#{@manage_membership_url}']")
+        button = find("a[href='#{@manage_membership_url}']")
         expect(button).to have_text "Manage"
       end
     end
@@ -331,7 +331,7 @@ describe("Download Page", type: :system, js: true) do
       it "displays a link to restart membership if inactive" do
         visit "/d/#{@url_redirect.token}"
         select_disclosure "Membership" do
-          button = find("a.button[href='#{@manage_membership_url}']")
+          button = find("a[href='#{@manage_membership_url}']")
           expect(button).to have_text "Restart"
         end
       end
@@ -347,14 +347,14 @@ describe("Download Page", type: :system, js: true) do
         it "includes a Manage Membership link if the subscription is restartable" do
           allow_any_instance_of(Subscription).to receive(:alive_or_restartable?).and_return(true)
           visit "/d/#{@url_redirect.token}"
-          button = find("a.button[href='#{@manage_membership_url}']")
+          button = find("a[href='#{@manage_membership_url}']")
           expect(button).to have_text "Manage membership"
         end
 
         it "includes a Resubscribe link if the subscription is not restartable" do
           allow_any_instance_of(Subscription).to receive(:alive_or_restartable?).and_return(false)
           visit "/d/#{@url_redirect.token}"
-          button = find("a.button[href='#{@purchase.link.long_url}']")
+          button = find("a[href='#{@purchase.link.long_url}']")
           expect(button).to have_text "Resubscribe"
         end
       end
