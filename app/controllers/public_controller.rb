@@ -5,10 +5,9 @@ class PublicController < ApplicationController
 
   before_action { opt_out_of_header(:csp) } # for the use of external JS on public pages
 
-  before_action :hide_layouts, only: [:thank_you]
   before_action :set_on_public_page
 
-  layout "inertia", only: [:widgets, :ping, :api]
+  layout "inertia", only: [:widgets, :ping, :api, :charge, :license_key_lookup]
 
   def home
     redirect_to user_signed_in? ? after_sign_in_path_for(logged_in_user) : login_path
@@ -23,6 +22,7 @@ class PublicController < ApplicationController
 
   def charge
     @title = "Why is there a charge on my account?"
+    render inertia: "Public/Charge"
   end
 
   def charge_data
@@ -50,6 +50,7 @@ class PublicController < ApplicationController
 
   def license_key_lookup
     @title = "What is my license key?"
+    render inertia: "Public/LicenseKeyLookup"
   end
 
   # api methods
@@ -63,10 +64,6 @@ class PublicController < ApplicationController
     @title = "Ping"
 
     render inertia: "Public/Ping"
-  end
-
-  def thank_you
-    @title = "Thank you!"
   end
 
   def working_webhook

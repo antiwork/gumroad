@@ -14,7 +14,7 @@ export const AnalyticsLayout = ({
   title = "Analytics",
   showTabs = true,
 }: {
-  selectedTab: "following" | "sales" | "utm_links";
+  selectedTab: "following" | "sales" | "churn" | "utm_links";
   children: React.ReactNode;
   actions?: React.ReactNode;
   title?: string;
@@ -33,6 +33,11 @@ export const AnalyticsLayout = ({
             <Tab asChild isSelected={selectedTab === "sales"}>
               <Link href={Routes.sales_dashboard_path()}>Sales</Link>
             </Tab>
+            {user.policies.churn.show ? (
+              <Tab asChild isSelected={selectedTab === "churn"}>
+                <Link href={Routes.churn_dashboard_path()}>Churn</Link>
+              </Tab>
+            ) : null}
             {user.policies.utm_link.index ? (
               <Tab asChild isSelected={selectedTab === "utm_links"}>
                 <Link href={Routes.dashboard_utm_links_path()}>Links</Link>

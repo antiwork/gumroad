@@ -3,6 +3,7 @@ import { createCast } from "ts-safe-cast";
 
 import { register } from "$app/utils/serverComponentUtil";
 
+import { Button } from "$app/components/Button";
 import { Form } from "$app/components/server-components/Admin/Form";
 import { showAlert } from "$app/components/server-components/Alert";
 import { Pill } from "$app/components/ui/Pill";
@@ -21,9 +22,9 @@ export const AdminAddCreditForm = ({ user_id }: { user_id: number }) => (
             <Pill className="-ml-2 shrink-0">$</Pill>
             <input type="text" name="credit[credit_amount]" placeholder="10.25" inputMode="decimal" required />
           </div>
-          <button type="submit" className="button" disabled={isLoading}>
+          <Button type="submit" disabled={isLoading}>
             {isLoading ? "Saving..." : "Add credits"}
-          </button>
+          </Button>
         </div>
         <small>Subtract credits by providing a negative value</small>
       </fieldset>

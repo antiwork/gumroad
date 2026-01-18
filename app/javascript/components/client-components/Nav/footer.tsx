@@ -38,7 +38,7 @@ function NavbarFooter() {
             href={Routes.root_url({ ...routeParams, host: currentSeller?.subdomain ?? routeParams.host })}
           />
           <NavLinkDropdownItem text="Affiliates" icon="gift-fill" href={Routes.affiliates_url(routeParams)} />
-          <Link role="menuitem" href={Routes.logout_url(routeParams)} method="delete" className="w-full">
+          <Link role="menuitem" href={Routes.logout_url(routeParams)} method="delete" className="w-full all-unset">
             <Icon name="box-arrow-in-right-fill" className="mr-3 ml-1" />
             Logout
           </Link>

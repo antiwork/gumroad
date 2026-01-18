@@ -655,7 +655,7 @@ export const CommunityView = () => {
 
                 <button
                   onClick={() => setSidebarOpen(false)}
-                  className={cx("flex h-8 w-8 justify-center", {
+                  className={cx("flex h-8 w-8 cursor-pointer justify-center all-unset", {
                     hidden: isAboveBreakpoint,
                   })}
                   aria-label="Close sidebar"
@@ -825,7 +825,7 @@ const CommunityChatHeader = ({
     aria-label="Community chat header"
   >
     <button
-      className={cx("shrink-0", { hidden: isAboveBreakpoint })}
+      className={cx("shrink-0 cursor-pointer all-unset", { hidden: isAboveBreakpoint })}
       aria-label="Open sidebar"
       onClick={() => setSidebarOpen(true)}
     >
@@ -849,7 +849,7 @@ const GoBackHeader = () => {
       <div className="flex items-center">
         <button
           onClick={handleGoBack}
-          className="flex cursor-pointer items-center border-none bg-transparent p-0 text-sm no-underline"
+          className="flex cursor-pointer items-center border-none bg-transparent p-0 text-sm no-underline all-unset"
         >
           <Icon name="arrow-left" className="mr-1" /> Go back
         </button>

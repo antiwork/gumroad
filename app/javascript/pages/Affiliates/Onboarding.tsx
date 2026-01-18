@@ -165,7 +165,7 @@ export default function AffiliatesOnboarding() {
                 />
                 {enableAffiliateLink ? (
                   <CopyToClipboard text={affiliateRequestUrl}>
-                    <button type="button" className="underline">
+                    <button type="button" className="cursor-pointer underline all-unset">
                       Copy link
                     </button>
                   </CopyToClipboard>

@@ -799,7 +799,7 @@ export default function PaymentsPage() {
           ) : (
             <div className="flex flex-col">
               <Alert role="status" variant="success">
-                Your account details have been verified!
+                Your identity has been verified!
               </Alert>
               <div className="mt-4 flex items-center">
                 <img src={logo} alt="Gum Coin" className="mr-2 h-5 w-5" />

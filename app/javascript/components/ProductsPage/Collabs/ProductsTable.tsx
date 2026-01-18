@@ -1,14 +1,12 @@
+import { router } from "@inertiajs/react";
 import * as React from "react";
 
-import { getPagedProducts, ProductsParams, Product } from "$app/data/collabs";
+import { Product } from "$app/data/collabs";
 import { classNames } from "$app/utils/classNames";
 import { formatPriceCentsWithCurrencySymbol } from "$app/utils/currency";
-import { asyncVoid } from "$app/utils/promise";
-import { AbortError, assertResponseError } from "$app/utils/request";
 
 import { Pagination, PaginationProps } from "$app/components/Pagination";
 import { ProductIconCell } from "$app/components/ProductsPage/ProductIconCell";
-import { showAlert } from "$app/components/server-components/Alert";
 import {
   Table,
   TableBody,
@@ -22,57 +20,27 @@ import {
 import { useUserAgentInfo } from "$app/components/UserAgent";
 import { useClientSortingTableDriver } from "$app/components/useSortingTableDriver";
 
-type State = {
-  entries: readonly Product[];
-  pagination: PaginationProps;
-  isLoading: boolean;
-  query: string | null;
-};
-
 export const CollabsProductsTable = (props: { entries: Product[]; pagination: PaginationProps }) => {
-  const [state, setState] = React.useState<State>({
-    entries: props.entries,
-    pagination: props.pagination,
-    isLoading: false,
-    query: null,
-  });
-  const activeRequest = React.useRef<{ cancel: () => void } | null>(null);
+  const [isLoading, setIsLoading] = React.useState(false);
   const tableRef = React.useRef<HTMLTableElement>(null);
   const userAgentInfo = useUserAgentInfo();
+  const { items: products, thProps } = useClientSortingTableDriver(props.entries);
 
-  const { entries: products, pagination, isLoading } = state;
-
-  const loadProducts = asyncVoid(async ({ page, query }: ProductsParams) => {
-    setState((prevState) => ({ ...prevState, isLoading: true }));
-    try {
-      activeRequest.current?.cancel();
-
-      const request = getPagedProducts({
-        page,
-        query,
-      });
-      activeRequest.current = request;
-
-      setState({
-        ...(await request.response),
-        isLoading: false,
-        query,
-      });
-      activeRequest.current = null;
-      tableRef.current?.scrollIntoView({ behavior: "smooth" });
-    } catch (e) {
-      if (e instanceof AbortError) return;
-      assertResponseError(e);
-      setState((prevState) => ({ ...prevState, isLoading: false }));
-      showAlert(e.message, "error");
-    }
-  });
-
-  const { items, thProps } = useClientSortingTableDriver<Product>(state.entries);
+  const handlePageChange = (page: number) => {
+    router.reload({
+      data: { products_page: page },
+      only: ["products_data"],
+      onStart: () => setIsLoading(true),
+      onFinish: () => {
+        setIsLoading(false);
+        tableRef.current?.scrollIntoView({ behavior: "smooth" });
+      },
+    });
+  };
 
   return (
     <div className="flex flex-col gap-4">
-      <Table aria-live="polite" className={classNames(isLoading && "pointer-events-none opacity-50")} ref={tableRef}>
+      <Table ref={tableRef} aria-live="polite" className={classNames(isLoading && "pointer-events-none opacity-50")}>
         <TableCaption>Products</TableCaption>
         <TableHeader>
           <TableRow>
@@ -88,7 +56,7 @@ export const CollabsProductsTable = (props: { entries: Product[]; pagination: Pa
         </TableHeader>
 
         <TableBody>
-          {items.map((product) => (
+          {products.map((product) => (
             <TableRow key={product.id}>
               <ProductIconCell
                 href={product.can_edit ? product.edit_url : product.url}
@@ -149,9 +117,7 @@ export const CollabsProductsTable = (props: { entries: Product[]; pagination: Pa
         </TableFooter>
       </Table>
 
-      {pagination.pages > 1 ? (
-        <Pagination onChangePage={(page) => loadProducts({ page, query: state.query })} pagination={pagination} />
-      ) : null}
+      {props.pagination.pages > 1 ? <Pagination onChangePage={handlePageChange} pagination={props.pagination} /> : null}
     </div>
   );
 };

@@ -113,7 +113,7 @@ export const BundleProductItem = ({
             </PopoverContent>
           </Popover>
         ) : null}
-        <button className="underline" onClick={removeBundleProduct}>
+        <button className="cursor-pointer underline all-unset" onClick={removeBundleProduct}>
           Remove
         </button>
       </CartItemEnd>
