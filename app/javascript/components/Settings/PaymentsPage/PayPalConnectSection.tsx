@@ -65,15 +65,17 @@ const PayPalConnectSection = ({
             {paypalConnect.show_paypal_connect ? (
               <>
                 <div>
-                  <a
-                    className="button button-paypal paypal-connect"
-                    href={Routes.connect_paypal_path({
-                      referer: Routes.settings_payments_path(),
-                    })}
-                    inert={isFormDisabled || !paypalConnect.allow_paypal_connect}
-                  >
-                    Connect with Paypal
-                  </a>
+                  <Button asChild color="paypal" disabled={isFormDisabled || !paypalConnect.allow_paypal_connect}>
+                    <a
+                      href={Routes.connect_paypal_path({
+                        referer: Routes.settings_payments_path(),
+                      })}
+                      inert={isFormDisabled || !paypalConnect.allow_paypal_connect}
+                    >
+                      <span className="brand-icon brand-icon-paypal" />
+                      Connect with Paypal
+                    </a>
+                  </Button>
                 </div>
                 {!paypalConnect.allow_paypal_connect ? (
                   <Alert variant="warning">
@@ -105,8 +107,7 @@ const PayPalConnectSection = ({
                 <>
                   <p>
                     <Button
-                      color="danger"
-                      className="button-paypal"
+                      color="paypal"
                       aria-label="Disconnect PayPal account"
                       disabled={isFormDisabled || !paypalConnect.paypal_disconnect_allowed}
                       onClick={disconnectPayPal}
@@ -130,15 +131,17 @@ const PayPalConnectSection = ({
             {paypalConnect.show_paypal_connect ? (
               <>
                 <p>
-                  <a
-                    className="button button-paypal paypal-connect"
-                    href={Routes.connect_paypal_path({
-                      referer: Routes.settings_payments_path(),
-                    })}
-                    inert={isFormDisabled || !paypalConnect.allow_paypal_connect}
-                  >
-                    Connect with Paypal
-                  </a>
+                  <Button asChild color="paypal" disabled={isFormDisabled || !paypalConnect.allow_paypal_connect}>
+                    <a
+                      href={Routes.connect_paypal_path({
+                        referer: Routes.settings_payments_path(),
+                      })}
+                      inert={isFormDisabled || !paypalConnect.allow_paypal_connect}
+                    >
+                      <span className="brand-icon brand-icon-paypal" />
+                      Connect with Paypal
+                    </a>
+                  </Button>
                 </p>
                 {!paypalConnect.allow_paypal_connect ? (
                   <Alert variant="warning">

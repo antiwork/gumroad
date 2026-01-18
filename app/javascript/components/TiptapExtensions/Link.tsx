@@ -7,7 +7,7 @@ import * as React from "react";
 import { createPortal } from "react-dom";
 import { cast } from "ts-safe-cast";
 
-import { Button } from "$app/components/Button";
+import { Button, buttonVariants } from "$app/components/Button";
 import { Icon } from "$app/components/Icons";
 import { Modal } from "$app/components/Modal";
 import { Popover } from "$app/components/Popover";
@@ -224,7 +224,7 @@ const LinkNodeView = ({ node, editor, getPos, deleteNode }: NodeViewProps) => {
             <NodeViewContent
               as="a"
               href={cast<string>(node.attrs.href)}
-              className={cx({ "button primary": isButton })}
+              className={cx({ [buttonVariants({ size: "default", color: "primary" })]: isButton })}
               target="_blank"
               rel="noopener noreferrer nofollow"
             />
@@ -273,7 +273,7 @@ const LinkNodeView = ({ node, editor, getPos, deleteNode }: NodeViewProps) => {
           as="a"
           href={cast<string>(node.attrs.href)}
           contentEditable={editor.isEditable}
-          className={cx({ "button primary": isButton })}
+          className={cx({ [buttonVariants({ size: "default", color: "primary" })]: isButton })}
           target="_blank"
           rel="noopener noreferrer nofollow"
           onClick={(event: React.MouseEvent) => {

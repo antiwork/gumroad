@@ -265,9 +265,11 @@ const WithContent = ({
             <DiscordButton purchaseId={props.purchase.id} connected={content.discord.connected} />
           ) : null}
           {content.community_chat_url ? (
-            <a className="button accent" href={content.community_chat_url}>
-              Community
-            </a>
+            <Button asChild>
+              <a className="accent" href={content.community_chat_url}>
+                Community
+              </a>
+            </Button>
           ) : null}
           <OpenInAppButton iosAppUrl={content.ios_app_url} androidAppUrl={content.android_app_url} />
           {content.download_all_button ? (
@@ -333,7 +335,6 @@ const WithContent = ({
           </IsMobileAppViewProvider>
         </MediaUrlsProvider>
       </PurchaseInfoProvider>
-
       {showPageList ? (
         <div role="navigation" className="mt-auto flex gap-4 border-t border-border pt-4 lg:justify-end lg:pb-4">
           {isDesktop ? null : (
@@ -341,9 +342,11 @@ const WithContent = ({
               aria-label="Table of Contents"
               position="bottom"
               trigger={
-                <div className="button">
-                  <Icon name="unordered-list" />
-                </div>
+                <Button asChild>
+                  <div>
+                    <Icon name="unordered-list" />
+                  </div>
+                </Button>
               }
             >
               {(close) => (
@@ -392,11 +395,9 @@ const WithContent = ({
           </WithTooltip>
         </div>
       ) : null}
-
       {content.video_transcoding_info ? (
         <TranscodingNoticeModal transcodeOnFirstSale={content.video_transcoding_info.transcode_on_first_sale} />
       ) : null}
-
       {content.rich_content_pages === null && content.posts.length > 0 ? (
         <div className="flex flex-col gap-4">
           <DownloadPagePostList posts={content.posts} />

@@ -5,6 +5,7 @@ import FileUtils from "$app/utils/file";
 import { asyncVoid } from "$app/utils/promise";
 import { request } from "$app/utils/request";
 
+import { buttonVariants } from "$app/components/Button";
 import { FileKindIcon } from "$app/components/FileRowContent";
 import { Icon } from "$app/components/Icons";
 import { showAlert } from "$app/components/server-components/Alert";
@@ -80,7 +81,7 @@ export const FileInput = ({ customFieldId }: { customFieldId: string }) => {
   });
 
   const fileUpload = (
-    <label className="button primary">
+    <label className={buttonVariants({ size: "default", color: "primary" })}>
       <input type="file" onChange={handleFileChange} disabled={isUploading} multiple />
       <Icon name="upload-fill" />
       Upload files

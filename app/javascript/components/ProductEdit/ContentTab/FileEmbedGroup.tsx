@@ -12,7 +12,7 @@ import { classNames } from "$app/utils/classNames";
 import GuidGenerator from "$app/utils/guid_generator";
 import { assertResponseError } from "$app/utils/request";
 
-import { Button, NavigationButton } from "$app/components/Button";
+import { Button, NavigationButton, buttonVariants } from "$app/components/Button";
 import { Icon } from "$app/components/Icons";
 import { LoadingSpinner } from "$app/components/LoadingSpinner";
 import { Popover } from "$app/components/Popover";
@@ -177,7 +177,7 @@ const FileEmbedGroupNodeView = ({
               {showDownloadButton ? (
                 <Popover
                   trigger={
-                    <div className="button">
+                    <div className={buttonVariants({ size: "default" })}>
                       Download all
                       <Icon name="outline-cheveron-down" />
                     </div>

@@ -265,9 +265,9 @@ const CustomersPage = ({
               onToggle={() => searchInputRef.current?.focus()}
               trigger={
                 <WithTooltip tip="Search">
-                  <div className="button">
+                  <Button>
                     <Icon name="solid-search" />
-                  </div>
+                  </Button>
                 </WithTooltip>
               }
             >
@@ -288,9 +288,9 @@ const CustomersPage = ({
               dropdownClassName="p-0!"
               trigger={
                 <WithTooltip tip="Filter">
-                  <div className="button">
+                  <Button>
                     <Icon name="filter" />
-                  </div>
+                  </Button>
                 </WithTooltip>
               }
             >
@@ -414,9 +414,9 @@ const CustomersPage = ({
               aria-label="Export"
               trigger={
                 <WithTooltip tip="Export">
-                  <div className="button">
+                  <Button>
                     <Icon name="download" />
-                  </div>
+                  </Button>
                 </WithTooltip>
               }
             >
@@ -797,7 +797,7 @@ const CustomerDrawer = ({
       <SheetHeader>
         <div className="flex gap-4">
           {onBack ? (
-            <button onClick={onBack} aria-label="Return to bundle">
+            <button onClick={onBack} aria-label="Return to bundle" className="cursor-pointer all-unset">
               <Icon name="arrow-left" style={{ fontSize: "var(--big-icon-size)" }} />
             </button>
           ) : null}
@@ -1535,7 +1535,7 @@ const AddressSection = ({
               <br />
               {currentAddress.country}
             </p>
-            <button className="underline" onClick={() => setIsEditing(true)}>
+            <button className="cursor-pointer underline all-unset" onClick={() => setIsEditing(true)}>
               Edit
             </button>
           </CardContent>
@@ -1680,7 +1680,7 @@ const EmailSection = ({
             <section>
               <h5 className="grow font-bold">{currentEmail}</h5>
               {onSave ? (
-                <button className="underline" onClick={() => setIsEditing(true)}>
+                <button className="cursor-pointer underline all-unset" onClick={() => setIsEditing(true)}>
                   Edit
                 </button>
               ) : (
@@ -1974,7 +1974,7 @@ const OptionSection = ({
               ) : (
                 <>
                   <h5>{option?.name ?? "None selected"}</h5>
-                  <button className="underline" onClick={() => setIsEditing(true)}>
+                  <button className="cursor-pointer underline all-unset" onClick={() => setIsEditing(true)}>
                     Edit
                   </button>
                 </>
@@ -2135,7 +2135,7 @@ const SeatSection = ({ seats: currentSeats, onSave }: { seats: number; onSave: (
           <CardContent asChild>
             <section>
               <h5 className="grow font-bold">{seats}</h5>
-              <button className="underline" onClick={() => setIsEditing(true)}>
+              <button className="cursor-pointer underline all-unset" onClick={() => setIsEditing(true)}>
                 Edit
               </button>
             </section>
@@ -2434,7 +2434,7 @@ const ChargeRow = ({
           {purchase.chargedback ? <Pill size="small">Chargedback</Pill> : null}
         </section>
         {!purchase.refunded && !purchase.chargedback && purchase.amount_refundable > 0 ? (
-          <button className="underline" onClick={() => setIsRefunding((prev) => !prev)}>
+          <button className="cursor-pointer underline all-unset" onClick={() => setIsRefunding((prev) => !prev)}>
             Refund Options
           </button>
         ) : null}

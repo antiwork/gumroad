@@ -5,6 +5,7 @@ import { ProductPurchase, fetchProductPurchases } from "$app/data/admin/admin_pr
 import { assertResponseError } from "$app/utils/request";
 import { register } from "$app/utils/serverComponentUtil";
 
+import { Button } from "$app/components/Button";
 import { LoadingSpinner } from "$app/components/LoadingSpinner";
 import { showAlert } from "$app/components/server-components/Alert";
 import { Alert } from "$app/components/ui/Alert";
@@ -103,9 +104,9 @@ const AdminProductPurchases = ({
           </Alert>
         ) : null}
         {hasMore ? (
-          <button className="button small" onClick={() => void loadPurchases()} disabled={isLoading}>
+          <Button small onClick={() => void loadPurchases()} disabled={isLoading}>
             {isLoading ? "Loading..." : "Load more"}
-          </button>
+          </Button>
         ) : null}
       </div>
     </details>
