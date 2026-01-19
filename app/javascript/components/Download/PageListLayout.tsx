@@ -3,6 +3,11 @@ import * as React from "react";
 
 import { classNames } from "$app/utils/classNames";
 
+type ScrollToTopContextValue = () => void;
+const ScrollToTopContext = React.createContext<ScrollToTopContextValue | null>(null);
+
+export const useScrollToTop = () => React.useContext(ScrollToTopContext);
+
 export const PageListLayout = ({
   pageList,
   children,
@@ -11,17 +16,29 @@ export const PageListLayout = ({
   pageList: React.ReactNode;
   children: React.ReactNode;
   className?: string;
-}) => (
-  <div
-    className={classNames(
-      "flex min-h-0 flex-col gap-6 bg-background p-4 [scrollbar-gutter:stable] md:p-8 lg:flex-row lg:gap-16 lg:overflow-y-auto",
-      className,
-    )}
-  >
-    <div className="flex flex-col gap-4 lg:sticky lg:top-0 lg:w-80 lg:pb-8">{pageList}</div>
-    <div className="h-0 flex-1">{children}</div>
-  </div>
-);
+}) => {
+  const contentRef = React.useRef<HTMLDivElement>(null);
+
+  const scrollToTop = React.useCallback(() => {
+    contentRef.current?.scrollTo({ top: 0, behavior: "instant" });
+  }, []);
+
+  return (
+    <ScrollToTopContext.Provider value={scrollToTop}>
+      <div
+        className={classNames(
+          "flex min-h-0 flex-col gap-6 bg-background p-4 [scrollbar-gutter:stable] md:p-8 lg:flex-row lg:gap-16",
+          className,
+        )}
+      >
+        <div className="flex flex-col gap-4 lg:w-80 lg:shrink-0 lg:overflow-y-auto">{pageList}</div>
+        <div ref={contentRef} className="flex-1 lg:overflow-y-auto">
+          {children}
+        </div>
+      </div>
+    </ScrollToTopContext.Provider>
+  );
+};
 
 export const PageList = React.forwardRef<HTMLDivElement, React.HTMLProps<HTMLDivElement>>(
   ({ className, ...props }, ref) => (

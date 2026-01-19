@@ -14,7 +14,7 @@ import { DiscordButton } from "$app/components/DiscordButton";
 import { DownloadAllButton } from "$app/components/Download/DownloadAllButton";
 import { FileItem, FileList as DownloadFileList, FolderItem } from "$app/components/Download/FileList";
 import { OpenInAppButton } from "$app/components/Download/OpenInAppButton";
-import { PageList, PageListItem } from "$app/components/Download/PageListLayout";
+import { PageList, PageListItem, useScrollToTop } from "$app/components/Download/PageListLayout";
 import { DownloadPagePostList, Post } from "$app/components/Download/PostList";
 import {
   FileDownloadInfo,
@@ -209,6 +209,14 @@ const WithContent = ({
   const isDesktop = useIsAboveBreakpoint("lg");
   const pages = content.rich_content_pages ?? [];
   const [activePageIndex, setActivePageIndex] = React.useState(0);
+  const scrollToTop = useScrollToTop();
+  const goToPage = React.useCallback(
+    (index: number) => {
+      setActivePageIndex(index);
+      scrollToTop?.();
+    },
+    [scrollToTop],
+  );
   const activePage = pages[activePageIndex];
   const showPageList = pages.length > 1 || (pages.length === 1 && (pages[0]?.title ?? "").trim() !== "");
   const hasPreviousPage = activePageIndex > 0;
@@ -287,7 +295,7 @@ const WithContent = ({
               <PageListItem
                 key={page.page_id}
                 isSelected={index === activePageIndex}
-                onClick={() => setActivePageIndex(index)}
+                onClick={() => goToPage(index)}
                 role="tab"
               >
                 <Icon
@@ -357,7 +365,7 @@ const WithContent = ({
                       role="menuitemradio"
                       aria-checked={index === activePageIndex}
                       onClick={() => {
-                        setActivePageIndex(index);
+                        goToPage(index);
                         close();
                       }}
                     >
@@ -376,7 +384,7 @@ const WithContent = ({
           <WithTooltip position="top" tip={hasPreviousPage ? null : "No more pages"}>
             <Button
               disabled={!hasPreviousPage}
-              onClick={() => setActivePageIndex(activePageIndex - 1)}
+              onClick={() => goToPage(activePageIndex - 1)}
               className="flex-1 lg:flex-none"
             >
               <Icon name="arrow-left" />
@@ -386,7 +394,7 @@ const WithContent = ({
           <WithTooltip position="top" tip={hasNextPage ? null : "No more pages"}>
             <Button
               disabled={!hasNextPage}
-              onClick={() => setActivePageIndex(activePageIndex + 1)}
+              onClick={() => goToPage(activePageIndex + 1)}
               className="flex-1 lg:flex-none"
             >
               Next
