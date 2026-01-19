@@ -87,6 +87,12 @@ class Subscription < ApplicationRecord
     where("subscriptions.flags & ? = 0 and failed_at is null and ended_at is null and cancelled_at is null",
           flag_mapping["flags"][:is_test_subscription])
   }
+  scope :restartable, -> {
+    not_is_test_subscription
+      .where.not(deactivated_at: nil)
+      .where(ended_at: nil)
+      .where("cancelled_at IS NULL OR subscriptions.flags & ? != 0", flag_mapping["flags"][:cancelled_by_buyer])
+  }
 
   delegate :custom_fields, to: :original_purchase, allow_nil: true
   delegate :original_offer_code, to: :original_purchase, allow_nil: true
@@ -857,6 +863,22 @@ class Subscription < ApplicationRecord
 
   def alive_or_restartable?
     !ended? && !cancelled_by_seller?
+  end
+
+  def self.find_restartable_for_checkout(link:, user:, email:)
+    base_scope = link.subscriptions.restartable.order(deactivated_at: :desc)
+
+    if user.present?
+      subscription = base_scope.find_by(user: user)
+      return subscription if subscription
+    end
+
+    return nil if email.blank?
+
+    original_purchase_flag = Purchase.flag_mapping["flags"][:is_original_subscription_purchase]
+    base_scope.joins("INNER JOIN purchases ON purchases.subscription_id = subscriptions.id AND (purchases.flags & #{original_purchase_flag}) != 0")
+              .where("LOWER(purchases.email) = ?", email.downcase)
+              .first
   end
 
   def discount_applies_to_next_charge?

@@ -30,6 +30,12 @@ class Purchase::BaseService
     def create_subscription(giftee_purchase)
       return if purchase.subscription.present?
 
+      restartable = find_restartable_subscription(giftee_purchase)
+      if restartable.present?
+        restart_subscription(restartable, giftee_purchase)
+        return
+      end
+
       is_gift = purchase.is_gift_sender_purchase
       charge_occurrence_count =
         if purchase.is_installment_payment
@@ -65,6 +71,30 @@ class Purchase::BaseService
       subscription.payment_options << payment_option
       subscription.save!
       subscription.purchases << [purchase, giftee_purchase].compact
+    end
+
+    def find_restartable_subscription(giftee_purchase)
+      return nil if purchase.is_installment_payment
+      return nil if purchase.is_test_purchase?
+      return nil if purchase.link.deleted?
+
+      is_gift = purchase.is_gift_sender_purchase
+      user = is_gift ? giftee_purchase&.purchaser : purchase.purchaser
+      email = is_gift ? giftee_purchase&.email : purchase.email
+
+      Subscription.find_restartable_for_checkout(link: purchase.link, user: user, email: email)
+    end
+
+    def restart_subscription(subscription, giftee_purchase)
+      is_gift = purchase.is_gift_sender_purchase
+
+      ActiveRecord::Base.transaction do
+        subscription.credit_card = purchase.credit_card unless is_gift
+        subscription.resubscribe!
+        subscription.purchases << [purchase, giftee_purchase].compact
+      end
+
+      subscription.send_restart_notifications!
     end
 
     def handle_purchase_failure
