@@ -20,7 +20,7 @@ class OfferCodesController < ApplicationController
             "Sorry, the discount code you wish to use is invalid."
           end
 
-        { valid: false, error_code: response[:error_code], error_message: error_message: }
+        { valid: false, error_code: response[:error_code], error_message: error_message}
       else
         { valid: true, products_data: response[:products_data] }
       end

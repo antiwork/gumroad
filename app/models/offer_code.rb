@@ -265,7 +265,7 @@ class OfferCode < ApplicationRecord
       if amount_percentage.present?  && fallback_amount_cents.present?
         errors.add(:base, "Fallback discount must be a percentage to match the primary discount (#{amount_percentage}%)")
       elsif amount_cents.present? && fallback_amount_percentage.present?
-        errors. add(:base, "Fallback discount must be a fixed amount to match the primary discount ($#{amount_cents})")
+        errors.add(:base, "Fallback discount must be a fixed amount to match the primary discount ($#{amount_cents})")
       end
     end
   end
@@ -291,13 +291,13 @@ class OfferCode < ApplicationRecord
     else
       return nil
     end
-    base_discount. merge(
+    base_discount.merge(
       {
-        product_ids: universal?  ? nil :products.map(&:external_id),
-        expires_at: ,
-        minimum_quantity:,
-        duration_in_billing_cycles:,
-        minimum_amount_cents:,
+        product_ids: universal? ? nil : products.map(&:external_id),
+        expires_at: expires_at,
+        minimum_quantity: minimum_quantity,
+        duration_in_billing_cycles: duration_in_billing_cycles,
+        minimum_amount_cents: minimum_amount_cents,
       }
     )
   end
@@ -419,14 +419,14 @@ class OfferCode < ApplicationRecord
           normalized_email
         )
       else
-        scope = scope.where("LOWER(purchases.email) = ?", normalized_email)
+        scope = scope.where("purchases.email = ?", normalized_email)
       end
 
       scope = scope.where("(purchases.stripe_refunded IS NULL OR purchases.stripe_refunded = 0)")
       scope = scope.where("purchases.chargeback_date IS NULL")
-
       scope = scope.where.not(status: 'canceled') if Purchase.column_names.include?("status")
 
+      scope.order(created_at: :desc).first
       result = scope.order(created_at: :desc).first
       result
     end
@@ -459,4 +459,4 @@ class OfferCode < ApplicationRecord
         )
       end
     end
-end
+  end
