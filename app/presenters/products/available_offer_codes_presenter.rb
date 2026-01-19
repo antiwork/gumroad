@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-class Products::AvailableDiscountCodesPresenter
+class Products::AvailableOfferCodesPresenter
   attr_reader :offer_codes
 
   def initialize(offer_codes: [])

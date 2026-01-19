@@ -442,7 +442,7 @@ describe Checkout::DiscountsController do
 
       before do
         offer_code.products << product
-        product.update!(default_discount_code_id: offer_code.id)
+        product.update!(default_offer_code_id: offer_code.id)
       end
 
       it "returns HTTP unprocessable entity and prevents deletion" do
