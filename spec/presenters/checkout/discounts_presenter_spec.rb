@@ -203,4 +203,57 @@ describe Checkout::DiscountsPresenter do
       end
     end
   end
+
+  describe "#discounts_props upgrade_discounts_enabled" do
+    let(:presenter) { described_class.new(pundit_user: SellerContext.new(user:, seller:), offer_codes: [], pagination: nil) }
+
+    before do
+      create(:team_membership, user:, seller:, role: TeamMembership::ROLE_ADMIN)
+    end
+
+    it "returns false when feature flag is disabled" do
+      expect(presenter.discounts_props[:upgrade_discounts_enabled]).to eq(false)
+    end
+
+    it "returns true when feature flag is enabled for the seller" do
+      Feature.activate_user(:upgrade_discounts, seller)
+
+      expect(presenter.discounts_props[:upgrade_discounts_enabled]).to eq(true)
+    end
+  end
+
+  describe "#offer_code_props with upgrade discount fields" do
+    let(:required_product) { create(:product, user: seller, price_cents: 1000) }
+    let(:offer_code_with_upgrade) do
+      create(:offer_code,
+             user: seller,
+             products: [product1],
+             amount_percentage: 20,
+             required_product_ids: [required_product.external_id],
+             minimum_quantity_discount_tiers: [
+               { "older_than_seconds" => 604800, "older_than_unit" => "week", "discount" => { "type" => "percent", "value" => 30 } }
+             ]
+      )
+    end
+
+    before do
+      create(:team_membership, user:, seller:, role: TeamMembership::ROLE_ADMIN)
+    end
+
+    it "includes required_product_ids and minimum_quantity_discount_tiers in props" do
+      props = presenter.offer_code_props(offer_code_with_upgrade)
+
+      expect(props[:required_product_ids]).to eq([required_product.external_id])
+      expect(props[:minimum_quantity_discount_tiers]).to eq([
+                                                              { "older_than_seconds" => 604800, "older_than_unit" => "week", "discount" => { "type" => "percent", "value" => 30 } }
+                                                            ])
+    end
+
+    it "returns empty arrays when upgrade discount fields are not set" do
+      props = presenter.offer_code_props(offer_code1)
+
+      expect(props[:required_product_ids]).to eq([])
+      expect(props[:minimum_quantity_discount_tiers]).to eq([])
+    end
+  end
 end

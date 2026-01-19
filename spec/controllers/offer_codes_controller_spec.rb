@@ -81,5 +81,68 @@ describe OfferCodesController do
                                            },
                                          })
     end
+
+    describe "upgrade discounts" do
+      let(:seller) { product.user }
+      let(:required_product) { create(:product, user: seller, price_cents: 0) }
+      let(:buyer_email) { "buyer@example.com" }
+
+      let(:upgrade_offer_code) do
+        create(:offer_code,
+               user: seller,
+               products: [product],
+               amount_cents: nil,
+               amount_percentage: 25,
+               required_product_ids: [required_product.external_id]
+        )
+      end
+
+      let(:upgrade_params) do
+        {
+          code: upgrade_offer_code.code,
+          email: buyer_email,
+          products: {
+            product.unique_permalink => {
+              permalink: product.unique_permalink,
+              quantity: 1
+            }
+          }
+        }
+      end
+
+      before do
+        Feature.activate_user(:upgrade_discounts, seller)
+      end
+
+      it "returns an error when email is not provided" do
+        upgrade_params.delete(:email)
+        get :compute_discount, params: upgrade_params
+
+        expect(response.parsed_body).to eq({
+                                             "valid" => false,
+                                             "error_code" => "missing_email",
+                                             "error_message" => "Enter your email to apply this discount."
+                                           })
+      end
+
+      it "returns an error when buyer does not own the required product" do
+        get :compute_discount, params: upgrade_params
+
+        expect(response.parsed_body).to eq({
+                                             "valid" => false,
+                                             "error_code" => "missing_required_product",
+                                             "error_message" => "Sorry, this discount is only available for customers who own a qualifying product."
+                                           })
+      end
+
+      it "returns the discount when buyer owns the required product" do
+        create(:free_purchase, link: required_product, email: buyer_email)
+
+        get :compute_discount, params: upgrade_params
+
+        expect(response.parsed_body["valid"]).to eq(true)
+        expect(response.parsed_body["products_data"][product.unique_permalink]["percents"]).to eq(25)
+      end
+    end
   end
 end

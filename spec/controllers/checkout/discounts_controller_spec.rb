@@ -279,6 +279,98 @@ describe Checkout::DiscountsController do
         expect(response.parsed_body["error_message"]).to eq("Discount code must be unique.")
       end
     end
+
+    context "with upgrade discount fields" do
+      let!(:required_product) { create(:product, user: seller, price_cents: 1000) }
+      let!(:target_product) { create(:product, user: seller, price_cents: 1000) }
+
+      it "creates an offer code with required_product_ids" do
+        post :create, params: {
+          name: "Upgrade Discount",
+          code: "upgrade10",
+          amount_percentage: 10,
+          universal: false,
+          selected_product_ids: [target_product.external_id],
+          required_product_ids: [required_product.external_id],
+        }, as: :json
+
+        expect(response).to be_successful
+        expect(response.parsed_body["success"]).to eq(true)
+
+        offer_code = seller.offer_codes.last
+        expect(offer_code.required_product_ids).to eq([required_product.external_id])
+      end
+
+      it "creates an offer code with required_product_ids and discount tiers" do
+        expect do
+          post :create, params: {
+            name: "Tiered Upgrade",
+            code: "tiered10",
+            amount_percentage: 10,
+            universal: false,
+            selected_product_ids: [target_product.external_id],
+            required_product_ids: [required_product.external_id],
+            minimum_quantity_discount_tiers: [
+              { older_than_seconds: 1.week.to_i, older_than_unit: "week", discount: { type: "percent", value: 25 } },
+              { older_than_seconds: 1.month.to_i, older_than_unit: "month", discount: { type: "percent", value: 50 } }
+            ],
+          }, as: :json
+        end.to change { seller.offer_codes.count }.by(1)
+
+        expect(response).to be_successful
+        expect(response.parsed_body["success"]).to eq(true)
+
+        offer_code = seller.offer_codes.last
+        expect(offer_code.required_product_ids).to eq([required_product.external_id])
+        expect(offer_code.minimum_quantity_discount_tiers).to eq([
+                                                                   { "older_than_seconds" => 1.week.to_i, "older_than_unit" => "week", "discount" => { "type" => "percent", "value" => 25 } },
+                                                                   { "older_than_seconds" => 1.month.to_i, "older_than_unit" => "month", "discount" => { "type" => "percent", "value" => 50 } }
+                                                                 ])
+      end
+
+      it "creates an offer code with fixed amount discount tiers" do
+        expect do
+          post :create, params: {
+            name: "Fixed Tier Upgrade",
+            code: "fixedtier",
+            amount_percentage: 10,
+            universal: false,
+            selected_product_ids: [target_product.external_id],
+            required_product_ids: [required_product.external_id],
+            minimum_quantity_discount_tiers: [
+              { older_than_seconds: 2.weeks.to_i, older_than_unit: "week", discount: { type: "cents", value: 500 }, currency_type: "usd" }
+            ],
+          }, as: :json
+        end.to change { seller.offer_codes.count }.by(1)
+
+        expect(response).to be_successful
+
+        offer_code = seller.offer_codes.last
+        expect(offer_code.minimum_quantity_discount_tiers).to eq([
+                                                                   { "older_than_seconds" => 2.weeks.to_i, "older_than_unit" => "week", "discount" => { "type" => "cents", "value" => 500 }, "currency_type" => "usd" }
+                                                                 ])
+      end
+
+      it "creates an offer code with multiple required products" do
+        second_required_product = create(:product, user: seller)
+
+        expect do
+          post :create, params: {
+            name: "Multi-Req Upgrade",
+            code: "multireq",
+            amount_percentage: 15,
+            universal: false,
+            selected_product_ids: [target_product.external_id],
+            required_product_ids: [required_product.external_id, second_required_product.external_id],
+          }, as: :json
+        end.to change { seller.offer_codes.count }.by(1)
+
+        expect(response).to be_successful
+
+        offer_code = seller.offer_codes.last
+        expect(offer_code.required_product_ids).to contain_exactly(required_product.external_id, second_required_product.external_id)
+      end
+    end
   end
 
   describe "PUT update" do
@@ -399,6 +491,107 @@ describe Checkout::DiscountsController do
     context "when the offer code doesn't exist" do
       it "returns a 404 error" do
         expect { put :update, params: { id: "" } }.to raise_error(ActiveRecord::RecordNotFound)
+      end
+    end
+
+    context "with upgrade discount fields" do
+      let!(:required_product) { create(:product, user: seller) }
+      let!(:target_product) { create(:product, user: seller, price_cents: 1000) }
+      let!(:upgrade_offer_code) do
+        create(:offer_code,
+               name: "Existing Upgrade",
+               code: "existingupgrade",
+               user: seller,
+               products: [target_product],
+               amount_percentage: 10,
+               required_product_ids: [required_product.external_id],
+               minimum_quantity_discount_tiers: [
+                 { "older_than_seconds" => 1.week.to_i, "older_than_unit" => "week", "discount" => { "type" => "percent", "value" => 20 } }
+               ]
+        )
+      end
+
+      it "updates an offer code's required_product_ids" do
+        new_required_product = create(:product, user: seller)
+
+        put :update, params: {
+          id: upgrade_offer_code.external_id,
+          name: "Updated Upgrade",
+          amount_percentage: 15,
+          universal: false,
+          selected_product_ids: [target_product.external_id],
+          required_product_ids: [new_required_product.external_id],
+          minimum_quantity_discount_tiers: [],
+        }, as: :json
+
+        expect(response).to be_successful
+        expect(response.parsed_body["success"]).to eq(true)
+
+        upgrade_offer_code.reload
+        expect(upgrade_offer_code.name).to eq("Updated Upgrade")
+        expect(upgrade_offer_code.amount_percentage).to eq(15)
+        expect(upgrade_offer_code.required_product_ids).to eq([new_required_product.external_id])
+        expect(upgrade_offer_code.minimum_quantity_discount_tiers).to eq([])
+      end
+
+      it "updates an offer code's discount tiers" do
+        put :update, params: {
+          id: upgrade_offer_code.external_id,
+          name: "Updated Tiers",
+          amount_percentage: 10,
+          universal: false,
+          selected_product_ids: [target_product.external_id],
+          required_product_ids: [required_product.external_id],
+          minimum_quantity_discount_tiers: [
+            { older_than_seconds: 2.weeks.to_i, older_than_unit: "week", discount: { type: "percent", value: 30 } },
+            { older_than_seconds: 1.month.to_i, older_than_unit: "month", discount: { type: "percent", value: 50 } }
+          ],
+        }, as: :json
+
+        expect(response).to be_successful
+
+        upgrade_offer_code.reload
+        expect(upgrade_offer_code.minimum_quantity_discount_tiers).to eq([
+                                                                           { "older_than_seconds" => 2.weeks.to_i, "older_than_unit" => "week", "discount" => { "type" => "percent", "value" => 30 } },
+                                                                           { "older_than_seconds" => 1.month.to_i, "older_than_unit" => "month", "discount" => { "type" => "percent", "value" => 50 } }
+                                                                         ])
+      end
+
+      it "clears upgrade discount fields when empty arrays are passed" do
+        put :update, params: {
+          id: upgrade_offer_code.external_id,
+          name: "No Upgrade",
+          amount_percentage: 10,
+          universal: false,
+          selected_product_ids: [target_product.external_id],
+          required_product_ids: [],
+          minimum_quantity_discount_tiers: [],
+        }, as: :json
+
+        expect(response).to be_successful
+
+        upgrade_offer_code.reload
+        expect(upgrade_offer_code.required_product_ids).to eq([])
+        expect(upgrade_offer_code.minimum_quantity_discount_tiers).to eq([])
+      end
+
+      it "adds multiple required products" do
+        second_required_product = create(:product, user: seller)
+
+        put :update, params: {
+          id: upgrade_offer_code.external_id,
+          name: "Multi-Req",
+          amount_percentage: 10,
+          universal: false,
+          selected_product_ids: [target_product.external_id],
+          required_product_ids: [required_product.external_id, second_required_product.external_id],
+          minimum_quantity_discount_tiers: [],
+        }, as: :json
+
+        expect(response).to be_successful
+
+        upgrade_offer_code.reload
+        expect(upgrade_offer_code.required_product_ids).to contain_exactly(required_product.external_id, second_required_product.external_id)
       end
     end
   end

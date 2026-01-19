@@ -189,6 +189,8 @@ class OfferCode < ApplicationRecord
   end
 
   def requires_product_ownership?
+    return false unless Feature.active?(:upgrade_discounts, user)
+
     required_product_ids.present? && required_product_ids.any?
   end
 
@@ -218,6 +220,7 @@ class OfferCode < ApplicationRecord
   end
 
   def effective_discount_for_email(email:, product_currency_type: nil)
+    return discount unless Feature.active?(:upgrade_discounts, user)
     return discount if !requires_product_ownership?
 
     qualifying_purchase = qualifying_purchase_for_email(email)

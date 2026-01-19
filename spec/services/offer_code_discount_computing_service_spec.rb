@@ -405,4 +405,87 @@ describe OfferCodeDiscountComputingService do
       end
     end
   end
+
+  describe "upgrade discounts" do
+    let(:required_product) { create(:product, user: seller, price_cents: 1000) }
+    let(:buyer_email) { "buyer@example.com" }
+
+    let(:upgrade_offer_code) do
+      create(:offer_code,
+             user: seller,
+             products: [product],
+             amount_percentage: 20,
+             required_product_ids: [required_product.external_id]
+      )
+    end
+
+    let(:upgrade_products_data) do
+      {
+        product.unique_permalink => { quantity: "1", permalink: product.unique_permalink }
+      }
+    end
+
+    before do
+      Feature.activate_user(:upgrade_discounts, seller)
+    end
+
+    context "when feature flag is disabled" do
+      before do
+        Feature.deactivate_user(:upgrade_discounts, seller)
+      end
+
+      it "ignores required product ownership check and applies discount" do
+        result = OfferCodeDiscountComputingService.new(upgrade_offer_code.code, upgrade_products_data).process
+
+        expect(result[:error_code]).to be_nil
+        expect(result[:products_data][product.unique_permalink][:discount][:percents]).to eq(20)
+      end
+    end
+
+    context "when buyer owns the required product" do
+      before do
+        create(:purchase, link: required_product, email: buyer_email, created_at: 2.weeks.ago)
+      end
+
+      it "applies the discount" do
+        result = OfferCodeDiscountComputingService.new(upgrade_offer_code.code, upgrade_products_data, email: buyer_email).process
+
+        expect(result[:error_code]).to be_nil
+        expect(result[:products_data][product.unique_permalink][:discount][:percents]).to eq(20)
+      end
+
+      context "with tiered discounts" do
+        before do
+          upgrade_offer_code.update!(minimum_quantity_discount_tiers: [
+                                       { "older_than_seconds" => 7.days.to_i, "older_than_unit" => "week", "discount" => { "type" => "percent", "value" => 40 } }
+                                     ])
+        end
+
+        it "applies the tier discount when ownership duration qualifies" do
+          result = OfferCodeDiscountComputingService.new(upgrade_offer_code.code, upgrade_products_data, email: buyer_email).process
+
+          expect(result[:error_code]).to be_nil
+          expect(result[:products_data][product.unique_permalink][:discount][:percents]).to eq(40)
+        end
+      end
+    end
+
+    context "when buyer does not own the required product" do
+      it "returns missing_required_product error code" do
+        result = OfferCodeDiscountComputingService.new(upgrade_offer_code.code, upgrade_products_data, email: buyer_email).process
+
+        expect(result[:error_code]).to eq(:missing_required_product)
+        expect(result[:products_data]).to eq({})
+      end
+    end
+
+    context "when email is not provided" do
+      it "returns missing_email error code" do
+        result = OfferCodeDiscountComputingService.new(upgrade_offer_code.code, upgrade_products_data).process
+
+        expect(result[:error_code]).to eq(:missing_email)
+        expect(result[:products_data]).to eq({})
+      end
+    end
+  end
 end

@@ -13,6 +13,7 @@ function Discounts() {
     show_black_friday_banner,
     black_friday_code,
     black_friday_code_name,
+    upgrade_discounts_enabled,
   } = cast<DiscountsPageProps>(usePage().props);
 
   return (
@@ -24,6 +25,7 @@ function Discounts() {
       show_black_friday_banner={show_black_friday_banner}
       black_friday_code={black_friday_code}
       black_friday_code_name={black_friday_code_name}
+      upgrade_discounts_enabled={upgrade_discounts_enabled}
     />
   );
 }

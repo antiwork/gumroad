@@ -30,7 +30,8 @@ class Checkout::DiscountsPresenter
       end,
       show_black_friday_banner: Feature.active?(:black_friday_seller_banner),
       black_friday_code: SearchProducts::BLACK_FRIDAY_CODE,
-      black_friday_code_name: BLACK_FRIDAY_CODE_NAME
+      black_friday_code_name: BLACK_FRIDAY_CODE_NAME,
+      upgrade_discounts_enabled: Feature.active?(:upgrade_discounts, pundit_user.seller),
     }
   end
 

@@ -750,4 +750,243 @@ describe OfferCode do
       end
     end
   end
+
+  describe "upgrade discounts" do
+    let(:seller) { create(:user) }
+    let(:required_product) { create(:product, user: seller, price_cents: 0) }
+    let(:discount_product) { create(:product, user: seller, price_cents: 2000) }
+    let(:buyer_email) { "buyer@example.com" }
+
+    let(:offer_code) do
+      create(:offer_code,
+             user: seller,
+             products: [discount_product],
+             amount_cents: nil,
+             amount_percentage: 20,
+             required_product_ids: [required_product.external_id]
+      )
+    end
+
+    before do
+      Feature.activate_user(:upgrade_discounts, seller)
+    end
+
+    describe "#requires_product_ownership?" do
+      it "returns true when required_product_ids is present and feature is enabled" do
+        expect(offer_code.requires_product_ownership?).to eq(true)
+      end
+
+      it "returns false when required_product_ids is empty" do
+        offer_code.update!(required_product_ids: [])
+        expect(offer_code.requires_product_ownership?).to eq(false)
+      end
+
+      it "returns false when required_product_ids is nil" do
+        offer_code.update!(required_product_ids: nil)
+        expect(offer_code.requires_product_ownership?).to eq(false)
+      end
+
+      it "returns false when feature flag is disabled" do
+        Feature.deactivate_user(:upgrade_discounts, seller)
+        expect(offer_code.requires_product_ownership?).to eq(false)
+      end
+    end
+
+    describe "#buyer_owns_required_product?" do
+      it "returns true when buyer has purchased the required product" do
+        create(:free_purchase, link: required_product, email: buyer_email)
+
+        expect(offer_code.buyer_owns_required_product?(email: buyer_email)).to eq(true)
+      end
+
+      it "returns false when buyer has not purchased the required product" do
+        expect(offer_code.buyer_owns_required_product?(email: buyer_email)).to eq(false)
+      end
+
+      it "returns false when email is blank" do
+        create(:free_purchase, link: required_product, email: buyer_email)
+
+        expect(offer_code.buyer_owns_required_product?(email: nil)).to eq(false)
+        expect(offer_code.buyer_owns_required_product?(email: "")).to eq(false)
+      end
+
+      it "returns true when buyer owns any one of the required products" do
+        other_required_product = create(:product, user: seller, price_cents: 0)
+        offer_code.update!(required_product_ids: [required_product.external_id, other_required_product.external_id])
+
+        create(:free_purchase, link: other_required_product, email: buyer_email)
+
+        expect(offer_code.buyer_owns_required_product?(email: buyer_email)).to eq(true)
+      end
+
+      it "excludes refunded purchases" do
+        create(:free_purchase, :refunded, link: required_product, email: buyer_email)
+
+        expect(offer_code.buyer_owns_required_product?(email: buyer_email)).to eq(false)
+      end
+
+      it "excludes chargedback purchases" do
+        create(:free_purchase, link: required_product, email: buyer_email, chargeback_date: Time.current)
+
+        expect(offer_code.buyer_owns_required_product?(email: buyer_email)).to eq(false)
+      end
+
+      it "excludes gift sender purchases" do
+        create(:free_purchase, link: required_product, email: buyer_email, is_gift_sender_purchase: true)
+
+        expect(offer_code.buyer_owns_required_product?(email: buyer_email)).to eq(false)
+      end
+
+      it "includes gift receiver purchases" do
+        create(:free_purchase, link: required_product, email: buyer_email, is_gift_receiver_purchase: true, purchase_state: "gift_receiver_purchase_successful")
+
+        expect(offer_code.buyer_owns_required_product?(email: buyer_email)).to eq(true)
+      end
+    end
+
+    describe "#qualifying_purchase_for_email" do
+      it "returns the most recent qualifying purchase" do
+        create(:free_purchase, link: required_product, email: buyer_email, created_at: 2.months.ago)
+        recent_purchase = create(:free_purchase, link: required_product, email: buyer_email, created_at: 1.week.ago)
+
+        expect(offer_code.qualifying_purchase_for_email(buyer_email)).to eq(recent_purchase)
+      end
+
+      it "returns nil when no qualifying purchase exists" do
+        expect(offer_code.qualifying_purchase_for_email(buyer_email)).to be_nil
+      end
+    end
+
+    describe "#effective_discount_for_email" do
+      it "returns the base discount when feature flag is disabled" do
+        Feature.deactivate_user(:upgrade_discounts, seller)
+        create(:free_purchase, link: required_product, email: buyer_email)
+
+        result = offer_code.effective_discount_for_email(email: buyer_email, product_currency_type: "usd")
+
+        expect(result[:type]).to eq("percent")
+        expect(result[:percents]).to eq(20)
+      end
+
+      it "returns the base discount when no tiers are configured" do
+        create(:free_purchase, link: required_product, email: buyer_email)
+
+        result = offer_code.effective_discount_for_email(email: buyer_email, product_currency_type: "usd")
+
+        expect(result[:type]).to eq("percent")
+        expect(result[:percents]).to eq(20)
+      end
+
+      it "returns nil when buyer does not own the required product" do
+        result = offer_code.effective_discount_for_email(email: buyer_email, product_currency_type: "usd")
+
+        expect(result).to be_nil
+      end
+
+      context "with discount tiers" do
+        before do
+          offer_code.update!(minimum_quantity_discount_tiers: [
+                               { "older_than_seconds" => 7.days.to_i, "older_than_unit" => "week", "discount" => { "type" => "percent", "value" => 30 } },
+                               { "older_than_seconds" => 30.days.to_i, "older_than_unit" => "month", "discount" => { "type" => "percent", "value" => 50 } },
+                             ])
+        end
+
+        it "returns the base discount when ownership is less than the smallest tier threshold" do
+          create(:free_purchase, link: required_product, email: buyer_email, created_at: 3.days.ago)
+
+          result = offer_code.effective_discount_for_email(email: buyer_email, product_currency_type: "usd")
+
+          expect(result[:type]).to eq("percent")
+          expect(result[:percents]).to eq(20)
+        end
+
+        it "returns the first tier discount when ownership exceeds first tier threshold" do
+          create(:free_purchase, link: required_product, email: buyer_email, created_at: 10.days.ago)
+
+          result = offer_code.effective_discount_for_email(email: buyer_email, product_currency_type: "usd")
+
+          expect(result[:type]).to eq("percent")
+          expect(result[:percents]).to eq(30)
+        end
+
+        it "returns the highest applicable tier discount" do
+          create(:free_purchase, link: required_product, email: buyer_email, created_at: 60.days.ago)
+
+          result = offer_code.effective_discount_for_email(email: buyer_email, product_currency_type: "usd")
+
+          expect(result[:type]).to eq("percent")
+          expect(result[:percents]).to eq(50)
+        end
+
+        it "supports fixed-amount tier discounts" do
+          offer_code.update!(minimum_quantity_discount_tiers: [
+                               { "older_than_seconds" => 7.days.to_i, "older_than_unit" => "week", "discount" => { "type" => "cents", "value" => 500 }, "currency_type" => "usd" },
+                             ])
+          create(:free_purchase, link: required_product, email: buyer_email, created_at: 10.days.ago)
+
+          result = offer_code.effective_discount_for_email(email: buyer_email, product_currency_type: "usd")
+
+          expect(result[:type]).to eq("fixed")
+          expect(result[:cents]).to eq(500)
+        end
+
+        it "falls back to base discount when tier currency does not match product currency" do
+          offer_code.update!(minimum_quantity_discount_tiers: [
+                               { "older_than_seconds" => 7.days.to_i, "older_than_unit" => "week", "discount" => { "type" => "cents", "value" => 500 }, "currency_type" => "eur" },
+                             ])
+          create(:free_purchase, link: required_product, email: buyer_email, created_at: 10.days.ago)
+
+          result = offer_code.effective_discount_for_email(email: buyer_email, product_currency_type: "usd")
+
+          expect(result[:type]).to eq("percent")
+          expect(result[:percents]).to eq(20)
+        end
+      end
+    end
+
+    describe "#buyer_owns_required_product? email case-insensitivity" do
+      it "matches email case-insensitively" do
+        create(:free_purchase, link: required_product, email: "Buyer@Example.COM")
+
+        expect(offer_code.buyer_owns_required_product?(email: "buyer@example.com")).to eq(true)
+        expect(offer_code.buyer_owns_required_product?(email: "BUYER@EXAMPLE.COM")).to eq(true)
+      end
+    end
+
+    describe "#qualifying_purchase_for_email with multiple products" do
+      it "returns the most recent purchase from any of the required products" do
+        other_required_product = create(:product, user: seller, price_cents: 0)
+        offer_code.update!(required_product_ids: [required_product.external_id, other_required_product.external_id])
+
+        create(:free_purchase, link: required_product, email: buyer_email, created_at: 2.months.ago)
+        recent_purchase = create(:free_purchase, link: other_required_product, email: buyer_email, created_at: 1.week.ago)
+
+        expect(offer_code.qualifying_purchase_for_email(buyer_email)).to eq(recent_purchase)
+      end
+    end
+
+    describe "#effective_discount_for_email edge cases" do
+      it "returns base discount when required_product_ids is empty" do
+        offer_code.update!(required_product_ids: [])
+        create(:free_purchase, link: required_product, email: buyer_email)
+
+        result = offer_code.effective_discount_for_email(email: buyer_email, product_currency_type: "usd")
+
+        expect(result[:type]).to eq("percent")
+        expect(result[:percents]).to eq(20)
+      end
+
+      it "returns nil when email is nil" do
+        result = offer_code.effective_discount_for_email(email: nil, product_currency_type: "usd")
+
+        expect(result).to be_nil
+      end
+
+      it "returns nil when email is empty" do
+        result = offer_code.effective_discount_for_email(email: "", product_currency_type: "usd")
+
+        expect(result).to be_nil
+      end
+    end
+  end
 end
