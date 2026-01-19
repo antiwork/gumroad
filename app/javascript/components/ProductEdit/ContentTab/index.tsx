@@ -750,6 +750,7 @@ const ContentTabContent = ({ selectedVariantId }: { selectedVariantId: string | 
         ) : null}
         <PageListLayout
           className="md:h-auto! md:flex-1"
+          editContentClassName="border border-border rounded overflow-auto p-2 h-screen"
           pageList={
             !isDesktop && !showPageList ? null : (
               <div className="flex flex-col gap-4">

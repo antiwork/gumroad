@@ -7,10 +7,12 @@ export const PageListLayout = ({
   pageList,
   children,
   className,
+  editContentClassName,
 }: {
   pageList: React.ReactNode;
   children: React.ReactNode;
   className?: string;
+  editContentClassName?: string;
 }) => (
   <div
     className={classNames(
@@ -19,7 +21,7 @@ export const PageListLayout = ({
     )}
   >
     <div className="flex flex-col gap-4 lg:sticky lg:top-0 lg:w-80 lg:pb-8">{pageList}</div>
-    <div className="h-0 flex-1">{children}</div>
+    <div className={classNames("h-0 flex-1", editContentClassName)}>{children}</div>
   </div>
 );
 
