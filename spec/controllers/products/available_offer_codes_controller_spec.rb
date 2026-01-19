@@ -4,7 +4,7 @@ require "spec_helper"
 require "shared_examples/authorize_called"
 require "shared_examples/sellers_base_controller_concern"
 
-describe Products::AvailableDiscountCodesController do
+describe Products::AvailableOfferCodesController do
   it_behaves_like "inherits from Sellers::BaseController"
 
   let(:seller) { create(:named_seller) }
@@ -85,7 +85,7 @@ describe Products::AvailableDiscountCodesController do
 
       context "with MAX_OFFER_CODES_LIMIT" do
         before do
-          (Products::AvailableDiscountCodesController::MAX_OFFER_CODES_LIMIT + 5).times do |i|
+          (Products::AvailableOfferCodesController::MAX_OFFER_CODES_LIMIT + 5).times do |i|
             create(:offer_code, user: seller, name: "Code #{i}", code: "LIMITCODE#{i}", products: [product])
           end
         end
@@ -94,7 +94,7 @@ describe Products::AvailableDiscountCodesController do
           get :index, format: :json, params: { product_id: product.unique_permalink }
 
           expect(response).to be_successful
-          expect(response.parsed_body.length).to eq(Products::AvailableDiscountCodesController::MAX_OFFER_CODES_LIMIT)
+          expect(response.parsed_body.length).to eq(Products::AvailableOfferCodesController::MAX_OFFER_CODES_LIMIT)
         end
       end
 
