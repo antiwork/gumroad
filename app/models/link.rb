@@ -1327,11 +1327,13 @@ class Link < ApplicationRecord
     def default_offer_code_must_be_associated_with_product
       return if default_offer_code_id.blank?
 
-      valid_offer_code = offer_codes.alive.exists?(id: default_offer_code_id) ||
-        user&.offer_codes&.universal_with_matching_currency(price_currency_type)&.alive&.exists?(id: default_offer_code_id)
+      offer_code = offer_codes.alive.find_by(id: default_offer_code_id) ||
+        user&.offer_codes&.universal_with_matching_currency(price_currency_type)&.alive&.find_by(id: default_offer_code_id)
 
-      if !valid_offer_code
+      if offer_code.nil?
         errors.add(:default_offer_code, "must be associated with this product")
+      elsif offer_code.inactive?
+        errors.add(:default_offer_code, "cannot be expired or not yet active")
       end
     end
 

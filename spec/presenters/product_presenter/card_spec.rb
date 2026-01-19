@@ -69,7 +69,9 @@ describe ProductPresenter::Card do
         end
 
         it "does not apply discount when offer code is deleted" do
-          offer_code.mark_deleted!
+          offer_code.update_column(:deleted_at, Time.current)
+          discount_product.reload
+
           data = described_class.new(product: discount_product).for_web(request:)
 
           expect(data[:price_cents]).to eq(1000)

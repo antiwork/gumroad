@@ -34,13 +34,14 @@ class OfferCode < ApplicationRecord
   validate :price_validation
   validate :validate_cancellation_discount_uniqueness
   validate :validate_cancellation_discount_product_type
+  validate :cannot_delete_if_used_as_default_discount
 
   before_save :to_mongo
 
   after_save :invalidate_product_cache
   after_save :reindex_associated_products
   before_destroy :capture_associated_product_ids
-  before_destroy :clear_default_offer_code_references
+  before_destroy :prevent_destroy_if_used_as_default_discount
   after_destroy :reindex_captured_products
 
   validates_uniqueness_of :code, scope: %i[user_id deleted_at], if: :universal?, unless: :deleted?, message: "must be unique."
@@ -304,7 +305,17 @@ class OfferCode < ApplicationRecord
       reindex_associated_products(products_to_reindex: Link.where(id: @product_ids_to_reindex)) if @product_ids_to_reindex.present?
     end
 
-    def clear_default_offer_code_references
-      products_with_default_discount.update_all(default_offer_code_id: nil)
+    def cannot_delete_if_used_as_default_discount
+      return unless being_marked_as_deleted?
+      return unless products_with_default_discount.visible.exists?
+
+      errors.add(:base, "Cannot delete this discount code because it is set as the default discount on one or more products. Please remove it from those products first.")
+    end
+
+    def prevent_destroy_if_used_as_default_discount
+      return unless products_with_default_discount.exists?
+
+      errors.add(:base, "Cannot delete this discount code because it is set as the default discount on one or more products.")
+      throw(:abort)
     end
 end

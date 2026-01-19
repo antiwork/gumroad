@@ -4874,12 +4874,32 @@ describe Link, :vcr do
       expect(product).to be_valid
     end
 
-    it "clears default_offer_code when the offer code is destroyed" do
+    it "does not allow setting an expired offer code as default" do
+      expired_offer_code = create(:offer_code, user: product.user, products: [product], valid_at: 2.days.ago, expires_at: 1.day.ago)
+      product.default_offer_code = expired_offer_code
+      expect(product).not_to be_valid
+      expect(product.errors[:default_offer_code]).to include("cannot be expired or not yet active")
+    end
+
+    it "does not allow setting a not-yet-active offer code as default" do
+      future_offer_code = create(:offer_code, user: product.user, products: [product], valid_at: 1.day.from_now, expires_at: 2.days.from_now)
+      product.default_offer_code = future_offer_code
+      expect(product).not_to be_valid
+      expect(product.errors[:default_offer_code]).to include("cannot be expired or not yet active")
+    end
+
+    it "allows setting an active offer code with valid date range as default" do
+      active_offer_code = create(:offer_code, user: product.user, products: [product], valid_at: 1.day.ago, expires_at: 1.day.from_now)
+      product.default_offer_code = active_offer_code
+      expect(product).to be_valid
+    end
+
+    it "blocks destruction of offer code when set as default" do
       product.update!(default_offer_code: product_offer_code)
       expect(product.reload.default_offer_code_id).to eq(product_offer_code.id)
 
-      product_offer_code.destroy!
-      expect(product.reload.default_offer_code_id).to be_nil
+      expect { product_offer_code.destroy! }.to raise_error(ActiveRecord::RecordNotDestroyed)
+      expect(product.reload.default_offer_code_id).to eq(product_offer_code.id)
     end
   end
 end
