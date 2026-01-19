@@ -714,7 +714,7 @@ class Subscription < ApplicationRecord
           .where("refunds.amount_cents = 0")
           .order("refunds.created_at DESC")
           .limit(10)
-          .find { |refund| refund.business_vat_id.present? } # business_vat_id stored in json_data
+          .find { |refund| refund.business_vat_id.present? }
           &.business_vat_id
   end
 
@@ -967,7 +967,7 @@ class Subscription < ApplicationRecord
                        .where("gumroad_tax_cents > 0")
                        .where("amount_cents = 0")
                        .order(created_at: :desc)
-                       .find { |refund| refund.business_vat_id.present? } # business_vat_id stored in json_data
+                       .find { |refund| refund.business_vat_id.present? }
                        &.business_vat_id
     end
 
