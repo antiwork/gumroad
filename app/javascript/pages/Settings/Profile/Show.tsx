@@ -169,9 +169,10 @@ export default function SettingsPage() {
               <Fieldset>
                 <Legend>Social links</Legend>
                 {creatorProfile.twitter_handle ? (
-                  <button type="button" className="button button-twitter" onClick={handleUnlinkTwitter}>
+                  <Button type="button" color="twitter" onClick={handleUnlinkTwitter}>
+                    <span className="brand-icon brand-icon-twitter" />
                     Disconnect {creatorProfile.twitter_handle} from X
-                  </button>
+                  </Button>
                 ) : (
                   <SocialAuthButton
                     provider="twitter"
@@ -247,13 +248,11 @@ export default function SettingsPage() {
         </form>
         <PreviewSidebar
           previewLink={(props) => (
-            <a
-              {...props}
-              className="button"
-              href={Routes.root_url({ host: creatorProfile.subdomain })}
-              target="_blank"
-              rel="noreferrer"
-            />
+            <Button asChild>
+              <a {...props} href={Routes.root_url({ host: creatorProfile.subdomain })} target="_blank" rel="noreferrer">
+                View profile
+              </a>
+            </Button>
           )}
         >
           <Preview

@@ -139,7 +139,7 @@ export default function MainPage() {
                 This email address has not been confirmed yet.{" "}
                 {resentConfirmationEmail ? null : (
                   <button
-                    className="underline"
+                    className="cursor-pointer underline all-unset"
                     onClick={(e) => {
                       e.preventDefault();
                       resendConfirmationEmail();
@@ -558,7 +558,11 @@ const InvalidateActiveSessionsSection = () => {
   return (
     <Section className="p-4! md:p-8!">
       <Fieldset>
-        <button className="underline" type="button" onClick={() => setIsConfirmationDialogOpen(true)}>
+        <button
+          className="cursor-pointer underline all-unset"
+          type="button"
+          onClick={() => setIsConfirmationDialogOpen(true)}
+        >
           Sign out from all active sessions
         </button>
         <small>You will be signed out from all your active sessions including this session.</small>
