@@ -792,7 +792,11 @@ const Reviews = ({
             />
           ))}
           {state.pagination.page < state.pagination.pages ? (
-            <button className="underline" onClick={() => void loadNextPage()} disabled={isLoading}>
+            <button
+              className="cursor-pointer underline all-unset"
+              onClick={() => void loadNextPage()}
+              disabled={isLoading}
+            >
               Load more
             </button>
           ) : null}

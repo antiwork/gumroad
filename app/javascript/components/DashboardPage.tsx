@@ -5,7 +5,7 @@ import * as React from "react";
 import { formatPriceCentsWithCurrencySymbol } from "$app/utils/currency";
 
 import { ActivityFeed, ActivityItem } from "$app/components/ActivityFeed";
-import { NavigationButton } from "$app/components/Button";
+import { Button, NavigationButton } from "$app/components/Button";
 import { useAppDomain } from "$app/components/DomainSettings";
 import { Icon } from "$app/components/Icons";
 import { CustomizeProfileIcon } from "$app/components/icons/getting-started/CustomizeProfileIcon";
@@ -189,9 +189,9 @@ const GettingStartedItem = ({
 
   if (completed) {
     return (
-      <div className={cx(commonClasses, "button filled cursor-default!")} data-status="completed">
+      <Button color="filled" className={cx(commonClasses, "cursor-default!")} data-status="completed">
         {content}
-      </div>
+      </Button>
     );
   }
 

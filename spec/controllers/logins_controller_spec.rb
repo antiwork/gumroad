@@ -292,6 +292,22 @@ describe LoginsController, type: :controller, inertia: true do
       end
     end
 
+    describe "two factor authentication stale session" do
+      it "does not redirect to two factor auth when the pending 2FA session belongs to another user" do
+        other_user = create(:user, password: "password")
+        other_user.two_factor_authentication_enabled = true
+        other_user.save!
+
+        # Simulate a stale 2FA session from a previous/aborted login attempt.
+        session[:verify_two_factor_auth_for] = other_user.id
+
+        post "create", params: { user: { login_identifier: @user.email, password: "password" } }
+
+        expect(response).to redirect_to(dashboard_path)
+        expect(session[:verify_two_factor_auth_for]).to be_nil
+      end
+    end
+
     it_behaves_like "merge guest cart with user cart" do
       let(:user) { @user }
       let(:call_action) { post "create", params: { user: { login_identifier: user.email, password: "password" } } }

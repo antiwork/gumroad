@@ -321,6 +321,14 @@ $accent-color: map-get($colors, "pink"); // [1]
 
       button,
       .button {
+        padding: spacer(3) spacer(4);
+        border: solid calc(size(1) / 16) currentColor;
+        border-radius: border-radius(1);
+        font-size: nth($font-sizes, 2);
+        line-height: nth($line-heights, 2);
+        font-family: inherit;
+        cursor: pointer;
+        text-decoration: none;
         /* Needed to expand button full width in emails */
         display: block;
         text-align: center;
@@ -329,11 +337,13 @@ $accent-color: map-get($colors, "pink"); // [1]
         /* Some email clients don't support CSS variables: https://www.caniemail.com/search/?s=var */
         background-color: transparent;
         color: #000000;
+        border-color: #000000;
 
         &.primary {
           /* Some email clients don't support CSS variables: https://www.caniemail.com/search/?s=var */
           background-color: #000000;
           color: #ffffff;
+          border-color: #000000;
         }
       }
 

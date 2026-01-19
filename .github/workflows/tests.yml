@@ -91,32 +91,6 @@ jobs:
           username: ${{ secrets.QUAY_USERNAME }}
           password: ${{ secrets.QUAY_PASSWORD }}
           logout: false
-      - name: Configure AWS credentials
-        uses: aws-actions/configure-aws-credentials@v4
-        with:
-          aws-access-key-id: ${{ secrets.BUILD_AWS_ACCESS_KEY_ID }}
-          aws-secret-access-key: ${{ secrets.BUILD_AWS_SECRET_ACCESS_KEY }}
-          aws-region: ${{ secrets.AWS_DEFAULT_REGION }}
-      - name: Cache S3 credentials files for tests
-        id: cache-s3-files
-        uses: actions/cache@v3
-        with:
-          path: |
-            config/credentials.yml.enc
-            config/certs/development_com.GRD.iOSCreator.pem
-            config/certs/production_com.GRD.iOSCreator.pem
-          key: s3-files-${{ hashFiles('**/credentials.yml.enc', '**/development_com.GRD.iOSCreator.pem') }}-2025-06-17
-      - name: Download files from S3
-        if: steps.cache-s3-files.outputs.cache-hit != 'true'
-        run: |
-          for file in \
-            "credentials.yml.enc:config/credentials.yml.enc" \
-            "certs/development_com.GRD.iOSCreator.pem:config/certs/development_com.GRD.iOSCreator.pem" \
-            "certs/development_com.GRD.iOSCreator.pem:config/certs/production_com.GRD.iOSCreator.pem"; do
-            src="s3://gumroad-secrets/credentials/development/${file%:*}"
-            dst="${file#*:}"
-            aws s3 cp "$src" "$dst"
-          done
       - name: Build and push test image
         env:
           WEB_BASE_REPO: quay.io/gumroad/web_base
@@ -144,7 +118,6 @@ jobs:
                   BRANCH_CACHE_RESTORE_ENABLED=false \
                   NEW_WEB_TAG=$REVISION \
                   COMPOSE_PROJECT_NAME=web_${{ github.run_id }}_${{ github.run_attempt }} \
-                  RAILS_MASTER_KEY=${{ secrets.RAILS_MASTER_KEY }} \
                   make $make_target
               logger "pushing $repo:$tag"
               for i in {1..3}; do
@@ -212,7 +185,6 @@ jobs:
         run: |
           docker run --rm --network ${{ env.COMPOSE_PROJECT_NAME }}_default \
             -e RAILS_ENV=test \
-            -e RAILS_MASTER_KEY=${{ secrets.RAILS_MASTER_KEY }} \
             $WEB_REPO:test-${{ github.event_name == 'pull_request_target' && github.event.pull_request.head.sha || github.sha }} \
             bundle exec rake db:setup
 
@@ -222,7 +194,6 @@ jobs:
           KNAPSACK_PRO_BRANCH: ${{ github.event_name == 'pull_request_target' && github.head_ref || github.ref_name }}
         run: |
           docker run --rm --network ${{ env.COMPOSE_PROJECT_NAME }}_default \
-            -e RAILS_MASTER_KEY=${{ secrets.RAILS_MASTER_KEY }} \
             -e RUBY_YJIT_ENABLE=1 \
             -e KNAPSACK_PRO_TEST_SUITE_TOKEN_RSPEC=${{ secrets.KNAPSACK_PRO_TEST_SUITE_TOKEN_RSPEC_FAST }} \
             -e KNAPSACK_PRO_CI_NODE_TOTAL=${{ matrix.ci_node_total }} \
@@ -342,13 +313,11 @@ jobs:
         run: |
           docker run --rm --network ${{ env.COMPOSE_PROJECT_NAME }}_default \
             -e RAILS_ENV=test \
-            -e RAILS_MASTER_KEY=${{ secrets.RAILS_MASTER_KEY }} \
             $WEB_REPO:test-${{ github.event_name == 'pull_request_target' && github.event.pull_request.head.sha || github.sha }} \
             bundle exec rake db:setup
 
       - name: Run tests
         env:
-          RAILS_MASTER_KEY: ${{ secrets.RAILS_MASTER_KEY }}
           RUBY_YJIT_ENABLE: 1
           KNAPSACK_PRO_TEST_SUITE_TOKEN_RSPEC: ${{ secrets.KNAPSACK_PRO_TEST_SUITE_TOKEN_RSPEC_FAST }}
           KNAPSACK_PRO_CI_NODE_TOTAL: ${{ matrix.ci_node_total }}
@@ -376,7 +345,6 @@ jobs:
           docker run --rm --network ${{ env.COMPOSE_PROJECT_NAME }}_default \
             -v "$(pwd)/capybara-artifacts:/app/tmp/capybara" \
             -v "$(pwd)/test-logs:/app/log" \
-            -e RAILS_MASTER_KEY \
             -e RUBY_YJIT_ENABLE \
             -e KNAPSACK_PRO_TEST_SUITE_TOKEN_RSPEC \
             -e KNAPSACK_PRO_CI_NODE_TOTAL \

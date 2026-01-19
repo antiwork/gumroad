@@ -7,7 +7,7 @@ import { type Affiliate, type AffiliateRequest, type AffiliateStatistics, getSta
 import { formatPriceCentsWithCurrencySymbol } from "$app/utils/currency";
 import { assertResponseError } from "$app/utils/request";
 
-import { Button } from "$app/components/Button";
+import { Button, buttonVariants } from "$app/components/Button";
 import { CopyToClipboard } from "$app/components/CopyToClipboard";
 import { Icon } from "$app/components/Icons";
 import { LoadingSpinner } from "$app/components/LoadingSpinner";
@@ -86,7 +86,7 @@ const SearchBoxPopover = ({ initialQuery, onSearch }: { initialQuery: string; on
       aria-label="Search"
       trigger={
         <WithTooltip tip="Search" position="bottom">
-          <div className="button">
+          <div className={buttonVariants({ size: "default" })}>
             <Icon name="solid-search" />
           </div>
         </WithTooltip>
@@ -380,7 +380,11 @@ export default function AffiliatesIndex() {
                         Affiliates
                         <div className="text-base">
                           <WithTooltip tip="Export" position="top">
-                            <a href={Routes.export_affiliates_path()} className="button primary" aria-label="Export">
+                            <a
+                              href={Routes.export_affiliates_path()}
+                              className={buttonVariants({ size: "default", color: "primary" })}
+                              aria-label="Export"
+                            >
                               <Icon name="download" />
                             </a>
                           </WithTooltip>

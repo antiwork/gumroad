@@ -189,7 +189,7 @@ export const PdfReaderPage = ({
       <div role="application" className="scoped-tailwind-preflight flex h-full flex-col">
         <div role="menubar" className="flex text-sm md:text-base">
           <div className="border-r">
-            <button aria-label="Back" onClick={() => history.back()} className="p-4">
+            <button aria-label="Back" onClick={() => history.back()} className="cursor-pointer p-4 all-unset">
               <Icon name="x" />
             </button>
           </div>
@@ -221,6 +221,7 @@ export const PdfReaderPage = ({
               {pageNumber} of {pageCount}
             </div>
             <button
+              className="cursor-pointer all-unset"
               aria-label="Previous"
               onClick={() => updatePage("previous")}
               disabled={pageNumber === 1 || pageCount === 1}
@@ -228,6 +229,7 @@ export const PdfReaderPage = ({
               <Icon name="arrow-left" />
             </button>
             <button
+              className="cursor-pointer all-unset"
               aria-label="Next"
               onClick={() => updatePage("next")}
               disabled={pageNumber === pageCount || pageCount === 1}
