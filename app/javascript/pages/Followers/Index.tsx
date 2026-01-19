@@ -84,14 +84,8 @@ export default function FollowersPage() {
 
   const [isLoadingMore, setIsLoadingMore] = React.useState(false);
   const [selectedFollowerId, setSelectedFollowerId] = React.useState<string | null>(null);
-  const [searchBoxOpen, setSearchBoxOpen] = React.useState(false);
   const [searchQuery, setSearchQuery] = React.useState(email);
-  const searchInputRef = React.useRef<HTMLInputElement | null>(null);
   const selectedFollower = followers.find((follower) => follower.id === selectedFollowerId);
-
-  React.useEffect(() => {
-    if (searchBoxOpen) searchInputRef.current?.focus();
-  }, [searchBoxOpen]);
 
   const updateSearch = useDebouncedCallback((email: string) => {
     router.reload({

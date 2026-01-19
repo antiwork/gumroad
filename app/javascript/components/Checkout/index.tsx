@@ -435,6 +435,7 @@ const CartItemComponent = ({
   updateCart: (update: Partial<CartState>) => void;
   isGift: boolean;
 }) => {
+  const [editPopoverOpen, setEditPopoverOpen] = React.useState(false);
   const [selection, setSelection] = React.useState<PriceSelection>({
     rent: item.rent,
     optionId: item.option_id,
@@ -445,7 +446,6 @@ const CartItemComponent = ({
     payInInstallments: item.pay_in_installments,
   });
   const [error, setError] = React.useState<null | string>(null);
-  const [editPopoverOpen, setEditPopoverOpen] = React.useState(false);
 
   const discount = getDiscountedPrice(cart, item);
 
@@ -456,14 +456,10 @@ const CartItemComponent = ({
   );
 
   const saveChanges = () => {
-    if (isPWYW && (selection.price.value === null || selection.price.value < priceCents)) {
-      setSelection({ ...selection, price: { ...selection.price, error: true } });
-      return;
-    }
-    if (selection.optionId !== item.option_id && findCartItem(cart, item.product.permalink, selection.optionId)) {
-      setError("You already have this item in your cart.");
-      return;
-    }
+    if (isPWYW && (selection.price.value === null || selection.price.value < priceCents))
+      return setSelection({ ...selection, price: { ...selection.price, error: true } });
+    if (selection.optionId !== item.option_id && findCartItem(cart, item.product.permalink, selection.optionId))
+      return setError("You already have this item in your cart.");
     const index = cart.items.findIndex((i) => i === item);
     const items = cart.items.slice();
     items[index] = {

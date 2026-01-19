@@ -1,6 +1,6 @@
 import * as React from "react";
 
-import { Button } from "$app/components/Button";
+import { Button, buttonVariants } from "$app/components/Button";
 import { Popover, PopoverContent, PopoverTrigger } from "$app/components/Popover";
 
 type Props = { iosAppUrl: string; androidAppUrl: string };
@@ -15,12 +15,28 @@ export const OpenInAppButton = ({ iosAppUrl, androidAppUrl }: Props) => (
         <h3>Gumroad Library</h3>
         <div>Download from the App Store</div>
         <div className="grid grid-flow-col justify-between gap-4">
-          <a className="button button-apple" href={iosAppUrl} target="_blank" rel="noreferrer">
-            App Store
-          </a>
-          <a className="button button-android" href={androidAppUrl} target="_blank" rel="noreferrer">
-            Play Store
-          </a>
+          <Button asChild>
+            <a
+              className={buttonVariants({ size: "default", color: "apple" })}
+              href={iosAppUrl}
+              target="_blank"
+              rel="noreferrer"
+            >
+              <span className="brand-icon brand-icon-apple" />
+              App Store
+            </a>
+          </Button>
+          <Button asChild>
+            <a
+              className={buttonVariants({ size: "default", color: "android" })}
+              href={androidAppUrl}
+              target="_blank"
+              rel="noreferrer"
+            >
+              <span className="brand-icon brand-icon-android" />
+              Play Store
+            </a>
+          </Button>
         </div>
       </div>
     </PopoverContent>

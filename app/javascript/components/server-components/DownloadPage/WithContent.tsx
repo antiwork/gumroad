@@ -265,9 +265,9 @@ const WithContent = ({
             <DiscordButton purchaseId={props.purchase.id} connected={content.discord.connected} />
           ) : null}
           {content.community_chat_url ? (
-            <a className="button accent" href={content.community_chat_url}>
-              Community
-            </a>
+            <Button asChild color="accent">
+              <a href={content.community_chat_url}>Community</a>
+            </Button>
           ) : null}
           <OpenInAppButton iosAppUrl={content.ios_app_url} androidAppUrl={content.android_app_url} />
           {content.download_all_button ? (

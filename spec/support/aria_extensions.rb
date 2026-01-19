@@ -235,16 +235,13 @@ Capybara.add_selector(:table_cell) do
 end
 
 # add matching by aria-label and handle disabled state
-# Use XPath.anywhere for aria-based disclosures since content may be in a portal
-# Also support Radix UI popovers where content is lazily rendered
+# Use XPath.anywhere for aria-based disclosures since content may be rendered in a portal
 Capybara.modify_selector(:disclosure) do
   xpath do |name, **|
     match_name = XPath.string.n.is(name.to_s) | XPath.attr(:"aria-label").equals(name.to_s)
     button = (XPath.self(:button) | (XPath.attr(:role) == "button")) & match_name
     # Standard ARIA pattern: content element exists and is linked via aria-controls
     aria = XPath.anywhere[XPath.attr(:id) == XPath.anywhere[button][XPath.attr(:"aria-expanded")].attr(:"aria-controls")]
-    # Radix UI pattern: content may not exist until opened, look for any element with role="dialog" or data-radix-popper-content-wrapper
-    # that appears after clicking the button. For now, we still require the linking.
     details = XPath.descendant(:details)[XPath.child(:summary)[match_name]]
     aria + details
   end
