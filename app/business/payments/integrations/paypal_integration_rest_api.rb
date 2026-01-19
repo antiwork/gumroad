@@ -54,7 +54,7 @@ class PaypalIntegrationRestApi
                 integration_method: "PAYPAL",
                 integration_type: "THIRD_PARTY",
                 third_party_details: {
-                  features: %w(PAYMENT REFUND PARTNER_FEE DELAY_FUNDS_DISBURSEMENT ACCESS_MERCHANT_INFORMATION READ_SELLER_DISPUTE)
+                  features: %w(PAYMENT REFUND PARTNER_FEE DELAY_FUNDS_DISBURSEMENT ACCESS_MERCHANT_INFORMATION READ_SELLER_DISPUTE UPDATE_SELLER_DISPUTE)
                 }
               }
             }

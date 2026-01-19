@@ -1684,6 +1684,16 @@ describe PaypalChargeProcessor, :vcr do
       expect(primary[:evidence_info][:tracking_info].first[:carrier_name]).to eq("FEDEX")
       expect(primary[:evidence_info][:tracking_info].first[:tracking_number]).to eq("123456789")
     end
+
+    it "includes tracking URL for known carriers" do
+      allow(dispute_evidence).to receive(:shipping_carrier).and_return("FedEx")
+      allow(dispute_evidence).to receive(:shipping_tracking_number).and_return("123456789")
+
+      evidences = processor.send(:build_paypal_evidences, dispute_evidence, dispute)
+      tracking_info = evidences.first[:evidence_info][:tracking_info].first
+
+      expect(tracking_info[:tracking_url]).to eq("http://www.fedex.com/Tracking?language=english&cntry_code=us&tracknumbers=123456789")
+    end
   end
 
   describe "#normalize_carrier_name" do

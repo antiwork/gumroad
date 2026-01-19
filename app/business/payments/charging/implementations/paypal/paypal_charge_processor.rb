@@ -699,13 +699,14 @@ class PaypalChargeProcessor
 
       if dispute_evidence.shipping_tracking_number.present?
         carrier = normalize_carrier_name(dispute_evidence.shipping_carrier)
-        evidence[:evidence_info] = {
-          tracking_info: [{
-            carrier_name: carrier,
-            carrier_name_other: carrier == "OTHER" ? dispute_evidence.shipping_carrier : nil,
-            tracking_number: dispute_evidence.shipping_tracking_number
-          }.compact]
+        tracking_info = {
+          carrier_name: carrier,
+          carrier_name_other: carrier == "OTHER" ? dispute_evidence.shipping_carrier : nil,
+          tracking_number: dispute_evidence.shipping_tracking_number
         }
+        tracking_url = build_tracking_url(dispute_evidence.shipping_carrier, dispute_evidence.shipping_tracking_number)
+        tracking_info[:tracking_url] = tracking_url if tracking_url.present?
+        evidence[:evidence_info] = { tracking_info: [tracking_info.compact] }
       end
 
       if dispute_evidence.access_activity_log.present?
@@ -715,6 +716,19 @@ class PaypalChargeProcessor
       end
 
       evidence
+    end
+
+    def build_tracking_url(carrier, tracking_number)
+      return nil if carrier.blank? || tracking_number.blank?
+
+      # Find matching carrier in mapping (case-insensitive)
+      matched_carrier = Shipment::CARRIER_TRACKING_URL_MAPPING.keys.find do |key|
+        key.downcase == carrier.downcase
+      end
+
+      return nil unless matched_carrier
+
+      Shipment::CARRIER_TRACKING_URL_MAPPING[matched_carrier] + tracking_number
     end
 
     def build_refund_evidence(dispute_evidence)
