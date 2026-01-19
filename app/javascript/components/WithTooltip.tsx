@@ -18,7 +18,6 @@ type Props = {
 export const WithTooltip = ({ tip, children, position = "bottom", className, tooltipProps, ...props }: Props) => {
   const id = React.useId();
 
-  if (tip == null) return children;
 
   return (
     <span {...props} className={classNames("group/tooltip relative inline-grid", className, position)}>
