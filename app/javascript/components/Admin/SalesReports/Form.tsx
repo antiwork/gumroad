@@ -3,26 +3,34 @@ import { subMonths } from "date-fns";
 import * as React from "react";
 import { cast } from "ts-safe-cast";
 
-import Errors from "$app/components/Admin/Form/Errors";
+import { classNames } from "$app/utils/classNames";
+
 import { Button } from "$app/components/Button";
+import Errors from "$app/components/Form/Errors";
 
 type Props = {
   countries: [string, string][];
   sales_types: [string, string][];
   authenticityToken: string;
+  onSuccess?: () => void;
+  wrapper?: (children: React.ReactNode) => React.ReactNode;
 };
 
 type Errors = {
   authenticity_token?: string[];
-  sales_report?: {
-    country_code?: string[];
-    start_date?: string[];
-    end_date?: string[];
-    sales_type?: string[];
-  };
+  "sales_report.country_code"?: string | undefined;
+  "sales_report.start_date"?: string | undefined;
+  "sales_report.end_date"?: string | undefined;
+  "sales_report.sales_type"?: string | undefined;
 };
 
-const AdminSalesReportsForm = ({ countries, sales_types, authenticityToken }: Props) => {
+const AdminSalesReportsForm = ({
+  countries,
+  sales_types,
+  authenticityToken,
+  onSuccess,
+  wrapper = (children) => children,
+}: Props) => {
   const defaultStartDate = React.useMemo(() => subMonths(new Date(), 1).toISOString().split("T")[0], []);
   const defaultEndDate = React.useMemo(() => new Date().toISOString().split("T")[0], []);
 
@@ -41,7 +49,10 @@ const AdminSalesReportsForm = ({ countries, sales_types, authenticityToken }: Pr
 
     form.post(Routes.admin_sales_reports_path(), {
       only: ["job_history", "errors", "flash"],
-      onSuccess: () => form.resetAndClearErrors(),
+      onSuccess: () => {
+        form.resetAndClearErrors();
+        onSuccess?.();
+      },
     });
   };
 
@@ -49,88 +60,114 @@ const AdminSalesReportsForm = ({ countries, sales_types, authenticityToken }: Pr
 
   return (
     <form onSubmit={handleSubmit}>
-      <section>
-        <header>Generate sales report with custom date ranges</header>
-
-        <div className="grid grid-rows-[auto_1fr] gap-3">
-          <label htmlFor="country_code">Country</label>
-          <select
-            name="sales_report[country_code]"
-            id="country_code"
-            onChange={(event: React.ChangeEvent<HTMLSelectElement>) =>
-              form.setData("sales_report.country_code", event.target.value)
-            }
-            value={form.data.sales_report.country_code}
-            required
+      {wrapper(
+        <>
+          <fieldset
+            className={classNames("grid grid-rows-[auto_1fr] gap-3", {
+              danger: !!errors["sales_report.country_code"]?.length,
+            })}
           >
-            <option value="">Select country</option>
-            {countries.map(([name, code]) => (
-              <option key={code} value={code}>
-                {name}
-              </option>
-            ))}
-          </select>
-          <Errors errors={errors.sales_report?.country_code} label="Country code" />
-        </div>
-
-        <div className="grid grid-cols-2 gap-3">
-          <div className="grid grid-rows-[auto_1fr] gap-3">
-            <label htmlFor="start_date">Start date</label>
-            <input
-              name="sales_report[start_date]"
-              id="start_date"
-              type="date"
-              required
-              onChange={(event: React.ChangeEvent<HTMLInputElement>) =>
-                form.setData("sales_report.start_date", event.target.value)
+            <legend>
+              <label htmlFor="country_code">Country</label>
+            </legend>
+            <select
+              name="sales_report[country_code]"
+              id="country_code"
+              onChange={(event: React.ChangeEvent<HTMLSelectElement>) =>
+                form.setData("sales_report.country_code", event.target.value)
               }
-              value={form.data.sales_report.start_date}
-            />
-            <Errors errors={errors.sales_report?.start_date} label="Start date" />
+              value={form.data.sales_report.country_code}
+              required
+              aria-invalid={!!errors["sales_report.country_code"]?.length}
+            >
+              <option value="">Select country</option>
+              {countries.map(([name, code]) => (
+                <option key={code} value={code}>
+                  {name}
+                </option>
+              ))}
+            </select>
+            <Errors errors={errors["sales_report.country_code"]} label="Country code" />
+          </fieldset>
+
+          <div className="grid grid-cols-2 gap-3">
+            <fieldset
+              className={classNames("grid grid-rows-[auto_1fr] gap-3", {
+                danger: !!errors["sales_report.start_date"]?.length,
+              })}
+            >
+              <legend>
+                <label htmlFor="start_date">Start date</label>
+              </legend>
+              <input
+                name="sales_report[start_date]"
+                id="start_date"
+                type="date"
+                required
+                onChange={(event: React.ChangeEvent<HTMLInputElement>) =>
+                  form.setData("sales_report.start_date", event.target.value)
+                }
+                value={form.data.sales_report.start_date}
+                aria-invalid={!!errors["sales_report.start_date"]?.length}
+              />
+              <Errors errors={errors["sales_report.start_date"]} label="Start date" />
+            </fieldset>
+
+            <fieldset
+              className={classNames("grid grid-rows-[auto_1fr] gap-3", {
+                danger: !!errors["sales_report.end_date"]?.length,
+              })}
+            >
+              <legend>
+                <label htmlFor="end_date">End date</label>
+              </legend>
+              <input
+                name="sales_report[end_date]"
+                id="end_date"
+                type="date"
+                required
+                onChange={(event: React.ChangeEvent<HTMLInputElement>) =>
+                  form.setData("sales_report.end_date", event.target.value)
+                }
+                value={form.data.sales_report.end_date}
+                aria-invalid={!!errors["sales_report.end_date"]?.length}
+              />
+              <Errors errors={errors["sales_report.end_date"]} label="End date" />
+            </fieldset>
           </div>
 
-          <div className="grid grid-rows-[auto_1fr] gap-3">
-            <label htmlFor="end_date">End date</label>
-            <input
-              name="sales_report[end_date]"
-              id="end_date"
-              type="date"
-              required
-              onChange={(event: React.ChangeEvent<HTMLInputElement>) =>
-                form.setData("sales_report.end_date", event.target.value)
-              }
-              value={form.data.sales_report.end_date}
-            />
-            <Errors errors={errors.sales_report?.end_date} label="End date" />
-          </div>
-        </div>
-
-        <div className="grid grid-rows-[auto_1fr] gap-3">
-          <label htmlFor="sales_type">Type of sales</label>
-          <select
-            name="sales_report[sales_type]"
-            id="sales_type"
-            onChange={(event: React.ChangeEvent<HTMLSelectElement>) =>
-              form.setData("sales_report.sales_type", event.target.value)
-            }
-            value={form.data.sales_report.sales_type}
-            required
+          <fieldset
+            className={classNames("grid grid-rows-[auto_1fr] gap-3", {
+              danger: !!errors["sales_report.sales_type"]?.length,
+            })}
           >
-            {sales_types.map(([code, name]) => (
-              <option key={code} value={code}>
-                {name}
-              </option>
-            ))}
-          </select>
-          <Errors errors={errors.sales_report?.sales_type} label="Type of sales" />
-        </div>
+            <legend>
+              <label htmlFor="sales_type">Type of sales</label>
+            </legend>
+            <select
+              name="sales_report[sales_type]"
+              id="sales_type"
+              onChange={(event: React.ChangeEvent<HTMLSelectElement>) =>
+                form.setData("sales_report.sales_type", event.target.value)
+              }
+              value={form.data.sales_report.sales_type}
+              required
+              aria-invalid={!!errors["sales_report.sales_type"]?.length}
+            >
+              {sales_types.map(([code, name]) => (
+                <option key={code} value={code}>
+                  {name}
+                </option>
+              ))}
+            </select>
+            <Errors errors={errors["sales_report.sales_type"]} label="Type of sales" />
+          </fieldset>
 
-        <Button type="submit" color="primary" disabled={form.processing}>
-          {form.processing ? "Generating..." : "Generate report"}
-        </Button>
-
-        <input type="hidden" name="authenticity_token" value={form.data.authenticity_token} />
-      </section>
+          <Button type="submit" color="primary" disabled={form.processing}>
+            {form.processing ? "Generating..." : "Generate report"}
+          </Button>
+        </>,
+      )}
     </form>
   );
 };

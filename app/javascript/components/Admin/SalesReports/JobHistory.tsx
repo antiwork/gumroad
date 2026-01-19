@@ -45,7 +45,18 @@ const AdminSalesReportsJobHistory = ({ countries, sales_types, jobHistory, authe
 
   if (jobHistory.length === 0) {
     return showNewSalesReportForm ? (
-      <AdminSalesReportsForm countries={countries} sales_types={sales_types} authenticityToken={authenticityToken} />
+      <AdminSalesReportsForm
+        countries={countries}
+        sales_types={sales_types}
+        authenticityToken={authenticityToken}
+        onSuccess={() => setShowNewSalesReportForm(false)}
+        wrapper={(children) => (
+          <section>
+            <header>Generate sales report with custom date ranges</header>
+            {children}
+          </section>
+        )}
+      />
     ) : (
       <section>
         <Placeholder>

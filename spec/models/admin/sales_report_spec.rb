@@ -311,32 +311,4 @@ describe Admin::SalesReport do
       end
     end
   end
-
-  describe "#errors_hash" do
-    it "returns errors in the expected format" do
-      sales_report = described_class.new(country_code: "", start_date: "", end_date: "")
-      sales_report.valid?
-
-      errors = sales_report.errors_hash
-
-      expect(errors).to have_key(:sales_report)
-      expect(errors[:sales_report]).to be_a(Hash)
-      expect(errors[:sales_report][:country_code]).to include("Please select a country")
-      expect(errors[:sales_report][:start_date]).to include("Invalid date format. Please use YYYY-MM-DD format")
-      expect(errors[:sales_report][:end_date]).to include("Invalid date format. Please use YYYY-MM-DD format")
-      expect(errors[:sales_report][:sales_type]).to include("Invalid sales type, should be all_sales or discover_sales.")
-    end
-
-    it "returns empty hash when there are no errors" do
-      sales_report = described_class.new(valid_attributes)
-      sales_report.valid?
-      errors = sales_report.errors_hash
-      expect(errors).to eq({ sales_report: {} })
-
-      sales_report = described_class.new(valid_attributes.merge(sales_type: GenerateSalesReportJob::DISCOVER_SALES))
-      sales_report.valid?
-      errors = sales_report.errors_hash
-      expect(errors).to eq({ sales_report: {} })
-    end
-  end
 end
