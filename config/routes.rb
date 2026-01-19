@@ -223,6 +223,7 @@ Rails.application.routes.draw do
         resources :devices, only: :create
         resources :installments, only: :show
         resources :consumption_analytics, only: [:create], format: :json
+        resources :rich_content_page_views, only: [:create], format: :json
         resources :media_locations, only: [:create], format: :json
         resources :sessions, only: [:create], format: :json
         resources :feature_flags, only: [:show], format: :json
@@ -665,6 +666,7 @@ Rails.application.routes.draw do
       scope module: :products, format: true, constraints: { format: :json } do
         resources :other_refund_policies, only: :index
         resources :remaining_call_availabilities, only: :index
+        resource :rich_content_analytics, only: [:index], controller: "rich_content_analytics"
       end
     end
 

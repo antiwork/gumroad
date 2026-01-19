@@ -68,6 +68,7 @@ import { WithTooltip } from "$app/components/WithTooltip";
 
 import { FileEmbed, FileEmbedConfig } from "./FileEmbed";
 import { Page, PageTab, titleWithFallback } from "./PageTab";
+import { RichContentPageAnalytics } from "./RichContentPageAnalytics";
 
 declare global {
   interface Window {
@@ -853,6 +854,18 @@ const ContentTabContent = ({ selectedVariantId }: { selectedVariantId: string | 
                         className="flex flex-wrap items-center justify-between gap-4 p-4"
                       />
                     </Card>
+                    {showPageList && pages.length > 0 ? (
+                      <RichContentPageAnalytics
+                        productPermalink={uniquePermalink}
+                        onPageClick={(pageId) => {
+                          const page = pages.find((p) => p.id === pageId);
+                          if (page) {
+                            setSelectedPageId(page.id);
+                            if (!isDesktop) setPagesExpanded(false);
+                          }
+                        }}
+                      />
+                    ) : null}
                     <Card>
                       {product.native_type === "membership" ? (
                         <CardContent asChild details>

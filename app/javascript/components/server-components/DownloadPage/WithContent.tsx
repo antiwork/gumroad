@@ -34,6 +34,7 @@ import { useOriginalLocation } from "$app/components/useOriginalLocation";
 import { useRunOnce } from "$app/components/useRunOnce";
 import { WithTooltip } from "$app/components/WithTooltip";
 
+import { useTrackRichContentPageView } from "$app/components/Download/useTrackRichContentPageView";
 import { Layout, LayoutProps } from "./Layout";
 
 const LATEST_MEDIA_LOCATIONS_FETCH_INTERVAL_IN_MS = 10_000;
@@ -210,6 +211,13 @@ const WithContent = ({
   const pages = content.rich_content_pages ?? [];
   const [activePageIndex, setActivePageIndex] = React.useState(0);
   const activePage = pages[activePageIndex];
+
+  useTrackRichContentPageView({
+    pageId: activePage?.page_id ?? "",
+    urlRedirectId: props.redirect_id,
+    enabled: content.rich_content_pages !== null && activePage !== undefined,
+  });
+
   const showPageList = pages.length > 1 || (pages.length === 1 && (pages[0]?.title ?? "").trim() !== "");
   const hasPreviousPage = activePageIndex > 0;
   const hasNextPage = activePageIndex < pages.length - 1;
