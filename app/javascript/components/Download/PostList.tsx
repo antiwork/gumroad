@@ -37,7 +37,7 @@ export const DownloadPagePostList = ({ posts }: { posts: Post[] }) => {
               </div>
             </RowContent>
             <RowActions>
-              <TrackClick eventName="post_click" resourceId={post.id}>
+              <TrackClick eventName="post_click" post={post}>
                 <Button asChild>
                   <a href={post.view_url}>View</a>
                 </Button>

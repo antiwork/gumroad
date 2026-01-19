@@ -58,18 +58,12 @@ export const ProductTab = () => {
     googleCalendarEnabled,
     seller_refund_policy_enabled,
     cancellationDiscountsEnabled,
+    aiGenerated,
   } = useProductEditContext();
   const [initialProduct] = React.useState(product);
 
   const [thumbnail, setThumbnail] = React.useState(initialThumbnail);
-  const [showAiNotification, setShowAiNotification] = React.useState(false);
-
-  React.useEffect(() => {
-    if (window.location.hash === "#ai-generated") {
-      setShowAiNotification(true);
-      window.history.replaceState(null, "", window.location.pathname + window.location.search);
-    }
-  }, []);
+  const [showAiNotification, setShowAiNotification] = React.useState(aiGenerated);
 
   const { isUploading, setImagesUploading } = useImageUpload();
 

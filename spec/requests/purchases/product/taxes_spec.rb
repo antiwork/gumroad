@@ -126,12 +126,12 @@ describe("Product Page - Tax Scenarios", type: :system, js: true) do
         expect(page).to have_text("Sales tax US$53.50", normalize_ws: true)
         expect(page).to have_text("Total US$553.50", normalize_ws: true)
 
-        choose "10%"
+        choose "20%"
         wait_for_ajax
-        expect(page).to have_text("Subtotal US$500", normalize_ws: true)
-        expect(page).to have_text("Tip US$50", normalize_ws: true)
+        expect(page).to have_text("Subtotal US$600", normalize_ws: true)
+        expect(page).to have_text("Add a tip? US$100", normalize_ws: true)
         expect(page).to have_text("Sales tax US$58.85", normalize_ws: true)
-        expect(page).to have_text("Total US$608.85", normalize_ws: true)
+        expect(page).to have_text("Total US$658.85", normalize_ws: true)
 
         click_on "Pay"
         if page.has_text?("We are unable to verify your shipping address. Is your address correct?", wait: 5)
@@ -143,9 +143,9 @@ describe("Product Page - Tax Scenarios", type: :system, js: true) do
 
         purchase = Purchase.last
         expect(purchase.link_id).to eq(@product.id)
-        expect(purchase.price_cents).to eq(550_00)
-        expect(purchase.total_transaction_cents).to eq(608_85)
-        expect(purchase.fee_cents).to eq(71_75) # 597_44 * 0.129 + 50c + 30c
+        expect(purchase.price_cents).to eq(600_00)
+        expect(purchase.total_transaction_cents).to eq(658_85)
+        expect(purchase.fee_cents).to eq(78_20) # 600_00 * 0.129 + 50c + 30c
         expect(purchase.gumroad_tax_cents).to eq(58_85)
         expect(purchase.tax_cents).to eq(0)
         expect(purchase.was_tax_excluded_from_price).to eq(true)
@@ -157,7 +157,7 @@ describe("Product Page - Tax Scenarios", type: :system, js: true) do
         expect(purchase.purchase_sales_tax_info.country_code).to eq(Compliance::Countries::USA.alpha2)
         expect(purchase.purchase_sales_tax_info.card_country_code).to eq(Compliance::Countries::USA.alpha2)
         expect(purchase.purchase_sales_tax_info.postal_code).to eq("85144")
-        expect(purchase.tip.value_cents).to eq(50_00)
+        expect(purchase.tip.value_cents).to eq(100_00)
       end
     end
   end
@@ -3966,7 +3966,7 @@ describe("Product Page - Tax Scenarios", type: :system, js: true) do
     end
   end
 
-  describe "Canada Tax", taxjar: true do
+  describe "Canada Tax", taxjar: true, force_vcr_on: true do
     let (:product) { create(:product, price_cents: 100_00) }
 
     it "detects the province for Canada" do
