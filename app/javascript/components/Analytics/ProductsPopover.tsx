@@ -61,7 +61,9 @@ export const ProductsPopover = ({
         <CardContent>
           <Button
             onClick={() =>
-              setProducts((prevProducts) => prevProducts.map((product) => ({ ...product, selected: !product.selected })))
+              setProducts((prevProducts) =>
+                prevProducts.map((product) => ({ ...product, selected: !product.selected })),
+              )
             }
             className="grow basis-0"
           >
