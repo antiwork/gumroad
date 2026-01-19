@@ -4,16 +4,14 @@ export function formatPrice(
   currencySymbol: string,
   price: number,
   precision: number,
-  { noCentsIfWhole }: { noCentsIfWhole: boolean },
+  { noCentsIfWhole, symbolPosition = "prefix" }: { noCentsIfWhole: boolean; symbolPosition?: "prefix" | "suffix" },
 ): string {
   precision = noCentsIfWhole && price % 1 === 0 ? 0 : precision;
-  return (
-    currencySymbol +
-    price.toLocaleString(undefined, {
-      minimumFractionDigits: precision,
-      maximumFractionDigits: precision,
-    })
-  );
+  const formattedPrice = price.toLocaleString(undefined, {
+    minimumFractionDigits: precision,
+    maximumFractionDigits: precision,
+  });
+  return symbolPosition === "suffix" ? formattedPrice + currencySymbol : currencySymbol + formattedPrice;
 }
 
 export function priceCentsToUnit(cents: number, isSingleUnit: boolean): number {

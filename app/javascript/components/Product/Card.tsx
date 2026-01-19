@@ -23,7 +23,7 @@ export const Card = ({
   eager?: boolean | undefined;
 }) => (
   <ProductCard>
-    <ProductCardFigure>
+    <ProductCardFigure className="w-full aspect-video overflow-hidden">
       <Thumbnail url={product.thumbnail_url} nativeType={product.native_type} eager={eager} />
     </ProductCardFigure>
     {product.quantity_remaining != null ? <Ribbon>{product.quantity_remaining} left</Ribbon> : null}
@@ -63,13 +63,13 @@ export const Card = ({
 );
 
 export const HorizontalCard = ({ product, big, eager }: { product: CardProduct; big?: boolean; eager?: boolean }) => (
-  <ProductCard className="lg:flex-row">
-    <ProductCardFigure className="lg:h-full lg:rounded-l lg:rounded-tr-none lg:border-r lg:border-b-0 [&_img]:lg:h-0 [&_img]:lg:min-h-full lg:[&_img]:w-auto">
+  <ProductCard>
+    <ProductCardFigure className="w-full aspect-video overflow-hidden">
       <Thumbnail url={product.thumbnail_url} nativeType={product.native_type} eager={eager} />
     </ProductCardFigure>
     {product.quantity_remaining !== null ? <Ribbon>{product.quantity_remaining} left</Ribbon> : null}
-    <section className="flex flex-1 flex-col lg:gap-8 lg:px-6 lg:py-4">
-      <ProductCardHeader className="lg:border-b-0 lg:p-0">
+    <section className="flex flex-1 flex-col lg:px-6 lg:py-4">
+      <ProductCardHeader className="lg:p-0">
         <a href={product.url} className="stretched-link" draggable="false">
           {big ? (
             <h2 itemProp="name" className="line-clamp-3 gap-3">

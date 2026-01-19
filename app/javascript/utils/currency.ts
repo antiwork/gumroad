@@ -21,19 +21,24 @@ type Currency = {
   shortSymbol: string;
   displayFormat: string;
   minPriceCents: number;
+  symbolPosition: "prefix" | "suffix";
 };
 
 export const currencyCodeList: CurrencyCode[] = Object.keys(currenciesMap);
 
 export const findCurrencyByCode = (code: CurrencyCode): Currency => {
-  const spec = currenciesMap[code];
+  // Fallback to VND if currency not found (for legacy products with other currencies)
+  const spec = currenciesMap[code] ?? currenciesMap["vnd" as CurrencyCode];
+  const actualCode = currenciesMap[code] ? code : ("vnd" as CurrencyCode);
+  const symbol = spec.symbol;
   return {
-    code,
+    code: actualCode,
     isSingleUnit: "single_unit" in spec ? spec.single_unit : false,
-    longSymbol: spec.symbol,
-    shortSymbol: "short_symbol" in spec ? spec.short_symbol : spec.symbol, // default to long symbol
+    longSymbol: symbol,
+    shortSymbol: "short_symbol" in spec ? spec.short_symbol : symbol, // default to long symbol
     displayFormat: spec.display_format,
     minPriceCents: spec.min_price,
+    symbolPosition: "symbol_position" in spec ? (spec.symbol_position as "prefix" | "suffix") : "prefix",
   };
 };
 
@@ -75,7 +80,7 @@ export const formatPriceCentsWithCurrencySymbol = (
     currencySymbol,
     priceCentsToUnit(amountCents, currency.isSingleUnit),
     currency.isSingleUnit ? 0 : 2,
-    { noCentsIfWhole: noCentsIfWhole !== undefined ? noCentsIfWhole : true },
+    { noCentsIfWhole: noCentsIfWhole !== undefined ? noCentsIfWhole : true, symbolPosition: currency.symbolPosition },
   );
 };
 

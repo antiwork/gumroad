@@ -47,9 +47,9 @@ type Props = {
 
 const sortTitles = {
   curated: "Curated for you",
-  trending: "On the market",
-  hot_and_new: "Hot and new products",
-  best_sellers: "Best selling products",
+  trending: "Trên thị trường",
+  hot_and_new: "Sản phẩm mới và hấp dẫn",
+  best_sellers: "Sản phẩm bán chạy",
 };
 
 const ProductsCarousel = ({ products, title }: { products: CardProduct[]; title: string }) => {
@@ -79,7 +79,7 @@ const ProductsCarousel = ({ products, title }: { products: CardProduct[]; title:
       </header>
       <div className="relative">
         <div
-          className="override grid min-h-96 auto-cols-[min(20rem,60vw)] grid-flow-col gap-6 overflow-x-auto pb-1 [scrollbar-width:none] lg:auto-cols-[40rem] [&::-webkit-scrollbar]:hidden"
+          className="override grid min-h-90 auto-cols-[min(20rem,60vw)] grid-flow-col gap-6 overflow-x-auto pb-1 [scrollbar-width:none] lg:auto-cols-[20rem] [&::-webkit-scrollbar]:hidden"
           ref={itemsRef}
           style={{ scrollSnapType: dragStart != null ? "none" : undefined }}
           onScroll={handleScroll}
@@ -96,7 +96,7 @@ const ProductsCarousel = ({ products, title }: { products: CardProduct[]; title:
         >
           {products.map((product, idx) => (
             // Only the first 3 cards are visible, so we can set eager loading for them
-            <HorizontalCard key={product.id} product={product} big eager={idx < 3} />
+            <HorizontalCard key={product.id} product={product} eager={idx < 3} />
           ))}
         </div>
       </div>
@@ -280,6 +280,7 @@ const Discover = (props: Props) => {
     dispatch({ type: "set-params", params: { ...state.params, from: undefined, ...newParams } });
 
   const [recommendedProducts, setRecommendedProducts] = React.useState<CardProduct[]>(props.recommended_products);
+  const [hideFilters, setHideFilters] = React.useState(true);
 
   const hasOfferCode = !!state.params.offer_code;
 
@@ -348,7 +349,7 @@ const Discover = (props: Props) => {
               draggable={false}
             />
             <div className="font-regular mx-12 text-center text-xl text-white">
-              Snag creator-made deals <br className="block sm:hidden" /> before they're gone.
+              Hãy nắm bắt các ưu đãi do người sáng tạo thực hiện <br className="block sm:hidden" /> trước khi chúng biến mất.
             </div>
             {!isBlackFridayPage && (
               <div className="mt-8 text-base">
@@ -373,22 +374,33 @@ const Discover = (props: Props) => {
           </div>
         </header>
       ) : null}
-      <div className="grid gap-16! px-4 py-16 lg:ps-16 lg:pe-16">
+      <div className="grid gap-16! px-4 py-6 lg:ps-16 lg:pe-16">
         {showRecommendedSections ? (
           <ProductsCarousel
             products={recommendedProducts}
-            title={isCuratedProducts ? "Recommended" : "Featured products"}
+            title={isCuratedProducts ? "Sản phẩm được gợi ý" : "Sản phẩm nổi bật"}
           />
         ) : null}
         <section ref={resultsRef} className="flex flex-col gap-4">
-          <div style={{ display: "flex", justifyContent: "space-between", gap: "var(--spacer-2)", flexWrap: "wrap" }}>
-            <h2>
-              {state.params.query || hasOfferCode
-                ? state.results?.products.length
-                  ? `Showing 1-${state.results.products.length} of ${state.results.total} products`
-                  : null
-                : sortTitles[is<keyof typeof sortTitles>(state.params.sort) ? state.params.sort : "trending"]}
-            </h2>
+          <div style={{ display: "flex", justifyContent: "space-between", gap: "var(--spacer-2)", flexWrap: "wrap", alignItems: "center" }}>
+            <div className="flex items-center gap-3">
+              <h2>
+                {state.params.query || hasOfferCode
+                  ? state.results?.products.length
+                    ? `Showing 1-${state.results.products.length} of ${state.results.total} products`
+                    : null
+                  : sortTitles[is<keyof typeof sortTitles>(state.params.sort) ? state.params.sort : "trending"]}
+              </h2>
+              <button
+                className="flex cursor-pointer items-center gap-1 rounded-full border px-3 py-1.5 text-sm transition-colors hover:bg-gray-100"
+                onClick={() => setHideFilters(!hideFilters)}
+                aria-expanded={!hideFilters}
+                aria-label={hideFilters ? "Hiện bộ lọc" : "Ẩn bộ lọc"}
+              >
+                <Icon name="filter" />
+                {hideFilters ? "Bộ lọc" : "Ẩn bộ lọc"}
+              </button>
+            </div>
             {state.params.query || hasOfferCode ? null : (
               <Tabs>
                 {props.curated_product_ids.length > 0 ? (
@@ -401,34 +413,35 @@ const Discover = (props: Props) => {
                       })
                     }
                   >
-                    Curated
+                    Sản phẩm được gợi ý
                   </Tab>
                 ) : null}
                 <Tab
                   isSelected={!state.params.sort || state.params.sort === "default"}
-                  onClick={() => updateParams({ sort: undefined })}
+                  onClick={() => updateParams({ sort: "default" })}
                 >
-                  Trending
+                  Phổ biến
                 </Tab>
                 {props.curated_product_ids.length === 0 ? (
                   <Tab
                     isSelected={state.params.sort === "best_sellers"}
                     onClick={() => updateParams({ sort: "best_sellers" })}
                   >
-                    Best Sellers
+                    Bán chạy
                   </Tab>
                 ) : null}
                 <Tab
                   isSelected={state.params.sort === "hot_and_new"}
                   onClick={() => updateParams({ sort: "hot_and_new" })}
                 >
-                  Hot &amp; New
+                  Mới
                 </Tab>
               </Tabs>
             )}
           </div>
           <CardGrid
             state={state}
+            hideFilters={hideFilters}
             dispatchAction={dispatch}
             currencyCode={props.currency_code}
             hideSort={!state.params.query && !hasOfferCode}

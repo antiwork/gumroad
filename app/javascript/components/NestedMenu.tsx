@@ -245,7 +245,7 @@ const MenubarItem = ({
         className={classNames(
           "rounded-full! px-3! py-2! align-middle aria-[current]:bg-background aria-[current]:text-foreground",
           showExpandableIcon ? "relative cursor-pointer" : "",
-          hasChildren ? "aria-[current=true]:hover:shadow!" : "hover:shadow!",
+          "",
           { "border-transparent! bg-transparent! text-inherit!": !isHighlighted },
           { expandable: showExpandableIcon },
         )}
@@ -290,7 +290,7 @@ const MenubarItem = ({
               if (newSelectedItem === selectedItem) handleToggleMenu(false);
               onSelectItem?.(newSelectedItem, e);
             }}
-            className="flex h-full w-48 flex-col bg-white dark:bg-dark-gray"
+            className="flex h-full w-48 flex-col overflow-hidden bg-[#3a3a3a]"
           />
         </div>
       ) : null}
@@ -414,7 +414,7 @@ const ItemsList = ({
           className={item.children.length ? "flex! items-start! no-underline!" : undefined}
           aria-haspopup={item.children.length ? "menu" : undefined}
         >
-          <span className="min-w-0 flex-1 overflow-visible! break-words">{item.label}</span>
+          <span className="min-w-0 flex-1 overflow-hidden break-words">{item.label}</span>
           {item.children.length > 0 && <Icon name="outline-cheveron-right" className="shrink-0" />}
         </MenuItemLink>
       ))}
@@ -434,7 +434,7 @@ const MenuItemLink = ({
     {...props}
     href={props.href ?? "#"}
     className={classNames(
-      "shrink-0 justify-between gap-2 overflow-visible! p-4! whitespace-normal! hover:bg-primary! hover:text-background!",
+      "shrink-0 justify-between gap-2 overflow-visible! p-4! whitespace-normal! no-underline hover:bg-[#4a4a4a]! hover:text-white",
       className,
     )}
     role="menuitem"

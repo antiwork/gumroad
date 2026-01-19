@@ -19,11 +19,11 @@ const UserActionButtons: React.FC = () => {
     return (
       <>
         <NavigationButton href={Routes.library_url()} className="flex-1 lg:flex-none">
-          <Icon name="bookmark-heart-fill" /> Library
+          <Icon name="bookmark-heart-fill" /> Thư viện
         </NavigationButton>
         {currentSeller.has_published_products ? null : (
           <NavigationButton href={Routes.products_url()} color="primary" className="flex-1 lg:flex-none">
-            Start selling
+            Bắt đầu bán
           </NavigationButton>
         )}
       </>
@@ -33,10 +33,10 @@ const UserActionButtons: React.FC = () => {
   return (
     <>
       <NavigationButton href={Routes.login_url()} className="flex-1 lg:flex-none">
-        Log in
+        Đăng nhập
       </NavigationButton>
       <NavigationButton href={Routes.signup_url()} color="primary" className="flex-1 lg:flex-none">
-        Start selling
+        Bắt đầu bán
       </NavigationButton>
     </>
   );
@@ -187,7 +187,7 @@ export const Layout: React.FC<{
   return (
     <div className={className}>
       <header
-        className="hero relative z-20 border-t-0 border-b border-border bg-body px-4 py-8 lg:ps-16 lg:pe-16"
+        className="relative z-20 border-t-0 border-b border-border bg-[#262626] px-4 py-8 lg:ps-16 lg:pe-16 text-white [--color:255_255_255] [--primary:255_255_255]"
         style={showTaxonomy && rootTaxonomy ? getRootTaxonomyCss(rootTaxonomy) : undefined}
       >
         <div className="flex w-full flex-col gap-4">

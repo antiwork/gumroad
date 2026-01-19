@@ -21,7 +21,7 @@ module SearchProducts
 
     def format_search_params!
       if params[:tags].is_a?(String)
-        params[:tags] = params[:tags].split(",").map { |t| t.tr("-", " ").squish.downcase }
+        params[:tags] = params[:tags].split(",").map(&:squish)
       end
 
       if params[:filetypes].is_a?(String)

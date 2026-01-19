@@ -22,7 +22,7 @@ export const brandNames = [
 export type BrandName = (typeof brandNames)[number];
 
 export const buttonVariants = cva(
-  "inline-flex items-center justify-center gap-2 cursor-pointer border border-border rounded bg-transparent text-current font-[inherit] no-underline transition-transform hover:-translate-1 hover:shadow active:translate-0 active:shadow-none disabled:opacity-30 disabled:hover:translate-0 disabled:hover:shadow-none",
+  "inline-flex items-center justify-center gap-2 cursor-pointer border border-border rounded bg-transparent text-current font-[inherit] no-underline disabled:opacity-30",
   {
     variants: {
       variant: {

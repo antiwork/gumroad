@@ -49,8 +49,8 @@ export const Nav = ({
     <div role="nav">
       <NestedMenu
         type={isDesktop ? "menubar" : "menu"}
-        moreLabel="More Categories"
-        buttonLabel="Categories"
+        moreLabel="Thêm danh mục"
+        buttonLabel="Danh mục"
         items={menuItems}
         selectedItemKey={selectedCategory}
         onSelectItem={(item) => {
@@ -82,7 +82,7 @@ const generateTaxonomyItemsForMenu = (wholeTaxonomy: Taxonomy[], forceDomain: bo
   return [
     {
       key: "all#key",
-      label: "All",
+      label: "Tất cả",
       href: forceDomain ? Routes.discover_url({ host: discoverDomain }) : Routes.discover_path(),
     },
     ...wholeTaxonomy.map((taxonomy): MenuItem => {

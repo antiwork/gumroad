@@ -216,14 +216,43 @@ export const CardGrid = ({
   const maxPriceUid = React.useId();
   const onProfile = !!searchParams.user_id;
 
-  const concatFoundAndNotFound = (
+  // Preserve initial tags/filetypes so they don't disappear when filtering
+  const [initialTags, setInitialTags] = React.useState<ProductFilter[]>([]);
+  const [initialFiletypes, setInitialFiletypes] = React.useState<ProductFilter[]>([]);
+
+  React.useEffect(() => {
+    if (results?.tags_data?.length && initialTags.length === 0) {
+      setInitialTags(results.tags_data);
+    }
+    if (results?.filetypes_data?.length && initialFiletypes.length === 0) {
+      setInitialFiletypes(results.filetypes_data);
+    }
+  }, [results?.tags_data, results?.filetypes_data]);
+
+  const mergeFilters = (
+    initialData: ProductFilter[],
     resultsData: ProductFilter[] | undefined,
     searchedKeys: ProductFilter["key"][] | undefined,
   ): ProductFilter[] => {
     const foundData = resultsData ?? [];
-    const notFoundKeys = searchedKeys?.filter((s) => !foundData.some((f) => f.key === s)) ?? [];
-    return notFoundKeys.map((key) => ({ key, doc_count: 0 })).concat(foundData);
+    // Create a map of current counts
+    const countMap = new Map(foundData.map((f) => [f.key, f.doc_count]));
+    // Merge initial data with current counts
+    const merged = initialData.map((item) => ({
+      key: item.key,
+      doc_count: countMap.get(item.key) ?? 0,
+    }));
+    // Add any new tags from results that weren't in initial
+    for (const item of foundData) {
+      if (!merged.some((m) => m.key === item.key)) {
+        merged.push(item);
+      }
+    }
+    // Add searched keys that are not in merged
+    const notFoundKeys = searchedKeys?.filter((s) => !merged.some((m) => m.key === s)) ?? [];
+    return notFoundKeys.map((key) => ({ key, doc_count: 0 })).concat(merged);
   };
+
   const [tagsOpen, setTagsOpen] = React.useState(false);
   const [filetypesOpen, setFiletypesOpen] = React.useState(false);
 
@@ -235,14 +264,14 @@ export const CardGrid = ({
       )}
     >
       {hideFilters ? null : (
-        <UICard className="overflow-y-auto lg:sticky lg:inset-y-4 lg:max-h-[calc(100vh-2rem)]" aria-label="Filters">
+        <UICard className="overflow-y-auto lg:sticky lg:inset-y-4 lg:max-h-[calc(100vh-2rem)]" aria-label="Bộ lọc">
           <CardContent asChild>
             <header>
-              {title ?? "Filters"}
+              {title ?? "Bộ lọc"}
               {anyFilters ? (
                 <div className="grow text-right">
                   <button className="cursor-pointer underline all-unset" onClick={resetFilters}>
-                    Clear
+                    Xóa
                   </button>
                 </div>
               ) : null}
@@ -252,7 +281,7 @@ export const CardGrid = ({
           {hideSort ? null : (
             <CardContent asChild details>
               <details>
-                <summary className="grow grid-flow-col grid-cols-[1fr_auto] before:col-start-2">Sort by</summary>
+                <summary className="grow grid-flow-col grid-cols-[1fr_auto] before:col-start-2">Sắp xếp</summary>
                 <fieldset role="group">
                   {(onProfile ? PROFILE_SORT_KEYS : SORT_KEYS).map((key) => (
                     <label key={key}>
@@ -276,7 +305,7 @@ export const CardGrid = ({
                 <summary className="grow grid-flow-col grid-cols-[1fr_auto] before:col-start-2">Tags</summary>
                 <fieldset role="group">
                   <label>
-                    All Products
+                    Tất cả sản phẩm
                     <input
                       type="checkbox"
                       checked={!searchParams.tags?.length}
@@ -286,7 +315,7 @@ export const CardGrid = ({
                   </label>
                   {results ? (
                     <FilterCheckboxes
-                      filters={concatFoundAndNotFound(results.tags_data, searchParams.tags)}
+                      filters={mergeFilters(initialTags, results.tags_data, searchParams.tags)}
                       selection={searchParams.tags ?? []}
                       setSelection={(tags) => updateParams({ tags })}
                       disabled={disableFilters ?? false}
@@ -299,11 +328,11 @@ export const CardGrid = ({
           {results?.filetypes_data.length || searchParams.filetypes?.length || filetypesOpen ? (
             <CardContent asChild details>
               <details onToggle={() => setFiletypesOpen(!filetypesOpen)}>
-                <summary className="grow grid-flow-col grid-cols-[1fr_auto] before:col-start-2">Contains</summary>
+                <summary className="grow grid-flow-col grid-cols-[1fr_auto] before:col-start-2">Loại</summary>
                 <fieldset role="group">
                   {results ? (
                     <FilterCheckboxes
-                      filters={concatFoundAndNotFound(results.filetypes_data, searchParams.filetypes)}
+                      filters={mergeFilters(initialFiletypes, results.filetypes_data, searchParams.filetypes)}
                       selection={searchParams.filetypes ?? []}
                       setSelection={(filetypes) => updateParams({ filetypes })}
                       disabled={disableFilters ?? false}
@@ -315,7 +344,7 @@ export const CardGrid = ({
           ) : null}
           <CardContent asChild details>
             <details>
-              <summary className="grow grid-flow-col grid-cols-[1fr_auto] before:col-start-2">Price</summary>
+              <summary className="grow grid-flow-col grid-cols-[1fr_auto] before:col-start-2">Giá</summary>
               <div
                 style={{
                   display: "grid",
@@ -326,7 +355,7 @@ export const CardGrid = ({
               >
                 <fieldset>
                   <legend>
-                    <label htmlFor={minPriceUid}>Minimum price</label>
+                    <label htmlFor={minPriceUid}>Giá thấp nhất</label>
                   </legend>
                   <div className="input">
                     <Pill className="-ml-2 shrink-0">{currencySymbol}</Pill>
@@ -343,7 +372,7 @@ export const CardGrid = ({
                 </fieldset>
                 <fieldset>
                   <legend>
-                    <label htmlFor={maxPriceUid}>Maximum price</label>
+                    <label htmlFor={maxPriceUid}>Giá cao nhất</label>
                   </legend>
                   <div className="input">
                     <Pill className="-ml-2 shrink-0">{currencySymbol}</Pill>
@@ -367,7 +396,7 @@ export const CardGrid = ({
       {results?.products.length === 0 ? (
         <Placeholder>
           <Icon name="archive-fill" />
-          No products found
+          Không tìm thấy sản phẩm
         </Placeholder>
       ) : (
         <div>
@@ -381,7 +410,7 @@ export const CardGrid = ({
           {pagination === "button" &&
           !((state.results?.total ?? 0) < (state.offset ?? 1) + (state.results?.products.length ?? 0)) ? (
             <div className="mt-8 w-full text-center">
-              <Button onClick={() => dispatchAction({ type: "load-more" })}>Load more</Button>
+              <Button onClick={() => dispatchAction({ type: "load-more" })}>Xem thêm</Button>
             </div>
           ) : null}
         </div>

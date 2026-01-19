@@ -218,11 +218,6 @@ module Product::Searchable
               end
             end
 
-            if params[:tags]
-              must do
-                terms "tags.keyword" => Array.wrap(params[:tags])
-              end
-            end
 
             if params[:filetypes]
               must do
@@ -375,6 +370,13 @@ module Product::Searchable
         params[:curated_product_ids].each_with_index do |id, i|
           search_options[:query][:bool][:should] << { term: { _id: { value: id, boost: params[:curated_product_ids].size - i } } }
         end
+      end
+
+      # Use post_filter for tags so aggregations count correctly (faceted search pattern)
+      if params[:tags].present?
+        search_options[:post_filter] = {
+          terms: { "tags.keyword" => Array.wrap(params[:tags]) }
+        }
       end
 
       search_options
