@@ -46,6 +46,46 @@ describe ProductPresenter::Card do
         expect(data[:url]).to include("code=BLACKFRIDAY2025")
       end
 
+      context "with default discount code" do
+        let(:discount_product) { create(:product, user: creator, price_cents: 1000) }
+        let(:offer_code) { create(:offer_code, user: creator, products: [discount_product], code: "SAVE20", amount_cents: nil, amount_percentage: 20) }
+
+        before do
+          discount_product.update!(default_offer_code: offer_code)
+        end
+
+        it "returns discounted price when product has default offer code" do
+          data = described_class.new(product: discount_product).for_web(request:)
+
+          expect(data[:price_cents]).to eq(800)
+          expect(data[:original_price_cents]).to eq(1000)
+          expect(data[:has_default_discount]).to be true
+        end
+
+        it "includes the default discount code in the URL" do
+          data = described_class.new(product: discount_product).for_web(request:)
+
+          expect(data[:url]).to include("code=SAVE20")
+        end
+
+        it "does not apply discount when offer code is deleted" do
+          offer_code.mark_deleted!
+          data = described_class.new(product: discount_product).for_web(request:)
+
+          expect(data[:price_cents]).to eq(1000)
+          expect(data[:original_price_cents]).to be_nil
+          expect(data[:has_default_discount]).to be false
+        end
+
+        it "does not apply discount when offer code is inactive" do
+          offer_code.update!(valid_at: 1.day.from_now, expires_at: 2.days.from_now)
+          data = described_class.new(product: discount_product).for_web(request:)
+
+          expect(data[:price_cents]).to eq(1000)
+          expect(data[:original_price_cents]).to be_nil
+          expect(data[:has_default_discount]).to be false
+        end
+      end
 
       it "does not return the URL of a deleted thumbnail" do
         create(:thumbnail, product:)

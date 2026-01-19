@@ -893,6 +893,32 @@ describe ProductPresenter do
         end
       end
     end
+
+    context "with offer codes" do
+      let(:seller) { create(:user) }
+      let(:product) { create(:product, user: seller, price_cents: 1000) }
+      let!(:product_offer_code) { create(:offer_code, user: seller, products: [product], code: "SAVE1", amount_cents: 100) }
+
+      it "includes available_offer_codes for product" do
+        props = described_class.new(product:).edit_props
+        codes = props[:product][:available_offer_codes]
+
+        expect(codes.map { _1[:code] }).to include("SAVE1")
+      end
+
+      it "includes default_offer_code_id when set" do
+        product.update!(default_offer_code: product_offer_code)
+        props = described_class.new(product:).edit_props
+
+        expect(props[:product][:default_offer_code_id]).to eq(product_offer_code.external_id)
+      end
+
+      it "returns nil for default_offer_code_id when not set" do
+        props = described_class.new(product:).edit_props
+
+        expect(props[:product][:default_offer_code_id]).to be_nil
+      end
+    end
   end
 
   describe ".card_for_web" do

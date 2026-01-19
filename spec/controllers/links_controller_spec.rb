@@ -3756,6 +3756,47 @@ describe LinksController, :vcr, inertia: true do
           end.not_to change(DiscoverSearch, :count)
         end
       end
+
+      describe "default discount code" do
+        let(:seller) { create(:user) }
+        let(:product) { create(:product, user: seller) }
+        let(:offer_code) { create(:offer_code, user: seller, products: [product], code: "SAVE20", amount_percentage: 20) }
+
+        before do
+          @request.host = URI.parse(seller.subdomain_with_protocol).host
+          product.update!(default_offer_code: offer_code)
+        end
+
+        it "applies the default discount code when no URL discount is provided" do
+          get :show, params: { id: product.to_param }
+
+          expect(response).to be_successful
+          product_props = assigns(:product_props)
+          expect(product_props[:discount_code][:code]).to eq("SAVE20")
+          expect(product_props[:discount_code][:is_default]).to be true
+        end
+
+        it "uses URL discount code over default when provided" do
+          other_code = create(:offer_code, user: seller, products: [product], code: "URL10", amount_percentage: 10)
+
+          get :show, params: { id: product.to_param, offer_code: "URL10" }
+
+          expect(response).to be_successful
+          product_props = assigns(:product_props)
+          expect(product_props[:discount_code][:code]).to eq("URL10")
+          expect(product_props[:discount_code][:is_default]).to be false
+        end
+
+        it "does not apply discount when product has no default offer code" do
+          product.update!(default_offer_code: nil)
+
+          get :show, params: { id: product.to_param }
+
+          expect(response).to be_successful
+          product_props = assigns(:product_props)
+          expect(product_props[:discount_code]).to be_nil
+        end
+      end
     end
 
     describe "GET cart_items_count" do

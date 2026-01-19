@@ -749,5 +749,33 @@ describe OfferCode do
         offer_code.send(:reindex_associated_products)
       end
     end
+
+    describe "#clear_default_offer_code_references" do
+      let(:product_with_default) { create(:product, user: creator) }
+      let(:default_offer_code) { create(:offer_code, user: creator, products: [product_with_default]) }
+
+      before do
+        product_with_default.update!(default_offer_code: default_offer_code)
+      end
+
+      it "clears default_offer_code_id on products when offer code is destroyed" do
+        expect(product_with_default.reload.default_offer_code_id).to eq(default_offer_code.id)
+
+        default_offer_code.destroy!
+
+        expect(product_with_default.reload.default_offer_code_id).to be_nil
+      end
+
+      it "clears default_offer_code_id on multiple products" do
+        another_product = create(:product, user: creator)
+        default_offer_code.products << another_product
+        another_product.update!(default_offer_code: default_offer_code)
+
+        default_offer_code.destroy!
+
+        expect(product_with_default.reload.default_offer_code_id).to be_nil
+        expect(another_product.reload.default_offer_code_id).to be_nil
+      end
+    end
   end
 end
