@@ -35,7 +35,8 @@ module TwoFactorAuthentication
   end
 
   def send_authentication_token!
-    TwoFactorAuthenticationMailer.authentication_token(id).deliver_later(queue: "critical")
+    email_provider = EmailRouterFallbackService.email_provider_for_two_factor(user: self)
+    TwoFactorAuthenticationMailer.authentication_token(id, email_provider:).deliver_later(queue: "critical")
   end
 
   def add_two_factor_authenticated_ip!(remote_ip)

@@ -430,6 +430,7 @@ describe ProductPresenter do
             fine_print: nil,
           },
           cancellation_discounts_enabled: false,
+          ai_generated: false,
         }
       )
     end
@@ -640,6 +641,7 @@ describe ProductPresenter do
               fine_print: nil,
             },
             cancellation_discounts_enabled: true,
+            ai_generated: false,
           }
         )
       end
@@ -848,6 +850,7 @@ describe ProductPresenter do
               fine_print: nil,
             },
             cancellation_discounts_enabled: false,
+            ai_generated: false,
           }
         )
       end

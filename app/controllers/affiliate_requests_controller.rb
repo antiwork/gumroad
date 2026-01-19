@@ -2,6 +2,7 @@
 
 class AffiliateRequestsController < ApplicationController
   include CustomDomainConfig
+  layout "inertia", only: [:new]
 
   PUBLIC_ACTIONS = %i[new create]
   before_action :authenticate_user!, except: PUBLIC_ACTIONS
@@ -13,23 +14,31 @@ class AffiliateRequestsController < ApplicationController
 
   def new
     @title = "Become an affiliate for #{@user.display_name}"
-    @profile_presenter = ProfilePresenter.new(
-      pundit_user:,
-      seller: @user,
-    )
-    @hide_layouts = true
+    profile_presenter = ProfilePresenter.new(pundit_user:, seller: @user)
+    render inertia: "AffiliateRequests/New", props: {
+      creator_profile: profile_presenter.creator_profile,
+      success: params[:success] == "true",
+      requester_has_existing_account: params[:requester_has_existing_account] == "true",
+      email_param: params[:email]
+    }
   end
 
   def create
-    @affiliate_request = @user.affiliate_requests.new(permitted_create_params)
-    @affiliate_request.locale = params[:locale] || "en"
+    affiliate_request = @user.affiliate_requests.new(permitted_create_params)
+    affiliate_request.locale = params[:locale] || "en"
 
-    if @affiliate_request.save
-      @affiliate_request.approve! if Feature.active?(:auto_approve_affiliates, @user)
+    if affiliate_request.save
+      affiliate_request.approve! if Feature.active?(:auto_approve_affiliates, @user)
       update_logged_in_user_name_if_needed(permitted_create_params[:name])
-      render json: { success: true, requester_has_existing_account: User.exists?(email: @affiliate_request.email) }
+
+      redirect_to custom_domain_new_affiliate_request_path(
+        success: true,
+        requester_has_existing_account: User.exists?(email: affiliate_request.email),
+        email: affiliate_request.email
+      ), status: :see_other
     else
-      render json: { success: false, error: @affiliate_request.errors.full_messages.first }
+      redirect_to custom_domain_new_affiliate_request_path,
+                  alert: affiliate_request.errors.full_messages.to_sentence
     end
   end
 
@@ -40,23 +49,24 @@ class AffiliateRequestsController < ApplicationController
     action_name = permitted_update_params[:action]
 
     unless affiliate_request.can_perform_action?(action_name)
-      render json: { success: false, error: "#{affiliate_request.name}'s affiliate request has been already processed." }
+      redirect_to affiliates_path,
+                  alert: "#{affiliate_request.name}'s affiliate request has been already processed."
       return
     end
 
     begin
       if action_name == AffiliateRequest::ACTION_APPROVE
         affiliate_request.approve!
+        redirect_to affiliates_path, notice: "Approved #{affiliate_request.name}'s request!", status: :see_other
       elsif action_name == AffiliateRequest::ACTION_IGNORE
         affiliate_request.ignore!
+        redirect_to affiliates_path, notice: "Ignored #{affiliate_request.name}'s request!", status: :see_other
       else
-        render json: { success: false, error: "#{action_name} is not a valid affiliate request action" }
-        return
+        redirect_to affiliates_path,
+                    alert: "#{action_name} is not a valid affiliate request action"
       end
-
-      render json: { success: true, affiliate_request:, requester_has_existing_account: User.exists?(email: affiliate_request.email) }
     rescue ActiveRecord::RecordInvalid => e
-      render json: { success: false, error: e.message }
+      redirect_to affiliates_path, alert: e.message
     end
   end
 
@@ -91,9 +101,9 @@ class AffiliateRequestsController < ApplicationController
 
     pending_requests = current_seller.affiliate_requests.unattended
     pending_requests.find_each(&:approve!)
-    render json: { success: true }
+    redirect_to affiliates_path, notice: "Approved all pending affiliate requests!", status: :see_other
   rescue ActiveRecord::RecordInvalid, StateMachines::InvalidTransition
-    render json: { success: false }
+    redirect_to affiliates_path, alert: "Failed to approve all requests"
   end
 
   private

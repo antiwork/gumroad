@@ -2,6 +2,7 @@ import * as React from "react";
 
 import { Form } from "$app/components/Admin/Form";
 import type { User } from "$app/components/Admin/Users/User";
+import { Button } from "$app/components/Button";
 import { showAlert } from "$app/components/server-components/Alert";
 import { Pill } from "$app/components/ui/Pill";
 
@@ -17,7 +18,7 @@ const AdminUserAddCredit = ({ user }: AdminUserAddCreditProps) => (
         <h3>Add credits</h3>
       </summary>
       <Form
-        url={Routes.add_credit_admin_user_path(user.id)}
+        url={Routes.add_credit_admin_user_path(user.external_id)}
         method="POST"
         confirmMessage="Are you sure you want to add credits?"
         onSuccess={() => showAlert("Successfully added credits.", "success")}
@@ -30,9 +31,9 @@ const AdminUserAddCredit = ({ user }: AdminUserAddCreditProps) => (
                 <input type="text" name="credit[credit_amount]" placeholder="10.25" inputMode="decimal" required />
               </div>
 
-              <button type="submit" className="button" disabled={isLoading}>
+              <Button type="submit" disabled={isLoading}>
                 {isLoading ? "Saving..." : "Add credits"}
-              </button>
+              </Button>
             </div>
 
             <small>Subtract credits by providing a negative value</small>

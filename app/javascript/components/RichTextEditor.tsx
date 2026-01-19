@@ -8,7 +8,7 @@ import { EditorView } from "@tiptap/pm/view";
 import { EditorContent, useEditor, Extensions } from "@tiptap/react";
 import StarterKit from "@tiptap/starter-kit";
 import cx from "classnames";
-import partition from "lodash/partition";
+import { partition } from "lodash-es";
 import * as React from "react";
 
 import { assertDefined } from "$app/utils/assert";
@@ -89,7 +89,7 @@ export const MenuItem = ({
   <MenuItemTooltip tip={name}>
     <button
       type="button"
-      className="toolbar-item"
+      className="toolbar-item cursor-pointer all-unset"
       aria-pressed={active}
       disabled={disabled}
       aria-label={name}

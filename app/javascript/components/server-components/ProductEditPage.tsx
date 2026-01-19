@@ -1,5 +1,5 @@
 import { DirectUpload } from "@rails/activestorage";
-import isEqual from "lodash/isEqual";
+import { isEqual } from "lodash-es";
 import * as React from "react";
 import { createBrowserRouter, RouteObject, RouterProvider } from "react-router-dom";
 import { StaticRouterProvider } from "react-router-dom/server";
@@ -84,6 +84,7 @@ type Props = {
   seller_refund_policy_enabled: boolean;
   seller_refund_policy: Pick<RefundPolicy, "title" | "fine_print">;
   cancellation_discounts_enabled: boolean;
+  ai_generated: boolean;
 };
 
 const createContextValue = (props: Props) => ({
@@ -120,6 +121,7 @@ const createContextValue = (props: Props) => ({
   contentUpdates: null,
   setContentUpdates: () => {},
   filesById: new Map(props.product.files.map((file) => [file.id, { ...file, url: getDownloadUrl(props.id, file) }])),
+  aiGenerated: props.ai_generated,
 });
 
 const pagesHaveSameContent = (pages1: Page[], pages2: Page[]): boolean => isEqual(pages1, pages2);

@@ -9,13 +9,12 @@ describe PublicController, type: :controller, inertia: true do
 
   let!(:demo_product) { create(:product, unique_permalink: "demo") }
 
-  { api: "API" }.each do |url, title|
-    describe "GET '#{url}'" do
-      it "succeeds and set instance variable" do
-        get(url)
-        expect(assigns(:title)).to eq(title)
-        expect(assigns(:"on_#{url}_page")).to be(true)
-      end
+  describe "GET api", inertia: true do
+    it "succeeds and renders with Inertia" do
+      get :api
+      expect(response).to be_successful
+      expect(assigns(:title)).to eq("API")
+      expect(inertia).to render_component("Public/Api")
     end
   end
 
@@ -25,6 +24,24 @@ describe PublicController, type: :controller, inertia: true do
       expect(response).to be_successful
       expect(assigns(:title)).to eq("Ping")
       expect(inertia).to render_component("Public/Ping")
+    end
+  end
+
+  describe "GET charge", inertia: true do
+    it "succeeds and renders with Inertia" do
+      get :charge
+      expect(response).to be_successful
+      expect(assigns(:title)).to eq("Why is there a charge on my account?")
+      expect(inertia).to render_component("Public/Charge")
+    end
+  end
+
+  describe "GET license_key_lookup", inertia: true do
+    it "succeeds and renders with Inertia" do
+      get :license_key_lookup
+      expect(response).to be_successful
+      expect(assigns(:title)).to eq("What is my license key?")
+      expect(inertia).to render_component("Public/LicenseKeyLookup")
     end
   end
 

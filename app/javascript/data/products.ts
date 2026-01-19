@@ -1,18 +1,8 @@
 import { cast } from "ts-safe-cast";
 
-import { RecurrenceId } from "$app/utils/recurringPricing";
-import { ResponseError, request } from "$app/utils/request";
-
-import { PaginationProps } from "$app/components/Pagination";
-import { Sort } from "$app/components/useSortingTableDriver";
+import { request } from "$app/utils/request";
 
 export type SortKey = "name" | "successful_sales_count" | "revenue" | "display_price_cents" | "status" | "cut";
-
-export type MembershipsParams = {
-  page: number | null;
-  query: string | null;
-  sort?: Sort<SortKey> | null;
-};
 
 export type Membership = {
   id: number;
@@ -39,12 +29,6 @@ export type Membership = {
   can_unarchive: boolean;
 };
 
-export type ProductsParams = {
-  page: number | null;
-  query: string | null;
-  sort?: Sort<SortKey> | null;
-};
-
 export type Product = {
   id: number;
   edit_url: string;
@@ -68,131 +52,6 @@ export type Product = {
 };
 
 export type RecurringProductType = "membership" | "newsletter" | "podcast";
-export type OneTimeDigitalProductType =
-  | "audiobook"
-  | "bundle"
-  | "call"
-  | "coffee"
-  | "commission"
-  | "course"
-  | "digital"
-  | "ebook";
-
-type CreateProductDataBase = {
-  name: string;
-  price_currency_type: string;
-  price_range: string;
-  release_at_date: string;
-  release_at_time: string;
-  ai_prompt: string | null;
-  number_of_content_pages: number | null;
-};
-
-type CreateProductDataPhysical = {
-  is_recurring_billing: false;
-  is_physical: true;
-  native_type: "physical";
-  subscription_duration: null;
-} & CreateProductDataBase;
-
-type CreateProductDataOneTimeDigital = {
-  is_recurring_billing: false;
-  is_physical: false;
-  native_type: OneTimeDigitalProductType;
-  subscription_duration: null;
-} & CreateProductDataBase;
-
-type CreateProductDataRecurring = {
-  is_recurring_billing: true;
-  is_physical: false;
-  native_type: RecurringProductType;
-  subscription_duration: RecurrenceId;
-} & CreateProductDataBase;
-
-export type CreateProductData =
-  | CreateProductDataPhysical
-  | CreateProductDataOneTimeDigital
-  | CreateProductDataRecurring;
-
-type CreateProductRequest = {
-  link: CreateProductData;
-};
-
-type CreateProductResponse =
-  | {
-      success: true;
-      redirect_to: string;
-    }
-  | {
-      success: false;
-      error_message: string;
-    };
-
-export async function createProduct(requestData: CreateProductRequest) {
-  const res = await request({
-    method: "POST",
-    accept: "json",
-    url: Routes.links_path(),
-    data: requestData,
-  });
-  if (!res.ok) throw new ResponseError();
-  const jsonResponse = cast<CreateProductResponse>(await res.json());
-  return jsonResponse;
-}
-
-export function getPagedProducts({
-  forArchivedProducts,
-  ...params
-}: ProductsParams & { forArchivedProducts: boolean }) {
-  const abort = new AbortController();
-
-  const url = forArchivedProducts
-    ? Routes.products_paged_products_archived_index_path(params)
-    : Routes.products_paged_path(params);
-  const response = request({
-    method: "GET",
-    accept: "json",
-    url,
-    abortSignal: abort.signal,
-  })
-    .then((res) => {
-      if (!res.ok) throw new ResponseError();
-      return res.json();
-    })
-    .then((json) => cast<{ entries: Product[]; pagination: PaginationProps }>(json));
-
-  return {
-    response,
-    cancel: () => abort.abort(),
-  };
-}
-
-export function getPagedMemberships({
-  forArchivedMemberships,
-  ...params
-}: MembershipsParams & { forArchivedMemberships: boolean }) {
-  const abort = new AbortController();
-
-  const url = forArchivedMemberships
-    ? Routes.memberships_paged_products_archived_index_path(params)
-    : Routes.memberships_paged_path(params);
-  const response = request({
-    method: "GET",
-    accept: "json",
-    url,
-    abortSignal: abort.signal,
-  })
-    .then((res) => {
-      if (!res.ok) throw new ResponseError();
-      return res.json();
-    })
-    .then((json) => cast<{ entries: Membership[]; pagination: PaginationProps }>(json));
-
-  return {
-    response,
-    cancel: () => abort.abort(),
-  };
-}
 
 export async function getFolderArchiveDownloadUrl(request_url: string) {
   const res = await request({

@@ -321,7 +321,7 @@ class User < ApplicationRecord
                       :do => :not_verified?
     after_transition any => %i[suspended_for_fraud suspended_for_tos_violation], :do => :invalidate_active_sessions!
     after_transition any => %i[suspended_for_fraud suspended_for_tos_violation], :do => :disable_links_and_tell_chat
-    after_transition any => %i[on_probation compliant flagged_for_tos_violation flagged_for_fraud suspended_for_tos_violation suspended_for_fraud],
+    after_transition any => %i[on_probation compliant not_reviewed flagged_for_tos_violation flagged_for_fraud suspended_for_tos_violation suspended_for_fraud],
                      :do => :add_user_comment
     after_transition any => [:flagged_for_tos_violation], :do => :add_product_comment
 
@@ -340,6 +340,10 @@ class User < ApplicationRecord
 
     event :mark_compliant do
       transition all => :compliant
+    end
+
+    event :mark_not_reviewed do
+      transition on_probation: :not_reviewed
     end
 
     event :flag_for_tos_violation do
@@ -1216,5 +1220,12 @@ class User < ApplicationRecord
 
     def to_email_domain(value)
       value.presence && Mail::Address.new(value).domain
+    end
+
+    # Checks if a value is purely numeric (returns true for both database IDs and external_ids).
+    # Used in redirect logic after external_id lookup fails, to distinguish numeric identifiers
+    # from usernames that start with numbers (e.g., "1jyo" should not redirect to user with id=1).
+    def self.id?(value)
+      value.present? && value.to_s == value.to_i.to_s
     end
 end

@@ -129,6 +129,7 @@ class Discover::TaxonomyPresenter
     "holiday-music" => "Holiday Music",
     "horns" => "Horns",
     "horror" => "Horror",
+    "houdini" => "Houdini",
     "html" => "HTML",
     "hunting" => "Hunting",
     "hypnosis" => "Hypnosis",

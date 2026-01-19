@@ -292,6 +292,22 @@ describe LoginsController, type: :controller, inertia: true do
       end
     end
 
+    describe "two factor authentication stale session" do
+      it "does not redirect to two factor auth when the pending 2FA session belongs to another user" do
+        other_user = create(:user, password: "password")
+        other_user.two_factor_authentication_enabled = true
+        other_user.save!
+
+        # Simulate a stale 2FA session from a previous/aborted login attempt.
+        session[:verify_two_factor_auth_for] = other_user.id
+
+        post "create", params: { user: { login_identifier: @user.email, password: "password" } }
+
+        expect(response).to redirect_to(dashboard_path)
+        expect(session[:verify_two_factor_auth_for]).to be_nil
+      end
+    end
+
     it_behaves_like "merge guest cart with user cart" do
       let(:user) { @user }
       let(:call_action) { post "create", params: { user: { login_identifier: user.email, password: "password" } } }
@@ -328,6 +344,49 @@ describe LoginsController, type: :controller, inertia: true do
         expect(controller.impersonated_user).to eq(user)
 
         get :destroy
+
+        expect(controller.impersonated_user).to be_nil
+        expect($redis.get(RedisKey.impersonated_user(admin.id))).to be_nil
+      end
+    end
+  end
+
+  describe "DELETE destroy" do
+    let(:user) { create(:user) }
+
+    before do
+      sign_in user
+    end
+
+    it "signs out the user and redirects to root path with notice" do
+      delete :destroy
+
+      expect(response).to redirect_to(root_path)
+      expect(flash[:notice]).to eq("Signed out successfully.")
+      expect(controller.user_signed_in?).to be(false)
+    end
+
+    it "clears cookies on sign out" do
+      cookies["last_viewed_dashboard"] = "sales"
+
+      delete :destroy
+
+      expect(response.cookies.key?("last_viewed_dashboard")).to eq(true)
+      expect(response.cookies["last_viewed_dashboard"]).to be_nil
+    end
+
+    context "when impersonating" do
+      let(:admin) { create(:admin_user) }
+
+      before do
+        sign_in admin
+        controller.impersonate_user(user)
+      end
+
+      it "resets impersonated user" do
+        expect(controller.impersonated_user).to eq(user)
+
+        delete :destroy
 
         expect(controller.impersonated_user).to be_nil
         expect($redis.get(RedisKey.impersonated_user(admin.id))).to be_nil

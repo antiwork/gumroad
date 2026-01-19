@@ -1,4 +1,4 @@
-import uniqBy from "lodash/uniqBy";
+import { uniqBy } from "lodash-es";
 import * as React from "react";
 import { createCast } from "ts-safe-cast";
 
@@ -125,7 +125,7 @@ const WishlistItemCard = ({
                   disabled={isDeleting}
                   aria-label="Remove this product"
                   onClick={() => void destroy()}
-                  className="grid p-4"
+                  className="grid cursor-pointer p-4 all-unset"
                 >
                   <Icon name="trash2" />
                 </button>
