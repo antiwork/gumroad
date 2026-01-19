@@ -81,6 +81,12 @@ describe Subscription, "#resolve_vat_id" do
 
     expect(subscription.resolve_vat_id).to be_nil
   end
+
+  it "handles nil original_purchase gracefully" do
+    subscription = create(:subscription, link: product, business_vat_id: nil)
+
+    expect(subscription.resolve_vat_id).to be_nil
+  end
 end
 
 describe Subscription, "#vat_id_from_any_subscription_purchase_refund" do
