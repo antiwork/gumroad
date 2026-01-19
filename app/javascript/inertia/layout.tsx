@@ -32,15 +32,22 @@ type PageProps = {
 export default function Layout({ children }: { children: React.ReactNode }) {
   const { title, flash, logged_in_user, current_seller } = usePage<PageProps>().props;
   const isRouteLoading = useRouteLoading();
+  const mainContentRef = React.useRef<HTMLDivElement>(null);
 
   useFlashMessage(flash);
+
   React.useEffect(() => {
-    return router.on("finish", () => {
-      const mainContent = document.getElementById("main-content");
-      if (mainContent) {
-        mainContent.scrollTop = 0;
+    const removeListener = router.on("finish", (event) => {
+      if (event.detail.visit?.preserveScroll) return;
+
+      if (mainContentRef.current) {
+        mainContentRef.current.scrollTop = 0;
       }
     });
+
+    return () => {
+      removeListener();
+    };
   }, []);
 
   return (
@@ -50,7 +57,11 @@ export default function Layout({ children }: { children: React.ReactNode }) {
         <Alert initial={null} />
         <div id="inertia-shell" className="flex h-screen flex-col lg:flex-row">
           {logged_in_user ? <Nav title="Dashboard" /> : null}
-          <main id="main-content" scroll-region className="flex-1 overflow-y-auto">
+          <main
+            id="main-content"
+            ref={mainContentRef}
+            className="flex-1 overflow-y-auto"
+          >
             {isRouteLoading ? <LoadingSkeleton /> : children}
           </main>
         </div>
