@@ -212,12 +212,19 @@ class OfferCode < ApplicationRecord
 
   def eligibility_tier_for(purchaser_email:)
     return nil unless required_product_id.present?
-    return nil if purchaser_email.blank?
+    if purchaser_email.blank?
+      return nil
+    end
 
     purchase = find_required_product_purchase(purchaser_email)
-    return nil unless purchase
+    unless purchase
+      return nil
+    end
 
-    return :primary unless required_product_max_age_months.present?
+
+    unless required_product_max_age_months.present?
+      return :primary
+    end
 
     months_owned = ((Time.current - purchase.created_at) / 1.month).floor
     cutoff_months = required_product_max_age_months
@@ -238,8 +245,7 @@ class OfferCode < ApplicationRecord
   validate :fallback_discount_requires_max_age_months
 
   def fallback_discount_requires_max_age_months
-    return unless fallback_amount_percentage.present?  || fallback_amount_cents. present?
-
+    return if fallback_amount_percentage.nil? && fallback_amount_cents.nil?
     if required_product_id.blank?
       errors.add(:base, "Fallback discount requires a required product to be selected")
     end
@@ -255,32 +261,45 @@ class OfferCode < ApplicationRecord
     if fallback_amount_percentage.present? && fallback_amount_cents.present?
       errors.add(:base, "Choose either a percentage or fixed amount for fallback discount, not both")
     end
-    if fallback_amount_percentage.present?  || fallback_amount_cents.present?
+    if fallback_amount_percentage.present? || fallback_amount_cents.present?
       if amount_percentage.present?  && fallback_amount_cents.present?
         errors.add(:base, "Fallback discount must be a percentage to match the primary discount (#{amount_percentage}%)")
-      elsif amount_cents. present? && fallback_amount_percentage.present?
+      elsif amount_cents.present? && fallback_amount_percentage.present?
         errors. add(:base, "Fallback discount must be a fixed amount to match the primary discount ($#{amount_cents})")
       end
     end
   end
 
   def discount_for_tier(tier)
-    case tier
+    base_discount = case tier
     when :primary
       if amount_percentage.present?
-        { percentage: amount_percentage }
+        { type: "percent", percents: amount_percentage }
+      elsif amount_cents.present?
+        { type: "fixed", cents: amount_cents }
       else
-        { cents: amount_cents }
+        return nil
       end
     when :fallback
-      if fallback_amount_percentage. present?
-        { percentage: fallback_amount_percentage }
+      if fallback_amount_percentage.present?
+        { type: "percent", percents: fallback_amount_percentage }
+      elsif fallback_amount_cents.present?
+        { type: "fixed", cents: fallback_amount_cents }
       else
-        { cents: fallback_amount_cents }
+        return nil
       end
     else
-      nil
+      return nil
     end
+    base_discount. merge(
+      {
+        product_ids: universal?  ? nil :products.map(&:external_id),
+        expires_at: ,
+        minimum_quantity:,
+        duration_in_billing_cycles:,
+        minimum_amount_cents:,
+      }
+    )
   end
 
   private
@@ -385,19 +404,31 @@ class OfferCode < ApplicationRecord
     def reindex_captured_products
       reindex_associated_products(products_to_reindex: Link.where(id: @product_ids_to_reindex)) if @product_ids_to_reindex.present?
     end
-
     def find_required_product_purchase(purchaser_email)
-      normalized_email = purchaser_email.downcase
-      user = User.find_by(email: normalized_email)
-      scope = Purchase.successful.where(link_id: required_product_id)
-      scope = if user
-        scope.where("purchaser_id = ? OR LOWER(email) = ?", user.id, normalized_email)  # ✅
+      return nil if purchaser_email.blank?
+
+      normalized_email = purchaser_email.strip.downcase
+      user = User.find_by("LOWER(email) = ?", normalized_email)
+      scope = Purchase.where(link_id: required_product_id)
+
+      scope = scope.successful_gift_or_nongift
+      if user
+        scope = scope.where(
+          "purchases.purchaser_id = ? OR LOWER(purchases.email) = ?",
+          user.id,
+          normalized_email
+        )
       else
-        scope.where("LOWER(email) = ?", normalized_email)
+        scope = scope.where("LOWER(purchases.email) = ?", normalized_email)
       end
-      scope = scope.where(refunded_at: nil, disputed_at: nil)
-      scope = scope.where. not(status: 'canceled') if Purchase.column_names.include?("status")
-      scope.order(created_at: :desc).first
+
+      scope = scope.where("(purchases.stripe_refunded IS NULL OR purchases.stripe_refunded = 0)")
+      scope = scope.where("purchases.chargeback_date IS NULL")
+
+      scope = scope.where.not(status: 'canceled') if Purchase.column_names.include?("status")
+
+      result = scope.order(created_at: :desc).first
+      result
     end
 
     def required_product_belongs_to_same_seller

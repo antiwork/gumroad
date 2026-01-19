@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[7.1].define(version: 2026_01_14_052245) do
+ActiveRecord::Schema[7.1].define(version: 2026_01_18_000002) do
   create_table "active_storage_attachments", charset: "utf8mb4", collation: "utf8mb4_unicode_ci", force: :cascade do |t|
     t.string "name", limit: 191, null: false
     t.string "record_type", limit: 191, null: false
@@ -1235,6 +1235,8 @@ ActiveRecord::Schema[7.1].define(version: 2026_01_14_052245) do
     t.bigint "flags", default: 0, null: false
     t.bigint "required_product_id"
     t.integer "required_product_max_age_months"
+    t.integer "fallback_amount_percentage"
+    t.integer "fallback_amount_cents"
     t.index ["code", "link_id"], name: "index_offer_codes_on_code_and_link_id"
     t.index ["link_id"], name: "index_offer_codes_on_link_id"
     t.index ["name", "link_id"], name: "index_offer_codes_on_name_and_link_id", length: { name: 191 }
@@ -1762,6 +1764,7 @@ ActiveRecord::Schema[7.1].define(version: 2026_01_14_052245) do
     t.index ["email"], name: "index_purchases_on_email_long", length: 191
     t.index ["full_name"], name: "index_purchases_on_full_name"
     t.index ["ip_address"], name: "index_purchases_on_ip_address"
+    t.index ["link_id", "email"], name: "index_link_id_email", length: { email: 191 }
     t.index ["link_id", "purchase_state", "created_at"], name: "index_purchases_on_link_id_and_purchase_state_and_created_at"
     t.index ["link_id"], name: "index_purchases_on_link_id"
     t.index ["offer_code_id"], name: "index_purchases_on_offer_code_id"
@@ -2746,5 +2749,5 @@ ActiveRecord::Schema[7.1].define(version: 2026_01_14_052245) do
 
   add_foreign_key "active_storage_attachments", "active_storage_blobs", column: "blob_id"
   add_foreign_key "active_storage_variant_records", "active_storage_blobs", column: "blob_id"
-  add_foreign_key "offer_codes", "links", column: "required_product_id", name: "_fk_rails_d22f55d0ca"
+  add_foreign_key "offer_codes", "links", column: "required_product_id"
 end

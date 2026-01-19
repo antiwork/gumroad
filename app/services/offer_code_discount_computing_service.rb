@@ -45,25 +45,20 @@ class OfferCodeDiscountComputingService
       if eligible?(offer_code, purchase_quantity)
         track_usage(offer_code, purchase_quantity)
         discount = if tier
-        tier_discount = offer_code.discount_for_tier(tier)
-        if tier_discount[:percentage]
-          { type: "percent", value: tier_discount[:percentage] }
+          offer_code.discount_for_tier(tier)
         else
-          { type: "cents", value: tier_discount[:cents] }
+          offer_code.discount
         end
-      else
-        offer_code.discount
-      end
-      products_data[link.unique_permalink] = { discount: discount }
-      optimistically_apply_to_applicable_cross_sells(products_data, link)
+        products_data[link.unique_permalink] = { discount: discount }
+        optimistically_apply_to_applicable_cross_sells(products_data, link)
       else
         track_ineligibility(offer_code, purchase_quantity)
       end
     end
 
     {
-      products_data:,
-      error_code:
+      products_data: products_data,
+      error_code: nil
     }
   end
 

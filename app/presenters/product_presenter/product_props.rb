@@ -18,7 +18,7 @@ class ProductPresenter::ProductProps
         id: product.external_id,
         permalink: product.unique_permalink,
         name: product.name,
-        seller: UserPresenter.new(user: seller).author_byline_props(custom_domain_url: seller_custom_domain_url, recommended_by:),
+        seller: UserPresenter.new(user: seller).author_byline_props(custom_domain_url: seller_custom_domain_url, recommended_by: recommended_by),
         collaborating_user: collaborator.present? ? UserPresenter.new(user: collaborator).author_byline_props : nil,
         covers: product.display_asset_previews.as_json,
         main_cover_id: product.main_preview&.guid,
@@ -69,7 +69,7 @@ class ProductPresenter::ProductProps
         public_files: product.alive_public_files.attached.map { PublicFilePresenter.new(public_file: _1).props },
         audio_previews_enabled: Feature.active?(:audio_previews, product.user),
       },
-      discount_code: discount_code_props(discount_code, quantity),
+      discount_code: discount_code_props(discount_code, quantity, pundit_user),
       purchase: purchase_props(product.purchase_info_for_product_page(pundit_user&.user, request.cookie_jar[:_gumroad_guid])),
       wishlists: pundit_user&.seller.present? ? (
         pundit_user.seller.wishlists.alive.includes(:alive_wishlist_products).map { |wishlist| WishlistPresenter.new(wishlist:).listing_props(product:) }
@@ -79,9 +79,9 @@ class ProductPresenter::ProductProps
 
   private
     attr_reader :product, :seller
-
-    def discount_code_props(discount_code, quantity)
+    def discount_code_props(discount_code, quantity, pundit_user)
       return if discount_code.blank?
+      purchaser_email = pundit_user&.user&.email
 
       offer_code_response = OfferCodeDiscountComputingService.new(
         discount_code,
@@ -90,7 +90,8 @@ class ProductPresenter::ProductProps
             permalink: product.unique_permalink,
             quantity: [quantity, product.find_offer_code(code: discount_code)&.minimum_quantity || 0].max
           }
-        }
+        },
+        purchaser_email: purchaser_email
       ).process
 
       if offer_code_response[:error_code].present?
