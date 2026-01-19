@@ -34,6 +34,55 @@ describe Subscription, "#update_business_vat_id!" do
   end
 end
 
+describe Subscription, "#resolve_vat_id" do
+  let(:seller) { create(:user) }
+  let(:product) { create(:subscription_product, user: seller) }
+
+  before do
+    create(:zip_tax_rate, country: "IT", zip_code: nil, state: nil, combined_rate: 0.22, is_seller_responsible: false)
+  end
+
+  it "prioritizes subscription's stored business_vat_id" do
+    subscription = create(:subscription, link: product, business_vat_id: "SUBSCRIPTION_VAT")
+    original_purchase = create(:free_purchase, is_original_subscription_purchase: true, link: product, subscription:)
+    original_purchase.create_purchase_sales_tax_info!(business_vat_id: "PURCHASE_VAT", country_code: "IT")
+
+    expect(subscription.resolve_vat_id).to eq "SUBSCRIPTION_VAT"
+  end
+
+  it "falls back to original purchase's sales tax info" do
+    subscription = create(:subscription, link: product, business_vat_id: nil)
+    original_purchase = create(:free_purchase, is_original_subscription_purchase: true, link: product, subscription:)
+    original_purchase.create_purchase_sales_tax_info!(business_vat_id: "PURCHASE_VAT", country_code: "IT")
+
+    expect(subscription.resolve_vat_id).to eq "PURCHASE_VAT"
+  end
+
+  it "falls back to original purchase's VAT refund" do
+    subscription = create(:subscription, link: product, business_vat_id: nil)
+    original_purchase = create(:free_purchase, is_original_subscription_purchase: true, link: product, subscription:, country: "Italy")
+    create(:refund, purchase: original_purchase, gumroad_tax_cents: 22, amount_cents: 0, business_vat_id: "REFUND_VAT")
+
+    expect(subscription.resolve_vat_id).to eq "REFUND_VAT"
+  end
+
+  it "falls back to any subscription purchase's VAT refund" do
+    subscription = create(:subscription, link: product, business_vat_id: nil)
+    create(:free_purchase, is_original_subscription_purchase: true, link: product, subscription:)
+    recurring_purchase = create(:free_purchase, is_original_subscription_purchase: false, link: product, subscription:, country: "Italy")
+    create(:refund, purchase: recurring_purchase, gumroad_tax_cents: 22, amount_cents: 0, business_vat_id: "RECURRING_REFUND_VAT")
+
+    expect(subscription.resolve_vat_id).to eq "RECURRING_REFUND_VAT"
+  end
+
+  it "returns nil when no VAT ID exists" do
+    subscription = create(:subscription, link: product, business_vat_id: nil)
+    create(:free_purchase, is_original_subscription_purchase: true, link: product, subscription:)
+
+    expect(subscription.resolve_vat_id).to be_nil
+  end
+end
+
 describe Subscription, "VAT ID lookup methods" do
   let(:seller) { create(:user) }
   let(:product) { create(:subscription_product, user: seller) }
