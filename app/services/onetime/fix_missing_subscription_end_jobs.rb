@@ -15,7 +15,9 @@ module Onetime
       errors = 0
       processed = 0
 
-      Subscription.where.not(charge_occurrence_count: nil)
+      Subscription.joins(:link)
+                  .where.not(charge_occurrence_count: nil)
+                  .where.not(links: { duration_in_months: nil })
                   .not_is_installment_plan
                   .where(ended_at: nil, cancelled_at: nil, failed_at: nil)
                   .find_each do |subscription|

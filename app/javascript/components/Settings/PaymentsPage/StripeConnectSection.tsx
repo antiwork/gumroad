@@ -76,11 +76,11 @@ const StripeConnectSection = ({
             </fieldset>
             <p>
               <Button
-                color="danger"
-                className="button-stripe"
+                color="stripe"
                 disabled={isFormDisabled || isDisconnecting || !stripeConnect.stripe_disconnect_allowed}
                 onClick={disconnectStripe}
               >
+                <span className="brand-icon brand-icon-stripe" />
                 Disconnect Stripe account
               </Button>
             </p>

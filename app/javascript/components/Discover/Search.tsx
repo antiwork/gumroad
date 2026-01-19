@@ -102,7 +102,7 @@ export const Search = ({ query, setQuery }: { query?: string | undefined; setQue
                 <Icon name="clock-history" className="mr-2 text-muted" />
                 {highlightQuery(item)}
               </a>
-              <button onClick={() => deleteRecentSearch(item)} aria-label="Remove">
+              <button onClick={() => deleteRecentSearch(item)} aria-label="Remove" className="cursor-pointer all-unset">
                 <Icon name="x" className="text-muted" />
               </button>
             </div>

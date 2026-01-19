@@ -875,11 +875,8 @@ const BraintreePayPal = ({ token }: { token: string }) => {
   }, [state.status.type]);
 
   return (
-    <Button
-      className="button-paypal grow"
-      onClick={() => dispatch({ type: "offer" })}
-      disabled={isSubmitDisabled(state)}
-    >
+    <Button color="paypal" onClick={() => dispatch({ type: "offer" })} disabled={isSubmitDisabled(state)}>
+      <span className="brand-icon brand-icon-paypal" />
       {payLabel}
     </Button>
   );

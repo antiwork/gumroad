@@ -7,6 +7,6 @@ export const ApiResource = ({ name, id, children }: { name: string; id: string; 
     <CardContent>
       <h2 className="grow">{name}</h2>
     </CardContent>
-    {children}
+    <CardContent details>{children}</CardContent>
   </Card>
 );

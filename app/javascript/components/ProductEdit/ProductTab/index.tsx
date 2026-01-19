@@ -94,7 +94,10 @@ export const ProductTab = () => {
                     <strong>Your AI product is ready!</strong> Take a moment to check out the product and content tabs.
                     Tweak things and make it your own—this is your time to shine!
                   </div>
-                  <button className="self-center underline" onClick={() => setShowAiNotification(false)}>
+                  <button
+                    className="cursor-pointer self-center underline all-unset"
+                    onClick={() => setShowAiNotification(false)}
+                  >
                     close
                   </button>
                 </div>
@@ -125,7 +128,7 @@ export const ProductTab = () => {
                   <legend>
                     <label htmlFor={`${uid}-url`}>URL</label>
                     <CopyToClipboard text={url}>
-                      <button type="button" className="font-normal underline">
+                      <button type="button" className="cursor-pointer font-normal underline all-unset">
                         Copy URL
                       </button>
                     </CopyToClipboard>
