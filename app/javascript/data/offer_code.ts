@@ -17,6 +17,7 @@ export type LineItemConfiguration = {
 type ComputeDiscountRequestData = {
   code: string;
   products: Record<Uid, LineItemConfiguration>;
+  email?: string;
 };
 
 export const computeOfferDiscount = async (payload: ComputeDiscountRequestData): Promise<OfferCodeResponseData> => {
@@ -41,7 +42,9 @@ export type OfferCodeResponseData =
         | "invalid_offer"
         | "insufficient_times_of_use"
         | "inactive"
-        | "unmet_minimum_purchase_quantity";
+        | "unmet_minimum_purchase_quantity"
+        | "missing_email"
+        | "missing_required_product";
       error_message: string;
     }
   | { valid: true; products_data: Record<string, Discount> };
@@ -59,6 +62,15 @@ type DiscountPayload = {
   minimumQuantity: number | null;
   durationInBillingCycles: Duration | null;
   minimumAmount: number | null;
+  requiredProductIds: string[];
+  minimumQuantityDiscountTiers: DiscountTier[];
+};
+
+export type DiscountTier = {
+  older_than_seconds: number;
+  older_than_unit: "day" | "week" | "month";
+  discount: { type: "cents" | "percent"; value: number };
+  currency_type?: CurrencyCode;
 };
 
 export const getPagedDiscounts = (page: number, query: string | null, sort: Sort<SortKey> | null) => {
@@ -91,6 +103,8 @@ export const createDiscount = async ({
   minimumQuantity,
   durationInBillingCycles,
   minimumAmount,
+  requiredProductIds,
+  minimumQuantityDiscountTiers,
 }: DiscountPayload) => {
   const response = await request({
     method: "POST",
@@ -110,6 +124,8 @@ export const createDiscount = async ({
       minimum_quantity: minimumQuantity,
       duration_in_billing_cycles: durationInBillingCycles,
       minimum_amount_cents: minimumAmount,
+      required_product_ids: requiredProductIds.length > 0 ? requiredProductIds : null,
+      minimum_quantity_discount_tiers: minimumQuantityDiscountTiers.length > 0 ? minimumQuantityDiscountTiers : null,
     },
   });
   const responseData = cast<
@@ -134,6 +150,8 @@ export const updateDiscount = async (
     minimumQuantity,
     durationInBillingCycles,
     minimumAmount,
+    requiredProductIds,
+    minimumQuantityDiscountTiers,
   }: DiscountPayload,
 ) => {
   const response = await request({
@@ -154,6 +172,8 @@ export const updateDiscount = async (
       minimum_quantity: minimumQuantity,
       duration_in_billing_cycles: durationInBillingCycles,
       minimum_amount_cents: minimumAmount,
+      required_product_ids: requiredProductIds.length > 0 ? requiredProductIds : null,
+      minimum_quantity_discount_tiers: minimumQuantityDiscountTiers.length > 0 ? minimumQuantityDiscountTiers : null,
     },
   });
   const responseData = cast<

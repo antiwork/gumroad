@@ -91,7 +91,7 @@ class Checkout::DiscountsController < Sellers::BaseController
 
   private
     def offer_code_params
-      params.permit(:name, :code, :universal, :max_purchase_count, :amount_cents, :amount_percentage, :currency_type, :valid_at, :expires_at, :minimum_quantity, :duration_in_billing_cycles, :minimum_amount_cents, selected_product_ids: [])
+      params.permit(:name, :code, :universal, :max_purchase_count, :amount_cents, :amount_percentage, :currency_type, :valid_at, :expires_at, :minimum_quantity, :duration_in_billing_cycles, :minimum_amount_cents, selected_product_ids: [], required_product_ids: [], minimum_quantity_discount_tiers: [:older_than_seconds, :older_than_unit, :currency_type, discount: [:type, :value]])
     end
 
     def paged_params

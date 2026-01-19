@@ -106,7 +106,7 @@ export const Checkout = ({
 
   async function applyDiscount(code: string, fromUrl = false) {
     setLoadingDiscount(true);
-    const discount = await computeOfferDiscount({
+    const discountRequest: Parameters<typeof computeOfferDiscount>[0] = {
       code,
       products: Object.fromEntries(
         cart.items.map((item) => [
@@ -114,7 +114,9 @@ export const Checkout = ({
           { permalink: item.product.permalink, quantity: item.quantity },
         ]),
       ),
-    });
+    };
+    if (state.email) discountRequest.email = state.email;
+    const discount = await computeOfferDiscount(discountRequest);
     if (discount.valid) {
       const entries = Object.entries(discount.products_data);
       const pppDiscountGreaterCount = entries.reduce((acc, [permalink, discount]) => {

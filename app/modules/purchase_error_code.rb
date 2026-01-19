@@ -26,6 +26,7 @@ module PurchaseErrorCode
   OFFER_CODE_INVALID = "offer_code_invalid"
   OFFER_CODE_SOLD_OUT = "offer_code_sold_out"
   EXCEEDING_OFFER_CODE_QUANTITY = "exceeding_offer_code_quantity"
+  OFFER_CODE_MISSING_REQUIRED_PRODUCT = "offer_code_missing_required_product"
   SUBSCRIPTION_INACTIVE = "subscription_inactive"
   PERCEIVED_PRICE_CENTS_NOT_MATCHING = "perceived_price_cents_not_matching"
   PRODUCT_SOLD_OUT = "product_sold_out"

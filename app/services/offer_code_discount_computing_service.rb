@@ -11,9 +11,10 @@ class OfferCodeDiscountComputingService
   #   => A[2], B[3], C[2] --> A[2], C[2]
   #   => A[2], C[3]       --> A[2]
 
-  def initialize(code, products)
+  def initialize(code, products, email: nil)
     @code = code
     @products = products
+    @email = email
   end
 
   def process
@@ -26,9 +27,10 @@ class OfferCodeDiscountComputingService
       next unless offer_code
       track_applicable_offer_code(offer_code)
 
-      if eligible?(offer_code, purchase_quantity)
+      if eligible?(offer_code, purchase_quantity, link)
         track_usage(offer_code, purchase_quantity)
-        products_data[link.unique_permalink] = { discount: offer_code.discount }
+        effective_discount = offer_code.effective_discount_for_email(email: email, product_currency_type: link.price_currency_type)
+        products_data[link.unique_permalink] = { discount: effective_discount }
         optimistically_apply_to_applicable_cross_sells(products_data, link)
       else
         track_ineligibility(offer_code, purchase_quantity)
@@ -42,7 +44,7 @@ class OfferCodeDiscountComputingService
   end
 
   private
-    attr_reader :code, :products
+    attr_reader :code, :products, :email
 
     def links
       @_links ||= Link.visible
@@ -68,10 +70,11 @@ class OfferCodeDiscountComputingService
         &.find { |offer_code| offer_code.applicable?(link) }
     end
 
-    def eligible?(offer_code, purchase_quantity)
+    def eligible?(offer_code, purchase_quantity, link = nil)
       return false if offer_code.inactive?
       return false unless meets_minimum_purchase_quantity?(offer_code, purchase_quantity)
       return false unless has_sufficient_times_of_use?(offer_code, purchase_quantity)
+      return false unless meets_required_product_ownership?(offer_code)
 
       true
     end
@@ -84,6 +87,24 @@ class OfferCodeDiscountComputingService
     def has_sufficient_times_of_use?(offer_code, purchase_quantity)
       offer_code.max_purchase_count.blank? ||
         remaining_times_of_use(offer_code) >= purchase_quantity
+    end
+
+    def meets_required_product_ownership?(offer_code)
+      return true if !offer_code.requires_product_ownership?
+
+      if email.blank?
+        @product_level_ineligibilities ||= {}
+        @product_level_ineligibilities[:missing_email] = true
+        return false
+      end
+
+      if !offer_code.buyer_owns_required_product?(email: email)
+        @product_level_ineligibilities ||= {}
+        @product_level_ineligibilities[:missing_required_product] = true
+        return false
+      end
+
+      true
     end
 
     def remaining_times_of_use(offer_code)
@@ -119,6 +140,8 @@ class OfferCodeDiscountComputingService
     end
 
     PRODUCT_LEVEL_INELIGIBILITIES_BY_DISPLAY_PRIORITY = [
+      :missing_email,
+      :missing_required_product,
       :unmet_minimum_purchase_quantity,
       :insufficient_times_of_use,
       :sold_out,
@@ -143,7 +166,8 @@ class OfferCodeDiscountComputingService
         offer_code = find_applicable_offer_code_for(cross_sell.product)
         next unless offer_code
 
-        products_data[cross_sell.product.unique_permalink] = { discount: offer_code.discount }
+        effective_discount = offer_code.effective_discount_for_email(email: email, product_currency_type: cross_sell.product.price_currency_type)
+        products_data[cross_sell.product.unique_permalink] = { discount: effective_discount }
       end
     end
 end

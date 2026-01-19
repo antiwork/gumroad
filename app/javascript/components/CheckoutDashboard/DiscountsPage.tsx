@@ -4,6 +4,7 @@ import { GroupBase, SelectInstance } from "react-select";
 import { is } from "ts-safe-cast";
 
 import {
+  DiscountTier,
   OfferCodeStatistics,
   createDiscount,
   deleteDiscount,
@@ -75,6 +76,8 @@ export type OfferCode = {
   duration_in_billing_cycles: Duration | null;
   minimum_quantity: number | null;
   minimum_amount_cents: number | null;
+  required_product_ids: string[];
+  minimum_quantity_discount_tiers: DiscountTier[];
 };
 
 export type SortKey = "name" | "revenue" | "uses" | "term";
@@ -671,6 +674,8 @@ const DiscountsPage = ({
             minimumQuantity: offerCode.minimum_quantity,
             durationInBillingCycles: offerCode.duration_in_billing_cycles,
             minimumAmount: offerCode.minimum_amount_cents,
+            requiredProductIds: offerCode.required_product_ids,
+            minimumQuantityDiscountTiers: offerCode.minimum_quantity_discount_tiers,
           });
           resetQueryState();
           setState({ offerCodes, pagination });
@@ -714,6 +719,8 @@ const DiscountsPage = ({
             minimumQuantity: offerCode.minimum_quantity,
             durationInBillingCycles: offerCode.duration_in_billing_cycles,
             minimumAmount: offerCode.minimum_amount_cents,
+            requiredProductIds: offerCode.required_product_ids,
+            minimumQuantityDiscountTiers: offerCode.minimum_quantity_discount_tiers,
           });
           resetQueryState();
           setState({ offerCodes, pagination });
@@ -816,6 +823,14 @@ const Form = ({
   );
   const [durationInBillingCycles, setDurationInMonths] = React.useState(offerCode?.duration_in_billing_cycles ?? null);
 
+  const [requiresProductOwnership, setRequiresProductOwnership] = React.useState(
+    (offerCode?.required_product_ids.length ?? 0) > 0,
+  );
+  const [requiredProductIds, setRequiredProductIds] = React.useState<string[]>(offerCode?.required_product_ids ?? []);
+  const [discountTiers, setDiscountTiers] = React.useState<DiscountTier[]>(
+    offerCode?.minimum_quantity_discount_tiers ?? [],
+  );
+
   const uid = React.useId();
 
   const handleSubmit = () => {
@@ -873,6 +888,8 @@ const Form = ({
       minimum_quantity: hasMinimumQuantity ? minimumQuantity.value : null,
       duration_in_billing_cycles: canSetDuration ? durationInBillingCycles : null,
       minimum_amount_cents: hasMinimumAmount ? minimumAmount.value : null,
+      required_product_ids: requiresProductOwnership ? requiredProductIds : [],
+      minimum_quantity_discount_tiers: requiresProductOwnership ? discountTiers : [],
     });
   };
 
@@ -1200,6 +1217,178 @@ const Form = ({
                       />
                     )}
                   </NumberInput>
+                </fieldset>
+              </div>
+            </Details>
+            <Details
+              className="toggle"
+              open={requiresProductOwnership}
+              summary={
+                <label>
+                  <input
+                    type="checkbox"
+                    role="switch"
+                    checked={requiresProductOwnership}
+                    onChange={(evt) => {
+                      setRequiresProductOwnership(evt.target.checked);
+                      if (!evt.target.checked) {
+                        setRequiredProductIds([]);
+                        setDiscountTiers([]);
+                      }
+                    }}
+                  />
+                  Require ownership of another product (upgrade discount)
+                </label>
+              }
+            >
+              <div className="dropdown flex flex-col gap-4">
+                <fieldset>
+                  <legend>
+                    <label htmlFor={`${uid}requiredProducts`}>Required products</label>
+                  </legend>
+                  <Select
+                    inputId={`${uid}requiredProducts`}
+                    instanceId={`${uid}requiredProducts`}
+                    options={products
+                      .filter((product) => !product.archived)
+                      .map((product) => ({ id: product.id, label: product.name }))}
+                    value={products
+                      .filter(({ id }) => requiredProductIds.includes(id))
+                      .map(({ id, name: label }) => ({ id, label }))}
+                    isMulti
+                    isClearable
+                    placeholder="Products buyer must own to use this discount"
+                    onChange={(selected) => setRequiredProductIds(selected.map(({ id }) => id))}
+                  />
+                  <small className="text-muted">
+                    Buyer must own at least one of these products to use this discount code.
+                  </small>
+                </fieldset>
+                <fieldset>
+                  <legend>
+                    <label>Time-based discount tiers (optional)</label>
+                  </legend>
+                  <small className="mb-4 block text-muted">
+                    Override the base discount based on how long the buyer has owned the required product.
+                  </small>
+                  {discountTiers.map((tier, index) => (
+                    <div key={index} className="mb-4 rounded border p-4">
+                      <div className="mb-3 flex items-center justify-between">
+                        <span className="font-bold">Tier {index + 1}</span>
+                        <Button
+                          onClick={() => setDiscountTiers((prev) => prev.filter((_, i) => i !== index))}
+                          aria-label="Remove tier"
+                        >
+                          <Icon name="trash2" />
+                        </Button>
+                      </div>
+                      <div className="mb-3">
+                        <label className="mb-2 block">If owned for at least</label>
+                        <div className="flex items-center gap-2">
+                          <NumberInput
+                            value={
+                              tier.older_than_unit === "day"
+                                ? tier.older_than_seconds / 86400
+                                : tier.older_than_unit === "week"
+                                  ? tier.older_than_seconds / 604800
+                                  : tier.older_than_seconds / 2592000
+                            }
+                            onChange={(value) => {
+                              if (value === null || value < 0) return;
+                              const multiplier =
+                                tier.older_than_unit === "day"
+                                  ? 86400
+                                  : tier.older_than_unit === "week"
+                                    ? 604800
+                                    : 2592000;
+                              setDiscountTiers((prev) =>
+                                prev.map((t, i) => {
+                                  if (i !== index) return t;
+                                  const updated: DiscountTier = {
+                                    older_than_seconds: value * multiplier,
+                                    older_than_unit: t.older_than_unit,
+                                    discount: t.discount,
+                                  };
+                                  if (t.currency_type) updated.currency_type = t.currency_type;
+                                  return updated;
+                                }),
+                              );
+                            }}
+                          >
+                            {(props) => <input className="!w-20" placeholder="0" {...props} />}
+                          </NumberInput>
+                          <TypeSafeOptionSelect
+                            className="!w-auto"
+                            value={tier.older_than_unit}
+                            onChange={(unit) => {
+                              const currentValue =
+                                tier.older_than_unit === "day"
+                                  ? tier.older_than_seconds / 86400
+                                  : tier.older_than_unit === "week"
+                                    ? tier.older_than_seconds / 604800
+                                    : tier.older_than_seconds / 2592000;
+                              const multiplier = unit === "day" ? 86400 : unit === "week" ? 604800 : 2592000;
+                              setDiscountTiers((prev) =>
+                                prev.map((t, i) => {
+                                  if (i !== index) return t;
+                                  const updated: DiscountTier = {
+                                    older_than_seconds: currentValue * multiplier,
+                                    older_than_unit: unit,
+                                    discount: t.discount,
+                                  };
+                                  if (t.currency_type) updated.currency_type = t.currency_type;
+                                  return updated;
+                                }),
+                              );
+                            }}
+                            options={[
+                              { id: "day" as const, label: "days" },
+                              { id: "week" as const, label: "weeks" },
+                              { id: "month" as const, label: "months" },
+                            ]}
+                          />
+                        </div>
+                      </div>
+                      <div>
+                        <span className="mb-2 block">Apply this discount:</span>
+                        <DiscountInput
+                          discount={{ type: tier.discount.type, value: tier.discount.value, error: false }}
+                          setDiscount={(newDiscount) => {
+                            setDiscountTiers((prev) =>
+                              prev.map((t, i) => {
+                                if (i !== index) return t;
+                                const updated: DiscountTier = {
+                                  older_than_seconds: t.older_than_seconds,
+                                  older_than_unit: t.older_than_unit,
+                                  discount: { type: newDiscount.type, value: newDiscount.value ?? 0 },
+                                };
+                                if (newDiscount.type === "cents") {
+                                  updated.currency_type = currencyCode;
+                                }
+                                return updated;
+                              }),
+                            );
+                          }}
+                          currencyCode={currencyCode}
+                        />
+                      </div>
+                    </div>
+                  ))}
+                  <Button
+                    onClick={() =>
+                      setDiscountTiers((prev) => [
+                        ...prev,
+                        {
+                          older_than_seconds: 2592000,
+                          older_than_unit: "month",
+                          discount: { type: "percent", value: 0 },
+                        },
+                      ])
+                    }
+                  >
+                    <Icon name="plus" />
+                    Add tier
+                  </Button>
                 </fieldset>
               </div>
             </Details>

@@ -3377,6 +3377,12 @@ class Purchase < ApplicationRecord
         return
       end
 
+      if offer_code.requires_product_ownership? && !offer_code.buyer_owns_required_product?(email: email)
+        self.error_code = PurchaseErrorCode::OFFER_CODE_MISSING_REQUIRED_PRODUCT
+        errors.add :base, "Sorry, this discount is only available for customers who own a qualifying product."
+        return
+      end
+
       return if offer_code.is_valid_for_purchase?(purchase_quantity: quantity)
 
       if offer_code.quantity_left > 0

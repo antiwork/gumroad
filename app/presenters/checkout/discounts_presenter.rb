@@ -58,6 +58,8 @@ class Checkout::DiscountsPresenter
       minimum_quantity: offer_code.minimum_quantity,
       duration_in_billing_cycles: offer_code.duration_in_billing_cycles,
       minimum_amount_cents: offer_code.minimum_amount_cents,
+      required_product_ids: offer_code.required_product_ids || [],
+      minimum_quantity_discount_tiers: offer_code.minimum_quantity_discount_tiers || [],
     }
   end
 end

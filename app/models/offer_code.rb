@@ -188,16 +188,88 @@ class OfferCode < ApplicationRecord
     )
   end
 
-  def is_amount_valid?(product)
-    product.available_price_cents.all? do |price_cents|
-      price_after_code = price_cents - amount_off(price_cents)
-      price_after_code <= 0 || price_after_code >= product.currency["min_price"]
+  def requires_product_ownership?
+    required_product_ids.present? && required_product_ids.any?
+  end
+
+  def buyer_owns_required_product?(email:)
+    return true if !requires_product_ownership?
+    return false if email.blank?
+
+    qualifying_purchase_for_email(email).present?
+  end
+
+  def qualifying_purchase_for_email(email)
+    return nil if !requires_product_ownership? || email.blank?
+
+    required_link_ids = Link.by_external_ids(required_product_ids).pluck(:id)
+    return nil if required_link_ids.empty?
+
+    Purchase
+      .by_email(email.downcase)
+      .where(link_id: required_link_ids)
+      .successful_gift_or_nongift
+      .not_is_gift_sender_purchase
+      .not_fully_refunded
+      .not_chargedback_or_chargedback_reversed
+      .not_additional_contribution
+      .order(created_at: :desc)
+      .first
+  end
+
+  def effective_discount_for_email(email:, product_currency_type: nil)
+    return discount if !requires_product_ownership?
+
+    qualifying_purchase = qualifying_purchase_for_email(email)
+    return nil if qualifying_purchase.nil?
+
+    applicable_tier = find_applicable_tier(qualifying_purchase.created_at)
+    return discount if applicable_tier.nil?
+
+    tier_discount = applicable_tier["discount"]
+    if tier_discount["type"] == "cents"
+      tier_currency = applicable_tier["currency_type"] || currency_type
+      if product_currency_type.present? && tier_currency.present? && product_currency_type != tier_currency
+        return discount
+      end
+      { type: "fixed", cents: tier_discount["value"] }.merge(base_discount_metadata)
+    else
+      { type: "percent", percents: tier_discount["value"] }.merge(base_discount_metadata)
     end
   end
 
-  def self.human_attribute_name(attr, _)
-    attr == "code" ? "Discount code" : super
-  end
+  private
+    def find_applicable_tier(purchase_created_at)
+      return nil if minimum_quantity_discount_tiers.blank?
+
+      owned_duration_seconds = Time.current - purchase_created_at
+      applicable_tiers = minimum_quantity_discount_tiers.select do |tier|
+        owned_duration_seconds >= tier["older_than_seconds"].to_i
+      end
+
+      applicable_tiers.max_by { |tier| tier["older_than_seconds"].to_i }
+    end
+
+    def base_discount_metadata
+      {
+        product_ids: universal? ? nil : products.map(&:external_id),
+        expires_at:,
+        minimum_quantity:,
+        duration_in_billing_cycles:,
+        minimum_amount_cents:,
+      }
+    end
+
+    def is_amount_valid?(product)
+      product.available_price_cents.all? do |price_cents|
+        price_after_code = price_cents - amount_off(price_cents)
+        price_after_code <= 0 || price_after_code >= product.currency["min_price"]
+      end
+    end
+
+    def self.human_attribute_name(attr, _)
+      attr == "code" ? "Discount code" : super
+    end
 
   private
     def max_purchase_count_is_greater_than_or_equal_to_inventory_sold
