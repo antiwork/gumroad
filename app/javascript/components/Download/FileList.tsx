@@ -443,7 +443,12 @@ const MobileAppAudioFileRow = ({ file }: { file: FileItem }) => {
 
   const messageListener = useRefToLatest((event: MessageEvent) => {
     if (typeof event.data !== "string" || !event.data.startsWith("{")) return;
-    const data: unknown = JSON.parse(event.data);
+    let data: unknown;
+    try {
+      data = JSON.parse(event.data);
+    } catch {
+      return;
+    }
     if (is<{ type: "mobileAppAudioPlayerInfo"; payload: MobileAppAudioPlayerInfo }>(data)) {
       if (data.payload.fileId !== file.id) return;
       setIsPlaying(data.payload.isPlaying);
