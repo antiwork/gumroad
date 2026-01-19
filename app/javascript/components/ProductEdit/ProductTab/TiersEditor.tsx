@@ -289,9 +289,7 @@ const TierEditor = ({
               ))}
             </fieldset>
             {allEnabledPricesAreZero ? (
-              <div role="alert" className="info">
-                Free tiers require a pay what they want price.
-              </div>
+              <Alert variant="info">Free tiers require a pay what they want price.</Alert>
             ) : null}
             <Details
               summary={

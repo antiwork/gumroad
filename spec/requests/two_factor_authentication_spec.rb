@@ -29,6 +29,38 @@ describe "Two-Factor Authentication", js: true, type: :system do
     end.to have_enqueued_mail(TwoFactorAuthenticationMailer, :authentication_token).once.with(user.id, email_provider: nil)
   end
 
+  it "does not redirect a user without 2FA to two-factor even if a stale 2FA session exists" do
+    next_path = "/about"
+    user_with_2fa = create(:user, skip_enabling_two_factor_authentication: false)
+    user_without_2fa = create(:user) # 2FA disabled by default in test factory
+
+    # User A reaches the 2FA page, which sets a pending 2FA session.
+    visit login_path(next: next_path)
+    fill_in "Email", with: user_with_2fa.email
+    fill_in "Password", with: user_with_2fa.password
+    click_on "Login"
+    expect(page).to have_text("Two-Factor Authentication")
+    expect(page).to have_text(user_with_2fa.email)
+
+    # User B does NOT have 2FA enabled. They should not be redirected to /two-factor.
+    visit login_path(next: next_path)
+    fill_in "Email", with: user_without_2fa.email
+    fill_in "Password", with: user_without_2fa.password
+    click_on "Login"
+
+    expect(page).to have_current_path(next_path)
+    expect(page).to_not have_text("Two-Factor Authentication")
+  end
+
+  it "redirects to two factor auth when logging in with a workflows next param and does not show a 404" do
+    visit login_path(next: workflows_path)
+    submit_login_form
+
+    expect(page).to have_text("Two-Factor Authentication")
+    expect(page).to have_current_path(two_factor_authentication_path(next: workflows_path))
+    expect(page).to_not have_text("Not Found")
+  end
+
   describe "Submit authentication token" do
     context "when correct token is entered" do
       it "navigates to login_path_for(user) on successful two factor authentication" do
@@ -55,10 +87,9 @@ describe "Two-Factor Authentication", js: true, type: :system do
         expect(page).to have_current_path(dashboard_path)
 
         # Clear the session by logging out
-        first("nav[aria-label='Main'] details summary").click
-        click_on "Logout"
-
-        expect(page).to have_content("Login")
+        visit logout_path
+        visit dashboard_path
+        expect(page).to have_current_path(login_path(next: dashboard_path))
         login_to_app
 
         # It doesn't ask for 2FA again - goes directly to dashboard
