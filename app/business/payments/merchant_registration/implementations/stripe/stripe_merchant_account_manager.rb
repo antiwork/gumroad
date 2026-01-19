@@ -169,6 +169,10 @@ module StripeMerchantAccountManager
       # Set the company's name to the individual's first and last name so that this is used as the Stripe account name and during payouts
       # Ref: https://github.com/gumroad/web/issues/19882
       diff_attributes[:company] = { name: user_compliance_info.first_and_last_name }
+      if last_user_compliance_info.country_code == Compliance::Countries::USA.alpha2 &&
+        last_user_compliance_info.business_type == UserComplianceInfo::BusinessTypes::SOLE_PROPRIETORSHIP
+        diff_attributes[:company][:structure] = ""
+      end
     end
 
     # Only set structure for US accounts
