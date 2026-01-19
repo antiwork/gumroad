@@ -81,13 +81,13 @@ const SearchBoxPopover = ({ initialQuery, onSearch }: { initialQuery: string; on
 
   return (
     <Popover open={searchBoxOpen} onOpenChange={setSearchBoxOpen}>
-      <PopoverTrigger aria-label="Search" asChild>
-        <WithTooltip tip="Search" position="bottom">
-          <div className={buttonVariants({ size: "default" })}>
+      <WithTooltip tip="Search" position="bottom">
+        <PopoverTrigger aria-label="Toggle Search" asChild>
+          <Button>
             <Icon name="solid-search" />
-          </div>
-        </WithTooltip>
-      </PopoverTrigger>
+          </Button>
+        </PopoverTrigger>
+      </WithTooltip>
       <PopoverContent>
         <div className="input input-wrapper">
           <Icon name="solid-search" />
