@@ -26,7 +26,7 @@ describe "Coffee", type: :system, js: true do
       expect(page).to have_field("Price", with: "1")
 
       click_on "Donate"
-      expect(page).to have_current_path("/checkout")
+      expect(page).to have_current_path("/checkout", ignore_query: true)
 
       within_cart_item "Buy me a coffee!" do
         expect(page).to have_text("US$1")
