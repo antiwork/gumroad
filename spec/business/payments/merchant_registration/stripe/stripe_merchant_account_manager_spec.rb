@@ -8656,7 +8656,7 @@ describe StripeMerchantAccountManager, :vcr do
         context "when the previous business type was sole proprietorship" do
           let(:user_compliance_info_1) { create(:user_compliance_info_business, user:, business_type: UserComplianceInfo::BusinessTypes::SOLE_PROPRIETORSHIP) }
 
-          it "clears the company structure" do
+          it "clears the company structure in a separate call before updating business type" do
             original_stripe_account_retrieve = Stripe::Account.method(:retrieve)
             expect(Stripe::Account).to receive(:retrieve).with(merchant_account.charge_processor_merchant_id) do |*args|
               stripe_account = original_stripe_account_retrieve.call(*args)
@@ -8666,8 +8666,13 @@ describe StripeMerchantAccountManager, :vcr do
 
             expect(Stripe::Account).to receive(:update).with(
               user.stripe_account.charge_processor_merchant_id,
-              hash_including(company: { name: user_compliance_info_2.first_and_last_name, structure: "" })
-            )
+              { company: { structure: "" } }
+            ).ordered
+            expect(Stripe::Account).to receive(:update).with(
+              user.stripe_account.charge_processor_merchant_id,
+              hash_including(company: { name: user_compliance_info_2.first_and_last_name })
+            ).ordered
+
             subject.update_account(user, passphrase: "1234")
           end
         end
