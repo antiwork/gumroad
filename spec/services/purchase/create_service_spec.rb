@@ -2670,7 +2670,7 @@ describe Purchase::CreateService, :vcr do
       end
     end
 
-    context "with default discount code tracking" do
+    describe "default discount code tracking" do
       let(:default_offer_code) { create(:offer_code, products: [product], amount_cents: discount_cents, code: "DEFAULT20") }
 
       before do
@@ -2678,27 +2678,29 @@ describe Purchase::CreateService, :vcr do
       end
 
       it "sets used_default_discount_code to true when the default offer code is used" do
-        purchase = product.sales.build(discount_code: default_offer_code.code)
-        purchase.offer_code = product.find_offer_code(code: purchase.discount_code.downcase.strip)
-        purchase.used_default_discount_code = purchase.offer_code.present? && purchase.offer_code == product.default_offer_code
+        params[:purchase].merge!(discount_code: default_offer_code.code)
+        service = Purchase::CreateService.new(product:, params:)
+        purchase = service.send(:build_purchase, params[:purchase])
 
+        expect(purchase.offer_code).to eq(default_offer_code)
         expect(purchase.used_default_discount_code).to be true
       end
 
       it "sets used_default_discount_code to false when a different offer code is used" do
         other_offer_code = create(:offer_code, products: [product], amount_cents: discount_cents, code: "OTHER")
+        params[:purchase].merge!(discount_code: other_offer_code.code)
+        service = Purchase::CreateService.new(product:, params:)
+        purchase = service.send(:build_purchase, params[:purchase])
 
-        purchase = product.sales.build(discount_code: other_offer_code.code)
-        purchase.offer_code = product.find_offer_code(code: purchase.discount_code.downcase.strip)
-        purchase.used_default_discount_code = purchase.offer_code.present? && purchase.offer_code == product.default_offer_code
-
+        expect(purchase.offer_code).to eq(other_offer_code)
         expect(purchase.used_default_discount_code).to be false
       end
 
-      it "sets used_default_discount_code to false when no discount code is used" do
-        purchase = product.sales.build
-        purchase.used_default_discount_code = false
+      it "defaults used_default_discount_code to false when no discount code is used" do
+        service = Purchase::CreateService.new(product:, params:)
+        purchase = service.send(:build_purchase, params[:purchase])
 
+        expect(purchase.offer_code).to be_nil
         expect(purchase.used_default_discount_code).to be false
       end
     end

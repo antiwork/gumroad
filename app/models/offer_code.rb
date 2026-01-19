@@ -313,7 +313,7 @@ class OfferCode < ApplicationRecord
     end
 
     def prevent_destroy_if_used_as_default_discount
-      return unless products_with_default_discount.exists?
+      return unless products_with_default_discount.visible.exists?
 
       errors.add(:base, "Cannot delete this discount code because it is set as the default discount on one or more products.")
       throw(:abort)
