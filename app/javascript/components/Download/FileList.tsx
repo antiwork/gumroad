@@ -9,6 +9,7 @@ import { classNames } from "$app/utils/classNames";
 import { humanizedDuration } from "$app/utils/duration";
 import FileUtils from "$app/utils/file";
 import { createJWPlayer } from "$app/utils/jwPlayer";
+import Mobile from "$app/utils/mobile";
 import { asyncVoid } from "$app/utils/promise";
 import { assertResponseError, request, ResponseError } from "$app/utils/request";
 
@@ -451,11 +452,12 @@ const MobileAppAudioFileRow = ({ file }: { file: FileItem }) => {
   });
 
   React.useEffect(() => {
+    const target = Mobile.isOnAndroidDevice() ? document : window;
     const listener = (e: MessageEvent) => messageListener.current(e);
-    // @ts-expect-error - React Native sends message events to embedded webviews via the document object, not window
-    document.addEventListener("message", listener);
-    // @ts-expect-error - React Native sends message events to embedded webviews via the document object, not window
-    return () => document.removeEventListener("message", listener);
+    // @ts-expect-error - React Native sends message events to Android webviews via the document object, not window
+    target.addEventListener("message", listener);
+    // @ts-expect-error - React Native sends message events to Android webviews via the document object, not window
+    return () => target.removeEventListener("message", listener);
   }, []);
 
   const [showTooltip, setShowTooltip] = React.useState(false);
