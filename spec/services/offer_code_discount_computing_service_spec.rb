@@ -407,13 +407,14 @@ describe OfferCodeDiscountComputingService do
   end
 
   describe "upgrade discounts" do
-    let(:required_product) { create(:product, user: seller, price_cents: 1000) }
+    let(:required_product) { create(:product, user: seller, price_cents: 0) }
     let(:buyer_email) { "buyer@example.com" }
 
     let(:upgrade_offer_code) do
       create(:offer_code,
              user: seller,
              products: [product],
+             amount_cents: nil,
              amount_percentage: 20,
              required_product_ids: [required_product.external_id]
       )
@@ -444,7 +445,7 @@ describe OfferCodeDiscountComputingService do
 
     context "when buyer owns the required product" do
       before do
-        create(:purchase, link: required_product, email: buyer_email, created_at: 2.weeks.ago)
+        create(:free_purchase, link: required_product, email: buyer_email, created_at: 2.weeks.ago)
       end
 
       it "applies the discount" do

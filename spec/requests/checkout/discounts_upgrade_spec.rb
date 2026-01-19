@@ -1,17 +1,18 @@
 # frozen_string_literal: true
 
 require "spec_helper"
+require "shared_examples/authorize_called"
 
 describe("Checkout discounts page - upgrade discounts", type: :system, js: true) do
   let(:seller) { create(:named_seller) }
-  let(:product1) { create(:product, name: "Product 1", user: seller, price_cents: 1000) }
-  let(:product2) { create(:product, name: "Product 2", user: seller, price_cents: 500) }
+  let!(:product1) { create(:product, name: "Product 1", user: seller, price_cents: 1000) }
+  let!(:product2) { create(:product, name: "Product 2", user: seller, price_cents: 500) }
   let(:membership) { create(:membership_product_with_preset_tiered_pricing, name: "Membership", user: seller) }
 
   include_context "with switching account to user as admin for seller"
 
   describe "upgrade discounts" do
-    let(:required_product) { create(:product, name: "Required Product", user: seller, price_cents: 1000) }
+    let!(:required_product) { create(:product, name: "Required Product", user: seller, price_cents: 1000) }
 
     context "when feature is disabled" do
       it "does not display the upgrade discount toggle" do
@@ -67,10 +68,10 @@ describe("Checkout discounts page - upgrade discounts", type: :system, js: true)
           select_combo_box_option search: "Required Product", from: "Required products"
 
           click_on "Add tier"
-          within find("div", text: "Tier 1").ancestor("div.rounded.border") do
-            fill_in placeholder: "0", with: "2"
+          within find("span.font-bold", text: "Tier 1").ancestor("div.rounded.border") do
+            all("input[placeholder='0']").first.fill_in(with: "2")
             select "weeks", from: find("select")[:id]
-            find("input[name='amount']").fill_in(with: "50")
+            fill_in "Percentage", with: "50"
           end
 
           click_on "Add discount"
@@ -98,17 +99,17 @@ describe("Checkout discounts page - upgrade discounts", type: :system, js: true)
           select_combo_box_option search: "Required Product", from: "Required products"
 
           click_on "Add tier"
-          within find("div", text: "Tier 1").ancestor("div.rounded.border") do
-            fill_in placeholder: "0", with: "1"
+          within find("span.font-bold", text: "Tier 1").ancestor("div.rounded.border") do
+            all("input[placeholder='0']").first.fill_in(with: "1")
             select "weeks", from: find("select")[:id]
-            find("input[name='amount']").fill_in(with: "25")
+            fill_in "Percentage", with: "25"
           end
 
           click_on "Add tier"
-          within find("div", text: "Tier 2").ancestor("div.rounded.border") do
-            fill_in placeholder: "0", with: "1"
+          within find("span.font-bold", text: "Tier 2").ancestor("div.rounded.border") do
+            all("input[placeholder='0']").first.fill_in(with: "1")
             select "months", from: find("select")[:id]
-            find("input[name='amount']").fill_in(with: "50")
+            fill_in "Percentage", with: "50"
           end
 
           click_on "Add discount"
@@ -142,7 +143,7 @@ describe("Checkout discounts page - upgrade discounts", type: :system, js: true)
           expect(page).to have_alert(text: "Successfully created discount!")
 
           offer_code = OfferCode.last
-          expect(offer_code.minimum_quantity_discount_tiers).to eq([])
+          expect(offer_code.minimum_quantity_discount_tiers).to be_blank
         end
 
         it "clears required products and tiers when unchecking the upgrade discount toggle" do
@@ -236,7 +237,7 @@ describe("Checkout discounts page - upgrade discounts", type: :system, js: true)
 
       describe "displaying upgrade discount in drawer" do
         let!(:upgrade_offer_code) do
-          create(:offer_code,
+          create(:percentage_offer_code,
                  name: "Drawer Test",
                  code: "drawertest",
                  user: seller,
@@ -261,7 +262,7 @@ describe("Checkout discounts page - upgrade discounts", type: :system, js: true)
 
       describe "duplicating an upgrade discount" do
         let!(:upgrade_offer_code) do
-          create(:offer_code,
+          create(:percentage_offer_code,
                  name: "Duplicate Source",
                  code: "duplicatesource",
                  user: seller,

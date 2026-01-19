@@ -172,8 +172,8 @@ export const updateDiscount = async (
       minimum_quantity: minimumQuantity,
       duration_in_billing_cycles: durationInBillingCycles,
       minimum_amount_cents: minimumAmount,
-      required_product_ids: requiredProductIds.length > 0 ? requiredProductIds : null,
-      minimum_quantity_discount_tiers: minimumQuantityDiscountTiers.length > 0 ? minimumQuantityDiscountTiers : null,
+      required_product_ids: requiredProductIds,
+      minimum_quantity_discount_tiers: minimumQuantityDiscountTiers,
     },
   });
   const responseData = cast<
