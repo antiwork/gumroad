@@ -312,6 +312,7 @@ class OfferCode < ApplicationRecord
 
     def validate_not_used_as_default_discount
       return unless deleted_at_changed? && deleted_at.present?
+      return unless persisted? # Skip validation for new records (id is nil)
 
       if Link.visible.where(default_offer_code_id: id).exists?
         errors.add(:base, "This discount code is currently set as the default discount for one or more active or archived products. Please remove it from all products before deleting.")

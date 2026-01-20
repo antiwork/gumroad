@@ -61,7 +61,7 @@ export const searchProductOfferCodes = async (
   const response = await request({
     method: "GET",
     accept: "json",
-    url: `/products/${encodeURIComponent(productPermalink)}/available_discount_codes.json?${params.toString()}`,
+    url: `/products/${encodeURIComponent(productPermalink)}/available_offer_codes.json?${params.toString()}`,
   });
 
   if (!response.ok) throw new ResponseError();

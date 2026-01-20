@@ -92,22 +92,22 @@ class ProductPresenter::ProductProps
       url_code_valid = url_code_result&.dig(:valid) == true
       default_code_valid = default_code_result&.dig(:valid) == true
 
-      return unless url_code_valid || default_code_valid
+      return url_code_result unless url_code_valid || default_code_valid
 
       return url_code_result if !default_code_valid
       return default_code_result if !url_code_valid
 
-      url_code_amount = url_code_result[:amount_off_cents].to_i
-      default_code_amount = default_code_result[:amount_off_cents].to_i
+      url_code_amount = compute_amount_off(url_code, quantity)
+      default_code_amount = compute_amount_off(default_code, quantity)
 
       url_code_amount > default_code_amount ? url_code_result : default_code_result
     end
 
     def evaluate_code(code, quantity)
-      return { valid: false, error_code: :missing_code } if code.blank?
+      return { valid: false, error_code: "missing_code" } if code.blank?
 
       offer_code = product.find_offer_code(code: code)
-      return { valid: false, error_code: :invalid_offer } unless offer_code
+      return { valid: false, error_code: "invalid_offer" } unless offer_code
 
       response = OfferCodeDiscountComputingService.new(
         code,
@@ -120,15 +120,23 @@ class ProductPresenter::ProductProps
       ).process
 
       if response[:error_code].present?
-        return { valid: false, error_code: response[:error_code] }
+        return { valid: false, error_code: response[:error_code].to_s }
       end
 
       {
         valid: true,
         code: code,
-        discount: offer_code.discount,
-        amount_off_cents: offer_code.amount_off(product.price_cents)
+        discount: offer_code.discount
       }
+    end
+
+    def compute_amount_off(code, quantity)
+      return 0 if code.blank?
+
+      offer_code = product.find_offer_code(code: code)
+      return 0 unless offer_code
+
+      offer_code.amount_off(product.price_cents)
     end
 
     def purchase_props(purchase_info)
