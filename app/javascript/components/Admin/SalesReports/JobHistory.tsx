@@ -7,6 +7,7 @@ import { Icon } from "$app/components/Icons";
 import { LoadingSpinner } from "$app/components/LoadingSpinner";
 import { Placeholder } from "$app/components/ui/Placeholder";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "$app/components/ui/Table";
+import { Section } from "$app/components/ui/Section";
 
 export type JobHistoryItem = {
   job_id: string;
@@ -65,10 +66,9 @@ const AdminSalesReportsJobHistory = ({ countries, sales_types, jobHistory, authe
         authenticityToken={authenticityToken}
         onSuccess={() => setShowNewSalesReportForm(false)}
         wrapper={(children) => (
-          <section>
-            <header>Generate sales report with custom date ranges</header>
+          <Section className="p-4 md:p-8" header="Generate sales report with custom date ranges">
             {children}
-          </section>
+          </Section>
         )}
       />
     ) : (
