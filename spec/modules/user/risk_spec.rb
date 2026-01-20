@@ -51,14 +51,14 @@ describe User::Risk do
         user = create(:user, payment_address: "test@example.com")
         create(:user, payment_address: "test@example.com")
 
-        expect {
+        expect do
           user.suspend_sellers_other_accounts(transition)
-        }.to change(SuspendAccountsWithPaymentAddressWorker.jobs, :size).from(0).to(1)
-        .and change { SuspendAccountsWithPaymentAddressWorker.jobs.last&.dig('args') }.to([user.id])
+        end.to change(SuspendAccountsWithPaymentAddressWorker.jobs, :size).from(0).to(1)
+        .and change { SuspendAccountsWithPaymentAddressWorker.jobs.last&.dig("args") }.to([user.id])
 
-        expect {
+        expect do
           SuspendAccountsWithPaymentAddressWorker.perform_one
-        }.to change(SuspendAccountsWithPaymentAddressWorker.jobs, :size).from(1).to(0)
+        end.to change(SuspendAccountsWithPaymentAddressWorker.jobs, :size).from(1).to(0)
       end
     end
   end
