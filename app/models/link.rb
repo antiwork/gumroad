@@ -821,16 +821,17 @@ class Link < ApplicationRecord
   # Public: Find all alive offer codes associated with product and user in order of created at.
   #
   # Returns list of offer codes.
-  def product_and_universal_offer_codes(query = nil, limit = nil)
+  def product_and_universal_offer_codes(query = nil, limit = nil, reverse = false)
     product_codes = offer_codes.alive
     universal_codes = user.offer_codes.universal_with_matching_currency(price_currency_type).alive
 
     if query.present?
-      product_codes = product_codes.search_by_name(query)
-      universal_codes = universal_codes.search_by_name(query)
+      product_codes = product_codes.search_by_name(query, reverse:)
+      universal_codes = universal_codes.search_by_name(query, reverse:)
     end
 
     combined_codes = (product_codes + universal_codes).sort_by(&:created_at)
+    combined_codes.reverse! if reverse
     limit ? combined_codes.first(limit) : combined_codes
   end
 

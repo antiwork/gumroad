@@ -90,11 +90,26 @@ describe Products::AvailableOfferCodesController do
           end
         end
 
-        it "enforces the limit" do
-          get :index, format: :json, params: { product_id: product.unique_permalink }
+        it "enforces the limit when query is present" do
+          get :index, format: :json, params: { product_id: product.unique_permalink, query: "Code" }
 
           expect(response).to be_successful
           expect(response.parsed_body.length).to eq(Products::AvailableOfferCodesController::MAX_OFFER_CODES_LIMIT)
+        end
+      end
+
+      context "with INITIAL_OFFER_CODES_LIMIT" do
+        before do
+          (Products::AvailableOfferCodesController::INITIAL_OFFER_CODES_LIMIT + 5).times do |i|
+            create(:offer_code, user: seller, name: "Initial Code #{i}", code: "INITIALCODE#{i}", products: [product])
+          end
+        end
+
+        it "enforces the initial limit when no query is present" do
+          get :index, format: :json, params: { product_id: product.unique_permalink }
+
+          expect(response).to be_successful
+          expect(response.parsed_body.length).to eq(Products::AvailableOfferCodesController::INITIAL_OFFER_CODES_LIMIT)
         end
       end
 
@@ -107,6 +122,47 @@ describe Products::AvailableOfferCodesController do
           expect(response).to be_successful
           codes = response.parsed_body.map { |code| code["code"] }
           expect(codes).to include(universal_offer_code.code)
+        end
+      end
+
+      context "ordering" do
+        let!(:oldest_code) { create(:offer_code, user: seller, name: "Oldest Code", code: "OLDEST", products: [product], created_at: 3.days.ago) }
+        let!(:middle_code) { create(:offer_code, user: seller, name: "Middle Code", code: "MIDDLE", products: [product], created_at: 2.days.ago) }
+        let!(:newest_code) { create(:offer_code, user: seller, name: "Newest Code", code: "NEWEST", products: [product], created_at: 1.day.ago) }
+        let!(:oldest_universal) { create(:universal_offer_code, user: seller, name: "Oldest Universal", code: "OLDEST_UNI", currency_type: product.price_currency_type, created_at: 4.days.ago) }
+        let!(:newest_universal) { create(:universal_offer_code, user: seller, name: "Newest Universal", code: "NEWEST_UNI", currency_type: product.price_currency_type, created_at: 1.hour.ago) }
+
+        it "returns offer codes ordered by newest first when no query is provided" do
+          get :index, format: :json, params: { product_id: product.unique_permalink }
+
+          expect(response).to be_successful
+          parsed_body = response.parsed_body
+          codes = parsed_body.map { |code| code["code"] }
+
+          # Should be ordered newest first
+          expect(codes).to eq(["NEWEST_UNI", "NEWEST", "MIDDLE", "OLDEST", "OLDEST_UNI"])
+        end
+
+        it "returns offer codes ordered by newest first when query is provided" do
+          get :index, format: :json, params: { product_id: product.unique_permalink, query: "Code" }
+
+          expect(response).to be_successful
+          parsed_body = response.parsed_body
+          codes = parsed_body.map { |code| code["code"] }
+
+          # Should be ordered newest first (only product codes match "Code")
+          expect(codes).to eq(["NEWEST", "MIDDLE", "OLDEST"])
+        end
+
+        it "returns universal offer codes ordered by newest first when query matches universal codes" do
+          get :index, format: :json, params: { product_id: product.unique_permalink, query: "Universal" }
+
+          expect(response).to be_successful
+          parsed_body = response.parsed_body
+          codes = parsed_body.map { |code| code["code"] }
+
+          # Should be ordered newest first (only universal codes match "Universal")
+          expect(codes).to eq(["NEWEST_UNI", "OLDEST_UNI"])
         end
       end
     end

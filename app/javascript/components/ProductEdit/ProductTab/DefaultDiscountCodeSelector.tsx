@@ -4,6 +4,7 @@ import { searchProductOfferCodes } from "$app/data/offer_code";
 import { assertResponseError } from "$app/utils/request";
 
 import { ComboBox } from "$app/components/ComboBox";
+import { Icon } from "$app/components/Icons";
 import { OfferCode, useProductEditContext } from "$app/components/ProductEdit/state";
 import { showAlert } from "$app/components/server-components/Alert";
 import { ToggleSettingRow } from "$app/components/SettingRow";
@@ -38,10 +39,6 @@ export const DefaultDiscountCodeSelector = () => {
       if (!uniquePermalink) return;
 
       const trimmedSearch = search.trim();
-      if (!trimmedSearch) {
-        resetSearch();
-        return;
-      }
 
       try {
         const results = await searchProductOfferCodes(uniquePermalink, trimmedSearch);
@@ -89,6 +86,11 @@ export const DefaultDiscountCodeSelector = () => {
               className="w-full"
               options={options}
               maxHeight="16rem"
+              onFocus={() => {
+                if (!query.trim()) {
+                  void fetchOptions("");
+                }
+              }}
               input={(props) => (
                 <div className="input">
                   <input
@@ -102,15 +104,11 @@ export const DefaultDiscountCodeSelector = () => {
                       const value = event.target.value;
                       setQuery(value);
 
-                      if (!value.trim()) {
-                        resetSearch();
-                        return;
-                      }
-
                       debouncedFetchOptions(value);
                       setIsOpen(true);
                     }}
                   />
+                  <Icon name="outline-cheveron-down" />
                 </div>
               )}
               option={(code, props) => (
