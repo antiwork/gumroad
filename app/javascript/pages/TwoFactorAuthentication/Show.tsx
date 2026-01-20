@@ -10,19 +10,27 @@ type PageProps = {
   user_id: string;
   email: string;
   token: string | null;
+  authenticity_token: string;
+};
+
+type FormData = {
+  token: string;
+  next: string | null;
+  authenticity_token: string;
 };
 
 function TwoFactorAuthentication() {
-  const { user_id, email, token: initialToken } = usePage<PageProps>().props;
+  const { user_id, email, token: initialToken, authenticity_token } = usePage<PageProps>().props;
   const next = new URL(useOriginalLocation()).searchParams.get("next");
   const uid = React.useId();
 
-  const form = useForm({
+  const form = useForm<FormData>({
     token: initialToken ?? "",
     next,
+    authenticity_token,
   });
 
-  const resendForm = useForm({});
+  const resendForm = useForm({ authenticity_token });
 
   const handleSubmit = (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();

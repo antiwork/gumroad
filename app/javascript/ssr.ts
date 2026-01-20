@@ -49,8 +49,6 @@ import ProfileCoffeePage from "$app/components/server-components/Profile/CoffeeP
 import ProfilePostPage from "$app/components/server-components/Profile/PostPage";
 import ProfileProductPage from "$app/components/server-components/Profile/ProductPage";
 import ProfileWishlistPage from "$app/components/server-components/Profile/WishlistPage";
-import PublicChargePage from "$app/components/server-components/Public/ChargePage";
-import PublicLicenseKeyPage from "$app/components/server-components/Public/LicenseKeyPage";
 import DisputeEvidencePage from "$app/components/server-components/Purchase/DisputeEvidencePage";
 import PurchaseProductPage from "$app/components/server-components/Purchase/ProductPage";
 import SubscribeReviewReminders from "$app/components/server-components/ReviewReminders/SubscribeReviewReminders";
@@ -119,8 +117,6 @@ ReactOnRails.register({
   ProfilePostPage,
   ProfileProductPage,
   ProfileWishlistPage,
-  PublicChargePage,
-  PublicLicenseKeyPage,
   SecureRedirectPage,
   SubscribePage,
   SubscribePreview,

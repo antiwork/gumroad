@@ -24,4 +24,10 @@ module InertiaRendering
 
       { message: flash_message, status: flash[:alert] ? "danger" : flash[:warning] ? "warning" : "success" }
     end
+
+    def inertia_errors(model)
+      { errors: model.errors.to_hash.each_with_object({}) do |(key, messages), hash|
+        hash["#{model.model_name.element}.#{key}"] = messages.to_sentence
+      end }
+    end
 end

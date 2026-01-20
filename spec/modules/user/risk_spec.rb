@@ -50,17 +50,17 @@ describe User::Risk do
       it "calls SuspendAccountsWithPaymentAddressWorker only once for all related accounts" do
         user = create(:user, payment_address: "test@example.com")
         create(:user, payment_address: "test@example.com")
-
-        expect {
+        
+        expect do
           user.suspend_sellers_other_accounts(transition)
-        }.to change(SuspendAccountsWithPaymentAddressWorker.jobs, :size).from(0).to(1)
-        .and change { SuspendAccountsWithPaymentAddressWorker.jobs.last&.dig('args') }.to([user.id])
+        end.to change(SuspendAccountsWithPaymentAddressWorker.jobs, :size).from(0).to(1)
+        .and change { SuspendAccountsWithPaymentAddressWorker.jobs.last&.dig("args") }.to([user.id])
         .and not_change { SuspendAccountsWithStripeFingerprintWorker.jobs.size }
-
-        expect {
+       
+        expect do
           SuspendAccountsWithPaymentAddressWorker.perform_one
-        }.to change(SuspendAccountsWithPaymentAddressWorker.jobs, :size).from(1).to(0)
-        .and not_change { SuspendAccountsWithStripeFingerprintWorker.jobs.size }
+        end.to change(SuspendAccountsWithPaymentAddressWorker.jobs, :size).from(1).to(0)
+        .and not_change { SuspendAccountsWithStripeFingerprintWorker.jobs.size }      
       end
     end
 
@@ -74,15 +74,15 @@ describe User::Risk do
           create(:ach_account, user:, stripe_fingerprint:)
         end
 
-        expect {
+        expect do
           user.suspend_sellers_other_accounts(transition)
-        }.to change(SuspendAccountsWithStripeFingerprintWorker.jobs, :size).from(0).to(1)
+        end.to change(SuspendAccountsWithStripeFingerprintWorker.jobs, :size).from(0).to(1)
         .and change { SuspendAccountsWithStripeFingerprintWorker.jobs.last&.dig('args') }.to([user.id])
         .and not_change { SuspendAccountsWithPaymentAddressWorker.jobs.size }
 
-        expect {
+        expect do
           SuspendAccountsWithStripeFingerprintWorker.perform_one
-        }.to change(SuspendAccountsWithStripeFingerprintWorker.jobs, :size).from(1).to(0)
+        end.to change(SuspendAccountsWithStripeFingerprintWorker.jobs, :size).from(1).to(0)
         .and not_change { SuspendAccountsWithPaymentAddressWorker.jobs.size }
       end
     end
@@ -101,14 +101,14 @@ describe User::Risk do
           create(:ach_account, user:, stripe_fingerprint:)
         end
 
-        expect {
+        expect do
           user.enable_sellers_other_accounts(transition)
-        }.to change(MarkAccountsCompliantWithStripeFingerprintWorker.jobs, :size).from(0).to(1)
+        end.to change(MarkAccountsCompliantWithStripeFingerprintWorker.jobs, :size).from(0).to(1)
         .and change { MarkAccountsCompliantWithStripeFingerprintWorker.jobs.last&.dig('args') }.to([user.id])
 
-        expect {
+        expect do
           MarkAccountsCompliantWithStripeFingerprintWorker.perform_one
-        }.to change(MarkAccountsCompliantWithStripeFingerprintWorker.jobs, :size).from(1).to(0)
+        end.to change(MarkAccountsCompliantWithStripeFingerprintWorker.jobs, :size).from(1).to(0)
       end
     end
   end

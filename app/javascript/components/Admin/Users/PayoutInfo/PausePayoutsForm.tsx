@@ -1,6 +1,7 @@
 import * as React from "react";
 
 import { Form } from "$app/components/Admin/Form";
+import { Button } from "$app/components/Button";
 
 const AdminPausePayoutsForm = ({
   user_external_id,
@@ -36,9 +37,9 @@ const AdminPausePayoutsForm = ({
               value={reason}
               onChange={onReasonChange}
             />
-            <button type="submit" className="button" disabled={isLoading}>
+            <Button type="submit" disabled={isLoading}>
               {isLoading ? "Pausing Payouts" : "Pause Payouts"}
-            </button>
+            </Button>
           </div>
         </fieldset>
       )}

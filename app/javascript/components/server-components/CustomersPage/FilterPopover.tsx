@@ -1,8 +1,10 @@
 import * as React from "react";
 import { createCast } from "ts-safe-cast";
 
+import { classNames } from "$app/utils/classNames";
 import { register } from "$app/utils/serverComponentUtil";
 
+import { buttonVariants } from "$app/components/Button";
 import { Icon } from "$app/components/Icons";
 import { Popover } from "$app/components/Popover";
 import { WithTooltip } from "$app/components/WithTooltip";
@@ -14,7 +16,7 @@ export const FilterPopover = ({ contentHTML }: Props) => (
     aria-label="Filter"
     trigger={
       <WithTooltip tip="Filter" position="bottom">
-        <div className="button js-toggle-filter-list">
+        <div className={classNames(buttonVariants({ size: "default" }), "js-toggle-filter-list")}>
           <Icon name="filter" />
         </div>
       </WithTooltip>
