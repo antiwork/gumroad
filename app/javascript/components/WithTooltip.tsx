@@ -20,7 +20,7 @@ export const WithTooltip = ({ tip, children, position = "bottom", className, too
 
   return (
     <span {...props} className={classNames("group/tooltip relative inline-grid", className, position)}>
-      <span aria-describedby={id} style={{ display: "contents" }}>
+      <span aria-describedby={tip ? id : undefined} style={{ display: "contents" }}>
         {children}
       </span>
       {tip ? (
