@@ -107,19 +107,19 @@ describe LoginsController, type: :controller, inertia: true do
     it "shows proper error if password is incorrect" do
       post "create", params: { user: { login_identifier: @user.email, password: "hunter2" } }
       expect(response).to redirect_to(login_path)
-      expect(flash[:warning]).to eq("Please try another password. The one you entered was incorrect.")
+      expect(flash[:warning]).to eq("Vui lòng thử một mật khẩu khác. Mật khẩu bạn đã nhập không chính xác.")
     end
 
     it "shows proper error if email doesn't exist" do
       post "create", params: { user: { login_identifier: "hithere@gumroaddddd.com", password: "password" } }
       expect(response).to redirect_to(login_path)
-      expect(flash[:warning]).to eq("An account does not exist with that email.")
+      expect(flash[:warning]).to eq("Không có tài khoản nào tồn tại với email đó.")
     end
 
     it "returns an error with no params" do
       post "create"
       expect(response).to redirect_to(login_path)
-      expect(flash[:warning]).to eq("An account does not exist with that email.")
+      expect(flash[:warning]).to eq("Không có tài khoản nào tồn tại với email đó.")
     end
 
     it "logs in if user already exists and redirects to next if present" do
@@ -146,7 +146,7 @@ describe LoginsController, type: :controller, inertia: true do
       post "create", params: { user: { login_identifier: @user.email, password: "password" } }
 
       expect(response).to redirect_to(login_path)
-      expect(flash[:warning]).to eq("You cannot log in because your account was permanently deleted. Please sign up for a new account to start selling!")
+      expect(flash[:warning]).to eq("Bạn không thể đăng nhập vì tài khoản của bạn đã bị xóa vĩnh viễn. Vui lòng đăng ký một tài khoản mới để bắt đầu bán hàng!")
     end
 
     it "does not log in a user when reCAPTCHA is not completed" do
@@ -155,7 +155,7 @@ describe LoginsController, type: :controller, inertia: true do
       post :create, params: { user: { login_identifier: @user.email, password: "password" } }
 
       expect(response).to redirect_to(login_path)
-      expect(flash[:warning]).to eq "Sorry, we could not verify the CAPTCHA. Please try again."
+      expect(flash[:warning]).to eq "Xin lỗi, chúng tôi không thể xác minh CAPTCHA. Vui lòng thử lại."
       expect(controller.user_signed_in?).to be(false)
     end
 
@@ -362,7 +362,7 @@ describe LoginsController, type: :controller, inertia: true do
       delete :destroy
 
       expect(response).to redirect_to(root_path)
-      expect(flash[:notice]).to eq("Signed out successfully.")
+      expect(flash[:notice]).to eq("Đã đăng xuất thành công.")
       expect(controller.user_signed_in?).to be(false)
     end
 

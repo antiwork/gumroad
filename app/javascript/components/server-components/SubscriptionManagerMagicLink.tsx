@@ -48,15 +48,15 @@ const SubscriptionManagerMagicLink = ({
   };
 
   const title = hasSentEmail
-    ? `We've sent a link to ${selectedUserEmail.email}.`
+    ? `Chúng tôi đã gửi link đến ${selectedUserEmail.email}.`
     : invalid
-      ? "Your magic link has expired."
-      : "You're currently not signed in.";
+      ? "Liên kết của bạn đã hết hạn."
+      : "Bạn chưa đăng nhập.";
   const subtitle = hasSentEmail
-    ? `Please check your inbox and click the link in your email to manage your ${subscriptionEntity}.`
+    ? `Vui lòng kiểm tra hộp thư đến và nhấp vào liên kết trong email để quản lý ${subscriptionEntity}.`
     : user_emails.length > 1
-      ? `To manage your ${subscriptionEntity} for ${product_name}, choose one of the emails associated with your account to receive a magic link.`
-      : `To manage your ${subscriptionEntity} for ${product_name}, click the button below to receive a magic link at ${selectedUserEmail.email}`;
+      ? `Để quản lý ${subscriptionEntity} cho ${product_name}, hãy chọn một trong các email được liên kết với tài khoản của bạn để nhận liên kết.`
+      : `Để quản lý ${subscriptionEntity} cho ${product_name}, hãy nhấp vào nút bên dưới để nhận liên kết tại ${selectedUserEmail.email}`;
 
   return (
     <Layout
@@ -66,56 +66,54 @@ const SubscriptionManagerMagicLink = ({
           <h3>{subtitle}</h3>
         </>
       }
-      headerActions={<a href={Routes.login_path()}>Log in</a>}
+      headerActions={<a href={Routes.login_path()}>Đăng nhập</a>}
     >
-      <form>
-        <section>
-          {hasSentEmail ? (
-            <>
-              <Button color="primary" onClick={() => void handleSendMagicLink()} disabled={loading}>
-                {loading ? <LoadingSpinner /> : null}
-                Resend magic link
-              </Button>
-              <p>
-                {user_emails.length > 1 ? (
-                  <>
-                    Can't see the email? Please check your spam folder.{" "}
-                    <button className="cursor-pointer underline all-unset" onClick={() => setHasSentEmail(false)}>
-                      Click here to choose another email
-                    </button>{" "}
-                    or try resending the link above.
-                  </>
-                ) : (
-                  "Can't see the email? Please check your spam folder or try resending the link above."
-                )}
-              </p>
-            </>
-          ) : (
-            <>
+      <form className="space-y-6">
+        {hasSentEmail ? (
+          <>
+            <Button color="primary" className="w-full" onClick={() => void handleSendMagicLink()} disabled={loading}>
+              {loading ? <LoadingSpinner /> : null}
+              Gửi lại link
+            </Button>
+            <p>
               {user_emails.length > 1 ? (
-                <fieldset>
-                  <legend>Choose an email</legend>
-                  {user_emails.map((userEmail) => (
-                    <label key={userEmail.source}>
-                      <input
-                        type="radio"
-                        name="email_source"
-                        value={userEmail.source}
-                        onChange={() => setSelectedUserEmail(userEmail)}
-                        checked={userEmail === selectedUserEmail}
-                      />
-                      {userEmail.email}
-                    </label>
-                  ))}
-                </fieldset>
-              ) : null}
-              <Button color="primary" onClick={() => void handleSendMagicLink()} disabled={loading}>
-                {loading ? <LoadingSpinner /> : null}
-                Send magic link
-              </Button>
-            </>
-          )}
-        </section>
+                <>
+                  Không thấy email? Vui lòng kiểm tra thư mục spam.{" "}
+                  <button className="cursor-pointer underline all-unset" onClick={() => setHasSentEmail(false)}>
+                    Chọn email khác
+                  </button>{" "}
+                  hoặc thử gửi lại link ở trên.
+                </>
+              ) : (
+                "Không thấy email? Vui lòng kiểm tra thư mục spam hoặc thử gửi lại link ở trên."
+              )}
+            </p>
+          </>
+        ) : (
+          <>
+            {user_emails.length > 1 ? (
+              <fieldset>
+                <legend>Chọn email</legend>
+                {user_emails.map((userEmail) => (
+                  <label key={userEmail.source}>
+                    <input
+                      type="radio"
+                      name="email_source"
+                      value={userEmail.source}
+                      onChange={() => setSelectedUserEmail(userEmail)}
+                      checked={userEmail === selectedUserEmail}
+                    />
+                    {userEmail.email}
+                  </label>
+                ))}
+              </fieldset>
+            ) : null}
+            <Button color="primary" onClick={() => void handleSendMagicLink()} disabled={loading}>
+              {loading ? <LoadingSpinner /> : null}
+              Gửi link
+            </Button>
+          </>
+        )}
       </form>
     </Layout>
   );

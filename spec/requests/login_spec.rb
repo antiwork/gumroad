@@ -31,7 +31,7 @@ describe "Login Feature Scenario", js: true, type: :system do
       fill_in "Password", with: "someotherpassword"
 
       click_on "Login"
-      expect(page).to have_alert(text: "Please try another password. The one you entered was incorrect.")
+      expect(page).to have_alert(text: "Vui lòng thử một mật khẩu khác. Mật khẩu bạn đã nhập không chính xác.")
       expect(page).to have_button("Login")
     end
   end
@@ -131,7 +131,7 @@ describe "Login Feature Scenario", js: true, type: :system do
       fill_in "Email to send reset instructions to", with: user.email
       click_on "Send"
 
-      expect(page).to have_alert(text: "Password reset sent! Please make sure to check your spam folder.")
+      expect(page).to have_alert(text: "Đã gửi yêu cầu đặt lại mật khẩu! Vui lòng kiểm tra thư mục spam.")
       expect(user.reload.reset_password_sent_at).to be_present
     end
 
@@ -142,7 +142,7 @@ describe "Login Feature Scenario", js: true, type: :system do
       fill_in "Email to send reset instructions to", with: "notauser@example.com"
       click_on "Send"
 
-      expect(page).to have_alert(text: "An account does not exist with that email.")
+      expect(page).to have_alert(text: "Không có tài khoản nào tồn tại với email đó.")
     end
   end
 end

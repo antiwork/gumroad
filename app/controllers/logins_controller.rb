@@ -22,7 +22,7 @@ class LoginsController < Devise::SessionsController
   def create
     site_key = GlobalConfig.get("RECAPTCHA_LOGIN_SITE_KEY")
     if !(Rails.env.development? && site_key.blank?) && !valid_recaptcha_response?(site_key: site_key)
-      return redirect_with_login_error("Sorry, we could not verify the CAPTCHA. Please try again.")
+      return redirect_with_login_error("Xin lỗi, chúng tôi không thể xác minh CAPTCHA. Vui lòng thử lại.")
     end
 
     if params["user"].instance_of?(ActionController::Parameters)
@@ -31,11 +31,11 @@ class LoginsController < Devise::SessionsController
       @user = User.where(email: login_identifier).first || User.where(username: login_identifier).first if login_identifier.present?
     end
 
-    return redirect_with_login_error("An account does not exist with that email.") if @user.blank?
+    return redirect_with_login_error("Không có tài khoản nào tồn tại với email đó.") if @user.blank?
 
-    return redirect_with_login_error("Please try another password. The one you entered was incorrect.") unless @user.valid_password?(password)
+    return redirect_with_login_error("Vui lòng thử một mật khẩu khác. Mật khẩu bạn đã nhập không chính xác.") unless @user.valid_password?(password)
 
-    return redirect_with_login_error("You cannot log in because your account was permanently deleted. Please sign up for a new account to start selling!") if @user.deleted?
+    return redirect_with_login_error("Bạn không thể đăng nhập vì tài khoản của bạn đã bị xóa vĩnh viễn. Vui lòng đăng ký một tài khoản mới để bắt đầu bán hàng!") if @user.deleted?
 
     if @user.suspended_for_fraud?
       check_suspended
@@ -45,7 +45,7 @@ class LoginsController < Devise::SessionsController
       sign_in_or_prepare_for_two_factor_auth(@user)
 
       if @user.respond_to?(:pwned?) && @user.pwned?
-        flash[:warning] = "Your password has previously appeared in a data breach as per haveibeenpwned.com and should never be used. We strongly recommend you change your password everywhere you have used it."
+        flash[:warning] = "Mật khẩu của bạn đã từng xuất hiện trong một vụ rò rỉ dữ liệu theo haveibeenpwned.com và không bao giờ nên được sử dụng. Chúng tôi đặc biệt khuyên bạn nên thay đổi mật khẩu ở mọi nơi bạn đã sử dụng nó."
       end
 
       redirect_to login_path_for(@user), allow_other_host: true

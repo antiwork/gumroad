@@ -22,7 +22,7 @@ export const brandNames = [
 export type BrandName = (typeof brandNames)[number];
 
 export const buttonVariants = cva(
-  "inline-flex items-center justify-center gap-2 cursor-pointer border border-border rounded bg-transparent text-current font-[inherit] no-underline disabled:opacity-30",
+  "inline-flex items-center justify-center gap-2 cursor-pointer rounded bg-transparent text-current font-[inherit] no-underline disabled:opacity-30 rounded-2xl",
   {
     variants: {
       variant: {
@@ -36,7 +36,7 @@ export const buttonVariants = cva(
         sm: "p-2 text-sm leading-[1.3]",
       },
       color: {
-        primary: "bg-primary text-primary-foreground hover:bg-accent hover:text-accent-foreground",
+        primary: "bg-primary text-white hover:bg-slate-800",
         black: "bg-black text-white",
         accent: "bg-accent text-accent-foreground",
         filled: "bg-background text-foreground",

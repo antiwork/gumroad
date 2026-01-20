@@ -71,51 +71,59 @@ function SignupPage() {
   };
 
   const headerText = referrer
-    ? `Join ${referrer.name} on Gumroad`
+    ? `Tham gia ${referrer.name} trên Gumroad`
     : application_name
-      ? `Sign up for Gumroad and connect ${application_name}`
-      : `Join over ${number_of_creators.toLocaleString()} creators who have earned over ${formatPrice("$", total_made, 0, { noCentsIfWhole: true })} on Gumroad selling digital products and memberships.`;
+      ? `Đăng ký Gumroad và kết nối ${application_name}`
+      : `Tham gia hơn ${number_of_creators.toLocaleString()} nhà sáng tạo đã kiếm được hơn ${formatPrice("$", total_made, 0, { noCentsIfWhole: true })} trên Gumroad bán sản phẩm kỹ thuật số và thành viên.`;
 
   return (
-    <Layout header={<h1>{headerText}</h1>} headerActions={<Link href={Routes.login_path({ next })}>Log in</Link>}>
-      <form onSubmit={(e) => void handleSubmit(e)}>
-        <SocialAuth />
-        <Separator>
-          <span>or</span>
-        </Separator>
-        <section>
-          <AuthAlert />
-          <fieldset>
-            <legend>
-              <label htmlFor={`${uid}-email`}>Email</label>
-            </legend>
+    <Layout header={headerText}>
+      <form className="space-y-6" onSubmit={(e) => void handleSubmit(e)}>
+        <AuthAlert />
+        <fieldset>
+          <legend>
+            <label htmlFor={`${uid}-email`}>Email</label>
+          </legend>
+          <div className="relative group input-focus border border-slate-200 rounded-2xl bg-slate-50 transition-all overflow-hidden">
             <input
               id={`${uid}-email`}
               type="email"
               value={form.data.user.email}
               onChange={(e) => form.setData("user.email", e.target.value)}
               required
+              className="w-full bg-transparent text-slate-900 text-sm p-4 pl-12 outline-none border-none appearance-none focus:ring-0 focus:outline-none"
             />
-          </fieldset>
-          <fieldset>
-            <legend>
-              <label htmlFor={`${uid}-password`}>Password</label>
-            </legend>
+          </div>
+        </fieldset>
+        <fieldset>
+          <legend>
+            <label htmlFor={`${uid}-password`}>Mật khẩu</label>
+          </legend>
+          <div className="relative group input-focus border border-slate-200 rounded-2xl bg-slate-50 transition-all overflow-hidden">
             <PasswordInput
               id={`${uid}-password`}
               value={form.data.user.password}
               onChange={(e) => form.setData("user.password", e.target.value)}
               required
             />
-          </fieldset>
-          <Button color="primary" type="submit" disabled={form.processing}>
-            {form.processing ? "Creating..." : "Create account"}
-          </Button>
-          <p>
-            You agree to our <a href="https://gumroad.com/terms">Terms of Use</a> and{" "}
-            <a href="https://gumroad.com/privacy">Privacy Policy</a>.
-          </p>
-        </section>
+          </div>
+        </fieldset>
+        <Button color="primary" type="submit" className="w-full" disabled={form.processing}>
+          {form.processing ? "Đang tạo..." : "Tạo tài khoản"}
+        </Button>
+        <Separator>
+          <span>Tùy chọn khác</span>
+        </Separator>
+        <SocialAuth />
+        <p>
+          Bằng việc tạo tài khoản, bạn đồng ý với <a href="https://gumroad.com/terms">Điều khoản sử dụng</a> và{" "}
+          <a href="https://gumroad.com/privacy">Chính sách bảo mật</a> của chúng tôi.
+        </p>
+
+        <p className="mt-10 text-center text-sm text-slate-500 font-medium">
+          Đã có tài khoản?
+          <Link href={Routes.login_path({ next })} className="ms-1 font-extrabold text-blue-600 hover:text-blue-700 hover:underline underline-offset-4">Đăng nhập</Link>
+        </p>
       </form>
       {recaptcha.container}
     </Layout>

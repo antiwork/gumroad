@@ -5,7 +5,7 @@ class Api::Internal::Helper::UsersController < Api::Internal::Helper::BaseContro
   before_action :authorize_hmac_signature!, only: [:user_info]
 
   def user_info
-    render json: { success: false, error: "'email' parameter is required" }, status: :bad_request if params[:email].blank?
+    render json: { success: false, error: "Tham số 'email' là bắt buộc" }, status: :bad_request if params[:email].blank?
 
     render json: {
       success: true,
@@ -14,8 +14,8 @@ class Api::Internal::Helper::UsersController < Api::Internal::Helper::BaseContro
   end
 
   USER_SUSPENSION_INFO_OPENAPI = {
-    summary: "Get user suspension information",
-    description: "Retrieve suspension status and details for a user",
+    summary: "Lấy thông tin đình chỉ tài khoản",
+    description: "Lấy trạng thái đình chỉ và chi tiết cho một tài khoản",
     requestBody: {
       required: true,
       content: {
@@ -23,7 +23,7 @@ class Api::Internal::Helper::UsersController < Api::Internal::Helper::BaseContro
           schema: {
             type: "object",
             properties: {
-              email: { type: "string", description: "Email address of the user" }
+              email: { type: "string", description: "Địa chỉ email của người dùng" }
             },
             required: ["email"]
           }
@@ -33,23 +33,23 @@ class Api::Internal::Helper::UsersController < Api::Internal::Helper::BaseContro
     security: [{ bearer: [] }],
     responses: {
       '200': {
-        description: "Successfully retrieved user suspension information",
+        description: "Lấy thông tin đình chỉ tài khoản thành công",
         content: {
           'application/json': {
             schema: {
               type: "object",
               properties: {
                 success: { type: "boolean" },
-                status: { type: "string", description: "Status of the user" },
-                updated_at: { type: "string", format: "date-time", nullable: true, description: "When the user's suspension status was last updated" },
-                appeal_url: { type: "string", nullable: true, description: "URL for the user to appeal their suspension" }
+                status: { type: "string", description: "Trạng thái tài khoản" },
+                updated_at: { type: "string", format: "date-time", nullable: true, description: "Thời gian cập nhật trạng thái đình chỉ tài khoản" },
+                appeal_url: { type: "string", nullable: true, description: "URL để kháng nghị đình chỉ tài khoản" }
               }
             }
           }
         }
       },
       '400': {
-        description: "Missing required parameters",
+        description: "Thiếu tham số bắt buộc",
         content: {
           'application/json': {
             schema: {
@@ -63,7 +63,7 @@ class Api::Internal::Helper::UsersController < Api::Internal::Helper::BaseContro
         }
       },
       '422': {
-        description: "User not found",
+        description: "Không tìm thấy tài khoản",
         content: {
           'application/json': {
             schema: {
@@ -80,13 +80,13 @@ class Api::Internal::Helper::UsersController < Api::Internal::Helper::BaseContro
   }.freeze
   def user_suspension_info
     if params[:email].blank?
-      render json: { success: false, error: "'email' parameter is required" }, status: :bad_request
+      render json: { success: false, error: "Tham số 'email' là bắt buộc" }, status: :bad_request
       return
     end
 
     user = User.alive.by_email(params[:email]).first
     if user.blank?
-      return render json: { success: false, error_message: "An account does not exist with that email." }, status: :unprocessable_entity
+      return render json: { success: false, error_message: "Không có tài khoản nào tồn tại với email đó." }, status: :unprocessable_entity
     end
 
     iffy_url = Rails.env.production? ? "https://api.iffy.com/api/v1/users" : "http://localhost:3000/api/v1/users"
@@ -130,14 +130,14 @@ class Api::Internal::Helper::UsersController < Api::Internal::Helper::BaseContro
 
       render json: {
         success: false,
-        error_message: "Failed to retrieve suspension information"
+        error_message: "Không thể lấy thông tin đình chỉ"
       }, status: :service_unavailable
     end
   end
 
   SEND_RESET_PASSWORD_INSTRUCTIONS_OPENAPI = {
-    summary: "Initiate password reset",
-    description: "Send email with instructions to reset password",
+    summary: "Gửi yêu cầu đặt lại mật khẩu",
+    description: "Gửi email chứa hướng dẫn đặt lại mật khẩu",
     requestBody: {
       required: true,
       content: {
@@ -145,7 +145,7 @@ class Api::Internal::Helper::UsersController < Api::Internal::Helper::BaseContro
           schema: {
             type: "object",
             properties: {
-              email: { type: "string", description: "Email address of the customer" }
+              email: { type: "string", description: "Địa chỉ email của khách hàng" }
             },
             required: ["email"]
           }
@@ -155,7 +155,7 @@ class Api::Internal::Helper::UsersController < Api::Internal::Helper::BaseContro
     security: [{ bearer: [] }],
     responses: {
       '200': {
-        description: "Successfully sent reset password instructions",
+        description: "Gửi yêu cầu đặt lại mật khẩu thành công",
         content: {
           'application/json': {
             schema: {
@@ -169,7 +169,7 @@ class Api::Internal::Helper::UsersController < Api::Internal::Helper::BaseContro
         }
       },
       '422': {
-        description: "Email invalid or user not found",
+        description: "Email không hợp lệ hoặc không tìm thấy tài khoản",
         content: {
           'application/json': {
             schema: {
@@ -189,19 +189,19 @@ class Api::Internal::Helper::UsersController < Api::Internal::Helper::BaseContro
       user = User.alive.by_email(params[:email]).first
       if user
         user.send_reset_password_instructions
-        render json: { success: true, message: "Reset password instructions sent" }
+        render json: { success: true, message: "Gửi yêu cầu đặt lại mật khẩu thành công" }
       else
-        render json: { error_message: "An account does not exist with that email." },
+        render json: { error_message: "Không có tài khoản nào tồn tại với email đó." },
                status: :unprocessable_entity
       end
     else
-      render json: { error_message: "Invalid email" }, status: :unprocessable_entity
+      render json: { error_message: "Email không hợp lệ" }, status: :unprocessable_entity
     end
   end
 
   UPDATE_EMAIL_OPENAPI = {
-    summary: "Update user email",
-    description: "Update a user's email address",
+    summary: "Cập nhật email người dùng",
+    description: "Cập nhật địa chỉ email của người dùng",
     requestBody: {
       required: true,
       content: {
@@ -209,8 +209,8 @@ class Api::Internal::Helper::UsersController < Api::Internal::Helper::BaseContro
           schema: {
             type: "object",
             properties: {
-              current_email: { type: "string", description: "Current email address of the user" },
-              new_email: { type: "string", description: "New email address for the user" }
+              current_email: { type: "string", description: "Địa chỉ email hiện tại của người dùng" },
+              new_email: { type: "string", description: "Địa chỉ email mới của người dùng" }
             },
             required: ["current_email", "new_email"]
           }
@@ -220,7 +220,7 @@ class Api::Internal::Helper::UsersController < Api::Internal::Helper::BaseContro
     security: [{ bearer: [] }],
     responses: {
       '200': {
-        description: "Successfully updated email",
+        description: "Cập nhật email thành công",
         content: {
           'application/json': {
             schema: {
@@ -233,7 +233,7 @@ class Api::Internal::Helper::UsersController < Api::Internal::Helper::BaseContro
         }
       },
       '422': {
-        description: "Invalid email or user not found",
+        description: "Email không hợp lệ hoặc không tìm thấy người dùng",
         content: {
           'application/json': {
             schema: {
@@ -249,12 +249,12 @@ class Api::Internal::Helper::UsersController < Api::Internal::Helper::BaseContro
   }.freeze
   def update_email
     if params[:current_email].blank? || params[:new_email].blank?
-      render json: { error_message: "Both current and new email are required." }, status: :unprocessable_entity
+      render json: { error_message: "Cả email hiện tại và email mới đều bắt buộc." }, status: :unprocessable_entity
       return
     end
 
     if !EmailFormatValidator.valid?(params[:new_email])
-      render json: { error_message: "Invalid new email format." }, status: :unprocessable_entity
+      render json: { error_message: "Định dạng email mới không hợp lệ." }, status: :unprocessable_entity
       return
     end
 
@@ -262,18 +262,18 @@ class Api::Internal::Helper::UsersController < Api::Internal::Helper::BaseContro
     if user
       user.email = params[:new_email]
       if user.save
-        render json: { message: "Email updated." }
+        render json: { message: "Đã cập nhật email." }
       else
         render json: { error_message: user.errors.full_messages.join(", ") }, status: :unprocessable_entity
       end
     else
-      render json: { error_message: "An account does not exist with that email." }, status: :unprocessable_entity
+      render json: { error_message: "Không có tài khoản nào tồn tại với email đó." }, status: :unprocessable_entity
     end
   end
 
   UPDATE_TWO_FACTOR_AUTHENTICATION_ENABLED_OPENAPI = {
-    summary: "Update two-factor authentication status",
-    description: "Update a user's two-factor authentication enabled status",
+    summary: "Cập nhật trạng thái xác thực hai yếu tố",
+    description: "Cập nhật trạng thái xác thực hai yếu tố của người dùng",
     requestBody: {
       required: true,
       content: {
@@ -281,8 +281,8 @@ class Api::Internal::Helper::UsersController < Api::Internal::Helper::BaseContro
           schema: {
             type: "object",
             properties: {
-              email: { type: "string", description: "Email address of the user" },
-              enabled: { type: "boolean", description: "Whether two-factor authentication should be enabled or disabled" }
+              email: { type: "string", description: "Địa chỉ email của người dùng" },
+              enabled: { type: "boolean", description: "Bật hoặc tắt xác thực hai yếu tố" }
             },
             required: ["email", "enabled"]
           }
@@ -292,7 +292,7 @@ class Api::Internal::Helper::UsersController < Api::Internal::Helper::BaseContro
     security: [{ bearer: [] }],
     responses: {
       '200': {
-        description: "Successfully updated two-factor authentication status",
+        description: "Cập nhật trạng thái xác thực hai yếu tố thành công",
         content: {
           'application/json': {
             schema: {
@@ -306,7 +306,7 @@ class Api::Internal::Helper::UsersController < Api::Internal::Helper::BaseContro
         }
       },
       '422': {
-        description: "Invalid email or user not found",
+        description: "Email không hợp lệ hoặc không tìm thấy người dùng",
         content: {
           'application/json': {
             schema: {
@@ -324,29 +324,29 @@ class Api::Internal::Helper::UsersController < Api::Internal::Helper::BaseContro
 
   def update_two_factor_authentication_enabled
     if params[:email].blank?
-      return render json: { success: false, error_message: "Email is required." }, status: :unprocessable_entity
+      return render json: { success: false, error_message: "Email là bắt buộc." }, status: :unprocessable_entity
     end
 
     if params[:enabled].nil?
-      return render json: { success: false, error_message: "Enabled status is required." }, status: :unprocessable_entity
+      return render json: { success: false, error_message: "Trạng thái bật/tắt là bắt buộc." }, status: :unprocessable_entity
     end
 
     user = User.alive.by_email(params[:email]).first
     if user.present?
       user.two_factor_authentication_enabled = params[:enabled]
       if user.save
-        render json: { success: true, message: "Two-factor authentication #{user.two_factor_authentication_enabled? ? "enabled" : "disabled"}." }
+        render json: { success: true, message: "Xác thực hai yếu tố đã được #{user.two_factor_authentication_enabled? ? "bật" : "tắt"}." }
       else
         render json: { success: false, error_message: user.errors.full_messages.join(", ") }, status: :unprocessable_entity
       end
     else
-      render json: { success: false, error_message: "An account does not exist with that email." }, status: :unprocessable_entity
+      render json: { success: false, error_message: "Không có tài khoản nào tồn tại với email đó." }, status: :unprocessable_entity
     end
   end
 
   CREATE_USER_APPEAL_OPENAPI = {
-    summary: "Create user appeal",
-    description: "Create an appeal for a suspended user who believes they have been suspended in error",
+    summary: "Tạo kháng nghị người dùng",
+    description: "Tạo kháng nghị cho người dùng bị đình chỉ khi họ tin rằng họ bị đình chỉ nhầm",
     requestBody: {
       required: true,
       content: {
@@ -354,8 +354,8 @@ class Api::Internal::Helper::UsersController < Api::Internal::Helper::BaseContro
           schema: {
             type: "object",
             properties: {
-              email: { type: "string", description: "Email address of the user" },
-              reason: { type: "string", description: "Reason for the appeal" }
+              email: { type: "string", description: "Địa chỉ email của người dùng" },
+              reason: { type: "string", description: "Lý do kháng nghị" }
             },
             required: ["email", "reason"]
           }
@@ -365,22 +365,22 @@ class Api::Internal::Helper::UsersController < Api::Internal::Helper::BaseContro
     security: [{ bearer: [] }],
     responses: {
       '200': {
-        description: "Successfully created appeal",
+        description: "Tạo kháng nghị thành công",
         content: {
           'application/json': {
             schema: {
               type: "object",
               properties: {
                 success: { const: true },
-                id: { type: "string", description: "ID of the appeal" },
-                appeal_url: { type: "string", description: "URL for the user to view their appeal"  }
+                id: { type: "string", description: "ID của kháng nghị" },
+                appeal_url: { type: "string", description: "URL để người dùng xem kháng nghị của họ"  }
               }
             }
           }
         }
       },
       '400': {
-        description: "Invalid parameters",
+        description: "Tham số không hợp lệ",
         content: {
           'application/json': {
             schema: {
@@ -394,7 +394,7 @@ class Api::Internal::Helper::UsersController < Api::Internal::Helper::BaseContro
         }
       },
       '422': {
-        description: "User not found or appeal creation failed",
+        description: "Không tìm thấy người dùng hoặc tạo kháng nghị thất bại",
         content: {
           'application/json': {
             schema: {
@@ -412,16 +412,16 @@ class Api::Internal::Helper::UsersController < Api::Internal::Helper::BaseContro
 
   def create_appeal
     if params[:email].blank?
-      return render json: { success: false, error_message: "'email' parameter is required" }, status: :bad_request
+      return render json: { success: false, error_message: "Tham số 'email' là bắt buộc" }, status: :bad_request
     end
 
     if params[:reason].blank?
-      return render json: { success: false, error_message: "'reason' parameter is required" }, status: :bad_request
+      return render json: { success: false, error_message: "Tham số 'reason' là bắt buộc" }, status: :bad_request
     end
 
     user = User.alive.by_email(params[:email]).first
     if user.blank?
-      return render json: { success: false, error_message: "An account does not exist with that email." }, status: :unprocessable_entity
+      return render json: { success: false, error_message: "Không có tài khoản nào tồn tại với email đó." }, status: :unprocessable_entity
     end
 
     iffy_url = Rails.env.production? ? "https://api.iffy.com/api/v1" : "http://localhost:3000/api/v1"
@@ -435,7 +435,7 @@ class Api::Internal::Helper::UsersController < Api::Internal::Helper::BaseContro
       )
 
       if !(response.success? && response.parsed_response["data"].present? && !response.parsed_response["data"].empty?)
-        error_message = response.parsed_response.is_a?(Hash) ? response.parsed_response["error"]&.[]("message") || "Failed to find user" : "Failed to find user"
+        error_message = response.parsed_response.is_a?(Hash) ? response.parsed_response["error"]&.[]("message") || "Không tìm thấy người dùng" : "Không tìm thấy người dùng"
         return render json: { success: false, error_message: error_message }, status: :unprocessable_entity
       end
 
@@ -454,7 +454,7 @@ class Api::Internal::Helper::UsersController < Api::Internal::Helper::BaseContro
       )
 
       if !(response.success? && response.parsed_response["data"].present? && !response.parsed_response["data"].empty?)
-        error_message = response.parsed_response.dig("error", "message") || "Failed to create appeal"
+        error_message = response.parsed_response.dig("error", "message") || "Tạo kháng nghị thất bại"
         return render json: { success: false, error_message: }, status: :unprocessable_entity
       end
 
@@ -472,7 +472,7 @@ class Api::Internal::Helper::UsersController < Api::Internal::Helper::BaseContro
 
       render json: {
         success: false,
-        error_message: "Failed to create appeal"
+        error_message: "Tạo kháng nghị thất bại"
       }, status: :service_unavailable
     end
   end

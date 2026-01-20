@@ -28,14 +28,14 @@ function PasswordReset() {
   };
 
   return (
-    <Layout header={<h1>Reset your password</h1>} headerActions={<Link href={Routes.login_path()}>Log in</Link>}>
-      <form onSubmit={handleSubmit}>
-        <section>
-          <AuthAlert />
-          <fieldset>
-            <legend>
-              <label htmlFor={`${uid}-password`}>Enter a new password</label>
-            </legend>
+    <Layout header="Đặt lại mật khẩu">
+      <form className="space-y-4" onSubmit={handleSubmit}>
+        <AuthAlert />
+        <fieldset>
+          <legend>
+            <label htmlFor={`${uid}-password`}>Nhập mật khẩu mới</label>
+          </legend>
+          <div className="relative group input-focus border border-slate-200 rounded-2xl bg-slate-50 transition-all overflow-hidden">
             <PasswordInput
               id={`${uid}-password`}
               value={form.data.user.password}
@@ -45,24 +45,30 @@ function PasswordReset() {
               autoFocus
               autoComplete="new-password"
             />
-          </fieldset>
-          <fieldset>
-            <legend>
-              <label htmlFor={`${uid}-password-confirmation`}>Enter same password to confirm</label>
-            </legend>
+          </div>
+        </fieldset>
+        <fieldset>
+          <legend>
+            <label htmlFor={`${uid}-password-confirmation`}>Xác nhận mật khẩu</label>
+          </legend>
+          <div className="relative group input-focus border border-slate-200 rounded-2xl bg-slate-50 transition-all overflow-hidden">
             <PasswordInput
               id={`${uid}-password-confirmation`}
               value={form.data.user.password_confirmation}
               onChange={(e) => form.setData("user.password_confirmation", e.target.value)}
-              placeholder="Password (to confirm)"
+              placeholder="Xác nhận mật khẩu"
               required
               autoComplete="new-password"
             />
-          </fieldset>
-          <Button color="primary" type="submit" disabled={form.processing}>
-            {form.processing ? "Resetting..." : "Reset password"}
-          </Button>
-        </section>
+          </div>
+        </fieldset>
+        <Button color="primary" type="submit" disabled={form.processing}>
+          {form.processing ? "Đang đặt lại..." : "Đặt lại mật khẩu"}
+        </Button>
+        <p className="mt-10 text-center text-sm text-slate-500 font-medium">
+          Đã có tài khoản?
+          <Link href={Routes.login_path()} className="ms-1 font-extrabold text-blue-600 hover:text-blue-700 hover:underline underline-offset-4">Đăng nhập</Link>
+        </p>
       </form>
     </Layout>
   );

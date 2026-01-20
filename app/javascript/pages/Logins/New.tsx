@@ -61,21 +61,14 @@ function LoginPage() {
   };
 
   return (
-    <Layout
-      header={<h1>{application_name ? `Connect ${application_name} to Gumroad` : "Log in"}</h1>}
-      headerActions={<Link href={Routes.signup_path({ next })}>Sign up</Link>}
-    >
-      <form onSubmit={(e) => void handleSubmit(e)}>
-        <SocialAuth />
-        <Separator>
-          <span>or</span>
-        </Separator>
-        <section>
-          <AuthAlert />
-          <fieldset>
-            <legend>
-              <label htmlFor={`${uid}-email`}>Email</label>
-            </legend>
+    <Layout header={application_name ? `Đăng nhập ${application_name}` : "Đăng nhập"}>
+      <form className="space-y-6" onSubmit={(e) => void handleSubmit(e)}>
+        <AuthAlert />
+        <fieldset>
+          <legend>
+            <label htmlFor={`${uid}-email`}>Email</label>
+          </legend>
+          <div className="relative group input-focus border border-slate-200 rounded-2xl bg-slate-50 transition-all overflow-hidden">
             <input
               id={`${uid}-email`}
               type="email"
@@ -84,15 +77,18 @@ function LoginPage() {
               required
               tabIndex={1}
               autoComplete="email"
+              className="w-full bg-transparent text-slate-900 text-sm p-4 pl-12 outline-none border-none appearance-none focus:ring-0 focus:outline-none"
             />
-          </fieldset>
-          <fieldset>
-            <legend>
-              <label htmlFor={`${uid}-password`}>Password</label>
-              <Link href={Routes.new_user_password_path({ next })} className="font-normal underline">
-                Forgot your password?
-              </Link>
-            </legend>
+          </div>
+        </fieldset>
+        <fieldset>
+          <legend>
+            <label htmlFor={`${uid}-password`}>Mật khẩu</label>
+            <Link href={Routes.new_user_password_path({ next })} className="font-normal underline">
+              Quên mật khẩu?
+            </Link>
+          </legend>
+          <div className="relative group input-focus border border-slate-200 rounded-2xl bg-slate-50 transition-all overflow-hidden">
             <PasswordInput
               id={`${uid}-password`}
               value={form.data.user.password}
@@ -101,11 +97,24 @@ function LoginPage() {
               tabIndex={1}
               autoComplete="current-password"
             />
-          </fieldset>
-          <Button color="primary" type="submit" disabled={form.processing}>
-            {form.processing ? "Logging in..." : "Login"}
-          </Button>
-        </section>
+          </div>
+        </fieldset>
+        <Button color="primary" type="submit" disabled={form.processing} className="w-full ">
+          {form.processing ? "Đang đăng nhập..." : "Đăng nhập"}
+        </Button>
+        <Separator>
+          <span>Tùy chọn khác</span>
+        </Separator>
+        <SocialAuth />
+
+        <p className="mt-10 text-center text-sm text-slate-500 font-medium">
+          Thành viên mới?
+          <Link
+            href={Routes.signup_path({ next })}
+            className="ms-1 font-extrabold text-blue-600 hover:text-blue-700 hover:underline underline-offset-4">
+            Tạo tài khoản
+          </Link>
+        </p>
       </form>
       {recaptcha.container}
     </Layout>

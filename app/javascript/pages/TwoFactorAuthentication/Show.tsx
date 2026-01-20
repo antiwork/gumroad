@@ -45,20 +45,20 @@ function TwoFactorAuthentication() {
     <Layout
       header={
         <>
-          <h1>Two-Factor Authentication</h1>
+          <h1>Xác thực hai yếu tố</h1>
           <h3>
-            To protect your account, we have sent an Authentication Token to {email}. Please enter it here to continue.
+            Để bảo vệ tài khoản của bạn, chúng tôi đã gửi một Mã xác thực đến {email}. Vui lòng nhập mã vào đây để tiếp tục.
           </h3>
         </>
       }
     >
-      <form onSubmit={handleSubmit}>
-        <section>
-          <AuthAlert />
-          <fieldset>
-            <legend>
-              <label htmlFor={uid}>Authentication Token</label>
-            </legend>
+      <form className="space-y-4" onSubmit={handleSubmit}>
+        <AuthAlert />
+        <fieldset>
+          <legend>
+            <label htmlFor={uid}>Mã xác thực</label>
+          </legend>
+          <div className="relative group input-focus border border-slate-200 rounded-2xl bg-slate-50 transition-all overflow-hidden">
             <input
               id={uid}
               type="text"
@@ -67,14 +67,14 @@ function TwoFactorAuthentication() {
               required
               autoFocus
             />
-          </fieldset>
-          <Button color="primary" type="submit" disabled={form.processing}>
-            {form.processing ? "Logging in..." : "Login"}
-          </Button>
-          <Button disabled={resendForm.processing} onClick={() => resendToken()}>
-            Resend Authentication Token
-          </Button>
-        </section>
+          </div>
+        </fieldset>
+        <Button color="primary" type="submit" disabled={form.processing}>
+          {form.processing ? "Đang xác thực..." : "Xác thực"}
+        </Button>
+        <Button disabled={resendForm.processing} onClick={() => resendToken()}>
+          Gửi lại mã xác thực
+        </Button>
       </form>
     </Layout>
   );

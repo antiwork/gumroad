@@ -32,21 +32,14 @@ function ForgotPasswordPage() {
   };
 
   return (
-    <Layout
-      header={<h1>{application_name ? `Connect ${application_name} to Gumroad` : "Forgot password"}</h1>}
-      headerActions={<Link href={Routes.login_path({ next })}>Log in</Link>}
-    >
-      <form onSubmit={handleSubmit}>
-        <SocialAuth />
-        <Separator>
-          <span>or</span>
-        </Separator>
-        <section>
-          <AuthAlert />
-          <fieldset>
-            <legend>
-              <label htmlFor={uid}>Email to send reset instructions to</label>
-            </legend>
+    <Layout header={application_name ? `Kết nối ${application_name} với Gumroad` : "Quên mật khẩu"}>
+      <form className="space-y-6" onSubmit={handleSubmit}>
+        <AuthAlert />
+        <fieldset>
+          <legend>
+            <label htmlFor={uid}>Email để gửi hướng dẫn đặt lại mật khẩu</label>
+          </legend>
+          <div className="relative group input-focus border border-slate-200 rounded-2xl bg-slate-50 transition-all overflow-hidden">
             <input
               id={uid}
               type="email"
@@ -56,11 +49,24 @@ function ForgotPasswordPage() {
               autoFocus
               autoComplete="email"
             />
-          </fieldset>
-          <Button color="primary" type="submit" disabled={form.processing}>
-            {form.processing ? "Sending..." : "Send"}
-          </Button>
-        </section>
+          </div>
+        </fieldset>
+        <Button color="primary" type="submit" className="w-full" disabled={form.processing}>
+          {form.processing ? "Đang gửi..." : "Gửi"}
+        </Button>
+        <Separator>
+          <span>Tùy chọn khác</span>
+        </Separator>
+        <SocialAuth />
+
+        <p className="mt-10 text-center text-sm text-slate-500 font-medium">
+          Bạn đã có tài khoản?
+          <Link
+            href={Routes.login_path({ next })}
+            className="ms-1 font-extrabold text-blue-600 hover:text-blue-700 hover:underline underline-offset-4">
+            Đăng nhập
+          </Link>
+        </p>
       </form>
     </Layout>
   );

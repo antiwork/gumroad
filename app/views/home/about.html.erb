@@ -25,7 +25,7 @@
 
             <!-- Search Bar -->
             <div
-               class="relative flex w-full max-w-2xl mx-auto lg:mx-0 shadow-2xl rounded-xl overflow-hidden bg-white border border-indigo-100"
+               class="relative flex w-full max-w-2xl mx-auto lg:mx-0 shadow-2xl rounded-xl overflow-hidden bg-white"
             >
                <form
                   action="<%= discover_path %>"
@@ -40,14 +40,14 @@
                      type="text"
                      name="query"
                      placeholder="Tìm kiếm..."
-                     class="!bg-gray mr-8 rounded-lg focus:outline-hidden focus:ring-1 focus:ring-black focus:border-black/60 w-full sm:w-64 text-xl! h-14! lg:h-16! dark:bg-gray-800 border !border-dark-gray dark:!bg-dark-gray dark:!laceholder-white dark:border-gray-600 dark:text-white!"
+                     class="mr-8 rounded-lg w-full sm:w-64 text-xl! h-14! lg:h-16! border-none! outline-none!"
                      style="padding-left: 2rem; padding-right: 5rem"
                   />
                   <button
                      type="submit"
                      aria-label="Search"
                      class="bg-white p-2 rounded-md absolute mr-3 right-0 top-1/2 -translate-y-[50%]"
-                     style="border: 1px solid #242423 !important"
+                     style="border: 1px solid #cccccc !important"
                   >
                      <svg
                         class="w-6 h-6 text-dark-gray"
@@ -512,7 +512,73 @@
 
       <%= render "home/shared/discovery_category" %>
    </div>
-   <%# Hiển thị sản phẩm %>
+   <%# Hiển thị sản phẩm top sale%>
+   <section class="py-16 bg-white">
+      <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+         <div class="flex justify-between items-end mb-10">
+            <div>
+               <h2 class="text-3xl font-bold text-slate-900 tracking-tight">
+                  Sản phẩm bán chạy
+               </h2>
+               <p class="text-slate-500 mt-2">
+                  Khám phá những sản phẩm AI được yêu thích nhất
+               </p>
+            </div>
+            <%= link_to discover_path, class: "text-blue-600 font-medium hover:underline flex items-center gap-1 no-underline" do %>
+               Xem tất cả
+               <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/>
+               </svg>
+            <% end %>
+         </div>
+
+         <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+            <% @featured_products.limit(6).each do |product| %>
+               <%= link_to product.long_url, class: "no-underline group block bg-white rounded-2xl border border-slate-200 overflow-hidden hover:shadow-xl hover:border-indigo-200 transition-all duration-300" do %>
+                  <div class="relative h-48 overflow-hidden bg-slate-100">
+                     <% if product.thumbnail.present? %>
+                        <%= image_tag product.thumbnail.url, alt: product.name, class: "w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" %>
+                     <% else %>
+                        <div class="w-full h-full flex items-center justify-center bg-gradient-to-br from-indigo-100 to-purple-100">
+                           <svg class="w-16 h-16 text-indigo-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"/>
+                           </svg>
+                        </div>
+                     <% end %>
+                     <% if product.taxonomy.present? %>
+                        <span class="absolute top-3 right-3 bg-black/70 backdrop-blur-sm text-white text-xs px-3 py-1 rounded-full font-medium">
+                           <%= product.taxonomy.slug.titleize %>
+                        </span>
+                     <% end %>
+                  </div>
+                  <div class="p-5">
+                     <h3 class="font-bold text-slate-800 text-lg mb-2 line-clamp-2 group-hover:text-indigo-600 transition-colors">
+                        <%= product.name %>
+                     </h3>
+                     <p class="text-slate-500 text-sm line-clamp-2 mb-4">
+                        <%= truncate(product.description.to_s, length: 80) %>
+                     </p>
+                     <div class="flex justify-between items-center">
+                        <div class="flex items-center gap-2">
+                           <% if product.user.present? %>
+                              <div class="w-7 h-7 rounded-full bg-gradient-to-tr from-indigo-500 to-purple-500 flex items-center justify-center text-xs text-white font-bold">
+                                 <%= product.user.name.to_s[0]&.upcase || "G" %>
+                              </div>
+                              <span class="text-sm text-slate-500">
+                                 <%= truncate(product.user.name.to_s, length: 15) %>
+                              </span>
+                           <% end %>
+                        </div>
+                        <span class="font-bold text-indigo-600 text-lg">
+                           <%= product.display_price %>
+                        </span>
+                     </div>
+                  </div>
+               <% end %>
+            <% end %>
+         </div>
+      </div>
+   </section>
 
    <div
       class="bg-gray flex flex-col lg:flex-row rounded-2xl px-4 gap-8 mx-auto max-w-6xl"
@@ -522,9 +588,9 @@
             class="flex bg-white items-center px-4 py-10 md:p-10 border lg:border border-dark-gray/50 rounded-2xl"
          >
             <h3 class="font-medium text-4xl md:text-5xl">
-               Don't take risks.
+               Đừng mạo hiểm.
                <br />
-               That's scary!
+               Điều đó thật đáng sợ!
             </h3>
          </div>
          <div
@@ -538,7 +604,7 @@
                   class="absolute -top-4 left-0 sm:-left-8 bg-white rounded-2xl px-6 sm:px-8 py-4 border border-black"
                >
                   <p class="text-xl font-medium m-0">
-                     Instead of selling a book...
+                     Thay vì bán một cuốn sách...
                   </p>
                </div>
             </div>
@@ -557,7 +623,7 @@
                   class="absolute -bottom-2 left-0 sm:-left-8 bg-white rounded-2xl px-6 sm:px-6 py-4 border border-black"
                >
                   <p class="text-xl font-medium m-0">
-                     ...start by selling a blog post!
+                     ...hãy bắt đầu bằng việc bán một bài viết!
                   </p>
                </div>
             </div>
@@ -566,9 +632,9 @@
             class="flex bg-white items-center px-4 py-10 md:p-10 border lg:border border-dark-gray/50 rounded-2xl"
          >
             <h3 class="font-medium text-4xl md:text-5xl">
-               Place small bets.
+               Đặt cược nhỏ.
                <br />
-               That's exciting!
+               Điều đó thật thú vị!
             </h3>
          </div>
       </div>
@@ -579,10 +645,10 @@
          class="flex flex-col lg:flex-col gap-8 lg:gap-16 max-w-5xl mx-auto lg:items-center"
       >
          <h1 class="font-medium text-4xl sm:text-5xl lg:text-7xl text-center">
-            Share your work. <br />
-            Someone out there needs it.
+            Chia sẻ sản phẩm của bạn. <br />
+            Ai đó ngoài kia đang cần nó.
          </h1>
-         <%= render "home/shared/button", text: "Start selling", url:
+         <%= render "home/shared/button", text: "Bắt đầu bán hàng", url:
          new_user_registration_path %>
       </div>
    </div>
