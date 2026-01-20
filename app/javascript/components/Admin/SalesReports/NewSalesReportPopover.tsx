@@ -1,22 +1,10 @@
-import { useForm, usePage } from "@inertiajs/react";
-import { subMonths } from "date-fns";
+import { usePage } from "@inertiajs/react";
 import * as React from "react";
-import { cast } from "ts-safe-cast";
 
-import Errors from "$app/components/Admin/Form/Errors";
-import { Button, buttonVariants } from "$app/components/Button";
+import AdminSalesReportsForm from "$app/components/Admin/SalesReports/Form";
+import { buttonVariants } from "$app/components/Button";
 import { Popover } from "$app/components/Popover";
 import { WithTooltip } from "$app/components/WithTooltip";
-
-type Errors = {
-  authenticity_token?: string[];
-  sales_report?: {
-    country_code?: string[];
-    start_date?: string[];
-    end_date?: string[];
-    sales_type?: string[];
-  };
-};
 
 type PageProps = {
   countries: [string, string][];
@@ -27,30 +15,6 @@ type PageProps = {
 const NewSalesReportPopover = () => {
   const { countries, sales_types, authenticity_token } = usePage<PageProps>().props;
   const [open, setOpen] = React.useState(false);
-
-  const defaultStartDate = React.useMemo(() => subMonths(new Date(), 1).toISOString().split("T")[0], []);
-  const defaultEndDate = React.useMemo(() => new Date().toISOString().split("T")[0], []);
-
-  const form = useForm({
-    authenticity_token,
-    sales_report: {
-      country_code: "",
-      start_date: defaultStartDate,
-      end_date: defaultEndDate,
-      sales_type: sales_types[0]?.[0],
-    },
-  });
-
-  const handleSubmit = (event: React.FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
-
-    form.post(Routes.admin_sales_reports_path(), {
-      only: ["job_history", "errors", "flash"],
-      onSuccess: () => setOpen(false),
-    });
-  };
-
-  const errors = cast<Errors>(form.errors);
 
   return (
     <Popover
@@ -64,86 +28,12 @@ const NewSalesReportPopover = () => {
       }
     >
       <div className="grid w-96 max-w-full gap-3">
-        <form onSubmit={handleSubmit} style={{ display: "contents" }}>
-          <div className="grid grid-rows-[auto_1fr] gap-3">
-            <label htmlFor="country_code">Country</label>
-            <select
-              name="sales_report[country_code]"
-              id="country_code"
-              onChange={(event: React.ChangeEvent<HTMLSelectElement>) =>
-                form.setData("sales_report.country_code", event.target.value)
-              }
-              value={form.data.sales_report.country_code}
-              required
-            >
-              <option value="">Select a country</option>
-              {countries.map(([name, code]) => (
-                <option key={code} value={code}>
-                  {name}
-                </option>
-              ))}
-            </select>
-            <Errors errors={errors.sales_report?.country_code} label="Country code" />
-          </div>
-
-          <div className="grid grid-cols-2 gap-3">
-            <div className="grid grid-rows-[auto_1fr] gap-3">
-              <label htmlFor="start_date">Start Date</label>
-              <input
-                name="sales_report[start_date]"
-                id="start_date"
-                type="date"
-                required
-                onChange={(event: React.ChangeEvent<HTMLInputElement>) =>
-                  form.setData("sales_report.start_date", event.target.value)
-                }
-                value={form.data.sales_report.start_date}
-              />
-              <Errors errors={errors.sales_report?.start_date} label="Start date" />
-            </div>
-
-            <div className="grid grid-rows-[1fr_auto] gap-3">
-              <label htmlFor="end_date">End Date</label>
-              <input
-                name="sales_report[end_date]"
-                id="end_date"
-                type="date"
-                required
-                onChange={(event: React.ChangeEvent<HTMLInputElement>) =>
-                  form.setData("sales_report.end_date", event.target.value)
-                }
-                value={form.data.sales_report.end_date}
-              />
-              <Errors errors={errors.sales_report?.end_date} label="End date" />
-            </div>
-          </div>
-
-          <div className="grid grid-rows-[auto_1fr] gap-3">
-            <label htmlFor="sales_type">Sale Type</label>
-            <select
-              name="sales_report[sales_type]"
-              id="sales_type"
-              onChange={(event: React.ChangeEvent<HTMLSelectElement>) =>
-                form.setData("sales_report.sales_type", event.target.value)
-              }
-              value={form.data.sales_report.sales_type}
-              required
-            >
-              {sales_types.map(([code, name]) => (
-                <option key={code} value={code}>
-                  {name}
-                </option>
-              ))}
-            </select>
-            <Errors errors={errors.sales_report?.sales_type} label="Type of sales" />
-          </div>
-
-          <Button type="submit" color="primary" disabled={form.processing}>
-            {form.processing ? "Generating..." : "Generate"}
-          </Button>
-
-          <input type="hidden" name="authenticity_token" value={form.data.authenticity_token} />
-        </form>
+        <AdminSalesReportsForm
+          countries={countries}
+          sales_types={sales_types}
+          authenticityToken={authenticity_token}
+          onSuccess={() => setOpen(false)}
+        />
       </div>
     </Popover>
   );

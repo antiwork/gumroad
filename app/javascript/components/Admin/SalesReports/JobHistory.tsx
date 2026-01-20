@@ -1,8 +1,10 @@
+import { router } from "@inertiajs/react";
 import * as React from "react";
 
 import AdminSalesReportsForm from "$app/components/Admin/SalesReports/Form";
 import { Button } from "$app/components/Button";
 import { Icon } from "$app/components/Icons";
+import { LoadingSpinner } from "$app/components/LoadingSpinner";
 import { Placeholder } from "$app/components/ui/Placeholder";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "$app/components/ui/Table";
 
@@ -27,6 +29,18 @@ type Props = {
 const AdminSalesReportsJobHistory = ({ countries, sales_types, jobHistory, authenticityToken }: Props) => {
   const [showNewSalesReportForm, setShowNewSalesReportForm] = React.useState(false);
 
+  const hasProcessingJobs = jobHistory.some((job) => job.status === "processing");
+
+  React.useEffect(() => {
+    if (!hasProcessingJobs) return;
+
+    const intervalId = setInterval(() => {
+      router.reload({ only: ["job_history"] });
+    }, 3000);
+
+    return () => clearInterval(intervalId);
+  }, [hasProcessingJobs]);
+
   const countryCodeToName = React.useMemo(() => {
     const map: Record<string, string> = {};
     countries.forEach(([name, code]) => {
@@ -45,7 +59,18 @@ const AdminSalesReportsJobHistory = ({ countries, sales_types, jobHistory, authe
 
   if (jobHistory.length === 0) {
     return showNewSalesReportForm ? (
-      <AdminSalesReportsForm countries={countries} sales_types={sales_types} authenticityToken={authenticityToken} />
+      <AdminSalesReportsForm
+        countries={countries}
+        sales_types={sales_types}
+        authenticityToken={authenticityToken}
+        onSuccess={() => setShowNewSalesReportForm(false)}
+        wrapper={(children) => (
+          <section>
+            <header>Generate sales report with custom date ranges</header>
+            {children}
+          </section>
+        )}
+      />
     ) : (
       <section>
         <Placeholder>
@@ -90,8 +115,8 @@ const AdminSalesReportsJobHistory = ({ countries, sales_types, jobHistory, authe
                     </div>
                   </a>
                 ) : (
-                  <div className="grid grid-cols-[auto_1fr] gap-2">
-                    <Icon name="circle" />
+                  <div className="grid grid-cols-[auto_1fr] items-center gap-2">
+                    <LoadingSpinner />
                     <span>Processing</span>
                   </div>
                 )}
