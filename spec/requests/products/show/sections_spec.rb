@@ -163,14 +163,14 @@ describe "Profile settings on product pages", type: :system, js: true do
   end
 
   it "paginates product sections with more than 9 products", :elasticsearch_wait_for_refresh do
-    products = 12.times. map { |i| create(:product, user: seller, name: "Product #{i + 1}") }
+    products = 12.times.map { |i| create(:product, user: seller, name: "Product #{i + 1}") }
     Link.import(refresh: true, force: true)
 
     section = create(
       :seller_profile_products_section,
-      seller:  seller,
+      seller: seller,
       product: product,
-      header:  "More Products",
+      header: "More Products",
       shown_products: products.map(&:id)
     )
 
