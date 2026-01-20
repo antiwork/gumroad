@@ -9,7 +9,7 @@ type TickProps = {
   payload: { value: string; index: number };
 };
 
-type DotProps = {
+export type DotProps = {
   key: string;
   cx: number;
   cy: number;

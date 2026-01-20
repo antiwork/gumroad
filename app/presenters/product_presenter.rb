@@ -8,18 +8,19 @@ class ProductPresenter
 
   extend PreorderHelper
 
-  attr_reader :product, :editing_page_id, :pundit_user, :request
+  attr_reader :product, :editing_page_id, :pundit_user, :request, :ai_generated
 
   delegate :user, :skus,
            :skus_enabled, :is_licensed, :is_multiseat_license, :quantity_enabled, :description,
            :is_recurring_billing, :should_include_last_post, :should_show_all_posts, :should_show_sales_count,
            :block_access_after_membership_cancellation, :duration_in_months, to: :product, allow_nil: true
 
-  def initialize(product:, editing_page_id: nil, request: nil, pundit_user: nil)
+  def initialize(product:, editing_page_id: nil, request: nil, pundit_user: nil, ai_generated: false)
     @product = product
     @editing_page_id = editing_page_id
     @request = request
     @pundit_user = pundit_user
+    @ai_generated = ai_generated
   end
 
   def self.new_page_props(current_seller:)
@@ -241,6 +242,7 @@ class ProductPresenter
         fine_print: product.user.refund_policy.fine_print,
       },
       cancellation_discounts_enabled: Feature.active?(:cancellation_discounts, product.user),
+      ai_generated:,
     }
   end
 

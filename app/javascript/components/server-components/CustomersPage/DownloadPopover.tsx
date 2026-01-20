@@ -4,7 +4,7 @@ import { createCast } from "ts-safe-cast";
 
 import { register } from "$app/utils/serverComponentUtil";
 
-import { Button } from "$app/components/Button";
+import { Button, buttonVariants } from "$app/components/Button";
 import { DateRangePicker } from "$app/components/DateRangePicker";
 import { Icon } from "$app/components/Icons";
 import { Popover } from "$app/components/Popover";
@@ -19,7 +19,7 @@ export const DownloadPopover = ({ authenticityToken }: Props) => {
       aria-label="Export"
       trigger={
         <WithTooltip tip="Export" position="bottom">
-          <div className="button js-toggle-download-box">
+          <div className={`${buttonVariants({ size: "default" })} js-toggle-download-box`}>
             <Icon name="download" />
           </div>
         </WithTooltip>

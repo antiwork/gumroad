@@ -16,6 +16,7 @@ aws_config = {
 # Support for MinIO in development and test environments
 if Rails.env.development? || Rails.env.test?
   aws_config[:endpoint] = AWS_S3_ENDPOINT if AWS_S3_ENDPOINT.present?
+  aws_config[:ssl_verify_peer] = false if USING_MINIO
   Aws.config[:s3] = { force_path_style: true }
 end
 
