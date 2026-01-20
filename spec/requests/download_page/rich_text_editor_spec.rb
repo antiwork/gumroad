@@ -160,6 +160,76 @@ describe("Download Page – Rich Text Editor Content", type: :system, js: true) 
       expect(page.evaluate_script("window._messages.length")).to eq(6)
     end
 
+    it "triggers app bridge messages for file embeds in React Native" do
+      visit("/d/#{@url_redirect.token}?display=mobile_app")
+
+      page.execute_script <<~JS
+        window._messages = [];
+        window.ReactNativeWebView = {
+          postMessage: (message) => {
+            window._messages.push(JSON.parse(message));
+          }
+        };
+      JS
+
+      within(find_embed(name: "Video file")) do
+        click_on "Download"
+        expect(page.evaluate_script("window._messages")).to eq(
+          [
+            {
+              type: "click",
+              payload: { resourceId: @video_file.external_id, isDownload: true, isPost: false, type: nil, isPlaying: nil, resumeAt: nil, contentLength: nil, extension: "MOV" }
+            }.as_json
+          ]
+        )
+        click_on "Watch"
+        expect(page.evaluate_script("window._messages[1]")).to eq(
+          {
+            type: "click",
+            payload: { resourceId: @video_file.external_id, isDownload: false, isPost: false, type: nil, isPlaying: nil, resumeAt: nil, contentLength: nil, extension: "MOV" }
+          }.as_json
+        )
+        expect(page).not_to have_selector("[aria-label='Video Player']")
+      end
+
+      within(find_embed(name: "Audio file")) do
+        click_on "Download"
+        expect(page.evaluate_script("window._messages[2]")).to eq(
+          {
+            type: "click",
+            payload: { resourceId: @audio_file.external_id, isDownload: true, isPost: false, type: nil, isPlaying: nil, resumeAt: nil, contentLength: nil, extension: "MP3" }
+          }.as_json
+        )
+        click_on "Play"
+        expect(page.evaluate_script("window._messages[3]")).to eq(
+          {
+            type: "click",
+            payload: { resourceId: @audio_file.external_id, isDownload: false, isPost: false, type: "audio", isPlaying: "false", resumeAt: "0", contentLength: "46", extension: "MP3" }
+          }.as_json
+        )
+        expect(page).not_to have_button("Close")
+      end
+
+      within(find_embed(name: "PDF file")) do
+        click_on "Download"
+        expect(page.evaluate_script("window._messages[4]")).to eq(
+          {
+            type: "click",
+            payload: { resourceId: @pdf_file.external_id, isDownload: true, isPost: false, type: nil, isPlaying: nil, resumeAt: nil, contentLength: nil, extension: "PDF" }
+          }.as_json
+        )
+        click_on "Read"
+        expect(page.evaluate_script("window._messages[5]")).to eq(
+          {
+            type: "click",
+            payload: { resourceId: @pdf_file.external_id, isDownload: false, isPost: false, type: nil, isPlaying: nil, resumeAt: nil, contentLength: nil, extension: "PDF" }
+          }.as_json
+        )
+      end
+
+      expect(page.evaluate_script("window._messages.length")).to eq(6)
+    end
+
     it "renders the customized download page for the purpose of embedding inside webview in the mobile apps" do
       visit("/d/#{@url_redirect.token}?display=mobile_app")
 

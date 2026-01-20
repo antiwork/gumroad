@@ -18,11 +18,9 @@ type Props = {
 export const WithTooltip = ({ tip, children, position = "bottom", className, tooltipProps, ...props }: Props) => {
   const id = React.useId();
 
-  if (tip == null) return children;
-
   return (
     <span {...props} className={classNames("group/tooltip relative inline-grid", className, position)}>
-      <span aria-describedby={id} style={{ display: "contents" }}>
+      <span aria-describedby={tip ? id : undefined} style={{ display: "contents" }}>
         {children}
       </span>
       {tip ? (

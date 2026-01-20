@@ -1,3 +1,3 @@
-<%= image_tag(logged_in_user.avatar_url, class: "user-avatar", size: "32", alt: logged_in_user.display_name) %>
+<%= image_tag(logged_in_user.avatar_url, class: "user-avatar", size: "20", alt: logged_in_user.display_name) %>
 <span><%= logged_in_user.email %></span>
 <%= link_to "Logout", logout_path %>
