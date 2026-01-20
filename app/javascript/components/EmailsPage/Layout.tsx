@@ -3,7 +3,7 @@ import React from "react";
 
 import { EmailTab } from "$app/data/installments";
 
-import { Button, buttonVariants } from "$app/components/Button";
+import { Button } from "$app/components/Button";
 import { Icon } from "$app/components/Icons";
 import { Popover, PopoverContent, PopoverTrigger } from "$app/components/Popover";
 import { PageHeader } from "$app/components/ui/PageHeader";
@@ -35,13 +35,13 @@ export const EmailsLayout = ({ selectedTab, children, hasPosts, query, onQueryCh
           <>
             {hasPosts && onQueryChange ? (
               <Popover open={isSearchPopoverOpen} onOpenChange={setIsSearchPopoverOpen}>
-                <PopoverTrigger aria-label="Toggle Search" asChild>
-                  <WithTooltip tip="Search" position="bottom">
-                    <div className={buttonVariants({ size: "default" })}>
+                <WithTooltip tip="Search" position="bottom">
+                  <PopoverTrigger aria-label="Toggle Search" asChild>
+                    <Button>
                       <Icon name="solid-search" />
-                    </div>
-                  </WithTooltip>
-                </PopoverTrigger>
+                    </Button>
+                  </PopoverTrigger>
+                </WithTooltip>
                 <PopoverContent>
                   <div className="input">
                     <Icon name="solid-search" />
