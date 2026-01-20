@@ -1,13 +1,13 @@
+import { usePage } from "@inertiajs/react";
 import * as React from "react";
+import { cast } from "ts-safe-cast";
 
-import { Layout } from "$app/components/ProductEdit/Layout";
+import { Layout, ProductEditProps } from "$app/components/ProductEdit/Layout";
 import { ReceiptPreview } from "$app/components/ProductEdit/ReceiptPreview";
-import { CustomReceiptTextInput } from "$app/components/ProductEdit/ReceiptTab/CustomReceiptTextInput";
-import { CustomViewContentButtonTextInput } from "$app/components/ProductEdit/ReceiptTab/CustomViewContentButtonTextInput";
-import { useProductEditContext } from "$app/components/ProductEdit/state";
+import { ReceiptTabContent } from "$app/components/ProductEdit/ReceiptTab";
 
-export const ReceiptTab = () => {
-  const { product, updateProduct } = useProductEditContext();
+export default function ReceiptTab() {
+  const props = cast<ProductEditProps>(usePage().props);
 
   return (
     <Layout
@@ -16,23 +16,9 @@ export const ReceiptTab = () => {
       previewScaleFactor={1}
       showBorder={false}
       showNavigationButton={false}
+      props={props}
     >
-      <div className="squished">
-        <form>
-          <section className="p-4! md:p-8!">
-            <CustomViewContentButtonTextInput
-              value={product.custom_view_content_button_text}
-              onChange={(value) => updateProduct({ custom_view_content_button_text: value })}
-              maxLength={product.custom_view_content_button_text_max_length}
-            />
-            <CustomReceiptTextInput
-              value={product.custom_receipt_text}
-              onChange={(value) => updateProduct({ custom_receipt_text: value })}
-              maxLength={product.custom_receipt_text_max_length}
-            />
-          </section>
-        </form>
-      </div>
+      <ReceiptTabContent />
     </Layout>
   );
-};
+}

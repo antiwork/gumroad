@@ -1,4 +1,4 @@
-import { router, usePage } from "@inertiajs/react";
+import { router } from "@inertiajs/react";
 import { DirectUpload } from "@rails/activestorage";
 import cx from "classnames";
 import { isEqual } from "lodash-es";
@@ -47,7 +47,7 @@ import { FileEntry, useProductEditContext } from "./state";
 
 type TabType = "product" | "content" | "receipt" | "share";
 
-type Props = {
+export type ProductEditProps = {
   product: Product;
   id: string;
   unique_permalink: string;
@@ -74,16 +74,9 @@ type Props = {
   seller_refund_policy_enabled: boolean;
   seller_refund_policy: Pick<RefundPolicy, "title" | "fine_print">;
   cancellation_discounts_enabled: boolean;
-  children: React.ReactNode;
-  currentTab: TabType;
-  isLoading?: boolean;
-  preview?: React.ReactNode;
-  previewScaleFactor?: number;
-  showBorder?: boolean;
-  showNavigationButton?: boolean;
 };
 
-const createContextValue = (props: Props) => ({
+const createContextValue = (props: ProductEditProps) => ({
   id: props.id,
   product: props.product,
   updateProduct: () => {},
@@ -240,6 +233,8 @@ export const Layout = ({
   previewScaleFactor = 0.4,
   showBorder = true,
   showNavigationButton = true,
+  currentTab,
+  props,
 }: {
   children: React.ReactNode;
   preview?: React.ReactNode;
@@ -248,16 +243,31 @@ export const Layout = ({
   previewScaleFactor?: number;
   showBorder?: boolean;
   showNavigationButton?: boolean;
+  currentTab: TabType;
+  props: ProductEditProps;
 }) => {
-  const props = cast<Props>(usePage().props);
   const [imagesUploading, setImagesUploading] = React.useState<Set<File>>(new Set());
   const rootPath = `/products/${props.unique_permalink}/edit`;
   const [currencyType, setCurrencyType] = React.useState<CurrencyCode>(props.currency_type);
   const [product, setProduct] = React.useState(props.product);
 
   const [saving, setSaving] = React.useState(false);
-  const url = useProductUrl();
-  const checkoutUrl = useProductUrl({ wanted: true });
+  const currentSeller = useCurrentSeller();
+  const { appDomain } = useDomains();
+
+  const url =
+    product.native_type === "coffee" && currentSeller
+      ? Routes.custom_domain_coffee_url({ host: currentSeller.subdomain })
+      : Routes.short_link_url(product.custom_permalink ?? props.unique_permalink, {
+          host: currentSeller?.subdomain ?? appDomain,
+        });
+  const checkoutUrl =
+    product.native_type === "coffee" && currentSeller
+      ? Routes.custom_domain_coffee_url({ host: currentSeller.subdomain, wanted: true })
+      : Routes.short_link_url(product.custom_permalink ?? props.unique_permalink, {
+          host: currentSeller?.subdomain ?? appDomain,
+          wanted: true,
+        });
 
   const [isPublishing, setIsPublishing] = React.useState(false);
   const setPublished = async (published: boolean) => {
@@ -267,7 +277,7 @@ export const Layout = ({
       await setProductPublished(props.unique_permalink, published);
       updateProduct({ is_published: published });
       showAlert(published ? "Published!" : "Unpublished!", "success");
-      if (props.currentTab === "share") {
+      if (currentTab === "share") {
         if (product.native_type === "coffee") router.visit(rootPath);
         else router.visit(`${rootPath}/content`);
       } else if (published) {
@@ -469,7 +479,7 @@ export const Layout = ({
                   </Button>
                 </CopyToClipboard>
               </>
-            ) : props.currentTab === "product" && !isCoffee ? (
+            ) : currentTab === "product" && !isCoffee ? (
               <Button
                 color="primary"
                 disabled={isBusy}
@@ -496,18 +506,18 @@ export const Layout = ({
             )}
           >
             <Tabs style={{ gridColumn: 1 }}>
-              <Tab isSelected={props.currentTab === "product"} onClick={() => onTabClick("product")}>
+              <Tab isSelected={currentTab === "product"} onClick={() => onTabClick("product")}>
                 Product
               </Tab>
               {!isCoffee ? (
-                <Tab isSelected={props.currentTab === "content"} onClick={() => onTabClick("content")}>
+                <Tab isSelected={currentTab === "content"} onClick={() => onTabClick("content")}>
                   Content
                 </Tab>
               ) : null}
-              <Tab isSelected={props.currentTab === "receipt"} onClick={() => onTabClick("receipt")}>
+              <Tab isSelected={currentTab === "receipt"} onClick={() => onTabClick("receipt")}>
                 Receipt
               </Tab>
-              <Tab isSelected={props.currentTab === "share"} onClick={() => onTabClick("share")}>
+              <Tab isSelected={currentTab === "share"} onClick={() => onTabClick("share")}>
                 Share
               </Tab>
             </Tabs>
