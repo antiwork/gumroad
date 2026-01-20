@@ -20,6 +20,7 @@ import {
 } from "$app/components/Payouts";
 import { ExportPayoutsPopover } from "$app/components/Payouts/ExportPayoutsPopover";
 import { showAlert } from "$app/components/server-components/Alert";
+import { Alert } from "$app/components/ui/Alert";
 import { Card, CardContent } from "$app/components/ui/Card";
 import { PageHeader } from "$app/components/ui/PageHeader";
 import { Pill } from "$app/components/ui/Pill";
@@ -528,7 +529,7 @@ export default function PayoutsIndex() {
       <div className="space-y-8 p-4 md:p-8">
         {!instant_payout ? (
           show_instant_payouts_notice ? (
-            <div className="info" role="status">
+            <Alert variant="info" role="status">
               <p>
                 To enable <strong>instant</strong> payouts,{" "}
                 <a href={Routes.settings_payments_path()}>update your payout method</a> to one of the{" "}
@@ -537,10 +538,10 @@ export default function PayoutsIndex() {
                 </a>
                 .
               </p>
-            </div>
+            </Alert>
           ) : null
         ) : instant_payout.payable_amount_cents >= MINIMUM_INSTANT_PAYOUT_AMOUNT_CENTS ? (
-          <div className="info" role="status">
+          <Alert variant="info" role="status">
             <div>
               <b>
                 You have{" "}
@@ -651,17 +652,17 @@ export default function PayoutsIndex() {
                   </footer>
                 </div>
                 {instantPayoutAmountCents > MAXIMUM_INSTANT_PAYOUT_AMOUNT_CENTS ? (
-                  <div role="status" className="info">
+                  <Alert variant="info" role="status">
                     Your balance exceeds the maximum amount for a single instant payout, so we'll automatically split
                     your balance into multiple payouts.
-                  </div>
+                  </Alert>
                 ) : null}
               </fieldset>
             </Modal>
-          </div>
+          </Alert>
         ) : null}
         {payouts_status === "paused" ? (
-          <div className="warning" role="status">
+          <Alert variant="warning" role="status">
             <p>
               {payouts_paused_by === "stripe" ? (
                 <strong>
@@ -685,24 +686,24 @@ export default function PayoutsIndex() {
                 </strong>
               )}
             </p>
-          </div>
+          </Alert>
         ) : null}
         {next_payout_period_data != null ? (
           next_payout_period_data.has_stripe_connect ? (
-            <div className="info" role="status">
+            <Alert variant="info" role="status">
               <p>For Stripe Connect users, all future payouts will be deposited directly to your Stripe account</p>
-            </div>
+            </Alert>
           ) : (
             <section className="grid gap-4">
               {next_payout_period_data.payout_note &&
               !["processing", "paused"].includes(next_payout_period_data.status) ? (
-                <div className="info" role="status">
+                <Alert variant="info" role="status">
                   <p>{next_payout_period_data.payout_note}</p>
-                </div>
+                </Alert>
               ) : null}
               {next_payout_period_data.status === "not_payable" ? (
                 past_payout_period_data.length > 0 ? (
-                  <div className="info" role="status">
+                  <Alert variant="info" role="status">
                     <p>
                       Reach a balance of at least{" "}
                       {formatPriceCentsWithCurrencySymbol("usd", next_payout_period_data.minimum_payout_amount_cents, {
@@ -710,7 +711,7 @@ export default function PayoutsIndex() {
                       })}{" "}
                       to be paid out for your sales.
                     </p>
-                  </div>
+                  </Alert>
                 ) : (
                   <PeriodEmpty minimumPayoutAmountCents={next_payout_period_data.minimum_payout_amount_cents} />
                 )

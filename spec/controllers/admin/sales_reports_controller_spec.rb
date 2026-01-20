@@ -120,12 +120,10 @@ describe Admin::SalesReportsController, type: :controller, inertia: true do
         expect(flash[:alert]).to eq "Invalid form submission. Please fix the errors."
 
         expect(session[:inertia_errors]).to eq({
-                                                 sales_report: {
-                                                   country_code: ["Please select a country"],
-                                                   start_date: ["Invalid date format. Please use YYYY-MM-DD format"],
-                                                   end_date: ["Invalid date format. Please use YYYY-MM-DD format"],
-                                                   sales_type: ["Invalid sales type, should be all_sales or discover_sales."]
-                                                 }
+                                                 "sales_report.country_code" => "Please select a country",
+                                                 "sales_report.start_date" => "Invalid date format. Please use YYYY-MM-DD format",
+                                                 "sales_report.end_date" => "Invalid date format. Please use YYYY-MM-DD format",
+                                                 "sales_report.sales_type" => "Invalid sales type, should be all_sales or discover_sales."
                                                })
       end
     end

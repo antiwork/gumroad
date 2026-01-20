@@ -4,6 +4,7 @@ import * as React from "react";
 
 import { assertDefined } from "$app/utils/assert";
 
+import { buttonVariants } from "$app/components/Button";
 import { Icon } from "$app/components/Icons";
 import { Popover } from "$app/components/Popover";
 
@@ -29,7 +30,7 @@ export const NodeActionsMenu = ({
       className="actions-menu"
       aria-label="Actions"
       trigger={
-        <div className="button small filled" data-drag-handle draggable>
+        <div className={buttonVariants({ size: "sm", color: "filled" })} data-drag-handle draggable>
           <Icon name="outline-drag" />
         </div>
       }

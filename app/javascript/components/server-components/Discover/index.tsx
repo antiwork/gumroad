@@ -62,11 +62,17 @@ const ProductsCarousel = ({ products, title }: { products: CardProduct[]; title:
       <header className="flex items-center justify-between">
         <h2>{title}</h2>
         <div className="flex items-center gap-2">
-          <button onClick={() => setActive((active + products.length - 1) % products.length)}>
+          <button
+            className="cursor-pointer all-unset"
+            onClick={() => setActive((active + products.length - 1) % products.length)}
+          >
             <Icon name="arrow-left" className="text-xl" />
           </button>
           {active + 1} / {products.length}
-          <button onClick={() => setActive((active + products.length + 1) % products.length)}>
+          <button
+            className="cursor-pointer all-unset"
+            onClick={() => setActive((active + products.length + 1) % products.length)}
+          >
             <Icon name="arrow-right" className="text-xl" />
           </button>
         </div>
@@ -468,7 +474,7 @@ const Discover = (props: Props) => {
                         <span>BLACKFRIDAY2025</span>
                         <button
                           onClick={() => updateParams({ offer_code: undefined })}
-                          className="flex items-center justify-center"
+                          className="flex cursor-pointer items-center justify-center all-unset"
                           aria-label="Remove offer code filter"
                         >
                           <Icon name="x" />

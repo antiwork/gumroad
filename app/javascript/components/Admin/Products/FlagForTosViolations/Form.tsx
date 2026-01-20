@@ -1,6 +1,7 @@
 import * as React from "react";
 
 import { Form } from "$app/components/Admin/Form";
+import { Button } from "$app/components/Button";
 import { showAlert } from "$app/components/server-components/Alert";
 
 type AdminSuspendForTosFormProps = {
@@ -44,9 +45,9 @@ export const AdminSuspendForTosForm = ({
               </option>
             ))}
           </select>
-          <button type="submit" className="button" disabled={isLoading}>
+          <Button type="submit" disabled={isLoading}>
             {isLoading ? "Suspending..." : "Submit"}
-          </button>
+          </Button>
         </>
       )}
     </Form>

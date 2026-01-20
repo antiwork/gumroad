@@ -141,7 +141,7 @@ const DiscoverEligibilityPromo = () => {
             .
           </div>
           <button
-            className="w-max underline"
+            className="w-max cursor-pointer underline all-unset"
             onClick={() => {
               localStorage.setItem("showDiscoverEligibilityPromo", "false");
               setShow(false);

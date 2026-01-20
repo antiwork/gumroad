@@ -1,15 +1,59 @@
 @import "../stylesheets/font";
 @import "../stylesheets/definitions";
-@import "../stylesheets/button";
 
 .gumroad-button {
   @include globals;
 }
 
+// Inlined from deleted _button.scss
+%gumroad-button-base {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: spacer(2);
+  cursor: pointer;
+  border: $border;
+  border-radius: border-radius(1);
+  font-family: inherit;
+  @include transition(transform);
+  padding: spacer(3) spacer(4);
+  @include font-size(2);
+
+  &:hover {
+    transform: translate(-$button-hover-transform-length, -$button-hover-transform-length);
+    box-shadow: box-shadow(1);
+  }
+
+  &:active {
+    transform: translate(0, 0);
+    box-shadow: none;
+  }
+}
+
 a.gumroad-button {
   --parent-color: 0 0 0 !important;
-  @extend %button, .primary;
   font-family: $font-family;
   $icons: [];
   @import "../stylesheets/icons";
+
+  @extend %gumroad-button-base;
+
+  & {
+    text-decoration: none;
+    background-color: full-color(primary);
+    color: full-color(contrast-primary);
+    border-color: full-color(primary);
+  }
+
+  &:hover {
+    background-color: full-color(accent);
+    color: full-color(contrast-accent);
+  }
+}
+
+button.gumroad-button-filled {
+  @extend %gumroad-button-base;
+  background-color: white;
+  color: black;
+  border-color: white;
 }

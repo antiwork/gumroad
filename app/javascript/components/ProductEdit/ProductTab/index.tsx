@@ -58,18 +58,12 @@ export const ProductTab = () => {
     googleCalendarEnabled,
     seller_refund_policy_enabled,
     cancellationDiscountsEnabled,
+    aiGenerated,
   } = useProductEditContext();
   const [initialProduct] = React.useState(product);
 
   const [thumbnail, setThumbnail] = React.useState(initialThumbnail);
-  const [showAiNotification, setShowAiNotification] = React.useState(false);
-
-  React.useEffect(() => {
-    if (window.location.hash === "#ai-generated") {
-      setShowAiNotification(true);
-      window.history.replaceState(null, "", window.location.pathname + window.location.search);
-    }
-  }, []);
+  const [showAiNotification, setShowAiNotification] = React.useState(aiGenerated);
 
   const { isUploading, setImagesUploading } = useImageUpload();
 
@@ -94,7 +88,10 @@ export const ProductTab = () => {
                     <strong>Your AI product is ready!</strong> Take a moment to check out the product and content tabs.
                     Tweak things and make it your own—this is your time to shine!
                   </div>
-                  <button className="self-center underline" onClick={() => setShowAiNotification(false)}>
+                  <button
+                    className="cursor-pointer self-center underline all-unset"
+                    onClick={() => setShowAiNotification(false)}
+                  >
                     close
                   </button>
                 </div>
@@ -125,7 +122,7 @@ export const ProductTab = () => {
                   <legend>
                     <label htmlFor={`${uid}-url`}>URL</label>
                     <CopyToClipboard text={url}>
-                      <button type="button" className="font-normal underline">
+                      <button type="button" className="cursor-pointer font-normal underline all-unset">
                         Copy URL
                       </button>
                     </CopyToClipboard>

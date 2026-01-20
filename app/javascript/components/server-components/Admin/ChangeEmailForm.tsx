@@ -3,6 +3,7 @@ import { createCast } from "ts-safe-cast";
 
 import { register } from "$app/utils/serverComponentUtil";
 
+import { Button } from "$app/components/Button";
 import { Form } from "$app/components/server-components/Admin/Form";
 import { showAlert } from "$app/components/server-components/Alert";
 
@@ -17,9 +18,9 @@ export const AdminChangeEmailForm = ({ user_id, current_email }: { user_id: numb
       <fieldset>
         <div style={{ display: "grid", gap: "var(--spacer-3)", gridTemplateColumns: "1fr auto" }}>
           <input type="email" name="update_email[email_address]" placeholder={current_email ?? ""} required />
-          <button type="submit" className="button" disabled={isLoading}>
+          <Button type="submit" disabled={isLoading}>
             {isLoading ? "Updating..." : "Update email"}
-          </button>
+          </Button>
         </div>
         <small>This will update the user's email to this new one!</small>
       </fieldset>

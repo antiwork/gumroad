@@ -7,12 +7,4 @@ class Products::CollabsPolicy < ApplicationPolicy
       user.role_marketing_for?(seller) ||
       user.role_support_for?(seller)
   end
-
-  def products_paged?
-    index?
-  end
-
-  def memberships_paged?
-    index?
-  end
 end

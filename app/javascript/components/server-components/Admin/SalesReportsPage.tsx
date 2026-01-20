@@ -3,6 +3,7 @@ import { createCast } from "ts-safe-cast";
 
 import { register } from "$app/utils/serverComponentUtil";
 
+import { Button, buttonVariants } from "$app/components/Button";
 import { Form } from "$app/components/server-components/Admin/Form";
 import { showAlert } from "$app/components/server-components/Alert";
 import { Placeholder } from "$app/components/ui/Placeholder";
@@ -85,9 +86,9 @@ const AdminSalesReportsPage = ({ countries, sales_types, job_history, form_actio
               ))}
             </select>
 
-            <button type="submit" className="button primary" disabled={isLoading}>
+            <Button type="submit" color="primary" disabled={isLoading}>
               {isLoading ? "Generating..." : "Generate report"}
-            </button>
+            </Button>
 
             <input type="hidden" name="authenticity_token" value={authenticity_token} />
           </section>
@@ -119,7 +120,12 @@ const AdminSalesReportsPage = ({ countries, sales_types, job_history, form_actio
                   <TableCell>{job.status}</TableCell>
                   <TableCell>
                     {job.status === "completed" && job.download_url ? (
-                      <a href={job.download_url} className="button small" target="_blank" rel="noopener noreferrer">
+                      <a
+                        href={job.download_url}
+                        className={buttonVariants({ size: "sm" })}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                      >
                         Download CSV
                       </a>
                     ) : (

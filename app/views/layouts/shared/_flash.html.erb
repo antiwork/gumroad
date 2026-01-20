@@ -1,2 +1,2 @@
 <% alert_text = flash[:alert] || flash[:warning] || flash[:notice] %>
-<%= react_component "Alert", props: { initial: alert_text ? { message: alert_text, status: flash[:alert] ? "alert" : flash[:warning] ? "warning" : "success" } : nil }, prerender: true %>
+<%= react_component "Alert", props: { initial: alert_text ? { message: alert_text, status: flash[:alert] ? "danger" : flash[:warning] ? "warning" : "success" } : nil }, prerender: true %>

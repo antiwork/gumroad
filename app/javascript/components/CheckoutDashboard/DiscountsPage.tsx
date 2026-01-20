@@ -16,7 +16,7 @@ import { asyncVoid } from "$app/utils/promise";
 import { AbortError, assertResponseError } from "$app/utils/request";
 import { writeQueryParams } from "$app/utils/url";
 
-import { Button } from "$app/components/Button";
+import { Button, buttonVariants } from "$app/components/Button";
 import { DiscountInput, InputtedDiscount } from "$app/components/CheckoutDashboard/DiscountInput";
 import { Layout, Page } from "$app/components/CheckoutDashboard/Layout";
 import { CopyToClipboard } from "$app/components/CopyToClipboard";
@@ -45,6 +45,7 @@ import { useGlobalEventListener } from "$app/components/useGlobalEventListener";
 import { useOriginalLocation } from "$app/components/useOriginalLocation";
 import { useUserAgentInfo } from "$app/components/UserAgent";
 import { useSortingTableDriver, Sort } from "$app/components/useSortingTableDriver";
+import { WithTooltip } from "$app/components/WithTooltip";
 
 import blackFridayIllustration from "$assets/images/illustrations/black_friday.svg";
 import placeholder from "$assets/images/placeholders/discounts.png";
@@ -306,9 +307,11 @@ const DiscountsPage = ({
               onToggle={setIsSearchPopoverOpen}
               aria-label="Search"
               trigger={
-                <div className="button">
-                  <Icon name="solid-search" />
-                </div>
+                <WithTooltip tip="Search" position="bottom">
+                  <div className={buttonVariants({ size: "default" })}>
+                    <Icon name="solid-search" />
+                  </div>
+                </WithTooltip>
               }
             >
               <div className="input">
@@ -444,7 +447,7 @@ const DiscountsPage = ({
                             onToggle={(open) => setPopoverOfferCodeId(open ? offerCode.id : null)}
                             aria-label="Open discount action menu"
                             trigger={
-                              <div className="button">
+                              <div className={buttonVariants({ size: "default" })}>
                                 <Icon name="three-dots" />
                               </div>
                             }

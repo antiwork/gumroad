@@ -3,6 +3,7 @@ import { createCast } from "ts-safe-cast";
 
 import { register } from "$app/utils/serverComponentUtil";
 
+import { Button } from "$app/components/Button";
 import { Form } from "$app/components/server-components/Admin/Form";
 import { showAlert } from "$app/components/server-components/Alert";
 
@@ -26,9 +27,9 @@ export const AdminAddCommentForm = ({
           <input type="hidden" name="comment[commentable_id]" value={commentable_id} />
           <input type="hidden" name="comment[commentable_type]" value={commentable_type} />
           <input type="hidden" name="comment[comment_type]" value="note" />
-          <button type="submit" className="button" disabled={isLoading}>
+          <Button type="submit" disabled={isLoading}>
             {isLoading ? "Saving..." : "Add comment"}
-          </button>
+          </Button>
         </div>
       </fieldset>
     )}

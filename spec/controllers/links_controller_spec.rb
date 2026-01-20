@@ -22,336 +22,23 @@ describe LinksController, :vcr, inertia: true do
     include_context "with user signed in as admin for seller"
 
     describe "GET index" do
-      before do
-        @membership1 = create(:subscription_product, user: seller)
-        @membership2 = create(:subscription_product, user: seller)
-        @unpublished_membership = create(:subscription_product, user: seller, purchase_disabled_at: Time.current)
-        @other_membership = create(:subscription_product)
-
-        @product1 = create(:product, user: seller)
-        @product2 = create(:product, user: seller)
-        @unpublished_product = create(:product, user: seller, purchase_disabled_at: Time.current)
-        @other_product = create(:product)
-      end
-
       it_behaves_like "authorize called for action", :get, :index do
         let(:record) { Link }
       end
 
-      it "returns seller's products" do
+      it "renders the Products/Index component with correct props" do
         get :index
 
-        memberships = assigns(:memberships)
-        expect(memberships).to include(@membership1)
-        expect(memberships).to include(@membership2)
-        expect(memberships).to include(@unpublished_membership)
-        expect(memberships).to_not include(@other_membership)
-
-        products = assigns(:products)
-        expect(products).to include(@product1)
-        expect(products).to include(@product2)
-        expect(products).to include(@unpublished_product)
-        expect(products).to_not include(@other_product)
-      end
-
-      it "does not return the deleted products" do
-        @membership2.update!(deleted_at: Time.current)
-        @product2.update!(deleted_at: Time.current)
-        get :index
-
-        expect(assigns(:memberships)).to_not include(@membership2)
-        expect(assigns(:products)).to_not include(@product2)
-      end
-
-      it "does not return archived products" do
-        @membership2.update!(archived: true)
-        @product2.update!(archived: true)
-
-        get :index
-
-        expect(assigns(:memberships)).to_not include(@membership2)
-        expect(assigns(:products)).to_not include(@product2)
-      end
-
-      describe "shows the correct number of sales" do
-        def expect_sales_count_in_inertia_response(expected_count)
-          products = inertia.props[:react_products_page_props][:products]
-          expect(products).to be_present, "Expected products in Inertia.js response"
-          expect(products.first[:successful_sales_count]).to eq(expected_count)
-        end
-
-        it "with a single sale" do
-          allow_any_instance_of(Link).to receive(:successful_sales_count).and_return(1)
-
-          get(:index)
-          expect(response).to be_successful
-
-          expect(inertia).to render_component("Products/Index")
-
-          expect_sales_count_in_inertia_response(1)
-        end
-
-        it "with over a thousand sales, comma-delimited" do
-          allow_any_instance_of(Link).to receive(:successful_sales_count).and_return(3_030)
-          get(:index)
-          expect(response).to be_successful
-
-          expect(inertia).to render_component("Products/Index")
-
-          expect_sales_count_in_inertia_response(3_030)
-        end
-
-        it "shows comma-delimited pre-orders count" do
-          @product1.update_attribute(:is_in_preorder_state, true)
-          allow_any_instance_of(Link).to receive(:successful_sales_count).and_return(424_242)
-          get(:index)
-          expect(response).to be_successful
-
-          expect(inertia).to render_component("Products/Index")
-
-          expect_sales_count_in_inertia_response(424_242)
-        end
-
-        it "shows comma-delimited subscribers count" do
-          create(:subscription_product, user: seller)
-          allow_any_instance_of(Link).to receive(:successful_sales_count).and_return(1_111)
-          get(:index)
-          expect(response).to be_successful
-
-          expect(inertia).to render_component("Products/Index")
-
-          expect_sales_count_in_inertia_response(1_111)
-        end
-      end
-
-      describe "visible product URLs" do
-        it "shows product URL without the protocol part" do
-          get :index
-
-          expect(response).to be_successful
-
-          expect(inertia).to render_component("Products/Index")
-
-          products = inertia.props[:react_products_page_props][:products]
-          expect(products).to be_present
-          expect(products.first[:url_without_protocol]).to be_present
-        end
-      end
-    end
-
-    describe "GET memberships_paged" do
-      before do
-        @memberships_per_page = 2
-        stub_const("LinksController::PER_PAGE", @memberships_per_page)
-      end
-
-      it_behaves_like "authorize called for action", :get, :memberships_paged do
-        let(:record) { Link }
-        let(:policy_method) { :index? }
-      end
-
-      describe "membership sorting + pagination", :elasticsearch_wait_for_refresh do
-        include_context "with products and memberships"
-
-        it_behaves_like "an API for sorting and pagination", :memberships_paged do
-          let!(:default_order) { [membership2, membership3, membership4, membership1] }
-          let!(:columns) do
-            {
-              "name" => [membership1, membership2, membership3, membership4],
-              "successful_sales_count" => [membership4, membership1, membership3, membership2],
-              "revenue" => [membership4, membership1, membership3, membership2],
-              "display_price_cents" => [membership4, membership3, membership2, membership1]
-            }
-          end
-          let!(:boolean_columns) { { "status" => [membership3, membership4, membership2, membership1] } }
-        end
-      end
-
-      describe "more than 2n visible memberships" do
-        before do
-          @memberships_count = 2 * @memberships_per_page + 1
-          @memberships_count.times { create(:subscription_product, user: seller) }
-        end
-
-        it "returns success on page 1" do
-          get :memberships_paged, params: { page: 1 }
-          expect(response.parsed_body["entries"].length).to eq @memberships_per_page
-        end
-
-        it "returns success on page 2" do
-          get :memberships_paged, params: { page: 2 }
-          expect(response.parsed_body["entries"].length).to eq @memberships_per_page
-        end
-
-        it "returns success on page 3" do
-          get :memberships_paged, params: { page: 3 }
-          expect(response.parsed_body["entries"].length).to eq 1
-        end
-      end
-
-      describe "between n and 2n visible memberships" do
-        before do
-          @memberships_count = @memberships_per_page + 1
-          @memberships_count.times { create(:subscription_product, user: seller) }
-        end
-
-        it "returns correctly on page 1" do
-          get :memberships_paged, params: { page: 1 }
-          expect(response.parsed_body["entries"].length).to eq @memberships_per_page
-        end
-
-        it "returns correctly on page 2" do
-          get :memberships_paged, params: { page: 2 }
-          expect(response.parsed_body["entries"].length).to eq 1
-        end
-
-        it "raises on page overflow" do
-          expect { get :memberships_paged, params: { page: 3 } }.to raise_error(Pagy::OverflowError)
-        end
-
-        describe "has some deleted memberships" do
-          before do
-            3.times { create(:subscription_product, user: seller, deleted_at: Time.current) }
-          end
-
-          it "returns correctly on page 1" do
-            get :memberships_paged, params: { page: 1 }
-            expect(response.parsed_body["entries"].length).to eq @memberships_per_page
-          end
-
-          it "returns correctly on page 2" do
-            get :memberships_paged, params: { page: 2 }
-            expect(response.parsed_body["entries"].length).to eq 1
-          end
-
-          it "raises on page overflow" do
-            expect { get :memberships_paged, params: { page: 3 } }.to raise_error(Pagy::OverflowError)
-          end
-        end
-      end
-
-      describe "< n visible memberships" do
-        before do
-          @published_count = @memberships_per_page - 1
-          @published_count.times { create(:subscription_product, user: seller) }
-        end
-
-        it "returns correctly on page 1" do
-          get :memberships_paged, params: { page: 1 }
-          expect(response.parsed_body["entries"].length).to eq @memberships_per_page - 1
-        end
-
-        it "raises on page overflow" do
-          expect { get :memberships_paged, params: { page: 2 } }.to raise_error(Pagy::OverflowError)
-        end
-      end
-    end
-
-    describe "GET products_paged" do
-      before do
-        @products_per_page = 2
-        stub_const("LinksController::PER_PAGE", @products_per_page)
-      end
-
-      it_behaves_like "authorize called for action", :get, :products_paged do
-        let(:record) { Link }
-        let(:policy_method) { :index? }
-      end
-
-      describe "non-membership sorting + pagination", :elasticsearch_wait_for_refresh do
-        include_context "with products and memberships"
-
-        it_behaves_like "an API for sorting and pagination", :products_paged do
-          let!(:default_order) { [product1, product3, product4, product2] }
-          let!(:columns) do
-            {
-              "name" => [product1, product2, product3, product4],
-              "successful_sales_count" => [product1, product2, product3, product4],
-              "revenue" => [product3, product2, product1, product4],
-              "display_price_cents" => [product3, product4, product2, product1]
-            }
-          end
-          let!(:boolean_columns) { { "status" => [product3, product4, product1, product2] } }
-        end
-      end
-
-      describe "more than 2n visible products" do
-        before do
-          @products_count = 2 * @products_per_page + 1
-          @products_count.times { create(:product, user: seller) }
-        end
-
-        it "returns success on page 1" do
-          get :products_paged, params: { page: 1 }
-          expect(response.parsed_body["entries"].length).to eq @products_per_page
-        end
-
-        it "returns success on page 2" do
-          get :products_paged, params: { page: 2 }
-          expect(response.parsed_body["entries"].length).to eq @products_per_page
-        end
-
-        it "returns success on page 3" do
-          get :products_paged, params: { page: 3 }
-          expect(response.parsed_body["entries"].length).to eq 1
-        end
-      end
-
-      describe "between n and 2n visible products" do
-        before do
-          @products_count = @products_per_page + 1
-          @products_count.times { create(:product, user: seller) }
-        end
-
-        it "returns correctly on page 1" do
-          get :products_paged, params: { page: 1 }
-          expect(response.parsed_body["entries"].length).to eq @products_per_page
-        end
-
-        it "returns correctly on page 2" do
-          get :products_paged, params: { page: 2 }
-          expect(response.parsed_body["entries"].length).to eq 1
-        end
-
-        it "raises on page overflow" do
-          expect { get :products_paged, params: { page: 3 } }.to raise_error(Pagy::OverflowError)
-        end
-
-        describe "has some deleted products" do
-          before do
-            3.times { create(:product, user: seller, deleted_at: Time.current) }
-          end
-
-          it "returns correctly on page 1" do
-            get :products_paged, params: { page: 1 }
-            expect(response.parsed_body["entries"].length).to eq @products_per_page
-          end
-
-          it "returns correctly on page 2" do
-            get :products_paged, params: { page: 2 }
-            expect(response.parsed_body["entries"].length).to eq 1
-          end
-
-          it "raises on page overflow" do
-            expect { get :products_paged, params: { page: 3 } }.to raise_error(Pagy::OverflowError)
-          end
-        end
-      end
-
-      describe "< n visible products" do
-        before do
-          @published_count = @products_per_page - 1
-          @published_count.times { create(:product, user: seller) }
-        end
-
-        it "returns correctly on page 1" do
-          get :products_paged, params: { page: 1 }
-          expect(response.parsed_body["entries"].length).to eq @products_per_page - 1
-        end
-
-        it "raises on page overflow" do
-          expect { get :products_paged, params: { page: 2 } }.to raise_error(Pagy::OverflowError)
-        end
+        expect(response).to be_successful
+        expect(inertia).to render_component("Products/Index")
+        expect(inertia.props).to include(
+          :archived_products_count,
+          :can_create_product,
+          :products_data,
+          :memberships_data
+        )
+        expect(inertia.props[:products_data]).to include(:products, :pagination, :sort)
+        expect(inertia.props[:memberships_data]).to include(:memberships, :pagination, :sort)
       end
     end
 
@@ -3051,38 +2738,19 @@ describe LinksController, :vcr, inertia: true do
         let(:record) { Link }
       end
 
-      it "succeeds with name and price" do
-        params = { price_cents: 100, name: "test link" }
-
-        post :create, params: { format: :json, link: params }
-
-        expect(response.parsed_body["success"]).to be(true)
-      end
-
-      it "fails if price missing" do
-        params = { name: "test link" }
-        post :create, params: { format: :json, link: params }
-        expect(response.parsed_body["success"]).to_not be(true)
-      end
-
-      it "fails if name is missing" do
-        params = { price_cents: 100 }
-        post :create, params: { format: :json, link: params }
-        expect(response.parsed_body["success"]).to be(false)
-      end
 
       it "creates link with display_product_reviews set to true" do
         params = { price_cents: 100, name: "test link" }
-        post :create, params: { format: :json, link: params }
-        expect(response.parsed_body["success"]).to be(true)
+        post :create, params: { link: params }
+        expect(response).to redirect_to(edit_link_path(Link.last))
         link = seller.links.last
         expect(link.display_product_reviews).to be(true)
       end
 
       it "ignores is_in_preorder_state param" do
         params = { price_cents: 100, name: "preorder", is_in_preorder_state: true, release_at: 1.year.from_now.iso8601 }
-        post :create, params: { format: :json, link: params }
-        expect(response.parsed_body["success"]).to be(true)
+        post :create, params: { link: params }
+        expect(response).to redirect_to(edit_link_path(Link.last))
         link = seller.links.last
         expect(link.name).to eq "preorder"
         expect(link.price_cents).to eq 100
@@ -3091,27 +2759,27 @@ describe LinksController, :vcr, inertia: true do
 
       it "is able to set currency type" do
         params = { price_cents: 100, name: "test link", url: @s3_url, price_currency_type: "jpy" }
-        post :create, params: { format: :json, link: params }
-        expect(response.parsed_body["success"]).to be(true)
+        post :create, params: { link: params }
+        expect(response).to redirect_to(edit_link_path(Link.last))
         expect(Link.last.price_currency_type).to eq "jpy"
       end
 
       it "creates the product if no files are provided" do
         params = { price_cents: 100, name: "test link", files: {} }
-        expect { post :create, params: { format: :json, link: params } }.to change { seller.links.count }.by(1)
+        expect { post :create, params: { link: params } }.to change { seller.links.count }.by(1)
       end
 
       it "assigns 'other' taxonomy" do
         params = { price_cents: 100, name: "test link" }
-        post :create, params: { format: :json, link: params }
-        expect(response.parsed_body["success"]).to be(true)
+        post :create, params: { link: params }
+        expect(response).to redirect_to(edit_link_path(Link.last))
         expect(Link.last.taxonomy).to eq(Taxonomy.find_by(slug: "other"))
       end
 
       context "when the product's native type is bundle" do
         it "sets is_bundle to true" do
-          post :create, params: { format: :json, link: { price_cents: 100, name: "Bundle", native_type: "bundle" } }
-          expect(response.parsed_body["success"]).to be(true)
+          post :create, params: { link: { price_cents: 100, name: "Bundle", native_type: "bundle" } }
+          expect(response).to redirect_to(edit_link_path(Link.last))
 
           product = Link.last
           expect(product.native_type).to eq("bundle")
@@ -3123,8 +2791,8 @@ describe LinksController, :vcr, inertia: true do
         let(:seller) { create(:user, :eligible_for_service_products) }
 
         it "sets custom_button_text_option to 'donate_prompt'" do
-          post :create, params: { format: :json, link: { price_cents: 100, name: "Coffee", native_type: "coffee" } }
-          expect(response.parsed_body["success"]).to be(true)
+          post :create, params: { link: { price_cents: 100, name: "Coffee", native_type: "coffee" } }
+          expect(response).to redirect_to(edit_link_path(Link.last))
 
           product = Link.last
           expect(product.native_type).to eq("coffee")
@@ -3189,8 +2857,8 @@ describe LinksController, :vcr, inertia: true do
           end
 
           it "allows users to create physical products" do
-            post :create, params: { format: :json, link: @params }
-            expect(response.parsed_body["success"]).to be(true)
+            post :create, params: { link: @params }
+            expect(response).to redirect_to(edit_link_path(Link.last))
             product = Link.last
             expect(product.is_physical).to be(true)
             expect(product.skus_enabled).to be(false)
@@ -3199,7 +2867,7 @@ describe LinksController, :vcr, inertia: true do
 
         context "when physical products are disabled" do
           it "returns forbidden" do
-            post :create, params: { format: :json, link: @params }
+            post :create, params: { link: @params }
             expect(response).to have_http_status(:forbidden)
           end
         end
@@ -3214,9 +2882,9 @@ describe LinksController, :vcr, inertia: true do
           it "does not enable community chat by default" do
             params = { price_cents: 100, name: "test link" }
 
-            post :create, params: { format: :json, link: params }
+            post :create, params: { link: params }
 
-            expect(response.parsed_body["success"]).to be(true)
+            expect(response).to redirect_to(edit_link_path(Link.last))
             product = seller.links.last
             expect(product.community_chat_enabled?).to be(false)
             expect(product.active_community).to be_nil
@@ -3231,9 +2899,9 @@ describe LinksController, :vcr, inertia: true do
           it "does not enable community chat" do
             params = { price_cents: 100, name: "test link" }
 
-            post :create, params: { format: :json, link: params }
+            post :create, params: { link: params }
 
-            expect(response.parsed_body["success"]).to be(true)
+            expect(response).to redirect_to(edit_link_path(Link.last))
             product = seller.links.last
             expect(product.community_chat_enabled?).to be(false)
             expect(product.active_community).to be_nil
@@ -3272,11 +2940,11 @@ describe LinksController, :vcr, inertia: true do
           allow_any_instance_of(Link).to receive_message_chain(:asset_previews, :build).and_return(nil)
           allow_any_instance_of(Link).to receive(:build_thumbnail).and_return(nil)
 
-          post :create, params: { format: :json, link: params }
+          post :create, params: { link: params }
 
           expect(service_double).to have_received(:generate_cover_image)
           expect(service_double).to have_received(:generate_rich_content_pages)
-          expect(response.parsed_body["success"]).to eq(true)
+          expect(response).to redirect_to(edit_link_path(Link.last, ai_generated: true))
 
           link = Link.last
           expect(link.name).to eq("UX design mastery using Figma")
@@ -3298,7 +2966,7 @@ describe LinksController, :vcr, inertia: true do
           expect(service_double).not_to receive(:generate_cover_image)
           expect(service_double).not_to receive(:generate_rich_content_pages)
 
-          post :create, params: { format: :json, link: params }
+          post :create, params: { link: params }
         end
 
         it "does not call AI service when ai_prompt is blank" do
@@ -3307,7 +2975,7 @@ describe LinksController, :vcr, inertia: true do
           expect(service_double).not_to receive(:generate_cover_image)
           expect(service_double).not_to receive(:generate_rich_content_pages)
 
-          post :create, params: { format: :json, link: { price_cents: 100, name: "Regular Product" } }
+          post :create, params: { link: { price_cents: 100, name: "Regular Product" } }
         end
       end
     end
