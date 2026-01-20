@@ -10,7 +10,7 @@ import { Label } from "$app/components/ui/Label";
 import { Select } from "$app/components/ui/Select";
 import { Button } from "$app/components/Button";
 import Errors from "$app/components/Form/Errors";
-import { Fieldset, Legend } from "$app/components/ui/Fieldset";
+import { Fieldset, FieldsetTitle } from "$app/components/ui/Fieldset";
 
 type Props = {
   countries: [string, string][];
@@ -71,9 +71,9 @@ const AdminSalesReportsForm = ({
               danger: !!errors["sales_report.country_code"]?.length,
             })}
           >
-            <Legend>
+            <FieldsetTitle>
               <Label htmlFor="country_code">Country</Label>
-            </Legend>
+            </FieldsetTitle>
             <Select
               name="sales_report[country_code]"
               id="country_code"
@@ -100,9 +100,9 @@ const AdminSalesReportsForm = ({
                 danger: !!errors["sales_report.start_date"]?.length,
               })}
             >
-              <Legend>
+              <FieldsetTitle>
                 <Label htmlFor="start_date">Start date</Label>
-              </Legend>
+              </FieldsetTitle>
               <Input
                 name="sales_report[start_date]"
                 id="start_date"
@@ -122,9 +122,9 @@ const AdminSalesReportsForm = ({
                 danger: !!errors["sales_report.end_date"]?.length,
               })}
             >
-              <Legend>
+              <FieldsetTitle>
                 <Label htmlFor="end_date">End date</Label>
-              </Legend>
+              </FieldsetTitle>
               <Input
                 name="sales_report[end_date]"
                 id="end_date"
@@ -145,9 +145,9 @@ const AdminSalesReportsForm = ({
               danger: !!errors["sales_report.sales_type"]?.length,
             })}
           >
-            <Legend>
+            <FieldsetTitle>
               <Label htmlFor="sales_type">Type of sales</Label>
-            </Legend>
+            </FieldsetTitle>
             <Select
               name="sales_report[sales_type]"
               id="sales_type"

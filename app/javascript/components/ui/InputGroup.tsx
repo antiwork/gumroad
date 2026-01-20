@@ -3,7 +3,9 @@ import * as React from "react";
 
 import { classNames } from "$app/utils/classNames";
 
-const InputGroupContext = React.createContext(false);
+const InputGroupContext = React.createContext<{ isInsideInputGroup: boolean; disabled?: boolean }>({
+  isInsideInputGroup: false,
+});
 
 export const useInputGroup = () => React.useContext(InputGroupContext);
 
@@ -15,7 +17,7 @@ const inputGroupVariants = cva(
   {
     variants: {
       disabled: {
-        true: "cursor-not-allowed opacity-30 [&_input]:opacity-100",
+        true: "cursor-not-allowed opacity-30",
         false: "",
       },
       readOnly: {
@@ -34,7 +36,7 @@ export const InputGroup = React.forwardRef<
   HTMLDivElement,
   React.HTMLAttributes<HTMLDivElement> & VariantProps<typeof inputGroupVariants>
 >(({ className, disabled, readOnly, children, ...props }, ref) => (
-  <InputGroupContext.Provider value={true}>
+  <InputGroupContext.Provider value={{ isInsideInputGroup: true, disabled: disabled ?? false }}>
     <div ref={ref} className={classNames(inputGroupVariants({ disabled, readOnly }), className)} {...props}>
       {children}
     </div>

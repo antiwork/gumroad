@@ -13,7 +13,7 @@ const inputGroupChildStyles = "border-none flex-1 bg-transparent shadow-none out
 
 export const Input = React.forwardRef<HTMLInputElement, React.InputHTMLAttributes<HTMLInputElement>>(
   ({ className, readOnly, ...props }, ref) => {
-    const isInsideInputGroup = useInputGroup();
+    const { isInsideInputGroup, disabled: inputGroupDisabled } = useInputGroup();
 
     return (
       <input
@@ -23,6 +23,7 @@ export const Input = React.forwardRef<HTMLInputElement, React.InputHTMLAttribute
           inputStyles,
           readOnly && "cursor-default bg-body focus:outline-none",
           isInsideInputGroup && inputGroupChildStyles,
+          inputGroupDisabled && "opacity-100",
           className,
         )}
         {...props}

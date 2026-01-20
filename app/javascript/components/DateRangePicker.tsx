@@ -17,7 +17,7 @@ import { Icon } from "$app/components/Icons";
 import { Popover } from "$app/components/Popover";
 import { useUserAgentInfo } from "$app/components/UserAgent";
 import { InputGroup } from "$app/components/ui/InputGroup";
-import { Fieldset, Legend } from "$app/components/ui/Fieldset";
+import { Fieldset, FieldsetTitle } from "$app/components/ui/Fieldset";
 import { Label } from "$app/components/ui/Label";
 
 export const DateRangePicker = ({
@@ -58,9 +58,9 @@ export const DateRangePicker = ({
       {isCustom ? (
         <div className="flex flex-col gap-4">
           <Fieldset>
-            <Legend>
+            <FieldsetTitle>
               <Label htmlFor={`${uid}-from`}>From (including)</Label>
-            </Legend>
+            </FieldsetTitle>
             <DateInput
               id={`${uid}-from`}
               value={from}
@@ -70,9 +70,9 @@ export const DateRangePicker = ({
             />
           </Fieldset>
           <Fieldset state={to < from ? "danger" : undefined}>
-            <Legend>
+            <FieldsetTitle>
               <Label htmlFor={`${uid}-to`}>To (including)</Label>
-            </Legend>
+            </FieldsetTitle>
             <DateInput
               id={`${uid}-to`}
               value={to}

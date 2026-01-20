@@ -4,15 +4,29 @@ import { classNames } from "$app/utils/classNames";
 
 import { Icon } from "$app/components/Icons";
 
-const checkboxBaseStyles =
-  "appearance-none size-[calc(1lh+0.125rem)] aspect-square border border-border bg-background text-base leading-[1.4] shrink-0 cursor-pointer disabled:cursor-not-allowed disabled:opacity-30 checked:bg-accent checked:text-accent-foreground rounded-lg peer";
-
 export const Checkbox = React.forwardRef<
   HTMLInputElement,
   { wrapperClassName?: string } & Omit<React.InputHTMLAttributes<HTMLInputElement>, "type">
 >(({ className, wrapperClassName, ...props }, ref) => (
   <span className={classNames("relative inline-flex shrink-0 items-center justify-center", wrapperClassName)}>
-    <input ref={ref} type="checkbox" className={classNames(checkboxBaseStyles, className)} {...props} />
+    <input
+      ref={ref}
+      type="checkbox"
+      className={classNames(
+        "appearance-none",
+        "aspect-square size-[calc(1lh+0.125rem)]",
+        "border border-border",
+        "bg-background",
+        "text-base leading-[1.4]",
+        "shrink-0 cursor-pointer",
+        "disabled:cursor-not-allowed disabled:opacity-30",
+        "checked:bg-accent checked:text-accent-foreground",
+        "rounded-lg",
+        "peer",
+        className,
+      )}
+      {...props}
+    />
     <Icon
       name="outline-check"
       className="pointer-events-none absolute hidden! text-accent-foreground peer-checked:block!"

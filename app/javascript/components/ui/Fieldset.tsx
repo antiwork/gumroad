@@ -28,16 +28,15 @@ export const Fieldset = React.forwardRef<
 ));
 Fieldset.displayName = "Fieldset";
 
-export const Legend = React.forwardRef<
+export const FieldsetTitle = React.forwardRef<
   HTMLLegendElement,
   { children: React.ReactNode } & React.HTMLAttributes<HTMLLegendElement>
 >(({ className, children, ...props }, ref) => (
   <legend
     ref={ref}
     className={classNames(
-      "relative mb-2 flex w-full items-center text-base leading-[1.4] font-bold",
+      "relative mb-2 flex w-full items-center justify-between text-base leading-[1.4] font-bold",
       "[&_a,&_label]:font-normal",
-      "[&>:last-child:not(:only-child)]:ml-auto",
       className,
     )}
     {...props}
@@ -45,4 +44,4 @@ export const Legend = React.forwardRef<
     {children}
   </legend>
 ));
-Legend.displayName = "Legend";
+FieldsetTitle.displayName = "FieldsetTitle";
