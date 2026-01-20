@@ -230,8 +230,25 @@ const CustomersPage = ({
     debouncedReloadCustomers();
   }, [query, includedItems, excludedItems]);
 
-  const [from, setFrom] = React.useState(subMonths(new Date(), 1));
-  const [to, setTo] = React.useState(new Date());
+  const [from, setFrom] = React.useState(() =>
+    createdAfter ? new Date(createdAfter) : subMonths(new Date(), 1)
+  );
+  const [to, setTo] = React.useState(() =>
+    createdBefore ? new Date(createdBefore) : new Date()
+  );
+
+  // Sync export date range with page filter dates when they change
+  React.useEffect(() => {
+    if (createdAfter) {
+      setFrom(new Date(createdAfter));
+    }
+  }, [createdAfter]);
+
+  React.useEffect(() => {
+    if (createdBefore) {
+      setTo(new Date(createdBefore));
+    }
+  }, [createdBefore]);
 
   const exportNames = React.useMemo(
     () =>
