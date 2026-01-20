@@ -621,7 +621,8 @@ describe("Product Edit Rich Text Editor", type: :system, js: true) do
       within find_embed(name: "test") do
         click_on "Play"
         expect(page).to have_selector("[aria-label='Pause']")
-        expect(page).to have_selector("[aria-label='Progress']", text: /00:0[1-9]/)
+        expect(page).to have_selector("[aria-label='Progress']", text: "00:01")
+        expect(page).to have_selector("[aria-label='Progress']", text: "00:02")
         click_on "Pause"
         expect(page).to have_selector("[aria-label='Rewind15']")
         click_on "Close"
