@@ -77,10 +77,6 @@ export const ProductsPageProductsTable = (props: {
     if (props.query !== null) debouncedLoadProducts();
   }, [props.query]);
 
-  const reloadProducts = () => {
-    router.get(Routes.products_path());
-  };
-
   if (!products.length) return null;
 
   return (
@@ -164,12 +160,12 @@ export const ProductsPageProductsTable = (props: {
                       onDuplicate={() => loadProducts()}
                       onArchive={() => {
                         props.setEnableArchiveTab?.(true);
-                        reloadProducts();
+                        loadProducts();
                       }}
                       onUnarchive={(hasRemainingArchivedProducts) => {
                         props.setEnableArchiveTab?.(hasRemainingArchivedProducts);
                         if (!hasRemainingArchivedProducts) router.get(Routes.products_path());
-                        else reloadProducts();
+                        else loadProducts();
                       }}
                     />
                   </div>

@@ -77,10 +77,6 @@ export const ProductsPageMembershipsTable = (props: {
     if (props.query !== null) debouncedLoadMemberships();
   }, [props.query]);
 
-  const reloadMemberships = () => {
-    router.get(Routes.products_path());
-  };
-
   if (!memberships.length) return null;
 
   return (
@@ -173,12 +169,12 @@ export const ProductsPageMembershipsTable = (props: {
                     onDuplicate={() => loadMemberships()}
                     onArchive={() => {
                       props.setEnableArchiveTab?.(true);
-                      reloadMemberships();
+                      loadMemberships();
                     }}
                     onUnarchive={(hasRemainingArchivedProducts) => {
                       props.setEnableArchiveTab?.(hasRemainingArchivedProducts);
                       if (!hasRemainingArchivedProducts) router.get(Routes.products_path());
-                      else reloadMemberships();
+                      else loadMemberships();
                     }}
                   />
                 </TableCell>

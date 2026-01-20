@@ -50,7 +50,6 @@ const ActionsPopover = ({
       onStart: () => setIsDeleting(true),
       onError: () => {
         showAlert("Failed to delete product. Please try again.", "error");
-        setIsDeleting(false);
       },
       onFinish: () => {
         setConfirmingDelete(false);
@@ -66,14 +65,11 @@ const ActionsPopover = ({
       {
         preserveScroll: true,
         onStart: () => setIsArchiving(true),
-        onFinish: () => {
-          setIsArchiving(false);
-          onArchive();
-        },
+        onSuccess: () => onArchive(),
         onError: () => {
           showAlert("Failed to archive product. Please try again.", "error");
-          setIsArchiving(false);
         },
+        onFinish: () => setIsArchiving(false),
       }
     );
   };
