@@ -22,7 +22,7 @@ class OfferCodesController < ApplicationController
 
         { valid: false, error_code: response[:error_code], error_message: error_message}
       else
-        { valid: true, products_data: response[:products_data] }
+        { valid: true, products_data: response[:products_data].transform_values { _1[:discount] } }
       end
 
 

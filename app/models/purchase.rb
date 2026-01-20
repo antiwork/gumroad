@@ -1673,12 +1673,29 @@ class Purchase < ApplicationRecord
 
   def set_price_and_rate
     if offer_code.present? && !has_cached_offer_code?
-      self.build_purchase_offer_code_discount(offer_code:, offer_code_amount: offer_code.amount, offer_code_is_percent: offer_code.is_percent?,
-                                              pre_discount_minimum_price_cents: minimum_paid_price_cents_per_unit_before_discount,
-                                              duration_in_months: link.is_tiered_membership? ? offer_code.duration_in_months : nil)
+      tier = if offer_code.required_product_id.present?
+        offer_code.eligibility_tier_for(purchaser_email: email)
+      end
+
+      if tier
+        tier_discount = offer_code.discount_for_tier(tier)
+        discount_amount = tier_discount[:percents] || tier_discount[:cents]
+        discount_is_percent = tier_discount[:type] == "percent"
+      else
+        discount_amount = offer_code.amount
+        discount_is_percent = offer_code.is_percent?
+      end
+
+      self.build_purchase_offer_code_discount(
+        offer_code:,
+        offer_code_amount: discount_amount,
+        offer_code_is_percent: discount_is_percent,
+        pre_discount_minimum_price_cents: minimum_paid_price_cents_per_unit_before_discount,
+        duration_in_months: link.is_tiered_membership? ? offer_code.duration_in_months : nil
+      )
     end
 
-    self.build_purchasing_power_parity_info(factor: purchasing_power_parity_factor) if is_purchasing_power_parity_discounted? && purchasing_power_parity_factor < 1
+    self.build_purchasing_power_parity_info(factor: purchasing_power_parity_factor) if is_purchasing_power_parity_discounted?  && purchasing_power_parity_factor < 1
 
     self.displayed_price_cents = determine_customized_price_cents || calculate_price_range_cents || minimum_paid_price_cents
     self.displayed_price_currency_type = link.price_currency_type
