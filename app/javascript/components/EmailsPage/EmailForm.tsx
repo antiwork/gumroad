@@ -713,10 +713,12 @@ export const EmailForm = ({ context, installment }: EmailFormProps) => {
                 Preview
               </Button>
             )}
-            <Link href={getCancelPath()} className="button" inert={isBusy ? true : undefined}>
-              <Icon name="x-square" />
-              Cancel
-            </Link>
+            <Button asChild>
+              <Link href={getCancelPath()} inert={isBusy ? true : undefined}>
+                <Icon name="x-square" />
+                Cancel
+              </Link>
+            </Button>
             <Popover
               trigger={
                 <Button disabled={isBusy}>

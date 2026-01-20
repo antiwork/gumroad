@@ -1,7 +1,7 @@
 import { useForm, usePage } from "@inertiajs/react";
 import * as React from "react";
 
-import { Button } from "$app/components/Button";
+import { Button, buttonVariants } from "$app/components/Button";
 import { Icon } from "$app/components/Icons";
 import { Popover } from "$app/components/Popover";
 import { Pill } from "$app/components/ui/Pill";
@@ -93,7 +93,7 @@ const SearchPopover = () => {
       aria-label="Toggle Search"
       trigger={
         <WithTooltip tip="Search" position="bottom">
-          <div className="button">
+          <div className={buttonVariants({ size: "default" })}>
             <Icon name="solid-search" />
           </div>
         </WithTooltip>

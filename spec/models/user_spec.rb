@@ -1870,10 +1870,16 @@ describe User, :vcr do
         expect(@product_1.reload.banned_at).to be(nil)
       end
 
-      it "suspends all the others sellers accounts if suspended for fraud" do
-        expect(@user).to receive(:suspend_sellers_other_accounts)
+      it "suspends all the others sellers accounts if suspended for fraud", :sidekiq_inline do
+        expect(@user).to receive(:suspend_sellers_other_accounts).and_call_original
+        user_3 = create(:user, payment_address: "sameuser@gmail.com")
         @user.flag_for_fraud(author_id: @admin_user.id)
         @user.suspend_for_fraud(author_id: @admin_user.id)
+        expect(user_3.reload.suspended?).to be(true)
+        expect(@user_2.reload.suspended?).to be(true)
+        expect(user_3.comments.count).to eq(2)
+        expect(@user_2.comments.count).to eq(2)
+        expect(@user.reload.comments.count).to eq(2)
       end
 
       it "does not suspend all the others sellers accounts if suspended for tos violation" do
@@ -1883,14 +1889,22 @@ describe User, :vcr do
       end
 
       it "re-enables all the sellers related accounts if the seller is marked compliant" do
+        user_3 = create(:user, payment_address: "sameuser@gmail.com", user_risk_state: "suspended_for_fraud")
+        expect(@user).to receive(:enable_sellers_other_accounts).and_call_original
         @user_2.flag_for_fraud(author_id: @admin_user.id)
         @user_2.suspend_for_fraud(author_id: @admin_user.id)
         @user.flag_for_fraud(author_id: @admin_user.id)
         @user.suspend_for_fraud(author_id: @admin_user.id)
         expect(@user_2.reload.suspended?).to be(true)
+        expect(@user_2.comments.count).to eq(2)
+        expect(user_3.reload.suspended?).to be(true)
 
         @user.mark_compliant(author_id: @admin_user.id)
-        expect(@user_2.reload.suspended?).to be(false)
+        expect(user_3.reload.compliant?).to be(true)
+        expect(@user_2.reload.compliant?).to be(true)
+        expect(user_3.comments.count).to eq(1)
+        expect(@user_2.comments.count).to eq(3)
+        expect(@user.comments.count).to eq(3)
       end
 
       it "re-enables all the sellers links if the seller is marked compliant" do

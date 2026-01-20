@@ -90,32 +90,23 @@ class LinksController < ApplicationController
     @product.is_bundle = @product.native_type == Link::NATIVE_TYPE_BUNDLE
     @product.json_data[:custom_button_text_option] = "donate_prompt" if @product.native_type == Link::NATIVE_TYPE_COFFEE
 
+    ai_generated = params[:link][:ai_prompt].present? && Feature.active?(:ai_product_generation, current_seller)
+
     begin
       @product.save!
 
-      if params[:link][:ai_prompt].present? && Feature.active?(:ai_product_generation, current_seller)
+      if ai_generated
         generate_product_details_using_ai
       end
     rescue ActiveRecord::RecordNotSaved, ActiveRecord::RecordInvalid, Link::LinkInvalid
-      @error_message = if @product&.errors&.any?
-        @product.errors.full_messages.first
-      elsif @preorder_link&.errors&.any?
-        @preorder_link.errors.full_messages[0]
-      else
-        "Sorry, something went wrong."
-      end
-      return respond_to do |format|
-        response = { success: false, error_message: @error_message }
-        format.json { render json: response }
-        format.html { render html: "<textarea>#{response.to_json}</textarea>" }
-      end
+      return redirect_to new_product_path, alert: @product.errors.to_hash.transform_values(&:to_sentence).first, inertia: inertia_errors(@product)
     end
 
     create_user_event("add_product")
-    respond_to do |format|
-      response = { success: true, redirect_to: edit_link_path(@product) }
-      format.html { render plain: response.to_json.to_s }
-      format.json { render json: response }
+    if ai_generated
+      redirect_to edit_link_path(@product, ai_generated: true), status: :see_other
+    else
+      redirect_to edit_link_path(@product), status: :see_other
     end
   end
 
@@ -290,7 +281,8 @@ class LinksController < ApplicationController
 
     @title = @product.name
 
-    @presenter = ProductPresenter.new(product: @product, pundit_user:)
+    ai_generated = params[:ai_generated] == "true"
+    @presenter = ProductPresenter.new(product: @product, pundit_user:, ai_generated:)
 
     render inertia: "Products/Edit/Index", props: @presenter.edit_props
   end
@@ -303,7 +295,8 @@ class LinksController < ApplicationController
 
     @title = @product.name
 
-    @presenter = ProductPresenter.new(product: @product, pundit_user:)
+    ai_generated = params[:ai_generated] == "true"
+    @presenter = ProductPresenter.new(product: @product, pundit_user:, ai_generated:)
 
     render inertia: "Products/Edit/Content", props: @presenter.edit_props
   end
@@ -316,7 +309,8 @@ class LinksController < ApplicationController
 
     @title = @product.name
 
-    @presenter = ProductPresenter.new(product: @product, pundit_user:)
+    ai_generated = params[:ai_generated] == "true"
+    @presenter = ProductPresenter.new(product: @product, pundit_user:, ai_generated:)
 
     render inertia: "Products/Edit/Receipt", props: @presenter.edit_props
   end
@@ -329,7 +323,8 @@ class LinksController < ApplicationController
 
     @title = @product.name
 
-    @presenter = ProductPresenter.new(product: @product, pundit_user:)
+    ai_generated = params[:ai_generated] == "true"
+    @presenter = ProductPresenter.new(product: @product, pundit_user:, ai_generated:)
 
     render inertia: "Products/Edit/Share", props: @presenter.edit_props
   end
@@ -362,7 +357,8 @@ class LinksController < ApplicationController
           :shipping_destinations,
           :call_limitation_info,
           :installment_plan,
-          :community_chat_enabled
+          :community_chat_enabled,
+          :default_offer_code_id
         ))
         @product.description = SaveContentUpsellsService.new(seller: @product.user, content: product_permitted_params[:description], old_content: @product.description_was).from_html
         @product.skus_enabled = false
@@ -415,6 +411,7 @@ class LinksController < ApplicationController
         update_availabilities
         update_call_limitation_info
         update_installment_plan
+        update_default_offer_code
 
         Product::SavePostPurchaseCustomFieldsService.new(@product).perform
 
@@ -734,6 +731,25 @@ class LinksController < ApplicationController
       if product_permitted_params[:installment_plan].present?
         @product.create_installment_plan!(product_permitted_params[:installment_plan])
       end
+    end
+
+    def update_default_offer_code
+      default_offer_code_id = product_permitted_params[:default_offer_code_id]
+
+      return @product.default_offer_code = nil if default_offer_code_id.blank?
+
+      offer_code = @product.user.offer_codes.alive.find_by_external_id!(default_offer_code_id)
+
+      raise Link::LinkInvalid, "Offer code cannot be expired" if offer_code.inactive?
+      raise Link::LinkInvalid, "Offer code must be associated with this product or be universal" unless valid_for_product?(offer_code)
+
+      @product.default_offer_code = offer_code
+    rescue ActiveRecord::RecordNotFound
+      raise Link::LinkInvalid, "Invalid offer code"
+    end
+
+    def valid_for_product?(offer_code)
+      offer_code.universal? || @product.offer_codes.where(id: offer_code.id).exists?
     end
 
     def toggle_community_chat!(enabled)

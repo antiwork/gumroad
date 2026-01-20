@@ -43,12 +43,6 @@ class Admin::SalesReport
     store_job_details(job_id)
   end
 
-  def errors_hash
-    {
-      sales_report: errors.to_hash
-    }
-  end
-
   def start_date=(value)
     @start_date = parse_date(value)
   end
