@@ -18,7 +18,7 @@ export const PageListLayout = ({
       className,
     )}
   >
-    <div className="flex flex-col gap-4 lg:sticky lg:top-0 lg:w-80 lg:pb-8">{pageList}</div>
+    <div className="flex h-full flex-col gap-4 lg:w-80 lg:overflow-y-auto lg:pb-8">{pageList}</div>
     <div className="h-0 flex-1">{children}</div>
   </div>
 );
