@@ -22,7 +22,9 @@
         </div>
         <% if content_for? :footer %>
           <footer>
-            <%= yield :footer %>
+            <div style="text-align: center; padding: 1rem 0;">
+              <%= yield :footer %>
+            </div>
           </footer>
         <% end %>
       </main>

@@ -212,11 +212,13 @@ export const EmailAttachments = ({
           ))}
         </Rows>
       ) : null}
-      <label className="button primary">
-        <input type="file" name="file" tabIndex={-1} multiple onChange={(e) => onAttachFiles(e.target)} />
-        <Icon name="paperclip" />
-        Attach files
-      </label>
+      <Button color="primary" asChild>
+        <label>
+          <input type="file" name="file" tabIndex={-1} multiple onChange={(e) => onAttachFiles(e.target)} />
+          <Icon name="paperclip" />
+          Attach files
+        </label>
+      </Button>
       {hasStreamableFiles ? (
         <Toggle value={isStreamOnly} onChange={setIsStreamOnly}>
           Disable file downloads (stream only)
