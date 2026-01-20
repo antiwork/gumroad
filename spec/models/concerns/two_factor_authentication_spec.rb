@@ -34,10 +34,40 @@ describe TwoFactorAuthentication do
   end
 
   describe "#send_authentication_token!" do
+    before do
+      EmailRouterFallbackService.clear(user: @user)
+    end
+
     it "enqueues authentication token email" do
       expect do
         @user.send_authentication_token!
-      end.to have_enqueued_mail(TwoFactorAuthenticationMailer, :authentication_token).with(@user.id)
+      end.to have_enqueued_mail(TwoFactorAuthenticationMailer, :authentication_token).with(@user.id, email_provider: nil)
+    end
+
+    context "when feature flag is active and email was recently sent" do
+      before do
+        Feature.activate(:resend_fallback_for_auth_emails)
+        EmailRouterFallbackService.record_email_sent(user: @user)
+      end
+
+      it "enqueues authentication token email with Resend provider" do
+        expect do
+          @user.send_authentication_token!
+        end.to have_enqueued_mail(TwoFactorAuthenticationMailer, :authentication_token).with(@user.id, email_provider: MailerInfo::EMAIL_PROVIDER_RESEND)
+      end
+    end
+
+    context "when feature flag is inactive" do
+      before do
+        Feature.deactivate(:resend_fallback_for_auth_emails)
+        EmailRouterFallbackService.record_email_sent(user: @user)
+      end
+
+      it "enqueues authentication token email with nil provider" do
+        expect do
+          @user.send_authentication_token!
+        end.to have_enqueued_mail(TwoFactorAuthenticationMailer, :authentication_token).with(@user.id, email_provider: nil)
+      end
     end
   end
 

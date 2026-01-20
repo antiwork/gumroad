@@ -140,7 +140,7 @@ describe TwoFactorAuthenticationValidator, type: :controller do
       it "doesn't send authentication token" do
         expect do
           controller.prepare_for_two_factor_authentication(@user)
-        end.not_to have_enqueued_mail(TwoFactorAuthenticationMailer, :authentication_token).with(@user.id)
+        end.not_to have_enqueued_mail(TwoFactorAuthenticationMailer, :authentication_token).with(@user.id, email_provider: nil)
       end
     end
 
@@ -148,7 +148,7 @@ describe TwoFactorAuthenticationValidator, type: :controller do
       it "sends authentication token" do
         expect do
           controller.prepare_for_two_factor_authentication(@user)
-        end.to have_enqueued_mail(TwoFactorAuthenticationMailer, :authentication_token).with(@user.id)
+        end.to have_enqueued_mail(TwoFactorAuthenticationMailer, :authentication_token).with(@user.id, email_provider: nil)
       end
     end
   end
