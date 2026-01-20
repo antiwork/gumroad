@@ -36,7 +36,7 @@ export const Legend = React.forwardRef<
     ref={ref}
     className={classNames(
       "relative mb-2 flex w-full items-center text-base leading-[1.4] font-bold",
-      "[&_a]:font-normal [&_label]:font-normal",
+      "[&_a,&_label]:font-normal",
       "[&>:last-child:not(:only-child)]:ml-auto",
       className,
     )}
