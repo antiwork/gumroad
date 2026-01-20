@@ -104,10 +104,10 @@ class ProductPresenter::ProductProps
     end
 
     def evaluate_code(code, quantity)
-      return { valid: false, error_code: "missing_code" } if code.blank?
+      return { valid: false, error_code: :missing_code } if code.blank?
 
       offer_code = product.find_offer_code(code: code)
-      return { valid: false, error_code: "invalid_offer" } unless offer_code
+      return { valid: false, error_code: :invalid_offer } unless offer_code
 
       response = OfferCodeDiscountComputingService.new(
         code,
@@ -120,7 +120,7 @@ class ProductPresenter::ProductProps
       ).process
 
       if response[:error_code].present?
-        return { valid: false, error_code: response[:error_code].to_s }
+        return { valid: false, error_code: response[:error_code] }
       end
 
       {
