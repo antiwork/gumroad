@@ -74,6 +74,7 @@ export type ProductEditProps = {
   seller_refund_policy_enabled: boolean;
   seller_refund_policy: Pick<RefundPolicy, "title" | "fine_print">;
   cancellation_discounts_enabled: boolean;
+  ai_generated: boolean;
 };
 
 const createContextValue = (props: ProductEditProps) => ({
