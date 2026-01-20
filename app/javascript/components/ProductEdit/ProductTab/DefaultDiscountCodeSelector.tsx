@@ -88,6 +88,7 @@ export const DefaultDiscountCodeSelector = () => {
               onToggle={setIsOpen}
               className="w-full"
               options={options}
+              maxHeight="16rem"
               input={(props) => (
                 <div className="input">
                   <input
