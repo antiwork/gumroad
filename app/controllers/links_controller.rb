@@ -30,7 +30,7 @@ class LinksController < ApplicationController
   before_action :fetch_product_and_enforce_ownership, only: %i[destroy]
   before_action :fetch_product_and_enforce_access, only: %i[update publish unpublish release_preorder update_sections]
 
-  layout "inertia", only: [:index, :new]
+  layout "inertia", only: [:index, :new, :edit]
 
   def index
     authorize Link
@@ -286,11 +286,52 @@ class LinksController < ApplicationController
     fetch_product_by_unique_permalink
     authorize @product
 
-    redirect_to bundle_path(@product.external_id) if @product.is_bundle?
+    return redirect_to bundle_path(@product.external_id) if @product.is_bundle?
 
     @title = @product.name
 
     @presenter = ProductPresenter.new(product: @product, pundit_user:)
+
+    render inertia: "Products/Edit/Index", props: @presenter.edit_props
+  end
+
+  def edit_content
+    fetch_product_by_unique_permalink
+    authorize @product
+
+    return redirect_to bundle_path(@product.external_id) if @product.is_bundle?
+
+    @title = @product.name
+
+    @presenter = ProductPresenter.new(product: @product, pundit_user:)
+
+    render inertia: "Products/Edit/Content", props: @presenter.edit_props
+  end
+
+  def edit_receipt
+    fetch_product_by_unique_permalink
+    authorize @product
+
+    return redirect_to bundle_path(@product.external_id) if @product.is_bundle?
+
+    @title = @product.name
+
+    @presenter = ProductPresenter.new(product: @product, pundit_user:)
+
+    render inertia: "Products/Edit/Receipt", props: @presenter.edit_props
+  end
+
+  def edit_share
+    fetch_product_by_unique_permalink
+    authorize @product
+
+    return redirect_to bundle_path(@product.external_id) if @product.is_bundle?
+
+    @title = @product.name
+
+    @presenter = ProductPresenter.new(product: @product, pundit_user:)
+
+    render inertia: "Products/Edit/Share", props: @presenter.edit_props
   end
 
   def update

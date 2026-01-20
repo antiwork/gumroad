@@ -28,7 +28,9 @@ import { Icon } from "$app/components/Icons";
 import { LoadingSpinner } from "$app/components/LoadingSpinner";
 import { Modal } from "$app/components/Modal";
 import { Popover } from "$app/components/Popover";
+import { FileEmbed, FileEmbedConfig } from "$app/components/ProductEdit/ContentTab/FileEmbed";
 import { FileEmbedGroup } from "$app/components/ProductEdit/ContentTab/FileEmbedGroup";
+import { Page, PageTab, titleWithFallback } from "$app/components/ProductEdit/ContentTab/PageTab";
 import { Layout } from "$app/components/ProductEdit/Layout";
 import { ExistingFileEntry, FileEntry, useProductEditContext, Variant } from "$app/components/ProductEdit/state";
 import { ReviewForm } from "$app/components/ReviewForm";
@@ -65,9 +67,6 @@ import { useConfigureEvaporate } from "$app/components/useConfigureEvaporate";
 import { useIsAboveBreakpoint } from "$app/components/useIsAboveBreakpoint";
 import { useRefToLatest } from "$app/components/useRefToLatest";
 import { WithTooltip } from "$app/components/WithTooltip";
-
-import { FileEmbed, FileEmbedConfig } from "./FileEmbed";
-import { Page, PageTab, titleWithFallback } from "./PageTab";
 
 declare global {
   interface Window {
@@ -1063,6 +1062,7 @@ export const ContentTab = () => {
         <EvaporateUploaderProvider value={evaporateUploader}>
           <S3UploadConfigProvider value={s3UploadConfig}>
             <Layout
+              currentTab="content"
               headerActions={
                 product.variants.length > 0 ? (
                   <>
