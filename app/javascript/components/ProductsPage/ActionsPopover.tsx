@@ -102,7 +102,7 @@ const ActionsPopover = ({
             </div>
           ) : null}
           {product.can_archive ? (
-            <div role="menuitem" inert={isArchiving} onClick={() => void handleArchive()}>
+            <div role="menuitem" inert={isArchiving} onClick={() => handleArchive()}>
               <Icon name="archive" />
               &ensp;{isArchiving ? "Archiving..." : "Archive"}
             </div>
@@ -128,7 +128,7 @@ const ActionsPopover = ({
               <Button onClick={() => setConfirmingDelete(false)} disabled={isDeleting}>
                 Cancel
               </Button>
-              <Button color="danger" onClick={() => void handleDelete()} disabled={isDeleting}>
+              <Button color="danger" onClick={() => handleDelete()} disabled={isDeleting}>
                 {isDeleting ? "Deleting..." : "Confirm"}
               </Button>
             </>
