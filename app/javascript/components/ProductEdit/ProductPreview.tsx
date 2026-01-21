@@ -3,7 +3,7 @@ import * as React from "react";
 import { recurrenceIds } from "$app/utils/recurringPricing";
 
 import { useCurrentSeller } from "$app/components/CurrentSeller";
-import { Product } from "$app/components/Product";
+import { Product, ProductDiscount } from "$app/components/Product";
 import { useProductUrl } from "$app/components/ProductEdit/Layout";
 import { RefundPolicyModalPreview } from "$app/components/ProductEdit/RefundPolicy";
 import { useProductEditContext } from "$app/components/ProductEdit/state";
@@ -29,6 +29,17 @@ export const ProductPreview = ({ showRefundPolicyModal }: { showRefundPolicyModa
 
   const defaultRecurrence =
     product.native_type === "membership" ? (product.subscription_duration ?? recurrenceIds[0]) : null;
+
+  const defaultDiscountCode: ProductDiscount | null = React.useMemo(() => {
+    if (!product.default_offer_code) return null;
+
+    return {
+      valid: true as const,
+      code: product.default_offer_code.code,
+      discount: product.default_offer_code.discount,
+    };
+  }, [product.default_offer_code]);
+
   const serializedProduct: Product = {
     id,
     name: product.name,
@@ -161,7 +172,7 @@ export const ProductPreview = ({ showRefundPolicyModal }: { showRefundPolicyModa
         twitter_handle: "",
       }}
       purchase={null}
-      discount_code={null}
+      discount_code={defaultDiscountCode}
       wishlists={[]}
       selection={{
         optionId: null,
@@ -180,6 +191,7 @@ export const ProductPreview = ({ showRefundPolicyModal }: { showRefundPolicyModa
       <Product
         product={serializedProduct}
         purchase={null}
+        discountCode={defaultDiscountCode}
         selection={{
           quantity: 1,
           optionId: serializedProduct.options[0]?.id ?? null,

@@ -256,6 +256,7 @@ describe ProductPresenter do
             **ProductPresenter::InstallmentPlanProps.new(product: presenter.product).props,
             customizable_price: true,
             suggested_price_cents: 200,
+            default_offer_code: nil,
             custom_button_text_option: "pay_prompt",
             custom_summary: "To summarize, I am a product.",
             custom_view_content_button_text: "Download Files",
@@ -376,6 +377,7 @@ describe ProductPresenter do
             native_type: "ebook",
             require_shipping: false,
             cancellation_discount: nil,
+            default_offer_code: nil,
             public_files: [],
             audio_previews_enabled: false,
             community_chat_enabled: nil,
@@ -435,6 +437,25 @@ describe ProductPresenter do
       )
     end
 
+    context "with default offer code" do
+      let(:offer_code) { create(:offer_code, user: product.user, products: [product], code: "DEFAULT10", amount_percentage: 10) }
+
+      before do
+        product.update!(default_offer_code: offer_code)
+      end
+
+      it "includes default_offer_code with id in edit_props" do
+        expect(presenter.edit_props[:product][:default_offer_code][:id]).to eq(offer_code.external_id)
+      end
+
+      it "includes default_offer_code in product data" do
+        default_offer_code = presenter.edit_props[:product][:default_offer_code]
+        expect(default_offer_code).to be_a(Hash)
+        expect(default_offer_code[:id]).to eq(offer_code.external_id)
+        expect(default_offer_code[:code]).to eq(offer_code.code)
+      end
+    end
+
     context "membership" do
       let(:membership) do
         create(
@@ -483,6 +504,7 @@ describe ProductPresenter do
               **ProductPresenter::InstallmentPlanProps.new(product: presenter.product).props,
               customizable_price: false,
               suggested_price_cents: nil,
+              default_offer_code: nil,
               custom_button_text_option: nil,
               custom_summary: nil,
               custom_view_content_button_text: nil,
@@ -605,6 +627,7 @@ describe ProductPresenter do
                 },
                 duration_in_billing_cycles: 3
               },
+              default_offer_code: nil,
               public_files: [],
               audio_previews_enabled: false,
               community_chat_enabled: nil,
@@ -736,6 +759,7 @@ describe ProductPresenter do
               **ProductPresenter::InstallmentPlanProps.new(product: presenter.product).props,
               customizable_price: false,
               suggested_price_cents: nil,
+              default_offer_code: nil,
               custom_button_text_option: nil,
               custom_summary: nil,
               custom_view_content_button_text: nil,
@@ -814,6 +838,7 @@ describe ProductPresenter do
               native_type: "digital",
               require_shipping: false,
               cancellation_discount: nil,
+              default_offer_code: nil,
               public_files: [],
               audio_previews_enabled: false,
               community_chat_enabled: nil,
