@@ -1,30 +1,33 @@
-import { cva, type VariantProps } from "class-variance-authority";
+import { cva } from "class-variance-authority";
 import * as React from "react";
 
 import { classNames } from "$app/utils/classNames";
 
-const fieldsetVariants = cva("flex flex-col border-none gap-2 [&[role=group]_label_input]:ml-auto", {
-  variants: {
-    state: {
-      default: "",
-      success: "[&_input]:border-success [&_select]:border-success [&_small]:text-success",
-      danger: "[&_input]:border-danger [&_select]:border-danger [&_small]:text-danger",
-      warning: "[&_input]:border-warning [&_select]:border-warning [&_small]:text-warning",
-      info: "[&_input]:border-info [&_select]:border-info [&_small]:text-info",
-    },
-  },
-  defaultVariants: {
-    state: "default",
-  },
-});
+export type FieldsetState = "default" | "success" | "danger" | "warning" | "info";
+
+const FieldsetContext = React.createContext<{ state: FieldsetState }>({ state: "default" });
+
+export const useFieldset = () => React.useContext(FieldsetContext);
+
+export const stateBorderStyles: Record<FieldsetState, string> = {
+  default: "",
+  success: "border-success",
+  danger: "border-danger",
+  warning: "border-warning",
+  info: "border-info",
+};
+
+const fieldsetStyles = "flex flex-col border-none gap-2 [&[role=group]_label_input]:ml-auto";
 
 export const Fieldset = React.forwardRef<
   HTMLFieldSetElement,
-  React.FieldsetHTMLAttributes<HTMLFieldSetElement> & VariantProps<typeof fieldsetVariants>
+  React.FieldsetHTMLAttributes<HTMLFieldSetElement> & { state?: FieldsetState | undefined }
 >(({ className, state, children, ...props }, ref) => (
-  <fieldset ref={ref} className={classNames(fieldsetVariants({ state }), className)} {...props}>
-    {children}
-  </fieldset>
+  <FieldsetContext.Provider value={{ state: state ?? "default" }}>
+    <fieldset ref={ref} className={classNames(fieldsetStyles, className)} {...props}>
+      {children}
+    </fieldset>
+  </FieldsetContext.Provider>
 ));
 Fieldset.displayName = "Fieldset";
 
@@ -45,3 +48,27 @@ export const FieldsetTitle = React.forwardRef<
   </legend>
 ));
 FieldsetTitle.displayName = "FieldsetTitle";
+
+const descriptionVariants = cva("text-muted", {
+  variants: {
+    state: {
+      default: "",
+      success: "text-success",
+      danger: "text-danger",
+      warning: "text-warning",
+      info: "text-info",
+    },
+  },
+});
+
+export const FieldsetDescription = React.forwardRef<HTMLElement, React.HTMLAttributes<HTMLElement>>(
+  ({ className, children, ...props }, ref) => {
+    const { state } = useFieldset();
+    return (
+      <small ref={ref} className={classNames(descriptionVariants({ state }), className)} {...props}>
+        {children}
+      </small>
+    );
+  },
+);
+FieldsetDescription.displayName = "FieldsetDescription";

@@ -2,6 +2,7 @@ import { cva, type VariantProps } from "class-variance-authority";
 import * as React from "react";
 
 import { classNames } from "$app/utils/classNames";
+import { useFieldset, stateBorderStyles } from "$app/components/ui/Fieldset";
 
 const InputGroupContext = React.createContext<{ isInsideInputGroup: boolean; disabled?: boolean }>({
   isInsideInputGroup: false,
@@ -35,11 +36,19 @@ const inputGroupVariants = cva(
 export const InputGroup = React.forwardRef<
   HTMLDivElement,
   React.HTMLAttributes<HTMLDivElement> & VariantProps<typeof inputGroupVariants>
->(({ className, disabled, readOnly, children, ...props }, ref) => (
-  <InputGroupContext.Provider value={{ isInsideInputGroup: true, disabled: disabled ?? false }}>
-    <div ref={ref} className={classNames(inputGroupVariants({ disabled, readOnly }), className)} {...props}>
-      {children}
-    </div>
-  </InputGroupContext.Provider>
-));
+>(({ className, disabled, readOnly, children, ...props }, ref) => {
+  const { state } = useFieldset();
+
+  return (
+    <InputGroupContext.Provider value={{ isInsideInputGroup: true, disabled: disabled ?? false }}>
+      <div
+        ref={ref}
+        className={classNames(inputGroupVariants({ disabled, readOnly }), stateBorderStyles[state], className)}
+        {...props}
+      >
+        {children}
+      </div>
+    </InputGroupContext.Provider>
+  );
+});
 InputGroup.displayName = "InputGroup";

@@ -1,6 +1,7 @@
 import * as React from "react";
 
 import { classNames } from "$app/utils/classNames";
+import { useFieldset, stateBorderStyles } from "$app/components/ui/Fieldset";
 import { useInputGroup } from "$app/components/ui/InputGroup";
 
 const inputStyles = classNames(
@@ -14,6 +15,7 @@ const inputGroupChildStyles = "border-none flex-1 bg-transparent shadow-none out
 export const Input = React.forwardRef<HTMLInputElement, React.InputHTMLAttributes<HTMLInputElement>>(
   ({ className, readOnly, ...props }, ref) => {
     const { isInsideInputGroup, disabled: inputGroupDisabled } = useInputGroup();
+    const { state } = useFieldset();
 
     return (
       <input
@@ -22,7 +24,7 @@ export const Input = React.forwardRef<HTMLInputElement, React.InputHTMLAttribute
         className={classNames(
           inputStyles,
           readOnly && "cursor-default bg-body focus:outline-none",
-          isInsideInputGroup && inputGroupChildStyles,
+          isInsideInputGroup ? inputGroupChildStyles : stateBorderStyles[state],
           inputGroupDisabled && "opacity-100",
           className,
         )}

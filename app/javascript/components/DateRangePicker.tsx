@@ -17,7 +17,7 @@ import { Icon } from "$app/components/Icons";
 import { Popover } from "$app/components/Popover";
 import { useUserAgentInfo } from "$app/components/UserAgent";
 import { InputGroup } from "$app/components/ui/InputGroup";
-import { Fieldset, FieldsetTitle } from "$app/components/ui/Fieldset";
+import { Fieldset, FieldsetDescription, FieldsetTitle } from "$app/components/ui/Fieldset";
 import { Label } from "$app/components/ui/Label";
 
 export const DateRangePicker = ({
@@ -81,7 +81,7 @@ export const DateRangePicker = ({
               }}
               aria-invalid={to < from}
             />
-            {to < from ? <small className="text-muted">Must be after from date</small> : null}
+            {to < from ? <FieldsetDescription>Must be after from date</FieldsetDescription> : null}
           </Fieldset>
         </div>
       ) : (
