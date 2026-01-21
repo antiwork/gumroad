@@ -39,7 +39,7 @@ const PayPalEmailSection = ({
       <div className="whitespace-pre-line">{feeInfoText}</div>
       <div>
         {countrySupportsNativePayouts && !isFormDisabled ? (
-          <button className="underline" onClick={() => updatePayoutMethod("bank")}>
+          <button className="cursor-pointer underline all-unset" onClick={() => updatePayoutMethod("bank")}>
             Switch to direct deposit
           </button>
         ) : null}

@@ -43,7 +43,7 @@ import { ImageUploadSettingsContext, RichTextEditor, useRichTextEditor } from "$
 import { S3UploadConfigProvider } from "$app/components/S3UploadConfig";
 import { Separator } from "$app/components/Separator";
 import { InvalidNameForEmailDeliveryWarning } from "$app/components/server-components/InvalidNameForEmailDeliveryWarning";
-import Placeholder from "$app/components/ui/Placeholder";
+import { Placeholder } from "$app/components/ui/Placeholder";
 import { Row, RowActions, RowContent, RowDetails, Rows } from "$app/components/ui/Rows";
 import { useConfigureEvaporate } from "$app/components/useConfigureEvaporate";
 import { useDebouncedCallback } from "$app/components/useDebouncedCallback";
@@ -265,19 +265,21 @@ const WorkflowEmails = ({ context, workflow }: WorkflowEmailsProps) => {
           navigation={<EditPageNavigation workflowExternalId={workflow.external_id} />}
           actions={
             <>
-              <Link href={Routes.workflows_path()} className="button" inert={isBusy || undefined}>
-                {workflow.published ? (
-                  <>
-                    <Icon name="x-square" />
-                    Cancel
-                  </>
-                ) : (
-                  <>
-                    <Icon name="arrow-left" />
-                    Back
-                  </>
-                )}
-              </Link>
+              <Button asChild>
+                <Link href={Routes.workflows_path()} inert={isBusy || undefined}>
+                  {workflow.published ? (
+                    <>
+                      <Icon name="x-square" />
+                      Cancel
+                    </>
+                  ) : (
+                    <>
+                      <Icon name="arrow-left" />
+                      Back
+                    </>
+                  )}
+                </Link>
+              </Button>
               <Button color="primary" disabled={isBusy} onClick={() => handleSave()}>
                 Save changes
               </Button>
@@ -655,7 +657,7 @@ const AbandonedCartProductListNodeView = (props: NodeViewProps) => {
       </WithTooltip>
       {abandonedCartProducts.length > shownProductCount ? (
         <button
-          className="link"
+          className="link cursor-pointer all-unset"
           onClick={() =>
             setShownProductCount(
               shownProductCount + ABANDONED_CART_PRODUCTS_TO_LOAD_PER_PAGE > abandonedCartProducts.length

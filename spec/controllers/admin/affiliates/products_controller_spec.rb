@@ -26,13 +26,13 @@ describe Admin::Affiliates::ProductsController, inertia: true do
 
   describe "GET index" do
     before do
-      get :index, params: { affiliate_id: affiliate_user.id }
+      get :index, params: { affiliate_external_id: affiliate_user.external_id }
     end
 
     it "returns successful response with Inertia page data" do
       expect(response).to be_successful
       expect(inertia.component).to eq("Admin/Affiliates/Products/Index")
-      expect(inertia.props[:products].map { _1[:id] }).to contain_exactly(published_product.id, unpublished_product.id)
+      expect(inertia.props[:products].map { _1[:external_id] }).to contain_exactly(published_product.external_id, unpublished_product.external_id)
       expect(inertia.props[:pagination]).to eq({ pages: 1, page: 1 })
     end
   end

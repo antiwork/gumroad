@@ -1,13 +1,15 @@
 import React from "react";
 
-import { Membership, Product } from "$app/data/products";
+import { Membership, Product, SortKey } from "$app/data/products";
 
+import { buttonVariants } from "$app/components/Button";
 import { Icon } from "$app/components/Icons";
 import { NavigationButtonInertia } from "$app/components/NavigationButton";
 import { PaginationProps } from "$app/components/Pagination";
 import { Popover } from "$app/components/Popover";
 import { ProductsLayout } from "$app/components/ProductsLayout";
-import Placeholder from "$app/components/ui/Placeholder";
+import { Placeholder, PlaceholderImage } from "$app/components/ui/Placeholder";
+import { Sort } from "$app/components/useSortingTableDriver";
 import { WithTooltip } from "$app/components/WithTooltip";
 
 import ProductsPage from "./ProductsPage";
@@ -15,19 +17,23 @@ import ProductsPage from "./ProductsPage";
 import placeholder from "$assets/images/product_nudge.svg";
 
 export type ProductsDashboardPageProps = {
-  memberships: Membership[];
-  memberships_pagination: PaginationProps;
-  products: Product[];
-  products_pagination: PaginationProps;
+  products_data: {
+    products: Product[];
+    pagination: PaginationProps;
+    sort?: Sort<SortKey> | null | undefined;
+  };
+  memberships_data: {
+    memberships: Membership[];
+    pagination: PaginationProps;
+    sort?: Sort<SortKey> | null | undefined;
+  };
   archived_products_count: number;
   can_create_product: boolean;
 };
 
 export const ProductsDashboardPage = ({
-  memberships,
-  memberships_pagination: membershipsPagination,
-  products,
-  products_pagination: productsPagination,
+  products_data: { products, pagination: productsPagination, sort: productsSort },
+  memberships_data: { memberships, pagination: membershipsPagination, sort: membershipsSort },
   archived_products_count: archivedProductsCount,
   can_create_product: canCreateProduct,
 }: ProductsDashboardPageProps) => {
@@ -54,7 +60,7 @@ export const ProductsDashboardPage = ({
               aria-label="Toggle Search"
               trigger={
                 <WithTooltip tip="Search" position="bottom">
-                  <div className="button">
+                  <div className={buttonVariants({ size: "default" })}>
                     <Icon name="solid-search" />
                   </div>
                 </WithTooltip>
@@ -82,9 +88,7 @@ export const ProductsDashboardPage = ({
       <section className="p-4 md:p-8">
         {memberships.length === 0 && products.length === 0 ? (
           <Placeholder>
-            <figure>
-              <img src={placeholder} />
-            </figure>
+            <PlaceholderImage src={placeholder} />
             <h2>We’ve never met an idea we didn’t like.</h2>
             <p>Your first product doesn’t need to be perfect. Just put it out there, and see if it sticks.</p>
             <div>
@@ -103,8 +107,10 @@ export const ProductsDashboardPage = ({
           <ProductsPage
             memberships={memberships}
             membershipsPagination={membershipsPagination}
+            membershipsSort={membershipsSort}
             products={products}
             productsPagination={productsPagination}
+            productsSort={productsSort}
             query={query}
             setEnableArchiveTab={setEnableArchiveTab}
           />

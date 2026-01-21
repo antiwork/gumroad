@@ -14,7 +14,7 @@ class Admin::SearchController < Admin::BaseController
                           @raw_query, @query, @query).order("created_at DESC").limit(RECORDS_PER_PAGE)
     @users = @users.with_blocked_attributes_for(:form_email, :form_email_domain)
 
-    redirect_to admin_user_path(@users.first) if @users.length == 1
+    redirect_to admin_user_path(@users.first.external_id) if @users.length == 1
   end
 
   def purchases

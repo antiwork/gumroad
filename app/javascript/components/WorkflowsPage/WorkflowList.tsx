@@ -9,7 +9,7 @@ import { Icon } from "$app/components/Icons";
 import { useLoggedInUser } from "$app/components/LoggedInUser";
 import { Modal } from "$app/components/Modal";
 import { showAlert } from "$app/components/server-components/Alert";
-import Placeholder from "$app/components/ui/Placeholder";
+import { Placeholder, PlaceholderImage } from "$app/components/ui/Placeholder";
 import { Table, TableBody, TableCaption, TableCell, TableHead, TableHeader, TableRow } from "$app/components/ui/Table";
 import { Layout } from "$app/components/WorkflowsPage";
 
@@ -23,9 +23,11 @@ const WorkflowList = ({ workflows }: WorkflowListProps) => {
   const loggedInUser = useLoggedInUser();
   const canManageWorkflow = !!loggedInUser?.policies.workflow.create;
   const newWorkflowButton = (
-    <Link href={Routes.new_workflow_path()} className="button accent" inert={!canManageWorkflow || undefined}>
-      New workflow
-    </Link>
+    <Button asChild color="accent">
+      <Link href={Routes.new_workflow_path()} inert={!canManageWorkflow || undefined}>
+        New workflow
+      </Link>
+    </Button>
   );
   const [deletingWorkflow, setDeletingWorkflow] = React.useState<{
     id: string;
@@ -96,9 +98,7 @@ const WorkflowList = ({ workflows }: WorkflowListProps) => {
       ) : (
         <div className="p-4 md:p-8">
           <Placeholder>
-            <figure>
-              <img src={placeholder} />
-            </figure>
+            <PlaceholderImage src={placeholder} />
             <h2>Automate emails with ease.</h2>
             <h4>Workflows allow you to send scheduled emails to a subset of your audience based on a trigger.</h4>
             {newWorkflowButton}
@@ -127,14 +127,15 @@ const WorkflowRow = ({
       <div style={{ display: "flex", gap: "var(--spacer-4)", alignItems: "center" }}>
         {workflow.published ? <small>Published</small> : <small>Unpublished</small>}
         <div className="flex flex-wrap gap-2">
-          <Link
-            className="button"
-            href={Routes.edit_workflow_path(workflow.external_id)}
-            aria-label="Edit workflow"
-            inert={!canManageWorkflow || undefined}
-          >
-            <Icon name="pencil" />
-          </Link>
+          <Button asChild>
+            <Link
+              href={Routes.edit_workflow_path(workflow.external_id)}
+              aria-label="Edit workflow"
+              inert={!canManageWorkflow || undefined}
+            >
+              <Icon name="pencil" />
+            </Link>
+          </Button>
           <Button color="danger" outline aria-label="Delete workflow" disabled={!canManageWorkflow} onClick={onDelete}>
             <Icon name="trash2" />
           </Button>

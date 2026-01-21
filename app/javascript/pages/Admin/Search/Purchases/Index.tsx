@@ -6,6 +6,7 @@ import EmptyState from "$app/components/Admin/EmptyState";
 import PaginatedLoader, { Pagination } from "$app/components/Admin/PaginatedLoader";
 import { type RefundPolicy, RefundPolicyTitle } from "$app/components/Admin/Purchases/RefundPolicy";
 import { PurchaseStates } from "$app/components/Admin/Purchases/States";
+import { Button } from "$app/components/Button";
 import { CopyToClipboard } from "$app/components/CopyToClipboard";
 import { Icon } from "$app/components/Icons";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "$app/components/ui/Table";
@@ -16,7 +17,7 @@ type Purchase = {
   formatted_display_price: string;
   formatted_gumroad_tax_amount: string | null;
   gumroad_responsible_for_tax: boolean;
-  product: { id: number; name: string; long_url: string };
+  product: { external_id: string; name: string; long_url: string };
   variants_list: string;
   refund_policy: RefundPolicy | null;
   product_refund_policy: string | null;
@@ -71,13 +72,13 @@ export default function Purchases() {
               <option value="refunded">Refunded</option>
               <option value="failed">Failed</option>
             </select>
-            <button type="submit" className="button primary">
+            <Button type="submit" color="primary">
               <Icon name="solid-search" />
-            </button>
+            </Button>
             {data.product_title_query || data.purchase_status ? (
-              <Link href={Routes.admin_search_purchases_path({ query: data.query })} className="button secondary">
-                Clear
-              </Link>
+              <Button asChild>
+                <Link href={Routes.admin_search_purchases_path({ query: data.query })}>Clear</Link>
+              </Button>
             ) : null}
           </form>
           <Table>
@@ -95,7 +96,7 @@ export default function Purchases() {
                       {purchase.formatted_display_price}
                       {purchase.gumroad_responsible_for_tax ? ` + ${purchase.formatted_gumroad_tax_amount} VAT` : null}
                     </Link>{" "}
-                    <Link href={Routes.admin_product_url(purchase.product.id)}>{purchase.product.name}</Link>{" "}
+                    <Link href={Routes.admin_product_url(purchase.product.external_id)}>{purchase.product.name}</Link>{" "}
                     {purchase.variants_list}{" "}
                     <Link href={purchase.product.long_url} target="_blank" rel="noopener noreferrer nofollow">
                       <Icon name="arrow-up-right-square" />

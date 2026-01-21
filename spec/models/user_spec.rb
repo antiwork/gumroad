@@ -1870,10 +1870,16 @@ describe User, :vcr do
         expect(@product_1.reload.banned_at).to be(nil)
       end
 
-      it "suspends all the others sellers accounts if suspended for fraud" do
-        expect(@user).to receive(:suspend_sellers_other_accounts)
+      it "suspends all the others sellers accounts if suspended for fraud", :sidekiq_inline do
+        expect(@user).to receive(:suspend_sellers_other_accounts).and_call_original
+        user_3 = create(:user, payment_address: "sameuser@gmail.com")
         @user.flag_for_fraud(author_id: @admin_user.id)
         @user.suspend_for_fraud(author_id: @admin_user.id)
+        expect(user_3.reload.suspended?).to be(true)
+        expect(@user_2.reload.suspended?).to be(true)
+        expect(user_3.comments.count).to eq(2)
+        expect(@user_2.comments.count).to eq(2)
+        expect(@user.reload.comments.count).to eq(2)
       end
 
       it "does not suspend all the others sellers accounts if suspended for tos violation" do
@@ -1883,14 +1889,22 @@ describe User, :vcr do
       end
 
       it "re-enables all the sellers related accounts if the seller is marked compliant" do
+        user_3 = create(:user, payment_address: "sameuser@gmail.com", user_risk_state: "suspended_for_fraud")
+        expect(@user).to receive(:enable_sellers_other_accounts).and_call_original
         @user_2.flag_for_fraud(author_id: @admin_user.id)
         @user_2.suspend_for_fraud(author_id: @admin_user.id)
         @user.flag_for_fraud(author_id: @admin_user.id)
         @user.suspend_for_fraud(author_id: @admin_user.id)
         expect(@user_2.reload.suspended?).to be(true)
+        expect(@user_2.comments.count).to eq(2)
+        expect(user_3.reload.suspended?).to be(true)
 
         @user.mark_compliant(author_id: @admin_user.id)
-        expect(@user_2.reload.suspended?).to be(false)
+        expect(user_3.reload.compliant?).to be(true)
+        expect(@user_2.reload.compliant?).to be(true)
+        expect(user_3.comments.count).to eq(1)
+        expect(@user_2.comments.count).to eq(3)
+        expect(@user.comments.count).to eq(3)
       end
 
       it "re-enables all the sellers links if the seller is marked compliant" do
@@ -3807,6 +3821,50 @@ describe User, :vcr do
       allow(user).to receive(:sales_cents_total).and_return(0)
 
       expect(user.eligible_for_ai_product_generation?).to eq(true)
+    end
+  end
+
+  describe ".id?" do
+    context "with valid numeric values" do
+      it "returns true for integer 1" do
+        expect(User.id?(1)).to be(true)
+      end
+
+      it "returns true for string '1'" do
+        expect(User.id?("1")).to be(true)
+      end
+
+      it "returns true for large numeric string" do
+        expect(User.id?("7269625173515")).to be(true)
+      end
+
+      it "returns true for large integer" do
+        expect(User.id?(7269625173515)).to be(true)
+      end
+    end
+
+    context "with invalid non-numeric values" do
+      it "returns false for string '1gum'" do
+        expect(User.id?("1gum")).to be(false)
+      end
+
+      it "returns false for string with special characters" do
+        expect(User.id?("1test@gumroad.com")).to be(false)
+      end
+    end
+
+    context "with blank values" do
+      it "returns false for nil" do
+        expect(User.id?(nil)).to be(false)
+      end
+
+      it "returns false for empty string" do
+        expect(User.id?("")).to be(false)
+      end
+
+      it "returns false for blank string" do
+        expect(User.id?("   ")).to be(false)
+      end
     end
   end
 end

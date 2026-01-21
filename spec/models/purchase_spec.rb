@@ -3023,6 +3023,26 @@ describe Purchase, :vcr do
     end
   end
 
+  describe "#mark_product_purchases_as_refunded!" do
+    let(:purchase) { create(:purchase, link: create(:product, :bundle)) }
+
+    before do
+      purchase.create_artifacts_and_send_receipt!
+    end
+
+    it "marks all bundle product purchases as fully refunded" do
+      expect(purchase.product_purchases.pluck(:stripe_refunded)).to all(be_nil)
+      purchase.mark_product_purchases_as_refunded!(is_partially_refunded: false)
+      expect(purchase.product_purchases.pluck(:stripe_refunded)).to all(eq(true))
+    end
+
+    it "marks all bundle product purchases as partially refunded" do
+      expect(purchase.product_purchases.pluck(:stripe_partially_refunded)).to all(eq(false))
+      purchase.mark_product_purchases_as_refunded!(is_partially_refunded: true)
+      expect(purchase.product_purchases.pluck(:stripe_partially_refunded)).to all(eq(true))
+    end
+  end
+
   describe "#has_content?" do
     before :each do
       allow(purchase).to receive(:webhook_failed).and_return false
@@ -4159,13 +4179,65 @@ describe Purchase, :vcr do
 
     context "when purchase record is invalid" do
       before do
-        @purchase_of_product_1.update_column(:merchant_account_id, nil)
+        @purchase_of_product_1.update_column(:price_cents, nil)
         expect(@purchase_of_product_1.valid?).to eq(false) # Ensure that the record currently fails validation
       end
 
       it "unsubscribes the buyer without running validations" do
         expect(Rails.logger).to receive(:info).with("Could not update purchase (#{@purchase_of_product_1.id}) with validations turned on. Unsubscribing the buyer without running validations.").and_call_original
         expect { @purchase_of_product_1.unsubscribe_buyer }.to change { @purchase_of_product_1.reload.can_contact }.from(true).to(false)
+      end
+    end
+  end
+
+  describe "#toggle_off_can_contact_if_buyer_has_unsubscribed" do
+    let(:seller) { create(:user) }
+    let(:buyer_email) { "buyer@example.com" }
+    let(:product_1) { create(:product, user: seller) }
+    let(:product_2) { create(:product, user: seller) }
+    let(:first_purchase) { create(:purchase, link: product_1, email: buyer_email, seller:) }
+
+    context "when customer has previously unsubscribed" do
+      before do
+        expect(first_purchase.can_contact).to be(true)
+        first_purchase.unsubscribe_buyer
+        expect(first_purchase.reload.can_contact).to be(false)
+      end
+
+      it "sets can_contact to false on new purchases automatically" do
+        new_purchase = create(:purchase, link: product_2, email: buyer_email, seller:)
+
+        expect(new_purchase.can_contact).to be(false)
+      end
+
+      it "does not add the customer to AudienceMember for the new purchase" do
+        expect(AudienceMember.find_by(email: buyer_email, seller:)).to be_nil
+
+        create(:purchase, link: product_2, email: buyer_email, seller:)
+
+        expect(AudienceMember.find_by(email: buyer_email, seller:)).to be_nil
+      end
+
+      it "prevents the customer from appearing in email blast audience" do
+        installment = create(:installment, seller:, installment_type: "audience")
+        create(:purchase, link: product_2, email: buyer_email, seller:)
+
+        expect(AudienceMember.filter(seller_id: seller.id, params: installment.audience_members_filter_params).where(email: buyer_email)).to be_empty
+      end
+    end
+
+    context "when customer has not previously unsubscribed" do
+      it "allows new purchases to have can_contact: true" do
+        new_purchase = create(:purchase, link: product_2, email: buyer_email, seller:)
+        expect(new_purchase.can_contact).to be(true)
+        expect(AudienceMember.find_by(email: buyer_email, seller:)).to be_present
+      end
+
+      it "allows the customer to appear in email blast audience" do
+        installment = create(:installment, seller:, installment_type: "audience")
+        create(:purchase, link: product_2, email: buyer_email, seller:)
+
+        expect(AudienceMember.filter(seller_id: seller.id, params: installment.audience_members_filter_params).where(email: buyer_email)).to be_present
       end
     end
   end

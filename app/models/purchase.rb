@@ -71,6 +71,7 @@ class Purchase < ApplicationRecord
   attr_json_data_accessor :perceived_price_cents
   attr_json_data_accessor :recommender_model_name
   attr_json_data_accessor :custom_fee_per_thousand
+  attr_json_data_accessor :default_offer_code_id
 
   alias_attribute :total_transaction_cents_usd, :total_transaction_cents
 
@@ -349,6 +350,7 @@ class Purchase < ApplicationRecord
   before_create :validate_quantity
   before_create :assign_is_multiseat_license
   before_create :check_for_fraud
+  before_create :toggle_off_can_contact_if_buyer_has_unsubscribed
 
   before_save :assign_default_rental_expired
   before_save :to_mongo
@@ -814,7 +816,7 @@ class Purchase < ApplicationRecord
       "stripe_refunded" => stripe_refunded,
       "is_chargedback" => chargedback?,
       "is_chargeback_reversed" => chargeback_reversed,
-      "refunded_by" => refunding_users.map { |u| { id: u.id, email: u.email } },
+      "refunded_by" => refunding_users.map { |u| { external_id: u.external_id, email: u.email } },
       "error_code" => error_code,
       "purchase_state" => purchase_state,
       "gumroad_responsible_for_tax" => gumroad_responsible_for_tax?
@@ -1544,6 +1546,18 @@ class Purchase < ApplicationRecord
     end
 
     giftee_purchase.save!
+  end
+
+  def mark_product_purchases_as_refunded!(is_partially_refunded:)
+    return unless is_bundle_purchase?
+
+    product_purchases.each do |product_purchase|
+      if is_partially_refunded
+        product_purchase.update!(stripe_partially_refunded: true)
+      else
+        product_purchase.update!(stripe_refunded: true)
+      end
+    end
   end
 
   def mark_giftee_purchase_as_chargeback
@@ -3075,7 +3089,7 @@ class Purchase < ApplicationRecord
 
     # Private: validator that guarantees that the right transaction information is present for paid purchases.
     def financial_transaction_validation
-      return if self.price_cents > 0 &&
+      return if self.price_cents.to_i > 0 &&
                 stripe_transaction_id.present? &&
                 merchant_account.present? &&
                 (stripe_fingerprint.present? || paypal_order_id) &&
@@ -3724,8 +3738,8 @@ class Purchase < ApplicationRecord
       card_and_ip_country_are_taxable ||= (ip_and_card_locations.uniq & taxable_countries).size == 1
       return true if !country_code.in?(taxable_countries) && !card_and_ip_country_are_taxable
 
-      # Reset taxes if we see an election of a taxable country and our basis locations aren't in those countries - final safety measure
-      return false if country_code.in?(taxable_countries) && (ip_and_card_locations & taxable_countries).empty?
+      # Trust buyer's country selection when IP/card are from non-taxable countries
+      return true if country_code.in?(taxable_countries) && (ip_and_card_locations & taxable_countries).empty?
 
       # Country matched
       return true if country_code.in?(ip_and_card_locations)
@@ -3853,5 +3867,13 @@ class Purchase < ApplicationRecord
       else
         fetch_installment_plan.calculate_installment_payment_price_cents(total_price_cents)
       end
+    end
+
+    def toggle_off_can_contact_if_buyer_has_unsubscribed
+      return unless new_record?
+      return unless can_contact?
+      return unless Purchase.where(email:, seller_id:, can_contact: false).exists?
+
+      self.can_contact = false
     end
 end

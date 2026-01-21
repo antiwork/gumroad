@@ -4,7 +4,7 @@ import { createCast } from "ts-safe-cast";
 import { register } from "$app/utils/serverComponentUtil";
 
 import { Button } from "$app/components/Button";
-import Placeholder from "$app/components/ui/Placeholder";
+import { Placeholder, PlaceholderImage } from "$app/components/ui/Placeholder";
 
 import { Layout, LayoutProps } from "./Layout";
 
@@ -58,20 +58,18 @@ const MembershipInactive = ({
   } | null;
 }) => (
   <Placeholder>
-    <figure>
-      <img src={placeholderImage} />
-    </figure>
+    <PlaceholderImage src={placeholderImage} />
     <h2>Your membership is inactive</h2>
     <p>You cannot access the content of {product_name} because your membership is no longer active.</p>
     {membership ? (
       membership.is_alive_or_restartable ? (
-        <a className="button primary" href={Routes.manage_subscription_url(membership.subscription_id)}>
-          Manage membership
-        </a>
+        <Button asChild color="primary">
+          <a href={Routes.manage_subscription_url(membership.subscription_id)}>Manage membership</a>
+        </Button>
       ) : product_long_url ? (
-        <a className="button primary" href={product_long_url}>
-          Resubscribe
-        </a>
+        <Button asChild color="primary">
+          <a href={product_long_url}>Resubscribe</a>
+        </Button>
       ) : null
     ) : null}
   </Placeholder>
@@ -88,16 +86,14 @@ const InstallmentPlanFailedOrCancelled = ({
   };
 }) => (
   <Placeholder>
-    <figure>
-      <img src={placeholderImage} />
-    </figure>
+    <PlaceholderImage src={placeholderImage} />
     <h2>Your installment plan is inactive</h2>
     {installment_plan.is_alive_or_restartable ? (
       <>
         <p>Please update your payment method to continue accessing the content of {product_name}.</p>
-        <a className="button primary" href={Routes.manage_subscription_url(installment_plan.subscription_id)}>
-          Update payment method
-        </a>
+        <Button asChild color="primary">
+          <a href={Routes.manage_subscription_url(installment_plan.subscription_id)}>Update payment method</a>
+        </Button>
       </>
     ) : (
       <p>You cannot access the content of {product_name} because your installment plan is no longer active.</p>
@@ -107,9 +103,7 @@ const InstallmentPlanFailedOrCancelled = ({
 
 const AccessExpired = () => (
   <Placeholder>
-    <figure>
-      <img src={placeholderImage} />
-    </figure>
+    <PlaceholderImage src={placeholderImage} />
     <h2>Access expired</h2>
     <p>It looks like your access to this product has expired. Please contact the creator for further assistance.</p>
   </Placeholder>
@@ -117,9 +111,7 @@ const AccessExpired = () => (
 
 const RentalExpired = () => (
   <Placeholder>
-    <figure>
-      <img src={placeholderImage} />
-    </figure>
+    <PlaceholderImage src={placeholderImage} />
     <h2>Your rental has expired</h2>
     <p>Rentals expire 30 days after purchase or 72 hours after you’ve begun watching it.</p>
   </Placeholder>

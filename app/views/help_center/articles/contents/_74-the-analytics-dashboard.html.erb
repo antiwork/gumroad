@@ -1,9 +1,10 @@
-<% @description = "In this article: Terms to know Diving into the data Referrers Locations Exporting a customer sales CSV How to read your CSV Once you've started accruing sales, " %>
+<% @description = "In this article: Terms to know Diving into the data Churn Referrers Locations Exporting a customer sales CSV How to read your CSV Once you've started accruing sales, " %>
 <div>
   <p><b>In this article:</b></p>
   <ul>
     <li><a href="#Terms-to-know-UxK3S">Terms to know</a></li>
     <li><a href="#Diving-into-the-data-E-Y2C">Diving into the data</a></li>
+    <li><a href="#churn">Churn</a></li>
     <li><a href="#Referrers-WBsBP">Referrers</a></li>
     <li><a href="#Locations-PoKPf">Locations</a></li>
     <li><a href="#sales-csv">Exporting a customer sales CSV</a></li>
@@ -40,6 +41,29 @@
   <p>A line graph of sales volume is overlaid on top to give you a sense of sales volume relative to your views.</p>
   <p>Hover on any day to see more information about the sales, views, and absolute sales value in dollars.</p>
   <figure><%= image_tag "https://d33v4339jhl8k0.cloudfront.net/docs/assets/5c4657ad2c7d3a66e32d763f/images/6246932342ba434a7afe2278/file-V5ESJfaXNp.png" %></figure>
+  <h3 id="churn">Churn</h3>
+  <p>If you sell <a href="82-membership-products">membership or subscription products</a>, the Churn tab helps you understand how many subscribers cancel over time. Go to <%= link_to "Analytics → Churn", churn_dashboard_path %> to access it.</p>
+  <figure><%= image_tag(asset_path("help_center/churn-dashboard.png"), alt: "Churn dashboard") %></figure>
+  <h4>Metrics</h4>
+  <p>The dashboard displays four key metrics for the selected date range:</p>
+  <ul>
+    <li><strong>Churn rate</strong> – The percentage of subscribers who canceled during the period.</li>
+    <li><strong>Last period churn rate</strong> – The churn rate for the previous period of equal length, for comparison.</li>
+    <li><strong>Churned users</strong> – The total number of subscribers who canceled.</li>
+    <li><strong>Revenue lost</strong> – The recurring revenue lost from those cancellations.</li>
+  </ul>
+  <h4>How churn rate is calculated</h4>
+  <p><strong>Churn rate = Canceled subscriptions ÷ (Active subscriptions at start of period + New subscriptions) × 100</strong></p>
+  <p>For example, if you started with 100 active subscribers, gained 20 new ones, and 6 canceled, your churn rate would be 6 ÷ 120 × 100 = 5%.</p>
+  <h4>Daily vs monthly view</h4>
+  <p>You can toggle between daily and monthly views using the drop-down. The chart values change because each view calculates the subscriber base differently:</p>
+  <ul>
+    <li><strong>Daily</strong> – Each bar shows that day's churn rate. The subscriber base is active subscribers at the start of that day plus new subscribers that day.</li>
+    <li><strong>Monthly</strong> – Each bar shows the month's churn rate. The subscriber base is active subscribers at the start of the month plus all new subscribers gained during the month.</li>
+  </ul>
+  <p>Monthly rates are not an average of daily rates—they use the month's starting active count plus total new subscribers, which gives a single cohesive rate for the entire month.</p>
+  <h4>Filtering by product</h4>
+  <p>By default, churn data is shown for all subscription products. Click the product filter to view churn for specific products.</p>
   <h3 id="Referrers-WBsBP">Referrers</h3>
   <p>A referrer is the original source of a visit to your product. </p>
   <ul>

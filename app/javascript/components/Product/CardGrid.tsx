@@ -7,11 +7,13 @@ import { CurrencyCode, getShortCurrencySymbol } from "$app/utils/currency";
 import { asyncVoid } from "$app/utils/promise";
 import { AbortError, assertResponseError } from "$app/utils/request";
 
+import { Button } from "$app/components/Button";
 import { Icon } from "$app/components/Icons";
 import { NumberInput } from "$app/components/NumberInput";
 import { showAlert } from "$app/components/server-components/Alert";
+import { Card as UICard, CardContent } from "$app/components/ui/Card";
 import { Pill } from "$app/components/ui/Pill";
-import Placeholder from "$app/components/ui/Placeholder";
+import { Placeholder } from "$app/components/ui/Placeholder";
 import { ProductCardGrid } from "$app/components/ui/ProductCardGrid";
 import { useDebouncedCallback } from "$app/components/useDebouncedCallback";
 import { useOnChange } from "$app/components/useOnChange";
@@ -143,7 +145,7 @@ const FilterCheckboxes = ({
         </label>
       ))}
       {filters.length > 5 && !showingAll ? (
-        <button className="underline" onClick={() => setShowingAll(true)}>
+        <button className="cursor-pointer underline all-unset" onClick={() => setShowingAll(true)}>
           Show more
         </button>
       ) : null}
@@ -233,124 +235,134 @@ export const CardGrid = ({
       )}
     >
       {hideFilters ? null : (
-        <div className="stack overflow-y-auto lg:sticky lg:inset-y-4 lg:max-h-[calc(100vh-2rem)]" aria-label="Filters">
-          <header>
-            {title ?? "Filters"}
-            {anyFilters ? (
-              <div className="text-right">
-                <button className="underline" onClick={resetFilters}>
-                  Clear
-                </button>
-              </div>
-            ) : null}
-          </header>
+        <UICard className="overflow-y-auto lg:sticky lg:inset-y-4 lg:max-h-[calc(100vh-2rem)]" aria-label="Filters">
+          <CardContent asChild>
+            <header>
+              {title ?? "Filters"}
+              {anyFilters ? (
+                <div className="grow text-right">
+                  <button className="cursor-pointer underline all-unset" onClick={resetFilters}>
+                    Clear
+                  </button>
+                </div>
+              ) : null}
+            </header>
+          </CardContent>
           {prependFilters}
           {hideSort ? null : (
-            <details>
-              <summary>Sort by</summary>
-              <fieldset role="group">
-                {(onProfile ? PROFILE_SORT_KEYS : SORT_KEYS).map((key) => (
-                  <label key={key}>
-                    {SORT_BY_LABELS[key]}
-                    <input
-                      type="radio"
-                      disabled={disableFilters}
-                      name={`${uid}-sortBy`}
-                      checked={(searchParams.sort ?? defaults.sort) === key}
-                      onChange={() => updateParams({ sort: key })}
-                    />
-                  </label>
-                ))}
-              </fieldset>
-            </details>
+            <CardContent asChild details>
+              <details>
+                <summary className="grow grid-flow-col grid-cols-[1fr_auto] before:col-start-2">Sort by</summary>
+                <fieldset role="group">
+                  {(onProfile ? PROFILE_SORT_KEYS : SORT_KEYS).map((key) => (
+                    <label key={key}>
+                      {SORT_BY_LABELS[key]}
+                      <input
+                        type="radio"
+                        disabled={disableFilters}
+                        name={`${uid}-sortBy`}
+                        checked={(searchParams.sort ?? defaults.sort) === key}
+                        onChange={() => updateParams({ sort: key })}
+                      />
+                    </label>
+                  ))}
+                </fieldset>
+              </details>
+            </CardContent>
           )}
           {results?.tags_data.length || searchParams.tags?.length || tagsOpen ? (
-            <details onToggle={() => setTagsOpen(!tagsOpen)}>
-              <summary>Tags</summary>
-              <fieldset role="group">
-                <label>
-                  All Products
-                  <input
-                    type="checkbox"
-                    checked={!searchParams.tags?.length}
-                    disabled={disableFilters || !searchParams.tags?.length}
-                    onChange={() => updateParams({ tags: undefined })}
-                  />
-                </label>
-                {results ? (
-                  <FilterCheckboxes
-                    filters={concatFoundAndNotFound(results.tags_data, searchParams.tags)}
-                    selection={searchParams.tags ?? []}
-                    setSelection={(tags) => updateParams({ tags })}
-                    disabled={disableFilters ?? false}
-                  />
-                ) : null}
-              </fieldset>
-            </details>
+            <CardContent asChild details>
+              <details onToggle={() => setTagsOpen(!tagsOpen)}>
+                <summary className="grow grid-flow-col grid-cols-[1fr_auto] before:col-start-2">Tags</summary>
+                <fieldset role="group">
+                  <label>
+                    All Products
+                    <input
+                      type="checkbox"
+                      checked={!searchParams.tags?.length}
+                      disabled={disableFilters || !searchParams.tags?.length}
+                      onChange={() => updateParams({ tags: undefined })}
+                    />
+                  </label>
+                  {results ? (
+                    <FilterCheckboxes
+                      filters={concatFoundAndNotFound(results.tags_data, searchParams.tags)}
+                      selection={searchParams.tags ?? []}
+                      setSelection={(tags) => updateParams({ tags })}
+                      disabled={disableFilters ?? false}
+                    />
+                  ) : null}
+                </fieldset>
+              </details>
+            </CardContent>
           ) : null}
           {results?.filetypes_data.length || searchParams.filetypes?.length || filetypesOpen ? (
-            <details onToggle={() => setFiletypesOpen(!filetypesOpen)}>
-              <summary>Contains</summary>
-              <fieldset role="group">
-                {results ? (
-                  <FilterCheckboxes
-                    filters={concatFoundAndNotFound(results.filetypes_data, searchParams.filetypes)}
-                    selection={searchParams.filetypes ?? []}
-                    setSelection={(filetypes) => updateParams({ filetypes })}
-                    disabled={disableFilters ?? false}
-                  />
-                ) : null}
-              </fieldset>
-            </details>
+            <CardContent asChild details>
+              <details onToggle={() => setFiletypesOpen(!filetypesOpen)}>
+                <summary className="grow grid-flow-col grid-cols-[1fr_auto] before:col-start-2">Contains</summary>
+                <fieldset role="group">
+                  {results ? (
+                    <FilterCheckboxes
+                      filters={concatFoundAndNotFound(results.filetypes_data, searchParams.filetypes)}
+                      selection={searchParams.filetypes ?? []}
+                      setSelection={(filetypes) => updateParams({ filetypes })}
+                      disabled={disableFilters ?? false}
+                    />
+                  ) : null}
+                </fieldset>
+              </details>
+            </CardContent>
           ) : null}
-          <details>
-            <summary>Price</summary>
-            <div
-              style={{
-                display: "grid",
-                gridTemplateColumns: "repeat(auto-fit, minmax(var(--dynamic-grid), 1fr))",
-                gridAutoFlow: "row",
-                gap: "var(--spacer-3)",
-              }}
-            >
-              <fieldset>
-                <legend>
-                  <label htmlFor={minPriceUid}>Minimum price</label>
-                </legend>
-                <div className="input">
-                  <Pill className="-ml-2 shrink-0">{currencySymbol}</Pill>
-                  <NumberInput
-                    onChange={(value) => {
-                      setEnteredMinPrice(value);
-                      debouncedTrySetPrice(value, enteredMaxPrice);
-                    }}
-                    value={enteredMinPrice ?? null}
-                  >
-                    {(props) => <input id={minPriceUid} placeholder="0" disabled={disableFilters} {...props} />}
-                  </NumberInput>
-                </div>
-              </fieldset>
-              <fieldset>
-                <legend>
-                  <label htmlFor={maxPriceUid}>Maximum price</label>
-                </legend>
-                <div className="input">
-                  <Pill className="-ml-2 shrink-0">{currencySymbol}</Pill>
-                  <NumberInput
-                    onChange={(value) => {
-                      setEnteredMaxPrice(value);
-                      debouncedTrySetPrice(enteredMinPrice, value);
-                    }}
-                    value={enteredMaxPrice ?? null}
-                  >
-                    {(props) => <input id={maxPriceUid} placeholder="∞" disabled={disableFilters} {...props} />}
-                  </NumberInput>
-                </div>
-              </fieldset>
-            </div>
-          </details>
+          <CardContent asChild details>
+            <details>
+              <summary className="grow grid-flow-col grid-cols-[1fr_auto] before:col-start-2">Price</summary>
+              <div
+                style={{
+                  display: "grid",
+                  gridTemplateColumns: "repeat(auto-fit, minmax(var(--dynamic-grid), 1fr))",
+                  gridAutoFlow: "row",
+                  gap: "var(--spacer-3)",
+                }}
+              >
+                <fieldset>
+                  <legend>
+                    <label htmlFor={minPriceUid}>Minimum price</label>
+                  </legend>
+                  <div className="input">
+                    <Pill className="-ml-2 shrink-0">{currencySymbol}</Pill>
+                    <NumberInput
+                      onChange={(value) => {
+                        setEnteredMinPrice(value);
+                        debouncedTrySetPrice(value, enteredMaxPrice);
+                      }}
+                      value={enteredMinPrice ?? null}
+                    >
+                      {(props) => <input id={minPriceUid} placeholder="0" disabled={disableFilters} {...props} />}
+                    </NumberInput>
+                  </div>
+                </fieldset>
+                <fieldset>
+                  <legend>
+                    <label htmlFor={maxPriceUid}>Maximum price</label>
+                  </legend>
+                  <div className="input">
+                    <Pill className="-ml-2 shrink-0">{currencySymbol}</Pill>
+                    <NumberInput
+                      onChange={(value) => {
+                        setEnteredMaxPrice(value);
+                        debouncedTrySetPrice(enteredMinPrice, value);
+                      }}
+                      value={enteredMaxPrice ?? null}
+                    >
+                      {(props) => <input id={maxPriceUid} placeholder="∞" disabled={disableFilters} {...props} />}
+                    </NumberInput>
+                  </div>
+                </fieldset>
+              </div>
+            </details>
+          </CardContent>
           {appendFilters}
-        </div>
+        </UICard>
       )}
       {results?.products.length === 0 ? (
         <Placeholder>
@@ -369,9 +381,7 @@ export const CardGrid = ({
           {pagination === "button" &&
           !((state.results?.total ?? 0) < (state.offset ?? 1) + (state.results?.products.length ?? 0)) ? (
             <div className="mt-8 w-full text-center">
-              <button className="button" onClick={() => dispatchAction({ type: "load-more" })}>
-                Load more
-              </button>
+              <Button onClick={() => dispatchAction({ type: "load-more" })}>Load more</Button>
             </div>
           ) : null}
         </div>

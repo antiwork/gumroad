@@ -13,6 +13,7 @@ class DashboardController < Sellers::BaseController
     if current_seller.suspended_for_tos_violation?
       redirect_to products_url
     else
+      LargeSeller.create_if_warranted(current_seller)
       presenter = CreatorHomePresenter.new(pundit_user)
       render inertia: "Dashboard/Index",
              props: { creator_home: presenter.creator_home_props }

@@ -1,14 +1,12 @@
+import { router } from "@inertiajs/react";
 import * as React from "react";
 
-import { getPagedMemberships, MembershipsParams, Membership } from "$app/data/collabs";
+import { Membership } from "$app/data/collabs";
 import { classNames } from "$app/utils/classNames";
 import { formatPriceCentsWithCurrencySymbol } from "$app/utils/currency";
-import { asyncVoid } from "$app/utils/promise";
-import { AbortError, assertResponseError } from "$app/utils/request";
 
 import { Pagination, PaginationProps } from "$app/components/Pagination";
 import { ProductIconCell } from "$app/components/ProductsPage/ProductIconCell";
-import { showAlert } from "$app/components/server-components/Alert";
 import {
   Table,
   TableBody,
@@ -22,49 +20,27 @@ import {
 import { useUserAgentInfo } from "$app/components/UserAgent";
 import { useClientSortingTableDriver } from "$app/components/useSortingTableDriver";
 
-type State = {
-  entries: readonly Membership[];
-  pagination: PaginationProps;
-  isLoading: boolean;
-  query: string | null;
-};
-
 export const CollabsMembershipsTable = (props: { entries: Membership[]; pagination: PaginationProps }) => {
-  const [state, setState] = React.useState<State>({
-    entries: props.entries,
-    pagination: props.pagination,
-    isLoading: false,
-    query: null,
-  });
-  const { entries, pagination, isLoading } = state;
-  const { items: memberships, thProps } = useClientSortingTableDriver<Membership>(entries);
+  const [isLoading, setIsLoading] = React.useState(false);
+  const tableRef = React.useRef<HTMLTableElement>(null);
   const { locale } = useUserAgentInfo();
+  const { items: memberships, thProps } = useClientSortingTableDriver(props.entries);
 
-  const activeRequest = React.useRef<{ cancel: () => void } | null>(null);
-  const loadMemberships = asyncVoid(async ({ query, page }: MembershipsParams) => {
-    setState((prevState) => ({ ...prevState, isLoading: true }));
-    try {
-      activeRequest.current?.cancel();
-      const request = getPagedMemberships({ page, query });
-      activeRequest.current = request;
-
-      setState({
-        ...(await request.response),
-        isLoading: false,
-        query,
-      });
-      activeRequest.current = null;
-    } catch (e) {
-      if (e instanceof AbortError) return;
-      assertResponseError(e);
-      showAlert(e.message, "error");
-      setState((prevState) => ({ ...prevState, isLoading: false }));
-    }
-  });
+  const handlePageChange = (page: number) => {
+    router.reload({
+      data: { memberships_page: page },
+      only: ["memberships_data"],
+      onStart: () => setIsLoading(true),
+      onFinish: () => {
+        setIsLoading(false);
+        tableRef.current?.scrollIntoView({ behavior: "smooth" });
+      },
+    });
+  };
 
   return (
     <section className="flex flex-col gap-4">
-      <Table aria-live="polite" className={classNames(isLoading && "pointer-events-none opacity-50")}>
+      <Table ref={tableRef} aria-live="polite" className={classNames(isLoading && "pointer-events-none opacity-50")}>
         <TableCaption>Memberships</TableCaption>
         <TableHeader>
           <TableRow>
@@ -164,9 +140,7 @@ export const CollabsMembershipsTable = (props: { entries: Membership[]; paginati
         </TableFooter>
       </Table>
 
-      {pagination.pages > 1 ? (
-        <Pagination onChangePage={(page) => loadMemberships({ query: state.query, page })} pagination={pagination} />
-      ) : null}
+      {props.pagination.pages > 1 ? <Pagination onChangePage={handlePageChange} pagination={props.pagination} /> : null}
     </section>
   );
 };

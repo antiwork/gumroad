@@ -5,6 +5,6 @@ class Admin::Affiliates::BaseController < Admin::BaseController
 
   private
     def set_affiliate_user
-      @affiliate_user = User.find(params[:affiliate_id])
+      @affiliate_user = User.find_by_external_id!(params[:affiliate_external_id])
     end
 end

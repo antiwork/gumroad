@@ -1,7 +1,7 @@
 import cx from "classnames";
-import throttle from "lodash/throttle";
+import { throttle } from "lodash-es";
 import * as React from "react";
-import { cast } from "ts-safe-cast";
+import { cast, is } from "ts-safe-cast";
 
 import { createConsumptionEvent } from "$app/data/consumption_analytics";
 import { trackMediaLocationChanged } from "$app/data/media_location";
@@ -9,6 +9,7 @@ import { classNames } from "$app/utils/classNames";
 import { humanizedDuration } from "$app/utils/duration";
 import FileUtils from "$app/utils/file";
 import { createJWPlayer } from "$app/utils/jwPlayer";
+import Mobile from "$app/utils/mobile";
 import { asyncVoid } from "$app/utils/promise";
 import { assertResponseError, request, ResponseError } from "$app/utils/request";
 
@@ -157,7 +158,7 @@ export const FileRow = ({
   const [isCollapsed, setIsCollapsed] = React.useState(initialCollapsed);
   const downloadUrl = file.download_url;
   const downloadButton = downloadUrl ? (
-    <TrackClick eventName="download_click" resourceId={file.id}>
+    <TrackClick eventName="download_click" file={file}>
       <NavigationButton href={downloadUrl}>Download</NavigationButton>
     </TrackClick>
   ) : null;
@@ -260,7 +261,7 @@ export const FileRow = ({
         {downloadButton}
 
         {!isEmbed && streamUrl != null ? (
-          <TrackClick eventName="stream_click" resourceId={file.id}>
+          <TrackClick eventName="stream_click" file={file}>
             <NavigationButton color="primary" href={streamUrl} target="_blank">
               {file.latest_media_location != null && file.latest_media_location.location === file.content_length
                 ? "Watch again"
@@ -276,7 +277,7 @@ export const FileRow = ({
         ) : null}
 
         {externalLinkUrl !== null ? (
-          <TrackClick eventName="external_link_click" resourceId={file.id}>
+          <TrackClick eventName="external_link_click" file={file}>
             <NavigationButton color="primary" href={externalLinkUrl} target="_blank">
               Open
             </NavigationButton>
@@ -284,7 +285,7 @@ export const FileRow = ({
         ) : null}
 
         {FileUtils.isAudioExtension(file.extension) ? (
-          <TrackClick eventName="play_click" resourceId={file.id}>
+          <TrackClick eventName="play_click" file={file}>
             <Button
               color={isShowingAudioDrawer ? undefined : "primary"}
               aria-label="Play Button"
@@ -315,15 +316,16 @@ export const FileRow = ({
         {!file.processing ? (
           <>
             {file.kindle_data != null ? (
-              <TrackClick eventName="send_to_kindle_click" resourceId={file.id}>
-                <Button className="button-kindle" onClick={toggleKindleDrawer}>
+              <TrackClick eventName="send_to_kindle_click" file={file}>
+                <Button color="kindle" onClick={toggleKindleDrawer}>
+                  <span className="brand-icon brand-icon-kindle" />
                   Send to Kindle
                 </Button>
               </TrackClick>
             ) : null}
 
             {file.read_url != null ? (
-              <NativeAppLink resourceId={file.id}>
+              <NativeAppLink file={file}>
                 <NavigationButton color="primary" href={file.read_url}>
                   {file.latest_media_location != null && file.latest_media_location.location === file.content_length
                     ? "Read again"
@@ -439,6 +441,30 @@ const MobileAppAudioFileRow = ({ file }: { file: FileItem }) => {
     }
   });
 
+  const messageListener = useRefToLatest((event: MessageEvent) => {
+    if (typeof event.data !== "string" || !event.data.startsWith("{")) return;
+    let data: unknown;
+    try {
+      data = JSON.parse(event.data);
+    } catch {
+      return;
+    }
+    if (is<{ type: "mobileAppAudioPlayerInfo"; payload: MobileAppAudioPlayerInfo }>(data)) {
+      if (data.payload.fileId !== file.id) return;
+      setIsPlaying(data.payload.isPlaying);
+      setLatestMediaLocation(parseFloat(data.payload.latestMediaLocation ?? "0"));
+    }
+  });
+
+  React.useEffect(() => {
+    const target = Mobile.isOnAndroidDevice() ? document : window;
+    const listener = (e: MessageEvent) => messageListener.current(e);
+    // @ts-expect-error - React Native sends message events to Android webviews via the document object, not window
+    target.addEventListener("message", listener);
+    // @ts-expect-error - React Native sends message events to Android webviews via the document object, not window
+    return () => target.removeEventListener("message", listener);
+  }, []);
+
   const [showTooltip, setShowTooltip] = React.useState(false);
   const touchAndHoldEventListeners = useTouchAndHold({
     onFinish: () => setShowTooltip(true),
@@ -457,7 +483,7 @@ const MobileAppAudioFileRow = ({ file }: { file: FileItem }) => {
       <WithTooltip tip={showTooltip ? file.file_name : null} position="top">
         <TrackClick
           eventName="play_click"
-          resourceId={isProcessing || showTooltip ? null : file.id} // Prevent playback when processing or showing tooltip
+          file={isProcessing || showTooltip ? null : file} // Prevent playback when processing or showing tooltip
           type="audio"
           isPlaying={isPlaying}
           resumeAt={latestMediaLocation || 0}
@@ -465,7 +491,7 @@ const MobileAppAudioFileRow = ({ file }: { file: FileItem }) => {
         >
           <RowContent asChild>
             <button
-              className={classNames("content", { "text-muted": isProcessing })}
+              className={classNames("content all-unset", { "text-muted": isProcessing })}
               style={{
                 gridColumn: "3 span",
                 userSelect: "none",
@@ -501,22 +527,22 @@ const MobileAppAudioFileRow = ({ file }: { file: FileItem }) => {
         style={{ gridColumn: "4", gap: "var(--spacer-4)", flexWrap: "nowrap" }}
       >
         {file.download_url ? (
-          <TrackClick eventName="download_click" resourceId={file.id}>
-            <button aria-label="Download">
+          <TrackClick eventName="download_click" file={file}>
+            <button aria-label="Download" className="cursor-pointer all-unset">
               <Icon name="download" className="type-icon" />
             </button>
           </TrackClick>
         ) : null}
         <TrackClick
           eventName="play_click"
-          resourceId={isProcessing ? null : file.id}
+          file={isProcessing ? null : file}
           type="audio"
           isPlaying={isPlaying}
           resumeAt={latestMediaLocation || 0}
           contentLength={file.duration || 0}
         >
           {isPlaying ? (
-            <button aria-label="Pause" disabled={isProcessing}>
+            <button aria-label="Pause" disabled={isProcessing} className="cursor-pointer all-unset">
               <Icon
                 className="type-icon"
                 name="circle-pause"
@@ -524,7 +550,7 @@ const MobileAppAudioFileRow = ({ file }: { file: FileItem }) => {
               />
             </button>
           ) : isCompleted ? (
-            <button aria-label="Play" disabled={isProcessing}>
+            <button aria-label="Play" disabled={isProcessing} className="cursor-pointer all-unset">
               <Icon
                 className="type-icon text-muted"
                 name="outline-check-circle"
@@ -532,7 +558,7 @@ const MobileAppAudioFileRow = ({ file }: { file: FileItem }) => {
               />
             </button>
           ) : (
-            <button aria-label="Play" disabled={isProcessing}>
+            <button aria-label="Play" disabled={isProcessing} className="cursor-pointer all-unset">
               <Icon
                 className="type-icon"
                 name={latestMediaLocation && latestMediaLocation > 0 ? "outline-circle-play" : "circle-play"}
@@ -684,9 +710,9 @@ const VideoEmbedPreview = ({
           borderRadius: "var(--border-radius-1) var(--border-radius-1) 0 0",
         }}
       />
-      <TrackClick eventName="watch" resourceId={file.id}>
+      <TrackClick eventName="watch" file={file}>
         <button
-          className="underline"
+          className="cursor-pointer underline all-unset"
           style={{
             position: "absolute",
             top: "50%",

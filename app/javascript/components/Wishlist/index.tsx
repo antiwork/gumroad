@@ -1,4 +1,4 @@
-import uniqBy from "lodash/uniqBy";
+import { uniqBy } from "lodash-es";
 import * as React from "react";
 import { createCast } from "ts-safe-cast";
 
@@ -17,7 +17,7 @@ import { Option } from "$app/components/Product/ConfigurationSelector";
 import { trackCtaClick } from "$app/components/Product/CtaButton";
 import { showAlert } from "$app/components/server-components/Alert";
 import { PageHeader } from "$app/components/ui/PageHeader";
-import Placeholder from "$app/components/ui/Placeholder";
+import { Placeholder } from "$app/components/ui/Placeholder";
 import { ProductCardGrid } from "$app/components/ui/ProductCardGrid";
 import { FollowButton } from "$app/components/Wishlist/FollowButton";
 import { WishlistEditor } from "$app/components/Wishlist/WishlistEditor";
@@ -125,7 +125,7 @@ const WishlistItemCard = ({
                   disabled={isDeleting}
                   aria-label="Remove this product"
                   onClick={() => void destroy()}
-                  className="grid p-4"
+                  className="grid cursor-pointer p-4 all-unset"
                 >
                   <Icon name="trash2" />
                 </button>

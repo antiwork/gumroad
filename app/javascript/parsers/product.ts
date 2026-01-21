@@ -40,6 +40,7 @@ export type CardProduct = {
   seller: { id: string; name: string; profile_url: string; avatar_url: string | null } | null;
   ratings: Ratings | null;
   price_cents: number;
+  original_price_cents?: number;
   currency_code: CurrencyCode;
   thumbnail_url: string | null;
   native_type: ProductNativeType;

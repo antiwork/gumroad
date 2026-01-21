@@ -2,6 +2,7 @@ import * as React from "react";
 
 import { Form } from "$app/components/Admin/Form";
 import type { User } from "$app/components/Admin/Users/User";
+import { Button } from "$app/components/Button";
 import { showAlert } from "$app/components/server-components/Alert";
 
 type SuspendForFraudProps = {
@@ -20,9 +21,9 @@ const SuspendForFraud = ({ user }: SuspendForFraudProps) => {
             <h3>Suspend for fraud</h3>
           </summary>
           <Form
-            url={Routes.suspend_for_fraud_admin_user_path(user.id)}
+            url={Routes.suspend_for_fraud_admin_user_path(user.external_id)}
             method="POST"
-            confirmMessage={`Are you sure you want to suspend user ${user.id} for fraud?`}
+            confirmMessage={`Are you sure you want to suspend user ${user.external_id} for fraud?`}
             onSuccess={() => showAlert("Suspended.", "success")}
           >
             {(isLoading) => (
@@ -34,9 +35,9 @@ const SuspendForFraud = ({ user }: SuspendForFraudProps) => {
                     className="flex-1"
                     placeholder="Add suspension note (optional)"
                   />
-                  <button type="submit" className="button" disabled={isLoading}>
+                  <Button type="submit" disabled={isLoading}>
                     {isLoading ? "Submitting..." : "Submit"}
-                  </button>
+                  </Button>
                 </div>
               </fieldset>
             )}

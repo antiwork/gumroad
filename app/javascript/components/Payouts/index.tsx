@@ -1,13 +1,11 @@
-import { Link } from "@inertiajs/react";
+import { Link, router } from "@inertiajs/react";
 import classNames from "classnames";
 import * as React from "react";
-import { cast } from "ts-safe-cast";
 
 import { exportPayouts } from "$app/data/balance";
-import { createInstantPayout } from "$app/data/payout";
 import { formatPriceCentsWithCurrencySymbol, formatPriceCentsWithoutCurrencySymbol } from "$app/utils/currency";
 import { asyncVoid } from "$app/utils/promise";
-import { assertResponseError, request } from "$app/utils/request";
+import { assertResponseError } from "$app/utils/request";
 
 import { Button, NavigationButton } from "$app/components/Button";
 import { Icon } from "$app/components/Icons";
@@ -17,9 +15,10 @@ import { PaginationProps } from "$app/components/Pagination";
 import { ExportPayoutsPopover } from "$app/components/Payouts/ExportPayoutsPopover";
 import { showAlert } from "$app/components/server-components/Alert";
 import { Alert } from "$app/components/ui/Alert";
+import { Card, CardContent } from "$app/components/ui/Card";
 import { PageHeader } from "$app/components/ui/PageHeader";
 import { Pill } from "$app/components/ui/Pill";
-import Placeholder from "$app/components/ui/Placeholder";
+import { Placeholder, PlaceholderImage } from "$app/components/ui/Placeholder";
 import { Tabs, Tab } from "$app/components/ui/Tabs";
 import { useUserAgentInfo } from "$app/components/UserAgent";
 import { WithTooltip } from "$app/components/WithTooltip";
@@ -171,9 +170,13 @@ export type BankAccount =
       routing_number: string;
       account_number: string;
       bank_name?: string;
-      sort_code: string;
     }
-  | { payout_method_type: "bank"; bank_account_type: "GI"; account_number: string }
+  | {
+      payout_method_type: "bank";
+      bank_account_type: "GI";
+      routing_number: string;
+      account_number: string;
+    }
   | { payout_method_type: "bank"; bank_account_type: "GA"; routing_number: string; account_number: string }
   | { payout_method_type: "bank"; bank_account_type: "MC"; account_number: string };
 
@@ -354,29 +357,29 @@ const Period = ({ payoutPeriodData }: { payoutPeriodData: PayoutPeriodData }) =>
           </WithTooltip>
         ) : null}
       </div>
-      <div className="stack" style={{ marginTop: "var(--spacer-4)" }}>
-        <div>
-          <h4>Sales</h4>
+      <Card style={{ marginTop: "var(--spacer-4)" }}>
+        <CardContent>
+          <h4 className="grow font-bold">Sales</h4>
           <div>{formatDollarAmount(payoutPeriodData.sales_cents)}</div>
-        </div>
+        </CardContent>
         {payoutPeriodData.credits_cents > 0 ? (
-          <div>
-            <h4>Credits</h4>
+          <CardContent>
+            <h4 className="grow font-bold">Credits</h4>
             <div>{formatDollarAmount(payoutPeriodData.credits_cents)}</div>
-          </div>
+          </CardContent>
         ) : null}
         {payoutPeriodData.affiliate_credits_cents !== 0 ? (
-          <div>
-            <h4>Affiliate or collaborator fees received</h4>
+          <CardContent>
+            <h4 className="grow font-bold">Affiliate or collaborator fees received</h4>
             <div>{formatDollarAmount(payoutPeriodData.affiliate_credits_cents)}</div>
-          </div>
+          </CardContent>
         ) : null}
         {payoutPeriodData.discover_fees_cents !== 0 || payoutPeriodData.direct_fees_cents !== 0 ? (
           <>
             {payoutPeriodData.discover_fees_cents !== 0 ? (
-              <div>
-                <div>
-                  <h4>
+              <CardContent>
+                <div className="grow">
+                  <h4 className="font-bold">
                     Discover sales{" "}
                     <a href="/help/article/66-gumroads-fees" target="_blank" rel="noreferrer">
                       fees
@@ -390,12 +393,12 @@ const Period = ({ payoutPeriodData }: { payoutPeriodData: PayoutPeriodData }) =>
                   ) : null}
                 </div>
                 <div>{formatNegativeDollarAmount(payoutPeriodData.discover_fees_cents)}</div>
-              </div>
+              </CardContent>
             ) : null}
             {payoutPeriodData.direct_fees_cents !== 0 ? (
-              <div>
-                <div>
-                  <h4>
+              <CardContent>
+                <div className="grow">
+                  <h4 className="font-bold">
                     Direct sales{" "}
                     <a href="/help/article/66-gumroads-fees" target="_blank" rel="noreferrer">
                       fees
@@ -409,80 +412,80 @@ const Period = ({ payoutPeriodData }: { payoutPeriodData: PayoutPeriodData }) =>
                   ) : null}
                 </div>
                 <div>{formatNegativeDollarAmount(payoutPeriodData.direct_fees_cents)}</div>
-              </div>
+              </CardContent>
             ) : null}
           </>
         ) : (
-          <div>
-            <h4>
+          <CardContent>
+            <h4 className="grow font-bold">
               <a href="/help/article/66-gumroads-fees" target="_blank" rel="noreferrer">
                 Fees
               </a>
             </h4>
             <div>{formatNegativeDollarAmount(payoutPeriodData.fees_cents)}</div>
-          </div>
+          </CardContent>
         )}
         {payoutPeriodData.refunds_cents !== 0 ? (
-          <div>
-            <h4>Refunds</h4>
+          <CardContent>
+            <h4 className="grow font-bold">Refunds</h4>
             <div>{formatNegativeDollarAmount(payoutPeriodData.refunds_cents)}</div>
-          </div>
+          </CardContent>
         ) : null}
         {payoutPeriodData.chargebacks_cents !== 0 ? (
-          <div>
-            <h4>
+          <CardContent>
+            <h4 className="grow font-bold">
               <a href="/help/article/134-how-does-gumroad-handle-chargebacks" target="_blank" rel="noreferrer">
                 Chargebacks
               </a>
             </h4>
             <div>{formatNegativeDollarAmount(payoutPeriodData.chargebacks_cents)}</div>
-          </div>
+          </CardContent>
         ) : null}
         {payoutPeriodData.credits_cents < 0 ? (
-          <div>
-            <h4>
+          <CardContent>
+            <h4 className="grow font-bold">
               <a href="/help/article/269-balance-page" target="_blank" rel="noreferrer">
                 Credits
               </a>
             </h4>
             <div>{formatNegativeDollarAmount(payoutPeriodData.credits_cents)}</div>
-          </div>
+          </CardContent>
         ) : null}
         {payoutPeriodData.loan_repayment_cents !== 0 ? (
-          <div>
-            <h4>Loan repayments</h4>
+          <CardContent>
+            <h4 className="grow font-bold">Loan repayments</h4>
             <div>{formatNegativeDollarAmount(payoutPeriodData.loan_repayment_cents)}</div>
-          </div>
+          </CardContent>
         ) : null}
         {payoutPeriodData.affiliate_fees_cents !== 0 ? (
-          <div>
-            <h4>Affiliate or collaborator fees paid</h4>
+          <CardContent>
+            <h4 className="grow font-bold">Affiliate or collaborator fees paid</h4>
             <div>{formatNegativeDollarAmount(payoutPeriodData.affiliate_fees_cents)}</div>
-          </div>
+          </CardContent>
         ) : null}
         {payoutPeriodData.paypal_payout_cents !== 0 ? (
-          <div>
-            <h4>
+          <CardContent>
+            <h4 className="grow font-bold">
               <a href="/help/article/275-paypal-connect" target="_blank" rel="noreferrer">
                 PayPal payouts
               </a>
             </h4>
             <div>{formatNegativeDollarAmount(payoutPeriodData.paypal_payout_cents)}</div>
-          </div>
+          </CardContent>
         ) : null}
         {payoutPeriodData.stripe_connect_payout_cents !== 0 ? (
-          <div>
-            <h4>
+          <CardContent>
+            <h4 className="grow font-bold">
               <a href="/help/article/330-stripe-connect" target="_blank" rel="noreferrer">
                 Stripe Connect payouts
               </a>
             </h4>
             <div>{formatNegativeDollarAmount(payoutPeriodData.stripe_connect_payout_cents)}</div>
-          </div>
+          </CardContent>
         ) : null}
         {payoutPeriodData.taxes_cents !== 0 ? (
-          <div>
-            <h4>
+          <CardContent>
+            <h4 className="grow font-bold">
               <a href="/help/article/121-sales-tax-on-gumroad" target="_blank" rel="noreferrer">
                 Taxes
               </a>
@@ -495,9 +498,9 @@ const Period = ({ payoutPeriodData }: { payoutPeriodData: PayoutPeriodData }) =>
                 <span>{formatDollarAmount(payoutPeriodData.taxes_cents)}</span>
               </WithTooltip>
             </div>
-          </div>
+          </CardContent>
         ) : null}
-        <div>
+        <CardContent>
           {(() => {
             const isCurrentPeriod = payoutPeriodData.status === "payable";
             switch (payoutPeriodData.payout_method_type) {
@@ -523,8 +526,8 @@ const Period = ({ payoutPeriodData }: { payoutPeriodData: PayoutPeriodData }) =>
               {payoutPeriodData.status === "payable" && payoutPeriodData.should_be_shown_currencies_always ? "USD" : ""}
             </span>
           </div>
-        </div>
-      </div>
+        </CardContent>
+      </Card>
     </section>
   );
 };
@@ -532,9 +535,7 @@ const Period = ({ payoutPeriodData }: { payoutPeriodData: PayoutPeriodData }) =>
 const PeriodEmpty = ({ minimumPayoutAmountCents }: { minimumPayoutAmountCents: number }) => (
   <div className="period period-empty full column">
     <Placeholder>
-      <figure>
-        <img src={placeholder} />
-      </figure>
+      <PlaceholderImage src={placeholder} />
       <h2>Let's get you paid.</h2>
       Reach a balance of at least{" "}
       {formatPriceCentsWithCurrencySymbol("usd", minimumPayoutAmountCents, {
@@ -651,36 +652,21 @@ const Payouts = ({
   past_payout_period_data,
   instant_payout,
   show_instant_payouts_notice,
-  pagination: initialPagination,
+  pagination,
   tax_center_enabled,
 }: PayoutsProps) => {
   const loggedInUser = useLoggedInUser();
   const userAgentInfo = useUserAgentInfo();
 
-  const [pastPayoutPeriodData, setPastPayoutPeriodData] = React.useState(past_payout_period_data);
-  const [pagination, setPagination] = React.useState(initialPagination);
-
   const [isLoading, setIsLoading] = React.useState(false);
 
-  const loadNextPage = async () => {
-    setIsLoading(true);
-    try {
-      const response = await request({
-        method: "GET",
-        accept: "json",
-        url: Routes.payments_paged_path({ page: pagination.page + 1 }),
-      })
-        .then((res) => res.json())
-        .then((json) => cast<{ payouts: PayoutPeriodData[]; pagination: PaginationProps }>(json));
-
-      setPastPayoutPeriodData((prevData) => [...prevData, ...response.payouts]);
-      setPagination(response.pagination);
-    } catch (error) {
-      assertResponseError(error);
-      showAlert(error.message, "error");
-    } finally {
-      setIsLoading(false);
-    }
+  const loadNextPage = () => {
+    router.reload({
+      data: { page: pagination.page + 1 },
+      only: ["pagination", "past_payout_period_data"],
+      onStart: () => setIsLoading(true),
+      onFinish: () => setIsLoading(false),
+    });
   };
 
   const [isInstantPayoutModalOpen, setIsInstantPayoutModalOpen] = React.useState(false);
@@ -693,22 +679,27 @@ const Payouts = ({
   const instantPayoutFee = instant_payout
     ? instantPayoutAmountCents - Math.floor(instantPayoutAmountCents / (1 + INSTANT_PAYOUT_FEE_PERCENTAGE))
     : 0;
-  const onRequestInstantPayout = async () => {
+  const onRequestInstantPayout = () => {
     if (!instant_payout) return;
-    setIsLoading(true);
-    try {
-      await createInstantPayout(
-        instant_payout.payable_balances.find((balance) => balance.id === instantPayoutId)?.date ??
-          new Date().toISOString(),
-      );
-      window.location.reload();
-    } catch (error) {
-      assertResponseError(error);
-      showAlert(error.message, "error");
-    } finally {
-      setIsInstantPayoutModalOpen(false);
-      setIsLoading(false);
-    }
+
+    const selectedDate =
+      instant_payout.payable_balances.find((balance) => balance.id === instantPayoutId)?.date ??
+      new Date().toISOString();
+
+    router.post(
+      Routes.instant_payouts_path(),
+      { date: selectedDate },
+      {
+        onStart: () => {
+          setIsInstantPayoutModalOpen(false);
+          setIsLoading(true);
+        },
+        onFinish: () => setIsLoading(false),
+        onError: () => {
+          showAlert("Failed to initiate instant payout. Please try again.", "error");
+        },
+      },
+    );
   };
 
   if (!loggedInUser) return null;
@@ -789,7 +780,7 @@ const Payouts = ({
               footer={
                 <>
                   <Button onClick={() => setIsInstantPayoutModalOpen(false)}>Cancel</Button>
-                  <Button color="primary" disabled={isLoading} onClick={() => void onRequestInstantPayout()}>
+                  <Button color="primary" disabled={isLoading} onClick={() => onRequestInstantPayout()}>
                     Get paid!
                   </Button>
                 </>
@@ -915,7 +906,7 @@ const Payouts = ({
                 </Alert>
               ) : null}
               {next_payout_period_data.status === "not_payable" ? (
-                pastPayoutPeriodData.length > 0 ? (
+                past_payout_period_data.length > 0 ? (
                   <Alert role="status" variant="info">
                     Reach a balance of at least{" "}
                     {formatPriceCentsWithCurrencySymbol("usd", next_payout_period_data.minimum_payout_amount_cents, {
@@ -942,18 +933,18 @@ const Payouts = ({
           </section>
         ) : null}
 
-        {pastPayoutPeriodData.length > 0 ? (
+        {past_payout_period_data.length > 0 ? (
           <>
             <section>
               <h2>Past payouts</h2>
               <section className="flex flex-col gap-4">
-                {pastPayoutPeriodData.map((payoutPeriodData, idx) => (
+                {past_payout_period_data.map((payoutPeriodData, idx) => (
                   <Period key={idx} payoutPeriodData={payoutPeriodData} />
                 ))}
               </section>
             </section>
             {pagination.page < pagination.pages ? (
-              <Button color="primary" onClick={() => void loadNextPage()} disabled={isLoading}>
+              <Button color="primary" onClick={loadNextPage} disabled={isLoading}>
                 Show older payouts
               </Button>
             ) : null}

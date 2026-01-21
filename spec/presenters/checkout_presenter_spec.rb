@@ -500,6 +500,7 @@ describe CheckoutPresenter do
               native_type: "digital",
               quantity: 1,
               thumbnail_url: nil,
+              url: bundle.bundle_products.second.product.long_url,
               variant: { id: bundle.bundle_products.second.variant.external_id, name: "Untitled 2" },
               custom_fields: [],
             },
@@ -509,6 +510,7 @@ describe CheckoutPresenter do
               native_type: "digital",
               quantity: 2,
               thumbnail_url: nil,
+              url: bundle.bundle_products.first.product.long_url,
               variant: nil,
               custom_fields: [
                 {

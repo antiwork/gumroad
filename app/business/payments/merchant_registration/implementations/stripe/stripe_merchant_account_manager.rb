@@ -166,6 +166,12 @@ module StripeMerchantAccountManager
     end
 
     if last_user_compliance_info&.is_business? && user_compliance_info.is_individual?
+      # Clear structure first - Stripe rejects company[structure] when business_type is "individual"
+      if last_user_compliance_info.country_code == Compliance::Countries::USA.alpha2 &&
+        last_user_compliance_info.business_type == UserComplianceInfo::BusinessTypes::SOLE_PROPRIETORSHIP
+        Stripe::Account.update(stripe_account.id, { company: { structure: "" } })
+      end
+
       # Set the company's name to the individual's first and last name so that this is used as the Stripe account name and during payouts
       # Ref: https://github.com/gumroad/web/issues/19882
       diff_attributes[:company] = { name: user_compliance_info.first_and_last_name }
@@ -385,7 +391,11 @@ module StripeMerchantAccountManager
           currency: bank_account.currency,
           account_number: bank_account.account_number.decrypt(passphrase).gsub(/[ -]/, "")
         }
-        bank_account_hash[:routing_number] = bank_account.routing_number if bank_account.routing_number.present?
+        if bank_account.routing_number.present?
+          routing_number = bank_account.routing_number
+          routing_number = routing_number.gsub(/[ -]/, "") if country_code == Compliance::Countries::GIB.alpha2
+          bank_account_hash[:routing_number] = routing_number
+        end
         bank_account_hash[:account_type] = bank_account.account_type if [Compliance::Countries::CHL.alpha2, Compliance::Countries::COL.alpha2].include?(country_code) && bank_account.account_type.present?
         bank_account_hash[:account_holder_name] = bank_account.account_holder_full_name if [Compliance::Countries::JPN.alpha2, Compliance::Countries::VNM.alpha2, Compliance::Countries::IDN.alpha2].include?(country_code)
         bank_account_hash

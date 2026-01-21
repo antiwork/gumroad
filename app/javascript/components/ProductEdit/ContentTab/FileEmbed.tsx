@@ -15,7 +15,7 @@ import { getMimeType } from "$app/utils/mimetypes";
 import { summarizeUploadProgress } from "$app/utils/summarizeUploadProgress";
 
 import { AudioPlayer } from "$app/components/AudioPlayer";
-import { Button, NavigationButton } from "$app/components/Button";
+import { Button, NavigationButton, buttonVariants } from "$app/components/Button";
 import { connectedFileRowClassName } from "$app/components/Download/RichContent";
 import { useEvaporateUploader } from "$app/components/EvaporateUploader";
 import { FileRowContent } from "$app/components/FileRowContent";
@@ -36,7 +36,7 @@ import { SubtitleList } from "$app/components/SubtitleList";
 import { SubtitleFile } from "$app/components/SubtitleList/Row";
 import { SubtitleUploadBox } from "$app/components/SubtitleUploadBox";
 import { NodeActionsMenu } from "$app/components/TiptapExtensions/NodeActionsMenu";
-import Placeholder from "$app/components/ui/Placeholder";
+import { Placeholder } from "$app/components/ui/Placeholder";
 import { Row, RowActions, RowContent, RowDetails } from "$app/components/ui/Rows";
 import { WithTooltip } from "$app/components/WithTooltip";
 
@@ -53,6 +53,8 @@ export const getDraggedFileEmbed = (editor: Editor) => {
 };
 
 const FileEmbedNodeView = ({ node, editor, getPos, updateAttributes }: NodeViewProps) => {
+  if (!node.attrs.id) return;
+
   const { id, updateProduct, filesById } = useProductEditContext();
   const uid = React.useId();
   const ref = React.useRef<HTMLDivElement>(null);
@@ -383,7 +385,7 @@ const FileEmbedNodeView = ({ node, editor, getPos, updateAttributes }: NodeViewP
                     }}
                   />
                   <button
-                    className="underline"
+                    className="cursor-pointer underline all-unset"
                     style={{
                       position: "absolute",
                       top: "50%",
@@ -397,7 +399,10 @@ const FileEmbedNodeView = ({ node, editor, getPos, updateAttributes }: NodeViewP
                   </button>
                   <div style={{ position: "absolute", top: "var(--spacer-5)", right: "var(--spacer-5)" }}>
                     <WithTooltip tip="Replace thumbnail">
-                      <label className="button primary" aria-label="Replace thumbnail">
+                      <label
+                        className={buttonVariants({ size: "default", color: "primary" })}
+                        aria-label="Replace thumbnail"
+                      >
                         {thumbnailInput}
                         <Icon name="upload-fill" />
                       </label>
@@ -408,7 +413,7 @@ const FileEmbedNodeView = ({ node, editor, getPos, updateAttributes }: NodeViewP
             ) : (
               <div className="preview">
                 <Placeholder>
-                  <label className="button primary">
+                  <label className={buttonVariants({ size: "default", color: "primary" })}>
                     {thumbnailInput}
                     <Icon name="upload-fill" />
                     Upload a thumbnail
@@ -468,7 +473,7 @@ const FileEmbedNodeView = ({ node, editor, getPos, updateAttributes }: NodeViewP
 
                 {file.is_streamable && isComplete ? (
                   <li>
-                    <button className="underline" onClick={() => setExpanded(!expanded)}>
+                    <button className="cursor-pointer underline all-unset" onClick={() => setExpanded(!expanded)}>
                       {file.subtitle_files.length}{" "}
                       {file.subtitle_files.length === 1 ? "closed caption" : "closed captions"}
                     </button>
@@ -675,7 +680,11 @@ const FileEmbedNodeView = ({ node, editor, getPos, updateAttributes }: NodeViewP
       </Row>
       {isDropZone ? (
         <div className="absolute inset-0 bg-backdrop">
-          <div className="button primary absolute top-1/2 left-1/2 -translate-1/2">Create folder with 2 items</div>
+          <div
+            className={`${buttonVariants({ size: "default", color: "primary" })} absolute top-1/2 left-1/2 -translate-1/2`}
+          >
+            Create folder with 2 items
+          </div>
         </div>
       ) : null}
     </NodeViewWrapper>

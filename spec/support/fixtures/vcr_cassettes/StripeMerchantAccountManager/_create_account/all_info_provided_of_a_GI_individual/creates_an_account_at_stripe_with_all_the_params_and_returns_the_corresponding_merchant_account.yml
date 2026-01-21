@@ -5,7 +5,7 @@ http_interactions:
     uri: https://api.stripe.com/v1/accounts
     body:
       encoding: UTF-8
-      string: type=custom&requested_capabilities[0]=card_payments&requested_capabilities[1]=transfers&country=GI&default_currency=gbp&metadata[user_id]=3535553259827&metadata[tos_agreement_id]=G_-mnBf9b1j9A7a4ub4nFQ%3D%3D&metadata[user_compliance_info_id]=G_-mnBf9b1j9A7a4ub4nFQ%3D%3D&metadata[bank_account_id]=G_-mnBf9b1j9A7a4ub4nFQ%3D%3D&tos_acceptance[date]=1427846400&tos_acceptance[ip]=54.234.242.13&business_type=individual&business_profile[name]=Chuck+Bartowski&business_profile[url]=https%3A%2F%2Fvipul.gumroad.com%2F&business_profile[product_description]=Chuck+Bartowski&individual[first_name]=Chuck&individual[last_name]=Bartowski&individual[email]=chuck%40gum.com&individual[phone]=0000000000&individual[dob][day]=1&individual[dob][month]=1&individual[dob][year]=1901&individual[address][line1]=address_full_match&individual[address][city]=Gibraltar&individual[address][postal_code]=GX11+1AA&individual[address][country]=GI&individual[id_number]=000000000&bank_account[country]=GI&bank_account[currency]=gbp&bank_account[account_number]=GI75NWBK000000007099453&settings[payouts][schedule][interval]=manual&settings[payouts][debit_negative_balances]=true
+      string: type=custom&requested_capabilities[0]=card_payments&requested_capabilities[1]=transfers&country=GI&default_currency=gbp&metadata[user_id]=3120150362011&metadata[tos_agreement_id]=VBytlR5AAJJCfZSRD4047w%3D%3D&metadata[user_compliance_info_id]=zQg9hyW7mqTCv-yvGCQVGQ%3D%3D&metadata[bank_account_id]=qApQX0_oiSqHvKWs2DNxLA%3D%3D&tos_acceptance[date]=1427846400&tos_acceptance[ip]=54.234.242.13&business_type=individual&business_profile[name]=Chuck+Bartowski&business_profile[url]=https%3A%2F%2Fvipul.gumroad.com%2F&business_profile[product_description]=Chuck+Bartowski&individual[first_name]=Chuck&individual[last_name]=Bartowski&individual[email]=chuck%40gum.com&individual[phone]=0000000000&individual[dob][day]=1&individual[dob][month]=1&individual[dob][year]=1901&individual[address][line1]=address_full_match&individual[address][city]=Gibraltar&individual[address][postal_code]=GX11+1AA&individual[address][country]=GI&individual[id_number]=000000000&bank_account[country]=GI&bank_account[currency]=gbp&bank_account[account_number]=000<STRONGBOX_GENERAL_PASSWORD>5&bank_account[routing_number]=108800&settings[payouts][schedule][interval]=manual&settings[payouts][debit_negative_balances]=true
     headers:
       User-Agent:
       - Stripe/v1 RubyBindings/12.5.0
@@ -14,13 +14,13 @@ http_interactions:
       Content-Type:
       - application/x-www-form-urlencoded
       Idempotency-Key:
-      - 261fea88-b5f2-4476-b796-a1d07f1a9295
+      - bbda12f5-6dd9-4f9d-af8c-e57dbdd12009
       Stripe-Version:
-      - 2023-10-16; risk_in_requirements_beta=v1
+      - '2023-10-16'
       X-Stripe-Client-User-Agent:
-      - '{"bindings_version":"12.5.0","lang":"ruby","lang_version":"3.3.4 p94 (2024-07-09)","platform":"arm64-darwin20","engine":"ruby","publisher":"stripe","uname":"Darwin
-        Harbakshs-MacBook-Air.local 20.5.0 Darwin Kernel Version 20.5.0: Sat May  8
-        05:10:31 PDT 2021; root:xnu-7195.121.3~9/RELEASE_ARM64_T8101 arm64","hostname":"Harbakshs-MacBook-Air.local"}'
+      - '{"bindings_version":"12.5.0","lang":"ruby","lang_version":"3.4.3 p32 (2025-04-14)","platform":"arm64-darwin25","engine":"ruby","publisher":"stripe","uname":"Darwin
+        gpianaMacBook-Pro 25.2.0 Darwin Kernel Version 25.2.0: Tue Nov 18 21:07:05
+        PST 2025; root:xnu-12377.61.12~1/RELEASE_ARM64_T6020 arm64","hostname":"gpianaMacBook-Pro"}'
       Accept-Encoding:
       - gzip;q=1.0,deflate;q=0.6,identity;q=0.3
       Accept:
@@ -33,11 +33,11 @@ http_interactions:
       Server:
       - nginx
       Date:
-      - Fri, 25 Oct 2024 05:31:18 GMT
+      - Tue, 06 Jan 2026 21:28:08 GMT
       Content-Type:
       - application/json
       Content-Length:
-      - '6142'
+      - '6449'
       Connection:
       - keep-alive
       Access-Control-Allow-Credentials:
@@ -54,49 +54,43 @@ http_interactions:
       Cache-Control:
       - no-cache, no-store
       Content-Security-Policy:
-      - report-uri https://q.stripe.com/csp-report?p=v1%2Faccounts; block-all-mixed-content;
-        default-src 'none'; base-uri 'none'; form-action 'none'; frame-ancestors 'none';
-        img-src 'self'; script-src 'self' 'report-sample'; style-src 'self'
-      Cross-Origin-Opener-Policy-Report-Only:
-      - same-origin; report-to="coop"
+      - base-uri 'none'; default-src 'none'; form-action 'none'; frame-ancestors 'none';
+        img-src 'self'; script-src 'self' 'report-sample'; style-src 'self'; worker-src
+        'none'; upgrade-insecure-requests; report-uri https://q.stripe.com/csp-violation?q=rLGKg2nBpk2Z6oN2RVESVbBQC1R9KVfBCtQTE-CnWB6oqMLv_8EfNg5XCJcqqT_ruteCSh6Ve4fHv23s
       Idempotency-Key:
-      - 261fea88-b5f2-4476-b796-a1d07f1a9295
+      - bbda12f5-6dd9-4f9d-af8c-e57dbdd12009
       Original-Request:
-      - req_RAKfWnSYVWaDZI
-      Report-To:
-      - '{"group":"coop","max_age":8640,"endpoints":[{"url":"https://q.stripe.com/coop-report?s=accounts-bapi-srv"}],"include_subdomains":true}'
-      Reporting-Endpoints:
-      - coop="https://q.stripe.com/coop-report?s=accounts-bapi-srv"
+      - req_dS0uEd52aLNWyM
       Request-Id:
-      - req_RAKfWnSYVWaDZI
+      - req_dS0uEd52aLNWyM
       Stripe-Should-Retry:
       - 'false'
       Stripe-Version:
-      - 2023-10-16; risk_in_requirements_beta=v1
+      - '2023-10-16'
       Vary:
       - Origin
-      X-Content-Type-Options:
-      - nosniff
       X-Stripe-Priority-Routing-Enabled:
       - 'true'
       X-Stripe-Routing-Context-Priority-Tier:
       - api-testmode
       X-Wc:
-      - A
+      - ABGHIJ
       Strict-Transport-Security:
       - max-age=63072000; includeSubDomains; preload
     body:
       encoding: UTF-8
       string: |-
         {
-          "id": "acct_1QDg7DS6cOdtMpl9",
+          "id": "acct_1SmhnNElp48oiiLR",
           "object": "account",
           "business_profile": {
             "annual_revenue": null,
             "estimated_worker_count": null,
-            "mcc": "5192",
+            "mcc": null,
+            "minority_owned_business_designation": null,
             "name": "Chuck Bartowski",
             "product_description": "Chuck Bartowski",
+            "specified_commercial_transactions_act_url": null,
             "support_address": null,
             "support_email": null,
             "support_phone": null,
@@ -105,10 +99,10 @@ http_interactions:
           },
           "business_type": "individual",
           "capabilities": {
-            "card_payments": "active",
-            "transfers": "active"
+            "card_payments": "inactive",
+            "transfers": "inactive"
           },
-          "charges_enabled": true,
+          "charges_enabled": false,
           "company": {
             "address": {
               "city": "Gibraltar",
@@ -148,17 +142,17 @@ http_interactions:
             "type": "application"
           },
           "country": "GI",
-          "created": 1729834276,
+          "created": 1767734886,
           "default_currency": "gbp",
-          "details_submitted": true,
+          "details_submitted": false,
           "email": null,
           "external_accounts": {
             "object": "list",
             "data": [
               {
-                "id": "ba_1QDg7DS6cOdtMpl9cQ7sHa1n",
+                "id": "ba_1SmhnNElp48oiiLRh5v8YE8V",
                 "object": "bank_account",
-                "account": "acct_1QDg7DS6cOdtMpl9",
+                "account": "acct_1SmhnNElp48oiiLR",
                 "account_holder_name": null,
                 "account_holder_type": null,
                 "account_type": null,
@@ -169,14 +163,14 @@ http_interactions:
                 "country": "GI",
                 "currency": "gbp",
                 "default_for_currency": true,
-                "fingerprint": "dkwrat3Sb3qj2MDm",
+                "fingerprint": "OuOPOfIxki96Cpbv",
                 "future_requirements": {
                   "currently_due": [],
                   "errors": [],
                   "past_due": [],
                   "pending_verification": []
                 },
-                "last4": "9453",
+                "last4": "2345",
                 "metadata": {},
                 "requirements": {
                   "currently_due": [],
@@ -184,13 +178,13 @@ http_interactions:
                   "past_due": [],
                   "pending_verification": []
                 },
-                "routing_number": "11-00-00000",
+                "routing_number": "10-88-00",
                 "status": "new"
               }
             ],
             "has_more": false,
             "total_count": 1,
-            "url": "/v1/accounts/acct_1QDg7DS6cOdtMpl9/external_accounts"
+            "url": "/v1/accounts/acct_1SmhnNElp48oiiLR/external_accounts"
           },
           "future_requirements": {
             "alternatives": [],
@@ -203,9 +197,9 @@ http_interactions:
             "pending_verification": []
           },
           "individual": {
-            "id": "person_1QDg7DS6cOdtMpl9pjYFDvAf",
+            "id": "person_1SmhnNElp48oiiLRMnWzF0yk",
             "object": "person",
-            "account": "acct_1QDg7DS6cOdtMpl9",
+            "account": "acct_1SmhnNElp48oiiLR",
             "address": {
               "city": "Gibraltar",
               "country": "GI",
@@ -214,7 +208,7 @@ http_interactions:
               "postal_code": "GX11 1AA",
               "state": null
             },
-            "created": 1729834276,
+            "created": 1767734886,
             "dob": {
               "day": 1,
               "month": 1,
@@ -235,6 +229,7 @@ http_interactions:
             "metadata": {},
             "phone": "+10000000000",
             "relationship": {
+              "authorizer": false,
               "director": false,
               "executive": false,
               "legal_guardian": false,
@@ -271,20 +266,26 @@ http_interactions:
             }
           },
           "metadata": {
-            "bank_account_id": "G_-mnBf9b1j9A7a4ub4nFQ==",
-            "tos_agreement_id": "G_-mnBf9b1j9A7a4ub4nFQ==",
-            "user_compliance_info_id": "G_-mnBf9b1j9A7a4ub4nFQ==",
-            "user_id": "3535553259827"
+            "bank_account_id": "qApQX0_oiSqHvKWs2DNxLA==",
+            "tos_agreement_id": "VBytlR5AAJJCfZSRD4047w==",
+            "user_compliance_info_id": "zQg9hyW7mqTCv-yvGCQVGQ==",
+            "user_id": "3120150362011"
           },
-          "payouts_enabled": true,
+          "payouts_enabled": false,
           "requirements": {
             "alternatives": [],
             "current_deadline": null,
-            "currently_due": [],
-            "disabled_reason": null,
+            "currently_due": [
+              "business_profile.mcc"
+            ],
+            "disabled_reason": "requirements.past_due",
             "errors": [],
-            "eventually_due": [],
-            "past_due": [],
+            "eventually_due": [
+              "business_profile.mcc"
+            ],
+            "past_due": [
+              "business_profile.mcc"
+            ],
             "pending_verification": []
           },
           "settings": {
@@ -298,7 +299,6 @@ http_interactions:
               "primary_color": null,
               "secondary_color": null
             },
-            "capital": {},
             "card_issuing": {
               "tos_acceptance": {
                 "date": null,
@@ -319,7 +319,8 @@ http_interactions:
               "timezone": "Etc/UTC"
             },
             "invoices": {
-              "default_account_tax_ids": null
+              "default_account_tax_ids": null,
+              "hosted_payment_method_save": "offer"
             },
             "payments": {
               "statement_descriptor": "CHUCK BARTOWSKI",
@@ -329,11 +330,12 @@ http_interactions:
             "payouts": {
               "debit_negative_balances": true,
               "schedule": {
-                "delay_days": 1,
+                "delay_days": 7,
                 "interval": "manual"
               },
               "statement_descriptor": null
             },
+            "paypay_payments": {},
             "sepa_debit_payments": {}
           },
           "tos_acceptance": {
@@ -343,5 +345,5 @@ http_interactions:
           },
           "type": "custom"
         }
-  recorded_at: Fri, 25 Oct 2024 05:31:18 GMT
+  recorded_at: Tue, 06 Jan 2026 21:28:08 GMT
 recorded_with: VCR 6.2.0

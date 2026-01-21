@@ -192,7 +192,7 @@ class CustomerMailer < ApplicationMailer
       {
         id: installment.id,
         subject: installment.subject,
-        message: installment.message_with_inline_abandoned_cart_products(products:, checkout_url: checkout_index_url(host: UrlService.domain_with_protocol, cart_id: cart.external_id))
+        message: installment.message_with_inline_abandoned_cart_products(products:, checkout_url: checkout_index_url(host: UrlService.domain_with_protocol, cart_id: cart.secure_external_id(scope: "cart_login")))
       }
     end
 

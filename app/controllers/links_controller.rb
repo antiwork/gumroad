@@ -6,7 +6,6 @@ class LinksController < ApplicationController
           CreateDiscoverSearch, DiscoverCuratedProducts, FetchProductByUniquePermalink
 
   DEFAULT_PRICE = 500
-  PER_PAGE = 50
 
   skip_before_action :check_suspended, only: %i[index show edit destroy increment_views track_user_action]
 
@@ -36,63 +35,25 @@ class LinksController < ApplicationController
   def index
     authorize Link
 
-    @guid = SecureRandom.hex
     @title = "Products"
 
-    @memberships_pagination, @memberships = paginated_memberships(page: 1)
-    @products_pagination, @products = paginated_products(page: 1)
-
-    @price = current_seller.links.last.try(:price_formatted_without_dollar_sign) ||
-             Money.new(DEFAULT_PRICE, current_seller.currency_type).format(
-               no_cents_if_whole: true, symbol: false
-             )
-
-    @user_compliance_info = current_seller.fetch_or_build_user_compliance_info
-    @react_products_page_props = DashboardProductsPagePresenter.new(
-      pundit_user:,
-      memberships: @memberships,
-      memberships_pagination: @memberships_pagination,
-      products: @products,
-      products_pagination: @products_pagination
-    ).page_props
-
-    render inertia: "Products/Index",
-           props: { react_products_page_props: @react_products_page_props }
-  end
-
-  def memberships_paged
-    authorize Link, :index?
-
-    pagination, memberships = paginated_memberships(page: paged_params[:page].to_i, query: params[:query])
-    react_products_page_props = DashboardProductsPagePresenter.new(
-      pundit_user:,
-      memberships:,
-      memberships_pagination: pagination,
-      products: nil,
-      products_pagination: nil)
-    .memberships_table_props
-
-    render json: {
-      pagination: react_products_page_props[:memberships_pagination],
-      entries: react_products_page_props[:memberships]
-    }
-  end
-
-  def products_paged
-    authorize Link, :index?
-
-    pagination, products = paginated_products(page: paged_params[:page].to_i, query: params[:query])
-    react_products_page_props = DashboardProductsPagePresenter.new(
-      pundit_user:,
-      memberships: nil,
-      memberships_pagination: nil,
-      products:,
-      products_pagination: pagination
-    ).products_table_props
-
-    render json: {
-      pagination: react_products_page_props[:products_pagination],
-      entries: react_products_page_props[:products]
+    render inertia: "Products/Index", props: {
+      archived_products_count: -> { products_page_presenter.page_props[:archived_products_count] },
+      can_create_product: -> { products_page_presenter.page_props[:can_create_product] },
+      products_data: -> {
+        {
+          products: products_page_presenter.products_table_props[:products],
+          pagination: products_page_presenter.products_table_props[:products_pagination],
+          sort: products_page_presenter.products_sort,
+        }
+      },
+      memberships_data: -> {
+        {
+          memberships: products_page_presenter.memberships_table_props[:memberships],
+          pagination: products_page_presenter.memberships_table_props[:memberships_pagination],
+          sort: products_page_presenter.memberships_sort,
+        }
+      },
     }
   end
 
@@ -129,32 +90,23 @@ class LinksController < ApplicationController
     @product.is_bundle = @product.native_type == Link::NATIVE_TYPE_BUNDLE
     @product.json_data[:custom_button_text_option] = "donate_prompt" if @product.native_type == Link::NATIVE_TYPE_COFFEE
 
+    ai_generated = params[:link][:ai_prompt].present? && Feature.active?(:ai_product_generation, current_seller)
+
     begin
       @product.save!
 
-      if params[:link][:ai_prompt].present? && Feature.active?(:ai_product_generation, current_seller)
+      if ai_generated
         generate_product_details_using_ai
       end
     rescue ActiveRecord::RecordNotSaved, ActiveRecord::RecordInvalid, Link::LinkInvalid
-      @error_message = if @product&.errors&.any?
-        @product.errors.full_messages.first
-      elsif @preorder_link&.errors&.any?
-        @preorder_link.errors.full_messages[0]
-      else
-        "Sorry, something went wrong."
-      end
-      return respond_to do |format|
-        response = { success: false, error_message: @error_message }
-        format.json { render json: response }
-        format.html { render html: "<textarea>#{response.to_json}</textarea>" }
-      end
+      return redirect_to new_product_path, alert: @product.errors.to_hash.transform_values(&:to_sentence).first, inertia: inertia_errors(@product)
     end
 
     create_user_event("add_product")
-    respond_to do |format|
-      response = { success: true, redirect_to: edit_link_path(@product) }
-      format.html { render plain: response.to_json.to_s }
-      format.json { render json: response }
+    if ai_generated
+      redirect_to edit_link_path(@product, ai_generated: true), status: :see_other
+    else
+      redirect_to edit_link_path(@product), status: :see_other
     end
   end
 
@@ -329,7 +281,8 @@ class LinksController < ApplicationController
 
     @title = @product.name
 
-    @presenter = ProductPresenter.new(product: @product, pundit_user:)
+    ai_generated = params[:ai_generated] == "true"
+    @presenter = ProductPresenter.new(product: @product, pundit_user:, ai_generated:)
   end
 
   def update
@@ -360,7 +313,8 @@ class LinksController < ApplicationController
           :shipping_destinations,
           :call_limitation_info,
           :installment_plan,
-          :community_chat_enabled
+          :community_chat_enabled,
+          :default_offer_code_id
         ))
         @product.description = SaveContentUpsellsService.new(seller: @product.user, content: product_permitted_params[:description], old_content: @product.description_was).from_html
         @product.skus_enabled = false
@@ -413,6 +367,7 @@ class LinksController < ApplicationController
         update_availabilities
         update_call_limitation_info
         update_installment_plan
+        update_default_offer_code
 
         Product::SavePostPurchaseCustomFieldsService.new(@product).perform
 
@@ -615,29 +570,40 @@ class LinksController < ApplicationController
                                    :refund_policy, :taxonomy_id)
     end
 
-    def paged_params
-      params.permit(:page, sort: [:key, :direction])
+    def products_page_presenter
+      @products_page_presenter ||= DashboardProductsPagePresenter.new(
+        pundit_user:,
+        query: index_params[:query],
+        products_page: index_params[:products_page],
+        products_sort: index_params[:products_sort],
+        memberships_page: index_params[:memberships_page],
+        memberships_sort: index_params[:memberships_sort]
+      )
     end
 
-    def paginated_memberships(page:, query: nil)
-      memberships = current_seller.products.membership.visible_and_not_archived
-      memberships = memberships.where("name like ?", "%#{query}%") if query.present?
+    def index_params
+      @index_params ||= begin
+        permitted = params.permit(
+          :query, :products_page, :memberships_page,
+          :products_sort_key, :products_sort_direction,
+          :memberships_sort_key, :memberships_sort_direction
+        )
 
-      sort_and_paginate_products(**paged_params[:sort].to_h.symbolize_keys, page:, collection: memberships, per_page: PER_PAGE, user_id: current_seller.id)
+        {
+          query: permitted[:query],
+          products_page: permitted[:products_page],
+          products_sort: extract_sort_params(:products, permitted),
+          memberships_page: permitted[:memberships_page],
+          memberships_sort: extract_sort_params(:memberships, permitted)
+        }
+      end
     end
 
-    def paginated_products(page:, query: nil)
-      products = current_seller
-        .products
-        .includes([
-                    thumbnail: { file_attachment: { blob: { variant_records: { image_attachment: :blob } } } },
-                    thumbnail_alive: { file_attachment: { blob: { variant_records: { image_attachment: :blob } } } },
-                  ])
-        .non_membership
-        .visible_and_not_archived
-      products = products.where("links.name like ?", "%#{query}%") if query.present?
-
-      sort_and_paginate_products(**paged_params[:sort].to_h.symbolize_keys, page:, collection: products, per_page: PER_PAGE, user_id: current_seller.id)
+    def extract_sort_params(prefix, permitted)
+      key = permitted[:"#{prefix}_sort_key"]
+      direction = permitted[:"#{prefix}_sort_direction"]
+      return nil unless %w[name display_price_cents successful_sales_count revenue status].include?(key)
+      { key:, direction: direction == "desc" ? "desc" : "asc" }
     end
 
     def update_removed_file_attributes
@@ -721,6 +687,25 @@ class LinksController < ApplicationController
       if product_permitted_params[:installment_plan].present?
         @product.create_installment_plan!(product_permitted_params[:installment_plan])
       end
+    end
+
+    def update_default_offer_code
+      default_offer_code_id = product_permitted_params[:default_offer_code_id]
+
+      return @product.default_offer_code = nil if default_offer_code_id.blank?
+
+      offer_code = @product.user.offer_codes.alive.find_by_external_id!(default_offer_code_id)
+
+      raise Link::LinkInvalid, "Offer code cannot be expired" if offer_code.inactive?
+      raise Link::LinkInvalid, "Offer code must be associated with this product or be universal" unless valid_for_product?(offer_code)
+
+      @product.default_offer_code = offer_code
+    rescue ActiveRecord::RecordNotFound
+      raise Link::LinkInvalid, "Invalid offer code"
+    end
+
+    def valid_for_product?(offer_code)
+      offer_code.universal? || @product.offer_codes.where(id: offer_code.id).exists?
     end
 
     def toggle_community_chat!(enabled)
