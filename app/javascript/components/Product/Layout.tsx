@@ -240,7 +240,7 @@ const CtaBar = ({
       ([entry]) => {
         if (!entry) return;
 
-        setVisible(!entry.isIntersecting);
+        setVisible(!entry.isIntersecting && entry.boundingClientRect.top < 0);
       },
       { threshold: 0.5 },
     ).observe(ctaButtonRef.current);
