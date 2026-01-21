@@ -280,20 +280,11 @@ $light-body-bg: #f4f4f0 !default;
 --form-element-height: #{$form-element-height};
 --transition-duration: 0.14s;
 
-@media (prefers-color-scheme: dark) {
-  --body-bg: #242423;
-  --primary: 221 221 221;
-  --contrast-primary: 0 0 0;
-  --color: 221 221 221;
-  --filled: 0 0 0;
-  --contrast-filled: 221 221 221;
-  --contrast-black: 221 221 221;
-  --border-alpha: 0.35;
-}
+
 }
 
 $border-width: math.div(size(1), 16);
-$border-color: rgb(var(--parent-color) / var(--border-alpha));
+$border-color: #e0e0e0;
 $backdrop-bg: rgba(0, 0, 0, 0.8);
 $border: solid $border-width $border-color;
 $outline: size(0.125) solid full-color(accent);

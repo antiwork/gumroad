@@ -10,7 +10,7 @@ export const PoweredByFooter = ({ className }: { className?: string }) => {
   return (
     <footer className={classNames("px-4 py-8 text-center lg:py-16", className)}>
       <div>
-        Powered by <a href={Routes.root_url({ host: rootDomain })} className="logo-full" aria-label="Gumroad" />
+        Được cung cấp bởi <a href={Routes.root_url({ host: rootDomain })} className="logo-full" aria-label="Gumroad" />
       </div>
     </footer>
   );

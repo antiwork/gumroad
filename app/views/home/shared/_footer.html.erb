@@ -1,11 +1,11 @@
 <div class="flex flex-col justify-between gap-16 bg-black text-white py-16 px-8 lg:flex-row lg:px-[4vw] lg:py-24 leading-relaxed">
   <div class="max-w-3xl flex flex-col gap-16 w-full">
     <div class="flex flex-col gap-8">
-      <div class="text-3xl lg:leading-tight lg:text-5xl">Subscribe to get tips and tactics to grow the way you want.</div>
+      <div class="text-3xl lg:leading-tight lg:text-5xl">Đăng ký để nhận mẹo và chiến lược phát triển theo cách bạn muốn.</div>
       <form action="https://gumroad.com/follow_from_embed_form" method="post" class="flex gap-1">
         <input name="seller_id" type="hidden" value="6282492303727">
         <div class="lg:flex-1">
-          <input name="email" placeholder="Your email address" type="email">
+          <input name="email" placeholder="Địa chỉ email của bạn" type="email">
         </div>
         <%= render "home/shared/button", text: "→", url: "#", type: "submit", variant: "pink", size: "small" %>
       </form>
@@ -18,18 +18,18 @@
   <div class="max-w-3xl flex flex-col w-full gap-16">
     <div class="flex-1 flex gap-16">
       <div class="flex-1 flex flex-col gap-3">
-        <%= link_to "Discover", discover_path, class: "no-underline hover:text-pink" %>
+        <%= link_to "Khám phá", discover_path, class: "no-underline hover:text-pink" %>
         <%= link_to "Blog", gumroad_blog_root_path, class: "no-underline hover:text-pink" %>
-        <%= link_to "Pricing", pricing_path, class: "no-underline hover:text-pink" %>
-        <%= link_to "Features", features_path, class: "no-underline hover:text-pink" %>
-        <%= link_to "About", about_path, class: "no-underline hover:text-pink" %>
+        <%= link_to "Bảng giá", pricing_path, class: "no-underline hover:text-pink" %>
+        <%= link_to "Tính năng", features_path, class: "no-underline hover:text-pink" %>
+        <%= link_to "Giới thiệu", about_path, class: "no-underline hover:text-pink" %>
         <%= link_to "Small Bets", small_bets_path, class: "no-underline hover:text-pink" %>
       </div>
       <div class="flex-1 flex flex-col gap-3">
-        <%= link_to "Help", help_center_root_path, class: "no-underline hover:text-pink" %>
-        <a href="https://www.youtube.com/playlist?list=PL_DfN-mKCGNuswqERc6sIA8urYAKARc6s" class="no-underline hover:text-pink">Board meetings</a>
-        <%= link_to "Terms of Service", terms_path, class: "no-underline hover:text-pink" %>
-        <%= link_to "Privacy Policy", privacy_path, class: "no-underline hover:text-pink" %>
+        <%= link_to "Trợ giúp", help_center_root_path, class: "no-underline hover:text-pink" %>
+        <a href="https://www.youtube.com/playlist?list=PL_DfN-mKCGNuswqERc6sIA8urYAKARc6s" class="no-underline hover:text-pink">Cuộc họp ban điều hành</a>
+        <%= link_to "Điều khoản dịch vụ", terms_path, class: "no-underline hover:text-pink" %>
+        <%= link_to "Chính sách bảo mật", privacy_path, class: "no-underline hover:text-pink" %>
       </div>
     </div>
     <div class="flex justify-between">
@@ -63,3 +63,4 @@
     </div>
   </div>
 </div>
+

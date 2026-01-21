@@ -50,6 +50,7 @@ interface HeaderRowElementsProps {
   avatarElement: React.ReactNode;
   navElementNoFooter: React.ReactNode;
   navElementWithFooter: React.ReactNode;
+  blogLink: React.ReactNode;
 }
 
 const DesktopHeaderRows: React.FC<HeaderRowElementsProps> = ({
@@ -59,12 +60,14 @@ const DesktopHeaderRows: React.FC<HeaderRowElementsProps> = ({
   cartButton,
   avatarElement,
   navElementNoFooter,
+  blogLink,
 }) => (
   <>
     <div className="flex w-full items-center gap-4">
       {logoLink}
       {searchBar}
       <div className="flex shrink-0 items-center space-x-4">
+        {blogLink}
         {userActionButtons}
         {cartButton}
       </div>
@@ -82,11 +85,13 @@ const MobileHeaderRows: React.FC<HeaderRowElementsProps> = ({
   cartButton,
   avatarElement,
   navElementWithFooter,
+  blogLink,
 }) => (
   <>
     <div className="flex w-full items-center justify-between">
       {logoLink}
       <div className="flex items-center gap-4">
+        {blogLink}
         {avatarElement}
         {cartButton}
       </div>
@@ -174,6 +179,15 @@ export const Layout: React.FC<{
     />
   );
 
+  const blogLink = (
+    <a
+      href={Routes.gumroad_blog_root_url()}
+      className="flex items-center gap-2 rounded-full px-4 py-2 text-white no-underline transition-colors hover:bg-white/10"
+    >
+      Bài viết
+    </a>
+  );
+
   const headerRowElementsProps: HeaderRowElementsProps = {
     logoLink,
     searchBar,
@@ -182,6 +196,7 @@ export const Layout: React.FC<{
     avatarElement,
     navElementNoFooter,
     navElementWithFooter,
+    blogLink,
   };
 
   return (

@@ -49,17 +49,17 @@
   def nav_links
     content_tag :div, class: "flex flex-col justify-center items-center lg:flex-row lg:gap-1 lg:px-6" do
       nav_link("Khám phá", discover_path) +
-      nav_link("Bài viết", gumroad_blog_root_path, {current_page_predicate: -> { request.path.start_with?(gumroad_blog_root_path) }}) +
-      nav_link("Bảng giá", pricing_path) +
-      nav_link("Tính năng", features_path) +
-      nav_link("Giới thiệu", about_path, {current_page_predicate: -> { current_page?(root_path) }})
+      nav_link("Bài viết", gumroad_blog_root_path, {current_page_predicate: -> { request.path.start_with?(gumroad_blog_root_path) }})
+      # nav_link("Bảng giá", pricing_path) +
+      # nav_link("Tính năng", features_path) +
+      # nav_link("Giới thiệu", about_path, {current_page_predicate: -> { current_page?(root_path) }})
     end
   end
 
   def auth_links
     content_tag :div, class: "flex flex-col lg:flex-row lg:h-full" do
       if signed_in?
-        nav_link("Giới thiệu", dashboard_url(host: DOMAIN), category: "button", context: "primary")
+        nav_link("Bán hàng", dashboard_url(host: DOMAIN), category: "button", context: "primary")
       else
         nav_link("Đăng nhập", new_user_session_path, category: "button") +
         nav_link("Bắt đầu bán hàng", new_user_registration_path, category: "button", context: "primary")

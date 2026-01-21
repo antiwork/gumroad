@@ -17,6 +17,9 @@ class HomeController < ApplicationController
                              .where.not(draft: true)
                              .order(updated_at: :desc)
                              .limit(8)
+
+    # Taxonomies for Discover header nav
+    @taxonomies_for_nav = Discover::TaxonomyPresenter.new.taxonomies_for_nav
   end
 
   private

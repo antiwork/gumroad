@@ -61,8 +61,8 @@ export const ClientNavLink = ({
       title={text}
       {...(onClick && { onClick })}
       className={classNames(
-        "flex items-center truncate border-y border-white/50 border-b-transparent px-6 py-4 no-underline last:border-b-white/50 hover:text-accent dark:border-foreground/50 dark:border-b-transparent dark:last:border-b-foreground/50",
-        { "text-accent": !!ariaCurrent },
+        "flex items-center truncate border-y border-transparent px-6 py-4 no-underline hover:bg-gray-50 hover:text-black dark:border-foreground/50 dark:border-b-transparent dark:last:border-b-foreground/50",
+        { "text-accent font-bold bg-gray-50": !!ariaCurrent },
       )}
     >
       {icon ? <Icon name={icon} className="mr-4" /> : null}

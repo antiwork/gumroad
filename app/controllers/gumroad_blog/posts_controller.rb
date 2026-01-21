@@ -12,6 +12,11 @@ class GumroadBlog::PostsController < GumroadBlog::BaseController
   def index
     authorize [:gumroad_blog, :posts]
 
+    if @blog_owner.nil?
+      @props = { posts: [] }
+      return
+    end
+
     posts = @blog_owner.installments
       .visible_on_profile
       .order(published_at: :desc)

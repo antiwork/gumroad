@@ -498,20 +498,6 @@
       </div>
    </section>
 
-   <div class="flex flex-col gap-16 py-16 lg:gap-24">
-      <div
-         class="flex flex-col justify-center px-8 lg:px-[4vw] gap-6 mx-auto text-center max-w-5xl"
-      >
-         <h2 class="text-5xl md:text-6xl lg:text-7xl">
-            Khả năng không giới hạn
-         </h2>
-         <p class="text-xl md:text-2xl">
-            Khám phá các sản phẩm và người sáng tạo bán chạy nhất
-         </p>
-      </div>
-
-      <%= render "home/shared/discovery_category" %>
-   </div>
    <%# Hiển thị sản phẩm top sale%>
    <section class="py-16 bg-white">
       <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
@@ -580,66 +566,6 @@
       </div>
    </section>
 
-   <div
-      class="bg-gray flex flex-col lg:flex-row rounded-2xl px-4 gap-8 mx-auto max-w-6xl"
-   >
-      <div class="flex flex-col overflow-hidden lg:flex-col lg:w-1/2 gap-8">
-         <div
-            class="flex bg-white items-center px-4 py-10 md:p-10 border lg:border border-dark-gray/50 rounded-2xl"
-         >
-            <h3 class="font-medium text-4xl md:text-5xl">
-               Đừng mạo hiểm.
-               <br />
-               Điều đó thật đáng sợ!
-            </h3>
-         </div>
-         <div
-            class="bg-white py-12 md:py-24 p-8 sm:p-32 md:p-32 lg:py-10 lg:px-12 flex items-center justify-center border lg:border rounded-2xl border-dark-gray/50"
-         >
-            <div class="relative">
-               <%= image_tag "about/blog-post-circle-1.svg", alt: "Sell anywhere
-               feature illustration", class: "w-full h-auto object-cover
-               mx-auto", data: { parallax: true } %>
-               <div
-                  class="absolute -top-4 left-0 sm:-left-8 bg-white rounded-2xl px-6 sm:px-8 py-4 border border-black"
-               >
-                  <p class="text-xl font-medium m-0">
-                     Thay vì bán một cuốn sách...
-                  </p>
-               </div>
-            </div>
-         </div>
-      </div>
-
-      <div class="flex flex-col overflow-hidden lg:flex-col lg:w-1/2 gap-8">
-         <div
-            class="bg-white py-12 md:py-24 p-8 sm:p-32 md:p-32 lg:py-10 lg:px-12 flex items-center justify-center border lg:border rounded-2xl border-dark-gray/50"
-         >
-            <div class="relative">
-               <%= image_tag "about/blog-post-circle-2.svg", alt: "Sell anywhere
-               feature illustration", class: "w-full h-auto object-cover
-               mx-auto", data: { parallax: true } %>
-               <div
-                  class="absolute -bottom-2 left-0 sm:-left-8 bg-white rounded-2xl px-6 sm:px-6 py-4 border border-black"
-               >
-                  <p class="text-xl font-medium m-0">
-                     ...hãy bắt đầu bằng việc bán một bài viết!
-                  </p>
-               </div>
-            </div>
-         </div>
-         <div
-            class="flex bg-white items-center px-4 py-10 md:p-10 border lg:border border-dark-gray/50 rounded-2xl"
-         >
-            <h3 class="font-medium text-4xl md:text-5xl">
-               Đặt cược nhỏ.
-               <br />
-               Điều đó thật thú vị!
-            </h3>
-         </div>
-      </div>
-   </div>
-
    <div class="px-8 py-16 lg:px-[4vw] lg:py-24">
       <div
          class="flex flex-col lg:flex-col gap-8 lg:gap-16 max-w-5xl mx-auto lg:items-center"
@@ -653,8 +579,7 @@
       </div>
    </div>
 
-   <%= image_tag "about/new-sale.svg", alt: "New sale illustration", class:
-   "w-full min-h-[300px] object-cover" %> <%= render "home/shared/footer" %> <%=
+   <%= render "home/shared/footer" %> <%=
    javascript_include_tag 'hero_parallax', nonce:
    SecureHeaders.content_security_policy_script_nonce(request), defer: true %>
 </div>

@@ -57,8 +57,8 @@ const BaseNavLink = ({
       href={href}
       title={text}
       className={classNames(
-        "flex items-center truncate border-y border-white/50 border-b-transparent px-6 py-4 no-underline last:border-b-white/50 hover:text-accent dark:border-foreground/50 dark:border-b-transparent dark:last:border-b-foreground/50",
-        { "text-accent": !!ariaCurrent },
+        "flex items-center truncate border-y border-transparent px-6 py-4 no-underline hover:bg-gray-50 hover:text-black dark:border-foreground/50 dark:border-b-transparent dark:last:border-b-foreground/50",
+        { "text-accent font-bold bg-gray-50": !!ariaCurrent },
       )}
       {...props}
     >
@@ -124,7 +124,7 @@ export const Nav = ({ title, children, footer }: Props) => {
       <nav
         aria-label="Main"
         className={classNames(
-          "flex flex-col overflow-x-hidden overflow-y-auto bg-black text-white lg:static lg:w-52 dark:text-foreground",
+          "flex flex-col overflow-x-hidden overflow-y-auto bg-white text-gray-900 lg:static lg:w-52 dark:text-foreground border-r border-gray-200",
           { "fixed z-10 size-full": open },
         )}
       >
@@ -172,7 +172,7 @@ export const UnbecomeDropdownItem = () => {
     }
   });
 
-  return <NavLinkDropdownItem text="Unbecome" icon="box-arrow-in-right-fill" href="#" onClick={makeRequest} />;
+  return <NavLinkDropdownItem text="Thoát chế độ mạo danh" icon="box-arrow-in-right-fill" href="#" onClick={makeRequest} />;
 };
 
 export const NavLinkDropdownMembershipItem = ({ teamMembership }: { teamMembership: TeamMembership }) => {

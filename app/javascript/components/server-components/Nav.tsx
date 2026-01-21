@@ -68,12 +68,12 @@ export const Nav = (props: Props) => {
       footer={
         <>
           {currentSeller?.isBuyer ? (
-            <NavLink text="Start selling" icon="shop-window-fill" href={Routes.dashboard_url(routeParams)} />
+            <NavLink text="Bắt đầu bán hàng" icon="shop-window-fill" href={Routes.dashboard_url(routeParams)} />
           ) : null}
-          <NavLink text="Settings" icon="gear-fill" href={Routes.settings_main_url(routeParams)} />
+          <NavLink text="Cài đặt" icon="gear-fill" href={Routes.settings_main_url(routeParams)} />
 
           <NavLink
-            text="Help"
+            text="Trợ giúp"
             icon="book"
             href={Routes.help_center_root_url(routeParams)}
             badge={
@@ -95,12 +95,12 @@ export const Nav = (props: Props) => {
                 </>
               ) : null}
               <NavLinkDropdownItem
-                text="Profile"
+                text="Hồ sơ"
                 icon="shop-window-fill"
                 href={Routes.root_url({ ...routeParams, host: currentSeller?.subdomain ?? routeParams.host })}
               />
-              <NavLinkDropdownItem text="Affiliates" icon="gift-fill" href={Routes.affiliates_url(routeParams)} />
-              <NavLinkDropdownItem text="Logout" icon="box-arrow-in-right-fill" href={Routes.logout_url(routeParams)} />
+              <NavLinkDropdownItem text="Tiếp thị liên kết" icon="gift-fill" href={Routes.affiliates_url(routeParams)} />
+              <NavLinkDropdownItem text="Đăng xuất" icon="box-arrow-in-right-fill" href={Routes.logout_url(routeParams)} />
               {loggedInUser?.isImpersonating ? <UnbecomeDropdownItem /> : null}
             </div>
           </DashboardNavProfilePopover>
@@ -109,18 +109,18 @@ export const Nav = (props: Props) => {
       {...props}
     >
       <NavSection>
-        <NavLink text="Home" icon="shop-window-fill" href={Routes.dashboard_url(routeParams)} exactHrefMatch />
+        <NavLink text="Trang chủ" icon="shop-window-fill" href={Routes.dashboard_url(routeParams)} exactHrefMatch />
         <NavLink
-          text="Products"
+          text="Sản phẩm"
           icon="archive-fill"
           href={Routes.products_url(routeParams)}
           additionalPatterns={[Routes.bundle_path(".", routeParams).slice(0, -1)]}
         />
         {loggedInUser?.policies.collaborator.create ? (
-          <NavLink text="Collaborators" icon="deal-fill" href={Routes.collaborators_url(routeParams)} />
+          <NavLink text="Cộng tác viên" icon="deal-fill" href={Routes.collaborators_url(routeParams)} />
         ) : null}
         <NavLink
-          text="Checkout"
+          text="Thanh toán"
           icon="cart3-fill"
           href={Routes.checkout_discounts_url(routeParams)}
           additionalPatterns={[Routes.checkout_form_url(routeParams), Routes.checkout_upsells_url(routeParams)]}
@@ -131,10 +131,10 @@ export const Nav = (props: Props) => {
           href={Routes.emails_url(routeParams)}
           additionalPatterns={[Routes.followers_url(routeParams)]}
         />
-        <NavLink text="Workflows" icon="diagram-2-fill" href={Routes.workflows_url(routeParams)} />
-        <NavLink text="Sales" icon="solid-currency-dollar" href={Routes.customers_url(routeParams)} />
+        <NavLink text="Quy trình làm việc" icon="diagram-2-fill" href={Routes.workflows_url(routeParams)} />
+        <NavLink text="Bán hàng" icon="solid-currency-dollar" href={Routes.customers_url(routeParams)} />
         <NavLink
-          text="Analytics"
+          text="Phân tích"
           icon="bar-chart-fill"
           href={Routes.sales_dashboard_url(routeParams)}
           additionalPatterns={[
@@ -144,17 +144,17 @@ export const Nav = (props: Props) => {
           ]}
         />
         {loggedInUser?.policies.balance.index ? (
-          <NavLink text="Payouts" icon="bank" href={Routes.balance_url(routeParams)} />
+          <NavLink text="Thanh toán" icon="bank" href={Routes.balance_url(routeParams)} />
         ) : null}
         {loggedInUser?.policies.community.index ? (
-          <NavLink text="Community" icon="solid-chat-alt" href={Routes.community_path(routeParams)} />
+          <NavLink text="Cộng đồng" icon="solid-chat-alt" href={Routes.community_path(routeParams)} />
         ) : null}
       </NavSection>
       <NavSection>
-        <NavLink text="Discover" icon="solid-search" href={discoverUrl} exactHrefMatch />
+        <NavLink text="Khám phá" icon="solid-search" href={discoverUrl} exactHrefMatch />
         {currentSeller?.id === loggedInUser?.id ? (
           <NavLink
-            text="Library"
+            text="Thư viện"
             icon="bookmark-heart-fill"
             href={Routes.library_url(routeParams)}
             additionalPatterns={[Routes.wishlists_url(routeParams), Routes.reviews_url(routeParams)]}

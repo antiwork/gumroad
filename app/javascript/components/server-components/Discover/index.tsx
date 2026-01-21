@@ -374,7 +374,7 @@ const Discover = (props: Props) => {
           </div>
         </header>
       ) : null}
-      <div className="grid gap-16! px-4 py-6 lg:ps-16 lg:pe-16">
+      <div className="grid gap-16! px-4 py-6 lg:ps-16 lg:pe-16 container mx-auto">
         {showRecommendedSections ? (
           <ProductsCarousel
             products={recommendedProducts}
@@ -387,12 +387,12 @@ const Discover = (props: Props) => {
               <h2>
                 {state.params.query || hasOfferCode
                   ? state.results?.products.length
-                    ? `Showing 1-${state.results.products.length} of ${state.results.total} products`
+                    ? `Hiển thị 1-${state.results.products.length} của ${state.results.total} sản phẩm`
                     : null
                   : sortTitles[is<keyof typeof sortTitles>(state.params.sort) ? state.params.sort : "trending"]}
               </h2>
               <button
-                className="flex cursor-pointer items-center gap-1 rounded-full border px-3 py-1.5 text-sm transition-colors hover:bg-gray-100"
+                className="flex cursor-pointer items-center gap-1 rounded-full border px-3 py-1.5 text-sm transition-colors"
                 onClick={() => setHideFilters(!hideFilters)}
                 aria-expanded={!hideFilters}
                 aria-label={hideFilters ? "Hiện bộ lọc" : "Ẩn bộ lọc"}
