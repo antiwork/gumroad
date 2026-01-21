@@ -77,7 +77,7 @@ class User::OmniauthCallbacksController < Devise::OmniauthCallbacksController
     auth = request.env["omniauth.auth"]
     referer = request.env["omniauth.params"]["referer"]
 
-    Rails.logger.info("Stripe Connect referer: #{referer}, parameters: #{auth}")
+    Rails.logger.info("Stripe Connect referer: #{referer}, parameters: #{LogRedactor.redact(auth)}")
 
     if logged_in_user&.stripe_connect_account.present?
       flash[:alert] = "You already have another Stripe account connected with your Gumroad account."

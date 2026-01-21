@@ -265,6 +265,11 @@ export const Product = ({
 
   const notForSaleMessage = getNotForSaleMessage(product);
   const [discountCode, setDiscountCode] = React.useState(initialDiscountCode);
+
+  React.useEffect(() => {
+    setDiscountCode(initialDiscountCode);
+  }, [initialDiscountCode]);
+
   const selectionAttributes = applySelection(product, discountCode?.valid ? discountCode.discount : null, selection);
   let { basePriceCents } = selectionAttributes;
   const { priceCents, discountedPriceCents, pppDiscounted, isPWYW, maxQuantity } = selectionAttributes;
