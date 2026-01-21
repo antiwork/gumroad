@@ -17,6 +17,7 @@ type Props<Option> = {
     props: React.HTMLAttributes<HTMLElement> & { ref: React.RefCallback<HTMLElement> },
     index: number,
   ) => React.ReactElement;
+  maxHeight?: string | number;
 };
 
 export const ComboBox = <Option extends unknown>({
@@ -29,6 +30,7 @@ export const ComboBox = <Option extends unknown>({
   options,
   option,
   className,
+  maxHeight,
   ...rest
 }: Props<Option> & Omit<React.HTMLAttributes<HTMLDivElement>, keyof Props<Option>>) => {
   const [open, setOpen] = React.useState(openProp ?? false);
@@ -113,7 +115,12 @@ export const ComboBox = <Option extends unknown>({
             }),
       })}
       <div hidden={!open} onMouseDown={(e) => e.preventDefault()}>
-        <datalist id={uid} onMouseOut={() => setFocusedOptionIndex(null)} aria-multiselectable={multiple}>
+        <datalist
+          id={uid}
+          onMouseOut={() => setFocusedOptionIndex(null)}
+          aria-multiselectable={multiple}
+          style={maxHeight ? { maxHeight } : undefined}
+        >
           {options.map((item, index) => (
             <React.Fragment key={index}>
               {option(

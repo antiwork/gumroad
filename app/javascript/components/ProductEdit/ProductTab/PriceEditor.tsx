@@ -5,7 +5,9 @@ import { CurrencyCode, formatPriceCentsWithoutCurrencySymbol } from "$app/utils/
 import { Details } from "$app/components/Details";
 import { Dropdown } from "$app/components/Dropdown";
 import { PriceInput } from "$app/components/PriceInput";
+import { DefaultDiscountCodeSelector } from "$app/components/ProductEdit/ProductTab/DefaultDiscountCodeSelector";
 import { InstallmentPlanEditor } from "$app/components/ProductEdit/ProductTab/InstallmentPlanEditor";
+import { ProductEditContext } from "$app/components/ProductEdit/state";
 import { Toggle } from "$app/components/Toggle";
 import { Alert } from "$app/components/ui/Alert";
 
@@ -40,6 +42,7 @@ export const PriceEditor = ({
 }) => {
   const uid = React.useId();
   const isFreeProduct = priceCents === 0;
+  const productEditContext = React.useContext(ProductEditContext);
 
   return (
     <fieldset>
@@ -90,6 +93,7 @@ export const PriceEditor = ({
           onNumberOfInstallmentsChange={onNumberOfInstallmentsChange}
         />
       ) : null}
+      {productEditContext ? <DefaultDiscountCodeSelector /> : null}
     </fieldset>
   );
 };
