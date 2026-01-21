@@ -3,7 +3,7 @@
 class Admin::PaydaysController < Admin::BaseController
   # Pay the seller for all their balances up to and including `params[:payout_period_end_date]`.
   def pay_user
-    user = User.find(params[:id])
+    user = User.find_by_external_id!(params[:id])
     date = Date.parse(payday_params[:payout_period_end_date])
 
     payout_processor_type = if payday_params[:payout_processor] == PayoutProcessorType::STRIPE

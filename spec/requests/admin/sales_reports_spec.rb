@@ -73,6 +73,35 @@ describe "Admin::SalesReportsController", type: :system, js: true do
         expect(page).to have_text("Processing")
       end
     end
+
+    context "when a processing job completes" do
+      it "automatically updates the UI to show the download link" do
+        processing_job = {
+          job_id: "123",
+          country_code: "GB",
+          start_date: "2023-01-01",
+          end_date: "2023-03-31",
+          sales_type: "all_sales",
+          enqueued_at: Time.current.to_s,
+          status: "processing"
+        }
+
+        completed_job = processing_job.merge(
+          status: "completed",
+          download_url: "https://example.com/report.csv"
+        )
+
+        allow($redis).to receive(:lrange).with(RedisKey.sales_report_jobs, 0, 19).and_return([processing_job.to_json], [completed_job.to_json])
+
+        visit admin_sales_reports_path
+
+        expect(page).to have_text("Processing")
+        expect(page).not_to have_link("United Kingdom_all_sales_report_2023-01-01_2023-03-31")
+
+        expect(page).to have_link("United Kingdom_all_sales_report_2023-01-01_2023-03-31", wait: 5)
+        expect(page).not_to have_text("Processing")
+      end
+    end
   end
 
   describe "POST /admin/sales_reports" do

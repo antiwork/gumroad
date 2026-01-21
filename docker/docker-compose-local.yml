@@ -65,7 +65,7 @@ services:
       minio:
         condition: service_healthy
     entrypoint: >
-      /bin/sh -c " /usr/bin/mc alias set myminio http://minio:9000 minioadmin minioadmin; for bucket in gumroad-dev gumroad-specs gumroad-invoices gumroad-dev-public-storage; do
+      /bin/sh -c " /usr/bin/mc alias set myminio http://minio:9000 minioadmin minioadmin; for bucket in gumroad-dev gumroad-specs gumroad-invoices gumroad-dev-public-storage gumroad-reporting-dev; do
         if ! /usr/bin/mc ls myminio/$$bucket > /dev/null 2>&1; then
           echo \"Bucket $$bucket does not exist. Creating...\";
           /usr/bin/mc mb myminio/$$bucket;
