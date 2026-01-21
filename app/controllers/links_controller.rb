@@ -30,7 +30,7 @@ class LinksController < ApplicationController
   before_action :fetch_product_and_enforce_ownership, only: %i[destroy]
   before_action :fetch_product_and_enforce_access, only: %i[update publish unpublish release_preorder update_sections]
 
-  layout "inertia", only: [:index, :new]
+  layout "inertia", only: [:index, :new, :edit]
 
   def index
     authorize Link
@@ -90,23 +90,32 @@ class LinksController < ApplicationController
     @product.is_bundle = @product.native_type == Link::NATIVE_TYPE_BUNDLE
     @product.json_data[:custom_button_text_option] = "donate_prompt" if @product.native_type == Link::NATIVE_TYPE_COFFEE
 
-    ai_generated = params[:link][:ai_prompt].present? && Feature.active?(:ai_product_generation, current_seller)
-
     begin
       @product.save!
 
-      if ai_generated
+      if params[:link][:ai_prompt].present? && Feature.active?(:ai_product_generation, current_seller)
         generate_product_details_using_ai
       end
     rescue ActiveRecord::RecordNotSaved, ActiveRecord::RecordInvalid, Link::LinkInvalid
-      return redirect_to new_product_path, alert: @product.errors.to_hash.transform_values(&:to_sentence).first, inertia: inertia_errors(@product)
+      @error_message = if @product&.errors&.any?
+        @product.errors.full_messages.first
+      elsif @preorder_link&.errors&.any?
+        @preorder_link.errors.full_messages[0]
+      else
+        "Sorry, something went wrong."
+      end
+      return respond_to do |format|
+        response = { success: false, error_message: @error_message }
+        format.json { render json: response }
+        format.html { render html: "<textarea>#{response.to_json}</textarea>" }
+      end
     end
 
     create_user_event("add_product")
-    if ai_generated
-      redirect_to edit_link_path(@product, ai_generated: true), status: :see_other
-    else
-      redirect_to edit_link_path(@product), status: :see_other
+    respond_to do |format|
+      response = { success: true, redirect_to: edit_link_path(@product) }
+      format.html { render plain: response.to_json.to_s }
+      format.json { render json: response }
     end
   end
 
@@ -275,18 +284,27 @@ class LinksController < ApplicationController
 
   def edit
     fetch_product_by_unique_permalink
-    authorize @product
+    authorize @product, :edit?
 
-    redirect_to bundle_path(@product.external_id) if @product.is_bundle?
+    if @product.is_bundle?
+      return redirect_to bundle_path(@product.external_id)
+    end
 
     @title = @product.name
+    presenter = ProductPresenter.new(product: @product, pundit_user:)
+    edit_props = presenter.edit_props
 
-    ai_generated = params[:ai_generated] == "true"
-    @presenter = ProductPresenter.new(product: @product, pundit_user:, ai_generated:)
+    render inertia: "Products/Edit", props: {
+      edit_props:,
+    }
   end
 
   def update
-    authorize @product
+    authorize @product, :update?
+
+    error_message = nil
+    warning_message = nil
+
     begin
       ActiveRecord::Base.transaction do
         @product.assign_attributes(product_permitted_params.except(
@@ -313,8 +331,7 @@ class LinksController < ApplicationController
           :shipping_destinations,
           :call_limitation_info,
           :installment_plan,
-          :community_chat_enabled,
-          :default_offer_code_id
+          :community_chat_enabled
         ))
         @product.description = SaveContentUpsellsService.new(seller: @product.user, content: product_permitted_params[:description], old_content: @product.description_was).from_html
         @product.skus_enabled = false
@@ -336,7 +353,8 @@ class LinksController < ApplicationController
           begin
             Product::SaveCancellationDiscountService.new(@product, product_permitted_params[:cancellation_discount]).perform
           rescue ActiveRecord::RecordInvalid => e
-            return render json: { error_message: e.record.errors.full_messages.first }, status: :unprocessable_entity
+            error_message = e.record.errors.full_messages.first
+            raise ActiveRecord::Rollback
           end
         end
 
@@ -353,10 +371,10 @@ class LinksController < ApplicationController
         SaveFilesService.perform(@product, product_permitted_params, rich_content_params)
         existing_rich_contents = @product.alive_rich_contents.to_a
         rich_content.each.with_index do |product_rich_content, index|
-          rich_content = existing_rich_contents.find { |c| c.external_id === product_rich_content[:id] } || @product.alive_rich_contents.build
-          product_rich_content[:description] = SaveContentUpsellsService.new(seller: @product.user, content: product_rich_content[:description], old_content: rich_content.description || []).from_rich_content
-          rich_content.update!(title: product_rich_content[:title].presence, description: product_rich_content[:description].presence || [], position: index)
-          rich_contents_to_keep << rich_content
+          rich_content_obj = existing_rich_contents.find { |c| c.external_id === product_rich_content[:id] } || @product.alive_rich_contents.build
+          product_rich_content[:description] = SaveContentUpsellsService.new(seller: @product.user, content: product_rich_content[:description], old_content: rich_content_obj.description || []).from_rich_content
+          rich_content_obj.update!(title: product_rich_content[:title].presence, description: product_rich_content[:description].presence || [], position: index)
+          rich_contents_to_keep << rich_content_obj
         end
         (existing_rich_contents - rich_contents_to_keep).each(&:mark_deleted!)
 
@@ -367,7 +385,6 @@ class LinksController < ApplicationController
         update_availabilities
         update_call_limitation_info
         update_installment_plan
-        update_default_offer_code
 
         Product::SavePostPurchaseCustomFieldsService.new(@product).perform
 
@@ -380,40 +397,68 @@ class LinksController < ApplicationController
         toggle_community_chat!(product_permitted_params[:community_chat_enabled])
         @product.generate_product_files_archives!
       end
-    rescue ActiveRecord::RecordNotSaved, ActiveRecord::RecordInvalid, Link::LinkInvalid => e
-      if @product.errors.details[:custom_fields].present?
-        error_message = "You must add titles to all of your inputs"
-      else
-        error_message = @product.errors.full_messages.first || e.message
+    rescue ActiveRecord::RecordNotSaved, ActiveRecord::RecordInvalid, Link::LinkInvalid, ActiveRecord::Rollback => e
+      if error_message.blank?
+        if @product.errors.details[:custom_fields].present?
+          error_message = "You must add titles to all of your inputs"
+        else
+          error_message = @product.errors.full_messages.first || e.message
+        end
       end
-      return render json: { error_message: }, status: :unprocessable_entity
-    end
-    invalid_currency_offer_codes = @product.product_and_universal_offer_codes.reject do |offer_code|
-      offer_code.is_currency_valid?(@product)
-    end.map(&:code)
-    invalid_amount_offer_codes = @product.product_and_universal_offer_codes.reject { _1.is_amount_valid?(@product) }.map(&:code)
-
-    all_invalid_offer_codes = (invalid_currency_offer_codes + invalid_amount_offer_codes).uniq
-
-    if all_invalid_offer_codes.any?
-      # Determine the main issue type for the message
-      has_currency_issues = invalid_currency_offer_codes.any?
-      has_amount_issues = invalid_amount_offer_codes.any?
-
-      if has_currency_issues && has_amount_issues
-        issue_description = "#{"has".pluralize(all_invalid_offer_codes.count)} currency mismatches or would discount this product below #{@product.min_price_formatted}"
-      elsif has_currency_issues
-        issue_description = "#{"has".pluralize(all_invalid_offer_codes.count)} currency #{"mismatch".pluralize(all_invalid_offer_codes.count)} with this product"
-      else
-        issue_description = "#{all_invalid_offer_codes.count > 1 ? "discount" : "discounts"} this product below #{@product.min_price_formatted}, but not to #{MoneyFormatter.format(0, @product.price_currency_type.to_sym, no_cents_if_whole: true, symbol: true)}"
-      end
-
-      return render json: {
-        warning_message: "The following offer #{"code".pluralize(all_invalid_offer_codes.count)} #{issue_description}: #{all_invalid_offer_codes.join(", ")}. Please update #{all_invalid_offer_codes.length > 1 ? "them or they" : "it or it"} will not work at checkout."
-      }
     end
 
-    head :no_content
+    if error_message.blank?
+      invalid_currency_offer_codes = @product.product_and_universal_offer_codes.reject do |offer_code|
+        offer_code.is_currency_valid?(@product)
+      end.map(&:code)
+      invalid_amount_offer_codes = @product.product_and_universal_offer_codes.reject { _1.is_amount_valid?(@product) }.map(&:code)
+
+      all_invalid_offer_codes = (invalid_currency_offer_codes + invalid_amount_offer_codes).uniq
+
+      if all_invalid_offer_codes.any?
+        has_currency_issues = invalid_currency_offer_codes.any?
+        has_amount_issues = invalid_amount_offer_codes.any?
+
+        issue_description = if has_currency_issues && has_amount_issues
+                              "#{"has".pluralize(all_invalid_offer_codes.count)} currency mismatches or would discount this product below #{@product.min_price_formatted}"
+                            elsif has_currency_issues
+                              "#{"has".pluralize(all_invalid_offer_codes.count)} currency #{"mismatch".pluralize(all_invalid_offer_codes.count)} with this product"
+                            else
+                              "#{all_invalid_offer_codes.count > 1 ? "discount" : "discounts"} this product below #{@product.min_price_formatted}, but not to #{MoneyFormatter.format(0, @product.price_currency_type.to_sym, no_cents_if_whole: true, symbol: true)}"
+                            end
+
+        warning_message = "The following offer #{"code".pluralize(all_invalid_offer_codes.count)} #{issue_description}: #{all_invalid_offer_codes.join(", ")}. Please update #{all_invalid_offer_codes.length > 1 ? "them or they" : "it or it"} will not work at checkout."
+      end
+    end
+
+    respond_to do |format|
+      format.html do
+        if error_message.present?
+          redirect_to edit_link_path(@product.unique_permalink),
+            inertia: { errors: { base: [error_message] } },
+            alert: error_message,
+            status: :see_other
+        elsif warning_message.present?
+          redirect_to edit_link_path(@product.unique_permalink),
+            alert: warning_message,
+            status: :see_other
+        else
+          redirect_to edit_link_path(@product.unique_permalink),
+            notice: "Product updated successfully",
+            status: :see_other
+        end
+      end
+
+      format.json do
+        if error_message.present?
+          render json: { error_message: }, status: :unprocessable_entity
+        elsif warning_message.present?
+          render json: { warning_message: }
+        else
+          head :no_content
+        end
+      end
+    end
   end
 
   def unpublish
@@ -687,25 +732,6 @@ class LinksController < ApplicationController
       if product_permitted_params[:installment_plan].present?
         @product.create_installment_plan!(product_permitted_params[:installment_plan])
       end
-    end
-
-    def update_default_offer_code
-      default_offer_code_id = product_permitted_params[:default_offer_code_id]
-
-      return @product.default_offer_code = nil if default_offer_code_id.blank?
-
-      offer_code = @product.user.offer_codes.alive.find_by_external_id!(default_offer_code_id)
-
-      raise Link::LinkInvalid, "Offer code cannot be expired" if offer_code.inactive?
-      raise Link::LinkInvalid, "Offer code must be associated with this product or be universal" unless valid_for_product?(offer_code)
-
-      @product.default_offer_code = offer_code
-    rescue ActiveRecord::RecordNotFound
-      raise Link::LinkInvalid, "Invalid offer code"
-    end
-
-    def valid_for_product?(offer_code)
-      offer_code.universal? || @product.offer_codes.where(id: offer_code.id).exists?
     end
 
     def toggle_community_chat!(enabled)
