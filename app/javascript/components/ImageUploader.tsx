@@ -2,7 +2,7 @@ import * as React from "react";
 
 import FileUtils from "$app/utils/file";
 
-import { Button } from "$app/components/Button";
+import { Button, buttonVariants } from "$app/components/Button";
 import { Icon } from "$app/components/Icons";
 import { LoadingSpinner } from "$app/components/LoadingSpinner";
 import { showAlert } from "$app/components/server-components/Alert";
@@ -43,7 +43,7 @@ export const ImageUploader = ({
         </Placeholder>
       ) : imageUrl == null ? (
         <Placeholder className="aspect-square items-center" style={{ background }}>
-          <label className="button primary">
+          <label className={buttonVariants({ size: "default", color: "primary" })}>
             <input
               type="file"
               id={id}

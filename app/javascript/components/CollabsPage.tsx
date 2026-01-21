@@ -3,7 +3,7 @@ import * as React from "react";
 import { Membership, Product } from "$app/data/collabs";
 import { formatPriceCentsWithCurrencySymbol } from "$app/utils/currency";
 
-import { NavigationButton } from "$app/components/Button";
+import { NavigationButtonInertia } from "$app/components/NavigationButton";
 import { PaginationProps } from "$app/components/Pagination";
 import { ProductsLayout } from "$app/components/ProductsLayout";
 import { CollabsMembershipsTable } from "$app/components/ProductsPage/Collabs/MembershipsTable";
@@ -16,10 +16,14 @@ import { WithTooltip } from "$app/components/WithTooltip";
 import placeholder from "$assets/images/placeholders/affiliated.png";
 
 export type CollabsPageProps = {
-  memberships: Membership[];
-  memberships_pagination: PaginationProps;
-  products: Product[];
-  products_pagination: PaginationProps;
+  products_data: {
+    products: Product[];
+    pagination: PaginationProps;
+  };
+  memberships_data: {
+    memberships: Membership[];
+    pagination: PaginationProps;
+  };
   stats: {
     total_revenue: number;
     total_customers: number;
@@ -31,10 +35,8 @@ export type CollabsPageProps = {
 };
 
 const CollabsPage = ({
-  memberships,
-  memberships_pagination: membershipsPagination,
-  products,
-  products_pagination: productsPagination,
+  products_data: { products, pagination: productsPagination },
+  memberships_data: { memberships, pagination: membershipsPagination },
   stats,
   archived_tab_visible: archivedTabVisible,
   collaborators_disabled_reason: collaboratorsDisabledReason,
@@ -50,13 +52,13 @@ const CollabsPage = ({
             <h2>Create your first collab!</h2>
             Offer a product in collaboration with another Gumroad creator to grow your audience.
             <WithTooltip position="top" tip={collaboratorsDisabledReason}>
-              <NavigationButton
+              <NavigationButtonInertia
                 disabled={collaboratorsDisabledReason !== null}
                 href="/collaborators/new"
                 color="accent"
               >
                 Add a collab
-              </NavigationButton>
+              </NavigationButtonInertia>
             </WithTooltip>
             <p>
               or{" "}

@@ -4,6 +4,7 @@ import * as React from "react";
 import { cast } from "ts-safe-cast";
 
 import Errors from "$app/components/Admin/Form/Errors";
+import { Button } from "$app/components/Button";
 
 type Props = {
   countries: [string, string][];
@@ -124,9 +125,9 @@ const AdminSalesReportsForm = ({ countries, sales_types, authenticityToken }: Pr
           <Errors errors={errors.sales_report?.sales_type} label="Type of sales" />
         </div>
 
-        <button type="submit" className="button primary" disabled={form.processing}>
+        <Button type="submit" color="primary" disabled={form.processing}>
           {form.processing ? "Generating..." : "Generate report"}
-        </button>
+        </Button>
 
         <input type="hidden" name="authenticity_token" value={form.data.authenticity_token} />
       </section>

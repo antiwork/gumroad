@@ -2,7 +2,7 @@
 
 require "spec_helper"
 
-describe "Embed scenario", type: :system, js: true do
+describe "Embed scenario", type: :system, js: true, mock_easypost: true do
   include EmbedHelpers
 
   after(:all) { cleanup_embed_artifacts }

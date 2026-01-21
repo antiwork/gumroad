@@ -4,6 +4,7 @@ import { type Product } from "$app/components/Analytics";
 import { Button } from "$app/components/Button";
 import { Icon } from "$app/components/Icons";
 import { Popover } from "$app/components/Popover";
+import { Card, CardContent } from "$app/components/ui/Card";
 
 export type ProductOption = Product & { selected: boolean };
 
@@ -15,6 +16,7 @@ export const ProductsPopover = ({
   setProducts: React.Dispatch<React.SetStateAction<ProductOption[]>>;
 }) => (
   <Popover
+    dropdownClassName="p-0!"
     trigger={
       <span className="input">
         <div className="fake-input">Select products...</div>
@@ -22,9 +24,9 @@ export const ProductsPopover = ({
       </span>
     }
   >
-    <div className="stack">
-      <div>
-        <fieldset>
+    <Card className="border-none shadow-none">
+      <CardContent>
+        <fieldset className="grow basis-0">
           <label>
             <input
               type="checkbox"
@@ -56,16 +58,17 @@ export const ProductsPopover = ({
             </label>
           ))}
         </fieldset>
-      </div>
-      <div>
+      </CardContent>
+      <CardContent>
         <Button
           onClick={() =>
             setProducts((prevProducts) => prevProducts.map((product) => ({ ...product, selected: !product.selected })))
           }
+          className="grow basis-0"
         >
           Toggle selected
         </Button>
-      </div>
-    </div>
+      </CardContent>
+    </Card>
   </Popover>
 );

@@ -3,7 +3,7 @@ import { createCast } from "ts-safe-cast";
 
 import { register } from "$app/utils/serverComponentUtil";
 
-import { Button } from "$app/components/Button";
+import { Button, buttonVariants } from "$app/components/Button";
 import { Icon } from "$app/components/Icons";
 import { Popover } from "$app/components/Popover";
 import { Separator } from "$app/components/Separator";
@@ -23,7 +23,7 @@ export const SearchPopover = ({ card_types }: Props) => {
       aria-label="Toggle Search"
       trigger={
         <WithTooltip tip="Search" position="bottom">
-          <div className="button">
+          <div className={buttonVariants({ size: "default" })}>
             <Icon name="solid-search" />
           </div>
         </WithTooltip>
