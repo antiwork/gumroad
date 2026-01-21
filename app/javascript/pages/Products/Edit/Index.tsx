@@ -9,7 +9,6 @@ import { useImageUpload } from "$app/components/ProductEdit/ProductTab/Descripti
 
 export default function ProductEditIndex() {
   const props = cast<ProductEditProps>(usePage().props);
-  console.log({ props });
 
   const { isUploading } = useImageUpload();
 
