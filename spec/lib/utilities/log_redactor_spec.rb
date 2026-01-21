@@ -22,13 +22,13 @@ RSpec.describe LogRedactor do
         }
         result = LogRedactor.redact(input)
         expect(result).to eq({
-          "token" => "[FILTERED]",
-          "stripe_publishable_key" => "[FILTERED]",
-          "authorization" => "[FILTERED]",
-          "paypal-auth-assertion" => "[FILTERED]",
-          "verify_sign" => "[FILTERED]",
-          "email" => "user@example.com"
-        })
+                               "token" => "[FILTERED]",
+                               "stripe_publishable_key" => "[FILTERED]",
+                               "authorization" => "[FILTERED]",
+                               "paypal-auth-assertion" => "[FILTERED]",
+                               "verify_sign" => "[FILTERED]",
+                               "email" => "user@example.com"
+                             })
       end
 
       it "handles case-insensitive sensitive keys" do
@@ -54,13 +54,13 @@ RSpec.describe LogRedactor do
         }
         result = LogRedactor.redact(input)
         expect(result).to eq({
-          "level1" => {
-            "level2" => {
-              "token" => "[FILTERED]",
-              "level3" => { "authorization" => "[FILTERED]", "data" => "public" }
-            }
-          }
-        })
+                               "level1" => {
+                                 "level2" => {
+                                   "token" => "[FILTERED]",
+                                   "level3" => { "authorization" => "[FILTERED]", "data" => "public" }
+                                 }
+                               }
+                             })
       end
 
       it "handles empty hash" do
@@ -127,16 +127,16 @@ RSpec.describe LogRedactor do
         }
         result = LogRedactor.redact(input)
         expect(result).to eq({
-          "users" => [
-            { "name" => "Alice", "token" => "[FILTERED]" },
-            { "name" => "Bob", "authorization" => "[FILTERED]" }
-          ],
-          "config" => {
-            "stripe_publishable_key" => "[FILTERED]",
-            "public_key" => "public123"
-          },
-          "count" => 42
-        })
+                               "users" => [
+                                 { "name" => "Alice", "token" => "[FILTERED]" },
+                                 { "name" => "Bob", "authorization" => "[FILTERED]" }
+                               ],
+                               "config" => {
+                                 "stripe_publishable_key" => "[FILTERED]",
+                                 "public_key" => "public123"
+                               },
+                               "count" => 42
+                             })
       end
     end
   end
