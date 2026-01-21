@@ -177,11 +177,11 @@ class ContactingCreatorMailerPreview < ActionMailer::Preview
   end
 
   def tax_form_1099k
-    ContactingCreatorMailer.tax_form_1099k(User.last&.id, Time.current.year.pred, "https://www.gumroad.com")
+    ContactingCreatorMailer.tax_form_1099k(User.last&.id, Time.current.year.pred)
   end
 
   def tax_form_1099misc
-    ContactingCreatorMailer.tax_form_1099misc(User.last&.id, Time.current.year.pred, "https://www.gumroad.com")
+    ContactingCreatorMailer.tax_form_1099misc(User.last&.id, Time.current.year.pred)
   end
 
   def review_submitted

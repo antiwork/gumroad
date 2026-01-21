@@ -89,7 +89,7 @@ export const MenuItem = ({
   <MenuItemTooltip tip={name}>
     <button
       type="button"
-      className="toolbar-item"
+      className="toolbar-item cursor-pointer all-unset"
       aria-pressed={active}
       disabled={disabled}
       aria-label={name}

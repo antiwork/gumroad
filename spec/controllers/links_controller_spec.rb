@@ -844,6 +844,65 @@ describe LinksController, :vcr, inertia: true do
           end
         end
 
+        describe "default discount code" do
+          let(:offer_code) { create(:offer_code, user: @product.user, products: [@product]) }
+          let(:universal_offer_code) { create(:universal_offer_code, user: @product.user) }
+          let(:other_user_offer_code) { create(:offer_code) }
+
+          it "sets the default offer code when a valid product offer code is provided" do
+            @params[:default_offer_code_id] = offer_code.external_id
+            post :update, params: @params, format: :json
+
+            expect(@product.reload.default_offer_code).to eq(offer_code)
+          end
+
+          it "sets the default offer code when a valid universal offer code is provided" do
+            @params[:default_offer_code_id] = universal_offer_code.external_id
+            post :update, params: @params, format: :json
+
+            expect(@product.reload.default_offer_code).to eq(universal_offer_code)
+          end
+
+          it "does not set the default offer code when offer code belongs to another user" do
+            @params[:default_offer_code_id] = other_user_offer_code.external_id
+            post :update, params: @params, format: :json
+
+            expect(@product.reload.default_offer_code).to be_nil
+          end
+
+          it "does not set the default offer code when offer code is not associated with the product" do
+            unassociated_offer_code = create(:offer_code, user: @product.user)
+            @params[:default_offer_code_id] = unassociated_offer_code.external_id
+            post :update, params: @params, format: :json
+
+            expect(@product.reload.default_offer_code).to be_nil
+          end
+
+          it "does not set the default offer code when offer code is expired" do
+            expired_offer_code = create(:offer_code, user: @product.user, products: [@product], valid_at: 2.days.ago, expires_at: 1.day.ago)
+            @params[:default_offer_code_id] = expired_offer_code.external_id
+            post :update, params: @params, format: :json
+
+            expect(@product.reload.default_offer_code).to be_nil
+          end
+
+          it "clears the default offer code when nil is provided" do
+            @product.update!(default_offer_code: offer_code)
+            @params[:default_offer_code_id] = nil
+            post :update, params: @params, format: :json
+
+            expect(@product.reload.default_offer_code).to be_nil
+          end
+
+          it "clears the default offer code when empty string is provided" do
+            @product.update!(default_offer_code: offer_code)
+            @params[:default_offer_code_id] = ""
+            post :update, params: @params, format: :json
+
+            expect(@product.reload.default_offer_code).to be_nil
+          end
+        end
+
         context "with pay-what-you-want pricing" do
           it "sets the suggested prices" do
             @params.merge!(
@@ -2738,38 +2797,19 @@ describe LinksController, :vcr, inertia: true do
         let(:record) { Link }
       end
 
-      it "succeeds with name and price" do
-        params = { price_cents: 100, name: "test link" }
-
-        post :create, params: { format: :json, link: params }
-
-        expect(response.parsed_body["success"]).to be(true)
-      end
-
-      it "fails if price missing" do
-        params = { name: "test link" }
-        post :create, params: { format: :json, link: params }
-        expect(response.parsed_body["success"]).to_not be(true)
-      end
-
-      it "fails if name is missing" do
-        params = { price_cents: 100 }
-        post :create, params: { format: :json, link: params }
-        expect(response.parsed_body["success"]).to be(false)
-      end
 
       it "creates link with display_product_reviews set to true" do
         params = { price_cents: 100, name: "test link" }
-        post :create, params: { format: :json, link: params }
-        expect(response.parsed_body["success"]).to be(true)
+        post :create, params: { link: params }
+        expect(response).to redirect_to(edit_link_path(Link.last))
         link = seller.links.last
         expect(link.display_product_reviews).to be(true)
       end
 
       it "ignores is_in_preorder_state param" do
         params = { price_cents: 100, name: "preorder", is_in_preorder_state: true, release_at: 1.year.from_now.iso8601 }
-        post :create, params: { format: :json, link: params }
-        expect(response.parsed_body["success"]).to be(true)
+        post :create, params: { link: params }
+        expect(response).to redirect_to(edit_link_path(Link.last))
         link = seller.links.last
         expect(link.name).to eq "preorder"
         expect(link.price_cents).to eq 100
@@ -2778,27 +2818,27 @@ describe LinksController, :vcr, inertia: true do
 
       it "is able to set currency type" do
         params = { price_cents: 100, name: "test link", url: @s3_url, price_currency_type: "jpy" }
-        post :create, params: { format: :json, link: params }
-        expect(response.parsed_body["success"]).to be(true)
+        post :create, params: { link: params }
+        expect(response).to redirect_to(edit_link_path(Link.last))
         expect(Link.last.price_currency_type).to eq "jpy"
       end
 
       it "creates the product if no files are provided" do
         params = { price_cents: 100, name: "test link", files: {} }
-        expect { post :create, params: { format: :json, link: params } }.to change { seller.links.count }.by(1)
+        expect { post :create, params: { link: params } }.to change { seller.links.count }.by(1)
       end
 
       it "assigns 'other' taxonomy" do
         params = { price_cents: 100, name: "test link" }
-        post :create, params: { format: :json, link: params }
-        expect(response.parsed_body["success"]).to be(true)
+        post :create, params: { link: params }
+        expect(response).to redirect_to(edit_link_path(Link.last))
         expect(Link.last.taxonomy).to eq(Taxonomy.find_by(slug: "other"))
       end
 
       context "when the product's native type is bundle" do
         it "sets is_bundle to true" do
-          post :create, params: { format: :json, link: { price_cents: 100, name: "Bundle", native_type: "bundle" } }
-          expect(response.parsed_body["success"]).to be(true)
+          post :create, params: { link: { price_cents: 100, name: "Bundle", native_type: "bundle" } }
+          expect(response).to redirect_to(edit_link_path(Link.last))
 
           product = Link.last
           expect(product.native_type).to eq("bundle")
@@ -2810,8 +2850,8 @@ describe LinksController, :vcr, inertia: true do
         let(:seller) { create(:user, :eligible_for_service_products) }
 
         it "sets custom_button_text_option to 'donate_prompt'" do
-          post :create, params: { format: :json, link: { price_cents: 100, name: "Coffee", native_type: "coffee" } }
-          expect(response.parsed_body["success"]).to be(true)
+          post :create, params: { link: { price_cents: 100, name: "Coffee", native_type: "coffee" } }
+          expect(response).to redirect_to(edit_link_path(Link.last))
 
           product = Link.last
           expect(product.native_type).to eq("coffee")
@@ -2876,8 +2916,8 @@ describe LinksController, :vcr, inertia: true do
           end
 
           it "allows users to create physical products" do
-            post :create, params: { format: :json, link: @params }
-            expect(response.parsed_body["success"]).to be(true)
+            post :create, params: { link: @params }
+            expect(response).to redirect_to(edit_link_path(Link.last))
             product = Link.last
             expect(product.is_physical).to be(true)
             expect(product.skus_enabled).to be(false)
@@ -2886,7 +2926,7 @@ describe LinksController, :vcr, inertia: true do
 
         context "when physical products are disabled" do
           it "returns forbidden" do
-            post :create, params: { format: :json, link: @params }
+            post :create, params: { link: @params }
             expect(response).to have_http_status(:forbidden)
           end
         end
@@ -2901,9 +2941,9 @@ describe LinksController, :vcr, inertia: true do
           it "does not enable community chat by default" do
             params = { price_cents: 100, name: "test link" }
 
-            post :create, params: { format: :json, link: params }
+            post :create, params: { link: params }
 
-            expect(response.parsed_body["success"]).to be(true)
+            expect(response).to redirect_to(edit_link_path(Link.last))
             product = seller.links.last
             expect(product.community_chat_enabled?).to be(false)
             expect(product.active_community).to be_nil
@@ -2918,9 +2958,9 @@ describe LinksController, :vcr, inertia: true do
           it "does not enable community chat" do
             params = { price_cents: 100, name: "test link" }
 
-            post :create, params: { format: :json, link: params }
+            post :create, params: { link: params }
 
-            expect(response.parsed_body["success"]).to be(true)
+            expect(response).to redirect_to(edit_link_path(Link.last))
             product = seller.links.last
             expect(product.community_chat_enabled?).to be(false)
             expect(product.active_community).to be_nil
@@ -2959,11 +2999,11 @@ describe LinksController, :vcr, inertia: true do
           allow_any_instance_of(Link).to receive_message_chain(:asset_previews, :build).and_return(nil)
           allow_any_instance_of(Link).to receive(:build_thumbnail).and_return(nil)
 
-          post :create, params: { format: :json, link: params }
+          post :create, params: { link: params }
 
           expect(service_double).to have_received(:generate_cover_image)
           expect(service_double).to have_received(:generate_rich_content_pages)
-          expect(response.parsed_body["success"]).to eq(true)
+          expect(response).to redirect_to(edit_link_path(Link.last, ai_generated: true))
 
           link = Link.last
           expect(link.name).to eq("UX design mastery using Figma")
@@ -2985,7 +3025,7 @@ describe LinksController, :vcr, inertia: true do
           expect(service_double).not_to receive(:generate_cover_image)
           expect(service_double).not_to receive(:generate_rich_content_pages)
 
-          post :create, params: { format: :json, link: params }
+          post :create, params: { link: params }
         end
 
         it "does not call AI service when ai_prompt is blank" do
@@ -2994,7 +3034,7 @@ describe LinksController, :vcr, inertia: true do
           expect(service_double).not_to receive(:generate_cover_image)
           expect(service_double).not_to receive(:generate_rich_content_pages)
 
-          post :create, params: { format: :json, link: { price_cents: 100, name: "Regular Product" } }
+          post :create, params: { link: { price_cents: 100, name: "Regular Product" } }
         end
       end
     end

@@ -101,6 +101,29 @@ describe Admin::UsersController, type: :controller, inertia: true do
         expect(inertia.props[:user][:external_id]).to eq(user_2.external_id)
       end
     end
+
+    context "when using internal user id" do
+      it "redirects GET requests to external_id URL" do
+        get :show, params: { external_id: user.id }
+
+        expect(response).to redirect_to(admin_user_path(user.external_id))
+        expect(response).to have_http_status(:see_other)
+      end
+    end
+  end
+
+  describe "fetch_user with internal id for non-GET requests" do
+    let(:user) { create(:user) }
+
+    it "does not redirect POST requests and processes the action" do
+      expect(user.verified).to be_nil
+
+      post :verify, params: { external_id: user.id }
+
+      expect(response).not_to be_redirect
+      expect(response.parsed_body["success"]).to be(true)
+      expect(user.reload.verified).to be(true)
+    end
   end
 
   describe "refund balance logic", :vcr, :sidekiq_inline do

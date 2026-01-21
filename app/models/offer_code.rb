@@ -33,6 +33,7 @@ class OfferCode < ApplicationRecord
   validate :price_validation
   validate :validate_cancellation_discount_uniqueness
   validate :validate_cancellation_discount_product_type
+  validate :validate_not_used_as_default_discount
 
   before_save :to_mongo
 
@@ -48,6 +49,14 @@ class OfferCode < ApplicationRecord
   # Fixed-amount-off offer codes only show up on products that match their currency. That's why this scope takes a currency_type.
   # nil currency_type is a percentage offer code
   scope :universal_with_matching_currency, ->(currency_type) { where("universal = 1 and (currency_type = ? or currency_type is null)", currency_type) }
+
+  # Public: Search offer codes by name
+  scope :search_by_name, ->(query, limit: 20, reverse: false) {
+    query = query.to_s.strip.downcase
+    return none if query.blank?
+    relation = where("LOWER(name) LIKE ?", "%#{query}%").limit(limit)
+    reverse ? relation.order(created_at: :desc) : relation.order(created_at: :asc)
+  }
   scope :universal, -> { where(universal: true) }
 
   def is_valid_for_purchase?(purchase_quantity: 1)
@@ -300,5 +309,14 @@ class OfferCode < ApplicationRecord
 
     def reindex_captured_products
       reindex_associated_products(products_to_reindex: Link.where(id: @product_ids_to_reindex)) if @product_ids_to_reindex.present?
+    end
+
+    def validate_not_used_as_default_discount
+      return unless deleted_at_changed? && deleted_at.present?
+      return unless persisted? # Skip validation for new records (id is nil)
+
+      if Link.visible.where(default_offer_code_id: id).exists?
+        errors.add(:base, "This discount code is currently set as the default discount for one or more active or archived products. Please remove it from all products before deleting.")
+      end
     end
 end

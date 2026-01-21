@@ -82,7 +82,11 @@ const CodeBlockComponent = ({ node, updateAttributes, editor }: NodeViewProps) =
           </select>
         ) : (
           <CopyToClipboard text={node.textContent}>
-            <button className="link" style={{ padding: "0 var(--spacer-1)" }} aria-label="Copy">
+            <button
+              className="link cursor-pointer all-unset"
+              style={{ padding: "0 var(--spacer-1)" }}
+              aria-label="Copy"
+            >
               <Icon name="outline-duplicate" />
             </button>
           </CopyToClipboard>

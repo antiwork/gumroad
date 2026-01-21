@@ -12,8 +12,13 @@ module Admin::FetchUser
       end
 
       if @user.nil? && User.id?(user_param) && (user = User.find_by(id: user_param))
-        new_path = request.fullpath.sub("/#{user_param}", "/#{user.external_id}")
-        return redirect_to new_path
+        if request.get?
+          new_path = request.fullpath.sub("/#{user_param}", "/#{user.external_id}")
+          return redirect_to new_path, status: :see_other
+        else
+          @user = user
+          return
+        end
       end
 
       e404 unless @user
