@@ -63,23 +63,23 @@ const StatsSection = (stats: Stats) => {
   return (
     <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4" aria-label="Stats">
       <StatsComponent
-        title="Revenue"
-        description="Your gross sales from all affiliated products."
+        title="Doanh thu"
+        description="Tổng doanh số của bạn từ tất cả các sản phẩm liên kết."
         value={formatPriceCentsWithCurrencySymbol("usd", stats.total_revenue, { symbolFormat: "short" })}
       />
       <StatsComponent
-        title="Sales"
-        description="Your number of affiliated sales."
+        title="Doanh số"
+        description="Số lượng bán hàng liên kết của bạn."
         value={stats.total_sales.toLocaleString(locale)}
       />
       <StatsComponent
-        title="Products"
-        description="Your number of affiliated products."
+        title="Sản phẩm"
+        description="Số lượng sản phẩm liên kết của bạn."
         value={stats.total_products.toLocaleString(locale)}
       />
       <StatsComponent
-        title="Affiliated creators"
-        description="The number of creators you're affiliated with."
+        title="Người tạo liên kết"
+        description="Số lượng người tạo mà bạn liên kết."
         value={stats.total_affiliated_creators.toLocaleString(locale)}
       />
     </div>
@@ -114,18 +114,18 @@ const AffiliatedProductsTable = ({
       <Table aria-live="polite" className={classNames(isLoading && "pointer-events-none opacity-50")}>
         <TableHeader>
           <TableRow>
-            <TableHead {...thProps("product_name")} title="Sort by Product">
-              Product
+            <TableHead {...thProps("product_name")} title="Sắp xếp theo Sản phẩm">
+              Sản phẩm
             </TableHead>
-            <TableHead {...thProps("sales_count")} title="Sort by Sales">
-              Sales
+            <TableHead {...thProps("sales_count")} title="Sắp xếp theo Doanh số">
+              Doanh số
             </TableHead>
-            <TableHead title="Sort by Type">Type</TableHead>
-            <TableHead {...thProps("commission")} title="Sort by Commission">
-              Commission
+            <TableHead title="Sắp xếp theo Loại">Loại</TableHead>
+            <TableHead {...thProps("commission")} title="Sắp xếp theo Hoa hồng">
+              Hoa hồng
             </TableHead>
-            <TableHead {...thProps("revenue")} title="Sort by Revenue">
-              Revenue
+            <TableHead {...thProps("revenue")} title="Sắp xếp theo Doanh thu">
+              Doanh thu
             </TableHead>
             <TableHead />
           </TableRow>
@@ -154,10 +154,10 @@ const AffiliatedProductsTable = ({
 
               <TableCell>
                 <div className="flex flex-wrap gap-3 lg:justify-end">
-                  <CopyToClipboard tooltipPosition="bottom" copyTooltip="Copy link" text={affiliatedProduct.url}>
+                  <CopyToClipboard tooltipPosition="bottom" copyTooltip="Sao chép liên kết" text={affiliatedProduct.url}>
                     <Button>
                       <Icon name="link" />
-                      Copy link
+                      Sao chép
                     </Button>
                   </CopyToClipboard>
                 </div>
@@ -206,7 +206,7 @@ const Search = ({ onSearch, value }: SearchProps) => {
           value={value}
           autoFocus
           type="text"
-          placeholder="Search"
+          placeholder="Tìm kiếm"
           onChange={(e) => onSearch(e.target.value)}
         />
       </div>
@@ -281,19 +281,19 @@ const AffiliatedPage = ({
   return (
     <ProductsLayout
       selectedTab="affiliated"
-      title={isShowingGlobalAffiliates ? "Gumroad Affiliates" : undefined}
+      title={isShowingGlobalAffiliates ? "Tiếp thị liên kết Gumroad" : undefined}
       ctaButton={
         isShowingGlobalAffiliates ? (
           <Button onClick={() => toggleOpen(false)}>
             <Icon name="x-circle" />
-            Close
+            Đóng
           </Button>
         ) : (
           <>
             {initialAffiliatedProducts.length > 0 && <Search onSearch={handleSearch} value={state.query} />}
             <WithTooltip position="bottom" tip={affiliatesDisabledReason}>
               <Button color="accent" disabled={affiliatesDisabledReason !== null} onClick={() => toggleOpen(true)}>
-                Gumroad affiliate
+                Tiếp thị liên kết Gumroad
               </Button>
             </WithTooltip>
           </>
@@ -313,18 +313,17 @@ const AffiliatedPage = ({
           {initialAffiliatedProducts.length === 0 ? (
             <Placeholder>
               <PlaceholderImage src={placeholder} />
-              <h2>Become an affiliate and earn!</h2>
-              Gumroad is a great place for you to make some side income, even if you're not actively creating your own
-              products.
+              <h2>Trở thành người làm tiếp thị liên kết và kiếm tiền!</h2>
+              Gumroad là một nơi tuyệt vời để bạn kiếm thêm thu nhập, ngay cả khi bạn không chủ động tạo sản phẩm của riêng mình.
               <WithTooltip position="top" tip={affiliatesDisabledReason}>
                 <Button disabled={affiliatesDisabledReason !== null} color="accent" onClick={() => toggleOpen(true)}>
-                  Become an affiliate
+                  Trở thành người tiếp thị
                 </Button>
               </WithTooltip>
               <p>
-                or{" "}
+                hoặc{" "}
                 <a href="/help/article/249-affiliate-faq" target="_blank" rel="noreferrer">
-                  learn more to get started
+                  tìm hiểu thêm để bắt đầu
                 </a>
               </p>
             </Placeholder>
@@ -334,7 +333,7 @@ const AffiliatedPage = ({
               {state.affiliatedProducts.length === 0 ? (
                 <Placeholder>
                   <PlaceholderImage src={placeholder} />
-                  <h2>No affiliated products found.</h2>
+                  <h2>Không tìm thấy sản phẩm liên kết nào.</h2>
                 </Placeholder>
               ) : (
                 <AffiliatedProductsTable

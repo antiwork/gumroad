@@ -16,7 +16,7 @@ export const DownloadTaxFormsPopover = ({ taxForms }: Props) => {
   const handleDownload = () => {
     try {
       if (selectedYears.size === 0) {
-        showAlert("Please select at least one tax year to download.", "error");
+        showAlert("Vui lòng chọn ít nhất một năm thuế để tải xuống.", "error");
         return;
       }
       selectedYears.forEach((year) => {
@@ -24,7 +24,7 @@ export const DownloadTaxFormsPopover = ({ taxForms }: Props) => {
       });
       setIsOpen(false);
     } catch {
-      showAlert("Sorry, something went wrong. Please try again.", "error");
+      showAlert("Xin lỗi, đã xảy ra lỗi. Vui lòng thử lại.", "error");
     }
   };
 
@@ -43,8 +43,8 @@ export const DownloadTaxFormsPopover = ({ taxForms }: Props) => {
         }
       }}
       trigger={
-        <Button aria-label="Tax forms">
-          <span>Tax forms</span>
+        <Button aria-label="Tải mẫu thuế">
+          <span>Mẫu thuế</span>
           <Icon name="download" />
         </Button>
       }
@@ -52,14 +52,14 @@ export const DownloadTaxFormsPopover = ({ taxForms }: Props) => {
       {isOpen ? (
         <div className="max-w-[300px] space-y-4 sm:max-w-full">
           {Object.keys(taxForms).length === 0 ? (
-            <section className="text-muted">No tax forms available.</section>
+            <section className="text-muted">Không có mẫu thuế nào.</section>
           ) : (
             <>
               <header>
                 <p className="mb-1">
-                  <strong>Download tax forms</strong>
+                  <strong>Tải mẫu thuế</strong>
                 </p>
-                <p>Select the tax years you want to download.</p>
+                <p>Chọn các năm thuế bạn muốn tải xuống.</p>
               </header>
 
               <section className="relative -mx-4 max-h-[300px] max-w-none overflow-y-auto border-b p-4">
@@ -89,10 +89,10 @@ export const DownloadTaxFormsPopover = ({ taxForms }: Props) => {
 
               <footer className="flex gap-4">
                 <Button className="flex-1" onClick={toggleSelectAll}>
-                  {selectedYears.size === Object.keys(taxForms).length ? "Deselect all" : "Select all"}
+                  {selectedYears.size === Object.keys(taxForms).length ? "Bỏ chọn tất cả" : "Chọn tất cả"}
                 </Button>
                 <Button className="flex-1" color="primary" disabled={selectedYears.size === 0} onClick={handleDownload}>
-                  Download
+                  Tải xuống
                 </Button>
               </footer>
             </>

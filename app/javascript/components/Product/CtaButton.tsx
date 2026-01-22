@@ -49,12 +49,12 @@ export const trackCtaClick = ({
 
 // TODO replace this with a free-form input
 const ctaNames = {
-  i_want_this_prompt: "I want this!",
-  buy_this_prompt: "Buy this",
-  pay_prompt: "Pay",
-  donate_prompt: "Donate",
-  support_prompt: "Support",
-  tip_prompt: "Tip",
+  i_want_this_prompt: "Tôi muốn cái này!",
+  buy_this_prompt: "Mua cái này",
+  pay_prompt: "Thanh toán",
+  donate_prompt: "Ủng hộ",
+  support_prompt: "Hỗ trợ",
+  tip_prompt: "Tiền boa",
 };
 export const getCtaName = (cta: CustomButtonTextOption) => ctaNames[cta];
 
@@ -147,20 +147,20 @@ export const CtaButton = React.forwardRef<HTMLAnchorElement, Props>(
         <NavigationButton ref={ref} href={url.toString()} color="accent" {...buttonCommonProps}>
           {label ??
             (purchase
-              ? "Purchase again"
+              ? "Mua lại"
               : product.recurrences
-                ? "Subscribe"
+                ? "Đăng ký"
                 : selection.rent
-                  ? "Rent"
+                  ? "Thuê"
                   : product.custom_button_text_option
                     ? getCtaName(product.custom_button_text_option)
-                    : "I want this!")}
+                    : "Tôi muốn cái này!")}
         </NavigationButton>
 
         {product.installment_plan && product.installment_plan.number_of_installments > 1 ? (
           <>
             <NavigationButton color="black" href={urlWithInstallments.toString()} {...buttonCommonProps}>
-              Pay in {product.installment_plan.number_of_installments} installments
+              Thanh toán trong {product.installment_plan.number_of_installments} đợt
             </NavigationButton>
             {showInstallmentPlanNotes ? (
               <small className="text-center">

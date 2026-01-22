@@ -87,14 +87,14 @@ const NewProductPage = ({
       setAiPromoVisible(false);
     } catch (e) {
       assertResponseError(e);
-      showAlert("Failed to dismiss promo", "error");
+      showAlert("Không thể bỏ qua quảng cáo", "error");
     }
   };
 
   const generateWithAi = async () => {
     if (aiPrompt.trim().length < MIN_AI_PROMPT_LENGTH) {
       showAlert(
-        `Please enter a detailed prompt for your product idea with a price in mind (minimum ${MIN_AI_PROMPT_LENGTH} characters)`,
+        `Vui lòng nhập lời nhắc chi tiết cho ý tưởng sản phẩm của bạn với mức giá dự kiến (tối thiểu ${MIN_AI_PROMPT_LENGTH} ký tự)`,
         "error",
       );
       return;
@@ -149,13 +149,13 @@ const NewProductPage = ({
         setAiPopoverOpen(false);
         setAiPromoVisible(false);
 
-        showAlert("All set! Review the form below and hit 'Next: customize' to continue.", "success");
+        showAlert("Đã xong! Xem lại biểu mẫu bên dưới và nhấn 'Tiếp theo: Tùy chỉnh' để tiếp tục.", "success");
       } else {
         showAlert(result.error, "error");
       }
     } catch (e) {
       assertResponseError(e);
-      showAlert("Failed to generate product details", "error");
+      showAlert("Không thể tạo chi tiết sản phẩm", "error");
     } finally {
       setIsGeneratingUsingAi(false);
     }
@@ -211,7 +211,7 @@ const NewProductPage = ({
       }
     } catch (e) {
       assertResponseError(e);
-      showAlert("Something went wrong.", "error");
+      showAlert("Đã xảy ra lỗi.", "error");
     } finally {
       setIsSubmitting(false);
     }
@@ -221,13 +221,13 @@ const NewProductPage = ({
     <>
       <PageHeader
         className="sticky-top"
-        title={show_orientation_text ? "Publish your first product" : "What are you creating?"}
+        title={show_orientation_text ? "Xuất bản sản phẩm đầu tiên của bạn" : "Bạn đang tạo gì?"}
         actions={
           <>
             <Button asChild>
               <Link href={Routes.products_path()}>
                 <Icon name="x-square" />
-                <span>Cancel</span>
+                <span>Hủy</span>
               </Link>
             </Button>
             {ai_generation_enabled ? (
@@ -235,7 +235,7 @@ const NewProductPage = ({
                 open={aiPopoverOpen}
                 onToggle={setAiPopoverOpen}
                 trigger={
-                  <Button color="primary" outline aria-label="Create a product with AI">
+                  <Button color="primary" outline aria-label="Tạo sản phẩm bằng AI">
                     <Icon name="sparkle" />
                   </Button>
                 }
@@ -243,15 +243,14 @@ const NewProductPage = ({
                 <div className="w-96 max-w-full">
                   <fieldset>
                     <legend>
-                      <label htmlFor={`ai-prompt-${formUID}`}>Create a product with AI</label>
+                      <label htmlFor={`ai-prompt-${formUID}`}>Tạo sản phẩm bằng AI</label>
                     </legend>
                     <p>
-                      Got an idea? Give clear instructions, and let AI create your product—quick and easy! Customize it
-                      to make it yours.
+                      Có ý tưởng? Hãy đưa ra hướng dẫn rõ ràng và để AI tạo sản phẩm cho bạn—nhanh chóng và dễ dàng! Tùy chỉnh để biến nó thành của bạn.
                     </p>
                     <textarea
                       id={`ai-prompt-${formUID}`}
-                      placeholder="e.g., a 'Coding with AI using Cursor for Designers' ebook with 5 chapters for $35'."
+                      placeholder="ví dụ: ebook 'Lập trình với AI bằng Cursor cho Nhà thiết kế' gồm 5 chương với giá $35'."
                       value={aiPrompt}
                       onChange={(e) => setAiPrompt(e.target.value)}
                       rows={4}
@@ -262,21 +261,21 @@ const NewProductPage = ({
                   </fieldset>
                   <div className="mt-3 flex justify-end gap-2">
                     <Button onClick={() => setAiPopoverOpen(false)} disabled={isGeneratingUsingAi}>
-                      Cancel
+                      Hủy
                     </Button>
                     <Button
                       color="primary"
                       onClick={() => void generateWithAi()}
                       disabled={isGeneratingUsingAi || !aiPrompt.trim()}
                     >
-                      {isGeneratingUsingAi ? "Generating..." : "Generate"}
+                      {isGeneratingUsingAi ? "Đang tạo..." : "Tạo"}
                     </Button>
                   </div>
                 </div>
               </Popover>
             ) : null}
             <Button color="accent" type="submit" form={`new-product-form-${formUID}`} disabled={isSubmitting}>
-              {isSubmitting ? "Adding..." : "Next: Customize"}
+              {isSubmitting ? "Đang thêm..." : "Tiếp theo: Tùy chỉnh"}
             </Button>
           </>
         }
@@ -287,12 +286,12 @@ const NewProductPage = ({
             <section className="p-4! md:p-8!">
               <header>
                 <p>
-                  Turn your idea into a live product in minutes. No fuss, just a few quick selections and you're ready
-                  to start selling. Whether it's digital downloads, online courses, or memberships — see what sticks.
+                  Biến ý tưởng của bạn thành sản phẩm thực tế trong vài phút. Không rắc rối, chỉ cần vài lựa chọn nhanh là bạn đã sẵn sàng bán hàng.
+                  Cho dù là tải xuống kỹ thuật số, khóa học trực tuyến hay gói thành viên — hãy xem điều gì phù hợp.
                   <br />
                   <br />
                   <a href="/help/article/64-is-gumroad-for-me" target="_blank" rel="noreferrer">
-                    Need help adding a product?
+                    Cần trợ giúp thêm sản phẩm?
                   </a>
                 </p>
               </header>
@@ -302,15 +301,14 @@ const NewProductPage = ({
                   <div className="flex items-center gap-4">
                     <img src={hands} alt="Hands" className="size-12" />
                     <div className="flex-1">
-                      <strong>New.</strong> You can create your product using AI now. Click the sparks button in the
-                      header to get started.
+                      <strong>Mới.</strong> Bây giờ bạn có thể tạo sản phẩm bằng AI. Nhấp vào nút tia lửa ở tiêu đề để bắt đầu.
                       <br />
                       <a href="/help/article/149-adding-a-product" target="_blank" rel="noreferrer">
-                        Learn more
+                        Tìm hiểu thêm
                       </a>
                     </div>
                     <button className="cursor-pointer underline all-unset" onClick={() => void dismissAiPromo()}>
-                      close
+                      đóng
                     </button>
                   </div>
                 </Alert>
@@ -318,14 +316,14 @@ const NewProductPage = ({
 
               <fieldset className={cx({ danger: errors.has("name") })}>
                 <legend>
-                  <label htmlFor={`name-${formUID}`}>Name</label>
+                  <label htmlFor={`name-${formUID}`}>Tên</label>
                 </legend>
 
                 <input
                   ref={nameInputRef}
                   id={`name-${formUID}`}
                   type="text"
-                  placeholder="Name of product"
+                  placeholder="Tên sản phẩm"
                   value={name}
                   onChange={(e) => {
                     setName(e.target.value);
@@ -336,7 +334,7 @@ const NewProductPage = ({
               </fieldset>
 
               <fieldset>
-                <legend>Products</legend>
+                <legend>Sản phẩm</legend>
                 <ProductTypeSelector
                   selectedType={productType}
                   types={native_product_types}
@@ -345,7 +343,7 @@ const NewProductPage = ({
               </fieldset>
               {service_product_types.length > 0 ? (
                 <fieldset>
-                  <legend>Services</legend>
+                  <legend>Dịch vụ</legend>
                   <ProductTypeSelector
                     selectedType={productType}
                     types={service_product_types}
@@ -357,7 +355,7 @@ const NewProductPage = ({
 
               <fieldset className={cx({ danger: errors.has("price") })}>
                 <legend>
-                  <label htmlFor={`price-${formUID}`}>{productType === "coffee" ? "Suggested amount" : "Price"}</label>
+                  <label htmlFor={`price-${formUID}`}>{productType === "coffee" ? "Số tiền đề xuất" : "Giá"}</label>
                 </legend>
 
                 <div className="input">
@@ -369,7 +367,7 @@ const NewProductPage = ({
                           setCurrencyCode(newCurrencyCode);
                         }}
                         value={currencyCode}
-                        aria-label="Currency"
+                        aria-label="Tiền tệ"
                         options={currencyCodeList.map((code) => {
                           const { displayFormat } = findCurrencyByCode(code);
                           return {
@@ -389,7 +387,7 @@ const NewProductPage = ({
                     type="text"
                     inputMode="decimal"
                     maxLength={10}
-                    placeholder="Price your product"
+                    placeholder="Định giá sản phẩm của bạn"
                     value={price}
                     onChange={(e) => {
                       let newValue = e.target.value;
@@ -411,7 +409,7 @@ const NewProductPage = ({
                             setSubscriptionDuration(newSubscriptionDuration);
                           }}
                           value={subscriptionDuration || defaultRecurrence}
-                          aria-label="Default subscription duration"
+                          aria-label="Thời hạn đăng ký mặc định"
                           options={recurrenceIds.map((recurrence) => ({
                             id: recurrence,
                             label: recurrenceLabels[recurrence],
@@ -436,51 +434,51 @@ export default NewProductPage;
 
 const PRODUCT_TYPES = {
   audiobook: {
-    description: "Let customers listen to your audio content.",
-    title: "Audiobook",
+    description: "Cho phép khách hàng nghe nội dung âm thanh của bạn.",
+    title: "Sách nói",
   },
   bundle: {
-    description: "Sell two or more existing products for a new price",
-    title: "Bundle",
+    description: "Bán hai hoặc nhiều sản phẩm hiện có với giá mới",
+    title: "Gói combo",
   },
   call: {
-    description: "Offer scheduled calls with your customers.",
-    title: "Call",
+    description: "Cung cấp các cuộc gọi theo lịch trình với khách hàng của bạn.",
+    title: "Cuộc gọi",
   },
   coffee: {
-    description: "Boost your support and accept tips from customers.",
-    title: "Coffee",
+    description: "Tăng cường sự ủng hộ và chấp nhận tiền boa từ khách hàng.",
+    title: "Cà phê (Ủng hộ)",
   },
   commission: {
-    description: "Sell custom services with 50% deposit upfront, 50% upon completion.",
-    title: "Commission",
+    description: "Bán dịch vụ tùy chỉnh với khoản đặt cọc trước 50%, 50% khi hoàn thành.",
+    title: "Hoa hồng",
   },
   course: {
-    description: "Sell a single lesson or teach a whole cohort of students.",
-    title: "Course or tutorial",
+    description: "Bán một bài học hoặc dạy cả một nhóm học viên.",
+    title: "Khóa học hoặc hướng dẫn",
   },
   digital: {
-    description: "Any set of files to download or stream.",
-    title: "Digital product",
+    description: "Bất kỳ tập tin nào để tải xuống hoặc phát trực tuyến.",
+    title: "Sản phẩm số",
   },
   ebook: {
-    description: "Offer a book or comic in PDF, ePub, and Mobi formats.",
-    title: "E-book",
+    description: "Cung cấp sách hoặc truyện tranh ở định dạng PDF, ePub và Mobi.",
+    title: "Sách điện tử",
   },
   membership: {
-    description: "Start a membership business around your fans.",
-    title: "Membership",
+    description: "Bắt đầu kinh doanh gói thành viên dành cho người hâm mộ.",
+    title: "Gói thành viên",
   },
   newsletter: {
-    description: "Deliver recurring content through email.",
-    title: "Newsletter",
+    description: "Gửi nội dung định kỳ qua email.",
+    title: "Bản tin",
   },
   physical: {
-    description: "Sell anything that requires shipping something.",
-    title: "Physical good",
+    description: "Bán bất cứ thứ gì cần vận chuyển.",
+    title: "Hàng vật lý",
   },
   podcast: {
-    description: "Make episodes available for streaming and direct downloads.",
+    description: "Cung cấp các tập để phát trực tuyến và tải xuống trực tiếp.",
     title: "Podcast",
   },
 };
@@ -521,7 +519,7 @@ const ProductTypeSelector = ({
         </Button>
       );
       return disabled ? (
-        <WithTooltip tip="Service products are disabled until your account is 30 days old." key={type}>
+        <WithTooltip tip="Sản phẩm dịch vụ bị vô hiệu hóa cho đến khi tài khoản của bạn đủ 30 ngày tuổi." key={type}>
           {typeButton}
         </WithTooltip>
       ) : (

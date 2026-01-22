@@ -49,7 +49,7 @@ const CollaboratorsPage = () => {
 
   return (
     <Layout
-      title="Collaborators"
+      title="Cộng tác viên"
       selectedTab="collaborators"
       showTabs={has_incoming_collaborators}
       headerActions={
@@ -59,7 +59,7 @@ const CollaboratorsPage = () => {
             color="accent"
             disabled={disableActions || collaborators_disabled_reason !== null}
           >
-            Add collaborator
+            Thêm cộng tác viên
           </NavigationButtonInertia>
         </WithTooltip>
       }
@@ -70,10 +70,10 @@ const CollaboratorsPage = () => {
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>Name</TableHead>
-                  <TableHead>Products</TableHead>
-                  <TableHead>Cut</TableHead>
-                  <TableHead>Status</TableHead>
+                  <TableHead>Tên</TableHead>
+                  <TableHead>Sản phẩm</TableHead>
+                  <TableHead>Hoa hồng</TableHead>
+                  <TableHead>Trạng thái</TableHead>
                   <TableHead />
                 </TableRow>
               </TableHeader>
@@ -98,11 +98,11 @@ const CollaboratorsPage = () => {
                           <small className="line-clamp-1">{collaborator.email}</small>
                         </div>
                         {collaborator.setup_incomplete ? (
-                          <WithTooltip tip="Not receiving payouts" position="top">
+                          <WithTooltip tip="Không nhận được khoản thanh toán" position="top">
                             <Icon
                               name="solid-shield-exclamation"
                               style={{ color: "rgb(var(--warning))" }}
-                              aria-label="Not receiving payouts"
+                              aria-label="Không nhận được khoản thanh toán"
                             />
                           </WithTooltip>
                         ) : null}
@@ -113,13 +113,13 @@ const CollaboratorsPage = () => {
                     </TableCell>
                     <TableCell className="whitespace-nowrap">{formatCommission(collaborator)}</TableCell>
                     <TableCell className="whitespace-nowrap">
-                      {collaborator.invitation_accepted ? <>Accepted</> : <>Pending</>}
+                      {collaborator.invitation_accepted ? <>Đã chấp nhận</> : <>Đang chờ xử lý</>}
                     </TableCell>
                     <TableCell onClick={(e) => e.stopPropagation()}>
                       <div className="flex flex-wrap gap-3 lg:justify-end">
                         <NavigationButtonInertia
                           href={Routes.edit_collaborator_path(collaborator.id)}
-                          aria-label="Edit"
+                          aria-label="Chỉnh sửa"
                           disabled={disableActions}
                         >
                           <Icon name="pencil" />
@@ -129,7 +129,7 @@ const CollaboratorsPage = () => {
                           type="submit"
                           color="danger"
                           onClick={() => remove(collaborator.id)}
-                          aria-label="Delete"
+                          aria-label="Xóa"
                           disabled={disableActions}
                         >
                           <Icon name="trash2" />
@@ -151,19 +151,19 @@ const CollaboratorsPage = () => {
                   <NavigationButtonInertia
                     href={Routes.edit_collaborator_path(selectedCollaborator.id)}
                     className="flex-1"
-                    aria-label="Edit"
+                    aria-label="Chỉnh sửa"
                     disabled={disableActions}
                   >
-                    Edit
+                    Chỉnh sửa
                   </NavigationButtonInertia>
                   <Button
                     className="flex-1"
                     color="danger"
-                    aria-label="Delete"
+                    aria-label="Xóa"
                     onClick={() => remove(selectedCollaborator.id)}
                     disabled={disableActions}
                   >
-                    {deleteForm.processing ? "Removing..." : "Remove"}
+                    {deleteForm.processing ? "Đang xóa..." : "Xóa"}
                   </Button>
                 </>
               }
@@ -174,10 +174,10 @@ const CollaboratorsPage = () => {
         <section className="p-4 md:p-8">
           <Placeholder>
             <PlaceholderImage src={placeholder} />
-            <h2>No collaborators yet</h2>
-            <h4>Share your revenue with the people who helped create your products.</h4>
+            <h2>Chưa có cộng tác viên nào</h2>
+            <h4>Chia sẻ doanh thu của bạn với những người đã giúp tạo ra sản phẩm của bạn.</h4>
             <a href="/help/article/341-collaborations" target="_blank" rel="noreferrer">
-              Learn more about collaborators
+              Tìm hiểu thêm về cộng tác viên
             </a>
           </Placeholder>
         </section>

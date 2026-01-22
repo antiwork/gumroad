@@ -75,7 +75,7 @@ const SectionEditor = ({
         data: { sections: order, main_section_index: mainIndex },
       });
       if (!response.ok) throw new ResponseError();
-      showAlert("Changes saved!", "success");
+      showAlert("Đã lưu thay đổi!", "success");
     } catch (e) {
       assertResponseError(e);
       showAlert(e.message, "error");
@@ -143,7 +143,7 @@ export const Layout = (
   const { product, purchase, discount_code: discountCode, cart, hasHero, wishlists, main_section_index } = props;
   const [selection, setSelection] = useSelectionFromUrl(product);
   const ctaButtonRef = React.useRef<HTMLAnchorElement>(null);
-  const ctaLabel = cart ? "Add to cart" : undefined;
+  const ctaLabel = cart ? "Thêm vào giỏ hàng" : undefined;
 
   const configurationSelectorRef = React.useRef<ConfigurationSelectorHandle>(null);
 
@@ -320,7 +320,7 @@ const CtaBar = ({
               evt.preventDefault();
               ctaButtonRef.current?.scrollIntoView(false);
               configurationSelectorRef.current?.focusRequiredInput();
-              if (isPWYW && selection.price.value === null) showAlert("You must input an amount", "warning");
+              if (isPWYW && selection.price.value === null) showAlert("Bạn phải nhập số tiền", "warning");
             }
           }}
         />
@@ -346,11 +346,11 @@ const EditButton = ({ product }: { product: Product }) => {
         zIndex: "var(--z-index-overlay)",
       }}
     >
-      <WithTooltip tip="Edit product" position={isDesktop ? "right" : "left"}>
+      <WithTooltip tip="Chỉnh sửa sản phẩm" position={isDesktop ? "right" : "left"}>
         <NavigationButton
           color="filled"
           href={Routes.edit_link_url({ id: product.permalink }, { host: appDomain })}
-          aria-label="Edit product"
+          aria-label="Chỉnh sửa sản phẩm"
         >
           <Icon name="pencil" />
         </NavigationButton>

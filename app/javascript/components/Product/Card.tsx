@@ -26,7 +26,7 @@ export const Card = ({
     <ProductCardFigure className="w-full aspect-video overflow-hidden">
       <Thumbnail url={product.thumbnail_url} nativeType={product.native_type} eager={eager} />
     </ProductCardFigure>
-    {product.quantity_remaining != null ? <Ribbon>{product.quantity_remaining} left</Ribbon> : null}
+    {product.quantity_remaining != null ? <Ribbon>{product.quantity_remaining} còn lại</Ribbon> : null}
     <ProductCardHeader>
       <a href={product.url} className="stretched-link">
         <h4 itemProp="name" className="line-clamp-4 lg:text-xl">
@@ -67,7 +67,7 @@ export const HorizontalCard = ({ product, big, eager }: { product: CardProduct; 
     <ProductCardFigure className="w-full aspect-video overflow-hidden">
       <Thumbnail url={product.thumbnail_url} nativeType={product.native_type} eager={eager} />
     </ProductCardFigure>
-    {product.quantity_remaining !== null ? <Ribbon>{product.quantity_remaining} left</Ribbon> : null}
+    {product.quantity_remaining !== null ? <Ribbon>{product.quantity_remaining} còn lại</Ribbon> : null}
     <section className="flex flex-1 flex-col lg:px-6 lg:py-4">
       <ProductCardHeader className="lg:p-0">
         <a href={product.url} className="stretched-link" draggable="false">
@@ -122,7 +122,7 @@ const Rating = ({ ratings, style }: { ratings: Ratings; style?: React.CSSPropert
   <div className="flex shrink-0 items-center gap-1" aria-label="Rating" style={style}>
     <Icon name="solid-star" />
     <span className="rating-average">{ratings.average.toFixed(1)}</span>
-    <span title={`${ratings.average} ${ratings.average === 1 ? "rating" : "ratings"}`}>
+    <span title={`${ratings.average} ${ratings.average === 1 ? "đánh giá" : "đánh giá"}`}>
       {`(${formatOrderOfMagnitude(ratings.count, 1)})`}
     </span>
   </div>

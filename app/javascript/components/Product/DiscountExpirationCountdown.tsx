@@ -36,7 +36,7 @@ export const DiscountExpirationCountdown = ({
 
   return (
     <div>
-      This discount expires in{" "}
+      Giảm giá này sẽ hết hạn trong{" "}
       <strong suppressHydrationWarning>
         {formatDuration(intervalToDuration({ start: 0, end: secondsUntilExpiration * 1000 }))}
       </strong>

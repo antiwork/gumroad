@@ -171,11 +171,11 @@ export type ProductDiscount =
 
 export const getNotForSaleMessage = (product: Product) =>
   product.is_compliance_blocked
-    ? "Sorry, this item is not available in your location."
+    ? "Xin lỗi, mặt hàng này không có sẵn tại địa điểm của bạn."
     : product.quantity_remaining === 0
-      ? "Sold out, please go back and pick another option."
+      ? "Đã hết hàng, vui lòng quay lại và chọn tùy chọn khác."
       : !product.is_published
-        ? "This product is not currently for sale."
+        ? "Sản phẩm này hiện không được bán."
         : null;
 
 export type WishlistForProduct = Wishlist & {
@@ -308,12 +308,12 @@ export const Product = ({
       setSelection?.({ ...selection, price: { ...selection.price, error: true } });
       if (selection.price.value === null) {
         configurationSelectorRef?.current?.focusRequiredInput();
-        showAlert("You must input an amount", "warning");
+        showAlert("Bạn phải nhập số tiền", "warning");
       }
       return false;
     }
     if (product.native_type === "call" && !selection.callStartTime) {
-      showAlert("You must select a date and time for the call", "warning");
+      showAlert("Bạn phải chọn ngày giờ cho cuộc gọi", "warning");
       return false;
     }
     return true;
@@ -336,7 +336,7 @@ export const Product = ({
   return (
     <article className="relative grid rounded border border-border bg-background lg:grid-cols-[2fr_1fr]">
       <Covers covers={product.covers} mainCoverId={product.main_cover_id} />
-      {product.quantity_remaining !== null ? <Ribbon>{product.quantity_remaining} left</Ribbon> : null}
+      {product.quantity_remaining !== null ? <Ribbon>{product.quantity_remaining} còn lại</Ribbon> : null}
       <section className="lg:border-r">
         <header className="grid gap-4 p-6 not-first:border-t">
           <h1 itemProp="name">{product.name}</h1>
@@ -365,7 +365,7 @@ export const Product = ({
             >
               {product.collaborating_user ? (
                 <>
-                  {sellerByline} with{" "}
+                  {sellerByline} với{" "}
                   <AuthorByline
                     name={product.collaborating_user.name}
                     profileUrl={product.collaborating_user.profile_url}
@@ -394,7 +394,7 @@ export const Product = ({
         ) : null}
         {isBundle ? (
           <section className="grid gap-4 border-t border-border p-6">
-            <h2>This bundle contains...</h2>
+            <h2>Gói này bao gồm...</h2>
             <CartItemList>
               {product.bundle_products.map((bundleProduct) => {
                 const price = formatPriceCentsWithCurrencySymbol(bundleProduct.currency_code, bundleProduct.price, {
@@ -417,7 +417,7 @@ export const Product = ({
                           {`${bundleProduct.ratings.average.toFixed(1)} (${bundleProduct.ratings.count})`}
                         </div>
                       ) : null}
-                      <span className="sr-only">Qty: {bundleProduct.quantity}</span>
+                      <span className="sr-only">SL: {bundleProduct.quantity}</span>
                       {bundleProduct.variant ? (
                         <CartItemFooter>
                           <span className="line-clamp-1">
@@ -455,8 +455,8 @@ export const Product = ({
             </Alert>
           ) : product.native_type === "commission" ? (
             <Alert role="status" variant="info">
-              Secure your order with a {`${COMMISSION_DEPOSIT_PROPORTION * 100}%`} deposit today; the remaining balance
-              will be charged upon completion.
+              Đảm bảo đơn hàng của bạn với khoản đặt cọc {`${COMMISSION_DEPOSIT_PROPORTION * 100}%`} ngay hôm nay; số dư còn lại
+              sẽ được tính khi hoàn thành.
             </Alert>
           ) : null}
           {discountCode ? (
@@ -465,38 +465,38 @@ export const Product = ({
                 <Alert role="status" variant="success">
                   <div className="flex flex-col gap-4">
                     {discountCode.discount.minimum_quantity
-                      ? `Get ${
+                      ? `Giảm ${
                           discountCode.discount.type === "percent"
                             ? `${discountCode.discount.percents}%`
                             : formatPriceCentsWithCurrencySymbol(product.currency_code, discountCode.discount.cents, {
                                 symbolFormat: "long",
                               })
-                        } off when you buy ${discountCode.discount.minimum_quantity} or more (Code ${discountCode.code.toUpperCase()})`
+                        } khi mua từ ${discountCode.discount.minimum_quantity} trở lên (Mã ${discountCode.code.toUpperCase()})`
                       : discountCode.discount.type === "percent"
-                        ? `${discountCode.discount.percents}% off will be applied at checkout (Code ${discountCode.code.toUpperCase()})`
-                        : `${formatPriceCentsWithCurrencySymbol(product.currency_code, discountCode.discount.cents, {
+                        ? `Giảm ${discountCode.discount.percents}% sẽ được áp dụng khi thanh toán (Mã ${discountCode.code.toUpperCase()})`
+                        : `Giảm ${formatPriceCentsWithCurrencySymbol(product.currency_code, discountCode.discount.cents, {
                             symbolFormat: "long",
-                          })} off will be applied at checkout (Code ${discountCode.code.toUpperCase()})`}
-                    {discountCode.discount.duration_in_billing_cycles && product.is_tiered_membership ? (
-                      <div>This discount will only apply to the first payment of your subscription.</div>
+                          })} sẽ được áp dụng khi thanh toán (Mã ${discountCode.code.toUpperCase()})`}
+                      {discountCode.discount.duration_in_billing_cycles && product.is_tiered_membership ? (
+                      <div>Giảm giá này sẽ chỉ áp dụng cho lần thanh toán đầu tiên của gói đăng ký.</div>
                     ) : null}
                     {discountCode.discount.minimum_amount_cents ? (
                       <div>
                         {(discountCode.discount.product_ids?.length ?? 0) === 1
-                          ? `This discount will apply when you spend ${formatPriceCentsWithCurrencySymbol(
+                          ? `Giảm giá này sẽ áp dụng khi bạn chi tiêu từ ${formatPriceCentsWithCurrencySymbol(
                               product.currency_code,
                               discountCode.discount.minimum_amount_cents,
                               { symbolFormat: "short" },
-                            )} or more.`
-                          : `This discount will apply when you spend ${formatPriceCentsWithCurrencySymbol(
+                            )} trở lên.`
+                          : `Giảm giá này sẽ áp dụng khi bạn chi tiêu từ ${formatPriceCentsWithCurrencySymbol(
                               product.currency_code,
                               discountCode.discount.minimum_amount_cents,
                               { symbolFormat: "short" },
-                            )} or more in ${
+                            )} trở lên cho các sản phẩm ${
                               !discountCode.discount.product_ids && product.seller
-                                ? `${product.seller.name}'s`
-                                : "selected"
-                            } products.`}
+                                ? `của ${product.seller.name}`
+                                : "được chọn"
+                            }.`}
                       </div>
                     ) : null}
                     {discountCode.discount.expires_at ? (
@@ -511,10 +511,10 @@ export const Product = ({
             ) : (
               <Alert role="status" variant="danger">
                 {discountCode.error_code === "sold_out"
-                  ? "Sorry, the discount code you wish to use has expired."
+                  ? "Xin lỗi, mã giảm giá bạn muốn sử dụng đã hết hạn."
                   : discountCode.error_code === "invalid_offer"
-                    ? "Sorry, the discount code you wish to use is invalid."
-                    : "Sorry, the discount code you wish to use is inactive."}
+                    ? "Xin lỗi, mã giảm giá bạn muốn sử dụng không hợp lệ."
+                    : "Xin lỗi, mã giảm giá bạn muốn sử dụng không hoạt động."}
               </Alert>
             )
           ) : null}
@@ -527,14 +527,14 @@ export const Product = ({
           />
           {product.ppp_details && pppDiscounted ? (
             <Alert role="status" variant="info">
-              This product supports purchasing power parity. Because you're located in{" "}
-              <b>{product.ppp_details.country}</b>, the price has been discounted by{" "}
+              Sản phẩm này hỗ trợ ngang giá sức mua. Vì bạn đang ở{" "}
+              <b>{product.ppp_details.country}</b>, giá đã được giảm{" "}
               <b>
                 {(Math.round((1 - discountedPriceCents / priceCents) * 100) / 100).toLocaleString(undefined, {
                   style: "percent",
                 })}
               </b>{" "}
-              to{" "}
+              còn{" "}
               <b>
                 {formatPriceCentsWithCurrencySymbol(product.currency_code, discountedPriceCents, {
                   symbolFormat: "long",
@@ -542,20 +542,19 @@ export const Product = ({
               </b>
               .
               {discountCode?.valid
-                ? " This discount will be applied because it is greater than the offer code discount."
+                ? " Giảm giá này sẽ được áp dụng vì nó lớn hơn giảm giá của mã ưu đãi."
                 : null}
             </Alert>
           ) : null}
           {product.free_trial ? (
             <Alert role="status" variant="info">
-              All memberships include a {product.free_trial.duration.amount} {product.free_trial.duration.unit} free
-              trial
+              Tất cả các gói thành viên đều bao gồm dùng thử miễn phí {product.free_trial.duration.amount} {product.free_trial.duration.unit}
             </Alert>
           ) : null}
           {product.duration_in_months ? (
             <Alert role="status" variant="info">
-              This membership will automatically end after{" "}
-              {product.duration_in_months === 1 ? "one month" : `${product.duration_in_months} months`}
+              Gói thành viên này sẽ tự động kết thúc sau{" "}
+              {product.duration_in_months === 1 ? "một tháng" : `${product.duration_in_months} tháng`}
             </Alert>
           ) : null}
           <CtaButton
@@ -574,23 +573,22 @@ export const Product = ({
             <Alert role="status" variant="info">
               <strong>{product.sales_count.toLocaleString()}</strong>{" "}
               {product.recurrences
-                ? "member"
+                ? "thành viên"
                 : product.preorder
-                  ? "pre-order"
+                  ? "đơn đặt trước"
                   : product.price_cents > 0 || product.options.some((option) => option.price_difference_cents)
-                    ? "sale"
-                    : "download"}
-              {product.sales_count === 1 ? "" : "s"}
+                    ? "lượt bán"
+                    : "lượt tải"}
             </Alert>
           ) : null}
           {product.preorder ? (
             <Alert role="status" variant="info">
-              Available on {formatDate(parseISO(product.preorder.release_date))}
+              Có sẵn vào {formatDate(parseISO(product.preorder.release_date))}
             </Alert>
           ) : null}
           {product.streamable ? (
             <Alert role="status" variant="info">
-              Watch link provided after purchase
+              Liên kết xem được cung cấp sau khi mua
             </Alert>
           ) : null}
           {product.summary || product.attributes.length > 0 ? (
@@ -654,7 +652,7 @@ const ExistingPurchaseCard = ({
 
   const viewContentButton = purchase.show_view_content_button_on_product_page ? (
     <NavigationButton color="primary" href={purchase.content_url ?? ""} target="_blank" onClick={handleViewClick}>
-      {customViewContentButtonText ?? "View content"}
+      {customViewContentButtonText ?? "Xem nội dung"}
     </NavigationButton>
   ) : null;
 
@@ -683,7 +681,7 @@ const ExistingPurchaseCard = ({
                 }
                 className="grow basis-0"
               >
-                {purchase.subscription_has_lapsed ? "Restart membership" : "Manage membership"}
+                {purchase.subscription_has_lapsed ? "Khởi động lại gói thành viên" : "Quản lý gói thành viên"}
               </NavigationButton>
               {viewContentButton}
             </CardContent>
@@ -694,11 +692,11 @@ const ExistingPurchaseCard = ({
               <h3 className="grow">
                 {isBundle
                   ? purchase.is_gift_receiver_purchase
-                    ? "You've received this bundle as a gift"
-                    : "You've purchased this bundle"
+                    ? "Bạn đã nhận được gói này như một món quà"
+                    : "Bạn đã mua gói này"
                   : purchase.is_gift_receiver_purchase
-                    ? "You've received this product as a gift"
-                    : "You've purchased this product"}
+                    ? "Bạn đã nhận được sản phẩm này như một món quà"
+                    : "Bạn đã mua sản phẩm này"}
               </h3>
               {viewContentButton}
             </li>
@@ -720,7 +718,7 @@ const ExistingPurchaseCard = ({
 
 export const RatingsHistogramRow = ({ rating, percentage }: { rating: number; percentage: number }) => {
   const formattedPercentage = `${percentage}%`;
-  const label = `${rating} ${rating === 1 ? "star" : "stars"}`;
+  const label = `${rating} ${rating === 1 ? "sao" : "sao"}`;
   return (
     <>
       <div>{label}</div>
@@ -764,11 +762,11 @@ const Reviews = ({
   return (
     <section className="grid gap-4 p-6 not-first:border-t">
       <header className="flex items-center justify-between">
-        <h3>Ratings</h3>
+        <h3>Đánh giá</h3>
         <div className="flex shrink-0 items-center gap-1">
           <Icon name="solid-star" />
           <div className="rating-average">{ratings.average}</div>(
-          {`${formatOrderOfMagnitude(ratings.count, 1)} ${ratings.count === 1 ? "rating" : "ratings"}`})
+          {`${formatOrderOfMagnitude(ratings.count, 1)} ${ratings.count === 1 ? "đánh giá" : "đánh giá"}`})
         </div>
       </header>
       <div itemProp="aggregateRating" itemType="https://schema.org/AggregateRating" itemScope hidden>
@@ -797,7 +795,7 @@ const Reviews = ({
               onClick={() => void loadNextPage()}
               disabled={isLoading}
             >
-              Load more
+              Tải thêm
             </button>
           ) : null}
         </section>
@@ -852,7 +850,7 @@ const RefundPolicyInfo = ({ refundPolicy, permalink }: { refundPolicy: RefundPol
   }, [viewingRefundPolicy]);
 
   const formattedDate = new Date(refundPolicy.updated_at).toLocaleString(userAgentInfo.locale, { dateStyle: "medium" });
-  const lastUpdated = `Last updated ${formattedDate}`;
+  const lastUpdated = `Cập nhật lần cuối ${formattedDate}`;
 
   const handleCloseModal = () => {
     setViewingRefundPolicy(false);

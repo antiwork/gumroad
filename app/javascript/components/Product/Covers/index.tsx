@@ -53,7 +53,7 @@ export const Covers = ({
         "group relative col-span-full overflow-hidden rounded-t border-b border-border bg-(image:--product-cover-placeholder) bg-cover",
         className,
       )}
-      aria-label="Product preview"
+      aria-label="Xem trước sản phẩm"
     >
       {closeButton}
       {prevCover ? <PreviewArrow direction="previous" onClick={() => setActiveCoverId(prevCover.id)} /> : null}
@@ -73,14 +73,14 @@ export const Covers = ({
       {covers.length > 1 && activeCover?.type !== "oembed" && activeCover?.type !== "video" ? (
         <div
           role="tablist"
-          aria-label="Select a cover"
+          aria-label="Chọn ảnh bìa"
           className="absolute bottom-0 flex w-full flex-wrap justify-center gap-2 p-3"
         >
           {covers.map((cover, i) => (
             <div
               key={i}
               role="tab"
-              aria-label={`Show cover ${i + 1}`}
+              aria-label={`Hiển thị ảnh bìa ${i + 1}`}
               aria-selected={i === activeCoverIndex}
               aria-controls={cover.id}
               onClick={(e) => {
@@ -115,7 +115,7 @@ const PreviewArrow = ({ direction, onClick }: { direction: "previous" | "next"; 
         e.preventDefault();
         onClick();
       }}
-      aria-label={direction === "previous" ? "Show previous cover" : "Show next cover"}
+      aria-label={direction === "previous" ? "Hiển thị ảnh bìa trước" : "Hiển thị ảnh bìa tiếp theo"}
     >
       <Icon name={iconName} />
     </button>

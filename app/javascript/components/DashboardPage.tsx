@@ -80,60 +80,60 @@ type GettingStartedItemType = {
 
 const GETTING_STARTED_ITEMS: GettingStartedItemType[] = [
   {
-    name: "Welcome aboard",
+    name: "Chào mừng bạn",
     getCompleted: () => true,
     link: Routes.dashboard_path(),
     IconComponent: MakeAccountIcon,
-    description: "Make a Gumroad account.",
+    description: "Tạo tài khoản Gumroad.",
   },
   {
-    name: "Make an impression",
+    name: "Tạo ấn tượng",
     getCompleted: (stats) => stats.customized_profile,
     link: Routes.settings_profile_path(),
     IconComponent: CustomizeProfileIcon,
-    description: "Customize your profile.",
+    description: "Tùy chỉnh hồ sơ của bạn.",
   },
   {
-    name: "Showtime",
+    name: "Bắt đầu thôi",
     getCompleted: (stats) => stats.first_product,
     link: Routes.new_product_path(),
     IconComponent: FirstProductIcon,
-    description: "Create your first product.",
+    description: "Tạo sản phẩm đầu tiên của bạn.",
   },
   {
-    name: "Build your tribe",
+    name: "Xây dựng cộng đồng",
     getCompleted: (stats) => stats.first_follower,
     link: Routes.followers_path(),
     IconComponent: FirstFollowerIcon,
-    description: "Get your first follower.",
+    description: "Có người theo dõi đầu tiên.",
   },
   {
-    name: "Cha-ching",
+    name: "Doanh số đầu tiên",
     getCompleted: (stats) => stats.first_sale,
     link: Routes.sales_dashboard_path(),
     IconComponent: FirstSaleIcon,
-    description: "Make your first sale.",
+    description: "Thực hiện đơn hàng đầu tiên.",
   },
   {
-    name: "Money inbound",
+    name: "Tiền về",
     getCompleted: (stats) => stats.first_payout,
     link: Routes.settings_payments_path(),
     IconComponent: FirstPayoutIcon,
-    description: "Get your first pay out.",
+    description: "Nhận khoản thanh toán đầu tiên.",
   },
   {
-    name: "Making waves",
+    name: "Tạo làn sóng",
     getCompleted: (stats) => stats.first_email,
     link: Routes.posts_path(),
     IconComponent: EmailBlastIcon,
-    description: "Send out your first email blast.",
+    description: "Gửi chiến dịch email đầu tiên.",
   },
   {
-    name: "Smart move",
+    name: "Nước đi thông minh",
     getCompleted: (stats) => stats.purchased_small_bets,
     link: Routes.small_bets_url(),
     IconComponent: SmallBetsIcon,
-    description: "Sign up for Small Bets.",
+    description: "Đăng ký Small Bets.",
   },
 ];
 
@@ -149,12 +149,12 @@ type GettingStartedItemProps = {
 const Greeter = () => (
   <Placeholder>
     <PlaceholderImage src={placeholderImage} />
-    <h2>We're here to help you get paid for your work.</h2>
+    <h2>Chúng tôi ở đây để giúp bạn nhận được thù lao cho công việc của mình.</h2>
     <NavigationButton href={Routes.new_product_path()} color="accent">
-      Create your first product
+      Tạo sản phẩm đầu tiên của bạn
     </NavigationButton>
     <a href="/help/article/149-adding-a-product" target="_blank" rel="noreferrer">
-      Learn more about creating products
+      Tìm hiểu thêm về cách tạo sản phẩm
     </a>
   </Placeholder>
 );
@@ -216,16 +216,16 @@ const ProductsTable = ({ sales }: TableProps) => {
   if (sales.every((b) => b.sales === 0)) {
     return (
       <div className="grid gap-4">
-        <h2>Best selling</h2>
+        <h2>Bán chạy nhất</h2>
         <Placeholder>
           <p>
-            You haven't made any sales yet. Learn how to{" "}
+            Bạn chưa có doanh số nào. Tìm hiểu cách{" "}
             <a href="/help/article/170-audience" target="_blank" rel="noreferrer">
-              build a following
+              xây dựng nhóm người theo dõi
             </a>{" "}
-            and{" "}
+            và{" "}
             <a href="/help/article/79-gumroad-discover" target="_blank" rel="noreferrer">
-              sell on Gumroad Discover
+              bán hàng trên Gumroad Discover
             </a>
           </p>
         </Placeholder>
@@ -235,21 +235,21 @@ const ProductsTable = ({ sales }: TableProps) => {
 
   return (
     <Table>
-      <TableCaption>Best selling</TableCaption>
+      <TableCaption>Bán chạy nhất</TableCaption>
       <TableHeader>
         <TableRow>
           <TableHead colSpan={2} {...thProps("name")}>
-            Products
+            Sản phẩm
           </TableHead>
-          <TableHead {...thProps("sales")}>Sales</TableHead>
-          <TableHead {...thProps("revenue")}>Revenue</TableHead>
-          <TableHead {...thProps("visits")}>Visits</TableHead>
-          <TableHead {...thProps("today")}>Today</TableHead>
+          <TableHead {...thProps("sales")}>Doanh số</TableHead>
+          <TableHead {...thProps("revenue")}>Doanh thu</TableHead>
+          <TableHead {...thProps("visits")}>Lượt truy cập</TableHead>
+          <TableHead {...thProps("today")}>Hôm nay</TableHead>
           <TableHead className="text-singleline" {...thProps("last_7")}>
-            Last 7 days
+            7 ngày qua
           </TableHead>
           <TableHead className="text-singleline" {...thProps("last_30")}>
-            Last 30 days
+            30 ngày qua
           </TableHead>
         </TableRow>
       </TableHeader>
@@ -315,7 +315,7 @@ export const DashboardPage = ({
   return (
     <div>
       <PageHeader
-        title="Dashboard"
+        title="Bảng điều khiển"
         actions={
           tax_center_enabled
             ? null
@@ -325,16 +325,16 @@ export const DashboardPage = ({
       />
       {stripe_verification_message ? (
         <Alert variant="warning">
-          {stripe_verification_message} <a href={Routes.settings_payments_path()}>Update</a>
+          {stripe_verification_message} <a href={Routes.settings_payments_path()}>Cập nhật</a>
         </Alert>
       ) : null}
       {show_1099_download_notice ? (
         <Alert variant="info">
-          Your 1099 tax form for {new Date().getFullYear() - 1} is ready!{" "}
+          Mẫu thuế 1099 cho năm {new Date().getFullYear() - 1} đã sẵn sàng!{" "}
           {tax_center_enabled ? (
-            <Link href={Routes.tax_center_path({ year: new Date().getFullYear() - 1 })}>Click here to download</Link>
+            <Link href={Routes.tax_center_path({ year: new Date().getFullYear() - 1 })}>Nhấn vào đây để tải xuống</Link>
           ) : (
-            <a href={Routes.dashboard_download_tax_form_path()}>Click here to download</a>
+            <a href={Routes.dashboard_download_tax_form_path()}>Nhấn vào đây để tải xuống</a>
           )}
           .
         </Alert>
@@ -344,17 +344,17 @@ export const DashboardPage = ({
         ? Object.values(getting_started_stats).some((v) => !v) && (
             <div className="grid gap-4 p-4 md:p-8">
               <div className="flex items-center justify-between">
-                <h2>Getting started</h2>
+                <h2>Bắt đầu</h2>
                 <a
                   href="#"
                   onClick={(e) => {
                     e.preventDefault();
                     toggleGettingStarted();
                   }}
-                  aria-label={gettingStartedMinimized ? "Expand getting started" : "Minimize getting started"}
+                  aria-label={gettingStartedMinimized ? "Mở rộng phần bắt đầu" : "Thu gọn phần bắt đầu"}
                   style={{ display: "flex", alignItems: "center", gap: "var(--spacer-1)" }}
                 >
-                  <span>{gettingStartedMinimized ? "Show more" : "Show less"}</span>
+                  <span>{gettingStartedMinimized ? "Xem thêm" : "Thu gọn"}</span>
                   <Icon
                     name={gettingStartedMinimized ? "arrows-expand" : "arrows-collapse"}
                     style={{ width: "20px", height: "20px" }}
@@ -389,23 +389,23 @@ export const DashboardPage = ({
       </div>
 
       <div className="grid gap-4 p-4 md:p-8">
-        <h2>Activity</h2>
+        <h2>Hoạt động</h2>
 
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
-          <Stats title="Balance" description="Your current balance available for payout" value={balances.balance} />
+          <Stats title="Số dư" description="Số dư hiện tại có thể thanh toán của bạn" value={balances.balance} />
           <Stats
-            title="Last 7 days"
-            description="Your total sales in the last 7 days"
+            title="7 ngày qua"
+            description="Tổng doanh số của bạn trong 7 ngày qua"
             value={balances.last_seven_days_sales_total}
           />
           <Stats
-            title="Last 28 days"
-            description="Your total sales in the last 28 days"
+            title="28 ngày qua"
+            description="Tổng doanh số của bạn trong 28 ngày qua"
             value={balances.last_28_days_sales_total}
           />
           <Stats
-            title="Total earnings"
-            description="Your all-time net earnings from all products, excluding refunds and chargebacks"
+            title="Tổng thu nhập"
+            description="Tổng thu nhập ròng từ tất cả sản phẩm, không bao gồm hoàn tiền và bồi hoàn"
             value={balances.total}
           />
         </div>

@@ -12,10 +12,10 @@ describe "Collaborators", type: :system, js: true do
         it "displays a placeholder message" do
           visit collaborators_path
 
-          expect(page).to have_title("Collaborators")
-          expect(page).to have_selector("h1", text: "Collaborators")
-          expect(page).to have_selector("h2", text: "No collaborators yet")
-          expect(page).to have_selector("h4", text: "Share your revenue with the people who helped create your products.")
+          expect(page).to have_title("Cộng tác viên")
+          expect(page).to have_selector("h1", text: "Cộng tác viên")
+          expect(page).to have_selector("h2", text: "Chưa có cộng tác viên nào")
+          expect(page).to have_selector("h4", text: "Chia sẻ doanh thu của bạn với những người đã giúp tạo ra sản phẩm của bạn.")
         end
       end
 
@@ -48,25 +48,25 @@ describe "Collaborators", type: :system, js: true do
               "Name" => collaborator_one.affiliate_user.username,
               "Products" => "2 products",
               "Cut" => "35% - 50%",
-              "Status" => "Accepted"
+              "Status" => "Đã chấp nhận"
             },
             {
               "Name" => collaborator_two.affiliate_user.username,
               "Products" => "None",
               "Cut" => "30%",
-              "Status" => "Accepted"
+              "Status" => "Đã chấp nhận"
             },
             {
               "Name" => collaborator_three.affiliate_user.username,
               "Products" => product_three.name,
               "Cut" => "30%",
-              "Status" => "Accepted"
+              "Status" => "Đã chấp nhận"
             },
             {
               "Name" => collaborator_four.affiliate_user.username,
               "Products" => "2 products",
               "Cut" => "30%",
-              "Status" => "Pending"
+              "Status" => "Đang chờ xử lý"
             },
           ].each do |row|
             expect(page).to have_table_row(row)
@@ -88,17 +88,19 @@ describe "Collaborators", type: :system, js: true do
             expect(page).to have_text(product_two.name)
             expect(page).to have_text("35%")
             expect(page).to have_text("50%")
-            expect(page).to have_link("Edit")
-            expect(page).to have_button("Remove")
-            expect(page).not_to have_text("Collaborators won't receive their cut until they set up a payout account in their Gumroad settings.")
+            expect(page).to have_text("35%")
+            expect(page).to have_text("50%")
+            expect(page).to have_link("Chỉnh sửa")
+            expect(page).to have_button("Xóa")
+            expect(page).not_to have_text("Cộng tác viên sẽ không nhận được phần chia của họ cho đến khi họ thiết lập tài khoản thanh toán trong cài đặt Gumroad của mình.")
           end
 
           find(:table_row, { "Name" => collaborator_two.affiliate_user.username, "Products" => "None", "Cut" => "30%" }).click
           within_modal collaborator_two.affiliate_user.name do
             expect(page).to have_text(collaborator_two.affiliate_user.email)
-            expect(page).to have_link("Edit")
-            expect(page).to have_button("Remove")
-            expect(page).to have_text("Collaborators won't receive their cut until they set up a payout account in their Gumroad settings.")
+            expect(page).to have_link("Chỉnh sửa")
+            expect(page).to have_button("Xóa")
+            expect(page).to have_text("Cộng tác viên sẽ không nhận được phần chia của họ cho đến khi họ thiết lập tài khoản thanh toán trong cài đặt Gumroad của mình.")
           end
         end
       end
@@ -123,16 +125,16 @@ describe "Collaborators", type: :system, js: true do
       it "adds a collaborator for all visible products" do
         expect do
           visit collaborators_path
-          click_on "Add collaborator"
+          click_on "Thêm cộng tác viên"
 
-          expect(page).to have_title("Collaborators")
-          expect(page).to have_selector("h1", text: "New collaborator")
-          expect(page).to_not have_tab_button("Collaborators")
-          expect(page).to_not have_tab_button("Collaborations")
+          expect(page).to have_title("Cộng tác viên")
+          expect(page).to have_selector("h1", text: "Cộng tác viên mới")
+          expect(page).to_not have_tab_button("Cộng tác viên")
+          expect(page).to_not have_tab_button("Cộng tác")
 
           fill_in "email", with: "#{collaborating_user.email}  " # test trimming email
-          uncheck "Show as co-creator", checked: true
-          click_on "Add collaborator"
+          uncheck "Hiển thị là người đồng sáng tạo", checked: true
+          click_on "Thêm cộng tác viên"
 
           expect(page).to have_alert(text: "Changes saved!")
           expect(page).to have_current_path(collaborators_path)
@@ -156,7 +158,7 @@ describe "Collaborators", type: :system, js: true do
             "Name" => collaborator.affiliate_user.username,
             "Products" => "3 products",
             "Cut" => "50%",
-            "Status" => "Pending"
+            "Status" => "Đang chờ xử lý"
           }
         )
       end
@@ -166,18 +168,18 @@ describe "Collaborators", type: :system, js: true do
           visit new_collaborator_path
 
           fill_in "email", with: collaborating_user.email
-          uncheck "All products"
+          uncheck "Tất cả sản phẩm"
           within find(:table_row, { "Product" => product1.name }) do
             check product1.name
             fill_in "Percentage", with: 40
-            uncheck "Show as co-creator", checked: true
+            uncheck "Hiển thị là người đồng sáng tạo", checked: true
           end
           within find(:table_row, { "Product" => product3.name }) do
             check product3.name
             fill_in "Percentage", with: 10
           end
 
-          click_on "Add collaborator"
+          click_on "Thêm cộng tác viên"
 
           expect(page).to have_alert(text: "Changes saved!")
           expect(page).to have_current_path(collaborators_path)
@@ -206,12 +208,12 @@ describe "Collaborators", type: :system, js: true do
 
         # invalid email
         fill_in "email", with: "foo"
-        click_on "Add collaborator"
-        expect(page).to have_alert(text: "Please enter a valid email")
+        click_on "Thêm cộng tác viên"
+        expect(page).to have_alert(text: "Vui lòng nhập một email hợp lệ")
 
         # no user with that email
         fill_in "email", with: "foo@example.com"
-        click_on "Add collaborator"
+        click_on "Thêm cộng tác viên"
         expect(page).to have_alert(text: "The email address isn't associated with a Gumroad account.")
 
         # no products selected
@@ -221,68 +223,68 @@ describe "Collaborators", type: :system, js: true do
             uncheck product.name
           end
         end
-        click_on "Add collaborator"
-        expect(page).to have_alert(text: "At least one product must be selected")
+        click_on "Thêm cộng tác viên"
+        expect(page).to have_alert(text: "Phải chọn ít nhất một sản phẩm")
 
         # invalid default percent commission
         within find(:table_row, { "Product" => product1.name }) do
           check product1.name
         end
-        within find(:table_row, { "Product" => "All products" }) do
+        within find(:table_row, { "Product" => "Tất cả sản phẩm" }) do
           fill_in "Percentage", with: 75
         end
-        click_on "Add collaborator"
-        within find(:table_row, { "Product" => "All products" }) do
+        click_on "Thêm cộng tác viên"
+        within find(:table_row, { "Product" => "Tất cả sản phẩm" }) do
           expect(find("fieldset.danger")).to have_field("Percentage")
         end
-        expect(page).to have_alert(text: "Collaborator cut must be 50% or less")
+        expect(page).to have_alert(text: "Hoa hồng cộng tác viên phải từ 50% trở xuống")
 
         # invalid product percent commission
-        uncheck "All products"
+        uncheck "Tất cả sản phẩm"
         within find(:table_row, { "Product" => product1.name }) do
           check product1.name
           fill_in "Percentage", with: 75
         end
-        click_on "Add collaborator"
+        click_on "Thêm cộng tác viên"
         within find(:table_row, { "Product" => product1.name }) do
           expect(find("fieldset.danger")).to have_field("Percentage")
         end
-        expect(page).to have_alert(text: "Collaborator cut must be 50% or less")
+        expect(page).to have_alert(text: "Hoa hồng cộng tác viên phải từ 50% trở xuống")
         within find(:table_row, { "Product" => product1.name }) do
           fill_in "Percentage", with: 40
           expect(page).not_to have_selector("fieldset.danger")
           fill_in "Percentage", with: 0
         end
-        click_on "Add collaborator"
+        click_on "Thêm cộng tác viên"
         within find(:table_row, { "Product" => product1.name }) do
           expect(find("fieldset.danger")).to have_field("Percentage")
         end
-        expect(page).to have_alert(text: "Collaborator cut must be 50% or less")
+        expect(page).to have_alert(text: "Hoa hồng cộng tác viên phải từ 50% trở xuống")
 
         # missing default percent commission
-        check "All products"
-        within find(:table_row, { "Product" => "All products" }) do
+        check "Tất cả sản phẩm"
+        within find(:table_row, { "Product" => "Tất cả sản phẩm" }) do
           fill_in "Percentage", with: ""
         end
-        click_on "Add collaborator"
-        within find(:table_row, { "Product" => "All products" }) do
+        click_on "Thêm cộng tác viên"
+        within find(:table_row, { "Product" => "Tất cả sản phẩm" }) do
           expect(find("fieldset.danger")).to have_field("Percentage")
         end
-        expect(page).to have_alert(text: "Collaborator cut must be 50% or less")
+        expect(page).to have_alert(text: "Hoa hồng cộng tác viên phải từ 50% trở xuống")
 
         # missing product percent commission
-        uncheck "All products"
+        uncheck "Tất cả sản phẩm"
         within find(:table_row, { "Product" => product1.name }) do
           check product1.name
           fill_in "Percentage", with: ""
           expect(page).to have_field("Percentage", placeholder: "50") # shows the default value as a placeholder
         end
-        click_on "Add collaborator"
+        click_on "Thêm cộng tác viên"
         within find(:table_row, { "Product" => product1.name }) do
           expect(page).to have_field("Percentage", placeholder: "50") # shows the default value as a placeholder
           expect(find("fieldset.danger")).to have_field("Percentage")
         end
-        expect(page).to have_alert(text: "Collaborator cut must be 50% or less")
+        expect(page).to have_alert(text: "Hoa hồng cộng tác viên phải từ 50% trở xuống")
       end
 
       it "does not allow adding a collaborator for ineligible products but does for unpublished products" do
@@ -293,7 +295,7 @@ describe "Collaborators", type: :system, js: true do
         expect(page).not_to have_content product4.name
         expect(page).not_to have_content product5.name
 
-        check "Show unpublished and ineligible products"
+        check "Hiển thị sản phẩm chưa xuất bản và không đủ điều kiện"
         expect(page).to have_content product4.name
         expect(page).to have_content product5.name
 
@@ -305,7 +307,7 @@ describe "Collaborators", type: :system, js: true do
         end
 
         fill_in "email", with: collaborating_user.email
-        uncheck "All products"
+        uncheck "Tất cả sản phẩm"
 
         within find(:table_row, { "Product" => product2.name }) do
           check product2.name
@@ -315,14 +317,14 @@ describe "Collaborators", type: :system, js: true do
         end
         within find(:table_row, { "Product" => product4.name }) do
           expect(page).to have_unchecked_field(product4.name, disabled: true)
-          expect(page).to have_content "Already has a collaborator"
+          expect(page).to have_content "Đã có cộng tác viên"
         end
         within find(:table_row, { "Product" => product5.name }) do
           check product5.name
         end
 
         expect do
-          click_on "Add collaborator"
+          click_on "Thêm cộng tác viên"
 
           expect(page).to have_alert(text: "Changes saved!")
           expect(page).to have_current_path(collaborators_path)
@@ -334,10 +336,10 @@ describe "Collaborators", type: :system, js: true do
 
         visit collaborators_path
         within :table_row, { "Name" => collaborator.affiliate_user.display_name } do
-          click_on "Edit"
+          click_on "Chỉnh sửa"
         end
 
-        expect(page).to have_checked_field("Show unpublished and ineligible products")
+        expect(page).to have_checked_field("Hiển thị sản phẩm chưa xuất bản và không đủ điều kiện")
         within find(:table_row, { "Product" => product5.name }) do
           expect(page).to have_checked_field(product5.name)
         end
@@ -354,30 +356,30 @@ describe "Collaborators", type: :system, js: true do
 
           affiliated_products.each do |product|
             within find(:table_row, { "Product" => product.name }) do
-              expect(page).to have_content "Selecting this product will remove all its affiliates."
+              expect(page).to have_content "Chọn sản phẩm này sẽ xóa tất cả các đơn vị liên kết của nó."
             end
           end
 
-          click_on "Add collaborator"
+          click_on "Thêm cộng tác viên"
 
-          expect(page).to have_modal("Remove affiliates?")
-          within_modal("Remove affiliates?") do
-            expect(page).to have_text("Affiliates will be removed from the following products:")
+          expect(page).to have_modal("Xóa đơn vị liên kết?")
+          within_modal("Xóa đơn vị liên kết?") do
+            expect(page).to have_text("Các đơn vị liên kết sẽ bị xóa khỏi các sản phẩm sau:")
             affiliated_products.first(10).each do |product|
               expect(page).to have_text(product.name)
             end
             affiliated_products.last(2).each do |product|
               expect(page).not_to have_text(product.name)
             end
-            expect(page).to have_text("and 2 others.")
-            click_on "No, cancel"
+            expect(page).to have_text("và 2 người khác.")
+            click_on "Không, hủy"
           end
-          expect(page).not_to have_modal("Remove affiliates?")
+          expect(page).not_to have_modal("Xóa đơn vị liên kết?")
 
-          click_on "Add collaborator"
-          expect(page).to have_modal("Remove affiliates?")
-          within_modal("Remove affiliates?") do
-            click_on "Yes, continue"
+          click_on "Thêm cộng tác viên"
+          expect(page).to have_modal("Xóa đơn vị liên kết?")
+          within_modal("Xóa đơn vị liên kết?") do
+            click_on "Có, tiếp tục"
           end
 
           expect(page).to have_alert(text: "Changes saved!")
@@ -415,7 +417,7 @@ describe "Collaborators", type: :system, js: true do
 
       visit collaborators_path
       within find(:table_row, { "Name" => collaborators.first.affiliate_user.username }) do
-        click_on "Delete"
+        click_on "Xóa"
       end
       expect(page).to have_alert(text: "The collaborator was removed successfully.")
       expect(collaborators.first.reload.deleted_at).to be_present
@@ -424,7 +426,7 @@ describe "Collaborators", type: :system, js: true do
 
       find(:table_row, { "Name" => collaborators.second.affiliate_user.username }).click
       within_modal collaborators.second.affiliate_user.username do
-        click_on "Remove"
+        click_on "Xóa"
       end
       wait_for_ajax
       expect(page).to have_alert(text: "The collaborator was removed successfully.")
@@ -448,17 +450,17 @@ describe "Collaborators", type: :system, js: true do
         expect do
           visit collaborators_path
           within :table_row, { "Name" => collaborator.affiliate_user.display_name } do
-            click_on "Edit"
+            click_on "Chỉnh sửa"
           end
 
-          expect(page).to have_title("Collaborators")
+          expect(page).to have_title("Cộng tác viên")
           expect(page).to have_selector("h1", text: collaborator.affiliate_user.display_name)
-          expect(page).to_not have_tab_button("Collaborators")
-          expect(page).to_not have_tab_button("Collaborations")
+          expect(page).to_not have_tab_button("Cộng tác viên")
+          expect(page).to_not have_tab_button("Cộng tác")
 
           # edit default commission
-          within find(:table_row, { "Product" => "All products" }) do
-            expect(page).to have_checked_field("All products")
+          within find(:table_row, { "Product" => "Tất cả sản phẩm" }) do
+            expect(page).to have_checked_field("Tất cả sản phẩm")
             fill_in "Percentage", with: 30
           end
 
@@ -468,12 +470,12 @@ describe "Collaborators", type: :system, js: true do
           end
 
           # enable individual cuts
-          uncheck "All products"
+          uncheck "Tất cả sản phẩm"
 
           # show as co-creator & edit commission for product 2
           within find(:table_row, { "Product" => product2.name }) do
             check product2.name
-            check "Show as co-creator", checked: false
+            check "Hiển thị là người đồng sáng tạo", checked: false
             fill_in "Percentage", with: 25
           end
 
@@ -482,32 +484,32 @@ describe "Collaborators", type: :system, js: true do
             check product3.name
           end
           within find(:table_row, { "Product" => product4.name }) do
-            expect(page).to have_content "Selecting this product will remove all its affiliates."
+            expect(page).to have_content "Chọn sản phẩm này sẽ xóa tất cả các đơn vị liên kết của nó."
             check product4.name
             fill_in "Percentage", with: 45
           end
 
-          check "Show unpublished and ineligible products"
+          check "Hiển thị sản phẩm chưa xuất bản và không đủ điều kiện"
           # cannot select ineligible product
           within find(:table_row, { "Product" => ineligible_product.name }) do
             have_unchecked_field(ineligible_product.name, disabled: true)
-            expect(page).to have_content "Already has a collaborator"
+            expect(page).to have_content "Đã có cộng tác viên"
           end
 
-          click_on "Save changes"
+          click_on "Lưu thay đổi"
 
-          expect(page).to have_modal("Remove affiliates?")
-          within_modal("Remove affiliates?") do
-            expect(page).to have_text("Affiliates will be removed from the following products:")
+          expect(page).to have_modal("Xóa đơn vị liên kết?")
+          within_modal("Xóa đơn vị liên kết?") do
+            expect(page).to have_text("Các đơn vị liên kết sẽ bị xóa khỏi các sản phẩm sau:")
             expect(page).to have_text(product4.name)
             click_on "Close"
           end
-          expect(page).not_to have_modal("Remove affiliates?")
+          expect(page).not_to have_modal("Xóa đơn vị liên kết?")
 
-          click_on "Save changes"
-          expect(page).to have_modal("Remove affiliates?")
-          within_modal("Remove affiliates?") do
-            click_on "Yes, continue"
+          click_on "Lưu thay đổi"
+          expect(page).to have_modal("Xóa đơn vị liên kết?")
+          within_modal("Xóa đơn vị liên kết?") do
+            click_on "Có, tiếp tục"
           end
 
           expect(page).to have_alert(text: "Changes saved!")

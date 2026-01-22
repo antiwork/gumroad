@@ -24,10 +24,10 @@ export const Layout = ({
       {showTabs ? (
         <Tabs>
           <Tab asChild isSelected={selectedTab === "collaborators"}>
-            <Link href={Routes.collaborators_path()}>Collaborators</Link>
+            <Link href={Routes.collaborators_path()}>Cộng tác viên</Link>
           </Tab>
           <Tab asChild isSelected={selectedTab === "collaborations"}>
-            <Link href={Routes.collaborators_incomings_path()}>Collaborations</Link>
+            <Link href={Routes.collaborators_incomings_path()}>Cộng tác</Link>
           </Tab>
         </Tabs>
       ) : null}

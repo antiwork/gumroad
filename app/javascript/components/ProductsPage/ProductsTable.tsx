@@ -88,20 +88,20 @@ export const ProductsPageProductsTable = (props: {
         <TableHeader>
           <TableRow>
             <TableHead />
-            <TableHead {...thProps("name")} title="Sort by Name" className="lg:relative lg:-left-20">
-              Name
+            <TableHead {...thProps("name")} title="Sắp xếp theo Tên" className="lg:relative lg:-left-20">
+              Tên
             </TableHead>
-            <TableHead {...thProps("successful_sales_count")} title="Sort by Sales">
-              Sales
+            <TableHead {...thProps("successful_sales_count")} title="Sắp xếp theo Doanh số">
+              Doanh số
             </TableHead>
-            <TableHead {...thProps("revenue")} title="Sort by Revenue">
-              Revenue
+            <TableHead {...thProps("revenue")} title="Sắp xếp theo Doanh thu">
+              Doanh thu
             </TableHead>
-            <TableHead {...thProps("display_price_cents")} title="Sort by Price">
-              Price
+            <TableHead {...thProps("display_price_cents")} title="Sắp xếp theo Giá">
+              Giá
             </TableHead>
-            <TableHead {...thProps("status")} title="Sort by Status">
-              Status
+            <TableHead {...thProps("status")} title="Sắp xếp theo Trạng thái">
+              Trạng thái
             </TableHead>
           </TableRow>
         </TableHeader>
@@ -132,7 +132,7 @@ export const ProductsPageProductsTable = (props: {
                 </a>
 
                 {product.remaining_for_sale_count ? (
-                  <small>{product.remaining_for_sale_count.toLocaleString(locale)} remaining</small>
+                  <small>{product.remaining_for_sale_count.toLocaleString(locale)} còn lại</small>
                 ) : null}
               </TableCell>
 
@@ -146,11 +146,11 @@ export const ProductsPageProductsTable = (props: {
                 {(() => {
                   switch (product.status) {
                     case "unpublished":
-                      return <>Unpublished</>;
+                      return <>Chưa xuất bản</>;
                     case "preorder":
-                      return <>Pre-order</>;
+                      return <>Đặt hàng trước</>;
                     case "published":
-                      return <>Published</>;
+                      return <>Đã xuất bản</>;
                   }
                 })()}
               </TableCell>
@@ -180,7 +180,7 @@ export const ProductsPageProductsTable = (props: {
 
         <TableFooter>
           <TableRow>
-            <TableCell colSpan={2}>Totals</TableCell>
+            <TableCell colSpan={2}>Tổng cộng</TableCell>
             <TableCell label="Sales" className="whitespace-nowrap">
               {products.reduce((sum, product) => sum + product.successful_sales_count, 0).toLocaleString(locale)}
             </TableCell>

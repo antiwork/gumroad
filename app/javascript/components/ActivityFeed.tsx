@@ -25,7 +25,7 @@ const Sale = ({ details: { price_cents, product_name, product_unique_permalink }
   <>
     <Icon name="outline-currency-dollar" className="text-green" />
     <span>
-      New sale of <a href={Routes.short_link_path({ id: product_unique_permalink })}>{product_name}</a> for{" "}
+      Đơn hàng mới của <a href={Routes.short_link_path({ id: product_unique_permalink })}>{product_name}</a> với giá{" "}
       {formatPriceCentsWithCurrencySymbol("usd", price_cents, { symbolFormat: "short", noCentsIfWhole: true })}
     </span>
   </>
@@ -34,14 +34,14 @@ const Sale = ({ details: { price_cents, product_name, product_unique_permalink }
 const Follow = ({ details: { email, name } }: { details: FollowItemDetails }) => (
   <>
     <Icon name="person-circle-fill" />
-    <span> New follower {name || email} added</span>
+    <span> Người theo dõi mới {name || email} đã tham gia</span>
   </>
 );
 
 const FollowRemoved = ({ details: { email, name } }: { details: FollowItemDetails }) => (
   <>
     <Icon name="person-circle-fill" />
-    <span> Follower {name || email} removed</span>
+    <span> Người theo dõi {name || email} đã hủy theo dõi</span>
   </>
 );
 
@@ -53,12 +53,12 @@ export const ActivityFeed = ({ items }: { items: ActivityItem[] }) => {
     return (
       <Placeholder>
         <p>
-          Followers and sales will show up here as they come in.
+          Người theo dõi và doanh số sẽ hiển thị ở đây khi có cập nhật mới.
           {loggedInUser?.policies.product.create ? (
             <span>
               {" "}
-              For now, <a href={Routes.products_path()}>create a product</a> or{" "}
-              <a href={Routes.settings_profile_path()}>customize your profile</a>
+              Bây giờ, hãy <a href={Routes.products_path()}>tạo sản phẩm</a> hoặc{" "}
+              <a href={Routes.settings_profile_path()}>tùy chỉnh hồ sơ của bạn</a>
             </span>
           ) : null}
         </p>

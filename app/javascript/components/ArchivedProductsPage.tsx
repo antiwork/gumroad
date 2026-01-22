@@ -42,7 +42,7 @@ export const ArchivedProductsPage = ({
   return (
     <ProductsLayout
       selectedTab="archived"
-      title="Products"
+      title="Sản phẩm"
       archivedTabVisible
       ctaButton={
         <>
@@ -51,7 +51,7 @@ export const ArchivedProductsPage = ({
             onToggle={setIsSearchPopoverOpen}
             aria-label="Toggle Search"
             trigger={
-              <WithTooltip tip="Search" position="bottom">
+              <WithTooltip tip="Tìm kiếm" position="bottom">
                 <div className={buttonVariants({ size: "default" })}>
                   <Icon name="solid-search" />
                 </div>
@@ -63,14 +63,14 @@ export const ArchivedProductsPage = ({
               <input
                 ref={searchInputRef}
                 type="text"
-                placeholder="Search products"
+                placeholder="Tìm kiếm sản phẩm"
                 value={query ?? ""}
                 onChange={(evt) => setQuery(evt.target.value)}
               />
             </div>
           </Popover>
           <NavigationButtonInertia href={Routes.new_product_path()} disabled={!canCreateProduct} color="accent">
-            New product
+            Sản phẩm mới
           </NavigationButtonInertia>
         </>
       }

@@ -54,15 +54,15 @@ const IncomingCollaboratorsTableRow = ({
     </TableCell>
     <TableCell className="whitespace-nowrap">{formatCommission(incomingCollaborator)}</TableCell>
     <TableCell className="whitespace-nowrap">
-      {incomingCollaborator.invitation_accepted ? <>Accepted</> : <>Pending</>}
+      {incomingCollaborator.invitation_accepted ? <>Đã chấp nhận</> : <>Đang chờ xử lý</>}
     </TableCell>
     <TableCell>
       {incomingCollaborator.invitation_accepted ? null : (
         <div className="flex flex-wrap gap-3 lg:justify-end" onClick={(e) => e.stopPropagation()}>
-          <Button type="submit" aria-label="Accept" onClick={onAccept} disabled={disabled}>
+          <Button type="submit" aria-label="Chấp nhận" onClick={onAccept} disabled={disabled}>
             <Icon name="outline-check" />
           </Button>
-          <Button type="submit" color="danger" aria-label="Decline" onClick={onReject} disabled={disabled}>
+          <Button type="submit" color="danger" aria-label="Từ chối" onClick={onReject} disabled={disabled}>
             <Icon name="x" />
           </Button>
         </div>
@@ -75,10 +75,10 @@ const EmptyState = () => (
   <section className="p-4 md:p-8">
     <Placeholder>
       <PlaceholderImage src={placeholder} />
-      <h2>No collaborations yet</h2>
-      <h4>Creators who have invited you to collaborate on their products will appear here.</h4>
+      <h2>Chưa có sự cộng tác nào</h2>
+      <h4>Những người sáng tạo đã mời bạn cộng tác trên sản phẩm của họ sẽ xuất hiện tại đây.</h4>
       <a href="/help/article/341-collaborations" target="_blank" rel="noreferrer">
-        Learn more about collaborations
+        Tìm hiểu thêm về cộng tác
       </a>
     </Placeholder>
   </section>
@@ -105,10 +105,10 @@ const IncomingCollaboratorsTable = ({
     <Table aria-live="polite" className={classNames(disabled && "pointer-events-none opacity-50")}>
       <TableHeader>
         <TableRow>
-          <TableHead>From</TableHead>
-          <TableHead>Products</TableHead>
-          <TableHead>Your cut</TableHead>
-          <TableHead>Status</TableHead>
+          <TableHead>Từ</TableHead>
+          <TableHead>Sản phẩm</TableHead>
+          <TableHead>Hoa hồng của bạn</TableHead>
+          <TableHead>Trạng thái</TableHead>
           <TableHead />
         </TableRow>
       </TableHeader>
@@ -140,12 +140,12 @@ const IncomingCollaboratorsTable = ({
               disabled={disabled}
               onClick={() => onRemove(selected)}
             >
-              Remove
+              Xóa
             </Button>
           ) : (
             <>
               <Button className="flex-1" aria-label="Accept" onClick={() => onAccept(selected)} disabled={disabled}>
-                Accept
+                Chấp nhận
               </Button>
               <Button
                 className="flex-1"
@@ -154,7 +154,7 @@ const IncomingCollaboratorsTable = ({
                 onClick={() => onReject(selected)}
                 disabled={disabled}
               >
-                Decline
+                Từ chối
               </Button>
             </>
           )
@@ -181,7 +181,7 @@ const IncomingCollaboratorsPage = () => {
 
   return (
     <Layout
-      title="Collaborators"
+      title="Cộng tác viên"
       selectedTab="collaborations"
       showTabs
       headerActions={
@@ -193,7 +193,7 @@ const IncomingCollaboratorsPage = () => {
               !loggedInUser?.policies.collaborator.create || collaborators_disabled_reason !== null || form.processing
             }
           >
-            Add collaborator
+            Thêm cộng tác viên
           </NavigationButtonInertia>
         </WithTooltip>
       }
@@ -220,7 +220,7 @@ const IncomingCollaboratorsPage = () => {
             form.delete(Routes.collaborators_incoming_path(incomingCollaborator.id), {
               only: ["collaborators", "flash"],
               onSuccess: () => setSelected(null),
-              onError: () => showAlert("Sorry, something went wrong. Please try again.", "error"),
+              onError: () => showAlert("Xin lỗi, đã xảy ra lỗi. Vui lòng thử lại.", "error"),
             })
           }
         />

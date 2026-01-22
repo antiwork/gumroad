@@ -49,7 +49,7 @@ export const ProductsDashboardPage = ({
   return (
     <ProductsLayout
       selectedTab="products"
-      title="Products"
+      title="Sản phẩm"
       archivedTabVisible={enableArchiveTab}
       ctaButton={
         <>
@@ -59,7 +59,7 @@ export const ProductsDashboardPage = ({
               onToggle={setIsSearchPopoverOpen}
               aria-label="Toggle Search"
               trigger={
-                <WithTooltip tip="Search" position="bottom">
+                <WithTooltip tip="Tìm kiếm" position="bottom">
                   <div className={buttonVariants({ size: "default" })}>
                     <Icon name="solid-search" />
                   </div>
@@ -71,7 +71,7 @@ export const ProductsDashboardPage = ({
                 <input
                   ref={searchInputRef}
                   type="text"
-                  placeholder="Search products"
+                  placeholder="Tìm kiếm sản phẩm"
                   value={query ?? ""}
                   onChange={(evt) => setQuery(evt.target.value)}
                 />
@@ -80,7 +80,7 @@ export const ProductsDashboardPage = ({
           ) : null}
 
           <NavigationButtonInertia href={Routes.new_product_path()} disabled={!canCreateProduct} color="accent">
-            New product
+            Sản phẩm mới
           </NavigationButtonInertia>
         </>
       }
@@ -89,17 +89,17 @@ export const ProductsDashboardPage = ({
         {memberships.length === 0 && products.length === 0 ? (
           <Placeholder>
             <PlaceholderImage src={placeholder} />
-            <h2>We’ve never met an idea we didn’t like.</h2>
-            <p>Your first product doesn’t need to be perfect. Just put it out there, and see if it sticks.</p>
+            <h2>Chúng tôi chưa từng gặp ý tưởng nào mà chúng tôi không thích.</h2>
+            <p>Sản phẩm đầu tiên của bạn không cần phải hoàn hảo. Chỉ cần đưa nó ra và xem nó có hiệu quả không.</p>
             <div>
               <NavigationButtonInertia href={Routes.new_product_path()} disabled={!canCreateProduct} color="accent">
-                New product
+                Sản phẩm mới
               </NavigationButtonInertia>
             </div>
             <span>
-              or{" "}
+              hoặc{" "}
               <a href="/help/article/304-products-dashboard" target="_blank" rel="noreferrer">
-                learn more about the products dashboard
+                tìm hiểu thêm về bảng điều khiển sản phẩm
               </a>
             </span>
           </Placeholder>

@@ -44,26 +44,26 @@ const CollabsPage = ({
   const userAgentInfo = useUserAgentInfo();
 
   return (
-    <ProductsLayout selectedTab="collabs" title="Products" archivedTabVisible={archivedTabVisible}>
+    <ProductsLayout selectedTab="collabs" title="Sản phẩm" archivedTabVisible={archivedTabVisible}>
       <section className="p-4 md:p-8">
         {memberships.length === 0 && products.length === 0 ? (
           <Placeholder>
             <PlaceholderImage src={placeholder} />
-            <h2>Create your first collab!</h2>
-            Offer a product in collaboration with another Gumroad creator to grow your audience.
+            <h2>Tạo cộng tác đầu tiên của bạn!</h2>
+            Cung cấp một sản phẩm hợp tác với một người sáng tạo Gumroad khác để phát triển khán giả của bạn.
             <WithTooltip position="top" tip={collaboratorsDisabledReason}>
               <NavigationButtonInertia
                 disabled={collaboratorsDisabledReason !== null}
                 href="/collaborators/new"
                 color="accent"
               >
-                Add a collab
+                Thêm cộng tác
               </NavigationButtonInertia>
             </WithTooltip>
             <p>
-              or{" "}
+              hoặc{" "}
               <a href="/help/article/341-collaborations" target="_blank" rel="noreferrer">
-                learn more to get started
+                tìm hiểu thêm để bắt đầu
               </a>
             </p>
           </Placeholder>
@@ -71,23 +71,23 @@ const CollabsPage = ({
           <div style={{ display: "grid", gap: "var(--spacer-7)" }}>
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4" aria-label="Stats">
               <StatsComponent
-                title="Total revenue"
-                description="Gross sales from all your product collabs."
+                title="Tổng doanh thu"
+                description="Tổng doanh số từ tất cả các cộng tác sản phẩm của bạn."
                 value={formatPriceCentsWithCurrencySymbol("usd", stats.total_revenue, { symbolFormat: "short" })}
               />
               <StatsComponent
-                title="Customers"
-                description="Unique customers across all your product collabs."
+                title="Khách hàng"
+                description="Khách hàng duy nhất trên tất cả các cộng tác sản phẩm của bạn."
                 value={stats.total_customers.toLocaleString(userAgentInfo.locale)}
               />
               <StatsComponent
-                title="Active members"
-                description="Members with an active subscription from your product collabs."
+                title="Thành viên đang hoạt động"
+                description="Các thành viên có đăng ký đang hoạt động từ các cộng tác sản phẩm của bạn."
                 value={stats.total_members.toLocaleString(userAgentInfo.locale)}
               />
               <StatsComponent
-                title="Collaborations"
-                description="Total number of product collabs."
+                title="Cộng tác"
+                description="Tổng số cộng tác sản phẩm."
                 value={stats.total_collaborations.toLocaleString(userAgentInfo.locale)}
               />
             </div>

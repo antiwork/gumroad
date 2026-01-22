@@ -60,7 +60,7 @@ const PWYWInput = React.forwardRef<
     <fieldset className={cx({ danger: hasError })}>
       {!hideLabel ? (
         <legend>
-          <label htmlFor={uid}>Name a fair price:</label>
+          <label htmlFor={uid}>Đặt mức giá hợp lý:</label>
         </legend>
       ) : null}
       <PriceInput
@@ -267,7 +267,7 @@ export const OptionRadioButton = ({
       )}
       <div>
         <h4>{name}</h4>
-        {quantityLeft != null ? <small>{`${quantityLeft} left`}</small> : null}
+        {quantityLeft != null ? <small>{`${quantityLeft} còn lại`}</small> : null}
         {description ? (
           <div>
             <Breaklines text={description} />
@@ -397,7 +397,7 @@ const CallDateAndTimeSelector = ({
   if (firstAvailableStartTime === null && !isLoading) {
     return (
       <Alert role="status" variant="warning">
-        {product.options.length > 1 ? "There are no available times for this option." : "There are no available times."}
+        {product.options.length > 1 ? "Không có thời gian trống cho tùy chọn này." : "Không có thời gian trống."}
       </Alert>
     );
   }
@@ -413,7 +413,7 @@ const CallDateAndTimeSelector = ({
             justifyContent: "space-between",
           }}
         >
-          <span>Select a date</span>
+          <span>Chọn ngày</span>
           {isLoading ? <LoadingSpinner /> : null}
         </h4>
         <Calendar
@@ -438,7 +438,7 @@ const CallDateAndTimeSelector = ({
               marginBottom: "var(--spacer-2)",
             }}
           >
-            <span>Select a time</span>
+            <span>Chọn giờ</span>
             <span title={clientTimeZone.longFormattedName} suppressHydrationWarning>
               {clientTimeZone.shortFormattedName}
             </span>
@@ -461,7 +461,7 @@ const CallDateAndTimeSelector = ({
       {selectedStartTime ? (
         <div>
           <h4>
-            You selected{" "}
+            Bạn đã chọn{" "}
             <strong>
               {formatCallDate(selectedStartTime, { date: { hideYear: true }, timeZone: { hidden: true } })}
             </strong>
@@ -487,7 +487,7 @@ const PaymentOptionSelector = ({
 
   return (
     <section>
-      <h4 className="mb-2">Payment option</h4>
+      <h4 className="mb-2">Tùy chọn thanh toán</h4>
       <div role="radiogroup" className="radio-buttons">
         <Button
           role="radio"
@@ -495,8 +495,8 @@ const PaymentOptionSelector = ({
           onClick={() => onChange({ payInInstallments: false })}
         >
           <div>
-            <strong>Pay in full</strong>
-            <p>One-time payment</p>
+            <strong>Thanh toán toàn bộ</strong>
+            <p>Thanh toán một lần</p>
           </div>
         </Button>
 
@@ -506,7 +506,7 @@ const PaymentOptionSelector = ({
           onClick={() => onChange({ payInInstallments: true })}
         >
           <div>
-            <strong>Pay in {product.installment_plan.number_of_installments} installments</strong>
+            <strong>Thanh toán trong {product.installment_plan.number_of_installments} đợt</strong>
             <p>
               {formatInstallmentPaymentSchedule(
                 fullPriceCents,
@@ -619,7 +619,7 @@ export const ConfigurationSelector = React.forwardRef<
             aria-checked={selection.optionId === null}
             onClick={() => setSelection?.({ ...selection, optionId: null, price: { value: null, error: false } })}
           >
-            Other
+            Khác
           </Button>
         </div>
         {selection.optionId === null ? pwywInput : null}
@@ -652,8 +652,8 @@ export const ConfigurationSelector = React.forwardRef<
             selected={selection.rent}
             onClick={() => update({ rent: true })}
             priceCents={hasOptions ? null : product.rental.price_cents}
-            name="Rent"
-            description="Your rental will be available for 30 days. Once started, you’ll have 72 hours to watch it as much as you’d like!"
+            name="Thuê"
+            description="Bạn có thể thuê trong 30 ngày. Khi bắt đầu, bạn sẽ có 72 giờ để xem bao nhiêu tùy thích!"
             currencyCode={product.currency_code}
             isPWYW={!!product.pwyw}
             discount={discount}
@@ -664,8 +664,8 @@ export const ConfigurationSelector = React.forwardRef<
             selected={!selection.rent}
             onClick={() => update({ rent: false })}
             priceCents={hasOptions ? null : product.price_cents}
-            name="Buy"
-            description="Watch as many times as you want, forever."
+            name="Mua"
+            description="Xem bao nhiêu lần tùy thích, mãi mãi."
             currencyCode={product.currency_code}
             isPWYW={!!product.pwyw}
             discount={discount}
@@ -742,7 +742,7 @@ export const ConfigurationSelector = React.forwardRef<
       {hasConfigurableQuantity ? (
         <fieldset>
           <legend>
-            <label htmlFor={quantityInputUID}>{product.is_multiseat_license ? "Seats" : "Quantity"}</label>
+            <label htmlFor={quantityInputUID}>{product.is_multiseat_license ? "Chỗ ngồi" : "Số lượng"}</label>
           </legend>
           <NumberInput onChange={(quantity) => update({ quantity: quantity ?? 0 })} value={selection.quantity}>
             {(props) => <input type="number" id={quantityInputUID} {...props} min={1} max={maxQuantity ?? undefined} />}

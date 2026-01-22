@@ -20,30 +20,30 @@ export const ProductsLayout = ({
   archivedTabVisible: boolean;
 }) => (
   <div>
-    <PageHeader title={title || "Products"} actions={ctaButton}>
+    <PageHeader title={title || "Sản phẩm"} actions={ctaButton}>
       <Tabs>
         <Tab isSelected={selectedTab === "products"} asChild>
           <Link href={Routes.products_path()} className="no-underline">
-            All products
+            Tất cả sản phẩm
           </Link>
         </Tab>
 
         <Tab isSelected={selectedTab === "affiliated"} asChild>
           <Link href={Routes.products_affiliated_index_path()} className="no-underline">
-            Affiliated
+            Tiếp thị liên kết
           </Link>
         </Tab>
 
         <Tab isSelected={selectedTab === "collabs"} asChild>
           <Link href={Routes.products_collabs_path()} className="no-underline">
-            Collabs
+            Cộng tác
           </Link>
         </Tab>
 
         {archivedTabVisible ? (
           <Tab isSelected={selectedTab === "archived"} asChild>
             <Link href={Routes.products_archived_index_path()} className="no-underline">
-              Archived
+              Đã lưu trữ
             </Link>
           </Tab>
         ) : null}

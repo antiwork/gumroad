@@ -88,20 +88,20 @@ export const ProductsPageMembershipsTable = (props: {
         <TableHeader>
           <TableRow>
             <TableHead />
-            <TableHead {...thProps("name")} title="Sort by Name" className="lg:relative lg:-left-20">
-              Name
+            <TableHead {...thProps("name")} title="Sắp xếp theo Tên" className="lg:relative lg:-left-20">
+              Tên
             </TableHead>
-            <TableHead {...thProps("successful_sales_count")} title="Sort by Members">
-              Members
+            <TableHead {...thProps("successful_sales_count")} title="Sắp xếp theo Thành viên">
+              Thành viên
             </TableHead>
-            <TableHead {...thProps("revenue")} title="Sort by Revenue">
-              Revenue
+            <TableHead {...thProps("revenue")} title="Sắp xếp theo Doanh thu">
+              Doanh thu
             </TableHead>
-            <TableHead {...thProps("display_price_cents")} title="Sort by Price">
-              Price
+            <TableHead {...thProps("display_price_cents")} title="Sắp xếp theo Giá">
+              Giá
             </TableHead>
-            <TableHead {...thProps("status")} title="Sort by Status">
-              Status
+            <TableHead {...thProps("status")} title="Sắp xếp theo Trạng thái">
+              Trạng thái
             </TableHead>
             <TableHead />
           </TableRow>
@@ -128,7 +128,7 @@ export const ProductsPageMembershipsTable = (props: {
                 {membership.successful_sales_count.toLocaleString(userAgentInfo.locale)}
 
                 {membership.remaining_for_sale_count ? (
-                  <small>{membership.remaining_for_sale_count.toLocaleString(userAgentInfo.locale)} remaining</small>
+                  <small>{membership.remaining_for_sale_count.toLocaleString(userAgentInfo.locale)} còn lại</small>
                 ) : null}
               </TableCell>
 
@@ -137,7 +137,7 @@ export const ProductsPageMembershipsTable = (props: {
 
                 <small>
                   {membership.has_duration
-                    ? `Including pending payments: ${formatPriceCentsWithCurrencySymbol(
+                    ? `Bao gồm thanh toán đang chờ xử lý: ${formatPriceCentsWithCurrencySymbol(
                         "usd",
                         membership.revenue_pending,
                         {
@@ -146,7 +146,7 @@ export const ProductsPageMembershipsTable = (props: {
                       )}`
                     : `${formatPriceCentsWithCurrencySymbol("usd", membership.monthly_recurring_revenue, {
                         symbolFormat: "short",
-                      })} /mo`}
+                      })} /tháng`}
                 </small>
               </TableCell>
 
@@ -156,11 +156,11 @@ export const ProductsPageMembershipsTable = (props: {
                 {(() => {
                   switch (membership.status) {
                     case "unpublished":
-                      return <>Unpublished</>;
+                      return <>Chưa xuất bản</>;
                     case "preorder":
-                      return <>Pre-order</>;
+                      return <>Đặt hàng trước</>;
                     case "published":
-                      return <>Published</>;
+                      return <>Đã xuất bản</>;
                   }
                 })()}
               </TableCell>
@@ -188,7 +188,7 @@ export const ProductsPageMembershipsTable = (props: {
 
         <TableFooter>
           <TableRow>
-            <TableCell colSpan={2}>Totals</TableCell>
+            <TableCell colSpan={2}>Tổng cộng</TableCell>
 
             <TableCell label="Members" className="whitespace-nowrap">
               {memberships

@@ -27,7 +27,7 @@ const CollaboratorDetailsSheet = ({
       <SheetHeader>{isIncoming ? collaborator.seller_name : (collaborator.name ?? "Collaborator")}</SheetHeader>
       {showSetupWarning ? (
         <Alert variant="warning">
-          Collaborators won't receive their cut until they set up a payout account in their Gumroad settings.
+          Cộng tác viên sẽ không nhận được phần chia của họ cho đến khi họ thiết lập tài khoản thanh toán trong cài đặt Gumroad của mình.
         </Alert>
       ) : null}
 
@@ -39,7 +39,7 @@ const CollaboratorDetailsSheet = ({
       </section>
 
       <section className="stack">
-        <h3>Products</h3>
+        <h3>Sản phẩm</h3>
         {collaborator.products.map((product) => {
           const productName = product.name;
 

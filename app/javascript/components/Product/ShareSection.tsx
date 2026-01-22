@@ -105,8 +105,8 @@ export const ShareSection = ({
                 {saveState.type === "success"
                   ? saveState.wishlist.name
                   : saveState.type === "saving"
-                    ? "Adding to wishlist..."
-                    : "Add to wishlist"}
+                    ? "Đang thêm vào danh sách yêu thích..."
+                    : "Thêm vào danh sách yêu thích"}
               </span>
               <Icon name="outline-cheveron-down" />
             </div>
@@ -134,7 +134,7 @@ export const ShareSection = ({
                 onSubmit={(e) => {
                   e.preventDefault();
                   if (!dropdownState.newWishlistName.trim()) {
-                    showAlert("Please enter a wishlist name", "error");
+                    showAlert("Vui lòng nhập tên danh sách yêu thích", "error");
                     return;
                   }
                   void addProduct(newWishlist(dropdownState.newWishlistName));
@@ -143,7 +143,7 @@ export const ShareSection = ({
                 <input
                   type="text"
                   autoFocus
-                  placeholder="Wishlist name"
+                  placeholder="Tên danh sách yêu thích"
                   value={dropdownState.newWishlistName}
                   onChange={(e) => setDropdownState({ state: "creating", newWishlistName: e.target.value })}
                   className="input"
@@ -186,11 +186,11 @@ export const ShareSection = ({
           }
         >
           <div className="grid grid-cols-1 gap-4">
-            <TwitterShareButton url={product.long_url} text={`Buy ${product.name} on @Gumroad`} />
+            <TwitterShareButton url={product.long_url} text={`Mua ${product.name} trên @Gumroad`} />
             <FacebookShareButton url={product.long_url} text={product.name} />
-            <CopyToClipboard text={product.long_url} copyTooltip="Copy product URL">
-              <Button aria-label="Copy product URL">
-                <Icon name="link" /> Copy link
+            <CopyToClipboard text={product.long_url} copyTooltip="Sao chép URL sản phẩm">
+              <Button aria-label="Sao chép URL sản phẩm">
+                <Icon name="link" /> Sao chép liên kết
               </Button>
             </CopyToClipboard>
           </div>
@@ -200,10 +200,10 @@ export const ShareSection = ({
         <Alert variant="success">
           {saveState.newlyCreated ? (
             <>
-              Wishlist created! <a href={Routes.wishlists_url()}>Edit it here.</a>
+              Đã tạo danh sách yêu thích! <a href={Routes.wishlists_url()}>Chỉnh sửa tại đây.</a>
             </>
           ) : (
-            "Added to wishlist!"
+            "Đã thêm vào danh sách yêu thích!"
           )}
         </Alert>
       ) : null}

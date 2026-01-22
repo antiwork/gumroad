@@ -21,14 +21,14 @@ import { useOnChange } from "$app/components/useOnChange";
 import { Card } from "./Card";
 
 export const SORT_BY_LABELS = {
-  default: "Default",
-  highest_rated: "Highest rated",
-  hot_and_new: "Hot and new",
-  most_reviewed: "Most reviewed",
-  newest: "Newest",
-  page_layout: "Custom",
-  price_asc: "Price (Low to High)",
-  price_desc: "Price (High to Low)",
+  default: "Mặc định",
+  highest_rated: "Đánh giá cao nhất",
+  hot_and_new: "Mới & nổi bật",
+  most_reviewed: "Nhiều đánh giá nhất",
+  newest: "Mới nhất",
+  page_layout: "Tùy chỉnh",
+  price_asc: "Giá (Thấp đến Cao)",
+  price_desc: "Giá (Cao đến Thấp)",
 };
 
 export type State = {
@@ -146,7 +146,7 @@ const FilterCheckboxes = ({
       ))}
       {filters.length > 5 && !showingAll ? (
         <button className="cursor-pointer underline all-unset" onClick={() => setShowingAll(true)}>
-          Show more
+          Xem thêm
         </button>
       ) : null}
     </>
