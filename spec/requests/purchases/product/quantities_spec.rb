@@ -3,7 +3,7 @@
 require("spec_helper")
 
 describe("Multiple quantity purchases from product page", type: :system, js: true) do
-  describe "multiple quantities" do
+  describe "multiple quantities", :mock_easypost do
     before do
       @product = create(:physical_product, price_cents: 200)
     end

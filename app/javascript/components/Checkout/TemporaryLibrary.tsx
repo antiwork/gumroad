@@ -10,6 +10,7 @@ import { AuthorByline } from "$app/components/Product/AuthorByline";
 import { Thumbnail } from "$app/components/Product/Thumbnail";
 import { showAlert } from "$app/components/server-components/Alert";
 import { Result } from "$app/components/server-components/CheckoutPage";
+import { Card as UICard, CardContent } from "$app/components/ui/Card";
 import { PageHeader } from "$app/components/ui/PageHeader";
 import { ProductCard, ProductCardFigure, ProductCardHeader, ProductCardFooter } from "$app/components/ui/ProductCard";
 import { ProductCardGrid } from "$app/components/ui/ProductCardGrid";
@@ -34,8 +35,8 @@ export const TemporaryLibrary = ({ results, canBuyerSignUp }: { results: Result[
       <section className="p-4 md:p-8">
         <div className="grid grid-cols-1 items-start gap-x-16 gap-y-8 lg:grid-cols-[var(--grid-cols-sidebar)]">
           {!user && canBuyerSignUp ? (
-            <div className="stack">
-              <div>
+            <UICard>
+              <CardContent>
                 <CreateAccountForm
                   createAccountData={{
                     email: state.email,
@@ -45,9 +46,10 @@ export const TemporaryLibrary = ({ results, canBuyerSignUp }: { results: Result[
                         ? null
                         : state.status.paymentMethod.cardParamsResult.cardParams,
                   }}
+                  className="grow"
                 />
-              </div>
-            </div>
+              </CardContent>
+            </UICard>
           ) : null}
           <ProductCardGrid>
             {results.flatMap(({ result, item }) =>

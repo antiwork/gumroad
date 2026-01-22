@@ -1,5 +1,6 @@
 import React from "react";
 
+import { Card, CardContent } from "$app/components/ui/Card";
 import CodeSnippet from "$app/components/ui/CodeSnippet";
 
 const ERROR_CODES = [
@@ -12,12 +13,12 @@ const ERROR_CODES = [
 ];
 
 export const Errors = () => (
-  <div className="stack" id="api-errors">
-    <div>
-      <h2>API Errors</h2>
-    </div>
-    <div>
-      <div className="flex flex-col gap-4">
+  <Card id="api-errors">
+    <CardContent>
+      <h2 className="grow">API Errors</h2>
+    </CardContent>
+    <CardContent>
+      <div className="flex grow flex-col gap-4">
         <p>
           Gumroad uses HTTP status codes to indicate the status of a request. Here's a run down on likely response
           codes.
@@ -47,6 +48,6 @@ export const Errors = () => (
         <p></p>
         <p>When present, the message will describe the particular problem and suggestions on what went wrong.</p>
       </div>
-    </div>
-  </div>
+    </CardContent>
+  </Card>
 );

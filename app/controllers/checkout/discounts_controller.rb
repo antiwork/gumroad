@@ -82,10 +82,10 @@ class Checkout::DiscountsController < Sellers::BaseController
     offer_code = OfferCode.find_by_external_id!(params[:id])
     authorize [:checkout, offer_code]
 
-    if offer_code.mark_deleted(validate: false)
+    if offer_code.mark_deleted
       render json: { success: true }
     else
-      render json: { success: false, error_message: offer_code.errors.full_messages.first }
+      render json: { success: false, error_message: offer_code.errors.full_messages.first }, status: :unprocessable_entity
     end
   end
 

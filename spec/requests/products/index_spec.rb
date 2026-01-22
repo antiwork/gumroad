@@ -337,7 +337,7 @@ describe "Products Page Scenario", type: :system, js: true do
 
   describe "pagination" do
     before do
-      stub_const("LinksController::PER_PAGE", 1)
+      stub_const("DashboardProductsPagePresenter::PER_PAGE", 1)
     end
 
     it "paginates memberships" do
@@ -483,7 +483,7 @@ describe "Products Page Scenario", type: :system, js: true do
       per_page.times do
         create(:product, user: seller, name: "Pig")
       end
-      stub_const("LinksController::PER_PAGE", per_page)
+      stub_const("DashboardProductsPagePresenter::PER_PAGE", per_page)
     end
 
     it "shows the search results" do
@@ -506,7 +506,7 @@ describe "Products Page Scenario", type: :system, js: true do
 
     it "duplicates a product" do
       product = create(:product, user: seller, name: "Test product")
-      stub_const("LinksController::PER_PAGE", 1)
+      stub_const("DashboardProductsPagePresenter::PER_PAGE", 1)
       visit(products_path)
 
       select_disclosure "Toggle Search" do
@@ -524,7 +524,7 @@ describe "Products Page Scenario", type: :system, js: true do
 
     it "duplicates a membership" do
       membership = create(:subscription_product, user: seller, name: "Test membership")
-      stub_const("LinksController::PER_PAGE", 1)
+      stub_const("DashboardProductsPagePresenter::PER_PAGE", 1)
       visit(products_path)
 
       select_disclosure "Toggle Search" do
@@ -542,7 +542,7 @@ describe "Products Page Scenario", type: :system, js: true do
 
     it "deletes a product" do
       product = create(:product, user: seller, name: "Test product")
-      stub_const("LinksController::PER_PAGE", 1)
+      stub_const("DashboardProductsPagePresenter::PER_PAGE", 1)
       visit(products_path)
 
       select_disclosure "Toggle Search" do
@@ -561,7 +561,7 @@ describe "Products Page Scenario", type: :system, js: true do
 
     it "deletes a membership" do
       membership = create(:subscription_product, user: seller, name: "Test membership")
-      stub_const("LinksController::PER_PAGE", 1)
+      stub_const("DashboardProductsPagePresenter::PER_PAGE", 1)
       visit(products_path)
 
       select_disclosure "Toggle Search" do

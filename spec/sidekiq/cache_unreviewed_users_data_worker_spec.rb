@@ -12,7 +12,7 @@ describe CacheUnreviewedUsersDataWorker do
 
       cached_data = Admin::UnreviewedUsersService.cached_users_data
       expect(cached_data[:users].size).to eq(1)
-      expect(cached_data[:users].first[:id]).to eq(user.id)
+      expect(cached_data[:users].first[:external_id]).to eq(user.external_id)
     end
   end
 end

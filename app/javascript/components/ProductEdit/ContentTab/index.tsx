@@ -57,6 +57,7 @@ import { MoveNode } from "$app/components/TiptapExtensions/MoveNode";
 import { Posts, PostsProvider } from "$app/components/TiptapExtensions/Posts";
 import { ShortAnswer } from "$app/components/TiptapExtensions/ShortAnswer";
 import { UpsellCard } from "$app/components/TiptapExtensions/UpsellCard";
+import { Card, CardContent } from "$app/components/ui/Card";
 import { Row, RowContent, Rows } from "$app/components/ui/Rows";
 import { Tabs, Tab } from "$app/components/ui/Tabs";
 import { UpsellSelectModal, Product, ProductOption } from "$app/components/UpsellSelectModal";
@@ -600,7 +601,7 @@ const ContentTabContent = ({ selectedVariantId }: { selectedVariantId: string | 
                   <p>Paste a video link or upload images or videos.</p>
                   <Tabs variant="buttons">
                     <Tab isSelected aria-controls={`${uid}-embed-tab`} asChild>
-                      <button type="button">
+                      <button type="button" className="cursor-pointer all-unset">
                         <Icon name="link" />
                         <h4>Embed link</h4>
                       </button>
@@ -739,7 +740,7 @@ const ContentTabContent = ({ selectedVariantId }: { selectedVariantId: string | 
                 </Popover>
                 <>
                   <Separator aria-orientation="vertical" />
-                  <button className="toolbar-item" onClick={handleCreatePageClick}>
+                  <button className="toolbar-item cursor-pointer all-unset" onClick={handleCreatePageClick}>
                     <Icon name="plus" /> Page
                   </button>
                 </>
@@ -763,7 +764,7 @@ const ContentTabContent = ({ selectedVariantId }: { selectedVariantId: string | 
                     <>
                       {isDesktop ? null : (
                         <PageListItem asChild className="tailwind-override text-left">
-                          <button onClick={() => setPagesExpanded(!pagesExpanded)}>
+                          <button className="cursor-pointer all-unset" onClick={() => setPagesExpanded(!pagesExpanded)}>
                             <span className="flex-1">
                               <strong>Table of contents:</strong> {titleWithFallback(selectedPage?.title)}
                             </span>
@@ -824,7 +825,7 @@ const ContentTabContent = ({ selectedVariantId }: { selectedVariantId: string | 
                               />
                             </WithTooltip>
                           ) : null}
-                          <PageListItem asChild className="tailwind-override text-left">
+                          <PageListItem asChild className="text-left">
                             <button
                               className="add-page"
                               onClick={(e) => {
@@ -843,22 +844,40 @@ const ContentTabContent = ({ selectedVariantId }: { selectedVariantId: string | 
                 ) : null}
                 {isDesktop ? (
                   <>
-                    <div className="stack">
-                      <ReviewForm permalink="" purchaseId="" review={null} preview />
-                    </div>
-                    <div className="stack">
+                    <Card>
+                      <ReviewForm
+                        permalink=""
+                        purchaseId=""
+                        review={null}
+                        preview
+                        className="flex flex-wrap items-center justify-between gap-4 p-4"
+                      />
+                    </Card>
+                    <Card>
                       {product.native_type === "membership" ? (
-                        <details>
-                          <summary inert>Membership</summary>
-                        </details>
+                        <CardContent asChild details>
+                          <details>
+                            <summary className="grow grid-flow-col grid-cols-[1fr_auto] before:col-start-2" inert>
+                              Membership
+                            </summary>
+                          </details>
+                        </CardContent>
                       ) : null}
-                      <details>
-                        <summary inert>Receipt</summary>
-                      </details>
-                      <details>
-                        <summary inert>Library</summary>
-                      </details>
-                    </div>
+                      <CardContent asChild details>
+                        <details>
+                          <summary inert className="grow grid-flow-col grid-cols-[1fr_auto] before:col-start-2">
+                            Receipt
+                          </summary>
+                        </details>
+                      </CardContent>
+                      <CardContent asChild details>
+                        <details>
+                          <summary inert className="grow grid-flow-col grid-cols-[1fr_auto] before:col-start-2">
+                            Library
+                          </summary>
+                        </details>
+                      </CardContent>
+                    </Card>
                     <EntityInfo
                       entityName={selectedVariant ? `${product.name} - ${selectedVariant.name}` : product.name}
                       creator={seller}

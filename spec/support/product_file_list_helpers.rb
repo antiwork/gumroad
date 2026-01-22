@@ -74,10 +74,12 @@ module ProductFileListHelpers
 
   def transfer_dropbox_upload(dropbox_url: nil)
     if dropbox_url
-      DropboxFile.where(dropbox_url:).last.transfer_to_s3
+      dropbox_file = DropboxFile.where(dropbox_url:).last
     else
-      DropboxFile.last.transfer_to_s3
+      dropbox_file = DropboxFile.last
     end
+    stub_dropbox_file_transfer(dropbox_file)
+    dropbox_file.transfer_to_s3
   end
 
   private
@@ -86,14 +88,27 @@ module ProductFileListHelpers
     end
 
     def generate_dropbox_file_info_with_path(path)
-      file = HTTParty.post("https://api.dropboxapi.com/2/files/get_temporary_link",
-                           headers: {
-                             "Authorization" => "Bearer #{GlobalConfig.get("DROPBOX_API_KEY")}",
-                             "Content-Type" => "application/json"
-                           },
-                           body: { path: }.to_json)
+      filename = File.basename(path)
+      {
+        bytes: 1024,
+        icon: "",
+        link: "https://fake-dropbox-link.test/#{SecureRandom.hex(8)}/#{filename}",
+        name: filename,
+        id: "id:#{SecureRandom.hex(16)}"
+      }
+    end
 
-      { bytes: file["metadata"]["size"], icon: "", link: file["link"], name: file["metadata"]["name"],
-        id: file["metadata"]["id"] }
+    def stub_dropbox_file_transfer(dropbox_file)
+      allow(HTTParty).to receive(:get)
+        .with(dropbox_file.dropbox_url, hash_including(:stream_body))
+        .and_yield("fake file content")
+
+      s3_resource = double("s3_resource")
+      s3_bucket = double("s3_bucket")
+      s3_object = double("s3_object")
+      allow(Aws::S3::Resource).to receive(:new).and_return(s3_resource)
+      allow(s3_resource).to receive(:bucket).and_return(s3_bucket)
+      allow(s3_bucket).to receive(:object).and_return(s3_object)
+      allow(s3_object).to receive(:upload_file).and_return(true)
     end
 end

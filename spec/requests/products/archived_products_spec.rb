@@ -16,7 +16,7 @@ describe "Archived Products", type: :system, js: true do
 
   describe "pagination" do
     before do
-      stub_const("Products::ArchivedController::PER_PAGE", 1)
+      stub_const("DashboardProductsPagePresenter::PER_PAGE", 1)
     end
 
     it "paginates archived memberships" do
