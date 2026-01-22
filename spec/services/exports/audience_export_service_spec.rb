@@ -1,13 +1,15 @@
-# frozen_string_literal: true
+
+
+ # frozen_string_literal: true
 
 require "spec_helper"
 
 describe Exports::AudienceExportService do
+  let!(:user) { create(:user) }
   describe "#perform" do
-    let!(:user) { create(:user) }
     let!(:follower) { create(:active_follower, email: "follower@gumroad.com", user: user, created_at: 1.day.ago) }
     let(:product) { create(:product, user: user, name: "Product 1", price_cents: 100) }
-    let!(:customer) { create(:purchase, seller: user, link: product, created_at: 2.days.ago) }
+    let!(:customer) { create(:free_purchase, seller: user, link: product, created_at: 2.days.ago) }
     let(:affiliate_user) { create(:affiliate_user, created_at: 4.days.ago) }
     let(:direct_affiliate) { create(:direct_affiliate, affiliate_user:, seller: user, created_at: 3.days.ago) }
     let!(:product_affiliate) { create(:product_affiliate, product:, affiliate: direct_affiliate, affiliate_basis_points: 10_00) }
