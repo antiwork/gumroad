@@ -9,7 +9,7 @@ declare module "react" {
 }
 
 const rangeStyles = classNames(
-  "appearance-none bg-transparent h-[0.3125rem]",
+  "appearance-none bg-none h-[0.3125rem]",
   "[&::-webkit-slider-runnable-track]:h-[0.3125rem] [&::-webkit-slider-runnable-track]:w-full [&::-webkit-slider-runnable-track]:cursor-pointer [&::-webkit-slider-runnable-track]:rounded-[0.25rem] [&::-webkit-slider-runnable-track]:[background:var(--range-bg)]",
   "[&::-moz-range-track]:h-[0.3125rem] [&::-moz-range-track]:w-full [&::-moz-range-track]:cursor-pointer [&::-moz-range-track]:rounded-[0.25rem] [&::-moz-range-track]:[background:var(--range-bg)]",
   "[&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:border-0 [&::-webkit-slider-thumb]:size-[1em] [&::-webkit-slider-thumb]:[background:rgb(var(--color))] [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:cursor-pointer [&::-webkit-slider-thumb]:[margin-top:calc(0.5*(0.3125rem-1em))]",
