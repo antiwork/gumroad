@@ -2,7 +2,7 @@ import * as React from "react";
 
 import { classNames } from "$app/utils/classNames";
 
-export const Section = ({
+export const FormSection = ({
   header,
   children,
   className,

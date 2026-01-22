@@ -3,7 +3,7 @@ import React from "react";
 
 import { Button } from "$app/components/Button";
 import CodeSnippet from "$app/components/ui/CodeSnippet";
-import { Section } from "$app/components/ui/Section";
+import { FormSection } from "$app/components/ui/FormSection";
 import { Textarea } from "$app/components/ui/Textarea";
 
 export type Props = {
@@ -34,7 +34,7 @@ const Form = ({ action, header, buttonLabel }: Props) => {
 
   return (
     <form onSubmit={handleSubmit}>
-      <Section
+      <FormSection
         className="p-4 md:p-8"
         header={
           <>
@@ -73,7 +73,7 @@ const Form = ({ action, header, buttonLabel }: Props) => {
         <Button type="submit" color="primary">
           {buttonLabel}
         </Button>
-      </Section>
+      </FormSection>
     </form>
   );
 };

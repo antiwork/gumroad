@@ -4,7 +4,7 @@ import React from "react";
 import { Button } from "$app/components/Button";
 import CodeSnippet from "$app/components/ui/CodeSnippet";
 import { Label } from "$app/components/ui/Label";
-import { Section } from "$app/components/ui/Section";
+import { FormSection } from "$app/components/ui/FormSection";
 import { Select } from "$app/components/ui/Select";
 import { Textarea } from "$app/components/ui/Textarea";
 
@@ -47,7 +47,7 @@ const SuspendUsers = () => {
 
   return (
     <form onSubmit={handleSubmit}>
-      <Section
+      <FormSection
         className="p-4 md:p-8"
         header={
           <>
@@ -106,7 +106,7 @@ const SuspendUsers = () => {
         <Button type="submit" color="primary">
           Suspend users
         </Button>
-      </Section>
+      </FormSection>
     </form>
   );
 };
