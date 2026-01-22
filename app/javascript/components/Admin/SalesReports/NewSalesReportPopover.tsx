@@ -4,7 +4,6 @@ import * as React from "react";
 import AdminSalesReportsForm from "$app/components/Admin/SalesReports/Form";
 import { buttonVariants } from "$app/components/Button";
 import { Popover, PopoverContent, PopoverTrigger } from "$app/components/Popover";
-import { WithTooltip } from "$app/components/WithTooltip";
 
 type PageProps = {
   countries: [string, string][];
@@ -19,9 +18,13 @@ const NewSalesReportPopover = () => {
   return (
     <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger aria-label="New Sales Report" asChild>
-        <WithTooltip tip="Generate a new sales report" position="bottom">
-          <div className={buttonVariants({ size: "default", color: "primary" })}>New report</div>
-        </WithTooltip>
+        <button
+          type="button"
+          className={buttonVariants({ size: "default", color: "primary" })}
+          title="Generate a new sales report"
+        >
+          New report
+        </button>
       </PopoverTrigger>
       <PopoverContent>
         <div className="grid w-96 max-w-full gap-3">

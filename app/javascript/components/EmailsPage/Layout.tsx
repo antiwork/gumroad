@@ -8,7 +8,6 @@ import { Icon } from "$app/components/Icons";
 import { Popover, PopoverContent, PopoverTrigger } from "$app/components/Popover";
 import { PageHeader } from "$app/components/ui/PageHeader";
 import { Tab, Tabs } from "$app/components/ui/Tabs";
-import { WithTooltip } from "$app/components/WithTooltip";
 
 type LayoutProps = {
   selectedTab: EmailTab;
@@ -35,13 +34,11 @@ export const EmailsLayout = ({ selectedTab, children, hasPosts, query, onQueryCh
           <>
             {hasPosts && onQueryChange ? (
               <Popover open={isSearchPopoverOpen} onOpenChange={setIsSearchPopoverOpen}>
-                <WithTooltip tip="Search" position="bottom">
-                  <PopoverTrigger aria-label="Toggle Search" asChild>
-                    <Button>
-                      <Icon name="solid-search" />
-                    </Button>
-                  </PopoverTrigger>
-                </WithTooltip>
+                <PopoverTrigger aria-label="Toggle Search" asChild>
+                  <Button>
+                    <Icon name="solid-search" />
+                  </Button>
+                </PopoverTrigger>
                 <PopoverContent>
                   <div className="input">
                     <Icon name="solid-search" />
