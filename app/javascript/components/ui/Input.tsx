@@ -4,9 +4,10 @@ import { classNames } from "$app/utils/classNames";
 import { useFieldset, stateBorderStyles } from "$app/components/ui/Fieldset";
 import { useInputGroup } from "$app/components/ui/InputGroup";
 
-const inputStyles = classNames(
+export const baseStyles = classNames(
   "font-[inherit] py-3 px-4 text-base leading-[1.4]",
-  "border border-border rounded block w-full bg-background text-foreground placeholder:text-muted focus:outline-2 focus:outline-accent focus:outline-offset-0",
+  "border border-border rounded block w-full bg-background placeholder:text-muted",
+  "focus:outline-2 focus:outline-accent focus:outline-offset-0",
   "disabled:cursor-not-allowed disabled:opacity-30",
 );
 
@@ -22,7 +23,7 @@ export const Input = React.forwardRef<HTMLInputElement, React.InputHTMLAttribute
         ref={ref}
         readOnly={readOnly}
         className={classNames(
-          inputStyles,
+          baseStyles,
           readOnly && "cursor-default bg-body focus:outline-none",
           isInsideInputGroup ? inputGroupChildStyles : stateBorderStyles[state],
           inputGroupDisabled && "opacity-100",

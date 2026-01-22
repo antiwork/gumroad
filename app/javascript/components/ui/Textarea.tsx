@@ -1,16 +1,14 @@
 import * as React from "react";
 
 import { classNames } from "$app/utils/classNames";
-
-const textareaBaseStyles =
-  "px-4 py-3 font-[inherit] text-base leading-[1.4] border border-border rounded block w-full bg-background text-foreground placeholder:text-muted focus:outline-2 focus:outline-offset-0 focus:outline-accent disabled:cursor-not-allowed disabled:opacity-30 resize-y";
+import { baseStyles } from "$app/components/ui/Input";
 
 export const Textarea = React.forwardRef<HTMLTextAreaElement, React.TextareaHTMLAttributes<HTMLTextAreaElement>>(
   ({ className, readOnly, ...props }, ref) => (
     <textarea
       ref={ref}
       readOnly={readOnly}
-      className={classNames(textareaBaseStyles, readOnly && "cursor-default bg-body focus:outline-none", className)}
+      className={classNames(baseStyles, "resize-y", readOnly && "cursor-default bg-body focus:outline-none", className)}
       {...props}
     />
   ),
