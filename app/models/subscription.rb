@@ -700,6 +700,7 @@ class Subscription < ApplicationRecord
     update!(business_vat_id: vat_id) if vat_id.present? && business_vat_id.blank?
   end
 
+  # TODO: Remove fallback logic after running Onetime::BackfillSubscriptionVatIds
   def resolve_vat_id
     business_vat_id.presence ||
       original_purchase&.purchase_sales_tax_info&.business_vat_id.presence ||
