@@ -2,7 +2,7 @@
 
 class Exports::CompileAudienceExportChunksJob
   include Sidekiq::Worker
-  sidekiq_options retry: 3, queue: :low, lock: :until_executed
+  sidekiq_options retry: 3, queue: :low
 
   FIELDS = ["Subscriber Email", "Subscribed Time"].freeze
 
