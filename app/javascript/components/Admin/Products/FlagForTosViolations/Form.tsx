@@ -39,7 +39,7 @@ export const AdminSuspendForTosForm = ({
     >
       {(isLoading) => (
         <>
-          <Select name="suspend_tos[reason]" defaultValue={default_reason} className="flex-1">
+          <Select name="suspend_tos[reason]" defaultValue={default_reason} wrapperClassName="flex-1">
             {Object.entries(reasons).map(([name, value]) => (
               <option key={value} value={value}>
                 {name}

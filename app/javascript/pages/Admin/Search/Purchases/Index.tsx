@@ -66,7 +66,7 @@ export default function Purchases() {
             <Select
               name="purchase_status"
               value={data.purchase_status}
-              className="w-auto shrink-0"
+              wrapperClassName="w-auto shrink-0"
               onChange={(e) => setData("purchase_status", e.target.value)}
             >
               <option value="">Any status</option>

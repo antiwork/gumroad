@@ -5,6 +5,7 @@ import { formatPriceCentsWithCurrencySymbol } from "$app/utils/currency";
 
 import { Table, TableBody, TableCaption, TableCell, TableHead, TableHeader, TableRow } from "$app/components/ui/Table";
 import { useClientSortingTableDriver } from "$app/components/useSortingTableDriver";
+import { Select } from "$app/components/ui/Select";
 
 type TableEntry = {
   name: string;
@@ -196,10 +197,15 @@ export const LocationsTable = ({
   const caption = (
     <div className="flex justify-between">
       Locations
-      <select aria-label="Locations" className="w-fit" value={selected} onChange={(ev) => setSelected(ev.target.value)}>
+      <Select
+        aria-label="Locations"
+        wrapperClassName="w-fit"
+        value={selected}
+        onChange={(ev) => setSelected(ev.target.value)}
+      >
         <option value="world">World</option>
         <option value="us">United States</option>
-      </select>
+      </Select>
     </div>
   );
 
