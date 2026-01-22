@@ -1,7 +1,7 @@
 # frozen_string_literal: true
 require 'spec_helper'
 
-RSpec.describe Exports::ProcessChunkWorker, type: :worker do
+RSpec.describe Exports::ProcessAudienceExportChunkJob, type: :worker do
   let(:seller) { create(:user) }
   let(:recipient) { create(:user) }
   let(:export) { AudienceExport.create!(seller: seller, recipient: recipient, json_data: { options: { followers: true } }) }
@@ -15,8 +15,8 @@ RSpec.describe Exports::ProcessChunkWorker, type: :worker do
   end
 
   it 'enqueues compile job when all chunks are processed' do
-    allow(Exports::CompileChunksWorker).to receive(:perform_async)
+    allow(Exports::CompileAudienceExportChunksJob).to receive(:perform_async)
     described_class.new.perform(chunk.id)
-    expect(Exports::CompileChunksWorker).to have_received(:perform_async).with(export.id)
+    expect(Exports::CompileAudienceExportChunksJob).to have_received(:perform_async).with(export.id)
   end
 end

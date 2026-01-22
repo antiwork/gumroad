@@ -1,8 +1,5 @@
 # frozen_string_literal: true
 
-
-
-
 class Exports::AudienceExportService
   FIELDS = ["Subscriber Email", "Subscribed Time"].freeze
   CHUNK_THRESHOLD = 10_000
@@ -26,7 +23,7 @@ class Exports::AudienceExportService
       export.options = @options
       export.filename = @filename
       export.save!
-      Exports::CreateAndEnqueueChunksWorker.perform_async(export.id)
+      Exports::CreateAudienceExportChunksJob.perform_async(export.id)
       nil
     end
   end

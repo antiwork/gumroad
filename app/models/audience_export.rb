@@ -6,10 +6,8 @@ class AudienceExport < ApplicationRecord
 
   has_many :audience_export_chunks, dependent: :delete_all
 
-  # Use project convention for JSON serialization
   include JsonData
   attr_json_data_accessor :options, :filename
-  # Store all options and metadata in the json_data column
 
   validates :seller, :recipient, presence: true
 end

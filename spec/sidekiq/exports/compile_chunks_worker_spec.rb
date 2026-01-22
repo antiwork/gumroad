@@ -1,7 +1,7 @@
 # frozen_string_literal: true
 require 'spec_helper'
 
-RSpec.describe Exports::CompileChunksWorker, type: :worker do
+RSpec.describe Exports::CompileAudienceExportChunksJob, type: :worker do
   let(:seller) { create(:user) }
   let(:recipient) { create(:user) }
   let(:export) { AudienceExport.create!(seller: seller, recipient: recipient, json_data: { options: { followers: true } }) }

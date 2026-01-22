@@ -1,18 +1,23 @@
 # frozen_string_literal: true
 
-class Exports::CreateAndEnqueueChunksWorker
+class Exports::CreateAudienceExportChunksJob
   include Sidekiq::Worker
   sidekiq_options retry: 5, queue: :low
 
-  CHUNK_SIZE = 5000 # Documented rationale: balances memory and job count
+  CHUNK_SIZE = 5000
 
   def perform(audience_export_id)
     export = AudienceExport.find(audience_export_id)
     audience = build_audience_query(export)
-    member_ids = audience.pluck(:id)
+    audience.in_batches(of: CHUNK_SIZE) do |batch|
+      export.audience_export_chunks.create!(
+        member_ids: batch.ids,
+        members_data: []
+      )
+    end
+
     return if member_ids.empty?
 
-    # Remove any previous chunks (retry safety)
     export.audience_export_chunks.delete_all
 
     member_ids.each_slice(CHUNK_SIZE).with_index do |ids, idx|
@@ -20,7 +25,7 @@ class Exports::CreateAndEnqueueChunksWorker
     end
 
     export.audience_export_chunks.each do |chunk|
-      Exports::ProcessChunkWorker.perform_async(chunk.id)
+      Exports::ProcessAudienceExportChunkJob.perform_async(chunk.id)
     end
   end
 

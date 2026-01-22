@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-class Exports::ProcessChunkWorker
+class Exports::ProcessAudienceExportChunkJob
   include Sidekiq::Worker
   sidekiq_options retry: 5, queue: :low
 
@@ -15,7 +15,7 @@ class Exports::ProcessChunkWorker
       unprocessed = export.audience_export_chunks
         .where("json_data -> 'members_data' IS NULL OR json_data -> 'members_data' = '[]'").count
       if unprocessed == 0
-        Exports::CompileChunksWorker.perform_async(export.id)
+        Exports::CompileAudienceExportChunksJob.perform_async(export.id)
       end
     end
   end

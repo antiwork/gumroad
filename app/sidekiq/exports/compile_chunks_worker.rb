@@ -1,7 +1,7 @@
 # frozen_string_literal: true
 require 'csv'
 
-class Exports::CompileChunksWorker
+class Exports::CompileAudienceExportChunksJob
   include Sidekiq::Worker
   sidekiq_options retry: 3, queue: :low
 
@@ -22,7 +22,7 @@ class Exports::CompileChunksWorker
     AudienceExportMailer.export_ready(export, tempfile.path, export.filename).deliver_later
     tempfile.close
     tempfile.unlink
-    # Cleanup
     export.audience_export_chunks.delete_all
+    export.destroy!
   end
 end
