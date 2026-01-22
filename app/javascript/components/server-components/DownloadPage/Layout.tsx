@@ -255,6 +255,7 @@ export const Layout = ({
         )}
         {settings || pageList ? (
           <PageListLayout
+            downloadPage
             className="flex-1"
             pageList={
               <>
