@@ -37,7 +37,7 @@ export const ShareTab = () => {
           <section className="p-4! md:p-8!">
             <DiscoverEligibilityPromo />
             <header>
-              <h2>Share</h2>
+              <h2>Chia sẻ</h2>
             </header>
             <div className="flex flex-wrap gap-2">
               <TwitterShareButton url={url} text={`Buy ${product.name} on @Gumroad`} />
@@ -45,7 +45,7 @@ export const ShareTab = () => {
               <CopyToClipboard text={url} tooltipPosition="top">
                 <Button color="primary">
                   <Icon name="link" />
-                  Copy URL
+                  Sao chép URL
                 </Button>
               </CopyToClipboard>
               <NavigationButton
@@ -55,7 +55,7 @@ export const ShareTab = () => {
                 color="accent"
               >
                 <Icon name="plus" />
-                Create Gum
+                Tạo Gum
               </NavigationButton>
             </div>
           </section>
@@ -68,23 +68,23 @@ export const ShareTab = () => {
             <header style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
               <h2>Gumroad Discover</h2>
               <a href="/help/article/79-gumroad-discover" target="_blank" rel="noreferrer">
-                Learn more
+                Tìm hiểu thêm
               </a>
             </header>
             {isListedOnDiscover ? (
               <Alert role="status" variant="success">
                 <div className="flex flex-col justify-between sm:flex-row">
-                  {product.name} is listed on Gumroad Discover.
-                  <a href={discoverLink.toString()}>View</a>
+                  {product.name} đã được niêm yết trên Gumroad Discover.
+                  <a href={discoverLink.toString()}>Xem</a>
                 </div>
               </Alert>
             ) : null}
             <div className="flex flex-col gap-4">
               <p>
-                Gumroad Discover recommends your products to prospective customers for a flat 30% fee on each sale,
-                helping you grow beyond your existing following and find even more people who care about your work.
+                Gumroad Discover giới thiệu sản phẩm của bạn cho khách hàng tiềm năng với mức phí cố định 30% trên mỗi lần bán,
+                giúp bạn phát triển vượt ra ngoài lượng người theo dõi hiện có và tìm thấy nhiều người quan tâm đến công việc của bạn.
               </p>
-              <p>When enabled, the product will also become part of the Gumroad affiliate program.</p>
+              <p>Khi được bật, sản phẩm cũng sẽ trở thành một phần của chương trình tiếp thị liên kết Gumroad.</p>
             </div>
             <TaxonomyEditor
               taxonomyId={product.taxonomy_id}
@@ -97,14 +97,14 @@ export const ShareTab = () => {
                 value={product.display_product_reviews}
                 onChange={(newValue) => updateProduct({ display_product_reviews: newValue })}
               >
-                Display your product's 1-5 star rating to prospective customers
+                Hiển thị xếp hạng 1-5 sao của sản phẩm cho khách hàng tiềm năng
               </Toggle>
               <Toggle value={product.is_adult} onChange={(newValue) => updateProduct({ is_adult: newValue })}>
-                This product contains content meant{" "}
+                Sản phẩm này chứa nội dung chỉ dành cho{" "}
                 <a href="/help/article/156-gumroad-and-adult-content" target="_blank" rel="noreferrer">
-                  only for adults,
+                  người lớn,
                 </a>{" "}
-                including the preview
+                bao gồm cả bản xem trước
               </Toggle>
             </fieldset>
           </section>
@@ -129,14 +129,13 @@ const DiscoverEligibilityPromo = () => {
         <img src={hands} alt="" className="size-12" />
         <div className="flex flex-1 flex-col gap-2">
           <div>
-            To appear on Gumroad Discover, make sure to meet all the{" "}
+            Để xuất hiện trên Gumroad Discover, hãy đảm bảo đáp ứng tất cả các{" "}
             <a href="/help/article/79-gumroad-discover" target="_blank" rel="noreferrer">
-              eligibility criteria
+              tiêu chí đủ điều kiện
             </a>
-            , which includes making at least one successful sale and completing the Risk Review process explained in
-            detail{" "}
+            , bao gồm việc thực hiện ít nhất một giao dịch thành công và hoàn thành quy trình Đánh giá Rủi ro được giải thích chi tiết{" "}
             <a href="/help/article/13-getting-paid" target="_blank" rel="noreferrer">
-              here
+              tại đây
             </a>
             .
           </div>
@@ -147,7 +146,7 @@ const DiscoverEligibilityPromo = () => {
               setShow(false);
             }}
           >
-            Close
+            Đóng
           </button>
         </div>
       </div>

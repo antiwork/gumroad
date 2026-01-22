@@ -206,7 +206,7 @@ const FileEmbedNodeView = ({ node, editor, getPos, updateAttributes }: NodeViewP
   const uploadThumbnail = (thumbnail: File) => {
     if (thumbnail.size > 5 * 1024 * 1024)
       return showAlert(
-        "Could not process your thumbnail, please upload an image with size smaller than 5 MB.",
+        "Không thể xử lý ảnh thu nhỏ của bạn, vui lòng tải lên ảnh có kích thước nhỏ hơn 5 MB.",
         "error",
       );
 
@@ -281,7 +281,7 @@ const FileEmbedNodeView = ({ node, editor, getPos, updateAttributes }: NodeViewP
     item: () => (
       <>
         <Icon name="solid-folder-open" />
-        <span>Move to folder...</span>
+        <span>Di chuyển vào thư mục...</span>
       </>
     ),
     menu: () => (
@@ -292,7 +292,7 @@ const FileEmbedNodeView = ({ node, editor, getPos, updateAttributes }: NodeViewP
             role="menuitem"
           >
             <Icon name="folder-plus" />
-            <span>New folder</span>
+            <span>Thư mục mới</span>
           </div>
         )}
         {fileEmbedGroups.map(({ uid, name }) => (
@@ -302,12 +302,12 @@ const FileEmbedNodeView = ({ node, editor, getPos, updateAttributes }: NodeViewP
               editor.commands.moveFileEmbedToGroup({ fileUid: cast(node.attrs.uid), groupUid: uid });
 
               const fileName = filesById.get(cast<string>(node.attrs.id))?.display_name;
-              if (fileName) showAlert(`Moved "${fileName}" to "${name}".`, "success");
+              if (fileName) showAlert(`Đã chuyển "${fileName}" sang "${name}".`, "success");
             }}
             role="menuitem"
           >
             <Icon name="solid-folder-open" />
-            <span>{name || "Untitled"}</span>
+            <span>{name || "Không có tiêu đề"}</span>
           </div>
         ))}
       </>
@@ -393,15 +393,15 @@ const FileEmbedNodeView = ({ node, editor, getPos, updateAttributes }: NodeViewP
                       transform: "translate(-50%, -50%)",
                     }}
                     onClick={() => setShowingVideoPlayer(true)}
-                    aria-label="Watch"
+                    aria-label="Xem"
                   >
                     <PlayVideoIcon />
                   </button>
                   <div style={{ position: "absolute", top: "var(--spacer-5)", right: "var(--spacer-5)" }}>
-                    <WithTooltip tip="Replace thumbnail">
+                    <WithTooltip tip="Thay thế ảnh thu nhỏ">
                       <label
                         className={buttonVariants({ size: "default", color: "primary" })}
-                        aria-label="Replace thumbnail"
+                        aria-label="Thay thế ảnh thu nhỏ"
                       >
                         {thumbnailInput}
                         <Icon name="upload-fill" />
@@ -416,15 +416,15 @@ const FileEmbedNodeView = ({ node, editor, getPos, updateAttributes }: NodeViewP
                   <label className={buttonVariants({ size: "default", color: "primary" })}>
                     {thumbnailInput}
                     <Icon name="upload-fill" />
-                    Upload a thumbnail
+                    Tải lên ảnh thu nhỏ
                   </label>
                   <div>
-                    The thumbnail image is shown as a preview in the embedded video player. Your image should have a
-                    16:9 aspect ratio, at least 1280x720px, and be in JPG, PNG, or GIF format.
+                    Ảnh thu nhỏ được hiển thị dưới dạng bản xem trước trong trình phát video nhúng. Ảnh của bạn nên có
+                    tỷ lệ 16:9, ít nhất 1280x720px, và ở định dạng JPG, PNG hoặc GIF.
                   </div>
-                  <Separator>or</Separator>
+                  <Separator>hoặc</Separator>
                   <div>
-                    <Button onClick={generateThumbnail}>Generate a thumbnail</Button>
+                    <Button onClick={generateThumbnail}>Tạo ảnh thu nhỏ</Button>
                   </div>
                 </Placeholder>
               </div>
@@ -437,7 +437,7 @@ const FileEmbedNodeView = ({ node, editor, getPos, updateAttributes }: NodeViewP
         />
         <RowContent className="content">
           {file.is_streamable && node.attrs.collapsed ? (
-            <label className="thumbnail" aria-label="Upload a thumbnail">
+            <label className="thumbnail" aria-label="Tải lên ảnh thu nhỏ">
               {loadingVideo ? (
                 <div style={{ placeSelf: "center" }}>
                   <LoadingSpinner className="size-12" />
@@ -475,12 +475,12 @@ const FileEmbedNodeView = ({ node, editor, getPos, updateAttributes }: NodeViewP
                   <li>
                     <button className="cursor-pointer underline all-unset" onClick={() => setExpanded(!expanded)}>
                       {file.subtitle_files.length}{" "}
-                      {file.subtitle_files.length === 1 ? "closed caption" : "closed captions"}
+                      {file.subtitle_files.length === 1 ? "phụ đề" : "phụ đề"}
                     </button>
                   </li>
                 ) : null}
 
-                {isComplete && file.is_transcoding_in_progress ? <li>Transcoding in progress</li> : null}
+                {isComplete && file.is_transcoding_in_progress ? <li>Đang chuyển mã</li> : null}
               </>
             }
           />
@@ -492,14 +492,14 @@ const FileEmbedNodeView = ({ node, editor, getPos, updateAttributes }: NodeViewP
               href={downloadUrl}
               download={`${file.display_name}.${file.extension?.toLocaleLowerCase()}`}
             >
-              Download
+              Tải xuống
             </NavigationButton>
           ) : null}
 
           {file.is_streamable ? (
             <Popover
               trigger={
-                <Button aria-label="Thumbnail view">
+                <Button aria-label="Chế độ xem thu nhỏ">
                   <Icon name={node.attrs.collapsed ? "arrows-expand" : "arrows-collapse"} />
                 </Button>
               }
@@ -514,7 +514,7 @@ const FileEmbedNodeView = ({ node, editor, getPos, updateAttributes }: NodeViewP
                     }}
                   >
                     <Icon name={node.attrs.collapsed ? "arrows-expand" : "arrows-collapse"} />
-                    <span>{node.attrs.collapsed ? "Expand selected" : "Collapse selected"}</span>
+                    <span>{node.attrs.collapsed ? "Mở rộng đã chọn" : "Thu gọn đã chọn"}</span>
                   </div>
                   <div
                     role="menuitem"
@@ -535,7 +535,7 @@ const FileEmbedNodeView = ({ node, editor, getPos, updateAttributes }: NodeViewP
                     }}
                   >
                     <Icon name={node.attrs.collapsed ? "arrows-expand" : "arrows-collapse"} />
-                    <span>{node.attrs.collapsed ? "Expand all thumbnails" : "Collapse all thumbnails"}</span>
+                    <span>{node.attrs.collapsed ? "Mở rộng tất cả ảnh thu nhỏ" : "Thu gọn tất cả ảnh thu nhỏ"}</span>
                   </div>
                 </div>
               )}
@@ -543,20 +543,20 @@ const FileEmbedNodeView = ({ node, editor, getPos, updateAttributes }: NodeViewP
           ) : null}
 
           {!file.is_streamable || isComplete ? (
-            <Button onClick={() => setExpanded(!expanded)} aria-label={expanded ? "Close drawer" : "Edit"}>
+            <Button onClick={() => setExpanded(!expanded)} aria-label={expanded ? "Đóng ngăn kéo" : "Chỉnh sửa"}>
               <Icon name={expanded ? "outline-cheveron-up" : "outline-cheveron-down"} />
             </Button>
           ) : null}
 
           {!isComplete ? (
-            <Button color="danger" outline onClick={onCancel} aria-label="Cancel">
-              Cancel
+            <Button color="danger" outline onClick={onCancel} aria-label="Hủy">
+              Hủy
             </Button>
           ) : null}
 
           {FileUtils.isAudioExtension(file.extension) ? (
             <Button color="primary" onClick={() => setShowingAudioDrawer(!showingAudioDrawer)}>
-              {showingAudioDrawer ? "Close" : "Play"}
+              {showingAudioDrawer ? "Đóng" : "Phát"}
             </Button>
           ) : null}
 
@@ -565,7 +565,7 @@ const FileEmbedNodeView = ({ node, editor, getPos, updateAttributes }: NodeViewP
               color={showingVideoPlayer ? undefined : "primary"}
               onClick={() => setShowingVideoPlayer(!showingVideoPlayer)}
             >
-              {showingVideoPlayer ? "Close" : "Play"}
+              {showingVideoPlayer ? "Đóng" : "Phát"}
             </Button>
           ) : null}
         </RowActions>
@@ -586,20 +586,20 @@ const FileEmbedNodeView = ({ node, editor, getPos, updateAttributes }: NodeViewP
           <RowDetails className="drawer flex flex-col gap-4">
             <fieldset>
               <legend>
-                <label htmlFor={`${uid}name`}>Name</label>
+                <label htmlFor={`${uid}name`}>Tên</label>
               </legend>
               <input
                 type="text"
                 id={`${uid}name`}
                 value={file.display_name}
                 onChange={(evt) => updateFile({ display_name: evt.target.value })}
-                placeholder="Name"
+                placeholder="Tên"
               />
             </fieldset>
 
             <fieldset>
               <legend>
-                <label htmlFor={`${uid}description`}>Description</label>
+                <label htmlFor={`${uid}description`}>Mô tả</label>
               </legend>
               <textarea
                 id={`${uid}description`}
@@ -607,7 +607,7 @@ const FileEmbedNodeView = ({ node, editor, getPos, updateAttributes }: NodeViewP
                 maxLength={65_535}
                 value={file.description ?? ""}
                 onChange={(evt) => updateFile({ description: evt.target.value })}
-                placeholder="Description"
+                placeholder="Mô tả"
               />
             </fieldset>
 
@@ -634,9 +634,9 @@ const FileEmbedNodeView = ({ node, editor, getPos, updateAttributes }: NodeViewP
                   checked={file.pdf_stamp_enabled}
                   onChange={(e) => updateFile({ pdf_stamp_enabled: e.target.checked })}
                 />
-                Stamp this PDF with buyer information
+                Đóng dấu PDF này với thông tin người mua
                 <a href="/help/article/130-pdf-stamping" target="_blank" rel="noreferrer">
-                  Learn more
+                  Tìm hiểu thêm
                 </a>
               </label>
             ) : null}
@@ -644,7 +644,7 @@ const FileEmbedNodeView = ({ node, editor, getPos, updateAttributes }: NodeViewP
             {file.is_streamable ? (
               <>
                 <fieldset>
-                  <legend>Subtitles</legend>
+                  <legend>Phụ đề</legend>
                   <div className="flex flex-col gap-4">
                     <SubtitleList
                       subtitleFiles={file.subtitle_files}
@@ -668,9 +668,9 @@ const FileEmbedNodeView = ({ node, editor, getPos, updateAttributes }: NodeViewP
                     checked={file.stream_only}
                     onChange={(e) => updateFile({ stream_only: e.target.checked })}
                   />
-                  Disable file downloads (stream only)
+                  Tắt tải xuống file (chỉ xem trực tuyến)
                   <a href="/help/article/43-streaming-videos" target="_blank" rel="noreferrer">
-                    Learn more
+                    Tìm hiểu thêm
                   </a>
                 </label>
               </>
@@ -683,7 +683,7 @@ const FileEmbedNodeView = ({ node, editor, getPos, updateAttributes }: NodeViewP
           <div
             className={`${buttonVariants({ size: "default", color: "primary" })} absolute top-1/2 left-1/2 -translate-1/2`}
           >
-            Create folder with 2 items
+            Tạo thư mục với 2 mục
           </div>
         </div>
       ) : null}

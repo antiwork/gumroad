@@ -1,4 +1,3 @@
-import { HelperClientProvider } from "@helperai/react";
 import * as React from "react";
 import { createCast } from "ts-safe-cast";
 
@@ -6,7 +5,7 @@ import { register } from "$app/utils/serverComponentUtil";
 import { initTeamMemberReadOnlyAccess } from "$app/utils/team_member_read_only";
 
 import { useCurrentSeller } from "$app/components/CurrentSeller";
-import { useAppDomain, useDiscoverUrl } from "$app/components/DomainSettings";
+import { useAppDomain } from "$app/components/DomainSettings";
 import { useLoggedInUser } from "$app/components/LoggedInUser";
 import {
   Nav as NavFramework,
@@ -17,7 +16,6 @@ import {
   NavSection,
 } from "$app/components/Nav";
 import { DashboardNavProfilePopover } from "$app/components/ProfilePopover";
-import { UnreadTicketsBadge } from "$app/components/support/UnreadTicketsBadge";
 import { useRunOnce } from "$app/components/useRunOnce";
 
 type Props = {
@@ -41,7 +39,6 @@ export const Nav = (props: Props) => {
   const routeParams = { host: useAppDomain() };
   const loggedInUser = useLoggedInUser();
   const currentSeller = useCurrentSeller();
-  const discoverUrl = useDiscoverUrl();
   const teamMemberships = loggedInUser?.teamMemberships;
 
   React.useEffect(() => {
@@ -72,18 +69,6 @@ export const Nav = (props: Props) => {
           ) : null}
           <NavLink text="Cài đặt" icon="gear-fill" href={Routes.settings_main_url(routeParams)} />
 
-          <NavLink
-            text="Trợ giúp"
-            icon="book"
-            href={Routes.help_center_root_url(routeParams)}
-            badge={
-              props.helper_host && props.helper_session ? (
-                <HelperClientProvider host={props.helper_host} session={props.helper_session}>
-                  <UnreadTicketsBadge />
-                </HelperClientProvider>
-              ) : null
-            }
-          />
           <DashboardNavProfilePopover user={currentSeller}>
             <div role="menu">
               {teamMemberships != null && teamMemberships.length > 0 ? (
@@ -151,7 +136,6 @@ export const Nav = (props: Props) => {
         ) : null}
       </NavSection>
       <NavSection>
-        <NavLink text="Khám phá" icon="solid-search" href={discoverUrl} exactHrefMatch />
         {currentSeller?.id === loggedInUser?.id ? (
           <NavLink
             text="Thư viện"

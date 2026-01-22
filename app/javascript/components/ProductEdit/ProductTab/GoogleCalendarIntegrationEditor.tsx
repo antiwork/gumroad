@@ -45,7 +45,7 @@ export const GoogleCalendarIntegrationEditor = ({
         .then(setCalendars)
         .catch((e: unknown) => {
           assertResponseError(e);
-          showAlert("Could not fetch calendars, please try again.", "error");
+          showAlert("Không thể lấy danh sách lịch, vui lòng thử lại.", "error");
         })
         .finally(() => {
           setIsLoading(false);
@@ -76,13 +76,13 @@ export const GoogleCalendarIntegrationEditor = ({
           }
         } catch (e) {
           assertResponseError(e);
-          showAlert("Could not connect to your Google Calendar account, please try again.", "error");
+          showAlert("Không thể kết nối với tài khoản Google Calendar của bạn, vui lòng thử lại.", "error");
         } finally {
           setIsLoading(false);
         }
       },
       onError: () => {
-        showAlert("Could not connect to your Google Calendar account, please try again.", "error");
+        showAlert("Không thể kết nối với tài khoản Google Calendar của bạn, vui lòng thử lại.", "error");
         setIsLoading(false);
       },
       onPopupClose: () => setIsLoading(false),
@@ -109,7 +109,7 @@ export const GoogleCalendarIntegrationEditor = ({
           setEnabledForOptions(false);
         }
       }}
-      label="Connect with Google Calendar to sync your calls"
+      label="Kết nối với Google Calendar để đồng bộ cuộc gọi của bạn"
       dropdown={
         <div className="flex flex-col gap-4">
           {isLoading ? (
@@ -117,12 +117,12 @@ export const GoogleCalendarIntegrationEditor = ({
           ) : integration ? (
             <>
               <p>
-                People who purchase your product will automatically receive a Google Calendar invite and we'll keep your
-                calendar in sync.
+                Những người mua sản phẩm của bạn sẽ tự động nhận được lời mời Google Calendar và chúng tôi sẽ giữ cho
+                lịch của bạn được đồng bộ.
               </p>
-              <label htmlFor="google-account">Google account</label>
+              <label htmlFor="google-account">Tài khoản Google</label>
               <input id="google-account" type="text" value={integration.integration_details.email} readOnly />
-              <label htmlFor="calendar-select">Choose calendar</label>
+              <label htmlFor="calendar-select">Chọn lịch</label>
               <select
                 id="calendar-select"
                 value={integration.integration_details.calendar_id}
@@ -146,18 +146,18 @@ export const GoogleCalendarIntegrationEditor = ({
                 ))}
               </select>
               <Button color="danger" onClick={() => onChange(null)}>
-                Disconnect Google Calendar
+                Ngắt kết nối Google Calendar
               </Button>
             </>
           ) : (
             <>
               <p>
-                People who purchase your product will automatically receive a Google Calendar invite and we'll keep your
-                calendar in sync.
+                Những người mua sản phẩm của bạn sẽ tự động nhận được lời mời Google Calendar và chúng tôi sẽ giữ cho
+                lịch của bạn được đồng bộ.
               </p>
               <Button color="google" onClick={handleConnectGoogleAccount}>
                 <span className="brand-icon brand-icon-google" />
-                Connect to Google Calendar
+                Kết nối với Google Calendar
               </Button>
             </>
           )}

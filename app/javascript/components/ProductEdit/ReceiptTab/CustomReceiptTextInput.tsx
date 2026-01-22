@@ -12,11 +12,11 @@ export const CustomReceiptTextInput = ({
   const uid = React.useId();
   return (
     <fieldset>
-      <label htmlFor={uid}>Custom message</label>
+      <label htmlFor={uid}>Tin nhắn tùy chỉnh</label>
       <textarea
         id={uid}
         maxLength={maxLength}
-        placeholder="Add any additional information you'd like to include on the receipt."
+        placeholder="Thêm bất kỳ thông tin bổ sung nào bạn muốn đưa vào biên lai."
         value={value ?? ""}
         onChange={(evt) => onChange(evt.target.value)}
         rows={3}

@@ -54,9 +54,9 @@ export const CoverEditor = ({
     <section className="p-4! md:p-8!">
       <header>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-          <h2>Cover</h2>
+          <h2>Ảnh bìa</h2>
           <a href="/help/article/60-adding-a-cover-image" target="_blank" rel="noreferrer">
-            Learn more
+            Tìm hiểu thêm
           </a>
         </div>
       </header>
@@ -86,10 +86,10 @@ export const CoverEditor = ({
               ))}
             </Sortable>
 
-            <WithTooltip tip={canAddPreview ? null : "Maximum number of previews uploaded"}>
+            <WithTooltip tip={canAddPreview ? null : "Đã tải lên số lượng ảnh xem trước tối đa"}>
               <Popover
                 disabled={!canAddPreview || isUploading}
-                aria-label="Add cover"
+                aria-label="Thêm ảnh bìa"
                 trigger={
                   <div className={buttonVariants({ size: "default" })}>
                     <Icon name="plus" />
@@ -169,12 +169,12 @@ const CoverUploader = ({
 
                   for (const file of event.target.files) {
                     if (!FileUtils.isFileNameExtensionAllowed(file.name, ALLOWED_EXTENSIONS)) {
-                      showAlert("Invalid file type.", "error");
+                      showAlert("Loại file không hợp lệ.", "error");
                       continue;
                     }
                     // TODO change the relevant endpoint(s) to allow uploading multiple files at once
                     await new Promise<void>((resolve) => {
-                      new DirectUpload(file, "/rails/active_storage/direct_uploads").create((error, blob) => {
+                      new DirectUpload(file, Routes.rails_direct_uploads_path()).create((error, blob) => {
                         if (error) {
                           showAlert(error.message, "error");
                         } else {
@@ -187,7 +187,7 @@ const CoverUploader = ({
                 })}
               />
               <TabIcon name="upload-fill" />
-              Computer files
+              File từ máy tính
             </label>
           </Tab>
           <Tab
@@ -199,7 +199,7 @@ const CoverUploader = ({
             aria-controls={`${uid}-url`}
           >
             <TabIcon name="link" />
-            External link
+            Liên kết ngoài
           </Tab>
         </Tabs>
         <fieldset
@@ -224,22 +224,22 @@ const CoverUploader = ({
                     setUploader(null);
                   });
                 }}
-                aria-label="Upload"
+                aria-label="Tải lên"
               >
                 <Icon name="upload-fill" />
               </Button>
             </div>
           ) : null}
-          <small>We support media from sites such as YouTube, Vimeo, and Soundcloud.</small>
+          <small>Chúng tôi hỗ trợ media từ các trang như YouTube, Vimeo và Soundcloud.</small>
         </fieldset>
       </div>
     )
   ) : (
     <>
       <Button color="primary" onClick={() => setIsSelecting(true)}>
-        <Icon name="upload-fill" /> Upload images or videos
+        <Icon name="upload-fill" /> Tải ảnh hoặc video lên
       </Button>
-      Images should be horizontal, at least 1280x720px, and 72 DPI (dots per inch).
+      Ảnh nên là ảnh ngang, ít nhất 1280x720px và 72 DPI (chấm mỗi inch).
     </>
   );
 };
@@ -247,7 +247,7 @@ const CoverUploader = ({
 const CoversTabList = React.forwardRef<HTMLDivElement, React.HTMLProps<HTMLDivElement>>((props, ref) => (
   <Tabs
     variant="buttons"
-    aria-label="Product covers"
+    aria-label="Ảnh bìa sản phẩm"
     {...props}
     className="-mt-3 !auto-cols-max grid-flow-col overflow-x-auto pt-3 pb-4 pl-1"
     ref={ref}
@@ -301,7 +301,7 @@ const CoverTab = ({
             onRemove();
           }}
           style={{ position: "absolute", top: 0, right: 0, transform: "translate(50%, -50%)" }}
-          aria-label="Remove cover"
+          aria-label="Xóa ảnh bìa"
         />
       ) : null}
     </Tab>

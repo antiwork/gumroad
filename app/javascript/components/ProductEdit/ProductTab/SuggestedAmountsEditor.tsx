@@ -43,20 +43,20 @@ export const SuggestedAmountsEditor = ({
       disabled={versions.length === 3}
     >
       <Icon name="plus" />
-      Add amount
+      Thêm mức giá
     </Button>
   );
 
   return (
     <fieldset>
-      <legend>{versions.length > 1 ? "Suggested amounts" : "Suggested amount"}</legend>
+      <legend>{versions.length > 1 ? "Mức giá gợi ý" : "Mức giá gợi ý"}</legend>
       {versions.map((version, index) => (
         <SuggestedAmountEditor
           key={version.id}
           version={version}
           updateVersion={(update) => updateVersion(version.id, update)}
           onDelete={versions.length > 1 ? () => onChange(versions.filter(({ id }) => id !== version.id)) : null}
-          label={`Suggested amount ${index + 1}`}
+          label={`Mức giá gợi ý ${index + 1}`}
           onBlur={() =>
             onChange(versions.sort((a, b) => (a.price_difference_cents ?? 0) - (b.price_difference_cents ?? 0)))
           }
@@ -92,7 +92,7 @@ const SuggestedAmountEditor = ({
         ariaLabel={label}
         onBlur={onBlur}
       />
-      <Button aria-label="Delete" onClick={onDelete ?? undefined} disabled={!onDelete}>
+      <Button aria-label="Xóa" onClick={onDelete ?? undefined} disabled={!onDelete}>
         <Icon name="trash2" />
       </Button>
     </section>

@@ -147,8 +147,8 @@ export const DescriptionEditor = ({
   const editor = useRichTextEditor({
     id: uid,
     className: "textarea",
-    ariaLabel: "Description",
-    placeholder: "Describe your product...",
+    ariaLabel: "Mô tả",
+    placeholder: "Mô tả sản phẩm...",
     initialValue: isMounted ? initialDescription : null,
     onChange,
     onInputNonImageFiles: (files: File[]) => {
@@ -190,7 +190,7 @@ export const DescriptionEditor = ({
         if (!audioPreviewsEnabled) return;
 
         if (!FileUtils.isAudioExtension(FileUtils.getFileExtension(file.name).toUpperCase())) {
-          showAlert("Only audio files are allowed", "error");
+          showAlert("Chỉ được upload file âm thanh", "error");
           return;
         }
 
@@ -200,7 +200,7 @@ export const DescriptionEditor = ({
         });
         if (publicFileEmbeds.length >= MAX_ALLOWED_PUBLIC_FILES_COUNT) {
           showAlert(
-            `You can only upload up to ${MAX_ALLOWED_PUBLIC_FILES_COUNT} audio previews in the description`,
+            `Chỉ được upload tối đa ${MAX_ALLOWED_PUBLIC_FILES_COUNT} file âm thanh trong mô tả`,
             "error",
           );
           return;
@@ -212,7 +212,7 @@ export const DescriptionEditor = ({
         );
         if (file.size > MAX_ALLOWED_PUBLIC_FILE_SIZE_IN_BYTES) {
           showAlert(
-            `File is too large (max allowed size is ${FileUtils.getReadableFileSize(
+            `File quá lớn (kích thước tối đa cho phép là ${FileUtils.getReadableFileSize(
               MAX_ALLOWED_PUBLIC_FILE_SIZE_IN_BYTES,
             )})`,
             "error",
@@ -271,13 +271,13 @@ export const DescriptionEditor = ({
               .catch((error: unknown) => {
                 fileUploadCleanup(editor, src);
                 onError?.(error instanceof Error ? error : null);
-                showAlert("Failed to upload the file. Please try again.", "error");
+            showAlert("Upload file thất bại. Vui lòng thử lại.", "error");
               });
           },
           onError: (error: Error | null) => {
             fileUploadCleanup(editor, src);
             onError?.(error);
-            showAlert("Failed to upload the file. Please try again.", "error");
+            showAlert("Upload file thất bại. Vui lòng thử lại.", "error");
           },
         });
         setActiveUploaders((prev) => prev.set(src, uploader));
@@ -340,7 +340,7 @@ export const DescriptionEditor = ({
 
   return (
     <fieldset>
-      <label htmlFor={uid}>Description</label>
+      <label htmlFor={uid}>Mô tả</label>
       <PublicFilesSettingsContext.Provider value={publicFilesSettings}>
         <ImageUploadSettingsContext.Provider value={imageSettings}>
           <div className="rich-text-editor" data-gumroad-ignore>

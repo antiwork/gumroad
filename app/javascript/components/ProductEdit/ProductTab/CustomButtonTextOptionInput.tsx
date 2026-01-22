@@ -20,7 +20,7 @@ export const CustomButtonTextOptionInput = <T extends CustomButtonTextOption>({
 
   return (
     <fieldset>
-      <label htmlFor={uid}>Call to action</label>
+      <label htmlFor={uid}>Nút hành động</label>
       <TypeSafeOptionSelect
         id={uid}
         value={value ?? options[0]}

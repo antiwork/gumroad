@@ -27,18 +27,18 @@ export const TaxonomyEditor = ({
   return (
     <fieldset>
       <legend>
-        <label htmlFor={uid}>Category</label>
+        <label htmlFor={uid}>Danh mục</label>
       </legend>
       <Select
         inputId={uid}
-        placeholder="Begin typing to select a category"
+        placeholder="Bắt đầu nhập để chọn danh mục"
         options={options}
         onChange={(taxonomy) => onChange(taxonomy?.id ?? null)}
         isMulti={false}
         isClearable
         value={options.find(({ id }) => id === taxonomyId) ?? null}
       />
-      <small>Select a category to show your product on Gumroad Discover.</small>
+      <small>Chọn một danh mục để hiển thị sản phẩm của bạn trên Gumroad Discover.</small>
     </fieldset>
   );
 };

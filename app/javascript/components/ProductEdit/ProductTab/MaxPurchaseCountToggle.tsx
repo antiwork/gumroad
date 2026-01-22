@@ -25,14 +25,14 @@ export const MaxPurchaseCountToggle = ({
       open={isEnabled}
       summary={
         <Toggle value={isEnabled} onChange={setIsEnabled}>
-          Limit product sales
+          Giới hạn số lượng bán
         </Toggle>
       }
     >
       <div className="dropdown">
         <fieldset>
-          <label htmlFor={`${uid}-max-purchase-count`}>Maximum number of purchases</label>
-          <WithTooltip tip="Total sales">
+          <label htmlFor={`${uid}-max-purchase-count`}>Số lượng mua tối đa</label>
+          <WithTooltip tip="Tổng số bán">
             <NumberInput value={count} onChange={setCount}>
               {(props) => <input id={`${uid}-max-purchase-count`} placeholder="∞" {...props} />}
             </NumberInput>

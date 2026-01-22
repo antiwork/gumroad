@@ -15,8 +15,7 @@ import { initTeamMemberReadOnlyAccess } from "$app/utils/team_member_read_only";
 
 import NavbarFooter from "$app/components/client-components/Nav/footer";
 import { CloseOnNavigate } from "$app/components/CloseOnNavigate";
-import { useCurrentSeller } from "$app/components/CurrentSeller";
-import { useAppDomain, useDiscoverUrl } from "$app/components/DomainSettings";
+import { useAppDomain } from "$app/components/DomainSettings";
 import { Icon } from "$app/components/Icons";
 import { useLoggedInUser } from "$app/components/LoggedInUser";
 import { Nav as NavFramework, NavLink, NavSection } from "$app/components/Nav";
@@ -62,7 +61,7 @@ export const ClientNavLink = ({
       {...(onClick && { onClick })}
       className={classNames(
         "flex items-center truncate border-y border-transparent px-6 py-4 no-underline hover:bg-gray-50 hover:text-black dark:border-foreground/50 dark:border-b-transparent dark:last:border-b-foreground/50",
-        { "text-accent font-bold bg-gray-50": !!ariaCurrent },
+        { "text-black bg-gray-50": !!ariaCurrent },
       )}
     >
       {icon ? <Icon name={icon} className="mr-4" /> : null}
@@ -80,8 +79,6 @@ export const ClientNavLink = ({
 export const Nav = (props: Props) => {
   const routeParams = { host: useAppDomain() };
   const loggedInUser = useLoggedInUser();
-  const currentSeller = useCurrentSeller();
-  const discoverUrl = useDiscoverUrl();
   const teamMemberships = loggedInUser?.teamMemberships;
 
   React.useEffect(() => {
@@ -107,18 +104,18 @@ export const Nav = (props: Props) => {
     <NavFramework footer={<NavbarFooter />} {...props}>
       <CloseOnNavigate />
       <NavSection>
-        <ClientNavLink text="Home" icon="shop-window-fill" href={Routes.dashboard_url(routeParams)} exactHrefMatch />
+        <ClientNavLink text="Trang chủ" icon="shop-window-fill" href={Routes.dashboard_url(routeParams)} exactHrefMatch />
         <ClientNavLink
-          text="Products"
+          text="Sản phẩm"
           icon="archive-fill"
           href={Routes.products_url(routeParams)}
           additionalPatterns={[Routes.bundle_path(".", routeParams).slice(0, -1)]}
         />
         {loggedInUser?.policies.collaborator.create ? (
-          <ClientNavLink text="Collaborators" icon="deal-fill" href={Routes.collaborators_url(routeParams)} />
+          <ClientNavLink text="Cộng tác viên" icon="deal-fill" href={Routes.collaborators_url(routeParams)} />
         ) : null}
         <ClientNavLink
-          text="Checkout"
+          text="Thanh toán"
           icon="cart3-fill"
           href={Routes.checkout_discounts_url(routeParams)}
           additionalPatterns={[Routes.checkout_form_url(routeParams), Routes.checkout_upsells_url(routeParams)]}
@@ -129,10 +126,10 @@ export const Nav = (props: Props) => {
           href={Routes.emails_url(routeParams)}
           additionalPatterns={[Routes.followers_url(routeParams)]}
         />
-        <ClientNavLink text="Workflows" icon="diagram-2-fill" href={Routes.workflows_url(routeParams)} />
-        <ClientNavLink text="Sales" icon="solid-currency-dollar" href={Routes.customers_url(routeParams)} />
+        <ClientNavLink text="Quy trình làm việc" icon="diagram-2-fill" href={Routes.workflows_url(routeParams)} />
+        <ClientNavLink text="Bán hàng" icon="solid-currency-dollar" href={Routes.customers_url(routeParams)} />
         <ClientNavLink
-          text="Analytics"
+          text="Phân tích"
           icon="bar-chart-fill"
           href={Routes.sales_dashboard_url(routeParams)}
           additionalPatterns={[
@@ -142,21 +139,10 @@ export const Nav = (props: Props) => {
           ]}
         />
         {loggedInUser?.policies.balance.index ? (
-          <ClientNavLink text="Payouts" icon="bank" href={Routes.balance_url(routeParams)} />
+          <ClientNavLink text="Thanh toán" icon="bank" href={Routes.balance_url(routeParams)} />
         ) : null}
         {loggedInUser?.policies.community.index ? (
-          <NavLink text="Community" icon="solid-chat-alt" href={Routes.community_path(routeParams)} />
-        ) : null}
-      </NavSection>
-      <NavSection>
-        <NavLink text="Discover" icon="solid-search" href={discoverUrl} exactHrefMatch />
-        {currentSeller?.id === loggedInUser?.id ? (
-          <ClientNavLink
-            text="Library"
-            icon="bookmark-heart-fill"
-            href={Routes.library_url(routeParams)}
-            additionalPatterns={[Routes.wishlists_url(routeParams), Routes.reviews_url(routeParams)]}
-          />
+          <NavLink text="Cộng đồng" icon="solid-chat-alt" href={Routes.community_path(routeParams)} />
         ) : null}
       </NavSection>
     </NavFramework>

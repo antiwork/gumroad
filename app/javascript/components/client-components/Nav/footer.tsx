@@ -18,10 +18,9 @@ function NavbarFooter() {
   return (
     <>
       {currentSeller?.isBuyer ? (
-        <NavLink text="Start selling" icon="shop-window-fill" href={Routes.dashboard_url(routeParams)} />
+        <NavLink text="Bắt đầu bán hàng" icon="shop-window-fill" href={Routes.dashboard_url(routeParams)} />
       ) : null}
-      <ClientNavLink text="Settings" icon="gear-fill" href={Routes.settings_main_url(routeParams)} />
-      <NavLink text="Help" icon="book" href={Routes.help_center_root_url(routeParams)} />
+      <ClientNavLink text="Cài đặt" icon="gear-fill" href={Routes.settings_main_url(routeParams)} />
       <DashboardNavProfilePopover user={currentSeller}>
         <div role="menu">
           {teamMemberships != null && teamMemberships.length > 0 ? (
@@ -33,14 +32,14 @@ function NavbarFooter() {
             </>
           ) : null}
           <NavLinkDropdownItem
-            text="Profile"
+            text="Hồ sơ"
             icon="shop-window-fill"
             href={Routes.root_url({ ...routeParams, host: currentSeller?.subdomain ?? routeParams.host })}
           />
-          <NavLinkDropdownItem text="Affiliates" icon="gift-fill" href={Routes.affiliates_url(routeParams)} />
+          <NavLinkDropdownItem text="Tiếp thị liên kết" icon="gift-fill" href={Routes.affiliates_url(routeParams)} />
           <Link role="menuitem" href={Routes.logout_url(routeParams)} method="delete" className="w-full all-unset">
             <Icon name="box-arrow-in-right-fill" className="mr-3 ml-1" />
-            Logout
+            Đăng xuất
           </Link>
           {loggedInUser?.isImpersonating ? <UnbecomeDropdownItem /> : null}
         </div>

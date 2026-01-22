@@ -17,7 +17,7 @@ const MIN_SIDE_DIMENSION = 600;
 const MEGABYTE = 1024 * 1024;
 const MAX_FILE_SIZE = 5 * MEGABYTE;
 export class ValidationError extends Error {
-  constructor(message = "Invalid file type.") {
+  constructor(message = "Loại file không hợp lệ.") {
     super(message);
   }
 }
@@ -26,13 +26,13 @@ const validateFile = async (file: File) => {
   if (!FileUtils.isFileNameExtensionAllowed(file.name, ALLOWED_EXTENSIONS)) throw new ValidationError();
 
   if (file.size > MAX_FILE_SIZE)
-    throw new ValidationError("Could not process your thumbnail, please upload an image with size smaller than 5 MB.");
+    throw new ValidationError("Không thể xử lý thumbnail, vui lòng tải lên ảnh có kích thước nhỏ hơn 5 MB.");
 
   const dimensions = await getImageDimensionsFromFile(file).catch(() => null);
   if (!dimensions) throw new ValidationError();
-  if (dimensions.height !== dimensions.width) throw new ValidationError("Image must be square.");
+  if (dimensions.height !== dimensions.width) throw new ValidationError("Ảnh phải là hình vuông.");
 
-  if (dimensions.height < MIN_SIDE_DIMENSION) throw new ValidationError("Image must be at least 600x600px.");
+  if (dimensions.height < MIN_SIDE_DIMENSION) throw new ValidationError("Ảnh phải có kích thước ít nhất 600x600px.");
 };
 
 export const coverUrlForThumbnail = (covers: AssetPreview[]) =>
@@ -64,7 +64,7 @@ export const ThumbnailEditor = ({
   const removeThumbnail = async (guid: string) => {
     try {
       await deleteThumbnail(permalink, guid);
-      showAlert("Thumbnail has been deleted.", "success");
+      showAlert("Đã xóa thumbnail.", "success");
       setThumbnail(null);
     } catch (e) {
       assertResponseError(e);
@@ -77,21 +77,21 @@ export const ThumbnailEditor = ({
       <div className="flex items-center justify-between">
         <h2>Thumbnail</h2>
         <a href="/help/article/60-adding-a-cover-image" target="_blank" rel="noreferrer">
-          Learn more
+          Tìm hiểu thêm
         </a>
       </div>
       <ImageUploader
         imageAlt="Thumbnail image"
         imageUrl={thumbnail?.url ?? null}
         allowedExtensions={ALLOWED_EXTENSIONS}
-        helpText="This image appears in the Gumroad Library, Discover and Profile pages. Your image should be square, at least 600x600px, and JPG, PNG or GIF format."
+        helpText="Ảnh này xuất hiện trên Thư viện, Khám phá và trang Hồ sơ. Ảnh của bạn nên là hình vuông, ít nhất 600x600px, và ở định dạng JPG, PNG hoặc GIF."
         onRemove={() => void removeThumbnail(thumbnail?.guid ?? "")}
         defaultImageUrl={coverUrlForThumbnail(covers) ?? cast<string>(nativeTypeThumbnails(`./${nativeType}.svg`))}
         onSelectFile={(file) =>
           new Promise((resolve, reject) => {
             validateFile(file).then(
               () => {
-                new DirectUpload(file, "/rails/active_storage/direct_uploads").create((error, blob) => {
+                new DirectUpload(file, Routes.rails_direct_uploads_path()).create((error, blob) => {
                   if (error) return resolve(showAlert(error.message, "error"));
                   saveThumbnail({ type: "file", signedBlobId: blob.signed_id }).then(resolve, (e: unknown) => {
                     assertResponseError(e);

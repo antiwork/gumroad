@@ -37,15 +37,15 @@ export const InstallmentPlanEditor = ({
       disabled={totalAmountCents <= 0 || isPWYW}
       value={allowInstallmentPayments}
       onChange={onAllowInstallmentPaymentsChange}
-      label="Allow customers to pay in installments"
+      label="Cho phép khách hàng trả góp"
       dropdown={
         <fieldset>
           <NumberInput value={numberOfInstallments} onChange={(value) => onNumberOfInstallmentsChange(value || 0)}>
             {(props) => (
               <div className="input">
-                <input {...props} type="number" min={2} aria-label="Number of installments" />
+                <input {...props} type="number" min={2} aria-label="Số kỳ trả góp" />
                 <label>
-                  <span>equal monthly payments</span>
+                  <span>khoản thanh toán hàng tháng bằng nhau</span>
                 </label>
               </div>
             )}

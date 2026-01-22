@@ -18,7 +18,7 @@ const UserActionButtons: React.FC = () => {
   if (currentSeller) {
     return (
       <>
-        <NavigationButton href={Routes.library_url()} className="flex-1 lg:flex-none">
+        <NavigationButton href={Routes.library_url()} className="flex-1 lg:flex-none rounded-full hover:bg-white/10 transition-colors">
           <Icon name="bookmark-heart-fill" /> Thư viện
         </NavigationButton>
         {currentSeller.has_published_products ? null : (
@@ -180,12 +180,13 @@ export const Layout: React.FC<{
   );
 
   const blogLink = (
-    <a
+    <NavigationButton
       href={Routes.gumroad_blog_root_url()}
-      className="flex items-center gap-2 rounded-full px-4 py-2 text-white no-underline transition-colors hover:bg-white/10"
+      className="rounded-full text-white hover:bg-white/10 transition-colors"
     >
+      <Icon name="pencil" />
       Bài viết
-    </a>
+    </NavigationButton>
   );
 
   const headerRowElementsProps: HeaderRowElementsProps = {

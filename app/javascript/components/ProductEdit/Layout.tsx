@@ -91,10 +91,10 @@ const NotifyAboutProductUpdatesAlert = () => {
     >
       <Alert variant="info">
         <div className="flex flex-col gap-4">
-          Changes saved! Would you like to notify your customers about those changes?
+          Đã lưu thay đổi! Bạn có muốn thông báo cho khách hàng về những thay đổi này không?
           <div className="flex gap-2">
             <Button color="primary" outline onClick={() => close()}>
-              Skip for now
+              Bỏ qua lúc này
             </Button>
             <NavigationButton
               color="primary"
@@ -111,7 +111,7 @@ const NotifyAboutProductUpdatesAlert = () => {
               target="_blank"
               rel="noreferrer"
             >
-              Send notification
+              Gửi thông báo
             </NavigationButton>
           </div>
         </div>
@@ -155,7 +155,7 @@ export const Layout = ({
       await saveProduct(uniquePermalink, id, product, currencyType);
       await setProductPublished(uniquePermalink, published);
       updateProduct({ is_published: published });
-      showAlert(published ? "Published!" : "Unpublished!", "success");
+      showAlert(published ? "Đã xuất bản!" : "Đã hủy xuất bản!", "success");
       if (tab === "share") {
         if (product.native_type === "coffee") navigate.current(rootPath);
         else navigate.current(`${rootPath}/content`);
@@ -178,11 +178,11 @@ export const Layout = ({
   const isUploadingFilesOrImages = isLoading || isUploadingFiles || !!imageSettings?.isUploading;
   const isBusy = isUploadingFilesOrImages || saving || isPublishing;
   const saveButtonTooltip = isUploadingFiles
-    ? "Files are still uploading..."
+    ? "Các tệp vẫn đang tải lên..."
     : isUploadingFilesOrImages
-      ? "Images are still uploading..."
+      ? "Hình ảnh vẫn đang tải lên..."
       : isBusy
-        ? "Please wait..."
+        ? "Vui lòng đợi..."
         : undefined;
 
   React.useEffect(() => {
@@ -198,16 +198,16 @@ export const Layout = ({
   const saveButton = (
     <WithTooltip tip={saveButtonTooltip}>
       <Button color="primary" disabled={isBusy} onClick={() => void save()}>
-        {saving ? "Saving changes..." : "Save changes"}
+        {saving ? "Đang lưu thay đổi..." : "Lưu thay đổi"}
       </Button>
     </WithTooltip>
   );
 
   const onTabClick = (e: React.MouseEvent<HTMLAnchorElement>, callback?: () => void) => {
     const message = isUploadingFiles
-      ? "Some files are still uploading, please wait..."
+      ? "Một số tệp vẫn đang tải lên, vui lòng đợi..."
       : isUploadingFilesOrImages
-        ? "Some images are still uploading, please wait..."
+        ? "Một số hình ảnh vẫn đang tải lên, vui lòng đợi..."
         : undefined;
 
     if (message) {
@@ -228,20 +228,20 @@ export const Layout = ({
       <form hidden data-id={uniquePermalink} id="edit-link-basic-form" />
       <PageHeader
         className="sticky-top"
-        title={product.name || "Untitled"}
+        title={product.name || "Không có tiêu đề"}
         actions={
           product.is_published ? (
             <>
               <Button disabled={isBusy} onClick={() => void setPublished(false)}>
-                {isPublishing ? "Unpublishing..." : "Unpublish"}
+                {isPublishing ? "Đang hủy xuất bản..." : "Hủy xuất bản"}
               </Button>
               {saveButton}
-              <CopyToClipboard text={url} copyTooltip="Copy product URL">
+              <CopyToClipboard text={url} copyTooltip="Sao chép URL sản phẩm">
                 <Button>
                   <Icon name="link" />
                 </Button>
               </CopyToClipboard>
-              <CopyToClipboard text={checkoutUrl} copyTooltip="Copy checkout URL" tooltipPosition="left">
+              <CopyToClipboard text={checkoutUrl} copyTooltip="Sao chép URL thanh toán" tooltipPosition="left">
                 <Button>
                   <Icon name="cart-plus" />
                 </Button>
@@ -253,14 +253,14 @@ export const Layout = ({
               disabled={isBusy}
               onClick={() => void save().then(() => navigate.current(`${rootPath}/content`))}
             >
-              {saving ? "Saving changes..." : "Save and continue"}
+              {saving ? "Đang lưu..." : "Lưu và tiếp tục"}
             </Button>
           ) : (
             <>
               {saveButton}
               <WithTooltip tip={saveButtonTooltip}>
                 <Button color="accent" disabled={isBusy} onClick={() => void setPublished(true)}>
-                  {isPublishing ? "Publishing..." : "Publish and continue"}
+                  {isPublishing ? "Đang xuất bản..." : "Xuất bản và tiếp tục"}
                 </Button>
               </WithTooltip>
             </>
@@ -276,19 +276,19 @@ export const Layout = ({
           <Tabs style={{ gridColumn: 1 }}>
             <Tab asChild isSelected={tab === "product"}>
               <Link to={rootPath} onClick={onTabClick}>
-                Product
+                Sản phẩm
               </Link>
             </Tab>
             {!isCoffee ? (
               <Tab asChild isSelected={tab === "content"}>
                 <Link to={`${rootPath}/content`} onClick={onTabClick}>
-                  Content
+                  Nội dung
                 </Link>
               </Tab>
             ) : null}
             <Tab asChild isSelected={tab === "receipt"}>
               <Link to={`${rootPath}/receipt`} onClick={onTabClick}>
-                Receipt
+                Biên lai
               </Link>
             </Tab>
             <Tab asChild isSelected={tab === "share"}>
@@ -299,14 +299,14 @@ export const Layout = ({
                     if (!product.is_published) {
                       evt.preventDefault();
                       showAlert(
-                        "Not yet! You've got to publish your awesome product before you can share it with your audience and the world.",
+                        "Chưa được đâu! Bạn phải xuất bản sản phẩm tuyệt vời của mình trước khi có thể chia sẻ nó với khán giả và thế giới.",
                         "warning",
                       );
                     }
                   });
                 }}
               >
-                Share
+                Chia sẻ
               </Link>
             </Tab>
           </Tabs>

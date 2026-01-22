@@ -45,9 +45,9 @@ export const RefundPolicySelector = ({
       open={isEnabled}
       summary={
         <Toggle value={isEnabled} onChange={setIsEnabled}>
-          Specify a refund policy for this product{" "}
+          Chỉ định chính sách hoàn tiền cho sản phẩm này{" "}
           <a href="/help/article/335-custom-refund-policy" target="_blank" rel="noreferrer">
-            Learn more
+            Tìm hiểu thêm
           </a>
         </Toggle>
       }
@@ -55,10 +55,10 @@ export const RefundPolicySelector = ({
       <div className="dropdown flex flex-col gap-4">
         <fieldset>
           <legend>
-            <label htmlFor={`${uid}-max-refund-period-in-days`}>Refund period</label>
+            <label htmlFor={`${uid}-max-refund-period-in-days`}>Thời hạn hoàn tiền</label>
             {refundPolicies.length > 0 ? (
               <Popover
-                trigger={<div className="link">Copy from other products</div>}
+                trigger={<div className="link">Sao chép từ các sản phẩm khác</div>}
                 open={isPopoverOpen}
                 onToggle={setIsPopoverOpen}
               >
@@ -72,7 +72,7 @@ export const RefundPolicySelector = ({
                   <Select
                     options={refundPolicies.map(({ id, product_name: label }) => ({ id, label }))}
                     isMulti={false}
-                    placeholder="Select a product"
+                    placeholder="Chọn một sản phẩm"
                     onChange={(option) => setSelectedRefundPolicyId(option?.id ?? null)}
                   />
                   <Button
@@ -91,7 +91,7 @@ export const RefundPolicySelector = ({
                       }
                     }}
                   >
-                    Copy
+                    Sao chép
                   </Button>
                 </div>
               </Popover>
@@ -121,7 +121,7 @@ export const RefundPolicySelector = ({
         </fieldset>
         <fieldset>
           <legend>
-            <label htmlFor={`${uid}-refund-policy-fine-print`}>Fine print (optional)</label>
+            <label htmlFor={`${uid}-refund-policy-fine-print`}>Điều khoản chi tiết (tùy chọn)</label>
           </legend>
           <textarea
             id={`${uid}-refund-policy-fine-print`}
@@ -145,7 +145,7 @@ export const RefundPolicyModalPreview = ({ refundPolicy, open }: { refundPolicy:
       open={!!refundPolicy.fine_print && open}
       title={refundPolicy.title}
       modal={false}
-      footer={`Last updated ${new Date().toLocaleString(userAgentInfo.locale, { dateStyle: "medium" })}`}
+      footer={`Cập nhật lần cuối ${new Date().toLocaleString(userAgentInfo.locale, { dateStyle: "medium" })}`}
     >
       <div style={{ whiteSpace: "pre-wrap" }}>{refundPolicy.fine_print}</div>
     </Modal>

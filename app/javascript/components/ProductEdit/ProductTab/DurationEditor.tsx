@@ -17,14 +17,14 @@ export const DurationEditor = () => {
         if (!open) updateProduct({ duration_in_months: null });
         setIsOpen(open);
       }}
-      label="Automatically end memberships after a number of months"
+      label="Tự động kết thúc tư cách thành viên sau một số tháng"
       dropdown={
         <fieldset>
           <legend>
-            <label htmlFor={uid}>Number of months</label>
+            <label htmlFor={uid}>Số tháng</label>
           </legend>
           <WithTooltip
-            tip="Any change in the length of your membership will only affect new members."
+            tip="Mọi thay đổi về thời hạn thành viên chỉ áp dụng cho thành viên mới."
             position="bottom"
           >
             <NumberInput

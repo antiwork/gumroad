@@ -91,36 +91,37 @@ export const ProductTab = () => {
                 <div className="flex items-center gap-4">
                   <Icon className="text-lg" name="sparkle" />
                   <div className="flex-1">
-                    <strong>Your AI product is ready!</strong> Take a moment to check out the product and content tabs.
-                    Tweak things and make it your own—this is your time to shine!
+                    <strong>Sản phẩm AI của bạn đã sẵn sàng!</strong> Hãy dành chút thời gian xem qua tab sản phẩm và nội dung.
+                    Chỉnh sửa và biến nó thành của riêng bạn—đây là lúc để bạn tỏa sáng!
                   </div>
                   <button
                     className="cursor-pointer self-center underline all-unset"
                     onClick={() => setShowAiNotification(false)}
                   >
-                    close
+                    đóng
                   </button>
                 </div>
               </Alert>
             ) : null}
             <BundleConversionNotice />
             <fieldset>
-              <label htmlFor={`${uid}-name`}>{isCoffee ? "Header" : "Name"}</label>
+              <label htmlFor={`${uid}-name`}>{isCoffee ? "Tiêu đề" : "Tên sản phẩm"}</label>
               <input
                 id={`${uid}-name`}
                 type="text"
                 value={product.name}
                 onChange={(evt) => updateProduct({ name: evt.target.value })}
+                placeholder={isCoffee ? "Nhập tiêu đề" : "Nhập tên sản phẩm"}
               />
             </fieldset>
             {isCoffee ? (
               <>
                 <fieldset>
-                  <label htmlFor={`${uid}-body`}>Body</label>
+                  <label htmlFor={`${uid}-body`}>Nội dung</label>
                   <textarea
                     id={`${uid}-body`}
                     value={product.description}
-                    placeholder="Add a short inspiring message"
+                    placeholder="Thêm một thông điệp truyền cảm hứng ngắn gọn"
                     onChange={(evt) => updateProduct({ description: evt.target.value })}
                   />
                 </fieldset>
@@ -129,7 +130,7 @@ export const ProductTab = () => {
                     <label htmlFor={`${uid}-url`}>URL</label>
                     <CopyToClipboard text={url}>
                       <button type="button" className="cursor-pointer font-normal underline all-unset">
-                        Copy URL
+                        Sao chép URL
                       </button>
                     </CopyToClipboard>
                   </legend>
@@ -159,14 +160,14 @@ export const ProductTab = () => {
           {isCoffee ? (
             <>
               <section className="p-4! md:p-8!">
-                <h2>Pricing</h2>
+                <h2>Giá</h2>
                 <SuggestedAmountsEditor
                   versions={product.variants}
                   onChange={(variants) => updateProduct({ variants })}
                 />
               </section>
               <section className="p-4! md:p-8!">
-                <h2>Settings</h2>
+                <h2>Cài đặt</h2>
                 <CustomButtonTextOptionInput
                   value={product.custom_button_text_option}
                   onChange={(value) => updateProduct({ custom_button_text_option: value })}
@@ -189,7 +190,7 @@ export const ProductTab = () => {
                 nativeType={product.native_type}
               />
               <section className="p-4! md:p-8!">
-                <h2>Product info</h2>
+                <h2>Thông tin sản phẩm</h2>
                 {product.native_type !== "membership" ? (
                   <CustomButtonTextOptionInput
                     value={product.custom_button_text_option}
@@ -209,15 +210,15 @@ export const ProductTab = () => {
                 />
               </section>
               <section className="p-4! md:p-8!">
-                <h2>Integrations</h2>
+                <h2>Tích hợp</h2>
                 <fieldset>
                   {product.community_chat_enabled === null ? null : (
                     <ToggleSettingRow
-                      label="Invite your customers to your Gumroad community chat"
+                      label="Mời khách hàng tham gia cộng đồng chat Gumroad của bạn"
                       value={product.community_chat_enabled}
                       onChange={(newValue) => updateProduct({ community_chat_enabled: newValue })}
                       help={{
-                        label: "Learn more",
+                        label: "Tìm hiểu thêm",
                         url: "/help/article/347-gumroad-community",
                       }}
                     />
@@ -261,13 +262,13 @@ export const ProductTab = () => {
               </section>
               {product.native_type === "membership" ? (
                 <section className="p-4! md:p-8!">
-                  <h2>Tiers</h2>
+                  <h2>Cấp bậc</h2>
                   <TiersEditor tiers={product.variants} onChange={(variants) => updateProduct({ variants })} />
                 </section>
               ) : (
                 <>
                   <section className="p-4! md:p-8!">
-                    <h2>Pricing</h2>
+                    <h2>Giá</h2>
                     <PriceEditor
                       priceCents={product.price_cents}
                       suggestedPriceCents={product.suggested_price_cents}
@@ -307,7 +308,7 @@ export const ProductTab = () => {
                           color: "var(--color-text-secondary)",
                         }}
                       >
-                        Commission products use a 50% deposit upfront, 50% upon completion payment split.
+                        Sản phẩm hoa hồng sử dụng cách chia thanh toán 50% đặt cọc trước, 50% khi hoàn thành.
                       </p>
                     ) : null}
                   </section>
@@ -315,13 +316,13 @@ export const ProductTab = () => {
                     <>
                       <section className="p-4! md:p-8!">
                         <div style={{ display: "flex", justifyContent: "space-between" }}>
-                          <h2>Durations</h2>
+                          <h2>Thời lượng</h2>
                           <a
                             href="https://gumroad.com/help/article/70-can-i-sell-services#call"
                             target="_blank"
                             rel="noreferrer"
                           >
-                            Learn more
+                            Tìm hiểu thêm
                           </a>
                         </div>
                         <DurationsEditor
@@ -330,7 +331,7 @@ export const ProductTab = () => {
                         />
                       </section>
                       <section className="p-4! md:p-8!">
-                        <h2>Available hours</h2>
+                        <h2>Giờ làm việc</h2>
                         <AvailabilityEditor
                           availabilities={product.availabilities}
                           onChange={(availabilities) => updateProduct({ availabilities })}
@@ -338,7 +339,7 @@ export const ProductTab = () => {
                       </section>
                       {product.call_limitation_info ? (
                         <section className="p-4! md:p-8!">
-                          <h2>Call limitations</h2>
+                          <h2>Giới hạn cuộc gọi</h2>
                           <CallLimitationsEditor
                             callLimitations={product.call_limitation_info}
                             onChange={(call_limitation_info) => updateProduct({ call_limitation_info })}
@@ -349,13 +350,13 @@ export const ProductTab = () => {
                   ) : (
                     <section aria-label="Version editor" className="p-4! md:p-8!">
                       <div style={{ display: "flex", justifyContent: "space-between" }}>
-                        <h2>{product.native_type === "physical" ? "Variants" : "Versions"}</h2>
+                        <h2>{product.native_type === "physical" ? "Biến thể" : "Phiên bản"}</h2>
                         <a
                           href="/help/article/126-setting-up-versions-on-a-digital-product"
                           target="_blank"
                           rel="noreferrer"
                         >
-                          Learn more
+                          Tìm hiểu thêm
                         </a>
                       </div>
                       <VersionsEditor
@@ -373,7 +374,7 @@ export const ProductTab = () => {
                 />
               ) : null}
               <section className="p-4! md:p-8!">
-                <h2>Settings</h2>
+                <h2>Cài đặt</h2>
                 <fieldset>
                   {product.native_type === "membership" ? (
                     <>
@@ -383,13 +384,13 @@ export const ProductTab = () => {
                         value={product.should_include_last_post}
                         onChange={(should_include_last_post) => updateProduct({ should_include_last_post })}
                       >
-                        New members will be emailed this product's last published post
+                        Thành viên mới sẽ được gửi email bài viết đã xuất bản gần nhất của sản phẩm này
                       </Toggle>
                       <Toggle
                         value={product.should_show_all_posts}
                         onChange={(should_show_all_posts) => updateProduct({ should_show_all_posts })}
                       >
-                        New members will get access to all posts you have published
+                        Thành viên mới sẽ được truy cập tất cả bài viết bạn đã xuất bản
                       </Toggle>
                       <Toggle
                         value={product.block_access_after_membership_cancellation}
@@ -397,7 +398,7 @@ export const ProductTab = () => {
                           updateProduct({ block_access_after_membership_cancellation })
                         }
                       >
-                        Members will lose access when their memberships end
+                        Thành viên sẽ mất quyền truy cập khi tư cách thành viên kết thúc
                       </Toggle>
                       <DurationEditor />
                     </>
@@ -412,7 +413,7 @@ export const ProductTab = () => {
                         value={product.quantity_enabled}
                         onChange={(newValue) => updateProduct({ quantity_enabled: newValue })}
                       >
-                        Allow customers to choose a quantity
+                        Cho phép khách hàng chọn số lượng
                       </Toggle>
                     </>
                   ) : null}
@@ -421,7 +422,7 @@ export const ProductTab = () => {
                       value={product.hide_sold_out_variants}
                       onChange={(newValue) => updateProduct({ hide_sold_out_variants: newValue })}
                     >
-                      Hide sold out versions
+                      Ẩn các phiên bản đã hết hàng
                     </Toggle>
                   ) : null}
                   <Toggle
@@ -429,17 +430,17 @@ export const ProductTab = () => {
                     onChange={(newValue) => updateProduct({ should_show_sales_count: newValue })}
                   >
                     {product.native_type === "membership"
-                      ? "Publicly show the number of members on your product page"
-                      : "Publicly show the number of sales on your product page"}
+                      ? "Hiển thị công khai số lượng thành viên trên trang sản phẩm"
+                      : "Hiển thị công khai số lượng đã bán trên trang sản phẩm"}
                   </Toggle>
                   {product.native_type !== "physical" ? (
                     <Toggle
                       value={product.is_epublication}
                       onChange={(newValue) => updateProduct({ is_epublication: newValue })}
                     >
-                      Mark product as e-publication for VAT purposes{" "}
+                      Đánh dấu sản phẩm là ấn phẩm điện tử cho mục đích VAT{" "}
                       <a href="/help/article/10-dealing-with-vat" target="_blank" rel="noreferrer">
-                        Learn more
+                        Tìm hiểu thêm
                       </a>
                     </Toggle>
                   ) : null}
@@ -457,13 +458,13 @@ export const ProductTab = () => {
                     value={product.require_shipping}
                     onChange={(newValue) => updateProduct({ require_shipping: newValue })}
                   >
-                    Require shipping information
+                    Yêu cầu thông tin giao hàng
                   </Toggle>
                 </fieldset>
                 {product.native_type === "membership" ? (
                   <fieldset>
                     <legend>
-                      <label htmlFor={`${uid}-subscription-duration`}>Default payment frequency</label>
+                      <label htmlFor={`${uid}-subscription-duration`}>Tần suất thanh toán mặc định</label>
                     </legend>
                     <TypeSafeOptionSelect
                       id={`${uid}-subscription-duration`}
@@ -480,7 +481,7 @@ export const ProductTab = () => {
                   verificationStatus={customDomainVerificationStatus}
                   customDomain={product.custom_domain}
                   setCustomDomain={(custom_domain) => updateProduct({ custom_domain })}
-                  label="Custom domain"
+                  label="Tên miền tùy chỉnh"
                   productId={id}
                   includeLearnMoreLink
                 />

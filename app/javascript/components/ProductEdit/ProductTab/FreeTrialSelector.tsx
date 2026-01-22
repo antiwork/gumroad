@@ -23,11 +23,11 @@ export const FreeTrialSelector = () => {
           free_trial_duration_unit: enabled ? DEFAULT_DURATION_UNIT : null,
         })
       }
-      label="Offer a free trial"
+      label="Cung cấp dùng thử miễn phí"
       dropdown={
         <fieldset>
           <legend>
-            <label htmlFor={uid}>Charge members after</label>
+            <label htmlFor={uid}>Tính phí thành viên sau</label>
           </legend>
           <TypeSafeOptionSelect
             id={uid}
@@ -37,7 +37,7 @@ export const FreeTrialSelector = () => {
             }
             options={PERMITTED_DURATIONS.map((option) => ({
               id: option,
-              label: option === "month" ? "one month" : "one week",
+              label: option === "month" ? "một tháng" : "một tuần",
             }))}
           />
         </fieldset>

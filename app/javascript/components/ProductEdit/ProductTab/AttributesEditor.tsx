@@ -30,13 +30,13 @@ export const AttributesEditor = ({
   const addButton = (
     <Button color="primary" onClick={() => setCustomAttributes([...customAttributes, { name: "", value: "" }])}>
       <Icon name="plus" />
-      Add detail
+      Thêm chi tiết
     </Button>
   );
 
   return (
     <fieldset>
-      <legend>Additional details</legend>
+      <legend>Chi tiết bổ sung</legend>
       {(fileAttributes?.length ?? 0) > 0 || customAttributes.length > 0 ? (
         <>
           {fileAttributes?.map((attribute, idx) => (
@@ -58,8 +58,8 @@ export const AttributesEditor = ({
         </>
       ) : (
         <Placeholder>
-          <h2>Add details</h2>
-          Call out important features of your product that help your customers decide to buy
+          <h2>Thêm chi tiết</h2>
+          Nêu bật các tính năng quan trọng của sản phẩm giúp khách hàng quyết định mua
           {addButton}
         </Placeholder>
       )}

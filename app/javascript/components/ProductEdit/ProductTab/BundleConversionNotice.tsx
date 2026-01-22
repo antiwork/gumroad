@@ -21,13 +21,12 @@ export const BundleConversionNotice = () => {
       <Alert role="status" variant="info">
         <div className="flex flex-col gap-4">
           <p>
-            <strong>Looks like this product could be a great bundle!</strong> With bundles, your customers can get
-            access to multiple products at once at a discounted price, without the need to duplicate content or
-            workflows.
+            <strong>Có vẻ sản phẩm này có thể là một gói tuyệt vời!</strong> Với gói, khách hàng của bạn có thể truy cập
+            nhiều sản phẩm cùng lúc với giá giảm, mà không cần sao chép nội dung hoặc quy trình làm việc.
           </p>
           <div>
             <Button color="primary" small onClick={() => setIsModalOpen(true)}>
-              Switch to bundle
+              Chuyển sang gói
             </Button>
           </div>
         </div>
@@ -38,9 +37,9 @@ export const BundleConversionNotice = () => {
         title={`Transform "${product.name}" into a bundle?`}
         footer={
           <>
-            <Button onClick={() => setIsModalOpen(false)}>No, cancel</Button>
+            <Button onClick={() => setIsModalOpen(false)}>Không, hủy</Button>
             <NavigationButton href={`${Routes.bundle_path(id)}/content`}>
-              Yes, let's select the products
+              Có, hãy chọn sản phẩm
             </NavigationButton>
           </>
         }
@@ -48,22 +47,20 @@ export const BundleConversionNotice = () => {
         <div className="flex flex-col gap-4">
           <div>
             <strong>
-              A bundle is a special type of product that allows you to offer multiple products together at a discounted
-              price.
+              Gói là một loại sản phẩm đặc biệt cho phép bạn cung cấp nhiều sản phẩm cùng nhau với giá giảm.
             </strong>{" "}
-            Here's what you can expect by making the switch:
+            Đây là những gì bạn có thể mong đợi khi chuyển đổi:
           </div>
           <ol>
-            <li>The current content of your product will no longer be editable.</li>
-            <li>You'll select the products to include in your new bundle.</li>
-            <li>After you save your product, new customers will get access to the selected products.</li>
+            <li>Nội dung hiện tại của sản phẩm sẽ không còn chỉnh sửa được.</li>
+            <li>Bạn sẽ chọn các sản phẩm để đưa vào gói mới.</li>
+            <li>Sau khi lưu sản phẩm, khách hàng mới sẽ được truy cập các sản phẩm đã chọn.</li>
             <li>
-              Your previous customers will retain access to the original content. They will not have access to the new
-              content.
+              Khách hàng trước đây vẫn giữ quyền truy cập nội dung gốc. Họ sẽ không có quyền truy cập nội dung mới.
             </li>
-            <li>All your sales data will remain intact.</li>
+            <li>Tất cả dữ liệu bán hàng của bạn sẽ được giữ nguyên.</li>
           </ol>
-          <strong>Conversion is not reversible once completed.</strong>
+          <strong>Việc chuyển đổi không thể hoàn tác sau khi hoàn tất.</strong>
         </div>
       </Modal>
     </>

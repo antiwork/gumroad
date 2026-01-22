@@ -17,20 +17,20 @@ export const ProfileSectionsEditor = ({
   if (!currentSeller) return null;
 
   const sectionName = (section: ProfileSection) => {
-    const name = section.header || "Unnamed section";
-    return section.default ? `${name} (Default)` : name;
+    const name = section.header || "Phần không tên";
+    return section.default ? `${name} (Mặc định)` : name;
   };
 
   return (
     <section className="p-8!">
       <header>
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-          <h2>Profile</h2>
+              <h2>Hồ sơ</h2>
           <a href="/help/article/124-your-gumroad-profile-page" target="_blank" rel="noreferrer">
-            Learn more
+            Tìm hiểu thêm
           </a>
         </div>
-        Choose the sections where you want this product to be displayed on your profile.
+        Chọn các phần bạn muốn sản phẩm này hiển thị trên hồ sơ của mình.
       </header>
       {profileSections.length ? (
         <fieldset>
@@ -53,7 +53,7 @@ export const ProfileSectionsEditor = ({
                   <br />
                   <small>
                     {section.product_names.length > 2
-                      ? `${items}, and ${section.product_names.length - 2} ${section.product_names.length - 2 === 1 ? " other" : " others"}`
+                      ? `${items}, và ${section.product_names.length - 2} ${section.product_names.length - 2 === 1 ? " mục khác" : " mục khác"}`
                       : items}
                   </small>
                 </div>
@@ -63,8 +63,8 @@ export const ProfileSectionsEditor = ({
         </fieldset>
       ) : (
         <Alert role="status" variant="info">
-          You currently have no sections in your profile to display this,{" "}
-          <a href={Routes.root_url({ host: currentSeller.subdomain })}>create one here</a>
+          Bạn hiện không có phần nào trong hồ sơ để hiển thị sản phẩm này,{" "}
+          <a href={Routes.root_url({ host: currentSeller.subdomain })}>tạo một phần tại đây</a>
         </Alert>
       )}
     </section>

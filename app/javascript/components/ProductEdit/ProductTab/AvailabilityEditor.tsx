@@ -92,9 +92,9 @@ export const AvailabilityEditor = ({
   return availabilities.length ? (
     <>
       <section style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr auto auto", gap: "var(--spacer-2)" }}>
-        <b>Date</b>
-        <b>From</b>
-        <b>To</b>
+        <b>Ngày</b>
+        <b>Từ</b>
+        <b>Đến</b>
         <span />
         <span />
         {groupedAvailabilities.map((group, idx) => {
@@ -120,7 +120,7 @@ export const AvailabilityEditor = ({
                           });
                         }
                       }}
-                      aria-label="Date"
+                      aria-label="Ngày"
                     />
                   ) : (
                     <span />
@@ -133,7 +133,7 @@ export const AvailabilityEditor = ({
                         start_time: setTime(availability.start_time, evt.target.value),
                       })
                     }
-                    aria-label="From"
+                    aria-label="Từ"
                   />
                   <input
                     type="time"
@@ -143,16 +143,16 @@ export const AvailabilityEditor = ({
                         end_time: setTime(availability.end_time, evt.target.value),
                       })
                     }
-                    aria-label="To"
+                    aria-label="Đến"
                   />
                   <Button
                     onClick={() => onChange(serializedAvailabilities.filter(({ id }) => availability.id !== id))}
-                    aria-label="Delete hours"
+                    aria-label="Xóa giờ"
                   >
                     <Icon name="trash2" />
                   </Button>
                   {idx === 0 ? (
-                    <Button onClick={() => addAvailability(lastGroupEndTime ?? new Date())} aria-label="Add hours">
+                    <Button onClick={() => addAvailability(lastGroupEndTime ?? new Date())} aria-label="Thêm giờ">
                       <Icon name="plus" />
                     </Button>
                   ) : (
@@ -178,8 +178,8 @@ export const AvailabilityEditor = ({
     </>
   ) : (
     <Placeholder>
-      <h2>Add day of availability</h2>
-      Adjust your availability to reflect specific dates and times
+      <h2>Thêm ngày làm việc</h2>
+      Điều chỉnh lịch làm việc của bạn theo các ngày và giờ cụ thể
       <AddButton
         onClick={() => {
           const date = new Date();
@@ -194,6 +194,6 @@ export const AvailabilityEditor = ({
 const AddButton = ({ onClick }: { onClick: () => void }) => (
   <Button color="primary" onClick={onClick}>
     <Icon name="plus" />
-    Add day of availability
+    Thêm ngày làm việc
   </Button>
 );

@@ -42,7 +42,7 @@ export const TagSelector = ({ tags, onChange }: { tags: string[]; onChange: (tag
   return (
     <fieldset>
       <legend>
-        <label htmlFor={uid}>Tags</label>
+        <label htmlFor={uid}>Thẻ</label>
       </legend>
       <TagInput
         inputId={uid}
@@ -62,7 +62,7 @@ export const TagSelector = ({ tags, onChange }: { tags: string[]; onChange: (tag
             : []),
         ]}
         onKeyDown={handleKeyDown}
-        placeholder="Begin typing to add a tag..."
+        placeholder="Bắt đầu nhập để thêm thẻ..."
         inputValue={query}
         onInputChange={setQuery}
         maxLength={MAX_TAG_LENGTH}

@@ -38,7 +38,7 @@ type FileGroupConfig = {
 };
 type FileEmbedGroupStorage = { lastCreatedUid: string | null };
 
-export const titleWithFallback = (title: unknown) => (title ? String(title).trim() : "") || "Untitled";
+export const titleWithFallback = (title: unknown) => (title ? String(title).trim() : "") || "Chưa đặt tên";
 
 export const useFilesInGroup = (node: ProseMirrorNode | null, filesById: Map<string, FileEntry>) =>
   React.useMemo(() => {
@@ -157,7 +157,7 @@ const FileEmbedGroupNodeView = ({
                 ref={inputRef}
                 defaultValue={node.attrs.name ? String(node.attrs.name) : ""}
                 maxLength={120}
-                placeholder="Folder name"
+                placeholder="Tên thư mục"
                 onClick={(e) => e.stopPropagation()}
                 onKeyDown={(e) => {
                   if (e.key === "Enter") {
@@ -178,7 +178,7 @@ const FileEmbedGroupNodeView = ({
                 <Popover
                   trigger={
                     <div className={buttonVariants({ size: "default" })}>
-                      Download all
+                      Tải tất cả
                       <Icon name="outline-cheveron-down" />
                     </div>
                   }
@@ -187,7 +187,7 @@ const FileEmbedGroupNodeView = ({
                     {downloading ? (
                       <Button disabled>
                         <LoadingSpinner />
-                        Zipping files...
+                        Đang nén file...
                       </Button>
                     ) : isTuple(downloadableFiles, 1) ? (
                       <NavigationButton
@@ -196,14 +196,14 @@ const FileEmbedGroupNodeView = ({
                         target="_blank"
                         rel="noopener noreferrer"
                       >
-                        Download file
+                        Tải file
                       </NavigationButton>
                     ) : (
-                      <Button onClick={() => void download()}>Download as ZIP</Button>
+                      <Button onClick={() => void download()}>Tải về dạng ZIP</Button>
                     )}
                     <Button disabled={downloading} onClick={() => void saveToDropbox()}>
                       <Icon name="dropbox" />
-                      Save to Dropbox
+                      Lưu vào Dropbox
                     </Button>
                   </div>
                 </Popover>

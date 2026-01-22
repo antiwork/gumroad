@@ -10,11 +10,11 @@ export const CustomSummaryInput = ({
   const uid = React.useId();
   return (
     <fieldset>
-      <label htmlFor={uid}>Summary</label>
+      <label htmlFor={uid}>Tóm tắt</label>
       <input
         id={uid}
         type="text"
-        placeholder="You'll get..."
+        placeholder="Bạn sẽ nhận được..."
         value={value ?? ""}
         onChange={(evt) => onChange(evt.target.value)}
       />

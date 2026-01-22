@@ -49,7 +49,7 @@ export const CircleIntegrationEditor = ({
       } catch (e) {
         assertResponseError(e);
         setCommunities({ status: "error" });
-        showAlert("Could not retrieve communities from Circle. Please check your API key.", "error");
+        showAlert("Không thể lấy cộng đồng từ Circle. Vui lòng kiểm tra API key của bạn.", "error");
       }
     }
   };
@@ -66,7 +66,7 @@ export const CircleIntegrationEditor = ({
     } catch (e) {
       assertResponseError(e);
       setSpaceGroups({ status: "error" });
-      showAlert("Could not retrieve space groups from Circle. Please try again.", "error");
+      showAlert("Không thể lấy nhóm không gian từ Circle. Vui lòng thử lại.", "error");
     }
   };
 
@@ -108,18 +108,18 @@ export const CircleIntegrationEditor = ({
           setEnabledForOptions(false);
         }
       }}
-      label="Invite your customers to a Circle community"
+      label="Mời khách hàng của bạn vào cộng đồng Circle"
       dropdown={
         <div className="flex flex-col gap-4">
-          People who purchase your product will be automatically invited to your Circle community. To get your API
-          token, visit your-community.circle.so/settings/API.
+          Những người mua sản phẩm của bạn sẽ tự động được mời vào cộng đồng Circle của bạn. Để lấy API token,
+          hãy truy cập your-community.circle.so/settings/API.
           <fieldset>
             <label htmlFor={`${uid}-api-key`}>API Token</label>
             <input
               id={`${uid}-api-key`}
               value={apiKey}
               onChange={(evt) => setApiKey(evt.target.value)}
-              placeholder="Type or paste your API token"
+              placeholder="Nhập hoặc dán API token của bạn"
             />
           </fieldset>
           <Button
@@ -132,7 +132,7 @@ export const CircleIntegrationEditor = ({
             }}
             disabled={communities?.status === "fetching"}
           >
-            {communities?.status === "success" ? "Update" : "Load communities"}
+            {communities?.status === "success" ? "Cập nhật" : "Tải cộng đồng"}
           </Button>
           {communities ? (
             communities.status === "fetching" ? (
@@ -140,11 +140,11 @@ export const CircleIntegrationEditor = ({
                 <LoadingSpinner />
               </div>
             ) : communities.status === "error" ? (
-              <Alert variant="danger">Could not retrieve communities from Circle. Please check your API key.</Alert>
+              <Alert variant="danger">Không thể lấy cộng đồng từ Circle. Vui lòng kiểm tra API key của bạn.</Alert>
             ) : (
               <fieldset>
                 <legend>
-                  <label htmlFor={`${uid}-community`}>Select a community</label>
+                  <label htmlFor={`${uid}-community`}>Chọn một cộng đồng</label>
                 </legend>
                 <select
                   id={`${uid}-community`}
@@ -152,7 +152,7 @@ export const CircleIntegrationEditor = ({
                   onChange={(ev) => setSelectedCommunityId(parseInt(ev.target.value, 10))}
                 >
                   <option value="select-community" disabled>
-                    Select a community
+                    Chọn một cộng đồng
                   </option>
                   {communities.data.map((community) => (
                     <option key={community.id} value={community.id}>
@@ -169,12 +169,12 @@ export const CircleIntegrationEditor = ({
                 <LoadingSpinner />
               </div>
             ) : spaceGroups.status === "error" ? (
-              <Alert variant="danger">Could not retrieve space groups from Circle. Please try again.</Alert>
+              <Alert variant="danger">Không thể lấy nhóm không gian từ Circle. Vui lòng thử lại.</Alert>
             ) : (
               <>
                 <fieldset>
                   <legend>
-                    <label htmlFor={`${uid}-space-group`}>Select a space group</label>
+                    <label htmlFor={`${uid}-space-group`}>Chọn một nhóm không gian</label>
                   </legend>
                   <select
                     id={`${uid}-space-group`}
@@ -185,7 +185,7 @@ export const CircleIntegrationEditor = ({
                     }}
                   >
                     <option value="select-space-group" disabled>
-                      Select a space group
+                      Chọn một nhóm không gian
                     </option>
                     {spaceGroups.data.map((spaceGroup) => (
                       <option key={spaceGroup.id} value={spaceGroup.id}>
@@ -203,7 +203,7 @@ export const CircleIntegrationEditor = ({
                         onChange({ ...integration, keep_inactive_members: !integration.keep_inactive_members })
                       }
                     />
-                    Do not remove Circle access when membership ends
+                    Không xóa quyền truy cập Circle khi tư cách thành viên kết thúc
                   </label>
                 ) : null}
                 {product.variants.length > 0 ? (
@@ -211,15 +211,15 @@ export const CircleIntegrationEditor = ({
                     {product.variants.every(({ integrations }) => !integrations.circle) ? (
                       <Alert role="status" variant="warning">
                         {product.native_type === "membership"
-                          ? "Your integration is not assigned to any tier. Check your tiers' settings."
-                          : "Your integration is not assigned to any version. Check your versions' settings."}
+                          ? "Tích hợp của bạn chưa được gán cho bất kỳ cấp bậc nào. Hãy kiểm tra cài đặt cấp bậc của bạn."
+                          : "Tích hợp của bạn chưa được gán cho bất kỳ phiên bản nào. Hãy kiểm tra cài đặt phiên bản của bạn."}
                       </Alert>
                     ) : null}
                     <Toggle
                       value={product.variants.every(({ integrations }) => integrations.circle)}
                       onChange={setEnabledForOptions}
                     >
-                      {product.native_type === "membership" ? "Enable for all tiers" : "Enable for all versions"}
+                      {product.native_type === "membership" ? "Kích hoạt cho tất cả các cấp bậc" : "Kích hoạt cho tất cả các phiên bản"}
                     </Toggle>
                   </>
                 ) : null}

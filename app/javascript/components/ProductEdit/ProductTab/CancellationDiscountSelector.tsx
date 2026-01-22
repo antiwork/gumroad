@@ -47,12 +47,12 @@ export const CancellationDiscountSelector = () => {
     <ToggleSettingRow
       value={isEnabled}
       onChange={setIsEnabled}
-      label="Offer a cancellation discount"
+      label="Cung cấp giảm giá khi hủy"
       dropdown={
         <section className="flex flex-col gap-4">
           <DiscountInput discount={discount} setDiscount={setDiscount} currencyCode={currencyType} />
           <fieldset>
-            <label htmlFor="billing-cycles">Duration in billing cycles</label>
+            <label htmlFor="billing-cycles">Thời hạn theo kỳ thanh toán</label>
             <NumberInput value={durationInBillingCycles} onChange={setDurationInBillingCycles}>
               {(props) => <input id="billing-cycles" type="text" autoComplete="off" placeholder="∞" {...props} />}
             </NumberInput>

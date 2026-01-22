@@ -33,7 +33,7 @@ export const ReceiptPreview = () => {
       setReceiptHtml(html);
     } catch (error) {
       assertResponseError(error);
-      setReceiptHtml("Error loading receipt preview");
+      setReceiptHtml("Lỗi khi tải bản xem trước biên lai");
     }
   }, [uniquePermalink, custom_receipt_text, custom_view_content_button_text]);
 

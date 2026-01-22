@@ -220,8 +220,8 @@ const ContentTabContent = ({ selectedVariantId }: { selectedVariantId: string | 
     FileEmbed.configure({ getConfig: () => fileEmbedConfig.current }),
   ]);
   const editor = useRichTextEditor({
-    ariaLabel: "Content editor",
-    placeholder: "Enter the content you want to sell. Upload your files or start typing.",
+    ariaLabel: "Trình soạn thảo nội dung",
+    placeholder: "Nhập nội dung bạn muốn bán. Tải lên file của bạn hoặc bắt đầu nhập.",
     initialValue,
     editable: true,
     extensions: contentEditorExtensions,
@@ -304,7 +304,7 @@ const ContentTabContent = ({ selectedVariantId }: { selectedVariantId: string | 
   const onInsertPosts = () => {
     if (!editor) return;
     if (selectedPage?.description && editor.$node(Posts.name)) {
-      showAlert("You can't insert a list of posts more than once per page", "error");
+      showAlert("Bạn không thể chèn danh sách bài viết nhiều hơn một lần mỗi trang", "error");
     } else {
       editor.chain().focus().insertPosts({}).run();
     }
@@ -314,11 +314,11 @@ const ContentTabContent = ({ selectedVariantId }: { selectedVariantId: string | 
     const pageWithLicense = findPageWithNode(LicenseKey.name);
     if (pageWithLicense) {
       showAlert(
-        pages.length > 1
-          ? `The license key has already been added to "${titleWithFallback(pageWithLicense.title)}"`
+          pages.length > 1
+          ? `Mã bản quyền đã được thêm vào "${titleWithFallback(pageWithLicense.title)}"`
           : product.variants.length > 1
-            ? `You can't insert more than one license key per ${product.native_type === "membership" ? "tier" : "version"}`
-            : "You can't insert more than one license key",
+            ? `Bạn không thể chèn nhiều hơn một mã bản quyền cho mỗi ${product.native_type === "membership" ? "cấp bậc" : "phiên bản"}`
+            : "Bạn không thể chèn nhiều hơn một mã bản quyền",
         "error",
       );
     } else {
@@ -454,7 +454,7 @@ const ContentTabContent = ({ selectedVariantId }: { selectedVariantId: string | 
   const onInsertMoreLikeThis = () => {
     if (!editor) return;
     if (selectedPage?.description && editor.$node(MoreLikeThis.name)) {
-      showAlert("You can't insert a More like this block more than once per page", "error");
+      showAlert("Bạn không thể chèn khối Xem thêm giống như này nhiều hơn một lần mỗi trang", "error");
     } else {
       editor
         .chain()
@@ -469,7 +469,7 @@ const ContentTabContent = ({ selectedVariantId }: { selectedVariantId: string | 
     if (!addingButton) return;
 
     const href = validateUrl(addingButton.url);
-    if (!href) return showAlert("Please enter a valid URL.", "error");
+    if (!href) return showAlert("Vui lòng nhập một URL hợp lệ.", "error");
     editor
       .chain()
       .focus()
@@ -494,17 +494,17 @@ const ContentTabContent = ({ selectedVariantId }: { selectedVariantId: string | 
             custom={
               <>
                 <LinkMenuItem editor={editor} />
-                <PopoverMenuItem name="Upload files" icon="upload-fill">
+                <PopoverMenuItem name="Tải file lên" icon="upload-fill">
                   {(close) => (
-                    <div role="menu" aria-label="Image and file uploader" onClick={close}>
+                    <div role="menu" aria-label="Trình tải ảnh và file" onClick={close}>
                       <div role="menuitem" onClick={() => setShowEmbedModal(true)}>
                         <Icon name="media" />
-                        <span>Embed media</span>
+                        <span>Nhúng media</span>
                       </div>
                       <label role="menuitem">
                         <input type="file" name="file" multiple onChange={(e) => uploadFileInput(e.target)} />
                         <Icon name="paperclip" />
-                        <span>Computer files</span>
+                        <span>File từ máy tính</span>
                       </label>
                       {existingFiles.length > 0 ? (
                         <div
@@ -515,12 +515,12 @@ const ContentTabContent = ({ selectedVariantId }: { selectedVariantId: string | 
                           }}
                         >
                           <Icon name="files-earmark" />
-                          <span>Existing product files</span>
+                          <span>File sản phẩm hiện có</span>
                         </div>
                       ) : null}
                       <div role="menuitem" onClick={uploadFromDropbox}>
                         <Icon name="dropbox" />
-                        <span>Dropbox files</span>
+                        <span>File từ Dropbox</span>
                       </div>
                     </div>
                   )}
@@ -529,10 +529,10 @@ const ContentTabContent = ({ selectedVariantId }: { selectedVariantId: string | 
                   <Modal
                     open
                     onClose={() => setSelectingExistingFiles(null)}
-                    title="Select existing product files"
+                    title="Chọn file sản phẩm hiện có"
                     footer={
                       <>
-                        <Button onClick={() => setSelectingExistingFiles(null)}>Cancel</Button>
+                        <Button onClick={() => setSelectingExistingFiles(null)}>Hủy</Button>
                         <Button
                           color="primary"
                           onClick={() => {
@@ -541,7 +541,7 @@ const ContentTabContent = ({ selectedVariantId }: { selectedVariantId: string | 
                             setSelectingExistingFiles(null);
                           }}
                         >
-                          Select
+                          Chọn
                         </Button>
                       </>
                     }
@@ -549,7 +549,7 @@ const ContentTabContent = ({ selectedVariantId }: { selectedVariantId: string | 
                     <div className="flex flex-col gap-4">
                       <input
                         type="text"
-                        placeholder="Find your files"
+                        placeholder="Tìm file của bạn"
                         value={selectingExistingFiles.query}
                         onChange={(evt) =>
                           setSelectingExistingFiles({ ...selectingExistingFiles, query: evt.target.value })
@@ -597,13 +597,13 @@ const ContentTabContent = ({ selectedVariantId }: { selectedVariantId: string | 
                   </Modal>
                 ) : null}
 
-                <Modal open={showEmbedModal} onClose={() => setShowEmbedModal(false)} title="Embed media">
-                  <p>Paste a video link or upload images or videos.</p>
+                <Modal open={showEmbedModal} onClose={() => setShowEmbedModal(false)} title="Nhúng media">
+                  <p>Dán link video hoặc tải ảnh hoặc video lên.</p>
                   <Tabs variant="buttons">
                     <Tab isSelected aria-controls={`${uid}-embed-tab`} asChild>
                       <button type="button" className="cursor-pointer all-unset">
                         <Icon name="link" />
-                        <h4>Embed link</h4>
+                        <h4>Nhúng link</h4>
                       </button>
                     </Tab>
                     <Tab isSelected={false} asChild>
@@ -625,7 +625,7 @@ const ContentTabContent = ({ selectedVariantId }: { selectedVariantId: string | 
                           }}
                         />
                         <Icon name="upload-fill" />
-                        <h4>Upload</h4>
+                        <h4>Tải lên</h4>
                       </label>
                     </Tab>
                   </Tabs>
@@ -644,7 +644,7 @@ const ContentTabContent = ({ selectedVariantId }: { selectedVariantId: string | 
                 <Popover
                   trigger={
                     <div className="toolbar-item">
-                      Insert <Icon name="outline-cheveron-down" />
+                      Thêm <Icon name="outline-cheveron-down" />
                     </div>
                   }
                   open={insertMenuState != null}
@@ -661,30 +661,30 @@ const ContentTabContent = ({ selectedVariantId }: { selectedVariantId: string | 
                           }}
                         >
                           <Icon name="outline-cheveron-left" />
-                          <span>Back</span>
+                          <span>Quay lại</span>
                         </div>
                         <div role="menuitem" onClick={() => editor.chain().focus().insertShortAnswer({}).run()}>
                           <Icon name="card-text" />
-                          <span>Short answer</span>
+                          <span>Câu trả lời ngắn</span>
                         </div>
                         <div role="menuitem" onClick={() => editor.chain().focus().insertLongAnswer({}).run()}>
                           <Icon name="file-text" />
-                          <span>Long answer</span>
+                          <span>Câu trả lời dài</span>
                         </div>
                         <div role="menuitem" onClick={() => editor.chain().focus().insertFileUpload({}).run()}>
                           <Icon name="folder-plus" />
-                          <span>Upload file</span>
+                          <span>Tải file lên</span>
                         </div>
                       </>
                     ) : (
                       <>
                         <div role="menuitem" onClick={() => setAddingButton({ label: "", url: "" })}>
                           <Icon name="button" />
-                          <span>Button</span>
+                          <span>Nút</span>
                         </div>
                         <div role="menuitem" onClick={() => editor.chain().focus().setHorizontalRule().run()}>
                           <Icon name="horizontal-rule" />
-                          <span>Divider</span>
+                          <span>Phân cách</span>
                         </div>
                         <div
                           role="menuitem"
@@ -695,24 +695,24 @@ const ContentTabContent = ({ selectedVariantId }: { selectedVariantId: string | 
                           className="flex items-center"
                         >
                           <Icon name="input-cursor-text" />
-                          <span>Input</span>
+                          <span>Nhập liệu</span>
                           <Icon name="outline-cheveron-right" className="ml-auto" />
                         </div>
                         <div role="menuitem" onClick={onInsertMoreLikeThis}>
                           <Icon name="grid" />
-                          <span>More like this</span>
+                          <span>Xem thêm giống như này</span>
                         </div>
                         <div role="menuitem" onClick={onInsertPosts}>
                           <Icon name="file-earmark-medical" />
-                          <span>List of posts</span>
+                          <span>Danh sách bài viết</span>
                         </div>
                         <div role="menuitem" onClick={onInsertLicense}>
                           <Icon name="outline-key" />
-                          <span>License key</span>
+                          <span>Mã bản quyền</span>
                         </div>
                         <div role="menuitem" onClick={() => setShowInsertPostModal(true)}>
                           <Icon name="twitter" />
-                          <span>Twitter post</span>
+                          <span>Bài đăng Twitter</span>
                         </div>
                         <div
                           role="menuitem"
@@ -722,7 +722,7 @@ const ContentTabContent = ({ selectedVariantId }: { selectedVariantId: string | 
                           }}
                         >
                           <Icon name="cart-plus" />
-                          <span>Upsell</span>
+                          <span>Bán thêm</span>
                         </div>
                         <div
                           role="menuitem"
@@ -732,7 +732,7 @@ const ContentTabContent = ({ selectedVariantId }: { selectedVariantId: string | 
                           }}
                         >
                           <Icon name="solid-star" />
-                          <span>Review</span>
+                          <span>Đánh giá</span>
                         </div>
                       </>
                     )}
@@ -741,7 +741,7 @@ const ContentTabContent = ({ selectedVariantId }: { selectedVariantId: string | 
                 <>
                   <Separator aria-orientation="vertical" />
                   <button className="toolbar-item cursor-pointer all-unset" onClick={handleCreatePageClick}>
-                    <Icon name="plus" /> Page
+                    <Icon name="plus" /> Trang
                   </button>
                 </>
               </>
@@ -766,7 +766,7 @@ const ContentTabContent = ({ selectedVariantId }: { selectedVariantId: string | 
                         <PageListItem asChild className="tailwind-override text-left">
                           <button className="cursor-pointer all-unset" onClick={() => setPagesExpanded(!pagesExpanded)}>
                             <span className="flex-1">
-                              <strong>Table of contents:</strong> {titleWithFallback(selectedPage?.title)}
+                              <strong>Mục lục:</strong> {titleWithFallback(selectedPage?.title)}
                             </span>
 
                             <Icon name={pagesExpanded ? "outline-cheveron-down" : "outline-cheveron-right"} />

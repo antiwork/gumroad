@@ -8,7 +8,7 @@ import { Pill } from "$app/components/ui/Pill";
 import { useOnChange } from "$app/components/useOnChange";
 import { useOnOutsideClick } from "$app/components/useOnOutsideClick";
 
-const UNITS = ["minutes", "hours", "days"] as const;
+const UNITS = ["phút", "giờ", "ngày"] as const;
 type Unit = (typeof UNITS)[number];
 type MinimumNotice = { unit: Unit; value: number | null };
 
@@ -16,22 +16,22 @@ const MINUTES_PER_DAY = 1440;
 const MINUTES_PER_HOUR = 60;
 
 const getMinimumNotice = (minimumNoticeInMinutes: number | null): MinimumNotice => {
-  if (minimumNoticeInMinutes === null) return { unit: "minutes", value: null };
+  if (minimumNoticeInMinutes === null) return { unit: "phút", value: null };
   else if (minimumNoticeInMinutes % MINUTES_PER_DAY === 0)
-    return { unit: "days", value: minimumNoticeInMinutes / MINUTES_PER_DAY };
+    return { unit: "ngày", value: minimumNoticeInMinutes / MINUTES_PER_DAY };
   else if (minimumNoticeInMinutes % MINUTES_PER_HOUR === 0)
-    return { unit: "hours", value: minimumNoticeInMinutes / MINUTES_PER_HOUR };
-  return { unit: "minutes", value: minimumNoticeInMinutes };
+    return { unit: "giờ", value: minimumNoticeInMinutes / MINUTES_PER_HOUR };
+  return { unit: "phút", value: minimumNoticeInMinutes };
 };
 
 const getNoticeInMinutes = ({ unit, value }: MinimumNotice) => {
   if (value === null) return null;
   switch (unit) {
-    case "days":
+    case "ngày":
       return value * MINUTES_PER_DAY;
-    case "hours":
+    case "giờ":
       return value * MINUTES_PER_HOUR;
-    case "minutes":
+    case "phút":
       return value;
   }
 };
@@ -58,7 +58,7 @@ export const CallLimitationsEditor = ({
   return (
     <>
       <fieldset>
-        <label htmlFor={`${uid}-notice-period`}>Notice period</label>
+        <label htmlFor={`${uid}-notice-period`}>Thời gian báo trước</label>
         <NumberInput value={minimumNotice.value} onChange={(value) => setMinimumNotice({ ...minimumNotice, value })}>
           {(props) => (
             <div className="input" ref={inputRef}>
@@ -67,7 +67,7 @@ export const CallLimitationsEditor = ({
                 <label>
                   <span>{minimumNotice.unit}</span>
                   <TypeSafeOptionSelect
-                    aria-label="Units"
+                    aria-label="Đơn vị"
                     onChange={(unit) => setMinimumNotice({ ...minimumNotice, unit })}
                     value={minimumNotice.unit}
                     options={UNITS.map((unit) => ({ id: unit, label: unit }))}
@@ -79,17 +79,17 @@ export const CallLimitationsEditor = ({
             </div>
           )}
         </NumberInput>
-        <small>Minimum notice time required when booking a call</small>
+        <small>Thời gian báo trước tối thiểu khi đặt lịch cuộc gọi</small>
       </fieldset>
       <fieldset>
-        <label htmlFor={`${uid}-daily-limit`}>Daily limit</label>
+        <label htmlFor={`${uid}-daily-limit`}>Giới hạn hàng ngày</label>
         <NumberInput
           onChange={(maximum_calls_per_day) => updateCallLimitations({ maximum_calls_per_day })}
           value={maximum_calls_per_day}
         >
           {(props) => <input id={`${uid}-daily-limit`} placeholder="2" {...props} />}
         </NumberInput>
-        <small>Maximum calls allowed per day</small>
+        <small>Số cuộc gọi tối đa mỗi ngày</small>
       </fieldset>
     </>
   );

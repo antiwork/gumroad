@@ -57,7 +57,7 @@ export const TiersEditor = ({ tiers, onChange }: { tiers: Tier[]; onChange: (tie
           ...tiers,
           {
             id: (newTierId++).toString(),
-            name: "Untitled",
+            name: "Chưa đặt tên",
             description: "",
             max_purchase_count: null,
             customizable_price: false,
@@ -79,14 +79,14 @@ export const TiersEditor = ({ tiers, onChange }: { tiers: Tier[]; onChange: (tie
       }}
     >
       <Icon name="plus" />
-      Add tier
+      Thêm cấp bậc
     </Button>
   );
 
   return tiers.length === 0 ? (
     <Placeholder>
-      <h2>Offer different tiers of this membership</h2>
-      Sweeten the deal for your customers with different levels of access. Every membership needs at least one tier.
+      <h2>Cung cấp các cấp bậc khác nhau của tư cách thành viên này</h2>
+      Thu hút khách hàng với các cấp độ truy cập khác nhau. Mỗi tư cách thành viên cần ít nhất một cấp bậc.
       {addButton}
     </Placeholder>
   ) : (
@@ -98,16 +98,15 @@ export const TiersEditor = ({ tiers, onChange }: { tiers: Tier[]; onChange: (tie
           title={`Remove ${deletionModalVersion.name}?`}
           footer={
             <>
-              <Button onClick={() => setDeletionModalVersionId(null)}>No, cancel</Button>
+              <Button onClick={() => setDeletionModalVersionId(null)}>Không, hủy</Button>
               <Button color="accent" onClick={() => onChange(tiers.filter(({ id }) => id !== deletionModalVersion.id))}>
-                Yes, remove
+                Có, xóa
               </Button>
             </>
           }
         >
-          If you delete this tier, its associated content will be removed as well. Your existing customers who purchased
-          it will see the content from the current cheapest tier as a fallback. If no tier exists, they will see the
-          product-level content.
+          Nếu bạn xóa cấp bậc này, nội dung liên quan cũng sẽ bị xóa. Khách hàng hiện tại đã mua sẽ thấy nội dung
+          từ cấp bậc rẻ nhất hiện tại làm dự phòng. Nếu không có cấp bậc nào, họ sẽ thấy nội dung cấp sản phẩm.
         </Modal>
       ) : null}
       <SortableList
@@ -197,19 +196,19 @@ const TierEditor = ({
           <h3>{tier.name || "Untitled"}</h3>
           {tier.active_subscribers_count ? (
             <small>
-              {tier.active_subscribers_count} {tier.active_subscribers_count === 1 ? "supporter" : "supporters"}
+              {tier.active_subscribers_count} {tier.active_subscribers_count === 1 ? "người hỗ trợ" : "người hỗ trợ"}
             </small>
           ) : null}
         </div>
       </RowContent>
       <RowActions>
-        <WithTooltip tip={isOpen ? "Close drawer" : "Open drawer"}>
+        <WithTooltip tip={isOpen ? "Đóng" : "Mở"}>
           <Button onClick={() => setIsOpen((prevIsOpen) => !prevIsOpen)}>
             <Icon name={isOpen ? "outline-cheveron-up" : "outline-cheveron-down"} />
           </Button>
         </WithTooltip>
-        <WithTooltip tip="Remove">
-          <Button onClick={onDelete} aria-label="Remove">
+        <WithTooltip tip="Xóa">
+          <Button onClick={onDelete} aria-label="Xóa">
             <Icon name="trash2" />
           </Button>
         </WithTooltip>
@@ -218,7 +217,7 @@ const TierEditor = ({
         <RowDetails asChild>
           <Drawer className="grid gap-6">
             <fieldset>
-              <label htmlFor={`${uid}-name`}>Name</label>
+              <label htmlFor={`${uid}-name`}>Tên</label>
               <div className="input">
                 <input
                   id={`${uid}-name`}
@@ -227,12 +226,12 @@ const TierEditor = ({
                   onChange={(evt) => updateTier({ name: evt.target.value })}
                 />
                 <a href={url} target="_blank" rel="noreferrer">
-                  Share
+                  Chia sẻ
                 </a>
               </div>
             </fieldset>
             <fieldset>
-              <label htmlFor={`${uid}-description`}>Description</label>
+              <label htmlFor={`${uid}-description`}>Mô tả</label>
               <textarea
                 id={`${uid}-description`}
                 value={tier.description}
@@ -240,7 +239,7 @@ const TierEditor = ({
               />
             </fieldset>
             <fieldset>
-              <label htmlFor={`${uid}-max-purchase-count`}>Maximum number of active supporters</label>
+              <label htmlFor={`${uid}-max-purchase-count`}>Số lượng người hỗ trợ tối đa</label>
               <NumberInput
                 onChange={(value) => updateTier({ max_purchase_count: value })}
                 value={tier.max_purchase_count}
@@ -257,7 +256,7 @@ const TierEditor = ({
                 gridTemplateColumns: "repeat(auto-fit, max(var(--dynamic-grid), 50% - var(--spacer-3) / 2))",
               }}
             >
-              <legend>Pricing</legend>
+              <legend>Giá</legend>
               {Object.entries(tier.recurrence_price_values).map(([recurrence, value]) => (
                 <div
                   style={{
@@ -272,7 +271,7 @@ const TierEditor = ({
                     type="checkbox"
                     role="switch"
                     checked={value.enabled}
-                    aria-label={`Toggle recurrence option: ${recurrenceNames[recurrence]}`}
+                    aria-label={`Chuyển đổi tùy chọn lặp lại: ${recurrenceNames[recurrence]}`}
                     onChange={() => updateRecurrencePriceValue(recurrence, { enabled: !value.enabled })}
                   />
                   <PriceInput
@@ -283,13 +282,13 @@ const TierEditor = ({
                     placeholder={PLACEHOLDER_VALUES[recurrence]}
                     suffix={perRecurrenceLabels[recurrence]}
                     disabled={!value.enabled}
-                    ariaLabel={`Amount ${perRecurrenceLabels[recurrence]}`}
+                    ariaLabel={`Số tiền ${perRecurrenceLabels[recurrence]}`}
                   />
                 </div>
               ))}
             </fieldset>
             {allEnabledPricesAreZero ? (
-              <Alert variant="info">Free tiers require a pay what they want price.</Alert>
+              <Alert variant="info">Các cấp bậc miễn phí yêu cầu một mức giá "trả tùy ý".</Alert>
             ) : null}
             <Details
               summary={
@@ -298,7 +297,7 @@ const TierEditor = ({
                   onChange={(customizable_price) => updateTier({ customizable_price })}
                   disabled={allEnabledPricesAreZero}
                 >
-                  Allow customers to pay what they want
+                  Cho phép khách hàng trả tùy ý
                 </Toggle>
               }
               className="toggle"
@@ -317,7 +316,7 @@ const TierEditor = ({
                       <React.Fragment key={recurrence}>
                         <fieldset>
                           <label htmlFor={`${uid}-${recurrence}-minimum-price`}>
-                            Minimum amount {perRecurrenceLabels[recurrence]}
+                            Số tiền tối thiểu {perRecurrenceLabels[recurrence]}
                           </label>
                           <PriceInput
                             id={`${uid}-${recurrence}-minimum-price`}
@@ -328,7 +327,7 @@ const TierEditor = ({
                         </fieldset>
                         <fieldset>
                           <label htmlFor={`${uid}-${recurrence}-suggested-price`}>
-                            Suggested amount {perRecurrenceLabels[recurrence]}
+                            Số tiền gợi ý {perRecurrenceLabels[recurrence]}
                           </label>
                           <PriceInput
                             id={`${uid}-${recurrence}-suggested-price`}
@@ -351,7 +350,7 @@ const TierEditor = ({
             <PriceChangeSettings tier={tier} updateTier={updateTier} />
             {integrations.length > 0 ? (
               <fieldset>
-                <legend>Integrations</legend>
+                <legend>Tích hợp</legend>
                 {integrations.map((integration) => (
                   <Toggle
                     value={tier.integrations[integration]}
@@ -360,7 +359,7 @@ const TierEditor = ({
                     }
                     key={integration}
                   >
-                    {integration === "circle" ? "Enable access to Circle community" : "Enable access to Discord server"}
+                    {integration === "circle" ? "Cho phép truy cập cộng đồng Circle" : "Cho phép truy cập máy chủ Discord"}
                   </Toggle>
                 ))}
               </fieldset>
@@ -409,9 +408,9 @@ const PriceChangeSettings = ({ tier, updateTier }: { tier: Tier; updateTier: (up
   const [editor, setEditor] = React.useState<Editor | null>(null);
 
   const formattedEffectiveDate = format(effectiveDate.value, "yyyy-MM-dd");
-  const placeholder = `The price of your membership to "${product.name}" is changing on ${formattedEffectiveDate}.
+  const placeholder = `Giá tư cách thành viên "${product.name}" của bạn sẽ thay đổi vào ngày ${formattedEffectiveDate}.
 
-You can modify or cancel your membership at any time.`;
+Bạn có thể sửa đổi hoặc hủy tư cách thành viên của mình bất kỳ lúc nào.`;
 
   React.useEffect(() => {
     if (editor) {
@@ -441,7 +440,7 @@ You can modify or cancel your membership at any time.`;
             })
           }
         >
-          Apply price changes to existing customers
+          Áp dụng thay đổi giá cho khách hàng hiện tại
         </Toggle>
       }
       className="toggle"
@@ -451,13 +450,13 @@ You can modify or cancel your membership at any time.`;
         <div className="grid gap-6">
           {initialEffectiveDate ? (
             <Alert variant="warning">
-              You have scheduled a pricing update for existing customers on {format(initialEffectiveDate, "MMMM d, y")}
+              Bạn đã lên lịch cập nhật giá cho khách hàng hiện tại vào ngày {format(initialEffectiveDate, "d MMMM, y")}
             </Alert>
           ) : null}
           <div>
             <strong>
-              We'll send an email reminder to your active members stating the new price 7 days prior to their next
-              scheduled payment.
+              Chúng tôi sẽ gửi email nhắc nhở cho các thành viên đang hoạt động của bạn về mức giá mới 7 ngày trước kỳ
+              thanh toán tiếp theo của họ.
             </strong>{" "}
             <button
               type="button"
@@ -471,21 +470,21 @@ You can modify or cancel your membership at any time.`;
                   effectiveDate: formattedEffectiveDate,
                 }).then(
                   () => {
-                    showAlert("Email sample sent! Check your email", "success");
+                    showAlert("Đã gửi email mẫu! Hãy kiểm tra hộp thư của bạn", "success");
                   },
                   (e: unknown) => {
                     assertResponseError(e);
-                    showAlert("Error sending email", "error");
+                    showAlert("Lỗi khi gửi email", "error");
                   },
                 )
               }
             >
-              Get a sample
+              Nhận mẫu
             </button>
           </div>
           <fieldset className={cx({ danger: effectiveDate.error })}>
             <legend>
-              <label htmlFor={`${uid}-date`}>Effective date for existing customers</label>
+              <label htmlFor={`${uid}-date`}>Ngày hiệu lực cho khách hàng hiện tại</label>
             </legend>
             <DateInput
               id={`${uid}-date`}
@@ -496,18 +495,18 @@ You can modify or cancel your membership at any time.`;
               }}
             />
 
-            {effectiveDate.error ? <small>The effective date must be at least 7 days from today</small> : null}
+            {effectiveDate.error ? <small>Ngày hiệu lực phải cách ngày hôm nay ít nhất 7 ngày</small> : null}
           </fieldset>
           <fieldset>
             <legend>
-              <label htmlFor={`${uid}-custom-message`}>Custom message</label>
+              <label htmlFor={`${uid}-custom-message`}>Tin nhắn tùy chỉnh</label>
             </legend>
             {isMounted ? (
               <RichTextEditor
                 id={`${uid}-custom-message`}
                 className="textarea"
                 placeholder={placeholder}
-                ariaLabel="Custom message"
+                ariaLabel="Tin nhắn tùy chỉnh"
                 initialValue={editorContent}
                 onChange={onMessageChange}
                 onCreate={setEditor}

@@ -37,7 +37,7 @@ export const VersionsEditor = ({
           ...versions,
           {
             id: (newVersionId++).toString(),
-            name: "Untitled",
+            name: "Chưa đặt tên",
             description: "",
             price_difference_cents: 0,
             max_purchase_count: null,
@@ -53,14 +53,14 @@ export const VersionsEditor = ({
       }}
     >
       <Icon name="plus" />
-      Add version
+      Thêm phiên bản
     </Button>
   );
 
   return versions.length === 0 ? (
     <Placeholder>
-      <h2>Offer variations of this product</h2>
-      Sweeten the deal for your customers with different options for format, version, etc
+      <h2>Cung cấp các biến thể của sản phẩm này</h2>
+      Thu hút khách hàng với các tùy chọn định dạng, phiên bản khác nhau, v.v.
       {addButton}
     </Placeholder>
   ) : (
@@ -72,19 +72,18 @@ export const VersionsEditor = ({
           title={`Remove ${deletionModalVersion.name}?`}
           footer={
             <>
-              <Button onClick={() => setDeletionModalVersionId(null)}>No, cancel</Button>
+              <Button onClick={() => setDeletionModalVersionId(null)}>Không, hủy</Button>
               <Button
                 color="accent"
                 onClick={() => onChange(versions.filter(({ id }) => id !== deletionModalVersion.id))}
               >
-                Yes, remove
+                Có, xóa
               </Button>
             </>
           }
         >
-          If you delete this version, its associated content will be removed as well. Your existing customers who
-          purchased it will see the content from the current cheapest version as a fallback. If no version exists, they
-          will see the product-level content.
+          Nếu bạn xóa phiên bản này, nội dung liên quan cũng sẽ bị xóa. Khách hàng hiện tại đã mua sẽ thấy nội dung
+          từ phiên bản rẻ nhất hiện tại làm dự phòng. Nếu không có phiên bản nào, họ sẽ thấy nội dung cấp sản phẩm.
         </Modal>
       ) : null}
       <SortableList
@@ -136,13 +135,13 @@ const VersionEditor = ({
         <h3>{version.name || "Untitled"}</h3>
       </RowContent>
       <RowActions>
-        <WithTooltip tip={isOpen ? "Close drawer" : "Open drawer"}>
+        <WithTooltip tip={isOpen ? "Đóng" : "Mở"}>
           <Button onClick={() => setIsOpen((prevIsOpen) => !prevIsOpen)}>
             <Icon name={isOpen ? "outline-cheveron-up" : "outline-cheveron-down"} />
           </Button>
         </WithTooltip>
-        <WithTooltip tip="Remove">
-          <Button onClick={onDelete} aria-label="Remove version">
+        <WithTooltip tip="Xóa">
+          <Button onClick={onDelete} aria-label="Xóa phiên bản">
             <Icon name="trash2" />
           </Button>
         </WithTooltip>
@@ -151,22 +150,22 @@ const VersionEditor = ({
         <RowDetails asChild>
           <Drawer className="grid gap-6">
             <fieldset>
-              <label htmlFor={`${uid}-name`}>Name</label>
+              <label htmlFor={`${uid}-name`}>Tên</label>
               <div className="input">
                 <input
                   id={`${uid}-name`}
                   type="text"
                   value={version.name}
-                  placeholder="Version name"
+                  placeholder="Tên phiên bản"
                   onChange={(evt) => updateVersion({ name: evt.target.value })}
                 />
                 <a href={url} target="_blank" rel="noreferrer">
-                  Share
+                  Chia sẻ
                 </a>
               </div>
             </fieldset>
             <fieldset>
-              <label htmlFor={`${uid}-description`}>Description</label>
+              <label htmlFor={`${uid}-description`}>Mô tả</label>
               <textarea
                 id={`${uid}-description`}
                 value={version.description}
@@ -175,7 +174,7 @@ const VersionEditor = ({
             </fieldset>
             <section className="grid grid-flow-col items-end gap-6">
               <fieldset>
-                <label htmlFor={`${uid}-price`}>Additional amount</label>
+                <label htmlFor={`${uid}-price`}>Số tiền bổ sung</label>
                 <PriceInput
                   id={`${uid}-price`}
                   currencyCode={currencyType}
@@ -185,7 +184,7 @@ const VersionEditor = ({
                 />
               </fieldset>
               <fieldset>
-                <label htmlFor={`${uid}-max-purchase-count`}>Maximum number of purchases</label>
+                <label htmlFor={`${uid}-max-purchase-count`}>Số lượng mua tối đa</label>
                 <NumberInput
                   onChange={(value) => updateVersion({ max_purchase_count: value })}
                   value={version.max_purchase_count}
@@ -198,7 +197,7 @@ const VersionEditor = ({
             </section>
             {integrations.length > 0 ? (
               <fieldset>
-                <legend>Integrations</legend>
+                <legend>Tích hợp</legend>
                 {integrations.map((integration) => (
                   <Toggle
                     value={version.integrations[integration]}
@@ -207,7 +206,7 @@ const VersionEditor = ({
                     }
                     key={integration}
                   >
-                    {integration === "circle" ? "Enable access to Circle community" : "Enable access to Discord server"}
+                    {integration === "circle" ? "Cho phép truy cập cộng đồng Circle" : "Cho phép truy cập máy chủ Discord"}
                   </Toggle>
                 ))}
               </fieldset>

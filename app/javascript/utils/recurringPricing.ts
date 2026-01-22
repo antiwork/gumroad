@@ -20,38 +20,38 @@ const recurrencesToMonths: Record<RecurrenceId, number> = {
 export const numberOfMonthsInRecurrence = (recurrenceId: RecurrenceId): number => recurrencesToMonths[recurrenceId];
 
 export const recurrenceLabels: Record<RecurrenceId, string> = {
-  monthly: "a month",
-  quarterly: "every 3 months",
-  biannually: "every 6 months",
-  yearly: "a year",
-  every_two_years: "every 2 years",
+  monthly: "mỗi tháng",
+  quarterly: "mỗi 3 tháng",
+  biannually: "mỗi 6 tháng",
+  yearly: "mỗi năm",
+  every_two_years: "mỗi 2 năm",
 };
 
 export const perRecurrenceLabels: Record<RecurrenceId, string> = {
-  monthly: `monthly`,
-  quarterly: `quarterly`,
-  biannually: `/ 6 months`,
-  yearly: `yearly`,
-  every_two_years: `/ 2 years`,
+  monthly: `hàng tháng`,
+  quarterly: `hàng quý`,
+  biannually: `/ 6 tháng`,
+  yearly: `hàng năm`,
+  every_two_years: `/ 2 năm`,
 };
 
 export const formatAmountPerRecurrence = (recurrenceId: RecurrenceId, formattedAmount: string): string =>
   `${formattedAmount} ${perRecurrenceLabels[recurrenceId]}`;
 
 export const recurrenceNames = {
-  monthly: "Monthly",
-  quarterly: "Quarterly",
-  biannually: "Every 6 months",
-  yearly: "Yearly",
-  every_two_years: "Every 2 years",
+  monthly: "Hàng tháng",
+  quarterly: "Hàng quý",
+  biannually: "Mỗi 6 tháng",
+  yearly: "Hàng năm",
+  every_two_years: "Mỗi 2 năm",
 };
 
 export const recurrenceDurationLabels: Record<RecurrenceId, string> = {
-  monthly: `1 month`,
-  quarterly: `3 months`,
-  biannually: `6 months`,
-  yearly: `1 year`,
-  every_two_years: `2 years`,
+  monthly: `1 tháng`,
+  quarterly: `3 tháng`,
+  biannually: `6 tháng`,
+  yearly: `1 năm`,
+  every_two_years: `2 năm`,
 };
 
 // Should match CurrencyHelper#recurrence_label

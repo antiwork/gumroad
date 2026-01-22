@@ -32,7 +32,7 @@ export const ShippingDestinationsEditor = ({
   return (
     <section className="p-4! md:p-8!">
       <header>
-        <h2>Shipping destinations</h2>
+        <h2>Địa điểm giao hàng</h2>
       </header>
       {shippingDestinations.length > 0 ? (
         <Card>
@@ -53,17 +53,17 @@ export const ShippingDestinationsEditor = ({
           <CardContent>
             <Button onClick={addShippingDestination} className="grow basis-0">
               <Icon name="plus" />
-              Add shipping destination
+              Thêm địa điểm giao hàng
             </Button>
           </CardContent>
         </Card>
       ) : (
         <Placeholder>
-          <h2>Add shipping destinations</h2>
-          Choose where you're able to ship your physical product to
+          <h2>Thêm địa điểm giao hàng</h2>
+          Chọn nơi bạn có thể giao sản phẩm vật lý
           <Button color="primary" onClick={addShippingDestination}>
             <Icon name="box" />
-            Add shipping destination
+            Thêm địa điểm giao hàng
           </Button>
         </Placeholder>
       )}
@@ -96,7 +96,7 @@ const ShippingDestinationRow = ({
         <div className="flex gap-2">
           <select
             id={`${uid}-country`}
-            aria-label="Country"
+            aria-label="Quốc gia"
             className="flex-1"
             value={shippingDestination.country_code}
             onChange={(evt) => updateDestination({ country_code: evt.target.value })}
@@ -112,8 +112,8 @@ const ShippingDestinationRow = ({
               );
             })}
           </select>
-          <WithTooltip position="bottom" tip="Remove">
-            <Button color="danger" outline onClick={onRemove} aria-label="Remove shipping destination">
+          <WithTooltip position="bottom" tip="Xóa">
+            <Button color="danger" outline onClick={onRemove} aria-label="Xóa địa điểm giao hàng">
               <Icon name="trash2" />
             </Button>
           </WithTooltip>
@@ -122,7 +122,7 @@ const ShippingDestinationRow = ({
       <div style={{ display: "grid", gridAutoFlow: "column", gap: "var(--spacer-3)", width: "100%" }}>
         <fieldset>
           <legend>
-            <label htmlFor={`${uid}-one-item`}>Amount alone</label>
+            <label htmlFor={`${uid}-one-item`}>Phí khi mua một</label>
           </legend>
           <PriceInput
             id={`${uid}-one-item`}
@@ -134,7 +134,7 @@ const ShippingDestinationRow = ({
         </fieldset>
         <fieldset>
           <legend>
-            <label htmlFor={`${uid}-multiple-items`}>Amount with others</label>
+            <label htmlFor={`${uid}-multiple-items`}>Phí khi mua cùng sản phẩm khác</label>
           </legend>
           <PriceInput
             id={`${uid}-multiple-items`}

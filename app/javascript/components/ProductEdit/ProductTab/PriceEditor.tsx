@@ -42,7 +42,7 @@ export const PriceEditor = ({
 
   return (
     <fieldset>
-      <label htmlFor={`${uid}-price-cents`}>Amount</label>
+      <label htmlFor={`${uid}-price-cents`}>Số tiền</label>
       <PriceInput
         id={`${uid}-price-cents`}
         currencyCode={currencyType}
@@ -50,14 +50,14 @@ export const PriceEditor = ({
         onChange={(newAmount) => setPriceCents(newAmount ?? 0)}
         currencyCodeSelector={currencyCodeSelector}
       />
-      {isFreeProduct ? <Alert variant="info">Free products require a pay what they want price.</Alert> : null}
+      {isFreeProduct ? <Alert variant="info">Sản phẩm miễn phí yêu cầu giá "trả tùy ý".</Alert> : null}
       <Details
         className="toggle"
         open={isPWYW}
         summary={
           <Toggle value={isPWYW} onChange={setIsPWYW} disabled={isFreeProduct}>
             <a href="/help/article/133-pay-what-you-want-pricing" target="_blank" rel="noreferrer">
-              Allow customers to pay what they want
+              Cho phép khách hàng trả tùy ý
             </a>
           </Toggle>
         }
@@ -71,11 +71,11 @@ export const PriceEditor = ({
           }}
         >
           <fieldset>
-            <label htmlFor={`${uid}-minimum-amount`}>Minimum amount</label>
+            <label htmlFor={`${uid}-minimum-amount`}>Số tiền tối thiểu</label>
             <PriceInput id={`${uid}-minimum-amount`} currencyCode={currencyType} cents={priceCents} disabled />
           </fieldset>
           <fieldset>
-            <label htmlFor={`${uid}-suggested-price-cents`}>Suggested amount</label>
+            <label htmlFor={`${uid}-suggested-price-cents`}>Số tiền gợi ý</label>
             <PriceInput
               id={`${uid}-suggested-price-cents`}
               placeholder={formatPriceCentsWithoutCurrencySymbol(currencyType, priceCents)}

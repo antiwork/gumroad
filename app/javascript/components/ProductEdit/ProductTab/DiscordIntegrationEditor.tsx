@@ -58,10 +58,10 @@ export const DiscordIntegrationEditor = ({
           setEnabledForOptions(false);
         }
       }}
-      label="Invite your customers to a Discord server"
+      label="Mời khách hàng của bạn vào máy chủ Discord"
       dropdown={
         <div className="flex flex-col gap-4">
-          People who purchase your product will be automatically invited to your Discord server.
+          Những người mua sản phẩm của bạn sẽ tự động được mời vào máy chủ Discord của bạn.
           {isLoading ? (
             <LoadingSpinner className="size-6" />
           ) : !integration ? (
@@ -86,12 +86,12 @@ export const DiscordIntegrationEditor = ({
                         });
                         setEnabledForOptions(true);
                       } else {
-                        showAlert("Could not connect to your Discord account, please try again.", "error");
+                        showAlert("Không thể kết nối với tài khoản Discord của bạn, vui lòng thử lại.", "error");
                       }
                       setIsLoading(false);
                     },
                     onError: () => {
-                      showAlert("Could not connect to your Discord account, please try again.", "error");
+                      showAlert("Không thể kết nối với tài khoản Discord của bạn, vui lòng thử lại.", "error");
                       setIsLoading(false);
                     },
                     onPopupClose: () => setIsLoading(false),
@@ -99,14 +99,14 @@ export const DiscordIntegrationEditor = ({
                 }}
               >
                 <span className="brand-icon brand-icon-discord" />
-                Connect to Discord
+                Kết nối với Discord
               </Button>
             </div>
           ) : (
             <>
               <div>
-                <b>Discord account #{integration.integration_details.username} connected</b>
-                <div>Server name: {integration.integration_details.server_name}</div>
+                <b>Tài khoản Discord #{integration.integration_details.username} đã kết nối</b>
+                <div>Tên máy chủ: {integration.integration_details.server_name}</div>
               </div>
               <div>
                 <Button
@@ -118,7 +118,7 @@ export const DiscordIntegrationEditor = ({
                   }}
                 >
                   <span className="icon brand-icon-discord" />
-                  Disconnect Discord
+                  Ngắt kết nối Discord
                 </Button>
               </div>
               {product.variants.length > 0 ? (
@@ -126,15 +126,15 @@ export const DiscordIntegrationEditor = ({
                   {product.variants.every(({ integrations }) => !integrations.discord) ? (
                     <Alert role="status" variant="warning">
                       {product.native_type === "membership"
-                        ? "Your integration is not assigned to any tier. Check your tiers' settings."
-                        : "Your integration is not assigned to any version. Check your versions' settings."}
+                        ? "Tích hợp của bạn chưa được gán cho bất kỳ cấp bậc nào. Hãy kiểm tra cài đặt cấp bậc của bạn."
+                        : "Tích hợp của bạn chưa được gán cho bất kỳ phiên bản nào. Hãy kiểm tra cài đặt phiên bản của bạn."}
                     </Alert>
                   ) : null}
                   <Toggle
                     value={product.variants.every(({ integrations }) => integrations.discord)}
                     onChange={setEnabledForOptions}
                   >
-                    {product.native_type === "membership" ? "Enable for all tiers" : "Enable for all versions"}
+                    {product.native_type === "membership" ? "Kích hoạt cho tất cả các cấp bậc" : "Kích hoạt cho tất cả các phiên bản"}
                   </Toggle>
                 </>
               ) : null}
@@ -147,7 +147,7 @@ export const DiscordIntegrationEditor = ({
                       onChange({ ...integration, keep_inactive_members: !integration.keep_inactive_members })
                     }
                   />
-                  Do not remove Discord access when membership ends
+                  Không xóa quyền truy cập Discord khi tư cách thành viên kết thúc
                 </label>
               ) : null}
             </>

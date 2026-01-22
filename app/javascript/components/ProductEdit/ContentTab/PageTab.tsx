@@ -19,7 +19,7 @@ export type Page = {
   updated_at: string;
 };
 
-export const titleWithFallback = (title: string | null | undefined) => (!title?.trim() ? "Untitled" : title);
+export const titleWithFallback = (title: string | null | undefined) => (!title?.trim() ? "Chưa đặt tên" : title);
 
 export const PageTab = ({
   page,
@@ -48,7 +48,7 @@ export const PageTab = ({
     extensions: [
       PlainTextStarterKit,
       BlurOnEnter,
-      Placeholder.configure({ placeholder: "Name your page" }),
+      Placeholder.configure({ placeholder: "Đặt tên cho trang của bạn" }),
       CharacterCount.configure({ limit: 70 }),
     ],
     editable: true,
@@ -61,11 +61,11 @@ export const PageTab = ({
   }, [renaming, editor]);
 
   const iconLabels = {
-    "file-arrow-down": "Page has various types of files",
-    "file-music": "Page has audio files",
-    "file-play": "Page has videos",
-    "file-text": "Page has no files",
-    "outline-key": "Page has license key",
+    "file-arrow-down": "Trang có nhiều loại file khác nhau",
+    "file-music": "Trang có file âm thanh",
+    "file-play": "Trang có video",
+    "file-text": "Trang không có file",
+    "outline-key": "Trang có mã bản quyền",
   };
   return (
     <PageListItem
@@ -94,10 +94,10 @@ export const PageTab = ({
           <Popover trigger={<Icon name="three-dots" />}>
             <div role="menu">
               <div role="menuitem" onClick={() => setRenaming(true)}>
-                <Icon name="pencil" /> Rename
+                <Icon name="pencil" /> Đổi tên
               </div>
               <div className="danger" role="menuitem" onClick={onDelete}>
-                <Icon name="trash2" /> Delete
+                <Icon name="trash2" /> Xóa
               </div>
             </div>
           </Popover>

@@ -36,7 +36,7 @@ export const DurationsEditor = ({
           ...durations,
           {
             id: (newDurationId++).toString(),
-            name: "Untitled",
+            name: "Chưa đặt tên",
             duration_in_minutes: null,
             description: "",
             price_difference_cents: 0,
@@ -53,14 +53,14 @@ export const DurationsEditor = ({
       }}
     >
       <Icon name="plus" />
-      Add duration
+      Thêm thời lượng
     </Button>
   );
 
   return durations.length === 0 ? (
     <Placeholder>
-      <h2>Add duration</h2>
-      Create one or more call durations for customers to choose from.
+      <h2>Thêm thời lượng</h2>
+      Tạo một hoặc nhiều thời lượng cuộc gọi để khách hàng lựa chọn.
       {addButton}
     </Placeholder>
   ) : (
@@ -72,19 +72,18 @@ export const DurationsEditor = ({
           title={`Remove ${deletionModalDuration.name}?`}
           footer={
             <>
-              <Button onClick={() => setDeletionModalDurationId(null)}>No, cancel</Button>
+              <Button onClick={() => setDeletionModalDurationId(null)}>Không, hủy</Button>
               <Button
                 color="accent"
                 onClick={() => onChange(durations.filter(({ id }) => id !== deletionModalDuration.id))}
               >
-                Yes, remove
+                Có, xóa
               </Button>
             </>
           }
         >
-          If you delete this version, its associated content will be removed as well. Your existing customers who
-          purchased it will see the content from the current cheapest version as a fallback. If no version exists, they
-          will see the product-level content.
+          Nếu bạn xóa phiên bản này, nội dung liên quan cũng sẽ bị xóa. Khách hàng hiện tại đã mua sẽ thấy nội dung
+          từ phiên bản rẻ nhất hiện tại làm dự phòng. Nếu không có phiên bản nào, họ sẽ thấy nội dung cấp sản phẩm.
         </Modal>
       ) : null}
       <SortableList
@@ -130,13 +129,13 @@ const DurationEditor = ({
         <h3>{duration.name}</h3>
       </RowContent>
       <RowActions>
-        <WithTooltip tip={isOpen ? "Close drawer" : "Open drawer"}>
+        <WithTooltip tip={isOpen ? "Đóng" : "Mở"}>
           <Button onClick={() => setIsOpen((prevIsOpen) => !prevIsOpen)}>
             <Icon name={isOpen ? "outline-cheveron-up" : "outline-cheveron-down"} />
           </Button>
         </WithTooltip>
-        <WithTooltip tip="Remove">
-          <Button onClick={onDelete} aria-label="Remove">
+        <WithTooltip tip="Xóa">
+          <Button onClick={onDelete} aria-label="Xóa">
             <Icon name="trash2" />
           </Button>
         </WithTooltip>
@@ -146,7 +145,7 @@ const DurationEditor = ({
           <Drawer className="grid gap-6">
             <fieldset>
               <legend>
-                <label htmlFor={`${uid}-duration`}>Duration</label>
+                <label htmlFor={`${uid}-duration`}>Thời lượng</label>
               </legend>
               <div className="input">
                 <NumberInput
@@ -155,18 +154,18 @@ const DurationEditor = ({
                     updateDuration({
                       duration_in_minutes,
                       name: duration_in_minutes
-                        ? `${duration_in_minutes} ${duration_in_minutes === 1 ? "minute" : "minutes"}`
-                        : "Untitled",
+                        ? `${duration_in_minutes} ${duration_in_minutes === 1 ? "phút" : "phút"}`
+                        : "Chưa đặt tên",
                     })
                   }
                 >
                   {(props) => <input id={`${uid}-duration`} {...props} />}
                 </NumberInput>
-                <Pill className="-mr-2 shrink-0">minutes</Pill>
+                <Pill className="-mr-2 shrink-0">phút</Pill>
               </div>
             </fieldset>
             <fieldset>
-              <label htmlFor={`${uid}-description`}>Description</label>
+              <label htmlFor={`${uid}-description`}>Mô tả</label>
               <textarea
                 id={`${uid}-description`}
                 value={duration.description}
@@ -177,7 +176,7 @@ const DurationEditor = ({
               style={{ display: "grid", gap: "var(--spacer-5)", gridAutoFlow: "column", alignItems: "flex-end" }}
             >
               <fieldset>
-                <label htmlFor={`${uid}-price`}>Additional amount</label>
+                <label htmlFor={`${uid}-price`}>Số tiền bổ sung</label>
                 <PriceInput
                   id={`${uid}-price`}
                   currencyCode={currencyType}
@@ -187,7 +186,7 @@ const DurationEditor = ({
                 />
               </fieldset>
               <fieldset>
-                <label htmlFor={`${uid}-max-purchase-count`}>Maximum number of purchases</label>
+                <label htmlFor={`${uid}-max-purchase-count`}>Số lượng mua tối đa</label>
                 <NumberInput
                   onChange={(value) => updateDuration({ max_purchase_count: value })}
                   value={duration.max_purchase_count}
