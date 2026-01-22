@@ -205,6 +205,12 @@ class ApplicationController < ActionController::Base
         return safe_final_path
       end
 
+      # Defensive: if a stale 2FA session is present for another user (e.g. from an aborted login),
+      # do not redirect the current user to the 2FA flow.
+      if session[:verify_two_factor_auth_for].present? && session[:verify_two_factor_auth_for] != user.id
+        reset_two_factor_auth_login_session
+      end
+
       if user_for_two_factor_authentication.present?
         two_factor_authentication_path(next: safe_final_path)
       else

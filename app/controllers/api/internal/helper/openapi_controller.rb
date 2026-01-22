@@ -1,8 +1,6 @@
 # frozen_string_literal: true
 
 class Api::Internal::Helper::OpenapiController < Api::Internal::Helper::BaseController
-  before_action :authorize_helper_token!
-
   def index
     render json: {
       openapi: "3.1.0",

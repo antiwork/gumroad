@@ -2,6 +2,7 @@ import * as React from "react";
 
 import { Form } from "$app/components/Admin/Form";
 import type { User } from "$app/components/Admin/Users/User";
+import { Button } from "$app/components/Button";
 import { showAlert } from "$app/components/server-components/Alert";
 
 type FlagForFraudProps = {
@@ -20,18 +21,23 @@ const FlagForFraud = ({ user }: FlagForFraudProps) => {
             <h3>Flag for fraud</h3>
           </summary>
           <Form
-            url={Routes.flag_for_fraud_admin_user_path(user.id)}
+            url={Routes.flag_for_fraud_admin_user_path(user.external_id)}
             method="POST"
-            confirmMessage={`Are you sure you want to flag user ${user.id} for fraud?`}
+            confirmMessage={`Are you sure you want to flag user ${user.external_id} for fraud?`}
             onSuccess={() => showAlert("Flagged.", "success")}
           >
             {(isLoading) => (
               <fieldset>
-                <div className="input-with-button" style={{ alignItems: "start" }}>
-                  <textarea name="flag_for_fraud[flag_note]" rows={3} placeholder="Add flag note (optional)" />
-                  <button type="submit" className="button" disabled={isLoading}>
+                <div className="flex items-start gap-2">
+                  <textarea
+                    name="flag_for_fraud[flag_note]"
+                    className="flex-1"
+                    rows={3}
+                    placeholder="Add flag note (optional)"
+                  />
+                  <Button type="submit" disabled={isLoading}>
                     {isLoading ? "Submitting..." : "Submit"}
-                  </button>
+                  </Button>
                 </div>
               </fieldset>
             )}

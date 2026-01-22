@@ -23,7 +23,7 @@ describe Admin::AffiliatesController, inertia: true do
       it "redirects to affiliate's admin page" do
         get :index, params: { query: @affiliate_user.email }
 
-        expect(response).to redirect_to admin_affiliate_path(@affiliate_user)
+        expect(response).to redirect_to admin_affiliate_path(@affiliate_user.external_id)
       end
     end
 
@@ -63,65 +63,59 @@ describe Admin::AffiliatesController, inertia: true do
         create(:direct_affiliate, affiliate_user:)
       end
 
-      it "returns page successfully" do
-        get :show, params: { id: affiliate_user.id }
+      it "redirects numeric ID to external_id" do
+        get :show, params: { external_id: affiliate_user.id }
+        expect(response).to redirect_to admin_affiliate_path(affiliate_user.external_id)
+      end
+
+      it "returns page successfully with external_id" do
+        get :show, params: { external_id: affiliate_user.external_id }
 
         expect(response).to be_successful
         expect(response.body).to have_text(affiliate_user.name)
         expect(assigns[:title]).to eq "Sam affiliate on Gumroad"
-      end
-
-      context "with products" do
-        let!(:published_product) { create(:product, name: "Published product") }
-        let!(:unpublished_product) { create(:product, name: "Unpublished product", purchase_disabled_at: Time.current) }
-        let!(:deleted_product) { create(:product, name: "Deleted product", deleted_at: Time.current) }
-        let!(:banned_product) { create(:product, name: "Banned product", banned_at: Time.current) }
-        let!(:alive_affiliate) { create(:direct_affiliate, affiliate_user:, products: [published_product, unpublished_product, deleted_product, banned_product]) }
-
-        let!(:product_by_deleted_affiliate) { create(:product, name: "Product by deleted affiliate") }
-        let!(:deleted_affiliate) { create(:direct_affiliate, affiliate_user:, products: [product_by_deleted_affiliate], deleted_at: Time.current) }
-
-        it "shows all products except banned or deleted ones" do
-          get :show, params: { id: affiliate_user.id }
-
-          expect(response).to be_successful
-          expect(response.body).to have_text(published_product.name)
-          expect(response.body).to have_text(unpublished_product.name)
-          expect(response.body).to_not have_text(deleted_product.name)
-          expect(response.body).to_not have_text(banned_product.name)
-          expect(response.body).to_not have_text(product_by_deleted_affiliate.name)
-          expect(response.body).to_not have_selector("[aria-label='Pagination']")
-        end
-
-        context "when there are too many products for one page" do
-          let!(:products) do
-            create_list(:product, 9) do |product, i|
-              product.created_at = Time.current + i.minutes
-            end
-          end
-
-          before do
-            create(:direct_affiliate, affiliate_user:, products:)
-          end
-
-          it "paginates the products" do
-            get :show, params: { id: affiliate_user.id }
-
-            expect(response).to be_successful
-            expect(response.body).to have_text(published_product.name)
-            products.each { expect(response.body).to have_text(_1.name) }
-            expect(response.body).to_not have_text(unpublished_product.name)
-            expect(response.body).to have_selector("[aria-label='Pagination']")
-          end
-        end
       end
     end
 
     context "when affiliate account is not present" do
       it "raises ActionController::RoutingError" do
         expect do
-          get :show, params: { id: affiliate_user.id }
+          get :show, params: { external_id: affiliate_user.external_id }
         end.to raise_error(ActionController::RoutingError, "Not Found")
+      end
+    end
+
+    context "when username starts with a number" do
+      let(:user_with_id_1) { create(:user, id: 1) }
+      let(:affiliate_user_with_numeric_username) { create(:user, username: "1gum") }
+
+      before do
+        user_with_id_1
+        affiliate_user_with_numeric_username
+        create(:direct_affiliate, affiliate_user: affiliate_user_with_numeric_username)
+      end
+
+      it "does not redirect to user with matching id when accessing by username" do
+        get :show, params: { external_id: "1gum" }
+
+        expect(response).to be_successful
+        expect(assigns[:affiliate_user]).to eq(affiliate_user_with_numeric_username)
+      end
+    end
+    context "when user's id overlaps with another user's external_id" do
+      let(:user_1) { create(:user) }
+      let(:user_2) { create(:user) }
+
+      before do
+        user_2.update_column(:external_id, user_1.id.to_s)
+        create(:direct_affiliate, affiliate_user: user_2)
+      end
+
+      it "finds user by external_id and does not redirect" do
+        get :show, params: { external_id: user_2.external_id }
+
+        expect(response).to be_successful
+        expect(assigns[:affiliate_user]).to eq(user_2)
       end
     end
   end

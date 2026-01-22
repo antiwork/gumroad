@@ -1,20 +1,22 @@
 import * as React from "react";
 
 import { getPagedAffiliatedProducts } from "$app/data/affiliated_products";
+import { classNames } from "$app/utils/classNames";
 import { formatPriceCentsWithCurrencySymbol } from "$app/utils/currency";
 import { asyncVoid } from "$app/utils/promise";
 import { AbortError, assertResponseError } from "$app/utils/request";
 
-import { Button } from "$app/components/Button";
-import { useClientAlert } from "$app/components/ClientAlertProvider";
+import { Button, buttonVariants } from "$app/components/Button";
 import { CopyToClipboard } from "$app/components/CopyToClipboard";
 import { GlobalAffiliates } from "$app/components/GlobalAffiliates";
 import { Icon } from "$app/components/Icons";
 import { Pagination, PaginationProps } from "$app/components/Pagination";
 import { Popover } from "$app/components/Popover";
 import { ProductsLayout } from "$app/components/ProductsLayout";
+import { showAlert } from "$app/components/server-components/Alert";
 import { Stats as StatsComponent } from "$app/components/Stats";
-import Placeholder from "$app/components/ui/Placeholder";
+import { Placeholder, PlaceholderImage } from "$app/components/ui/Placeholder";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "$app/components/ui/Table";
 import { useDebouncedCallback } from "$app/components/useDebouncedCallback";
 import { useGlobalEventListener } from "$app/components/useGlobalEventListener";
 import { useOriginalLocation } from "$app/components/useOriginalLocation";
@@ -59,7 +61,7 @@ const StatsSection = (stats: Stats) => {
   const { locale } = useUserAgentInfo();
 
   return (
-    <div className="stats-grid" aria-label="Stats">
+    <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4" aria-label="Stats">
       <StatsComponent
         title="Revenue"
         description="Your gross sales from all affiliated products."
@@ -108,54 +110,50 @@ const AffiliatedProductsTable = ({
   }, [sort]);
 
   return (
-    <section className="paragraphs">
-      <table aria-live="polite" aria-busy={isLoading}>
-        <thead>
-          <tr>
-            <th {...thProps("product_name")} title="Sort by Product">
+    <section className="flex flex-col gap-4">
+      <Table aria-live="polite" className={classNames(isLoading && "pointer-events-none opacity-50")}>
+        <TableHeader>
+          <TableRow>
+            <TableHead {...thProps("product_name")} title="Sort by Product">
               Product
-            </th>
-            <th {...thProps("sales_count")} title="Sort by Sales">
+            </TableHead>
+            <TableHead {...thProps("sales_count")} title="Sort by Sales">
               Sales
-            </th>
-            <th title="Sort by Type">Type</th>
-            <th {...thProps("commission")} title="Sort by Commission">
+            </TableHead>
+            <TableHead title="Sort by Type">Type</TableHead>
+            <TableHead {...thProps("commission")} title="Sort by Commission">
               Commission
-            </th>
-            <th {...thProps("revenue")} title="Sort by Revenue">
+            </TableHead>
+            <TableHead {...thProps("revenue")} title="Sort by Revenue">
               Revenue
-            </th>
-            <th />
-          </tr>
-        </thead>
+            </TableHead>
+            <TableHead />
+          </TableRow>
+        </TableHeader>
 
-        <tbody>
+        <TableBody>
           {affiliatedProducts.map((affiliatedProduct) => (
-            <tr key={affiliatedProduct.url}>
-              <td>
+            <TableRow key={affiliatedProduct.url}>
+              <TableCell>
                 <a href={affiliatedProduct.url} title={affiliatedProduct.url} target="_blank" rel="noreferrer">
                   {affiliatedProduct.product_name}
                 </a>
-              </td>
+              </TableCell>
 
-              <td data-label="Sales" style={{ whiteSpace: "nowrap" }}>
+              <TableCell className="whitespace-nowrap">
                 {affiliatedProduct.sales_count.toLocaleString(userAgentInfo.locale)}
-              </td>
+              </TableCell>
 
-              <td data-label="Type" style={{ whiteSpace: "nowrap" }}>
+              <TableCell className="whitespace-nowrap">
                 {affiliatedProduct.affiliate_type === "direct_affiliate" ? "Direct" : "Gumroad"}
-              </td>
+              </TableCell>
 
-              <td data-label="Commission">
-                {(affiliatedProduct.fee_percentage / 100).toLocaleString([], { style: "percent" })}
-              </td>
+              <TableCell>{(affiliatedProduct.fee_percentage / 100).toLocaleString([], { style: "percent" })}</TableCell>
 
-              <td data-label="Revenue" style={{ whiteSpace: "nowrap" }}>
-                {affiliatedProduct.humanized_revenue}
-              </td>
+              <TableCell className="whitespace-nowrap">{affiliatedProduct.humanized_revenue}</TableCell>
 
-              <td>
-                <div className="actions">
+              <TableCell>
+                <div className="flex flex-wrap gap-3 lg:justify-end">
                   <CopyToClipboard tooltipPosition="bottom" copyTooltip="Copy link" text={affiliatedProduct.url}>
                     <Button>
                       <Icon name="link" />
@@ -163,11 +161,11 @@ const AffiliatedProductsTable = ({
                     </Button>
                   </CopyToClipboard>
                 </div>
-              </td>
-            </tr>
+              </TableCell>
+            </TableRow>
           ))}
-        </tbody>
-      </table>
+        </TableBody>
+      </Table>
       {pagination.pages > 1 ? (
         <Pagination onChangePage={(page) => loadAffiliatedProducts(page, sort)} pagination={pagination} />
       ) : null}
@@ -195,7 +193,7 @@ const Search = ({ onSearch, value }: SearchProps) => {
       aria-label="Toggle Search"
       trigger={
         <WithTooltip tip="Search" position="bottom">
-          <div className="button">
+          <div className={buttonVariants({ size: "default" })}>
             <Icon name="solid-search" />
           </div>
         </WithTooltip>
@@ -234,7 +232,6 @@ const AffiliatedPage = ({
   const [isShowingGlobalAffiliates, setIsShowingGlobalAffiliates] = React.useState(
     url.searchParams.get("affiliates") === "true",
   );
-  const { showAlert } = useClientAlert();
 
   useGlobalEventListener("popstate", () => {
     setIsShowingGlobalAffiliates(new URL(location.href).searchParams.get("affiliates") === "true");
@@ -315,9 +312,7 @@ const AffiliatedPage = ({
         <section className="p-4 md:p-8">
           {initialAffiliatedProducts.length === 0 ? (
             <Placeholder>
-              <figure>
-                <img src={placeholder} />
-              </figure>
+              <PlaceholderImage src={placeholder} />
               <h2>Become an affiliate and earn!</h2>
               Gumroad is a great place for you to make some side income, even if you're not actively creating your own
               products.
@@ -338,9 +333,7 @@ const AffiliatedPage = ({
               <StatsSection {...stats} />
               {state.affiliatedProducts.length === 0 ? (
                 <Placeholder>
-                  <figure>
-                    <img src={placeholder} />
-                  </figure>
+                  <PlaceholderImage src={placeholder} />
                   <h2>No affiliated products found.</h2>
                 </Placeholder>
               ) : (

@@ -26,6 +26,15 @@ import { assertResponseError } from "$app/utils/request";
 import { startTrackingForSeller, trackProductEvent } from "$app/utils/user_analytics";
 
 import { NavigationButton } from "$app/components/Button";
+import {
+  CartItem,
+  CartItemEnd,
+  CartItemFooter,
+  CartItemMain,
+  CartItemMedia,
+  CartItemTitle,
+  CartItemList,
+} from "$app/components/CartItemList";
 import { Icon } from "$app/components/Icons";
 import { useLoggedInUser } from "$app/components/LoggedInUser";
 import { Modal } from "$app/components/Modal";
@@ -46,6 +55,7 @@ import { Covers as CoversComponent } from "$app/components/Product/Covers";
 import { CtaButton } from "$app/components/Product/CtaButton";
 import { DiscountExpirationCountdown } from "$app/components/Product/DiscountExpirationCountdown";
 import { PriceTag } from "$app/components/Product/PriceTag";
+import { Ribbon } from "$app/components/Product/Ribbon";
 import { ShareSection } from "$app/components/Product/ShareSection";
 import { Thumbnail } from "$app/components/Product/Thumbnail";
 import { PublicFilesSettingsContext } from "$app/components/ProductEdit/ProductTab/DescriptionEditor";
@@ -58,6 +68,8 @@ import { showAlert } from "$app/components/server-components/Alert";
 import { PublicFileEmbed } from "$app/components/TiptapExtensions/PublicFileEmbed";
 import { ReviewCard } from "$app/components/TiptapExtensions/ReviewCard";
 import { UpsellCard } from "$app/components/TiptapExtensions/UpsellCard";
+import { Alert } from "$app/components/ui/Alert";
+import { Card, CardContent } from "$app/components/ui/Card";
 import { useAddThirdPartyAnalytics } from "$app/components/useAddThirdPartyAnalytics";
 import { useOnChange } from "$app/components/useOnChange";
 import { useOriginalLocation } from "$app/components/useOriginalLocation";
@@ -253,6 +265,11 @@ export const Product = ({
 
   const notForSaleMessage = getNotForSaleMessage(product);
   const [discountCode, setDiscountCode] = React.useState(initialDiscountCode);
+
+  React.useEffect(() => {
+    setDiscountCode(initialDiscountCode);
+  }, [initialDiscountCode]);
+
   const selectionAttributes = applySelection(product, discountCode?.valid ? discountCode.discount : null, selection);
   let { basePriceCents } = selectionAttributes;
   const { priceCents, discountedPriceCents, pppDiscounted, isPWYW, maxQuantity } = selectionAttributes;
@@ -315,33 +332,42 @@ export const Product = ({
     />
   ) : null;
 
+  const showPrice =
+    !product.recurrences &&
+    product.options.length === 0 &&
+    !product.rental?.rent_only &&
+    (basePriceCents !== 0 || product.pwyw);
+
   return (
-    <article className="product">
+    <article className="relative grid rounded border border-border bg-background lg:grid-cols-[2fr_1fr]">
       <Covers covers={product.covers} mainCoverId={product.main_cover_id} />
-      {product.quantity_remaining !== null ? (
-        <div className="ribbon">{`${product.quantity_remaining} left`}</div>
-      ) : null}
-      <section>
-        <header>
+      {product.quantity_remaining !== null ? <Ribbon>{product.quantity_remaining} left</Ribbon> : null}
+      <section className="lg:border-r">
+        <header className="grid gap-4 p-6 not-first:border-t">
           <h1 itemProp="name">{product.name}</h1>
         </header>
-        <section className="details">
-          {!product.recurrences &&
-          product.options.length === 0 &&
-          !product.rental?.rent_only &&
-          (basePriceCents !== 0 || product.pwyw) ? (
-            <PriceTag
-              currencyCode={product.currency_code}
-              oldPrice={discountedPriceCents < basePriceCents ? basePriceCents : undefined}
-              price={discountedPriceCents}
-              url={product.long_url}
-              isPayWhatYouWant={!!product.pwyw}
-              isSalesLimited={product.is_sales_limited}
-              creatorName={product.seller?.name}
-            />
+        <section className="grid grid-cols-[auto_1fr] gap-[1px] border-t border-border p-0 sm:grid-cols-[auto_auto_minmax(max-content,1fr)]">
+          {showPrice ? (
+            <div className="px-6 py-4 outline outline-offset-0 outline-border">
+              <PriceTag
+                currencyCode={product.currency_code}
+                oldPrice={discountedPriceCents < basePriceCents ? basePriceCents : undefined}
+                price={discountedPriceCents}
+                url={product.long_url}
+                isPayWhatYouWant={!!product.pwyw}
+                isSalesLimited={product.is_sales_limited}
+                creatorName={product.seller?.name}
+              />
+            </div>
           ) : null}
           {sellerByline ? (
-            <div style={{ display: "flex", alignItems: "center", gap: "var(--spacer-2)", flexWrap: "wrap" }}>
+            <div
+              className={classNames(
+                "flex flex-wrap items-center gap-2 px-6 py-4 outline outline-offset-0 outline-border",
+                !showPrice && "col-span-full sm:col-auto",
+                showPrice && !(product.ratings != null && product.ratings.count > 0) && "sm:col-[2/-1]",
+              )}
+            >
               {product.collaborating_user ? (
                 <>
                   {sellerByline} with{" "}
@@ -357,11 +383,13 @@ export const Product = ({
             </div>
           ) : null}
           {product.ratings != null && product.ratings.count > 0 ? (
-            <RatingsSummary className="max-sm:col-span-full" ratings={product.ratings} />
+            <div className="flex items-center px-6 py-4 outline outline-offset-0 outline-border max-sm:col-span-full">
+              <RatingsSummary ratings={product.ratings} />
+            </div>
           ) : null}
         </section>
         {purchase !== null ? (
-          <ExistingPurchaseStack
+          <ExistingPurchaseCard
             purchase={purchase}
             permalink={product.permalink}
             isPreorder={product.preorder !== null}
@@ -370,55 +398,51 @@ export const Product = ({
           />
         ) : null}
         {isBundle ? (
-          <section>
+          <section className="grid gap-4 border-t border-border p-6">
             <h2>This bundle contains...</h2>
-            <div className="cart" role="list">
+            <CartItemList>
               {product.bundle_products.map((bundleProduct) => {
                 const price = formatPriceCentsWithCurrencySymbol(bundleProduct.currency_code, bundleProduct.price, {
                   symbolFormat: "long",
                 });
                 return (
-                  <div role="listitem" key={bundleProduct.id}>
-                    <section>
-                      <figure>
-                        <Thumbnail url={bundleProduct.thumbnail_url} nativeType={bundleProduct.native_type} />
-                      </figure>
-                      <section>
+                  <CartItem key={bundleProduct.id} isBundleItem>
+                    <CartItemMedia className="h-28 w-28">
+                      <Thumbnail url={bundleProduct.thumbnail_url} nativeType={bundleProduct.native_type} />
+                    </CartItemMedia>
+                    <CartItemMain className="h-28">
+                      <CartItemTitle asChild>
                         <a href={bundleProduct.url}>
-                          <h4>{bundleProduct.name}</h4>
+                          <h4 className="font-bold">{bundleProduct.name}</h4>
                         </a>
-                        {bundleProduct.ratings ? (
-                          <section className="flex shrink-0 items-center gap-1" aria-label="Rating">
-                            <Icon name="solid-star" />
-                            {`${bundleProduct.ratings.average.toFixed(1)} (${bundleProduct.ratings.count})`}
-                          </section>
-                        ) : null}
-                        <footer>
-                          <ul>
-                            <li>
-                              <strong>Qty:</strong> {bundleProduct.quantity}
-                            </li>
-                            {bundleProduct.variant ? (
-                              <li>
-                                <strong>{variantLabel(bundleProduct.native_type)}:</strong> {bundleProduct.variant}
-                              </li>
-                            ) : null}
-                          </ul>
-                        </footer>
-                      </section>
-                      <section>
-                        <span className="current-price" aria-label="Price">
-                          {discountedPriceCents < basePriceCents ? <s>{price}</s> : price}
-                        </span>
-                      </section>
-                    </section>
-                  </div>
+                      </CartItemTitle>
+                      {bundleProduct.ratings ? (
+                        <div className="line-clamp-1 flex shrink-0 items-center gap-1" aria-label="Rating">
+                          <Icon name="solid-star" />
+                          {`${bundleProduct.ratings.average.toFixed(1)} (${bundleProduct.ratings.count})`}
+                        </div>
+                      ) : null}
+                      <span className="sr-only">Qty: {bundleProduct.quantity}</span>
+                      {bundleProduct.variant ? (
+                        <CartItemFooter>
+                          <span className="line-clamp-1">
+                            <strong>{variantLabel(bundleProduct.native_type)}:</strong> {bundleProduct.variant}
+                          </span>
+                        </CartItemFooter>
+                      ) : null}
+                    </CartItemMain>
+                    <CartItemEnd className="flex-row items-start gap-4 p-4">
+                      <span className="current-price" aria-label="Price">
+                        {discountedPriceCents < basePriceCents ? <s>{price}</s> : price}
+                      </span>
+                    </CartItemEnd>
+                  </CartItem>
                 );
               })}
-            </div>
+            </CartItemList>
           </section>
         ) : null}
-        <section>
+        <section className="border-t border-border p-6">
           {pageLoaded ? (
             <PublicFilesSettingsContext.Provider value={publicFilesSettings}>
               <EditorContent className="rich-text" editor={descriptionEditor} />
@@ -429,22 +453,22 @@ export const Product = ({
         </section>
       </section>
       <section>
-        <section>
+        <section className="grid gap-4 p-6 not-first:border-t">
           {notForSaleMessage ? (
-            <div role="status" className="warning">
+            <Alert role="status" variant="warning">
               {notForSaleMessage}
-            </div>
+            </Alert>
           ) : product.native_type === "commission" ? (
-            <div role="status" className="info">
+            <Alert role="status" variant="info">
               Secure your order with a {`${COMMISSION_DEPOSIT_PROPORTION * 100}%`} deposit today; the remaining balance
               will be charged upon completion.
-            </div>
+            </Alert>
           ) : null}
           {discountCode ? (
             discountCode.valid ? (
               (discountedPriceCents < priceCents || discountCode.discount.minimum_quantity) && !pppDiscounted ? (
-                <div role="status" className="success">
-                  <div className="paragraphs">
+                <Alert role="status" variant="success">
+                  <div className="flex flex-col gap-4">
                     {discountCode.discount.minimum_quantity
                       ? `Get ${
                           discountCode.discount.type === "percent"
@@ -487,16 +511,16 @@ export const Product = ({
                       />
                     ) : null}
                   </div>
-                </div>
+                </Alert>
               ) : null
             ) : (
-              <div role="status" className="danger">
+              <Alert role="status" variant="danger">
                 {discountCode.error_code === "sold_out"
                   ? "Sorry, the discount code you wish to use has expired."
                   : discountCode.error_code === "invalid_offer"
                     ? "Sorry, the discount code you wish to use is invalid."
                     : "Sorry, the discount code you wish to use is inactive."}
-              </div>
+              </Alert>
             )
           ) : null}
           <ConfigurationSelector
@@ -507,39 +531,37 @@ export const Product = ({
             ref={configurationSelectorRef}
           />
           {product.ppp_details && pppDiscounted ? (
-            <div role="status" className="info">
-              <div>
-                This product supports purchasing power parity. Because you're located in{" "}
-                <b>{product.ppp_details.country}</b>, the price has been discounted by{" "}
-                <b>
-                  {(Math.round((1 - discountedPriceCents / priceCents) * 100) / 100).toLocaleString(undefined, {
-                    style: "percent",
-                  })}
-                </b>{" "}
-                to{" "}
-                <b>
-                  {formatPriceCentsWithCurrencySymbol(product.currency_code, discountedPriceCents, {
-                    symbolFormat: "long",
-                  })}
-                </b>
-                .
-                {discountCode?.valid
-                  ? " This discount will be applied because it is greater than the offer code discount."
-                  : null}
-              </div>
-            </div>
+            <Alert role="status" variant="info">
+              This product supports purchasing power parity. Because you're located in{" "}
+              <b>{product.ppp_details.country}</b>, the price has been discounted by{" "}
+              <b>
+                {(Math.round((1 - discountedPriceCents / priceCents) * 100) / 100).toLocaleString(undefined, {
+                  style: "percent",
+                })}
+              </b>{" "}
+              to{" "}
+              <b>
+                {formatPriceCentsWithCurrencySymbol(product.currency_code, discountedPriceCents, {
+                  symbolFormat: "long",
+                })}
+              </b>
+              .
+              {discountCode?.valid
+                ? " This discount will be applied because it is greater than the offer code discount."
+                : null}
+            </Alert>
           ) : null}
           {product.free_trial ? (
-            <div role="status" className="info">
+            <Alert role="status" variant="info">
               All memberships include a {product.free_trial.duration.amount} {product.free_trial.duration.unit} free
               trial
-            </div>
+            </Alert>
           ) : null}
           {product.duration_in_months ? (
-            <div role="status" className="info">
+            <Alert role="status" variant="info">
               This membership will automatically end after{" "}
               {product.duration_in_months === 1 ? "one month" : `${product.duration_in_months} months`}
-            </div>
+            </Alert>
           ) : null}
           <CtaButton
             ref={ctaButtonRef}
@@ -554,40 +576,42 @@ export const Product = ({
             }}
           />
           {product.sales_count !== null ? (
-            <div role="status" className="info">
-              <span>
-                <strong>{product.sales_count.toLocaleString()}</strong>{" "}
-                {product.recurrences
-                  ? "member"
-                  : product.preorder
-                    ? "pre-order"
-                    : product.price_cents > 0 || product.options.some((option) => option.price_difference_cents)
-                      ? "sale"
-                      : "download"}
-                {product.sales_count === 1 ? "" : "s"}
-              </span>
-            </div>
+            <Alert role="status" variant="info">
+              <strong>{product.sales_count.toLocaleString()}</strong>{" "}
+              {product.recurrences
+                ? "member"
+                : product.preorder
+                  ? "pre-order"
+                  : product.price_cents > 0 || product.options.some((option) => option.price_difference_cents)
+                    ? "sale"
+                    : "download"}
+              {product.sales_count === 1 ? "" : "s"}
+            </Alert>
           ) : null}
           {product.preorder ? (
-            <div role="status" className="info">
+            <Alert role="status" variant="info">
               Available on {formatDate(parseISO(product.preorder.release_date))}
-            </div>
+            </Alert>
           ) : null}
           {product.streamable ? (
-            <div role="status" className="info">
+            <Alert role="status" variant="info">
               Watch link provided after purchase
-            </div>
+            </Alert>
           ) : null}
           {product.summary || product.attributes.length > 0 ? (
-            <div className="stack">
-              {product.summary ? <p>{product.summary}</p> : null}
+            <Card>
+              {product.summary ? (
+                <CardContent asChild>
+                  <p>{product.summary}</p>
+                </CardContent>
+              ) : null}
               {product.attributes.map(({ name, value }, idx) => (
-                <div key={idx}>
-                  <h5>{name}</h5>
+                <CardContent key={idx}>
+                  <h5 className="grow font-bold">{name}</h5>
                   <div>{value}</div>
-                </div>
+                </CardContent>
               ))}
-            </div>
+            </Card>
           ) : null}
           <ShareSection product={product} selection={selection} wishlists={wishlists} />
           {product.refund_policy ? (
@@ -614,7 +638,7 @@ const Covers = ({ covers, mainCoverId }: { covers: AssetPreview[]; mainCoverId: 
   );
 };
 
-const ExistingPurchaseStack = ({
+const ExistingPurchaseCard = ({
   permalink,
   isPreorder,
   isBundle,
@@ -644,15 +668,15 @@ const ExistingPurchaseStack = ({
   if (!purchase.should_show_receipt) return null;
 
   return (
-    <section>
-      <div className="stack">
+    <section className="border-t border-border p-6">
+      <Card>
         {purchase.membership ? (
           <>
-            <div>
-              <h5>{purchase.membership.tier_name}</h5>
+            <CardContent>
+              <h5 className="grow font-bold">{purchase.membership.tier_name}</h5>
               {purchase.total_price_including_tax_and_shipping}
-            </div>
-            <div>
+            </CardContent>
+            <CardContent>
               <NavigationButton
                 href={purchase.membership.manage_url}
                 target="_blank"
@@ -662,25 +686,28 @@ const ExistingPurchaseStack = ({
                     permalink,
                   }).catch(assertResponseError)
                 }
+                className="grow basis-0"
               >
                 {purchase.subscription_has_lapsed ? "Restart membership" : "Manage membership"}
               </NavigationButton>
               {viewContentButton}
-            </div>
+            </CardContent>
           </>
         ) : (
-          <li>
-            <h3>
-              {isBundle
-                ? purchase.is_gift_receiver_purchase
-                  ? "You've received this bundle as a gift"
-                  : "You've purchased this bundle"
-                : purchase.is_gift_receiver_purchase
-                  ? "You've received this product as a gift"
-                  : "You've purchased this product"}
-            </h3>
-            {viewContentButton}
-          </li>
+          <CardContent asChild>
+            <li>
+              <h3 className="grow">
+                {isBundle
+                  ? purchase.is_gift_receiver_purchase
+                    ? "You've received this bundle as a gift"
+                    : "You've purchased this bundle"
+                  : purchase.is_gift_receiver_purchase
+                    ? "You've received this product as a gift"
+                    : "You've purchased this product"}
+              </h3>
+              {viewContentButton}
+            </li>
+          </CardContent>
         )}
         {!isPreorder && !isBundle && allowRating ? (
           <ReviewForm
@@ -688,9 +715,10 @@ const ExistingPurchaseStack = ({
             purchaseId={purchase.id}
             review={purchase.review}
             purchaseEmailDigest={purchase.email_digest}
+            className="flex flex-wrap items-center justify-between gap-4 p-4"
           />
         ) : null}
-      </div>
+      </Card>
     </section>
   );
 };
@@ -739,8 +767,8 @@ const Reviews = ({
   if (ratings.count === 0) return null;
 
   return (
-    <section>
-      <header>
+    <section className="grid gap-4 p-6 not-first:border-t">
+      <header className="flex items-center justify-between">
         <h3>Ratings</h3>
         <div className="flex shrink-0 items-center gap-1">
           <Icon name="solid-star" />
@@ -758,7 +786,7 @@ const Reviews = ({
         ))}
       </section>
       {state.reviews.length ? (
-        <section className="paragraphs" style={{ marginTop: "var(--spacer-2)" }}>
+        <section className="flex flex-col gap-4" style={{ marginTop: "var(--spacer-2)" }}>
           {state.reviews.map((review, idx) => (
             <Review
               key={review.id}
@@ -769,7 +797,11 @@ const Reviews = ({
             />
           ))}
           {state.pagination.page < state.pagination.pages ? (
-            <button className="underline" onClick={() => void loadNextPage()} disabled={isLoading}>
+            <button
+              className="cursor-pointer underline all-unset"
+              onClick={() => void loadNextPage()}
+              disabled={isLoading}
+            >
               Load more
             </button>
           ) : null}
@@ -849,7 +881,7 @@ const RefundPolicyInfo = ({ refundPolicy, permalink }: { refundPolicy: RefundPol
           title={refundPolicy.title}
           footer={<p>{lastUpdated}</p>}
         >
-          <div className="paragraphs">
+          <div className="flex flex-col gap-4">
             <div
               dangerouslySetInnerHTML={{
                 __html: refundPolicy.fine_print,

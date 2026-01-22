@@ -41,7 +41,7 @@ describe("Checkout upsells page", type: :system, js: true) do
         expect(page).to have_text("Product 1 - Untitled 2")
       end
       upsell1_row.click
-      within_section "Upsell 1", section_element: :aside do
+      within_modal "Upsell 1" do
         within_section "Details" do
           expect(page).to have_text("Offer text Take advantage of this excellent offer", normalize_ws: true)
           expect(page).to have_text("Uses 4", normalize_ws: true)
@@ -71,7 +71,7 @@ describe("Checkout upsells page", type: :system, js: true) do
         expect(page).to have_text("Product 2")
       end
       upsell2_row.click
-      within_section "Upsell 2", section_element: :aside do
+      within_modal "Upsell 2" do
         within_section "Details" do
           expect(page).to have_text("Offer text Take advantage of this excellent offer", normalize_ws: true)
           expect(page).to have_text("Uses 5", normalize_ws: true)
@@ -98,7 +98,7 @@ describe("Checkout upsells page", type: :system, js: true) do
 
       universal_upsell_row = find(:table_row, { "Upsell" => "Universal Upsell" })
       universal_upsell_row.click
-      within_section "Universal Upsell", section_element: :aside do
+      within_modal "Universal Upsell" do
         within_section "Selected products" do
           expect(page).to have_content("All products")
         end
@@ -212,7 +212,7 @@ describe("Checkout upsells page", type: :system, js: true) do
 
       find(:table_row, { "Upsell" => "Complete course upsell" }).click
 
-      within_section "Complete course upsell", section_element: :aside do
+      within_modal "Complete course upsell" do
         within_section "Details" do
           expect(page).to have_text("Offer text Enhance your learning experience", normalize_ws: true)
           expect(page).to have_text("Uses 0", normalize_ws: true)
@@ -336,7 +336,7 @@ describe("Checkout upsells page", type: :system, js: true) do
 
       find(:table_row, { "Upsell" => "Complete course upsell" }).click
 
-      within_section "Complete course upsell", section_element: :aside do
+      within_modal "Complete course upsell" do
         within_section "Details" do
           expect(page).to have_text("Offer text Enhance your learning experience", normalize_ws: true)
           expect(page).to have_text("Discount 20%", normalize_ws: true)
@@ -462,7 +462,7 @@ describe("Checkout upsells page", type: :system, js: true) do
 
       find(:table_row, { "Upsell" => "Complete course upsell" }).click
 
-      within_section "Complete course upsell", section_element: :aside do
+      within_modal "Complete course upsell" do
         within_section "Details" do
           expect(page).to have_text("Offer text Enhance your learning experience", normalize_ws: true)
           expect(page).to have_text("Discount 20%", normalize_ws: true)
@@ -518,7 +518,7 @@ describe("Checkout upsells page", type: :system, js: true) do
 
       find(:table_row, { "Upsell" => "Complete course upsell" }).click
 
-      within_section "Complete course upsell", section_element: :aside do
+      within_modal "Complete course upsell" do
         within_section "Details" do
           expect(page).to have_text("Offer text Enhance your learning experience", normalize_ws: true)
           expect(page).to have_text("Uses 4", normalize_ws: true)
@@ -608,7 +608,7 @@ describe("Checkout upsells page", type: :system, js: true) do
     visit checkout_upsells_path
 
     find(:table_row, { "Upsell" => "Upsell 2" }).click
-    within_section "Upsell 2", section_element: :aside do
+    within_modal "Upsell 2" do
       within_section "Details" do
         expect(page).to have_text("Status Live", normalize_ws: true)
       end
@@ -618,7 +618,7 @@ describe("Checkout upsells page", type: :system, js: true) do
     expect(page).to have_alert(text: "Upsell paused and will not appear at checkout.")
 
     find(:table_row, { "Upsell" => "Upsell 2", "Status" => "Paused" }).click
-    within_section "Upsell 2", section_element: :aside do
+    within_modal "Upsell 2" do
       within_section "Details" do
         expect(page).to have_text("Status Paused", normalize_ws: true)
       end
@@ -633,7 +633,7 @@ describe("Checkout upsells page", type: :system, js: true) do
     visit checkout_upsells_path
 
     find(:table_row, { "Upsell" => "Upsell 2", "Status" => "Paused" }).click
-    within_section "Upsell 2", section_element: :aside do
+    within_modal "Upsell 2" do
       within_section "Details" do
         expect(page).to have_text("Status Paused", normalize_ws: true)
       end
@@ -643,7 +643,7 @@ describe("Checkout upsells page", type: :system, js: true) do
     expect(page).to have_alert(text: "Upsell resumed and will appear at checkout.")
 
     find(:table_row, { "Upsell" => "Upsell 2", "Status" => "Live" }).click
-    within_section "Upsell 2", section_element: :aside do
+    within_modal "Upsell 2" do
       within_section "Details" do
         expect(page).to have_text("Status Live", normalize_ws: true)
       end
@@ -675,7 +675,7 @@ describe("Checkout upsells page", type: :system, js: true) do
 
     find(:table_row, { "Upsell" => "Complete course upsell" }).click
 
-    within_section "Complete course upsell", section_element: :aside do
+    within_modal "Complete course upsell" do
       within_section "Details" do
         expect(page).to have_text("Offer text Enhance your learning experience", normalize_ws: true)
         expect(page).to have_text("Uses 0", normalize_ws: true)
@@ -733,7 +733,7 @@ describe("Checkout upsells page", type: :system, js: true) do
 
     find(:table_row, { "Upsell" => "Complete course upsell" }).click
 
-    within_section "Complete course upsell", section_element: :aside do
+    within_modal "Complete course upsell" do
       within_section "Details" do
         expect(page).to have_text("Offer text Enhance your learning experience", normalize_ws: true)
         expect(page).to have_text("Discount 20%", normalize_ws: true)

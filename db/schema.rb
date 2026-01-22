@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[7.1].define(version: 2025_10_14_161000) do
+ActiveRecord::Schema[7.1].define(version: 2026_11_19_011937) do
   create_table "active_storage_attachments", charset: "utf8mb4", collation: "utf8mb4_unicode_ci", force: :cascade do |t|
     t.string "name", limit: 191, null: false
     t.string "record_type", limit: 191, null: false
@@ -413,6 +413,7 @@ ActiveRecord::Schema[7.1].define(version: 2025_10_14_161000) do
     t.boolean "pay_in_installments", default: false, null: false
     t.index ["cart_id", "product_id", "deleted_at"], name: "index_cart_products_on_cart_id_and_product_id_and_deleted_at", unique: true
     t.index ["cart_id"], name: "index_cart_products_on_cart_id"
+    t.index ["deleted_at", "cart_id"], name: "index_cart_products_on_deleted_at_and_cart_id"
     t.index ["product_id"], name: "index_cart_products_on_product_id"
   end
 
@@ -430,6 +431,7 @@ ActiveRecord::Schema[7.1].define(version: 2025_10_14_161000) do
     t.string "ip_address"
     t.index ["browser_guid"], name: "index_carts_on_browser_guid"
     t.index ["created_at"], name: "index_carts_on_created_at"
+    t.index ["deleted_at", "updated_at"], name: "index_carts_on_deleted_at_and_updated_at"
     t.index ["email"], name: "index_carts_on_email"
     t.index ["order_id"], name: "index_carts_on_order_id"
     t.index ["updated_at"], name: "index_carts_on_updated_at"
@@ -1121,8 +1123,10 @@ ActiveRecord::Schema[7.1].define(version: 2025_10_14_161000) do
     t.string "native_type", default: "digital", null: false
     t.integer "discover_fee_per_thousand", default: 100, null: false
     t.string "support_email"
+    t.integer "default_offer_code_id"
     t.index ["banned_at"], name: "index_links_on_banned_at"
     t.index ["custom_permalink"], name: "index_links_on_custom_permalink", length: 191
+    t.index ["default_offer_code_id"], name: "index_links_on_default_offer_code_id"
     t.index ["deleted_at"], name: "index_links_on_deleted_at"
     t.index ["showcaseable"], name: "index_links_on_showcaseable"
     t.index ["taxonomy_id"], name: "index_links_on_taxonomy_id"
@@ -2452,6 +2456,17 @@ ActiveRecord::Schema[7.1].define(version: 2025_10_14_161000) do
     t.index ["user_id", "state"], name: "index_user_compliance_info_requests_on_user_id_and_state"
   end
 
+  create_table "user_tax_forms", charset: "utf8mb4", collation: "utf8mb4_unicode_ci", force: :cascade do |t|
+    t.bigint "user_id", null: false
+    t.integer "tax_year", null: false
+    t.string "tax_form_type", null: false
+    t.text "json_data"
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.index ["user_id", "tax_year", "tax_form_type"], name: "index_user_tax_forms_on_user_id_and_tax_year_and_tax_form_type", unique: true
+    t.index ["user_id"], name: "index_user_tax_forms_on_user_id"
+  end
+
   create_table "users", charset: "utf8mb4", collation: "utf8mb4_unicode_ci", force: :cascade do |t|
     t.string "email", default: ""
     t.string "encrypted_password", limit: 128, default: "", null: false
@@ -2730,5 +2745,4 @@ ActiveRecord::Schema[7.1].define(version: 2025_10_14_161000) do
 
   add_foreign_key "active_storage_attachments", "active_storage_blobs", column: "blob_id"
   add_foreign_key "active_storage_variant_records", "active_storage_blobs", column: "blob_id"
-  add_foreign_key "installment_plan_snapshots", "payment_options"
 end

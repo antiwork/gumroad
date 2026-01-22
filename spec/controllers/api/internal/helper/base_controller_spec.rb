@@ -7,7 +7,7 @@ describe Api::Internal::Helper::BaseController do
 
   controller(described_class) do
     before_action :authorize_hmac_signature!, only: :index
-    before_action :authorize_helper_token!, only: :new
+    skip_before_action :authorize_helper_token!, only: :index
 
     def index
       render json: { success: true }

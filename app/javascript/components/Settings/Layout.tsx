@@ -1,4 +1,4 @@
-import cx from "classnames";
+import { Link } from "@inertiajs/react";
 import * as React from "react";
 
 import { SettingPage as Page } from "$app/parsers/settings";
@@ -23,11 +23,10 @@ type Props = {
   pages: Page[];
   currentPage: Page;
   children: React.ReactNode;
-  hasAside?: boolean;
   canUpdate?: boolean;
 };
 
-export const Layout = ({ onSave, pages, currentPage, children, hasAside, canUpdate }: Props) => (
+export const Layout = ({ onSave, pages, currentPage, children, canUpdate }: Props) => (
   <>
     <PageHeader
       className="sticky-top"
@@ -42,12 +41,12 @@ export const Layout = ({ onSave, pages, currentPage, children, hasAside, canUpda
     >
       <Tabs>
         {pages.map((page) => (
-          <Tab key={page} href={Routes[`settings_${page}_path`]()} isSelected={currentPage === page}>
-            {PAGE_TITLES[page]}
+          <Tab key={page} isSelected={currentPage === page} asChild>
+            <Link href={Routes[`settings_${page}_path`]()}>{PAGE_TITLES[page]}</Link>
           </Tab>
         ))}
       </Tabs>
     </PageHeader>
-    <div className={cx({ squished: hasAside })}>{children}</div>
+    <div>{children}</div>
   </>
 );

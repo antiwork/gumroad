@@ -16,13 +16,15 @@ describe("Product checkout with tipping", type: :system, js: true) do
       add_to_cart(product2)
       fill_checkout_form(product2)
 
-      expect(page).to have_radio_button("0%", checked: true)
+      expect(page).to have_radio_button("No Tip", checked: true)
+      expect(page).to have_text("Add a tip? US$0", normalize_ws: true)
 
-      choose "10%"
+      choose "20%"
 
-      expect(page).to have_text("Subtotal US$40", normalize_ws: true)
-      expect(page).to have_text("Tip US$4", normalize_ws: true)
-      expect(page).to have_text("Total US$44", normalize_ws: true)
+      expect(page).to have_field("Custom tip", with: "")
+      expect(page).to have_text("Subtotal US$48", normalize_ws: true)
+      expect(page).to have_text("Add a tip? US$8", normalize_ws: true)
+      expect(page).to have_text("Total US$48", normalize_ws: true)
       click_on "Pay"
 
       expect(page).to have_alert(text: "Your purchase was successful! We sent a receipt to test@gumroad.com.")
@@ -30,14 +32,14 @@ describe("Product checkout with tipping", type: :system, js: true) do
       purchase1 = Purchase.last
       expect(purchase1).to be_successful
       expect(purchase1.link).to eq(product1)
-      expect(purchase1.price_cents).to eq(2200)
-      expect(purchase1.tip.value_cents).to eq(200)
+      expect(purchase1.price_cents).to eq(2400)
+      expect(purchase1.tip.value_cents).to eq(400)
 
       purchase2 = Purchase.second_to_last
       expect(purchase2).to be_successful
       expect(purchase2.link).to eq(product2)
-      expect(purchase2.price_cents).to eq(2200)
-      expect(purchase2.tip.value_cents).to eq(200)
+      expect(purchase2.price_cents).to eq(2400)
+      expect(purchase2.tip.value_cents).to eq(400)
     end
 
     it "allows the buyer to tip a fixed amount" do
@@ -47,13 +49,12 @@ describe("Product checkout with tipping", type: :system, js: true) do
       add_to_cart(product2)
       fill_checkout_form(product2)
 
-      expect(page).to have_radio_button("0%", checked: true)
+      expect(page).to have_radio_button("No Tip", checked: true)
 
-      choose "Other"
-      fill_in "Tip", with: 20
+      fill_in "Custom tip", with: 20
 
-      expect(page).to have_text("Subtotal US$30", normalize_ws: true)
-      expect(page).to have_text("Tip US$20", normalize_ws: true)
+      expect(page).to have_text("Subtotal US$50", normalize_ws: true)
+      expect(page).to have_text("Add a tip? US$20", normalize_ws: true)
       expect(page).to have_text("Total US$50", normalize_ws: true)
       click_on "Pay"
 
@@ -81,11 +82,12 @@ describe("Product checkout with tipping", type: :system, js: true) do
         click_on "Donate"
         fill_checkout_form(coffee_product)
 
-        expect(page).not_to have_text("Add a tip")
-        expect(page).not_to have_radio_button("0%")
-        expect(page).not_to have_radio_button("10%")
+        expect(page).not_to have_text("Add a tip?")
+        expect(page).not_to have_radio_button("No Tip")
+        expect(page).not_to have_radio_button("15%")
         expect(page).not_to have_radio_button("20%")
-        expect(page).not_to have_radio_button("Other")
+        expect(page).not_to have_radio_button("25%")
+        expect(page).not_to have_field("Custom tip")
 
         expect(page).to have_text("Subtotal US$10", normalize_ws: true)
         expect(page).to have_text("Total US$10", normalize_ws: true)
@@ -94,17 +96,18 @@ describe("Product checkout with tipping", type: :system, js: true) do
         add_to_cart(product)
         fill_checkout_form(product)
 
-        expect(page).to have_text("Add a tip")
-        expect(page).to have_radio_button("0%", checked: true)
-        expect(page).to have_radio_button("10%")
+        expect(page).to have_text("Add a tip?")
+        expect(page).to have_radio_button("No Tip", checked: true)
+        expect(page).to have_radio_button("15%")
         expect(page).to have_radio_button("20%")
-        expect(page).to have_radio_button("Other")
+        expect(page).to have_radio_button("25%")
+        expect(page).to have_field("Custom tip")
 
-        choose "10%"
+        choose "20%"
 
-        expect(page).to have_text("Subtotal US$25", normalize_ws: true)
-        expect(page).to have_text("Tip US$2.50", normalize_ws: true)
-        expect(page).to have_text("Total US$27.50", normalize_ws: true)
+        expect(page).to have_text("Subtotal US$30", normalize_ws: true)
+        expect(page).to have_text("Add a tip? US$5", normalize_ws: true)
+        expect(page).to have_text("Total US$30", normalize_ws: true)
         click_on "Pay"
 
         expect(page).to have_alert(text: "Your purchase was successful! We sent a receipt to test@gumroad.com.")
@@ -112,137 +115,49 @@ describe("Product checkout with tipping", type: :system, js: true) do
         purchase1 = Purchase.last
         expect(purchase1).to be_successful
         expect(purchase1.link).to eq(coffee_product)
-        expect(purchase1.price_cents).to eq(1100)
-        expect(purchase1.tip.value_cents).to eq(100)
+        expect(purchase1.price_cents).to eq(1200)
+        expect(purchase1.tip.value_cents).to eq(200)
 
         purchase2 = Purchase.second_to_last
         expect(purchase2).to be_successful
         expect(purchase2.link).to eq(product)
-        expect(purchase2.price_cents).to eq(1650)
-        expect(purchase2.tip.value_cents).to eq(150)
+        expect(purchase2.price_cents).to eq(1800)
+        expect(purchase2.tip.value_cents).to eq(300)
       end
     end
   end
 
-  context "when the cart is free," do
+  context "when the cart is free" do
     let(:seller2) { create(:user, :eligible_for_service_products, tipping_enabled: true, name: "Seller 2", username: "seller2", email: "seller2@example.com", payment_address: "seller2@example.com") }
-    let(:free_product1) { create(:product, name: "Free Product 1", user: seller, price_cents: 0) }
-    let(:free_product2) { create(:product, name: "Free Product 2", user: seller, price_cents: 0) }
-    let(:free_product3) { create(:product, name: "Free Product 3", user: seller2, price_cents: 0) }
+    let(:free_product1) { create(:product, name: "Free Product", user: seller, price_cents: 0) }
+    let(:free_product2) { create(:product, name: "Free Product 2", user: seller2, price_cents: 0) }
 
-    it "only allows the buyer to tip a fixed amount" do
-      visit free_product2.long_url
-      add_to_cart(free_product2, pwyw_price: 0)
+    it "does not show tip selector and allows checkout without tip" do
       visit free_product1.long_url
       add_to_cart(free_product1, pwyw_price: 0)
+      visit free_product2.long_url
+      add_to_cart(free_product2, pwyw_price: 0)
 
+      expect(page).not_to have_text("Add a tip? $0")
       expect(page).not_to have_radio_button("0%")
       expect(page).not_to have_radio_button("10%")
       expect(page).not_to have_radio_button("20%")
       expect(page).not_to have_radio_button("Other")
+      expect(page).not_to have_field("Tip")
 
-      fill_in "Tip", with: 5
+      check_out(free_product1, is_free: true)
 
-      expect(page).not_to have_radio_button("0%")
-      expect(page).not_to have_radio_button("10%")
-      expect(page).not_to have_radio_button("20%")
-      expect(page).not_to have_radio_button("Other")
+      purchase = Purchase.last
+      expect(purchase).to be_successful
+      expect(purchase.link).to eq(free_product1)
+      expect(purchase.price_cents).to eq(0)
+      expect(purchase.tip).to be_nil
 
-      fill_checkout_form(free_product2)
-
-      expect(page).to have_text("Subtotal US$0", normalize_ws: true)
-      expect(page).to have_text("Tip US$5", normalize_ws: true)
-      expect(page).to have_text("Total US$5", normalize_ws: true)
-      click_on "Pay"
-
-      expect(page).to have_alert(text: "Your purchase was successful! We sent a receipt to test@gumroad.com.")
-
-      purchase_free_product2 = Purchase.last
-      expect(purchase_free_product2).to be_successful
-      expect(purchase_free_product2.link).to eq(free_product2)
-      expect(purchase_free_product2.price_cents).to eq(0)
-      expect(purchase_free_product2.tip).to be_nil
-
-      purchase_free_product1 = Purchase.second_to_last
-      expect(purchase_free_product1).to be_successful
-      expect(purchase_free_product1.link).to eq(free_product1)
-      expect(purchase_free_product1.price_cents).to eq(500)
-      expect(purchase_free_product1.tip.value_cents).to eq(500)
-    end
-
-    context "for single creator" do
-      it "applies full tip to first product when tip meets minimum" do
-        visit free_product2.long_url
-        add_to_cart(free_product2, pwyw_price: 0)
-        visit free_product1.long_url
-        add_to_cart(free_product1, pwyw_price: 0)
-
-        fill_in "Tip", with: 0.99
-        fill_checkout_form(free_product1)
-        expect(page).to have_text("Total US$0.99", normalize_ws: true)
-        click_on "Pay"
-
-        expect(page).to have_alert(text: "Your purchase was successful!")
-
-        purchase1 = Purchase.second_to_last
-        purchase2 = Purchase.last
-
-        expect(purchase1.tip.value_cents).to eq(99)
-        expect(purchase1.price_cents).to eq(99)
-
-        expect(purchase2.tip).to be_nil
-        expect(purchase2.price_cents).to eq(0)
-      end
-
-      it "shows backend validation error when tip below minimum" do
-        visit free_product1.long_url
-        add_to_cart(free_product1, pwyw_price: 0)
-
-        fill_in "Tip", with: 0.5
-        fill_checkout_form(free_product1)
-        expect(page).to have_text("Total US$0.5", normalize_ws: true)
-        click_on "Pay"
-
-        expect(page).to have_text("The amount must be at least $0.99.")
-      end
-    end
-
-    context "for multiple creators" do
-      it "distributes tip per creator to first product from each when tip meets minimum" do
-        visit free_product3.long_url
-        add_to_cart(free_product3, pwyw_price: 0)
-        visit free_product1.long_url
-        add_to_cart(free_product1, pwyw_price: 0)
-
-        fill_in "Tip", with: 1.98
-        fill_checkout_form(free_product1)
-        expect(page).to have_text("Total US$1.98", normalize_ws: true)
-        click_on "Pay"
-
-        expect(page).to have_alert(text: "Your purchase was successful!")
-
-        purchase1 = Purchase.second_to_last
-        purchase3 = Purchase.last
-
-        expect(purchase1.tip.value_cents).to eq(99)
-        expect(purchase1.price_cents).to eq(99)
-        expect(purchase3.tip.value_cents).to eq(99)
-        expect(purchase3.price_cents).to eq(99)
-      end
-
-      it "shows backend validation error with per-creator minimum when tip below minimum" do
-        visit free_product3.long_url
-        add_to_cart(free_product3, pwyw_price: 0)
-        visit free_product1.long_url
-        add_to_cart(free_product1, pwyw_price: 0)
-
-        fill_in "Tip", with: 1.5
-        fill_checkout_form(free_product1)
-        expect(page).to have_text("Total US$1.5", normalize_ws: true)
-        click_on "Pay"
-
-        expect(page).to have_text("The amount must be at least $0.99.", count: 2)
-      end
+      purchase2 = Purchase.second_to_last
+      expect(purchase2).to be_successful
+      expect(purchase2.link).to eq(free_product2)
+      expect(purchase2.price_cents).to eq(0)
+      expect(purchase2.tip).to be_nil
     end
   end
 
@@ -255,7 +170,7 @@ describe("Product checkout with tipping", type: :system, js: true) do
       fill_checkout_form(membership_product)
       wait_for_ajax
 
-      expect(page).not_to have_text("Add a tip")
+      expect(page).not_to have_text("Add a tip?")
 
       click_on "Pay"
 
@@ -277,7 +192,7 @@ describe("Product checkout with tipping", type: :system, js: true) do
       fill_checkout_form(product)
       wait_for_ajax
 
-      expect(page).not_to have_text("Add a tip")
+      expect(page).not_to have_text("Add a tip?")
 
       click_on "Pay"
 
@@ -301,10 +216,11 @@ describe("Product checkout with tipping", type: :system, js: true) do
 
       add_to_cart(product1)
 
-      expect(page).to have_radio_button("5%", checked: false)
+      expect(page).to have_radio_button("No Tip", checked: false)
       expect(page).to have_radio_button("15%", checked: true)
+      expect(page).to have_radio_button("20%", checked: false)
       expect(page).to have_radio_button("25%", checked: false)
-      expect(page).to have_radio_button("Other", checked: false)
+      expect(page).to have_field("Custom tip", placeholder: "Custom tip")
     end
   end
 
@@ -323,9 +239,9 @@ describe("Product checkout with tipping", type: :system, js: true) do
       choose "20%"
       wait_for_ajax
 
-      expect(page).to have_text("Subtotal US$30", normalize_ws: true)
+      expect(page).to have_text("Subtotal US$35", normalize_ws: true)
       expect(page).to have_text("Discounts #{offer_code.code} US$-5", normalize_ws: true)
-      expect(page).to have_text("Tip US$5", normalize_ws: true)
+      expect(page).to have_text("Add a tip? US$5", normalize_ws: true)
       expect(page).to have_text("Total US$30", normalize_ws: true)
 
       click_on "Pay"
@@ -357,8 +273,8 @@ describe("Product checkout with tipping", type: :system, js: true) do
       choose "20%"
       wait_for_ajax
 
-      expect(page).to have_text("Subtotal US$4.34", normalize_ws: true)
-      expect(page).to have_text("Tip US$0.87", normalize_ws: true)
+      expect(page).to have_text("Subtotal US$5.21", normalize_ws: true)
+      expect(page).to have_text("Add a tip? US$0.87", normalize_ws: true)
       expect(page).to have_text("Total US$5.21", normalize_ws: true)
 
       click_on "Pay"
@@ -408,8 +324,8 @@ describe("Product checkout with tipping", type: :system, js: true) do
 
       choose "20%"
 
-      expect(page).to have_text("Subtotal US$22", normalize_ws: true)
-      expect(page).to have_text("Tip US$4.40", normalize_ws: true)
+      expect(page).to have_text("Subtotal US$26.40", normalize_ws: true)
+      expect(page).to have_text("Add a tip? US$4.40", normalize_ws: true)
       expect(page).to have_text("Total US$26.40", normalize_ws: true)
       expect(page).to have_text("Payment today US$25.20", normalize_ws: true)
       expect(page).to have_text("Payment after completion US$1.20", normalize_ws: true)

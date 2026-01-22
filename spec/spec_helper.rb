@@ -105,6 +105,11 @@ def configure_vcr
     config.filter_sensitive_data("<RPUSH_CONSUMER_FCM_FIREBASE_PROJECT_ID>") { GlobalConfig.get("RPUSH_CONSUMER_FCM_FIREBASE_PROJECT_ID") }
     config.filter_sensitive_data("<SLACK_WEBHOOK_URL>") { GlobalConfig.get("SLACK_WEBHOOK_URL") }
     config.filter_sensitive_data("<CLOUDFRONT_KEYPAIR_ID>") { GlobalConfig.get("CLOUDFRONT_KEYPAIR_ID") }
+
+    # Filter EasyPost API key (Base64-encoded for Basic Auth headers)
+    config.filter_sensitive_data("<EASYPOST_API_KEY_BASE64>") do
+      Base64.strict_encode64("#{GlobalConfig.get('EASYPOST_API_KEY')}:")
+    end
   end
 end
 
@@ -145,6 +150,20 @@ RSpec.configure do |config|
       Thread.new { prepare_mysql },
       Thread.new { ElasticsearchSetup.prepare_test_environment }
     ].each(&:join)
+  end
+
+  # Stub SsrfFilter globally to allow localhost/minio in tests
+  # Use `skip_ssrf_stub: true` metadata to opt-out (e.g., for SSRF protection tests)
+  config.before(:each) do |example|
+    unless example.metadata[:skip_ssrf_stub]
+      allow(SsrfFilter).to receive(:get) do |url, **_args|
+        HTTParty.get(url)
+      end
+    end
+  end
+
+  config.after(:each) do |example|
+    RSpec::Mocks.space.proxy_for(SsrfFilter).reset if example.metadata[:skip_ssrf_stub]
   end
 
   config.before(:suite) do
@@ -250,6 +269,7 @@ RSpec.configure do |config|
   end
 
   config.around(:each) do |example|
+    Thread.current[:_rspec_example_metadata] = example.metadata
     config.instance_variable_set(:@curr_file_path, example.metadata[:example_group][:file_path])
     Mongoid.purge!
     options = %w[caching js] # delegate all the before- and after- hooks for these values to metaprogramming "setup" and "teardown" methods, below
@@ -259,6 +279,8 @@ RSpec.configure do |config|
     options.each { |opt| send(:"teardown_#{ opt }", example.metadata[opt.to_sym]) }
     Rails.cache.clear
     travel_back
+  ensure
+    Thread.current[:_rspec_example_metadata] = nil
   end
 
   config.around(:each, :shipping) do |example|
@@ -288,9 +310,39 @@ RSpec.configure do |config|
     end
   end
 
+  # Mock EasyPost address verification for physical product tests without VCR
+  config.before(:each, :mock_easypost) do
+    allow_any_instance_of(EasyPost::Services::Address).to receive(:create) do |_instance, params|
+      # Echo back the input address with successful verification
+      OpenStruct.new(
+        id: "adr_mock_#{SecureRandom.hex(8)}",
+        object: "Address",
+        street1: params[:street1]&.upcase || "1640 17TH ST",
+        street2: params[:street2] || "",
+        city: params[:city]&.upcase || "SAN FRANCISCO",
+        state: params[:state]&.upcase || "CA",
+        zip: params[:zip] || "94107",
+        country: params[:country] || "US",
+        verifications: OpenStruct.new(
+          delivery: OpenStruct.new(
+            success: true,
+            errors: [],
+            details: OpenStruct.new(latitude: 37.76493, longitude: -122.40005, time_zone: "America/Los_Angeles")
+          )
+        )
+      )
+    end
+  end
+
   config.after(:each, type: :system, js: true) do
     JSErrorReporter.instance.report_errors!(self)
     JSErrorReporter.instance.reset!
+  end
+
+  # checkout page fetches Braintree client token for PayPal button rendering.
+  # but we don't use paypal in system tests for checkout, so we don't need to generate a real token.
+  config.before(:each, type: :system, js: true) do
+    allow(Braintree::ClientToken).to receive(:generate).and_return("dummy_braintree_client_token")
   end
 
   config.before(:each) do
@@ -346,7 +398,9 @@ end
 
 def setup_js(val = false)
   if val
-    VCR.turn_off!
+    metadata = Thread.current[:_rspec_example_metadata] || {}
+    # Opt-in escape hatch for specific flaky JS specs that still rely on VCR cassettes (e.g. TaxJar rate-of-the-day).
+    VCR.turn_off! unless metadata[:force_vcr_on]
     # See also https://github.com/teamcapybara/capybara#gotchas
     WebMock.allow_net_connect!(net_http_connect_on_start: true)
   else

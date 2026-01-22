@@ -22,7 +22,7 @@ describe("ProductShowScenario", type: :system, js: true) do
     expect(product.sales.successful.last.price_cents).to eq(total_price * 100)
   end
 
-  it "preselects and allows purchase of a physical product sku as specified in the variant query string parameter" do
+  it "preselects and allows purchase of a physical product sku as specified in the variant query string parameter", :mock_easypost do
     product = create(:product, is_physical: true, require_shipping: true, skus_enabled: true)
     product.shipping_destinations << ShippingDestination.new(country_code: Compliance::Countries::USA.alpha2,
                                                              one_item_rate_cents: 4_00,
@@ -158,7 +158,7 @@ describe("ProductShowScenario", type: :system, js: true) do
       within "[role='listitem']" do
         expect(page).to have_text(@membership.name)
         expect(page).to have_text("Tier: Second Tier")
-        expect(page).to have_text("Membership: Every 6 months")
+        expect(page).to have_text("Every 6 months")
       end
       expect(page).to have_field("Email address", with: "gumhead@gumroad.com")
       expect(page).to have_field("your nickname", with: "moneybags")
@@ -506,12 +506,12 @@ describe("ProductShowScenario", type: :system, js: true) do
             add_to_cart(product, pwyw_price: 0.99)
 
             within "[role='listitem']" do
-              select_disclosure "Configure" do
+              select_disclosure "Edit" do
                 fill_in "Name a fair price", with: "0.1"
                 click_on "Save"
               end
               expect(page).to have_text("$0.99")
-              select_disclosure "Configure" do
+              select_disclosure "Edit" do
                 fill_in "Name a fair price", with: "0"
                 click_on "Save"
               end

@@ -14,9 +14,8 @@ import AdminProductInfo from "$app/components/Admin/Products/Info";
 import AdminProductPurchases from "$app/components/Admin/Products/Purchases";
 
 type ProductFile = {
-  id: number;
   external_id: string;
-  s3_filename: string;
+  s3_filename: string | null;
 };
 
 export type ActiveIntegration = {
@@ -24,35 +23,36 @@ export type ActiveIntegration = {
 };
 
 export type ProductUser = {
-  id: number;
-  name: string;
+  external_id: string;
+  name: string | null;
   suspended: boolean;
   flagged_for_tos_violation: boolean;
 };
 
 export type Product = {
-  id: number;
+  external_id: string;
   name: string;
   long_url: string;
   price_cents: number;
   currency_code: string;
   unique_permalink: string;
-  preview_url: string;
+  preview_url: string | null;
   cover_placeholder_url: string;
   price_formatted: string;
   created_at: string;
   user: ProductUser;
   admins_can_generate_url_redirects: boolean;
   alive_product_files: ProductFile[];
-  html_safe_description: string;
+  html_safe_description: string | null;
   alive: boolean;
   is_adult: boolean;
   active_integrations: ActiveIntegration[];
   admins_can_mark_as_staff_picked: boolean;
   admins_can_unmark_as_staff_picked: boolean;
   is_tiered_membership: boolean;
+  comments_count: number;
   updated_at: string;
-  deleted_at: string;
+  deleted_at: string | null;
 };
 
 type AdminUsersProductsProductProps = {
@@ -63,12 +63,12 @@ type AdminUsersProductsProductProps = {
 const AdminUsersProductsProduct = ({ product, isAffiliateUser = false }: AdminUsersProductsProductProps) => {
   const { url, props } = usePage();
   const compliance: Compliance = cast<Compliance>(props.compliance);
-  const isCurrentUrl = url === Routes.admin_product_path(product.unique_permalink);
+  const isCurrentUrl = url === Routes.admin_product_path(product.external_id);
 
   return (
     <article
       className="grid gap-4 rounded border border-border bg-background p-4"
-      data-product-id={product.unique_permalink}
+      data-product-id={product.external_id}
     >
       <AdminProductHeader product={product} isCurrentUrl={isCurrentUrl} />
       <AdminProductDescription product={product} />
@@ -76,7 +76,11 @@ const AdminUsersProductsProduct = ({ product, isAffiliateUser = false }: AdminUs
       <AdminProductInfo product={product} />
       <AdminProductActions product={product} />
       <AdminFlagForTosViolations product={product} compliance={compliance} />
-      <AdminProductPurchases productId={product.id} isAffiliateUser={isAffiliateUser} userId={product.user.id} />
+      <AdminProductPurchases
+        productExternalId={product.external_id}
+        isAffiliateUser={isAffiliateUser}
+        userExternalId={product.user.external_id}
+      />
       <AdminProductComments product={product} />
       <AdminProductFooter product={product} />
     </article>

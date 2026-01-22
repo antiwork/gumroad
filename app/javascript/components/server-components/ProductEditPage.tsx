@@ -1,5 +1,5 @@
 import { DirectUpload } from "@rails/activestorage";
-import isEqual from "lodash/isEqual";
+import { isEqual } from "lodash-es";
 import * as React from "react";
 import { createBrowserRouter, RouteObject, RouterProvider } from "react-router-dom";
 import { StaticRouterProvider } from "react-router-dom/server";
@@ -17,8 +17,10 @@ import { buildStaticRouter, GlobalProps, register } from "$app/utils/serverCompo
 
 import { Seller } from "$app/components/Product";
 import { ContentTab } from "$app/components/ProductEdit/ContentTab";
+import { getDownloadUrl } from "$app/components/ProductEdit/ContentTab/FileEmbed";
 import { Page } from "$app/components/ProductEdit/ContentTab/PageTab";
 import { ProductTab } from "$app/components/ProductEdit/ProductTab";
+import { ReceiptTab } from "$app/components/ProductEdit/ReceiptTab";
 import { RefundPolicy } from "$app/components/ProductEdit/RefundPolicy";
 import { ShareTab } from "$app/components/ProductEdit/ShareTab";
 import {
@@ -47,6 +49,11 @@ const routes: RouteObject[] = [
     path: "/products/:id/edit/share",
     element: <ShareTab />,
     handle: "share",
+  },
+  {
+    path: "/products/:id/edit/receipt",
+    element: <ReceiptTab />,
+    handle: "receipt",
   },
 ];
 
@@ -77,6 +84,7 @@ type Props = {
   seller_refund_policy_enabled: boolean;
   seller_refund_policy: Pick<RefundPolicy, "title" | "fine_print">;
   cancellation_discounts_enabled: boolean;
+  ai_generated: boolean;
 };
 
 const createContextValue = (props: Props) => ({
@@ -112,6 +120,8 @@ const createContextValue = (props: Props) => ({
   cancellationDiscountsEnabled: props.cancellation_discounts_enabled,
   contentUpdates: null,
   setContentUpdates: () => {},
+  filesById: new Map(props.product.files.map((file) => [file.id, { ...file, url: getDownloadUrl(props.id, file) }])),
+  aiGenerated: props.ai_generated,
 });
 
 const pagesHaveSameContent = (pages1: Page[], pages2: Page[]): boolean => isEqual(pages1, pages2);
@@ -184,12 +194,11 @@ const ProductEditPage = (props: Props) => {
 
   const contextValue = React.useMemo(
     () => ({
-      ...createContextValue(props),
+      ...createContextValue({ ...props, product }),
       setCurrencyType,
       currencyType,
       existingFiles,
       setExistingFiles,
-      product,
       updateProduct,
       save,
       saving,

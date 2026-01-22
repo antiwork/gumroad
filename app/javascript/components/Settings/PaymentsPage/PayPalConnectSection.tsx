@@ -7,6 +7,7 @@ import { request } from "$app/utils/request";
 import { Button } from "$app/components/Button";
 import { Icon } from "$app/components/Icons";
 import { showAlert } from "$app/components/server-components/Alert";
+import { Alert } from "$app/components/ui/Alert";
 
 export type PayPalConnect = {
   email: string | null;
@@ -52,7 +53,7 @@ const PayPalConnectSection = ({
           Learn more
         </a>
       </header>
-      <div className="paragraphs">
+      <div className="flex flex-col gap-4">
         {!paypalConnect.charge_processor_merchant_id ? (
           <>
             <p>
@@ -64,27 +65,27 @@ const PayPalConnectSection = ({
             {paypalConnect.show_paypal_connect ? (
               <>
                 <div>
-                  <a
-                    className="button button-paypal paypal-connect"
-                    href={Routes.connect_paypal_path({
-                      referer: Routes.settings_payments_path(),
-                    })}
-                    inert={isFormDisabled || !paypalConnect.allow_paypal_connect}
-                  >
-                    Connect with Paypal
-                  </a>
+                  <Button asChild color="paypal" disabled={isFormDisabled || !paypalConnect.allow_paypal_connect}>
+                    <a
+                      href={Routes.connect_paypal_path({
+                        referer: Routes.settings_payments_path(),
+                      })}
+                      inert={isFormDisabled || !paypalConnect.allow_paypal_connect}
+                    >
+                      <span className="brand-icon brand-icon-paypal" />
+                      Connect with Paypal
+                    </a>
+                  </Button>
                 </div>
                 {!paypalConnect.allow_paypal_connect ? (
-                  <div role="alert" className="warning">
-                    <div>
-                      <p>You must meet the following requirements in order to connect a PayPal account:</p>
-                      <ul>
-                        <li>Your account must be marked as compliant</li>
-                        <li>You must have earned at least $100</li>
-                        <li>You must have received at least one successful payout</li>
-                      </ul>
-                    </div>
-                  </div>
+                  <Alert variant="warning">
+                    <p>You must meet the following requirements in order to connect a PayPal account:</p>
+                    <ul>
+                      <li>Your account must be marked as compliant</li>
+                      <li>You must have earned at least $100</li>
+                      <li>You must have received at least one successful payout</li>
+                    </ul>
+                  </Alert>
                 ) : null}
               </>
             ) : null}
@@ -99,15 +100,14 @@ const PayPalConnectSection = ({
                 </legend>
                 <div className="input input-wrapper">
                   <div className="fake-input">{paypalConnect.charge_processor_merchant_id}</div>
-                  <Icon name="solid-check-circle" style={{ color: "rgb(var(--success))" }} />
+                  <Icon name="solid-check-circle" className="text-success" />
                 </div>
               </fieldset>
               {paypalConnect.show_paypal_connect ? (
                 <>
                   <p>
                     <Button
-                      color="danger"
-                      className="button-paypal"
+                      color="paypal"
                       aria-label="Disconnect PayPal account"
                       disabled={isFormDisabled || !paypalConnect.paypal_disconnect_allowed}
                       onClick={disconnectPayPal}
@@ -116,10 +116,10 @@ const PayPalConnectSection = ({
                     </Button>
                   </p>
                   {!paypalConnect.paypal_disconnect_allowed ? (
-                    <div role="alert" className="warning">
+                    <Alert variant="warning">
                       You cannot disconnect your PayPal account because it is being used for active subscription or
                       preorder payments.
-                    </div>
+                    </Alert>
                   ) : null}
                 </>
               ) : null}
@@ -131,32 +131,32 @@ const PayPalConnectSection = ({
             {paypalConnect.show_paypal_connect ? (
               <>
                 <p>
-                  <a
-                    className="button button-paypal paypal-connect"
-                    href={Routes.connect_paypal_path({
-                      referer: Routes.settings_payments_path(),
-                    })}
-                    inert={isFormDisabled || !paypalConnect.allow_paypal_connect}
-                  >
-                    Connect with Paypal
-                  </a>
+                  <Button asChild color="paypal" disabled={isFormDisabled || !paypalConnect.allow_paypal_connect}>
+                    <a
+                      href={Routes.connect_paypal_path({
+                        referer: Routes.settings_payments_path(),
+                      })}
+                      inert={isFormDisabled || !paypalConnect.allow_paypal_connect}
+                    >
+                      <span className="brand-icon brand-icon-paypal" />
+                      Connect with Paypal
+                    </a>
+                  </Button>
                 </p>
                 {!paypalConnect.allow_paypal_connect ? (
-                  <div role="alert" className="warning">
-                    <div>
-                      <p>You must meet the following requirements in order to connect a PayPal account:</p>
-                      <ul>
-                        <li>Your account must be marked as compliant</li>
-                        <li>You must have earned at least $100</li>
-                        <li>You must have received at least one successful payout</li>
-                      </ul>
-                    </div>
-                  </div>
+                  <Alert variant="warning">
+                    <p>You must meet the following requirements in order to connect a PayPal account:</p>
+                    <ul>
+                      <li>Your account must be marked as compliant</li>
+                      <li>You must have earned at least $100</li>
+                      <li>You must have received at least one successful payout</li>
+                    </ul>
+                  </Alert>
                 ) : null}
-                <div role="alert" className="warning">
+                <Alert variant="warning">
                   Your PayPal account connect with Gumroad is incomplete because of missing permissions. Please try
                   connecting again and grant the requested permissions.
-                </div>
+                </Alert>
               </>
             ) : null}
           </>

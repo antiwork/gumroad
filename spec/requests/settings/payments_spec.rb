@@ -162,12 +162,12 @@ describe("Payments Settings Scenario", type: :system, js: true) do
       fill_in("Last 4 digits of SSN", with: "1235")
 
       click_on("Update settings")
-      expect(page).to have_content("You must use a test bank account number. Try 000123456789 or see more options at https://stripe.com/docs/connect/testing#account-numbers.")
+      expect(page).to have_alert("You must use a test bank account number. Try 000123456789 or see more options at https://stripe.com/docs/connect/testing#account-numbers.")
 
       fill_in("Account number", with: "000123456789")
       fill_in("Confirm account number", with: "000123456789")
       click_on("Update settings")
-      expect(page).to have_content("Thanks! You're all set.")
+      expect(page).to have_alert(text: "Thanks! You're all set.")
       expect(page).to have_content("Routing number")
 
       compliance_info = @user.alive_user_compliance_info
@@ -213,7 +213,7 @@ describe("Payments Settings Scenario", type: :system, js: true) do
 
       click_on "Update settings"
 
-      expect(page).to have_content("Thanks! You're all set.")
+      expect(page).to have_alert(text: "Thanks! You're all set.")
       compliance_info = @user.reload.alive_user_compliance_info
       expect(compliance_info.first_name).to eq("barnabas")
       expect(compliance_info.last_name).to eq("barnabastein")
@@ -315,6 +315,84 @@ describe("Payments Settings Scenario", type: :system, js: true) do
       expect(find_button("Disconnect Stripe account", disabled: true)[:disabled]).to eq "true"
     end
 
+    it "does not allow saving placeholder state values" do
+      visit settings_payments_path
+
+      fill_in("First name", with: "barnabas")
+      fill_in("Last name", with: "barnabastein")
+      fill_in("Address", with: "address_full_match")
+      fill_in("City", with: "barnabasville")
+      select("State", from: "State")
+      fill_in("ZIP code", with: "12345")
+      fill_in("Phone number", with: "(502) 254-1982")
+
+      fill_in("Pay to the order of", with: "barnabas ngagy")
+      fill_in("Routing number", with: "110000000")
+      fill_in("Account number", with: "000123456789")
+      fill_in("Confirm account number", with: "000123456789")
+
+      select("1", from: "Day")
+      select("January", from: "Month")
+      select("1980", from: "Year")
+      fill_in("Last 4 digits of SSN", with: "1235")
+
+      expect do
+        click_on("Update settings")
+        expect(page).to have_status(text: "Please select a valid state or province.")
+      end.to_not change { @user.alive_user_compliance_info.reload.state }
+
+      select("California", from: "State")
+      expect do
+        click_on("Update settings")
+        wait_for_ajax
+        expect(page).to have_alert(text: "Thanks! You're all set.")
+      end.to change { @user.alive_user_compliance_info.reload.state }.to("CA")
+    end
+
+    it "does not allow saving placeholder state values for business" do
+      visit settings_payments_path
+
+      choose("Business")
+      fill_in("Legal business name", with: "Acme")
+      select("LLC", from: "Type")
+      find_field("Address", match: :first).set("123 North street")
+      find_field("City", match: :first).set("Barnesville")
+      find_field("State", match: :first).select("State")
+      find_field("ZIP code", match: :first).set("12345")
+      fill_in("Business phone number", with: "15052229876")
+      fill_in("Business Tax ID (EIN, or SSN for sole proprietors)", with: "123456789")
+
+      fill_in("First name", with: "barnabas")
+      fill_in("Last name", with: "barnabastein")
+      all('input[id$="creator-street-address"]').last.set("address_full_match")
+      all('input[id$="creator-city"]').last.set("barnabasville")
+      all('select[id$="creator-state"]').last.select("California")
+      all('input[id$="creator-zip-code"]').last.set("12345")
+      fill_in("Phone number", with: "(502) 254-1982")
+
+      fill_in("Pay to the order of", with: "barnabas ngagy")
+      fill_in("Routing number", with: "110000000")
+      fill_in("Account number", with: "000123456789")
+      fill_in("Confirm account number", with: "000123456789")
+
+      select("1", from: "Day")
+      select("January", from: "Month")
+      select("1980", from: "Year")
+      fill_in("Last 4 digits of SSN", with: "1235")
+
+      expect do
+        click_on("Update settings")
+        expect(page).to have_status(text: "Please select a valid state or province.")
+      end.to_not change { @user.alive_user_compliance_info.reload.business_state }
+
+      find_field("State", match: :first).select("California")
+      expect do
+        click_on("Update settings")
+        wait_for_ajax
+        expect(page).to have_alert(text: "Thanks! You're all set.")
+      end.to change { @user.alive_user_compliance_info.reload.business_state }.to("CA")
+    end
+
     describe "US-based creator with information set" do
       before do
         create(:ach_account_stripe_succeed, user: @user)
@@ -343,7 +421,7 @@ describe("Payments Settings Scenario", type: :system, js: true) do
         fill_in("Address", with: "address_full_match")
         click_on("Update settings")
 
-        expect(page).to have_content("Thanks! You're all set.")
+        expect(page).to have_alert(text: "Thanks! You're all set.")
         compliance_info = @user.alive_user_compliance_info
         expect(compliance_info.first_name).to eq("barnabas")
         expect(compliance_info.last_name).to eq("barnabastein")
@@ -398,7 +476,7 @@ describe("Payments Settings Scenario", type: :system, js: true) do
         fill_in("Confirm account number", with: "000111111116")
         click_on("Update settings")
 
-        expect(page).to have_content("Thanks! You're all set.")
+        expect(page).to have_alert(text: "Thanks! You're all set.")
         compliance_info = @user.alive_user_compliance_info
         expect(compliance_info.first_name).to eq("barnabas")
         expect(compliance_info.last_name).to eq("barnabastein")
@@ -463,7 +541,7 @@ describe("Payments Settings Scenario", type: :system, js: true) do
 
         expect(page).to have_section("Verification")
 
-        expect(page).to have_status(text: "Your account details have been verified!")
+        expect(page).to have_status(text: "Your identity has been verified!")
       end
 
       it "does not show the verification section if Stripe account is not active" do
@@ -484,7 +562,7 @@ describe("Payments Settings Scenario", type: :system, js: true) do
 
         merchant_account.mark_deleted!
         visit settings_payments_path
-        expect(page).to have_status(text: "Your account details have been verified!")
+        expect(page).to have_status(text: "Your identity has been verified!")
       end
 
       context "when the creator has a business account" do
@@ -574,6 +652,7 @@ describe("Payments Settings Scenario", type: :system, js: true) do
           click_on "Update settings"
           wait_for_ajax
           expect(page).to have_alert(text: "Thanks! You're all set.")
+          sleep 0.5 # Since the previous Alerts takes time to disappear, checking alert returns early before the api call is complete
         end.to change { @user.alive_user_compliance_info.reload.business_street_address }.to("123 North street")
         fill_in "Street address", with: "po box 123 smith street"
         expect do
@@ -634,7 +713,7 @@ describe("Payments Settings Scenario", type: :system, js: true) do
 
         click_on("Update settings")
 
-        expect(page).to have_content("Thanks! You're all set.")
+        expect(page).to have_alert(text: "Thanks! You're all set.")
         expect(page).to have_content("Routing number")
 
         compliance_info = @user.alive_user_compliance_info
@@ -716,7 +795,7 @@ describe("Payments Settings Scenario", type: :system, js: true) do
 
         click_on("Update settings")
 
-        expect(page).to have_content("Thanks! You're all set.")
+        expect(page).to have_alert(text: "Thanks! You're all set.")
         expect(page).to have_content("Transit and institution #")
 
         compliance_info = @user.alive_user_compliance_info
@@ -795,7 +874,7 @@ describe("Payments Settings Scenario", type: :system, js: true) do
       select("1980", from: "Year")
       fill_in("Last 4 digits of SSN", with: "1235")
       click_on("Update settings")
-      expect(page).to have_content("Thanks! You're all set.")
+      expect(page).to have_alert(text: "Thanks! You're all set.")
 
       refresh
       expect(page).to_not have_field("PayPal Email")
@@ -1071,6 +1150,12 @@ describe("Payments Settings Scenario", type: :system, js: true) do
         select("1980", from: "Year")
         click_on("Update settings")
         expect(page).to_not have_alert(text: "Thanks! You're all set.")
+        expect(find_field("State")["aria-invalid"]).to eq "true"
+        expect(page).to have_status(text: "Please select a valid state or province.")
+
+        select("Rio de Janeiro", from: "State")
+        click_on("Update settings")
+        expect(page).to have_alert(text: "Thanks! You're all set.")
       end
 
       it "allows the (non-US based) creator to enter their kyc and paypal email address and it'll save it properly" do
@@ -1082,6 +1167,7 @@ describe("Payments Settings Scenario", type: :system, js: true) do
         fill_in("City", with: "barnabasville")
         fill_in("Phone number", with: "5022541982")
         fill_in("Postal code", with: "12345")
+        select("Rio de Janeiro", from: "State")
 
         select("1", from: "Day")
         select("January", from: "Month")
@@ -1091,7 +1177,7 @@ describe("Payments Settings Scenario", type: :system, js: true) do
 
         click_on("Update settings")
 
-        expect(page).to have_content("Thanks! You're all set.")
+        expect(page).to have_alert(text: "Thanks! You're all set.")
         compliance_info = @user.alive_user_compliance_info
         expect(compliance_info.first_name).to eq("barnabas")
         expect(compliance_info.last_name).to eq("barnabastein")
@@ -1114,6 +1200,7 @@ describe("Payments Settings Scenario", type: :system, js: true) do
         fill_in "City", with: "Tokyo"
         fill_in "Postal code", with: "12345"
         fill_in "Phone number", with: "5022541982"
+        select("São Paulo", from: "State")
         select("1", from: "Day")
         select("January", from: "Month")
         select("1990", from: "Year")
@@ -1163,7 +1250,7 @@ describe("Payments Settings Scenario", type: :system, js: true) do
         fill_in("Postal code", with: "01067")
         click_on("Update settings")
 
-        expect(page).to have_content("Thanks! You're all set.")
+        expect(page).to have_alert(text: "Thanks! You're all set.")
         expect(page).not_to have_content("Routing number")
         compliance_info = @user.alive_user_compliance_info
         expect(compliance_info.first_name).to eq("barnabas")
@@ -1214,7 +1301,7 @@ describe("Payments Settings Scenario", type: :system, js: true) do
 
         click_on("Update settings")
 
-        expect(page).to have_content("Thanks! You're all set.")
+        expect(page).to have_alert(text: "Thanks! You're all set.")
         expect(page).to have_content("Clearing and branch code")
         compliance_info = @user.alive_user_compliance_info
         expect(compliance_info.first_name).to eq("barnabas")
@@ -1281,7 +1368,7 @@ describe("Payments Settings Scenario", type: :system, js: true) do
 
         click_on("Update settings")
 
-        expect(page).to have_content("Thanks! You're all set.")
+        expect(page).to have_alert(text: "Thanks! You're all set.")
         expect(page).to have_content("Transit and institution #")
         expect(page).to have_field("Job title", with: "Sales Manager")
 
@@ -1350,7 +1437,7 @@ describe("Payments Settings Scenario", type: :system, js: true) do
 
         click_on("Update settings")
 
-        expect(page).to have_content("Thanks! You're all set.")
+        expect(page).to have_alert(text: "Thanks! You're all set.")
         expect(page).to have_content("Bank and branch code")
         compliance_info = @user.alive_user_compliance_info
         expect(compliance_info.first_name).to eq("barnabas")
@@ -1399,7 +1486,7 @@ describe("Payments Settings Scenario", type: :system, js: true) do
 
         click_on("Update settings")
 
-        expect(page).to have_content("Thanks! You're all set.")
+        expect(page).to have_alert(text: "Thanks! You're all set.")
         expect(page).to have_content("Bank code")
         compliance_info = @user.alive_user_compliance_info
         expect(compliance_info.first_name).to eq("barnabas")
@@ -1426,6 +1513,7 @@ describe("Payments Settings Scenario", type: :system, js: true) do
 
       it "allows to enter bank account details" do
         visit settings_payments_path
+        expect(page).to have_field("IBAN")
 
         fill_in("First name", with: "barnabas")
         fill_in("Last name", with: "barnabastein")
@@ -1443,11 +1531,11 @@ describe("Payments Settings Scenario", type: :system, js: true) do
         fill_in("Confirm IBAN", with: "BG80BNBG96611020345678")
 
         expect(page).to have_content("Must exactly match the name on your bank account")
-        expect(page).to have_content("Payouts will be made in BGN.")
+        expect(page).to have_content("Payouts will be made in EUR.")
 
         click_on("Update settings")
 
-        expect(page).to have_content("Thanks! You're all set.")
+        expect(page).to have_alert(text: "Thanks! You're all set.")
         expect(page).not_to have_content("Routing number")
         compliance_info = @user.alive_user_compliance_info
         expect(compliance_info.first_name).to eq("barnabas")
@@ -1495,7 +1583,7 @@ describe("Payments Settings Scenario", type: :system, js: true) do
 
         click_on("Update settings")
 
-        expect(page).to have_content("Thanks! You're all set.")
+        expect(page).to have_alert(text: "Thanks! You're all set.")
         expect(page).not_to have_content("Routing number")
         compliance_info = @user.alive_user_compliance_info
         expect(compliance_info.first_name).to eq("barnabas")
@@ -1543,7 +1631,7 @@ describe("Payments Settings Scenario", type: :system, js: true) do
 
         click_on("Update settings")
 
-        expect(page).to have_content("Thanks! You're all set.")
+        expect(page).to have_alert(text: "Thanks! You're all set.")
         expect(page).not_to have_content("Routing number")
         compliance_info = @user.alive_user_compliance_info
         expect(compliance_info.first_name).to eq("barnabas")
@@ -1592,7 +1680,7 @@ describe("Payments Settings Scenario", type: :system, js: true) do
 
         click_on("Update settings")
 
-        expect(page).to have_content("Thanks! You're all set.")
+        expect(page).to have_alert(text: "Thanks! You're all set.")
         expect(page).to have_content("Bank code")
         compliance_info = @user.alive_user_compliance_info
         expect(compliance_info.first_name).to eq("barnabas")
@@ -1603,6 +1691,55 @@ describe("Payments Settings Scenario", type: :system, js: true) do
         expect(compliance_info.phone).to eq("+8223123456")
         expect(compliance_info.birthday).to eq(Date.new(1980, 1, 1))
         expect(@user.reload.active_bank_account.send(:account_number_decrypted)).to eq("000123456789")
+      end
+    end
+
+    describe "Kazakhstan creator" do
+      before do
+        old_user_compliance_info = @user.alive_user_compliance_info
+        new_user_compliance_info = old_user_compliance_info.dup
+        new_user_compliance_info.country = "Kazakhstan"
+
+        ActiveRecord::Base.transaction do
+          old_user_compliance_info.mark_deleted!
+          new_user_compliance_info.save!
+        end
+
+        @user.active_bank_account&.mark_deleted!
+        @user.update!(payment_address: nil)
+      end
+
+      it "collects PayPal payout info instead of bank details" do
+        visit settings_payments_path
+
+        fill_in("First name", with: "barnabas")
+        fill_in("Last name", with: "barnabastein")
+        fill_in("Address", with: "address_full_match")
+        fill_in("City", with: "Almaty")
+        fill_in("Phone number", with: "7012345678")
+        fill_in("Postal code", with: "050000")
+
+        select("1", from: "Day")
+        select("January", from: "Month")
+        select("1980", from: "Year")
+        select("Kazakhstan", from: "Country")
+        fill_in("Individual identification number (IIN)", with: "000000000")
+
+        expect(page).to have_field("PayPal Email")
+        fill_in("PayPal Email", with: "kazakh@example.com")
+
+        click_on("Update settings")
+
+        expect(page).to have_alert(text: "Thanks! You're all set.")
+        compliance_info = @user.alive_user_compliance_info
+        expect(compliance_info.first_name).to eq("barnabas")
+        expect(compliance_info.last_name).to eq("barnabastein")
+        expect(compliance_info.street_address).to eq("address_full_match")
+        expect(compliance_info.city).to eq("Almaty")
+        expect(compliance_info.zip_code).to eq("050000")
+        expect(compliance_info.phone).to eq("+77012345678")
+        expect(@user.reload.payment_address).to eq("kazakh@example.com")
+        expect(@user.reload.active_bank_account).to be_nil
       end
     end
 
@@ -1652,7 +1789,7 @@ describe("Payments Settings Scenario", type: :system, js: true) do
 
         click_on("Update settings")
 
-        expect(page).to have_content("Thanks! You're all set.")
+        expect(page).to have_alert(text: "Thanks! You're all set.")
         expect(page).not_to have_content("Routing number")
         compliance_info = @user.alive_user_compliance_info
         expect(compliance_info.first_name).to eq("uae")
@@ -1712,7 +1849,7 @@ describe("Payments Settings Scenario", type: :system, js: true) do
 
         click_on("Update settings")
 
-        expect(page).to have_content("Thanks! You're all set.")
+        expect(page).to have_alert(text: "Thanks! You're all set.")
         compliance_info = user.alive_user_compliance_info
         expect(compliance_info.first_name).to eq("barnabas")
         expect(compliance_info.last_name).to eq("barnabastein")
@@ -1758,7 +1895,7 @@ describe("Payments Settings Scenario", type: :system, js: true) do
 
         click_on("Update settings")
 
-        expect(page).to have_content("Thanks! You're all set.")
+        expect(page).to have_alert(text: "Thanks! You're all set.")
         compliance_info = @user.alive_user_compliance_info
         expect(compliance_info.first_name).to eq("barnabas")
         expect(compliance_info.last_name).to eq("barnabastein")
@@ -1794,7 +1931,7 @@ describe("Payments Settings Scenario", type: :system, js: true) do
 
         click_on("Update settings")
 
-        expect(page).to have_content("Thanks! You're all set.")
+        expect(page).to have_alert(text: "Thanks! You're all set.")
         compliance_info = @user.alive_user_compliance_info
         expect(compliance_info.first_name).to eq("barnabas")
         expect(compliance_info.last_name).to eq("barnabastein")
@@ -1841,7 +1978,7 @@ describe("Payments Settings Scenario", type: :system, js: true) do
 
         click_on("Update settings")
 
-        expect(page).to have_content("Thanks! You're all set.")
+        expect(page).to have_alert(text: "Thanks! You're all set.")
         expect(page).not_to have_content("Routing number")
         compliance_info = @user.alive_user_compliance_info
         expect(compliance_info.first_name).to eq("barnabas")
@@ -1890,7 +2027,7 @@ describe("Payments Settings Scenario", type: :system, js: true) do
 
         click_on("Update settings")
 
-        expect(page).to have_content("Thanks! You're all set.")
+        expect(page).to have_alert(text: "Thanks! You're all set.")
         expect(page).to have_content("Bank and branch code")
         compliance_info = @user.alive_user_compliance_info
         expect(compliance_info.first_name).to eq("barnabas")
@@ -1938,7 +2075,7 @@ describe("Payments Settings Scenario", type: :system, js: true) do
 
         click_on("Update settings")
 
-        expect(page).to have_content("Thanks! You're all set.")
+        expect(page).to have_alert(text: "Thanks! You're all set.")
         expect(page).to have_content("Bank Identifier Code (BIC)")
         compliance_info = @user.alive_user_compliance_info
         expect(compliance_info.first_name).to eq("barnabas")
@@ -1985,7 +2122,7 @@ describe("Payments Settings Scenario", type: :system, js: true) do
 
         click_on("Update settings")
 
-        expect(page).to have_content("Thanks! You're all set.")
+        expect(page).to have_alert(text: "Thanks! You're all set.")
         expect(page).not_to have_content("Routing number")
         compliance_info = @user.alive_user_compliance_info
         expect(compliance_info.first_name).to eq("barnabas")
@@ -2032,7 +2169,7 @@ describe("Payments Settings Scenario", type: :system, js: true) do
 
         click_on("Update settings")
 
-        expect(page).to have_content("Thanks! You're all set.")
+        expect(page).to have_alert(text: "Thanks! You're all set.")
         expect(page).not_to have_content("Routing number")
         compliance_info = @user.alive_user_compliance_info
         expect(compliance_info.first_name).to eq("barnabas")
@@ -2081,7 +2218,7 @@ describe("Payments Settings Scenario", type: :system, js: true) do
 
         click_on("Update settings")
 
-        expect(page).to have_content("Thanks! You're all set.")
+        expect(page).to have_alert(text: "Thanks! You're all set.")
         expect(page).not_to have_content("Routing number")
         compliance_info = @user.alive_user_compliance_info
         expect(compliance_info.first_name).to eq("barnabas")
@@ -2134,7 +2271,7 @@ describe("Payments Settings Scenario", type: :system, js: true) do
 
         click_on("Update settings")
 
-        expect(page).to have_content("Thanks! You're all set.")
+        expect(page).to have_alert(text: "Thanks! You're all set.")
         expect(page).to have_content("Bank code")
         compliance_info = @user.alive_user_compliance_info
         expect(compliance_info.first_name).to eq("barnabas")
@@ -2185,7 +2322,7 @@ describe("Payments Settings Scenario", type: :system, js: true) do
 
         click_on("Update settings")
 
-        expect(page).to have_content("Thanks! You're all set.")
+        expect(page).to have_alert(text: "Thanks! You're all set.")
         expect(page).not_to have_content("Routing number")
         compliance_info = @user.alive_user_compliance_info
         expect(compliance_info.first_name).to eq("barnabas")
@@ -2234,7 +2371,7 @@ describe("Payments Settings Scenario", type: :system, js: true) do
 
         click_on("Update settings")
 
-        expect(page).to have_content("Thanks! You're all set.")
+        expect(page).to have_alert(text: "Thanks! You're all set.")
         expect(page).not_to have_content("Routing number")
         compliance_info = @user.alive_user_compliance_info
         expect(compliance_info.first_name).to eq("barnabas")
@@ -2282,7 +2419,7 @@ describe("Payments Settings Scenario", type: :system, js: true) do
 
         click_on("Update settings")
 
-        expect(page).to have_content("Thanks! You're all set.")
+        expect(page).to have_alert(text: "Thanks! You're all set.")
         expect(page).not_to have_content("Routing number")
         compliance_info = @user.alive_user_compliance_info
         expect(compliance_info.first_name).to eq("Norwegian")
@@ -2331,7 +2468,7 @@ describe("Payments Settings Scenario", type: :system, js: true) do
 
         click_on("Update settings")
 
-        expect(page).to have_content("Thanks! You're all set.")
+        expect(page).to have_alert(text: "Thanks! You're all set.")
         expect(page).not_to have_content("Routing number")
         compliance_info = @user.alive_user_compliance_info
         expect(compliance_info.first_name).to eq("barnabas")
@@ -2379,7 +2516,7 @@ describe("Payments Settings Scenario", type: :system, js: true) do
 
         click_on("Update settings")
 
-        expect(page).to have_content("Thanks! You're all set.")
+        expect(page).to have_alert(text: "Thanks! You're all set.")
         expect(page).not_to have_content("Routing number")
         compliance_info = @user.alive_user_compliance_info
         expect(compliance_info.first_name).to eq("Liechtenstein")
@@ -2429,7 +2566,7 @@ describe("Payments Settings Scenario", type: :system, js: true) do
 
         click_on("Update settings")
 
-        expect(page).to have_content("Thanks! You're all set.")
+        expect(page).to have_alert(text: "Thanks! You're all set.")
         expect(page).to have_content("Bank code")
         compliance_info = @user.alive_user_compliance_info
         expect(compliance_info.first_name).to eq("barnabas")
@@ -2478,7 +2615,7 @@ describe("Payments Settings Scenario", type: :system, js: true) do
 
         click_on("Update settings")
 
-        expect(page).to have_content("Thanks! You're all set.")
+        expect(page).to have_alert(text: "Thanks! You're all set.")
         expect(page).not_to have_content("Routing number")
         compliance_info = @user.alive_user_compliance_info
         expect(compliance_info.first_name).to eq("barnabas")
@@ -2527,7 +2664,7 @@ describe("Payments Settings Scenario", type: :system, js: true) do
 
         click_on("Update settings")
 
-        expect(page).to have_content("Thanks! You're all set.")
+        expect(page).to have_alert(text: "Thanks! You're all set.")
         expect(page).to have_content("SWIFT / BIC code")
         compliance_info = @user.alive_user_compliance_info
         expect(compliance_info.first_name).to eq("barnabas")
@@ -2579,7 +2716,7 @@ describe("Payments Settings Scenario", type: :system, js: true) do
 
         click_on("Update settings")
 
-        expect(page).to have_content("Thanks! You're all set.")
+        expect(page).to have_alert(text: "Thanks! You're all set.")
         expect(page).to have_content("Bank code")
         compliance_info = @user.alive_user_compliance_info
         expect(compliance_info.first_name).to eq("barnabas")
@@ -2619,7 +2756,7 @@ describe("Payments Settings Scenario", type: :system, js: true) do
 
         click_on("Update settings")
 
-        expect(page).to have_content("Thanks! You're all set.")
+        expect(page).to have_alert(text: "Thanks! You're all set.")
         expect(page).to have_content("Bank code")
         compliance_info = @user.alive_user_compliance_info
         expect(compliance_info.first_name).to eq("barnabas")
@@ -2669,7 +2806,7 @@ describe("Payments Settings Scenario", type: :system, js: true) do
 
         click_on("Update settings")
 
-        expect(page).to have_content("Thanks! You're all set.")
+        expect(page).to have_alert(text: "Thanks! You're all set.")
         expect(page).to have_content("SWIFT / BIC code")
         compliance_info = @user.alive_user_compliance_info
         expect(compliance_info.first_name).to eq("barnabas")
@@ -2718,7 +2855,7 @@ describe("Payments Settings Scenario", type: :system, js: true) do
 
         click_on("Update settings")
 
-        expect(page).to have_content("Thanks! You're all set.")
+        expect(page).to have_alert(text: "Thanks! You're all set.")
         expect(page).to have_content("SWIFT / BIC code")
         compliance_info = @user.alive_user_compliance_info
         expect(compliance_info.first_name).to eq("barnabas")
@@ -2746,6 +2883,8 @@ describe("Payments Settings Scenario", type: :system, js: true) do
       it "allows to enter bank account details" do
         visit settings_payments_path
 
+        choose "Bank Account"
+
         fill_in("First name", with: "barnabas")
         fill_in("Last name", with: "barnabastein")
         fill_in("Address", with: "address_full_match")
@@ -2767,7 +2906,7 @@ describe("Payments Settings Scenario", type: :system, js: true) do
 
         click_on("Update settings")
 
-        expect(page).to have_content("Thanks! You're all set.")
+        expect(page).to have_alert(text: "Thanks! You're all set.")
         expect(page).to have_content("SWIFT / BIC code")
         compliance_info = @user.alive_user_compliance_info
         expect(compliance_info.first_name).to eq("barnabas")
@@ -2778,6 +2917,41 @@ describe("Payments Settings Scenario", type: :system, js: true) do
         expect(compliance_info.phone).to eq("+209876543210")
         expect(compliance_info.birthday).to eq(Date.new(1980, 1, 1))
         expect(@user.reload.active_bank_account.send(:account_number_decrypted)).to eq("EG800002000156789012345180002")
+      end
+
+      it "allows to enter PayPal details" do
+        visit settings_payments_path
+
+        choose "PayPal"
+
+        fill_in("First name", with: "barnabas")
+        fill_in("Last name", with: "barnabastein")
+        fill_in("Address", with: "address_full_match")
+        fill_in("City", with: "barnabasville")
+        fill_in("Phone number", with: "9876543210")
+        fill_in("Postal code", with: "10110")
+
+        select("1", from: "Day")
+        select("January", from: "Month")
+        select("1980", from: "Year")
+
+        expect(page).to have_status(text: "PayPal payouts are subject to a 2% processing fee.")
+        fill_in("PayPal Email", with: "egycr@example.com")
+
+        click_on("Update settings")
+
+        expect(page).to have_alert(text: "Thanks! You're all set.")
+        compliance_info = @user.alive_user_compliance_info
+        expect(compliance_info.first_name).to eq("barnabas")
+        expect(compliance_info.last_name).to eq("barnabastein")
+        expect(compliance_info.street_address).to eq("address_full_match")
+        expect(compliance_info.city).to eq("barnabasville")
+        expect(compliance_info.zip_code).to eq("10110")
+        expect(compliance_info.country).to eq("Egypt")
+        expect(compliance_info.phone).to eq("+209876543210")
+        expect(compliance_info.birthday).to eq(Date.new(1980, 1, 1))
+        expect(@user.reload.payment_address).to eq("egycr@example.com")
+        expect(@user.active_bank_account).to be nil
       end
     end
 
@@ -2816,7 +2990,7 @@ describe("Payments Settings Scenario", type: :system, js: true) do
 
         click_on("Update settings")
 
-        expect(page).to have_content("Thanks! You're all set.")
+        expect(page).to have_alert(text: "Thanks! You're all set.")
         expect(page).to have_content("SWIFT / BIC code")
         compliance_info = @user.alive_user_compliance_info
         expect(compliance_info.first_name).to eq("Bosnia and Herzegovina")
@@ -2866,7 +3040,7 @@ describe("Payments Settings Scenario", type: :system, js: true) do
 
         click_on("Update settings")
 
-        expect(page).to have_content("Thanks! You're all set.")
+        expect(page).to have_alert(text: "Thanks! You're all set.")
         expect(page).to have_content("SWIFT / BIC code")
         compliance_info = @user.alive_user_compliance_info
         expect(compliance_info.first_name).to eq("barnabas")
@@ -2916,7 +3090,7 @@ describe("Payments Settings Scenario", type: :system, js: true) do
 
         click_on("Update settings")
 
-        expect(page).to have_content("Thanks! You're all set.")
+        expect(page).to have_alert(text: "Thanks! You're all set.")
         expect(page).to have_content("SWIFT / BIC code")
         compliance_info = @user.alive_user_compliance_info
         expect(compliance_info.first_name).to eq("barnabas")
@@ -2928,58 +3102,6 @@ describe("Payments Settings Scenario", type: :system, js: true) do
         expect(compliance_info.birthday).to eq(Date.new(1980, 1, 1))
         expect(@user.reload.active_bank_account.send(:account_number_decrypted)).to eq("RS35105008123123123173")
         expect(@user.reload.active_bank_account.routing_number).to eq("TESTSERBXXX")
-      end
-    end
-
-    describe "KZ creator" do
-      before do
-        old_user_compliance_info = @user.alive_user_compliance_info
-        new_user_compliance_info = old_user_compliance_info.dup
-        new_user_compliance_info.country = "Kazakhstan"
-        ActiveRecord::Base.transaction do
-          old_user_compliance_info.mark_deleted!
-          new_user_compliance_info.save!
-        end
-      end
-
-      it "allows to enter bank account details" do
-        visit settings_payments_path
-
-        fill_in("First name", with: "barnabas")
-        fill_in("Last name", with: "barnabastein")
-        fill_in("Address", with: "address_full_match")
-        fill_in("City", with: "Almaty")
-        fill_in("Phone number", with: "7012345678")
-        fill_in("Postal code", with: "050000")
-
-        select("1", from: "Day")
-        select("January", from: "Month")
-        select("1980", from: "Year")
-
-        fill_in("Pay to the order of", with: "barnabas ngagy")
-        fill_in("SWIFT / BIC Code", with: "AAAAKZKZXXX")
-        fill_in("IBAN", with: "KZ221251234567890123")
-        fill_in("Confirm IBAN", with: "KZ221251234567890123")
-
-        fill_in("Individual identification number (IIN)", with: "000000000")
-
-        expect(page).to have_content("Must exactly match the name on your bank account")
-        expect(page).to have_content("Payouts will be made in KZT.")
-
-        click_on("Update settings")
-
-        expect(page).to have_content("Thanks! You're all set.")
-        expect(page).to have_content("SWIFT / BIC code")
-        compliance_info = @user.alive_user_compliance_info
-        expect(compliance_info.first_name).to eq("barnabas")
-        expect(compliance_info.last_name).to eq("barnabastein")
-        expect(compliance_info.street_address).to eq("address_full_match")
-        expect(compliance_info.city).to eq("Almaty")
-        expect(compliance_info.zip_code).to eq("050000")
-        expect(compliance_info.phone).to eq("+77012345678")
-        expect(compliance_info.birthday).to eq(Date.new(1980, 1, 1))
-        expect(@user.reload.active_bank_account.send(:account_number_decrypted)).to eq("KZ221251234567890123")
-        expect(@user.reload.active_bank_account.routing_number).to eq("AAAAKZKZXXX")
       end
     end
 
@@ -3018,7 +3140,7 @@ describe("Payments Settings Scenario", type: :system, js: true) do
 
         click_on("Update settings")
 
-        expect(page).to have_content("Thanks! You're all set.")
+        expect(page).to have_alert(text: "Thanks! You're all set.")
         expect(page).to have_content("SWIFT / BIC code")
         compliance_info = @user.alive_user_compliance_info
         expect(compliance_info.first_name).to eq("barnabas")
@@ -3068,7 +3190,7 @@ describe("Payments Settings Scenario", type: :system, js: true) do
 
         click_on("Update settings")
 
-        expect(page).to have_content("Thanks! You're all set.")
+        expect(page).to have_alert(text: "Thanks! You're all set.")
         expect(page).to have_content("SWIFT / BIC code")
         compliance_info = @user.alive_user_compliance_info
         expect(compliance_info.first_name).to eq("Antigua and Barbuda")
@@ -3118,7 +3240,7 @@ describe("Payments Settings Scenario", type: :system, js: true) do
 
         click_on("Update settings")
 
-        expect(page).to have_content("Thanks! You're all set.")
+        expect(page).to have_alert(text: "Thanks! You're all set.")
         expect(page).to have_content("SWIFT / BIC code")
         compliance_info = @user.alive_user_compliance_info
         expect(compliance_info.first_name).to eq("Tanzanian")
@@ -3168,7 +3290,7 @@ describe("Payments Settings Scenario", type: :system, js: true) do
 
         click_on("Update settings")
 
-        expect(page).to have_content("Thanks! You're all set.")
+        expect(page).to have_alert(text: "Thanks! You're all set.")
         expect(page).to have_content("SWIFT / BIC code")
         compliance_info = @user.alive_user_compliance_info
         expect(compliance_info.first_name).to eq("Namibian")
@@ -3218,7 +3340,7 @@ describe("Payments Settings Scenario", type: :system, js: true) do
 
         click_on("Update settings")
 
-        expect(page).to have_content("Thanks! You're all set.")
+        expect(page).to have_alert(text: "Thanks! You're all set.")
         expect(page).to have_content("SWIFT / BIC code")
         compliance_info = @user.reload.alive_user_compliance_info
         expect(compliance_info.first_name).to eq("Albanian")
@@ -3268,7 +3390,7 @@ describe("Payments Settings Scenario", type: :system, js: true) do
 
         click_on("Update settings")
 
-        expect(page).to have_content("Thanks! You're all set.")
+        expect(page).to have_alert(text: "Thanks! You're all set.")
         expect(page).to have_content("SWIFT / BIC code")
         compliance_info = @user.alive_user_compliance_info
         expect(compliance_info.first_name).to eq("Bahraini")
@@ -3317,7 +3439,7 @@ describe("Payments Settings Scenario", type: :system, js: true) do
 
         click_on("Update settings")
 
-        expect(page).to have_content("Thanks! You're all set.")
+        expect(page).to have_alert(text: "Thanks! You're all set.")
         expect(page).to have_content("SWIFT / BIC code")
         compliance_info = @user.alive_user_compliance_info
         expect(compliance_info.first_name).to eq("Rwandan")
@@ -3368,7 +3490,7 @@ describe("Payments Settings Scenario", type: :system, js: true) do
 
         click_on("Update settings")
 
-        expect(page).to have_content("Thanks! You're all set.")
+        expect(page).to have_alert(text: "Thanks! You're all set.")
         expect(page).to have_content("SWIFT / BIC code")
         compliance_info = @user.alive_user_compliance_info
         expect(compliance_info.first_name).to eq("Jordanian")
@@ -3418,7 +3540,7 @@ describe("Payments Settings Scenario", type: :system, js: true) do
 
         click_on("Update settings")
 
-        expect(page).to have_content("Thanks! You're all set.")
+        expect(page).to have_alert(text: "Thanks! You're all set.")
         expect(page).to have_content("SWIFT / BIC code")
         compliance_info = @user.alive_user_compliance_info
         expect(compliance_info.first_name).to eq("Nigerian")
@@ -3469,7 +3591,7 @@ describe("Payments Settings Scenario", type: :system, js: true) do
 
         click_on("Update settings")
 
-        expect(page).to have_content("Thanks! You're all set.")
+        expect(page).to have_alert(text: "Thanks! You're all set.")
         expect(page).to have_content("Bank and branch code")
         compliance_info = @user.alive_user_compliance_info
         expect(compliance_info.first_name).to eq("Azerbaijani")
@@ -3526,7 +3648,7 @@ describe("Payments Settings Scenario", type: :system, js: true) do
 
         click_on("Update settings")
 
-        expect(page).to have_content("Thanks! You're all set.")
+        expect(page).to have_alert(text: "Thanks! You're all set.")
         expect(page).to have_content("Bank and branch code")
         compliance_info = @user.alive_user_compliance_info
         expect(compliance_info.first_name).to eq("japanese")
@@ -3572,16 +3694,16 @@ describe("Payments Settings Scenario", type: :system, js: true) do
         select("1980", from: "Year")
 
         fill_in("Pay to the order of", with: "barnabas ngagy")
-        fill_in("IBAN", with: "GI75NWBK000000007099453")
-        fill_in("Confirm IBAN", with: "GI75NWBK000000007099453")
+        fill_in("Sort code", with: "10-88-00")
+        fill_in("Account #", with: "00012345")
+        fill_in("Confirm account #", with: "00012345")
 
         expect(page).to have_content("Must exactly match the name on your bank account")
         expect(page).to have_content("Payouts will be made in GBP.")
 
         click_on("Update settings")
 
-        expect(page).to have_content("Thanks! You're all set.")
-        expect(page).not_to have_content("Routing number")
+        expect(page).to have_alert(text: "Thanks! You're all set.")
         compliance_info = @user.alive_user_compliance_info
         expect(compliance_info.first_name).to eq("barnabas")
         expect(compliance_info.last_name).to eq("barnabastein")
@@ -3590,7 +3712,8 @@ describe("Payments Settings Scenario", type: :system, js: true) do
         expect(compliance_info.zip_code).to eq("GX11 1AA")
         expect(compliance_info.phone).to eq("+35020079123")
         expect(compliance_info.birthday).to eq(Date.new(1980, 1, 1))
-        expect(@user.reload.active_bank_account.send(:account_number_decrypted)).to eq("GI75NWBK000000007099453")
+        expect(@user.reload.active_bank_account.send(:account_number_decrypted)).to eq("00012345")
+        expect(@user.reload.active_bank_account.routing_number).to eq("10-88-00")
       end
     end
 
@@ -3628,7 +3751,7 @@ describe("Payments Settings Scenario", type: :system, js: true) do
 
         click_on("Update settings")
 
-        expect(page).to have_content("Thanks! You're all set.")
+        expect(page).to have_alert(text: "Thanks! You're all set.")
         expect(page).to have_content("SWIFT / BIC code")
         compliance_info = @user.alive_user_compliance_info
         expect(compliance_info.first_name).to eq("botswana")
@@ -3679,7 +3802,7 @@ describe("Payments Settings Scenario", type: :system, js: true) do
 
         click_on("Update settings")
 
-        expect(page).to have_content("Thanks! You're all set.")
+        expect(page).to have_alert(text: "Thanks! You're all set.")
         expect(page).to have_content("Bank code")
         compliance_info = @user.alive_user_compliance_info
         expect(compliance_info.first_name).to eq("uruguayan")
@@ -3729,7 +3852,7 @@ describe("Payments Settings Scenario", type: :system, js: true) do
 
         click_on("Update settings")
 
-        expect(page).to have_content("Thanks! You're all set.")
+        expect(page).to have_alert(text: "Thanks! You're all set.")
         expect(page).to have_content("SWIFT / BIC code")
         compliance_info = @user.alive_user_compliance_info
         expect(compliance_info.first_name).to eq("mauritian")
@@ -3779,7 +3902,7 @@ describe("Payments Settings Scenario", type: :system, js: true) do
 
         click_on("Update settings")
 
-        expect(page).to have_content("Thanks! You're all set.")
+        expect(page).to have_alert(text: "Thanks! You're all set.")
         expect(page).to have_content("Bank code")
         compliance_info = @user.alive_user_compliance_info
         expect(compliance_info.first_name).to eq("ghanaian")
@@ -3830,7 +3953,7 @@ describe("Payments Settings Scenario", type: :system, js: true) do
 
         click_on("Update settings")
 
-        expect(page).to have_content("Thanks! You're all set.")
+        expect(page).to have_alert(text: "Thanks! You're all set.")
         expect(page).to have_content("Bank and branch code")
         compliance_info = @user.alive_user_compliance_info
         expect(compliance_info.first_name).to eq("jamaican")
@@ -3879,7 +4002,7 @@ describe("Payments Settings Scenario", type: :system, js: true) do
 
         click_on("Update settings")
 
-        expect(page).to have_content("Thanks! You're all set.")
+        expect(page).to have_alert(text: "Thanks! You're all set.")
         expect(page).to have_content("SWIFT / BIC code")
         compliance_info = @user.alive_user_compliance_info
         expect(compliance_info.first_name).to eq("omani")
@@ -3927,7 +4050,7 @@ describe("Payments Settings Scenario", type: :system, js: true) do
 
         click_on("Update settings")
 
-        expect(page).to have_content("Thanks! You're all set.")
+        expect(page).to have_alert(text: "Thanks! You're all set.")
         expect(page).not_to have_content("Routing number")
         compliance_info = @user.alive_user_compliance_info
         expect(compliance_info.first_name).to eq("tunisian")
@@ -3978,7 +4101,7 @@ describe("Payments Settings Scenario", type: :system, js: true) do
 
         click_on("Update settings")
 
-        expect(page).to have_content("Thanks! You're all set.")
+        expect(page).to have_alert(text: "Thanks! You're all set.")
         expect(page).to have_content("Bank and branch code")
         compliance_info = @user.alive_user_compliance_info
         expect(compliance_info.first_name).to eq("Dominican Republic")
@@ -4029,7 +4152,7 @@ describe("Payments Settings Scenario", type: :system, js: true) do
 
         click_on("Update settings")
 
-        expect(page).to have_content("Thanks! You're all set.")
+        expect(page).to have_alert(text: "Thanks! You're all set.")
         expect(page).to have_content("Bank and branch code")
         compliance_info = @user.alive_user_compliance_info
         expect(compliance_info.first_name).to eq("Uzbekistan")
@@ -4080,7 +4203,7 @@ describe("Payments Settings Scenario", type: :system, js: true) do
 
         click_on("Update settings")
 
-        expect(page).to have_content("Thanks! You're all set.")
+        expect(page).to have_alert(text: "Thanks! You're all set.")
         expect(page).to have_content("Bank code")
         compliance_info = @user.alive_user_compliance_info
         expect(compliance_info.first_name).to eq("Bolivian")
@@ -4130,7 +4253,7 @@ describe("Payments Settings Scenario", type: :system, js: true) do
 
         click_on("Update settings")
 
-        expect(page).to have_content("Thanks! You're all set.")
+        expect(page).to have_alert(text: "Thanks! You're all set.")
         expect(page).to have_content("SWIFT / BIC code")
         compliance_info = @user.alive_user_compliance_info
         expect(compliance_info.first_name).to eq("Gabonese")
@@ -4179,7 +4302,7 @@ describe("Payments Settings Scenario", type: :system, js: true) do
 
         click_on("Update settings")
 
-        expect(page).to have_content("Thanks! You're all set.")
+        expect(page).to have_alert(text: "Thanks! You're all set.")
         expect(page).not_to have_content("Routing number")
         compliance_info = @user.alive_user_compliance_info
         expect(compliance_info.first_name).to eq("Monaco")
@@ -4229,7 +4352,7 @@ describe("Payments Settings Scenario", type: :system, js: true) do
 
         click_on("Update settings")
 
-        expect(page).to have_content("Thanks! You're all set.")
+        expect(page).to have_alert(text: "Thanks! You're all set.")
         expect(page).to have_content("SWIFT / BIC code")
         compliance_info = @user.alive_user_compliance_info
         expect(compliance_info.first_name).to eq("Moldova")
@@ -4279,7 +4402,7 @@ describe("Payments Settings Scenario", type: :system, js: true) do
 
         click_on("Update settings")
 
-        expect(page).to have_content("Thanks! You're all set.")
+        expect(page).to have_alert(text: "Thanks! You're all set.")
         expect(page).to have_content("SWIFT / BIC code")
         compliance_info = @user.alive_user_compliance_info
         expect(compliance_info.first_name).to eq("North Macedonian")
@@ -4329,7 +4452,7 @@ describe("Payments Settings Scenario", type: :system, js: true) do
 
         click_on("Update settings")
 
-        expect(page).to have_content("Thanks! You're all set.")
+        expect(page).to have_alert(text: "Thanks! You're all set.")
         expect(page).to have_content("SWIFT / BIC code")
         compliance_info = @user.alive_user_compliance_info
         expect(compliance_info.first_name).to eq("Ethiopia")
@@ -4379,7 +4502,7 @@ describe("Payments Settings Scenario", type: :system, js: true) do
 
         click_on("Update settings")
 
-        expect(page).to have_content("Thanks! You're all set.")
+        expect(page).to have_alert(text: "Thanks! You're all set.")
         expect(page).to have_content("SWIFT / BIC code")
         compliance_info = @user.alive_user_compliance_info
         expect(compliance_info.first_name).to eq("Brunei")
@@ -4429,7 +4552,7 @@ describe("Payments Settings Scenario", type: :system, js: true) do
 
         click_on("Update settings")
 
-        expect(page).to have_content("Thanks! You're all set.")
+        expect(page).to have_alert(text: "Thanks! You're all set.")
         expect(page).to have_content("SWIFT / BIC code")
         compliance_info = @user.alive_user_compliance_info
         expect(compliance_info.first_name).to eq("Guyana")
@@ -4481,7 +4604,7 @@ describe("Payments Settings Scenario", type: :system, js: true) do
 
         click_on("Update settings")
 
-        expect(page).to have_content("Thanks! You're all set.")
+        expect(page).to have_alert(text: "Thanks! You're all set.")
         expect(page).to have_content("SWIFT / BIC code")
         compliance_info = @user.alive_user_compliance_info
         expect(compliance_info.first_name).to eq("Guatemala")
@@ -4531,7 +4654,7 @@ describe("Payments Settings Scenario", type: :system, js: true) do
 
         click_on("Update settings")
 
-        expect(page).to have_content("Thanks! You're all set.")
+        expect(page).to have_alert(text: "Thanks! You're all set.")
         expect(page).to have_content("SWIFT / BIC code")
         compliance_info = @user.alive_user_compliance_info
         expect(compliance_info.first_name).to eq("Panamanian")
@@ -4584,7 +4707,7 @@ describe("Payments Settings Scenario", type: :system, js: true) do
 
         click_on("Update settings")
 
-        expect(page).to have_content("Thanks! You're all set.")
+        expect(page).to have_alert(text: "Thanks! You're all set.")
         expect(page).to have_content("Bank code")
         compliance_info = @user.alive_user_compliance_info
         expect(compliance_info.first_name).to eq("Bangladesh")
@@ -4635,7 +4758,7 @@ describe("Payments Settings Scenario", type: :system, js: true) do
 
         click_on("Update settings")
 
-        expect(page).to have_content("Thanks! You're all set.")
+        expect(page).to have_alert(text: "Thanks! You're all set.")
         expect(page).to have_content("SWIFT / BIC code")
         compliance_info = @user.alive_user_compliance_info
         expect(compliance_info.first_name).to eq("Bhutan")
@@ -4685,7 +4808,7 @@ describe("Payments Settings Scenario", type: :system, js: true) do
 
         click_on("Update settings")
 
-        expect(page).to have_content("Thanks! You're all set.")
+        expect(page).to have_alert(text: "Thanks! You're all set.")
         expect(page).to have_content("SWIFT / BIC code")
         compliance_info = @user.alive_user_compliance_info
         expect(compliance_info.first_name).to eq("Laos")
@@ -4738,7 +4861,7 @@ describe("Payments Settings Scenario", type: :system, js: true) do
 
         click_on("Update settings")
 
-        expect(page).to have_content("Thanks! You're all set.")
+        expect(page).to have_alert(text: "Thanks! You're all set.")
         expect(page).to have_content("SWIFT / BIC code")
         compliance_info = @user.alive_user_compliance_info
         expect(compliance_info.first_name).to eq("Mozambique")
@@ -4789,7 +4912,7 @@ describe("Payments Settings Scenario", type: :system, js: true) do
 
         click_on("Update settings")
 
-        expect(page).to have_content("Thanks! You're all set.")
+        expect(page).to have_alert(text: "Thanks! You're all set.")
         expect(page).to have_content("SWIFT / BIC code")
         compliance_info = @user.alive_user_compliance_info
         expect(compliance_info.first_name).to eq("El Salvadorian")
@@ -4840,7 +4963,7 @@ describe("Payments Settings Scenario", type: :system, js: true) do
 
         click_on("Update settings")
 
-        expect(page).to have_content("Thanks! You're all set.")
+        expect(page).to have_alert(text: "Thanks! You're all set.")
         expect(page).to have_content("Bank code")
         compliance_info = @user.alive_user_compliance_info
         expect(compliance_info.first_name).to eq("Paraguayan")
@@ -4890,7 +5013,7 @@ describe("Payments Settings Scenario", type: :system, js: true) do
 
         click_on("Update settings")
 
-        expect(page).to have_content("Thanks! You're all set.")
+        expect(page).to have_alert(text: "Thanks! You're all set.")
         expect(page).to have_content("SWIFT / BIC code")
         compliance_info = @user.alive_user_compliance_info
         expect(compliance_info.first_name).to eq("Armenian")
@@ -4940,7 +5063,7 @@ describe("Payments Settings Scenario", type: :system, js: true) do
 
         click_on("Update settings")
 
-        expect(page).to have_content("Thanks! You're all set.")
+        expect(page).to have_alert(text: "Thanks! You're all set.")
         expect(page).to have_content("SWIFT / BIC code")
         compliance_info = @user.alive_user_compliance_info
         expect(compliance_info.first_name).to eq("malagasy")
@@ -4991,7 +5114,7 @@ describe("Payments Settings Scenario", type: :system, js: true) do
 
         click_on("Update settings")
 
-        expect(page).to have_content("Thanks! You're all set.")
+        expect(page).to have_alert(text: "Thanks! You're all set.")
         expect(page).to have_content("Bank and branch code")
         compliance_info = @user.alive_user_compliance_info
         expect(compliance_info.first_name).to eq("Sri Lankan")
@@ -5041,7 +5164,7 @@ describe("Payments Settings Scenario", type: :system, js: true) do
 
         click_on("Update settings")
 
-        expect(page).to have_content("Thanks! You're all set.")
+        expect(page).to have_alert(text: "Thanks! You're all set.")
         expect(page).to have_content("SWIFT / BIC code")
         compliance_info = @user.alive_user_compliance_info
         expect(compliance_info.first_name).to eq("Kuwaiti")
@@ -5090,7 +5213,7 @@ describe("Payments Settings Scenario", type: :system, js: true) do
 
         click_on("Update settings")
 
-        expect(page).to have_content("Thanks! You're all set.")
+        expect(page).to have_alert(text: "Thanks! You're all set.")
         compliance_info = @user.alive_user_compliance_info
         expect(compliance_info.first_name).to eq("Icelandic")
         expect(compliance_info.last_name).to eq("Creator")
@@ -5138,7 +5261,7 @@ describe("Payments Settings Scenario", type: :system, js: true) do
 
         click_on("Update settings")
 
-        expect(page).to have_content("Thanks! You're all set.")
+        expect(page).to have_alert(text: "Thanks! You're all set.")
         expect(page).to have_content("SWIFT / BIC code")
         compliance_info = @user.alive_user_compliance_info
         expect(compliance_info.first_name).to eq("Qatar")
@@ -5188,7 +5311,7 @@ describe("Payments Settings Scenario", type: :system, js: true) do
 
         click_on("Update settings")
 
-        expect(page).to have_content("Thanks! You're all set.")
+        expect(page).to have_alert(text: "Thanks! You're all set.")
         expect(page).to have_content("SWIFT / BIC code")
         compliance_info = @user.alive_user_compliance_info
         expect(compliance_info.first_name).to eq("Bahamas")
@@ -5238,7 +5361,7 @@ describe("Payments Settings Scenario", type: :system, js: true) do
 
         click_on("Update settings")
 
-        expect(page).to have_content("Thanks! You're all set.")
+        expect(page).to have_alert(text: "Thanks! You're all set.")
         expect(page).to have_content("SWIFT / BIC code")
         compliance_info = @user.alive_user_compliance_info
         expect(compliance_info.first_name).to eq("Saint Lucia")
@@ -5287,7 +5410,7 @@ describe("Payments Settings Scenario", type: :system, js: true) do
 
         click_on("Update settings")
 
-        expect(page).to have_content("Thanks! You're all set.")
+        expect(page).to have_alert(text: "Thanks! You're all set.")
         expect(page).not_to have_content("Routing number")
         compliance_info = @user.alive_user_compliance_info
         expect(compliance_info.first_name).to eq("Senegal")
@@ -5336,7 +5459,7 @@ describe("Payments Settings Scenario", type: :system, js: true) do
 
         click_on("Update settings")
 
-        expect(page).to have_content("Thanks! You're all set.")
+        expect(page).to have_alert(text: "Thanks! You're all set.")
         expect(page).to have_content("SWIFT / BIC code")
         compliance_info = @user.alive_user_compliance_info
         expect(compliance_info.first_name).to eq("Angola")
@@ -5385,7 +5508,7 @@ describe("Payments Settings Scenario", type: :system, js: true) do
 
         click_on("Update settings")
 
-        expect(page).to have_content("Thanks! You're all set.")
+        expect(page).to have_alert(text: "Thanks! You're all set.")
         expect(page).not_to have_content("Routing number")
         compliance_info = @user.alive_user_compliance_info
         expect(compliance_info.first_name).to eq("Niger")
@@ -5435,7 +5558,7 @@ describe("Payments Settings Scenario", type: :system, js: true) do
 
         click_on("Update settings")
 
-        expect(page).to have_content("Thanks! You're all set.")
+        expect(page).to have_alert(text: "Thanks! You're all set.")
         expect(page).to have_content("SWIFT / BIC code")
         compliance_info = @user.alive_user_compliance_info
         expect(compliance_info.first_name).to eq("San Marino")
@@ -5485,7 +5608,7 @@ describe("Payments Settings Scenario", type: :system, js: true) do
 
         click_on("Update settings")
 
-        expect(page).to have_content("Thanks! You're all set.")
+        expect(page).to have_alert(text: "Thanks! You're all set.")
         expect(page).to have_content("SWIFT / BIC code")
         compliance_info = @user.alive_user_compliance_info
         expect(compliance_info.first_name).to eq("Cambodia")
@@ -5535,7 +5658,7 @@ describe("Payments Settings Scenario", type: :system, js: true) do
 
         click_on("Update settings")
 
-        expect(page).to have_content("Thanks! You're all set.")
+        expect(page).to have_alert(text: "Thanks! You're all set.")
         expect(page).to have_content("SWIFT / BIC code")
         compliance_info = @user.alive_user_compliance_info
         expect(compliance_info.first_name).to eq("Mongolia")
@@ -5585,7 +5708,7 @@ describe("Payments Settings Scenario", type: :system, js: true) do
 
         click_on("Update settings")
 
-        expect(page).to have_content("Thanks! You're all set.")
+        expect(page).to have_alert(text: "Thanks! You're all set.")
         expect(page).to have_content("SWIFT / BIC code")
         compliance_info = @user.alive_user_compliance_info
         expect(compliance_info.first_name).to eq("Algeria")
@@ -5635,7 +5758,7 @@ describe("Payments Settings Scenario", type: :system, js: true) do
 
         click_on("Update settings")
 
-        expect(page).to have_content("Thanks! You're all set.")
+        expect(page).to have_alert(text: "Thanks! You're all set.")
         expect(page).to have_content("SWIFT / BIC code")
         compliance_info = @user.alive_user_compliance_info
         expect(compliance_info.first_name).to eq("Macao")
@@ -5684,7 +5807,7 @@ describe("Payments Settings Scenario", type: :system, js: true) do
 
         click_on("Update settings")
 
-        expect(page).to have_content("Thanks! You're all set.")
+        expect(page).to have_alert(text: "Thanks! You're all set.")
         expect(page).not_to have_content("Routing number")
         compliance_info = @user.alive_user_compliance_info
         expect(compliance_info.first_name).to eq("Benin")
@@ -5732,7 +5855,7 @@ describe("Payments Settings Scenario", type: :system, js: true) do
 
         click_on("Update settings")
 
-        expect(page).to have_content("Thanks! You're all set.")
+        expect(page).to have_alert(text: "Thanks! You're all set.")
         expect(page).not_to have_content("Routing number")
         compliance_info = @user.alive_user_compliance_info
         expect(compliance_info.first_name).to eq("Cote d'Ivoire")
@@ -5866,6 +5989,17 @@ describe("Payments Settings Scenario", type: :system, js: true) do
 
           expect(page).to have_text("Please enter your exact name.")
           expect(@creator.backtax_agreements.count).to eq(0)
+        end
+
+        it "allows the creator to open the opt-in modal even if their legal entity name is missing" do
+          @creator.fetch_or_build_user_compliance_info
+          allow_any_instance_of(UserComplianceInfo).to receive(:legal_entity_name).and_return(nil)
+
+          visit settings_payments_path
+
+          click_on "Opt-in to backtaxes collection"
+
+          expect(page).to have_field("Type your full name to opt-in", placeholder: "Full name")
         end
       end
     end

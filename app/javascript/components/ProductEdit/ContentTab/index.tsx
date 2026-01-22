@@ -2,13 +2,13 @@ import { findChildren, generateJSON, Node as TiptapNode } from "@tiptap/core";
 import { DOMSerializer } from "@tiptap/pm/model";
 import { EditorContent } from "@tiptap/react";
 import { parseISO } from "date-fns";
-import partition from "lodash/partition";
+import { partition } from "lodash-es";
 import * as React from "react";
 import { ReactSortable } from "react-sortablejs";
 import { cast } from "ts-safe-cast";
 
 import { fetchDropboxFiles, ResponseDropboxFile, uploadDropboxFile } from "$app/data/dropbox_upload";
-import { Post } from "$app/data/workflows";
+import { type Post } from "$app/types/workflow";
 import { escapeRegExp } from "$app/utils";
 import { assertDefined } from "$app/utils/assert";
 import { formatDate } from "$app/utils/date";
@@ -57,6 +57,8 @@ import { MoveNode } from "$app/components/TiptapExtensions/MoveNode";
 import { Posts, PostsProvider } from "$app/components/TiptapExtensions/Posts";
 import { ShortAnswer } from "$app/components/TiptapExtensions/ShortAnswer";
 import { UpsellCard } from "$app/components/TiptapExtensions/UpsellCard";
+import { Card, CardContent } from "$app/components/ui/Card";
+import { Row, RowContent, Rows } from "$app/components/ui/Rows";
 import { Tabs, Tab } from "$app/components/ui/Tabs";
 import { UpsellSelectModal, Product, ProductOption } from "$app/components/UpsellSelectModal";
 import { useConfigureEvaporate } from "$app/components/useConfigureEvaporate";
@@ -64,7 +66,7 @@ import { useIsAboveBreakpoint } from "$app/components/useIsAboveBreakpoint";
 import { useRefToLatest } from "$app/components/useRefToLatest";
 import { WithTooltip } from "$app/components/WithTooltip";
 
-import { FileEmbed, FileEmbedConfig, getDownloadUrl } from "./FileEmbed";
+import { FileEmbed, FileEmbedConfig } from "./FileEmbed";
 import { Page, PageTab, titleWithFallback } from "./PageTab";
 
 declare global {
@@ -91,7 +93,7 @@ export const extensions = (productId: string, extraExtensions: TiptapNode[] = []
 ];
 
 const ContentTabContent = ({ selectedVariantId }: { selectedVariantId: string | null }) => {
-  const { id, product, updateProduct, seller, save, existingFiles, setExistingFiles, uniquePermalink } =
+  const { id, product, updateProduct, seller, save, existingFiles, setExistingFiles, uniquePermalink, filesById } =
     useProductEditContext();
   const uid = React.useId();
   const isDesktop = useIsAboveBreakpoint("lg");
@@ -209,9 +211,9 @@ const ContentTabContent = ({ selectedVariantId }: { selectedVariantId: string | 
     productId: id,
     variantId: selectedVariantId,
     prepareDownload: save,
-    files: product.files.map((file) => ({ ...file, url: getDownloadUrl(id, file) })),
+    filesById,
   });
-  const fileEmbedConfig = useRefToLatest<FileEmbedConfig>({ files: product.files });
+  const fileEmbedConfig = useRefToLatest<FileEmbedConfig>({ filesById });
   const uploadFilesRef = useRefToLatest(uploadFiles);
   const contentEditorExtensions = extensions(id, [
     FileEmbedGroup.configure({ getConfig: () => fileEmbedGroupConfig.current }),
@@ -362,10 +364,13 @@ const ContentTabContent = ({ selectedVariantId }: { selectedVariantId: string | 
 
   const addDropboxFiles = (files: ResponseDropboxFile[]) => {
     updateProduct((product) => {
+      const [updatedFiles, nonModifiedFiles] = partition(product.files, (file) =>
+        files.some(({ external_id }) => file.id === external_id),
+      );
       product.files = [
-        ...product.files.filter((file) => !files.some(({ external_id }) => file.id === external_id)),
+        ...nonModifiedFiles,
         ...files.map((file) => {
-          const existing = product.files.find(({ id }) => id === file.external_id);
+          const existing = updatedFiles.find(({ id }) => id === file.external_id);
           const extension = FileUtils.getFileExtension(file.name).toUpperCase();
           return {
             display_name: existing?.display_name ?? FileUtils.getFileNameWithoutExtension(file.name),
@@ -541,7 +546,7 @@ const ContentTabContent = ({ selectedVariantId }: { selectedVariantId: string | 
                       </>
                     }
                   >
-                    <div className="paragraphs">
+                    <div className="flex flex-col gap-4">
                       <input
                         type="text"
                         placeholder="Find your files"
@@ -550,8 +555,8 @@ const ContentTabContent = ({ selectedVariantId }: { selectedVariantId: string | 
                           setSelectingExistingFiles({ ...selectingExistingFiles, query: evt.target.value })
                         }
                       />
-                      <div
-                        className="rows overflow-auto"
+                      <Rows
+                        className="overflow-auto"
                         role="listbox"
                         style={{ maxHeight: "20rem", textAlign: "initial" }}
                       >
@@ -561,45 +566,50 @@ const ContentTabContent = ({ selectedVariantId }: { selectedVariantId: string | 
                           </div>
                         ) : (
                           filteredExistingFiles.map((file) => (
-                            <label key={file.id} role="option" style={{ cursor: "pointer" }}>
-                              <div className="content">
-                                <FileKindIcon extension={file.extension} />
-                                <div>
-                                  <h4>{file.display_name}</h4>
-                                  <span>{`${file.attached_product_name || "N/A"} (${FileUtils.getFullFileSizeString(file.file_size ?? 0)})`}</span>
-                                </div>
-                                <input
-                                  type="checkbox"
-                                  checked={selectingExistingFiles.selected.includes(file)}
-                                  onChange={() => {
-                                    setSelectingExistingFiles({
-                                      ...selectingExistingFiles,
-                                      selected: selectingExistingFiles.selected.includes(file)
-                                        ? selectingExistingFiles.selected.filter((id) => id !== file)
-                                        : [...selectingExistingFiles.selected, file],
-                                    });
-                                  }}
-                                  style={{ marginLeft: "auto" }}
-                                />
-                              </div>
-                            </label>
+                            <Row key={file.id} role="option" className="cursor-pointer" asChild>
+                              <label>
+                                <RowContent>
+                                  <FileKindIcon extension={file.extension} />
+                                  <div>
+                                    <h4>{file.display_name}</h4>
+                                    <span>{`${file.attached_product_name || "N/A"} (${FileUtils.getFullFileSizeString(file.file_size ?? 0)})`}</span>
+                                  </div>
+                                  <input
+                                    type="checkbox"
+                                    checked={selectingExistingFiles.selected.includes(file)}
+                                    onChange={() => {
+                                      setSelectingExistingFiles({
+                                        ...selectingExistingFiles,
+                                        selected: selectingExistingFiles.selected.includes(file)
+                                          ? selectingExistingFiles.selected.filter((id) => id !== file)
+                                          : [...selectingExistingFiles.selected, file],
+                                      });
+                                    }}
+                                    style={{ marginLeft: "auto" }}
+                                  />
+                                </RowContent>
+                              </label>
+                            </Row>
                           ))
                         )}
-                      </div>
+                      </Rows>
                     </div>
                   </Modal>
                 ) : null}
 
                 <Modal open={showEmbedModal} onClose={() => setShowEmbedModal(false)} title="Embed media">
                   <p>Paste a video link or upload images or videos.</p>
-                  <Tabs>
-                    <Tab isSelected aria-controls={`${uid}-embed-tab`}>
-                      <Icon name="link" />
-                      <h4>Embed link</h4>
+                  <Tabs variant="buttons">
+                    <Tab isSelected aria-controls={`${uid}-embed-tab`} asChild>
+                      <button type="button" className="cursor-pointer all-unset">
+                        <Icon name="link" />
+                        <h4>Embed link</h4>
+                      </button>
                     </Tab>
-                    <Tab isSelected={false}>
-                      <label className="button">
+                    <Tab isSelected={false} asChild>
+                      <label>
                         <input
+                          className="sr-only"
                           type="file"
                           accept="image/*,video/*"
                           multiple
@@ -730,7 +740,7 @@ const ContentTabContent = ({ selectedVariantId }: { selectedVariantId: string | 
                 </Popover>
                 <>
                   <Separator aria-orientation="vertical" />
-                  <button className="toolbar-item" onClick={handleCreatePageClick}>
+                  <button className="toolbar-item cursor-pointer all-unset" onClick={handleCreatePageClick}>
                     <Icon name="plus" /> Page
                   </button>
                 </>
@@ -742,7 +752,7 @@ const ContentTabContent = ({ selectedVariantId }: { selectedVariantId: string | 
           className="md:h-auto! md:flex-1"
           pageList={
             !isDesktop && !showPageList ? null : (
-              <div className="paragraphs">
+              <div className="flex flex-col gap-4">
                 {showPageList ? (
                   <ReactSortable
                     draggable="[role=tab]"
@@ -754,7 +764,7 @@ const ContentTabContent = ({ selectedVariantId }: { selectedVariantId: string | 
                     <>
                       {isDesktop ? null : (
                         <PageListItem asChild className="tailwind-override text-left">
-                          <button onClick={() => setPagesExpanded(!pagesExpanded)}>
+                          <button className="cursor-pointer all-unset" onClick={() => setPagesExpanded(!pagesExpanded)}>
                             <span className="flex-1">
                               <strong>Table of contents:</strong> {titleWithFallback(selectedPage?.title)}
                             </span>
@@ -815,7 +825,7 @@ const ContentTabContent = ({ selectedVariantId }: { selectedVariantId: string | 
                               />
                             </WithTooltip>
                           ) : null}
-                          <PageListItem asChild className="tailwind-override text-left">
+                          <PageListItem asChild className="text-left">
                             <button
                               className="add-page"
                               onClick={(e) => {
@@ -834,22 +844,40 @@ const ContentTabContent = ({ selectedVariantId }: { selectedVariantId: string | 
                 ) : null}
                 {isDesktop ? (
                   <>
-                    <div className="stack">
-                      <ReviewForm permalink="" purchaseId="" review={null} preview />
-                    </div>
-                    <div className="stack">
+                    <Card>
+                      <ReviewForm
+                        permalink=""
+                        purchaseId=""
+                        review={null}
+                        preview
+                        className="flex flex-wrap items-center justify-between gap-4 p-4"
+                      />
+                    </Card>
+                    <Card>
                       {product.native_type === "membership" ? (
-                        <details>
-                          <summary inert>Membership</summary>
-                        </details>
+                        <CardContent asChild details>
+                          <details>
+                            <summary className="grow grid-flow-col grid-cols-[1fr_auto] before:col-start-2" inert>
+                              Membership
+                            </summary>
+                          </details>
+                        </CardContent>
                       ) : null}
-                      <details>
-                        <summary inert>Receipt</summary>
-                      </details>
-                      <details>
-                        <summary inert>Library</summary>
-                      </details>
-                    </div>
+                      <CardContent asChild details>
+                        <details>
+                          <summary inert className="grow grid-flow-col grid-cols-[1fr_auto] before:col-start-2">
+                            Receipt
+                          </summary>
+                        </details>
+                      </CardContent>
+                      <CardContent asChild details>
+                        <details>
+                          <summary inert className="grow grid-flow-col grid-cols-[1fr_auto] before:col-start-2">
+                            Library
+                          </summary>
+                        </details>
+                      </CardContent>
+                    </Card>
                     <EntityInfo
                       entityName={selectedVariant ? `${product.name} - ${selectedVariant.name}` : product.name}
                       creator={seller}
@@ -1037,73 +1065,75 @@ export const ContentTab = () => {
             <Layout
               headerActions={
                 product.variants.length > 0 ? (
-                  <ComboBox<Variant>
-                    className="hidden lg:block"
-                    // TODO: Currently needed to get the icon on the selected option even though this is not multiple select. We should fix this in the design system
-                    multiple
-                    input={(props) => (
-                      <div {...props} className="input h-full min-h-auto" aria-label="Select a version">
-                        <span className="fake-input text-singleline">
-                          {selectedVariant && !product.has_same_rich_content_for_all_variants
-                            ? `Editing: ${selectedVariant.name || "Untitled"}`
-                            : "Editing: All versions"}
-                        </span>
-                        <Icon name="outline-cheveron-down" />
-                      </div>
-                    )}
-                    options={product.variants}
-                    option={(item, props, index) => (
-                      <>
-                        <div
-                          {...props}
-                          onClick={(e) => {
-                            props.onClick?.(e);
-                            setSelectedVariantId(item.id);
-                          }}
-                          aria-selected={item.id === selectedVariantId}
-                          inert={product.has_same_rich_content_for_all_variants}
-                        >
-                          <div>
-                            <h4>{item.name || "Untitled"}</h4>
-                            {item.id === selectedVariant?.id ? (
-                              <small>Editing</small>
-                            ) : product.has_same_rich_content_for_all_variants || item.rich_content.length ? (
-                              <small>
-                                Last edited on{" "}
-                                {formatDate(
-                                  (product.has_same_rich_content_for_all_variants
-                                    ? product.rich_content
-                                    : item.rich_content
-                                  ).reduce<Date | null>((acc, item) => {
-                                    const date = parseISO(item.updated_at);
-                                    return acc && acc > date ? acc : date;
-                                  }, null) ?? new Date(),
-                                )}
-                              </small>
-                            ) : (
-                              <small className="text-muted">No content yet</small>
-                            )}
-                          </div>
+                  <>
+                    <hr className="relative left-1/2 my-2 w-screen max-w-none -translate-x-1/2 border-border lg:hidden" />
+                    <ComboBox<Variant>
+                      // TODO: Currently needed to get the icon on the selected option even though this is not multiple select. We should fix this in the design system
+                      multiple
+                      input={(props) => (
+                        <div {...props} className="input h-full min-h-auto" aria-label="Select a version">
+                          <span className="fake-input text-singleline">
+                            {selectedVariant && !product.has_same_rich_content_for_all_variants
+                              ? `Editing: ${selectedVariant.name || "Untitled"}`
+                              : "Editing: All versions"}
+                          </span>
+                          <Icon name="outline-cheveron-down" />
                         </div>
-                        {index === product.variants.length - 1 ? (
-                          <div className="option">
-                            <label style={{ alignItems: "center" }}>
-                              <input
-                                type="checkbox"
-                                checked={product.has_same_rich_content_for_all_variants}
-                                onChange={() => {
-                                  if (!product.has_same_rich_content_for_all_variants && product.variants.length > 1)
-                                    return setConfirmingDiscardVariantContent(true);
-                                  setHasSameRichContent(!product.has_same_rich_content_for_all_variants);
-                                }}
-                              />
-                              <small>Use the same content for all versions</small>
-                            </label>
+                      )}
+                      options={product.variants}
+                      option={(item, props, index) => (
+                        <>
+                          <div
+                            {...props}
+                            onClick={(e) => {
+                              props.onClick?.(e);
+                              setSelectedVariantId(item.id);
+                            }}
+                            aria-selected={item.id === selectedVariantId}
+                            inert={product.has_same_rich_content_for_all_variants}
+                          >
+                            <div>
+                              <h4>{item.name || "Untitled"}</h4>
+                              {item.id === selectedVariant?.id ? (
+                                <small>Editing</small>
+                              ) : product.has_same_rich_content_for_all_variants || item.rich_content.length ? (
+                                <small>
+                                  Last edited on{" "}
+                                  {formatDate(
+                                    (product.has_same_rich_content_for_all_variants
+                                      ? product.rich_content
+                                      : item.rich_content
+                                    ).reduce<Date | null>((acc, item) => {
+                                      const date = parseISO(item.updated_at);
+                                      return acc && acc > date ? acc : date;
+                                    }, null) ?? new Date(),
+                                  )}
+                                </small>
+                              ) : (
+                                <small className="text-muted">No content yet</small>
+                              )}
+                            </div>
                           </div>
-                        ) : null}
-                      </>
-                    )}
-                  />
+                          {index === product.variants.length - 1 ? (
+                            <div className="option">
+                              <label style={{ alignItems: "center" }}>
+                                <input
+                                  type="checkbox"
+                                  checked={product.has_same_rich_content_for_all_variants}
+                                  onChange={() => {
+                                    if (!product.has_same_rich_content_for_all_variants && product.variants.length > 1)
+                                      return setConfirmingDiscardVariantContent(true);
+                                    setHasSameRichContent(!product.has_same_rich_content_for_all_variants);
+                                  }}
+                                />
+                                <small>Use the same content for all versions</small>
+                              </label>
+                            </div>
+                          ) : null}
+                        </>
+                      )}
+                    />
+                  </>
                 ) : null
               }
             >

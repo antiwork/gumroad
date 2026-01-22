@@ -43,7 +43,7 @@ class BlockedObject
     def find_object(object_value)
       find_by(object_value:)
     rescue NoMethodError
-      BlockedObject.none
+      nil
     end
 
     def find_active_object(object_value)

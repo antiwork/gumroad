@@ -6,7 +6,6 @@ import { saveProduct } from "$app/data/product_edit";
 import { setProductPublished } from "$app/data/publish_product";
 import { classNames } from "$app/utils/classNames";
 import { assertResponseError } from "$app/utils/request";
-import { paramsToQueryString } from "$app/utils/url";
 
 import { Button, NavigationButton } from "$app/components/Button";
 import { CopyToClipboard } from "$app/components/CopyToClipboard";
@@ -14,10 +13,11 @@ import { useCurrentSeller } from "$app/components/CurrentSeller";
 import { useDomains } from "$app/components/DomainSettings";
 import { Icon } from "$app/components/Icons";
 import { Preview } from "$app/components/Preview";
+import { PreviewSidebar, WithPreviewSidebar } from "$app/components/PreviewSidebar";
 import { useImageUploadSettings } from "$app/components/RichTextEditor";
 import { showAlert } from "$app/components/server-components/Alert";
-import { newEmailPath } from "$app/components/server-components/EmailsPage";
 import { SubtitleFile } from "$app/components/SubtitleList/Row";
+import { Alert } from "$app/components/ui/Alert";
 import { PageHeader } from "$app/components/ui/PageHeader";
 import { Tabs, Tab } from "$app/components/ui/Tabs";
 import { useRefToLatest } from "$app/components/useRefToLatest";
@@ -89,8 +89,8 @@ const NotifyAboutProductUpdatesAlert = () => {
       onMouseEnter={handleMouseEnter}
       onMouseLeave={handleMouseLeave}
     >
-      <div role="alert" className="info">
-        <div className="paragraphs">
+      <Alert variant="info">
+        <div className="flex flex-col gap-4">
           Changes saved! Would you like to notify your customers about those changes?
           <div className="flex gap-2">
             <Button color="primary" outline onClick={() => close()}>
@@ -98,23 +98,24 @@ const NotifyAboutProductUpdatesAlert = () => {
             </Button>
             <NavigationButton
               color="primary"
-              href={`${newEmailPath}?${paramsToQueryString({
+              href={Routes.new_email_path({
                 template: "content_updates",
                 product: uniquePermalink,
                 bought: contentUpdates?.uniquePermalinkOrVariantIds ?? [],
-              })}`}
+              })}
               onClick={() => {
                 // NOTE: this is a workaround to make sure the alert closes after the tab is opened
                 // with correct URL params. Otherwise `bought` won't be set correctly.
                 setTimeout(() => close(), 100);
               }}
               target="_blank"
+              rel="noreferrer"
             >
               Send notification
             </NavigationButton>
           </div>
         </div>
-      </div>
+      </Alert>
     </div>
   );
 };
@@ -124,11 +125,17 @@ export const Layout = ({
   preview,
   isLoading = false,
   headerActions,
+  previewScaleFactor = 0.4,
+  showBorder = true,
+  showNavigationButton = true,
 }: {
   children: React.ReactNode;
   preview?: React.ReactNode;
   isLoading?: boolean;
   headerActions?: React.ReactNode;
+  previewScaleFactor?: number;
+  showBorder?: boolean;
+  showNavigationButton?: boolean;
 }) => {
   const { id, product, updateProduct, uniquePermalink, saving, save, currencyType } = useProductEditContext();
   const rootPath = `/products/${uniquePermalink}/edit`;
@@ -279,6 +286,11 @@ export const Layout = ({
                 </Link>
               </Tab>
             ) : null}
+            <Tab asChild isSelected={tab === "receipt"}>
+              <Link to={`${rootPath}/receipt`} onClick={onTabClick}>
+                Receipt
+              </Link>
+            </Tab>
             <Tab asChild isSelected={tab === "share"}>
               <Link
                 to={`${rootPath}/share`}
@@ -301,39 +313,43 @@ export const Layout = ({
           {headerActions}
         </div>
       </PageHeader>
-      <div className={preview ? "squished fixed-aside flex-1 lg:grid lg:grid-cols-[1fr_30vw]" : "flex-1"}>
-        {children}
-        {preview ? (
-          <aside aria-label="Preview" className="sticky! top-0 min-h-screen self-start overflow-y-auto">
-            <header>
-              <h2>Preview</h2>
-              <WithTooltip tip="Preview">
+      {preview ? (
+        <WithPreviewSidebar className="flex-1">
+          {children}
+          <PreviewSidebar
+            {...(showNavigationButton && {
+              previewLink: (props) => (
                 <NavigationButton
-                  aria-label="Preview"
+                  {...props}
                   disabled={isBusy}
                   href={url}
                   onClick={(evt) => {
                     evt.preventDefault();
                     void save().then(() => window.open(url, "_blank"));
                   }}
-                >
-                  <Icon name="arrow-diagonal-up-right" />
-                </NavigationButton>
-              </WithTooltip>
-            </header>
+                />
+              ),
+            })}
+          >
             <Preview
-              scaleFactor={0.4}
-              style={{
-                border: "var(--border)",
-                backgroundColor: "rgb(var(--filled))",
-                borderRadius: "var(--border-radius-2)",
-              }}
+              scaleFactor={previewScaleFactor}
+              style={
+                showBorder
+                  ? {
+                      border: "var(--border)",
+                      backgroundColor: "rgb(var(--filled))",
+                      borderRadius: "var(--border-radius-2)",
+                    }
+                  : {}
+              }
             >
               {preview}
             </Preview>
-          </aside>
-        ) : null}
-      </div>
+          </PreviewSidebar>
+        </WithPreviewSidebar>
+      ) : (
+        <div className="flex-1">{children}</div>
+      )}
     </>
   );
 };

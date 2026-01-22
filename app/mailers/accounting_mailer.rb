@@ -73,7 +73,7 @@ class AccountingMailer < ApplicationMailer
       stripe: { held_by_gumroad: { active: 0, suspended: 0 }, held_by_stripe: { active: 0, suspended: 0 } },
       paypal: { active: 0, suspended: 0 }
     }
-    balances_csv = CSV.generate do |csv|
+    balances_csv = CsvSafe.generate do |csv|
       csv << ["user id", "paypal balance (in dollars)", "stripe balance (in dollars)", "is_suspended", "user_risk_state", "tos_violation_reason"]
       User.holding_non_zero_balance.each do |user|
         stat_key = user.suspended? ? :suspended : :active

@@ -4,7 +4,8 @@ import { Button } from "$app/components/Button";
 import { Icon } from "$app/components/Icons";
 import { PriceInput } from "$app/components/PriceInput";
 import { ShippingDestination, useProductEditContext } from "$app/components/ProductEdit/state";
-import Placeholder from "$app/components/ui/Placeholder";
+import { Card, CardContent } from "$app/components/ui/Card";
+import { Placeholder } from "$app/components/ui/Placeholder";
 import { WithTooltip } from "$app/components/WithTooltip";
 
 export const ShippingDestinationsEditor = ({
@@ -34,7 +35,7 @@ export const ShippingDestinationsEditor = ({
         <h2>Shipping destinations</h2>
       </header>
       {shippingDestinations.length > 0 ? (
-        <div className="stack">
+        <Card>
           {shippingDestinations.map((shippingDestination, index) => (
             <ShippingDestinationRow
               shippingDestination={shippingDestination}
@@ -49,13 +50,13 @@ export const ShippingDestinationsEditor = ({
               key={index}
             />
           ))}
-          <div>
-            <Button onClick={addShippingDestination}>
+          <CardContent>
+            <Button onClick={addShippingDestination} className="grow basis-0">
               <Icon name="plus" />
               Add shipping destination
             </Button>
-          </div>
-        </div>
+          </CardContent>
+        </Card>
       ) : (
         <Placeholder>
           <h2>Add shipping destinations</h2>
@@ -87,33 +88,36 @@ const ShippingDestinationRow = ({
   const updateDestination = (update: Partial<ShippingDestination>) => onChange({ ...shippingDestination, ...update });
 
   return (
-    <div aria-label="Shipping destination">
-      <fieldset className="input-with-button">
+    <CardContent aria-label="Shipping destination">
+      <fieldset className="grow basis-0">
         <legend>
           <label htmlFor={`${uid}-country`}>Country</label>
         </legend>
-        <select
-          id={`${uid}-country`}
-          aria-label="Country"
-          value={shippingDestination.country_code}
-          onChange={(evt) => updateDestination({ country_code: evt.target.value })}
-        >
-          {availableCountries.map((country) => {
-            const shouldInsertDividerAfter = INSERT_DIVIDERS_AFTER_CODES.includes(country.code);
+        <div className="flex gap-2">
+          <select
+            id={`${uid}-country`}
+            aria-label="Country"
+            className="flex-1"
+            value={shippingDestination.country_code}
+            onChange={(evt) => updateDestination({ country_code: evt.target.value })}
+          >
+            {availableCountries.map((country) => {
+              const shouldInsertDividerAfter = INSERT_DIVIDERS_AFTER_CODES.includes(country.code);
 
-            return (
-              <React.Fragment key={country.code}>
-                <option value={country.code}>{country.name}</option>
-                {shouldInsertDividerAfter ? <option disabled>──────────────</option> : null}
-              </React.Fragment>
-            );
-          })}
-        </select>
-        <WithTooltip position="bottom" tip="Remove">
-          <Button color="danger" outline onClick={onRemove} aria-label="Remove shipping destination">
-            <Icon name="trash2" />
-          </Button>
-        </WithTooltip>
+              return (
+                <React.Fragment key={country.code}>
+                  <option value={country.code}>{country.name}</option>
+                  {shouldInsertDividerAfter ? <option disabled>──────────────</option> : null}
+                </React.Fragment>
+              );
+            })}
+          </select>
+          <WithTooltip position="bottom" tip="Remove">
+            <Button color="danger" outline onClick={onRemove} aria-label="Remove shipping destination">
+              <Icon name="trash2" />
+            </Button>
+          </WithTooltip>
+        </div>
       </fieldset>
       <div style={{ display: "grid", gridAutoFlow: "column", gap: "var(--spacer-3)", width: "100%" }}>
         <fieldset>
@@ -141,6 +145,6 @@ const ShippingDestinationRow = ({
           />
         </fieldset>
       </div>
-    </div>
+    </CardContent>
   );
 };

@@ -13,7 +13,7 @@ CDN_URL_MAP = {
 public_assets_cdn_hosts = {
   development: {
     s3_proxy_host: "https://staging-static-2.gumroad.com",
-    public_storage_host: "https://staging-public-files.gumroad.com"
+    public_storage_host: AWS_S3_ENDPOINT
   },
   test: {
     s3_proxy_host: "https://test-static-2.gumroad.com",

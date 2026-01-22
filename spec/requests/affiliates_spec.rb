@@ -83,7 +83,9 @@ describe "Affiliates", type: :system, js: true do
     expect(page).to_not have_table "Requests", with_rows: [{ "Name" => affiliate_request.name }]
 
     # Clear the search and make sure the requests table is back
-    fill_in "Search", with: ""
+    select_disclosure "Search" do
+      fill_in "Search", with: ""
+    end
     expect(page).to have_table "Affiliates", with_rows: [
       { "Name" => affiliate1.affiliate_user.name, "Product" => product.name, "Commission" => "3%" },
       { "Name" => affiliate2.affiliate_user.name, "Product" => product.name, "Commission" => "3%" },
@@ -196,7 +198,7 @@ describe "Affiliates", type: :system, js: true do
     ]
 
     find(:table_row, { "Name" => affiliate_user1.name, "Product" => "2 products" }).click
-    within_section affiliate_user1.name, section_element: :aside do
+    within_modal affiliate_user1.name do
       within_section product.name do
         expect(page).to have_text("Revenue $20", normalize_ws: true)
         expect(page).to have_text("Sales 2", normalize_ws: true)
@@ -215,7 +217,7 @@ describe "Affiliates", type: :system, js: true do
     end
 
     find(:table_row, { "Name" => affiliate_user2.name, "Product" => product.name }).click
-    within_section affiliate_user2.name, section_element: :aside do
+    within_modal affiliate_user2.name do
       within_section product.name do
         expect(page).to have_text("Revenue $10", normalize_ws: true)
         expect(page).to have_text("Sales 1", normalize_ws: true)
@@ -228,7 +230,7 @@ describe "Affiliates", type: :system, js: true do
     end
 
     find(:table_row, { "Name" => affiliate_user3.name, "Product" => product.name }).click
-    within_section affiliate_user3.name, section_element: :aside do
+    within_modal affiliate_user3.name do
       within_section product.name do
         expect(page).to have_text("Revenue $0", normalize_ws: true)
         expect(page).to have_text("Sales 0", normalize_ws: true)
@@ -295,7 +297,7 @@ describe "Affiliates", type: :system, js: true do
         expect(page).to have_table "Requests", with_rows: [{ "Name" => affiliate_request.name }]
 
         find(:table_row, { "Name" => new_affiliate_user.name, "Product" => "2 products" }).click
-        within_section new_affiliate_user.name, section_element: :aside do
+        within_modal new_affiliate_user.name do
           within_section product_one.name do
             expect(page).to have_text("Revenue $0", normalize_ws: true)
             expect(page).to have_text("Sales 0", normalize_ws: true)
@@ -348,7 +350,7 @@ describe "Affiliates", type: :system, js: true do
         ]
 
         find(:table_row, { "Name" => new_affiliate_user.name, "Product" => product_one.name }).click
-        within_section new_affiliate_user.name, section_element: :aside do
+        within_modal new_affiliate_user.name do
           within_section product_one.name do
             expect(page).to have_text("Revenue $0", normalize_ws: true)
             expect(page).to have_text("Sales 0", normalize_ws: true)
@@ -398,12 +400,12 @@ describe "Affiliates", type: :system, js: true do
 
         within :table_row, { "Products" => "2 products" } do
           expect(page).to have_link("2 products", href: new_direct_affiliate.referral_url)
+          find(:table_cell, "Products").find("a").hover
+          expect(page).to have_text("#{product_one.name} (15%), #{product_two.name} (5%)")
         end
-        within :table_row, { "Products" => product_one.name } do
+        within :table_row, { "Products" => product_one.name, "Name" => existing_affiliate_user.name } do
           expect(page).to have_link(product_one.name, href: existing_affiliate.referral_url_for_product(product_one))
         end
-        find("td[data-label='Products'] a", match: :first).hover
-        expect(page).to have_text("#{product_one.name} (15%), #{product_two.name} (5%)")
 
         expect(new_direct_affiliate.apply_to_all_products).to be false
         product_affiliate_1, product_affiliate_2 = new_direct_affiliate.product_affiliates.to_a
@@ -440,7 +442,7 @@ describe "Affiliates", type: :system, js: true do
 
         visit affiliates_path
 
-        link = find_link("Add affiliate")
+        link = find_link("Add affiliate", inert: true)
         link.hover
         expect(link[:style]).to eq "pointer-events: none; cursor: not-allowed; opacity: 0.3;"
         expect(link).to have_tooltip(text: "Affiliates with Brazilian Stripe accounts are not supported.")
@@ -505,7 +507,7 @@ describe "Affiliates", type: :system, js: true do
 
       click_on "Save changes"
 
-      expect_alert_message("Changes saved!")
+      expect_alert_message("Affiliate updated successfully")
       # Show the most recently updated affiliate as the first row
       expect(page).to have_table "Affiliates", with_rows: [
         { "Name" => affiliate_user.name, "Products" => "3 products", "Commission" => "10% - 15%" },
@@ -535,7 +537,7 @@ describe "Affiliates", type: :system, js: true do
 
       click_on "Save changes"
 
-      expect_alert_message("Changes saved!")
+      expect_alert_message("Affiliate updated successfully")
       expect(page).to have_current_path(affiliates_path)
       expect(page).to have_button("Previous", disabled: true)
       expect(page).to have_button("Next")
@@ -554,12 +556,13 @@ describe "Affiliates", type: :system, js: true do
       check "Enable all products"
 
       click_on "Save changes"
-      expect_alert_message("Changes saved!")
-      expect(page).to have_table_row({ "Name" => affiliate_user.name, "Products" => "2 products", "Commission" => "15%" })
+      expect_alert_message("Affiliate updated successfully")
+      expect(page).to have_table "Affiliates"
 
       expect(direct_affiliate.reload.apply_to_all_products).to be true
       expect(direct_affiliate.affiliate_basis_points).to eq 1500
       expect(direct_affiliate.product_affiliates.count).to eq(2)
+      expect(page).to have_table_row({ "Name" => affiliate_user.name, "Products" => "2 products", "Commission" => "15%" })
     end
 
     it "can clear affiliate products" do
@@ -573,7 +576,7 @@ describe "Affiliates", type: :system, js: true do
       uncheck "Enable all products"
 
       click_on "Save changes"
-      expect_alert_message("Please enable at least one product.")
+      expect_alert_message("Please enable at least one product")
     end
   end
 
@@ -598,7 +601,7 @@ describe "Affiliates", type: :system, js: true do
       visit affiliates_path
       click_on "Delete"
       wait_for_ajax
-      expect_alert_message("The affiliate was removed successfully.")
+      expect_alert_message("Affiliate deleted successfully")
     end
 
     it "removes an affiliate from the aside drawer" do
@@ -610,11 +613,11 @@ describe "Affiliates", type: :system, js: true do
       ]
 
       find(:table_row, { "Name" => affiliate_user.name, "Product" => product.name }).click
-      within_section affiliate_user.name, section_element: :aside do
+      within_modal affiliate_user.name do
         click_on "Delete"
       end
       wait_for_ajax
-      expect_alert_message("The affiliate was removed successfully.")
+      expect_alert_message("Affiliate deleted successfully")
     end
 
     it "approves all pending affiliates" do
@@ -626,7 +629,7 @@ describe "Affiliates", type: :system, js: true do
       click_on "Approve all"
       wait_for_ajax
 
-      expect(page).to have_text "Approved"
+      expect_alert_message("Approved all pending affiliate requests!")
       pending_requests.each do |request|
         expect(request.reload).to be_approved
       end
@@ -670,8 +673,8 @@ describe "Affiliates", type: :system, js: true do
         # Ignore Will's request
         expect do
           click_on("Ignore")
-          wait_for_ajax
-        end.to change { request_three.reload.state }.to eq("ignored")
+          wait_until_true { request_three.reload.state == "ignored" }
+        end.to change { request_three.reload.state }.to("ignored")
       end
       expect(page).to_not have_text("Will")
 
@@ -679,8 +682,8 @@ describe "Affiliates", type: :system, js: true do
       within all("tr")[1] do
         expect do
           click_on("Ignore")
-          wait_for_ajax
-        end.to change { request_two.reload.state }.to eq("ignored")
+          wait_until_true { request_two.reload.state == "ignored" }
+        end.to change { request_two.reload.state }.to("ignored")
       end
       expect(page).to_not have_text("Jane")
 
@@ -688,8 +691,8 @@ describe "Affiliates", type: :system, js: true do
       within all("tr")[1] do
         expect do
           click_on("Approve")
-          wait_for_ajax
-        end.to change { request_one.reload.state }.to eq("approved")
+          wait_until_true { request_one.reload.state == "approved" }
+        end.to change { request_one.reload.state }.to("approved")
       end
       expect(page).to_not have_text("John")
 
@@ -697,26 +700,28 @@ describe "Affiliates", type: :system, js: true do
       within all("tr")[1] do
         expect do
           click_on("Approve")
-          wait_for_ajax
-        end.to change { request_four.reload.state }.to eq("approved")
-
+          wait_until_true { request_four.reload.state == "approved" }
+        end.to change { request_four.reload.state }.to("approved")
         # But because Rob doesn't have an account yet, his request won't go away
-        expect(page).to have_text("Rob")
+        expect(page).to have_button("Approved", disabled: true)
+      end
 
-        # Ignore Rob's request
+      # Ignore Rob's request
+      within all("tr")[1] do
         expect do
           click_on("Ignore")
-          wait_for_ajax
-        end.to change { request_four.reload.state }.to eq("ignored")
+          wait_until_true { request_four.reload.state == "ignored" }
+        end.to change { request_four.reload.state }.to("ignored")
       end
       expect(page).to_not have_text("Rob")
 
-      expect(page).to have_text("No requests yet")
+      # After all requests are processed, redirects to onboarding since seller has no products
+      expect(page).to have_text("You need a published product to add affiliates.")
     end
   end
 
   describe "sorting" do
-    let!(:seller) { create(:named_seller) }
+    let!(:seller) { create(:user) }
     let!(:product1) { create(:product, user: seller, name: "p1", price_cents: 10_00) }
     let!(:product2) { create(:product, user: seller, name: "p2", price_cents: 10_00) }
     let!(:product3) { create(:product, user: seller, name: "p3", price_cents: 10_00) }
@@ -728,6 +733,11 @@ describe "Affiliates", type: :system, js: true do
     let!(:affiliate_request) { create(:affiliate_request, seller:) }
 
     before do
+      MerchantAccount.find_or_create_by!(
+        charge_processor_id: StripeChargeProcessor.charge_processor_id,
+        user_id: nil
+      )
+
       stub_const("AffiliatesPresenter::PER_PAGE", 1)
       ProductAffiliate.where(affiliate_id: affiliate_user_1.id).each.with_index do |affiliate, idx|
         affiliate.update_columns(affiliate_basis_points: 3000 + 100 * idx, updated_at: Time.now)
@@ -742,10 +752,10 @@ describe "Affiliates", type: :system, js: true do
         affiliate.update_columns(affiliate_basis_points: 100 + 100 * idx, updated_at: Time.now + 3)
       end
 
-      create_list(:purchase_with_balance, 2, link: product1, affiliate: affiliate_user_1)
-      create_list(:purchase_with_balance, 3, link: product1, affiliate: affiliate_user_2)
-      create(:purchase_with_balance, link: product1, affiliate: affiliate_user_3)
-      create_list(:purchase_with_balance, 2, link: product1, affiliate: affiliate_user_4)
+      create_list(:purchase_with_balance, 2, link: product1, affiliate: affiliate_user_1, affiliate_credit_cents: 100)
+      create_list(:purchase_with_balance, 3, link: product1, affiliate: affiliate_user_2, affiliate_credit_cents: 100)
+      create(:purchase_with_balance, link: product1, affiliate: affiliate_user_3, affiliate_credit_cents: 100)
+      create_list(:purchase_with_balance, 2, link: product1, affiliate: affiliate_user_4, affiliate_credit_cents: 100)
 
       # Properly test sorting on affiliate_user_name
       affiliate_user_1.affiliate_user.update_columns(name: "alice", username: nil, unconfirmed_email: "ignored@example.com", email: "ignored@example.com")
@@ -764,65 +774,65 @@ describe "Affiliates", type: :system, js: true do
         find(:columnheader, "Name").click
       end
 
-      expect(page).to have_table_row({ "Name" => "alice", "Products" => "p1", "Commission" => "30%", "Sales" => "$2" })
       expect(page).to have_current_path("#{affiliates_path}?page=1&column=affiliate_user_name&sort=asc")
+      expect(page).to have_table_row({ "Name" => "alice", "Products" => "p1", "Commission" => "30%", "Sales" => "$20" })
       expect(page).to have_table "Requests", with_rows: [{ "Name" => affiliate_request.name }]
 
       within current_affiliates_table do
         find(:columnheader, "Name").click
       end
 
-      expect(page).to have_table_row({ "Name" => "david@example.com", "Products" => "2 products", "Commission" => "10% - 11%", "Sales" => "$1" })
       expect(page).to have_current_path("#{affiliates_path}?page=1&column=affiliate_user_name&sort=desc")
+      expect(page).to have_table_row({ "Name" => "david@example.com", "Products" => "2 products", "Commission" => "10% - 11%", "Sales" => "$10" })
       expect(page).to have_table "Requests", with_rows: [{ "Name" => affiliate_request.name }]
 
       within current_affiliates_table do
         find(:columnheader, "Products").click
       end
 
-      expect(page).to have_table_row({ "Name" => "alice", "Products" => "p1", "Commission" => "30%", "Sales" => "$2" })
       expect(page).to have_current_path("#{affiliates_path}?page=1&column=products&sort=asc")
+      expect(page).to have_table_row({ "Name" => "alice", "Products" => "p1", "Commission" => "30%", "Sales" => "$20" })
       expect(page).to have_table "Requests", with_rows: [{ "Name" => affiliate_request.name }]
 
       within current_affiliates_table do
         find(:columnheader, "Products").click
       end
 
-      expect(page).to have_table_row({ "Name" => "charlie@example.com", "Products" => "4 products", "Commission" => "1% - 4%", "Sales" => "$2" })
       expect(page).to have_current_path("#{affiliates_path}?page=1&column=products&sort=desc")
+      expect(page).to have_table_row({ "Name" => "charlie@example.com", "Products" => "4 products", "Commission" => "1% - 4%", "Sales" => "$20" })
       expect(page).to have_table "Requests", with_rows: [{ "Name" => affiliate_request.name }]
 
       within current_affiliates_table do
         find(:columnheader, "Commission").click
       end
 
-      expect(page).to have_table_row({ "Name" => "charlie@example.com", "Products" => "4 products", "Commission" => "1% - 4%", "Sales" => "$2" })
       expect(page).to have_current_path("#{affiliates_path}?page=1&column=fee_percent&sort=asc")
+      expect(page).to have_table_row({ "Name" => "charlie@example.com", "Products" => "4 products", "Commission" => "1% - 4%", "Sales" => "$20" })
       expect(page).to have_table "Requests", with_rows: [{ "Name" => affiliate_request.name }]
 
       within current_affiliates_table do
         find(:columnheader, "Commission").click
       end
 
-      expect(page).to have_table_row({ "Name" => "alice", "Products" => "p1", "Commission" => "30%", "Sales" => "$2" })
       expect(page).to have_current_path("#{affiliates_path}?page=1&column=fee_percent&sort=desc")
+      expect(page).to have_table_row({ "Name" => "alice", "Products" => "p1", "Commission" => "30%", "Sales" => "$20" })
       expect(page).to have_table "Requests", with_rows: [{ "Name" => affiliate_request.name }]
 
       within current_affiliates_table do
         find(:columnheader, "Sales").click
       end
 
-      expect(page).to have_table_row({ "Name" => "david@example.com", "Products" => "2 products", "Commission" => "10% - 11%", "Sales" => "$1" })
       expect(page).to have_current_path("#{affiliates_path}?page=1&column=volume_cents&sort=asc")
+      expect(page).to have_table_row({ "Name" => "david@example.com", "Products" => "2 products", "Commission" => "10% - 11%", "Sales" => "$10" })
       expect(page).to have_table "Requests", with_rows: [{ "Name" => affiliate_request.name }]
 
       within current_affiliates_table do
         find(:columnheader, "Sales").click
       end
 
-      expect(page).to have_table_row({ "Name" => "bob", "Products" => "3 products", "Commission" => "20% - 22%", "Sales" => "$3" })
-      expect(page).to have_table "Requests", with_rows: [{ "Name" => affiliate_request.name }]
       expect(page).to have_current_path("#{affiliates_path}?page=1&column=volume_cents&sort=desc")
+      expect(page).to have_table_row({ "Name" => "bob", "Products" => "3 products", "Commission" => "20% - 22%", "Sales" => "$30" })
+      expect(page).to have_table "Requests", with_rows: [{ "Name" => affiliate_request.name }]
     end
 
     it "sets the page to 1 on sort" do
@@ -858,19 +868,16 @@ describe "Affiliates", type: :system, js: true do
       within current_affiliates_table do
         find(:columnheader, "Name").click
       end
-      wait_for_ajax
-      page.go_back
-      wait_for_ajax
+      expect(page).to have_current_path("#{affiliates_path}?page=1&column=affiliate_user_name&sort=asc")
 
+      page.go_back
       expect(page).to have_current_path(affiliates_path)
-      expect(page).to have_table_row({ "Name" => "charlie@example.com", "Products" => "4 products", "Commission" => "1% - 4%", "Sales" => "$2" })
+      expect(page).to have_table_row({ "Name" => "charlie@example.com", "Products" => "4 products", "Commission" => "1% - 4%", "Sales" => "$20" })
       expect(page).to have_table "Requests", with_rows: [{ "Name" => affiliate_request.name }]
 
       page.go_forward
-      wait_for_ajax
-
       expect(page).to have_current_path("#{affiliates_path}?page=1&column=affiliate_user_name&sort=asc")
-      expect(page).to have_table_row({ "Name" => "alice", "Products" => "p1", "Commission" => "30%", "Sales" => "$2" })
+      expect(page).to have_table_row({ "Name" => "alice", "Products" => "p1", "Commission" => "30%", "Sales" => "$20" })
 
       within find("[aria-label='Pagination']") do
         expect(find_button("1")["aria-current"]).to eq("page")

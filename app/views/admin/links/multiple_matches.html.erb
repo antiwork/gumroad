@@ -9,7 +9,7 @@
     <% @product_matches.each do |product| %>
       <tr>
         <td data-label="Product">
-          <%= product.price_formatted %>, <%= link_to_unless_current(h(product.name), admin_link_url(product), title: product.id) %>
+          <%= product.price_formatted %>, <%= link_to_unless_current(h(product.name), admin_product_path(product), title: product.id) %>
           <%= link_to(tag.span(nil, class: "icon icon-arrow-up-right-square"), product.long_url, target: "_blank") %>
         </td>
 

@@ -2,6 +2,7 @@ import * as React from "react";
 
 import { OtherRefundPolicy } from "$app/data/products/other_refund_policies";
 import { Thumbnail } from "$app/data/thumbnails";
+import { Discount } from "$app/parsers/checkout";
 import {
   AssetPreview,
   CustomButtonTextOption,
@@ -85,6 +86,13 @@ export type InstallmentPlan = {
   number_of_installments: number;
 };
 
+export type OfferCode = {
+  id: string;
+  code: string;
+  name: string;
+  discount: Discount;
+};
+
 export type Product = {
   name: string;
   description: string;
@@ -97,6 +105,10 @@ export type Product = {
   installment_plan: InstallmentPlan | null;
   custom_button_text_option: CustomButtonTextOption | null;
   custom_summary: string | null;
+  custom_view_content_button_text: string | null;
+  custom_view_content_button_text_max_length: number;
+  custom_receipt_text: string | null;
+  custom_receipt_text_max_length: number;
   custom_attributes: Attribute[];
   file_attributes: Attribute[];
   max_purchase_count: number | null;
@@ -139,6 +151,8 @@ export type Product = {
   call_limitation_info: CallLimitationInfo | null;
   require_shipping: boolean;
   cancellation_discount: CancellationDiscount | null;
+  default_offer_code_id?: string | null;
+  default_offer_code: OfferCode | null;
   public_files: PublicFileWithStatus[];
   audio_previews_enabled: boolean;
   community_chat_enabled: boolean | null;
@@ -189,6 +203,8 @@ export const ProductEditContext = React.createContext<{
   cancellationDiscountsEnabled: boolean;
   contentUpdates: ContentUpdates;
   setContentUpdates: React.Dispatch<React.SetStateAction<ContentUpdates>>;
+  filesById: Map<string, FileEntry>;
+  aiGenerated: boolean;
 } | null>(null);
 export const useProductEditContext = () => assertDefined(React.useContext(ProductEditContext));
 

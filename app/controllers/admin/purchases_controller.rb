@@ -2,7 +2,7 @@
 
 class Admin::PurchasesController < Admin::BaseController
   before_action :fetch_purchase, only: %i[cancel_subscription refund refund_for_fraud refund_taxes_only resend_receipt
-                                          show sync_status_with_charge_processor block_buyer unblock_buyer undelete]
+                                          show sync_status_with_charge_processor block_buyer unblock_buyer undelete update_giftee_email]
 
   def cancel_subscription
     if @purchase.subscription
@@ -45,6 +45,10 @@ class Admin::PurchasesController < Admin::BaseController
         @purchase.email = params[:resend_receipt][:email_address]
         @purchase.save!
 
+        if @purchase.subscription.present? && !@purchase.is_original_subscription_purchase?
+          @purchase.original_purchase.update!(email: params[:resend_receipt][:email_address])
+        end
+
         user = User.alive.find_by(email: @purchase.email)
         @purchase.attach_to_user_and_card(user, nil, nil) if user
       end
@@ -52,14 +56,25 @@ class Admin::PurchasesController < Admin::BaseController
       @purchase.resend_receipt
       render json: { success: true }
     else
-      render json: { success: false }
+      e404_json
     end
+  rescue ActiveRecord::RecordInvalid => e
+    render json: { message: e.message }, status: :unprocessable_content
   end
 
   def show
     e404 if @purchase.nil?
     @product = @purchase.link
-    @title = "Purchase #{@purchase.id}"
+    @title = "Purchase #{@purchase.external_id}"
+    purchase = Admin::PurchasePresenter.new(@purchase).props
+    render(
+      inertia: "Admin/Purchases/Show",
+      props: {
+        purchase:,
+        product: Admin::ProductPresenter::Card.new(product: @product, pundit_user:).props,
+        user: Admin::UserPresenter::Card.new(user: @product.user, pundit_user:).props
+      },
+    )
   end
 
   def sync_status_with_charge_processor
@@ -118,17 +133,16 @@ class Admin::PurchasesController < Admin::BaseController
   end
 
   def update_giftee_email
-    new_giftee_email = params[:update_giftee_email][:giftee_email]
-    gift = Gift.find_by(gifter_purchase_id: params[:id])
+    new_giftee_email = params[:giftee_email]
 
-    if gift.present? && new_giftee_email != gift.giftee_email
+    if (gift = @purchase.gift_given).present? && new_giftee_email != gift.giftee_email
       giftee_purchase = Purchase.find_by(id: gift.giftee_purchase_id)
       if giftee_purchase.present?
         gift.update!(giftee_email: new_giftee_email)
         giftee_purchase.update!(email: new_giftee_email)
 
         giftee_purchase.resend_receipt
-        redirect_to [:admin, Purchase.find_by(id: params[:id])]
+        redirect_to admin_purchase_path(@purchase.external_id)
       else
         render json: {
           success: false,
@@ -140,9 +154,12 @@ class Admin::PurchasesController < Admin::BaseController
 
   private
     def fetch_purchase
-      @purchase = Purchase.find_by(id: params[:id]) if params[:id].to_i.to_s == params[:id]
-      @purchase ||= Purchase.find_by_external_id(params[:id])
-      @purchase ||= Purchase.find_by_external_id_numeric(params[:id].to_i)
-      @purchase ||= Purchase.find_by_stripe_transaction_id(params[:id])
+      if !Purchase.external_id?(params[:external_id]) && purchase = Purchase.find_by(id: params[:external_id])
+        return redirect_to admin_purchase_path(purchase.external_id)
+      end
+
+      @purchase = Purchase.find_by_external_id(params[:external_id])
+      @purchase ||= Purchase.find_by_external_id_numeric(params[:external_id].to_i)
+      @purchase ||= Purchase.find_by_stripe_transaction_id(params[:external_id])
     end
 end

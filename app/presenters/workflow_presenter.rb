@@ -60,41 +60,40 @@ class WorkflowPresenter
     props
   end
 
-  private
-    def workflow_form_context_props
-      user_presenter = UserPresenter.new(user: seller)
+  def workflow_form_context_props
+    user_presenter = UserPresenter.new(user: seller)
 
-      {
-        products_and_variant_options: user_presenter.products_for_filter_box.flat_map do |product|
-          [{
-            id: product.unique_permalink,
-            label: product.name,
-            product_permalink: product.unique_permalink,
-            archived: product.archived?,
-            type: "product",
-          }].concat(
-            (product.is_physical? ? product.skus_alive_not_default : product.alive_variants).map do
-              {
-                id: _1.external_id,
-                label: "#{product.name} — #{_1.name}",
-                product_permalink: product.unique_permalink,
-                archived: product.archived?,
-                type: "variant"
-              }
-            end
-          )
-        end,
-        affiliate_product_options: user_presenter.affiliate_products_for_filter_box.map do |product|
-          { id: product.unique_permalink, label: product.name, product_permalink: product.unique_permalink, archived: product.archived?, type: "product" }
-        end,
-        timezone: ActiveSupport::TimeZone[user_presenter.user.timezone].now.strftime("%Z"),
-        currency_symbol: user_presenter.user.currency_symbol,
-        countries: [Compliance::Countries::USA.common_name] + Compliance::Countries.for_select.flat_map { |_, name| Compliance::Countries::USA.common_name === name ? [] : name },
-        aws_access_key_id: AWS_ACCESS_KEY,
-        s3_url: s3_bucket_url,
-        user_id: user_presenter.user.external_id,
-        gumroad_address: GumroadAddress.full,
-        eligible_for_abandoned_cart_workflows: user_presenter.user.eligible_for_abandoned_cart_workflows?,
-      }
-    end
+    {
+      products_and_variant_options: user_presenter.products_for_filter_box.flat_map do |product|
+        [{
+          id: product.unique_permalink,
+          label: product.name,
+          product_permalink: product.unique_permalink,
+          archived: product.archived?,
+          type: "product",
+        }].concat(
+          (product.is_physical? ? product.skus_alive_not_default : product.alive_variants).map do
+            {
+              id: _1.external_id,
+              label: "#{product.name} — #{_1.name}",
+              product_permalink: product.unique_permalink,
+              archived: product.archived?,
+              type: "variant"
+            }
+          end
+        )
+      end,
+      affiliate_product_options: user_presenter.affiliate_products_for_filter_box.map do |product|
+        { id: product.unique_permalink, label: product.name, product_permalink: product.unique_permalink, archived: product.archived?, type: "product" }
+      end,
+      timezone: ActiveSupport::TimeZone[user_presenter.user.timezone].now.strftime("%Z"),
+      currency_symbol: user_presenter.user.currency_symbol,
+      countries: [Compliance::Countries::USA.common_name] + Compliance::Countries.for_select.flat_map { |_, name| Compliance::Countries::USA.common_name === name ? [] : name },
+      aws_access_key_id: AWS_ACCESS_KEY,
+      s3_url: s3_bucket_url,
+      user_id: user_presenter.user.external_id,
+      gumroad_address: GumroadAddress.full,
+      eligible_for_abandoned_cart_workflows: user_presenter.user.eligible_for_abandoned_cart_workflows?,
+    }
+  end
 end

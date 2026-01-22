@@ -49,7 +49,7 @@ export const CancellationDiscountSelector = () => {
       onChange={setIsEnabled}
       label="Offer a cancellation discount"
       dropdown={
-        <section className="paragraphs">
+        <section className="flex flex-col gap-4">
           <DiscountInput discount={discount} setDiscount={setDiscount} currencyCode={currencyType} />
           <fieldset>
             <label htmlFor="billing-cycles">Duration in billing cycles</label>

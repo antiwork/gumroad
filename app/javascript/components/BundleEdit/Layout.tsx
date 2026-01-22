@@ -13,6 +13,7 @@ import { useCurrentSeller } from "$app/components/CurrentSeller";
 import { useDomains } from "$app/components/DomainSettings";
 import { Icon } from "$app/components/Icons";
 import { Preview } from "$app/components/Preview";
+import { PreviewSidebar, WithPreviewSidebar } from "$app/components/PreviewSidebar";
 import { showAlert } from "$app/components/server-components/Alert";
 import { PageHeader } from "$app/components/ui/PageHeader";
 import { Tabs, Tab } from "$app/components/ui/Tabs";
@@ -189,22 +190,14 @@ export const Layout = ({
           </Tab>
         </Tabs>
       </PageHeader>
-      <div className={preview ? "squished fixed-aside flex-1 lg:grid lg:grid-cols-[1fr_30vw]" : "flex-1"}>
-        {children}
-        {preview ? (
-          <aside aria-label="Preview" className="sticky! top-0 min-h-screen self-start overflow-y-auto">
-            <header>
-              <h2>Preview</h2>
-              <WithTooltip tip="Preview">
-                <Button
-                  onClick={() => void handleSave().then(() => window.open(url))}
-                  disabled={isBusy}
-                  aria-label="Preview"
-                >
-                  <Icon name="arrow-diagonal-up-right" />
-                </Button>
-              </WithTooltip>
-            </header>
+      {preview ? (
+        <WithPreviewSidebar className="flex-1">
+          {children}
+          <PreviewSidebar
+            previewLink={(props) => (
+              <Button {...props} onClick={() => void handleSave().then(() => window.open(url))} disabled={isBusy} />
+            )}
+          >
             <Preview
               scaleFactor={0.4}
               style={{
@@ -214,9 +207,11 @@ export const Layout = ({
             >
               {preview}
             </Preview>
-          </aside>
-        ) : null}
-      </div>
+          </PreviewSidebar>
+        </WithPreviewSidebar>
+      ) : (
+        <div className="flex-1">{children}</div>
+      )}
     </>
   );
 };

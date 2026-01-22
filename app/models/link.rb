@@ -113,6 +113,7 @@ class Link < ApplicationRecord
   has_many :installments
   has_many :subscriptions
   has_and_belongs_to_many :offer_codes, join_table: "offer_codes_products", foreign_key: "product_id"
+  belongs_to :default_offer_code, class_name: "OfferCode", optional: true
   has_many :transcoded_videos
   has_many :imported_customers
   has_many :licenses
@@ -197,6 +198,7 @@ class Link < ApplicationRecord
   validate :alive_category_variants_presence, on: :update
   validate :content_has_no_adult_keywords, if: -> { description_changed? || name_changed? }
   validate :custom_view_content_button_text_length
+  validates :custom_receipt_text, length: { maximum: Product::Validations::MAX_CUSTOM_RECEIPT_TEXT_LENGTH }
   validates_presence_of :filetype
   validates_presence_of :filegroup
   validate :bundle_is_not_in_bundle, if: :is_bundle_changed?
@@ -205,6 +207,7 @@ class Link < ApplicationRecord
   validate :commission_price_is_valid, if: -> { native_type == Link::NATIVE_TYPE_COMMISSION }
   validate :one_coffee_per_user, on: :create, if: -> { native_type == Link::NATIVE_TYPE_COFFEE }
   validate :quantity_enabled_state_is_allowed
+  validate :default_offer_code_must_be_valid
 
   validates_associated :installment_plan, message: -> (link, _) { link.installment_plan.errors.full_messages.first }
 
@@ -225,6 +228,8 @@ class Link < ApplicationRecord
   attr_json_data_accessor :excluded_sales_tax_regions, default: -> { [] }
   attr_json_data_accessor :sections, default: -> { [] }
   attr_json_data_accessor :main_section_index, default: -> { 0 }
+  attr_json_data_accessor :custom_view_content_button_text
+  attr_json_data_accessor :custom_receipt_text
 
   scope :alive,                           -> { where(purchase_disabled_at: nil, banned_at: nil, deleted_at: nil) }
   scope :visible,                         -> { where(deleted_at: nil) }
@@ -498,7 +503,7 @@ class Link < ApplicationRecord
     self
   end
 
-  def long_url(recommended_by: nil, recommender_model_name: nil, include_protocol: true, layout: nil, affiliate_id: nil, query: nil, autocomplete: false)
+  def long_url(recommended_by: nil, recommender_model_name: nil, include_protocol: true, layout: nil, affiliate_id: nil, query: nil, code: nil, autocomplete: false)
     host = user.subdomain_with_protocol || UrlService.domain_with_protocol
     options = { host: }
     options[:recommended_by] = recommended_by if recommended_by.present?
@@ -506,6 +511,7 @@ class Link < ApplicationRecord
     options[:layout] = layout if layout.present?
     options[:query] = query if query.present?
     options[:affiliate_id] = affiliate_id if affiliate_id.present?
+    options[:code] = code if code.present?
     options[:autocomplete] = "true" if autocomplete
 
     product_long_url = Rails.application.routes.url_helpers.short_link_url(general_permalink, options)
@@ -815,10 +821,18 @@ class Link < ApplicationRecord
   # Public: Find all alive offer codes associated with product and user in order of created at.
   #
   # Returns list of offer codes.
-  def product_and_universal_offer_codes
-    (offer_codes.alive + user.offer_codes.universal_with_matching_currency(price_currency_type).alive).sort_by do |offer_code|
-      offer_code["created_at"]
+  def product_and_universal_offer_codes(query = nil, limit = nil, reverse = false)
+    product_codes = offer_codes.alive
+    universal_codes = user.offer_codes.universal_with_matching_currency(price_currency_type).alive
+
+    if query.present?
+      product_codes = product_codes.search_by_name(query, reverse:)
+      universal_codes = universal_codes.search_by_name(query, reverse:)
     end
+
+    combined_codes = (product_codes + universal_codes).sort_by(&:created_at)
+    combined_codes.reverse! if reverse
+    limit ? combined_codes.first(limit) : combined_codes
   end
 
   def purchase_info_for_product_page(requested_user, browser_guid)
@@ -826,7 +840,11 @@ class Link < ApplicationRecord
 
     eligible_purchases = Purchase.none
     eligible_purchases = requested_user.purchases.where(link: self) if requested_user
-    eligible_purchases = sales.where(browser_guid:, purchaser_id: nil) if browser_guid && eligible_purchases.blank?
+
+    # When a gift purchase is made, we set the same browser_guid for the gifter and giftee purchases.
+    # When fetching purchases using browser_guid, exclude gift receiver purchases so that we won't show
+    # the giftee purchase to gifter on the same browser.
+    eligible_purchases = sales.not_is_gift_receiver_purchase.where(browser_guid:, purchaser_id: nil) if browser_guid && eligible_purchases.blank?
 
     eligible_purchases = if is_in_preorder_state
       eligible_purchases.preorder_authorization_successful_or_gift
@@ -900,7 +918,7 @@ class Link < ApplicationRecord
     end
   end
 
-  %w[custom_summary custom_button_text_option custom_view_content_button_text custom_attributes purchase_terms].each do |method_name|
+  %w[custom_summary custom_button_text_option custom_attributes purchase_terms].each do |method_name|
     define_method "save_#{method_name}" do |argument|
       self.json_data ||= {}
       self.json_data[method_name] = argument
@@ -908,7 +926,7 @@ class Link < ApplicationRecord
     end
   end
 
-  %w[custom_summary custom_button_text_option custom_view_content_button_text purchase_terms].each do |method_name|
+  %w[custom_summary custom_button_text_option purchase_terms].each do |method_name|
     define_method method_name do
       self.json_data.present? ? self.json_data[method_name] : nil
     end
@@ -1222,6 +1240,18 @@ class Link < ApplicationRecord
       return if licensed_product_with_duplicate_permalink.empty?
 
       errors.add(:custom_permalink, :taken)
+    end
+
+    def default_offer_code_must_be_valid
+      return unless default_offer_code.present?
+
+      if !user.offer_codes.alive.where(id: default_offer_code.id).exists?
+        errors.add(:default_offer_code, "must belong to your offer codes")
+      elsif default_offer_code.inactive?
+        errors.add(:default_offer_code, "cannot be expired")
+      elsif !offer_codes.where(id: default_offer_code.id).exists? && !default_offer_code.universal?
+        errors.add(:default_offer_code, "must be associated with this product or be universal")
+      end
     end
 
     def enforce_user_email_confirmation!

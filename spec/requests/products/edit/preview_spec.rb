@@ -160,7 +160,9 @@ describe("Product Edit Previews", type: :system, js: true) do
       end
 
       fill_in("Amount", with: "0")
-      check "Allow customers to pay what they want"
+
+      pwyw_toggle = find_field("Allow customers to pay what they want", disabled: true)
+      expect(pwyw_toggle).to be_checked
 
       in_preview do
         expect(page).to have_content "$0+"
@@ -185,7 +187,8 @@ describe("Product Edit Previews", type: :system, js: true) do
         expect(page).to have_content "$0+"
       end
 
-      check "Allow customers to pay what they want"
+      pwyw_toggle = find_field("Allow customers to pay what they want", disabled: true)
+      expect(pwyw_toggle).to be_checked
 
       in_preview do
         expect(page).to have_content "$0+"
@@ -222,6 +225,24 @@ describe("Product Edit Previews", type: :system, js: true) do
       let(:product) { create(:product, :bundle, user: seller) }
 
       it_behaves_like "displaying collaborator"
+    end
+  end
+
+  context "with default discount code" do
+    let(:product) { create(:product_with_pdf_file, user: seller, size: 1024, price_cents: 1000) }
+    let(:offer_code) { create(:offer_code, user: seller, products: [product], code: "DEFAULT10", amount_percentage: 10, amount_cents: nil) }
+
+    before do
+      product.update!(default_offer_code: offer_code)
+    end
+
+    it "shows discounted price in preview when default discount code is set" do
+      visit edit_link_path(product.unique_permalink)
+
+      in_preview do
+        # Original price is $10.00, 10% off = $9.00; preview shows "$10 $9"
+        expect(page).to have_content "$10 $9"
+      end
     end
   end
 end

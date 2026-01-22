@@ -111,7 +111,7 @@ export const GoogleCalendarIntegrationEditor = ({
       }}
       label="Connect with Google Calendar to sync your calls"
       dropdown={
-        <div className="paragraphs">
+        <div className="flex flex-col gap-4">
           {isLoading ? (
             <LoadingSpinner />
           ) : integration ? (
@@ -155,7 +155,8 @@ export const GoogleCalendarIntegrationEditor = ({
                 People who purchase your product will automatically receive a Google Calendar invite and we'll keep your
                 calendar in sync.
               </p>
-              <Button className="button-google" onClick={handleConnectGoogleAccount}>
+              <Button color="google" onClick={handleConnectGoogleAccount}>
+                <span className="brand-icon brand-icon-google" />
                 Connect to Google Calendar
               </Button>
             </>

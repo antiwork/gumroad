@@ -15,24 +15,30 @@ class Admin::AffiliatesController < Admin::BaseController
     @users = @users.joins(:direct_affiliate_accounts).distinct
     @users = @users.with_blocked_attributes_for(:form_email, :form_email_domain)
 
-    list_paginated_users users: @users, template: "Admin/Affiliates/Index", legacy_template: "admin/affiliates/index", single_result_redirect_path: method(:admin_affiliate_path)
+    list_paginated_users users: @users, template: "Admin/Affiliates/Index", legacy_template: "admin/affiliates/index", single_result_redirect_path: ->(user) { admin_affiliate_path(user.external_id) }
   end
 
   def show
     @title = "#{@affiliate_user.display_name} affiliate on Gumroad"
-    products_scope = @affiliate_user.directly_affiliated_products.unscope(where: :purchase_disabled_at).order(Arel.sql(Admin::UsersController::PRODUCTS_ORDER))
-    @pagy, @products = pagy(products_scope, limit: Admin::UsersController::PRODUCTS_PER_PAGE)
     respond_to do |format|
-      format.html
-      format.json { render json: @affiliate }
+      format.html do
+        render inertia: "Admin/Affiliates/Show",
+               props: {
+                 user: Admin::UserPresenter::Card.new(user: @affiliate_user, pundit_user:).props,
+               }
+      end
+      format.json { render json: @affiliate_user }
     end
   end
 
   private
     def fetch_affiliate
-      @affiliate_user = User.find_by(username: params[:id])
-      @affiliate_user ||= User.find_by(id: params[:id])
-      @affiliate_user ||= User.find_by_external_id(params[:id].gsub(/^ext-/, ""))
+      @affiliate_user = User.find_by(username: params[:external_id])
+      @affiliate_user ||= User.find_by_external_id(params[:external_id])
+
+      if @affiliate_user.nil? && User.id?(params[:external_id]) && (user = User.find_by(id: params[:external_id]))
+        return redirect_to admin_affiliate_path(user.external_id)
+      end
 
       e404 if @affiliate_user.nil? || @affiliate_user.direct_affiliate_accounts.blank?
     end

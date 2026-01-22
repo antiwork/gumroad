@@ -18,6 +18,14 @@ class HealthcheckController < ApplicationController
     render plain: "Sidekiq: #{status}", status:
   end
 
+  def paypal_balance
+    topup_not_needed = $redis.get(RedisKey.paypal_topup_needed) == "false"
+    status = topup_not_needed ? :ok : :service_unavailable
+    message = topup_not_needed ? "topup not required" : "topup required"
+
+    render plain: "PayPal balance: #{message}", status:
+  end
+
   SIDEKIQ_QUEUE_LIMITS = { critical: 12_000 }
   SIDEKIQ_RETRIES_LIMIT = 20_000
   SIDEKIQ_DEAD_LIMIT = 10_000

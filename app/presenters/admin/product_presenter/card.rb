@@ -1,17 +1,17 @@
 # frozen_string_literal: true
 
 class Admin::ProductPresenter::Card
-  attr_reader :product, :admins_can_mark_as_staff_picked, :admins_can_unmark_as_staff_picked
+  attr_reader :product, :pundit_user
 
-  def initialize(product:, admins_can_mark_as_staff_picked:, admins_can_unmark_as_staff_picked:)
+  def initialize(product:, pundit_user:)
     @product = product
-    @admins_can_mark_as_staff_picked = admins_can_mark_as_staff_picked
-    @admins_can_unmark_as_staff_picked = admins_can_unmark_as_staff_picked
+    @pundit_user = pundit_user
   end
 
   def props
+    link_policy = Admin::Products::StaffPicked::LinkPolicy.new(pundit_user, product)
     {
-      id: product.id,
+      external_id: product.external_id,
       name: product.name,
       long_url: product.long_url,
       price_cents: product.price_cents,
@@ -22,7 +22,7 @@ class Admin::ProductPresenter::Card
       price_formatted: product.price_formatted,
       created_at: product.created_at,
       user: {
-        id: product.user_id,
+        external_id: product.user.external_id,
         name: product.user.name,
         suspended: product.user.suspended?,
         flagged_for_tos_violation: product.user.flagged_for_tos_violation?
@@ -33,9 +33,10 @@ class Admin::ProductPresenter::Card
       alive: product.alive?,
       is_adult: product.is_adult?,
       active_integrations: format_active_integrations,
-      admins_can_mark_as_staff_picked: admins_can_mark_as_staff_picked.call(product),
-      admins_can_unmark_as_staff_picked: admins_can_unmark_as_staff_picked.call(product),
+      admins_can_mark_as_staff_picked: link_policy.create?,
+      admins_can_unmark_as_staff_picked: link_policy.destroy?,
       is_tiered_membership: product.is_tiered_membership?,
+      comments_count: product.comments.size,
       updated_at: product.updated_at,
       deleted_at: product.deleted_at
     }
@@ -45,7 +46,6 @@ class Admin::ProductPresenter::Card
     def alive_product_files_props
       product.ordered_alive_product_files.map do |file|
         {
-          id: file.id,
           external_id: file.external_id,
           s3_filename: file.s3_filename
         }

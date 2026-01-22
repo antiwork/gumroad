@@ -40,7 +40,7 @@ export const FollowFormEmbed = ({ sellerId, preview }: { sellerId: string; previ
     <>
       {styles ? <style dangerouslySetInnerHTML={{ __html: styles }} /> : null}
       <FollowForm
-        className="input-with-button"
+        className="flex gap-2"
         ref={followFormRef}
         action={Routes.follow_user_from_embed_form_url({ host: appDomain })}
         method="post"
@@ -52,6 +52,7 @@ export const FollowFormEmbed = ({ sellerId, preview }: { sellerId: string; previ
           type="email"
           placeholder="Your email address"
           name="email"
+          className="flex-1"
           value={email}
           onChange={(evt) => setEmail(evt.target.value)}
         />

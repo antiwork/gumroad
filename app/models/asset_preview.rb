@@ -185,16 +185,15 @@ class AssetPreview < ApplicationRecord
     else
       self.oembed = nil
 
-      URI.open(new_url) do |remote_file|
-        tempfile = Tempfile.new(binmode: true)
-        tempfile.write(remote_file.read)
-        tempfile.rewind
-        blob = ActiveStorage::Blob.create_and_upload!(io: tempfile,
-                                                      filename: File.basename(new_url),
-                                                      content_type: remote_file.content_type)
-        self.file.attach(blob.signed_id)
-        self.file.analyze
-      end
+      response = SsrfFilter.get(new_url)
+      tempfile = Tempfile.new(binmode: true)
+      tempfile.write(response.body)
+      tempfile.rewind
+      blob = ActiveStorage::Blob.create_and_upload!(io: tempfile,
+                                                    filename: File.basename(new_url),
+                                                    content_type: response.content_type)
+      self.file.attach(blob.signed_id)
+      self.file.analyze
     end
   end
 

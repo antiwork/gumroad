@@ -5,11 +5,14 @@ import FileUtils from "$app/utils/file";
 import { asyncVoid } from "$app/utils/promise";
 import { request } from "$app/utils/request";
 
+import { buttonVariants } from "$app/components/Button";
 import { FileKindIcon } from "$app/components/FileRowContent";
 import { Icon } from "$app/components/Icons";
 import { showAlert } from "$app/components/server-components/Alert";
 import { usePurchaseCustomFields, usePurchaseInfo } from "$app/components/server-components/DownloadPage/WithContent";
-import Placeholder from "$app/components/ui/Placeholder";
+import { Card, CardContent } from "$app/components/ui/Card";
+import { Placeholder } from "$app/components/ui/Placeholder";
+import { Row, RowContent, Rows } from "$app/components/ui/Rows";
 
 const MAX_FILE_SIZE = 10 * 1024 * 1024;
 
@@ -78,7 +81,7 @@ export const FileInput = ({ customFieldId }: { customFieldId: string }) => {
   });
 
   const fileUpload = (
-    <label className="button primary">
+    <label className={buttonVariants({ size: "default", color: "primary" })}>
       <input type="file" onChange={handleFileChange} disabled={isUploading} multiple />
       <Icon name="upload-fill" />
       Upload files
@@ -86,27 +89,27 @@ export const FileInput = ({ customFieldId }: { customFieldId: string }) => {
   );
 
   return files.length ? (
-    <div className="stack">
-      <div>
-        <div role="tree">
+    <Card>
+      <CardContent>
+        <Rows role="list" className="grow">
           {files.map((file, index) => (
-            <div key={index} role="treeitem">
-              <div className="content">
+            <Row key={index} role="listitem">
+              <RowContent>
                 <FileKindIcon extension={file.extension} />
                 <div>
-                  <h4>{file.name}</h4>
+                  <h4 className="font-bold">{file.name}</h4>
                   <ul className="inline">
                     <li>{file.extension}</li>
                     <li>{FileUtils.getFullFileSizeString(file.size)}</li>
                   </ul>
                 </div>
-              </div>
-            </div>
+              </RowContent>
+            </Row>
           ))}
-        </div>
-      </div>
-      <div style={{ justifyContent: "center" }}>{fileUpload}</div>
-    </div>
+        </Rows>
+      </CardContent>
+      <CardContent style={{ justifyContent: "center" }}>{fileUpload}</CardContent>
+    </Card>
   ) : (
     <Placeholder>
       {fileUpload}

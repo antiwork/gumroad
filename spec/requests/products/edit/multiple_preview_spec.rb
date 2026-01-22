@@ -18,26 +18,26 @@ describe("Product edit multiple-preview Scenario", type: :system, js: true) do
 
   it "uploads a preview image" do
     visit(edit_link_path(product))
-    within_section "Cover", section_element: :section do
-      upload_image
+    upload_image
+    within "[role=tablist][aria-label='Product covers']" do
       img = first("img")
       expect(img.native.css_value("max-width")).to eq("100%")
-      find("button[role='tab']").hover
-      expect(page).to have_selector(".remove-button[aria-label='Remove cover']")
+      find(:tab_button).hover
+      expect(page).to have_selector("[aria-label='Remove cover']")
     end
   end
 
   it "uploads an image via URL" do
     visit(edit_link_path(product))
-    within_section "Cover", section_element: :section do
-      click_on "Upload images or videos"
-      select_tab "External link"
-      fill_in placeholder: "https://", with: "https://picsum.photos/200/300"
-      click_on "Upload"
+    click_on "Upload images or videos"
+    select_tab "External link"
+    fill_in placeholder: "https://", with: "https://picsum.photos/200/300"
+    click_on "Upload"
+    within "[role=tablist][aria-label='Product covers']" do
       img = first("img")
       expect(img.native.css_value("max-width")).to eq("100%")
-      find("button[role='tab']").hover
-      expect(page).to have_selector(".remove-button[aria-label='Remove cover']")
+      find(:tab_button).hover
+      expect(page).to have_selector("[aria-label='Remove cover']")
     end
   end
 
@@ -80,23 +80,19 @@ describe("Product edit multiple-preview Scenario", type: :system, js: true) do
     visit(edit_link_path(product))
     expect(find(:section, "Cover", section_element: :section)).to have_selector("img")
     expect(product.asset_previews.alive.count).to eq(2)
-    previews = all("button[role='tab'] img")
-    within_section "Cover", section_element: :section do
+    within "[role=tablist][aria-label='Product covers']" do
+      previews = all("img")
       expect(first("img")[:src]).to eq(previews.first["src"])
-      all("button[role='tab']").first.hover
-      find(".remove-button[aria-label='Remove cover']").click
-    end
-    wait_for_ajax
-    expect(product.asset_previews.alive.count).to eq(1)
-    within_section "Cover", section_element: :section do
+      all(:tab_button).first.hover
+      find("[aria-label='Remove cover']").click
+      wait_for_ajax
+      expect(product.asset_previews.alive.count).to eq(1)
       expect(first("img")[:src]).to eq(previews.last["src"])
+      find(:tab_button).hover
+      find("[aria-label='Remove cover']").click
     end
-    within_section "Cover", section_element: :section do
-      find("button[role='tab']").hover
-      find(".remove-button[aria-label='Remove cover']").click
-      expect(page).to have_button("Upload images or videos")
-      expect(page).to_not have_selector("img")
-    end
+    expect(page).to_not have_selector("[role=tablist][aria-label='Product covers']")
+    expect(page).to have_button("Upload images or videos")
     expect(product.asset_previews.alive.count).to eq(0)
   end
 end

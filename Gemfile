@@ -4,7 +4,7 @@ source "https://rubygems.org"
 
 ruby file: ".ruby-version"
 
-gem "rails", "7.1.3.4"
+gem "rails", "7.1.6"
 gem "rake", "13.2.1"
 
 install_if -> { ENV["BUNDLE_GEMS__CONTRIBSYS__COM"] } do
@@ -110,7 +110,7 @@ gem "httparty", "~> 0.21"
 gem "ibandit", "~> 1.26"
 gem "image_sorcery", "~> 1.1"
 gem "image_processing", "~> 1.12"
-gem "inertia_rails", "~> 3.10"
+gem "inertia_rails", "~> 3.15"
 gem "mini_magick", "~> 4.12"
 gem "jbuilder", "~> 2.11"
 gem "js-routes", "~> 2.2"

@@ -514,6 +514,17 @@ describe Exports::PurchaseExportService do
       expect { generate_csv }.to raise_error(StandardError, /not JSON safe/)
     end
 
+    it "shows whether the license key is enabled (not disabled)" do
+      expect(field_value(last_data_row, "License Key Enabled?")).to eq(nil)
+
+      @product.update!(is_licensed: true)
+      @purchase.create_license!
+      expect(field_value(last_data_row, "License Key Enabled?")).to eq("1")
+
+      @purchase.license.disable!
+      expect(field_value(last_data_row, "License Key Enabled?")).to eq("0")
+    end
+
     it "includes licence key" do
       @product.update!(is_licensed: true)
       @purchase.create_license!

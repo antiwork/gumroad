@@ -14,8 +14,9 @@ import {
   NavLinkDropdownItem,
   UnbecomeDropdownItem,
   NavLinkDropdownMembershipItem,
+  NavSection,
 } from "$app/components/Nav";
-import { Popover } from "$app/components/Popover";
+import { DashboardNavProfilePopover } from "$app/components/ProfilePopover";
 import { UnreadTicketsBadge } from "$app/components/support/UnreadTicketsBadge";
 import { useRunOnce } from "$app/components/useRunOnce";
 
@@ -33,7 +34,7 @@ type Props = {
       links?: Record<string, string> | null;
     } | null;
     currentToken?: string | null;
-  };
+  } | null;
 };
 
 export const Nav = (props: Props) => {
@@ -83,22 +84,14 @@ export const Nav = (props: Props) => {
               ) : null
             }
           />
-          <Popover
-            position="top"
-            trigger={
-              <>
-                <img className="user-avatar" src={currentSeller?.avatarUrl} alt="Your avatar" />
-                {currentSeller?.name || currentSeller?.email}
-              </>
-            }
-          >
+          <DashboardNavProfilePopover user={currentSeller}>
             <div role="menu">
               {teamMemberships != null && teamMemberships.length > 0 ? (
                 <>
                   {teamMemberships.map((teamMembership) => (
                     <NavLinkDropdownMembershipItem key={teamMembership.id} teamMembership={teamMembership} />
                   ))}
-                  <hr />
+                  <hr className="my-2" />
                 </>
               ) : null}
               <NavLinkDropdownItem
@@ -110,12 +103,12 @@ export const Nav = (props: Props) => {
               <NavLinkDropdownItem text="Logout" icon="box-arrow-in-right-fill" href={Routes.logout_url(routeParams)} />
               {loggedInUser?.isImpersonating ? <UnbecomeDropdownItem /> : null}
             </div>
-          </Popover>
+          </DashboardNavProfilePopover>
         </>
       }
       {...props}
     >
-      <section>
+      <NavSection>
         <NavLink text="Home" icon="shop-window-fill" href={Routes.dashboard_url(routeParams)} exactHrefMatch />
         <NavLink
           text="Products"
@@ -144,7 +137,11 @@ export const Nav = (props: Props) => {
           text="Analytics"
           icon="bar-chart-fill"
           href={Routes.sales_dashboard_url(routeParams)}
-          additionalPatterns={[Routes.audience_dashboard_url(routeParams), Routes.utm_links_dashboard_url(routeParams)]}
+          additionalPatterns={[
+            Routes.audience_dashboard_url(routeParams),
+            Routes.dashboard_utm_links_url(routeParams),
+            Routes.churn_dashboard_url(routeParams),
+          ]}
         />
         {loggedInUser?.policies.balance.index ? (
           <NavLink text="Payouts" icon="bank" href={Routes.balance_url(routeParams)} />
@@ -152,18 +149,18 @@ export const Nav = (props: Props) => {
         {loggedInUser?.policies.community.index ? (
           <NavLink text="Community" icon="solid-chat-alt" href={Routes.community_path(routeParams)} />
         ) : null}
-      </section>
-      <section>
+      </NavSection>
+      <NavSection>
         <NavLink text="Discover" icon="solid-search" href={discoverUrl} exactHrefMatch />
         {currentSeller?.id === loggedInUser?.id ? (
           <NavLink
             text="Library"
             icon="bookmark-heart-fill"
             href={Routes.library_url(routeParams)}
-            additionalPatterns={[Routes.wishlists_url(routeParams)]}
+            additionalPatterns={[Routes.wishlists_url(routeParams), Routes.reviews_url(routeParams)]}
           />
         ) : null}
-      </section>
+      </NavSection>
     </NavFramework>
   );
 };

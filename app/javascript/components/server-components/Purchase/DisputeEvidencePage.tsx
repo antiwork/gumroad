@@ -21,6 +21,9 @@ import { Button, NavigationButton } from "$app/components/Button";
 import { Icon } from "$app/components/Icons";
 import { LoadingSpinner } from "$app/components/LoadingSpinner";
 import { showAlert } from "$app/components/server-components/Alert";
+import { Alert } from "$app/components/ui/Alert";
+import { Card, CardContent } from "$app/components/ui/Card";
+import { Row, RowActions, RowContent, Rows } from "$app/components/ui/Rows";
 import { useUserAgentInfo } from "$app/components/UserAgent";
 
 const ALLOWED_EXTENSIONS = ["jpeg", "jpg", "png", "pdf"];
@@ -146,18 +149,20 @@ const DisputeEvidencePage = ({ dispute_evidence, disputable, products }: Props) 
   const disputeReason = disputeReasons[dispute_evidence.dispute_reason];
 
   return (
-    <div className="stack">
-      <header>
-        Dispute evidence
-        <h2>Submit additional information</h2>
-      </header>
+    <Card className="mx-auto my-8 max-w-2xl">
+      <CardContent asChild>
+        <header>
+          Dispute evidence
+          <h2 className="grow">Submit additional information</h2>
+        </header>
+      </CardContent>
       {formSubmitted ? (
-        <div>Thank you!</div>
+        <CardContent>Thank you!</CardContent>
       ) : (
         <>
-          <div>
+          <CardContent>
             {products.length > 1 ? (
-              <div>
+              <div className="grow">
                 <p>
                   A customer of yours ({dispute_evidence.customer_email}) has disputed their purchase made on{" "}
                   {purchaseDate} of the following {products.length} items for {disputable.formatted_display_price}.
@@ -174,7 +179,7 @@ const DisputeEvidencePage = ({ dispute_evidence, disputable, products }: Props) 
                 </ul>
               </div>
             ) : (
-              <p>
+              <p className="grow">
                 A customer of yours ({dispute_evidence.customer_email}) has disputed their purchase made on{" "}
                 {purchaseDate} of{" "}
                 <a href={products[0]?.url} target="_blank" rel="noreferrer">
@@ -192,14 +197,14 @@ const DisputeEvidencePage = ({ dispute_evidence, disputable, products }: Props) 
                 {dispute_evidence.duration_left_to_submit_evidence_formatted} will help us win on your behalf.
               </strong>
             </p>
-            <div role="alert" className="warning">
+            <Alert variant="warning">
               You only have one opportunity to submit your response. We immediately forward your response and all
               supporting files to our payment processor. You can't edit the response or submit additional information,
               so make sure you've assembled all of your evidence before you submit.
-            </div>
-          </div>
-          <div>
-            <fieldset>
+            </Alert>
+          </CardContent>
+          <CardContent>
+            <fieldset className="grow basis-0">
               <legend>
                 <label htmlFor={reasonForWinningUID}>Why should you win this dispute?</label>
               </legend>
@@ -228,10 +233,10 @@ const DisputeEvidencePage = ({ dispute_evidence, disputable, products }: Props) 
                 />
               ) : null}
             </fieldset>
-          </div>
+          </CardContent>
           {disputable.is_subscription && dispute_evidence.dispute_reason === "subscription_canceled" ? (
-            <div>
-              <fieldset>
+            <CardContent>
+              <fieldset className="grow basis-0">
                 <legend>
                   <label htmlFor={cancellationRebuttalUID}>Why was the customer's subscription not canceled?</label>
                 </legend>
@@ -261,11 +266,11 @@ const DisputeEvidencePage = ({ dispute_evidence, disputable, products }: Props) 
                   />
                 ) : null}
               </fieldset>
-            </div>
+            </CardContent>
           ) : null}
           {"refusalRequiresExplanation" in disputeReason ? (
-            <div>
-              <fieldset>
+            <CardContent>
+              <fieldset className="grow basis-0">
                 <legend>
                   <label htmlFor={refundRefusalExplanationUID}>Why is the customer not entitled to a refund?</label>
                 </legend>
@@ -277,10 +282,10 @@ const DisputeEvidencePage = ({ dispute_evidence, disputable, products }: Props) 
                   onChange={(evt) => updateSellerDisputeEvidence({ refundRefusalExplanation: evt.target.value })}
                 />
               </fieldset>
-            </div>
+            </CardContent>
           ) : null}
-          <div>
-            <fieldset>
+          <CardContent>
+            <fieldset className="grow basis-0">
               <legend>
                 <label>Do you have additional evidence you'd like to provide?</label>
               </legend>
@@ -321,9 +326,14 @@ const DisputeEvidencePage = ({ dispute_evidence, disputable, products }: Props) 
                 </>
               ) : null}
             </fieldset>
-          </div>
-          <div>
-            <Button color="primary" disabled={!isInfoProvided || isSubmitting} onClick={handleSubmit}>
+          </CardContent>
+          <CardContent>
+            <Button
+              color="primary"
+              disabled={!isInfoProvided || isSubmitting}
+              onClick={handleSubmit}
+              className="grow basis-0"
+            >
               {isSubmitting ? (
                 <>
                   <LoadingSpinner /> Submitting...
@@ -332,10 +342,10 @@ const DisputeEvidencePage = ({ dispute_evidence, disputable, products }: Props) 
                 "Submit"
               )}
             </Button>
-          </div>
+          </CardContent>
         </>
       )}
-    </div>
+    </Card>
   );
 };
 
@@ -364,10 +374,10 @@ const Files = ({
   };
 
   return (
-    <div className="rows" role="list">
+    <Rows role="list">
       {eligibleBlobs.map((blob) => (
-        <div role="listitem" key={blob.key}>
-          <div className="content">
+        <Row role="listitem" key={blob.key}>
+          <RowContent>
             <Icon name="solid-document-text" className="type-icon" />
             <div>
               <h4>{blob.title}</h4>
@@ -376,8 +386,8 @@ const Files = ({
                 <li>{FileUtils.getFullFileSizeString(blob.byte_size)}</li>
               </ul>
             </div>
-          </div>
-          <div className="actions">
+          </RowContent>
+          <RowActions>
             <NavigationButton outline href={Routes.s3_utility_cdn_url_for_blob_path({ key: blob.key })} target="_blank">
               View
             </NavigationButton>
@@ -392,10 +402,10 @@ const Files = ({
                 <Icon name="trash2" />
               </Button>
             ) : null}
-          </div>
-        </div>
+          </RowActions>
+        </Row>
       ))}
-    </div>
+    </Rows>
   );
 };
 

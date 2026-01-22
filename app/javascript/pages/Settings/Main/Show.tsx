@@ -1,0 +1,590 @@
+import { useForm, usePage } from "@inertiajs/react";
+import cx from "classnames";
+import * as React from "react";
+import { cast } from "ts-safe-cast";
+
+import { SettingPage } from "$app/parsers/settings";
+import { asyncVoid } from "$app/utils/promise";
+import { request, assertResponseError } from "$app/utils/request";
+
+import { Button } from "$app/components/Button";
+import { Modal } from "$app/components/Modal";
+import { NumberInput } from "$app/components/NumberInput";
+import { showAlert } from "$app/components/server-components/Alert";
+import { ToggleSettingRow } from "$app/components/SettingRow";
+import { ProductLevelSupportEmailsForm } from "$app/components/Settings/AdvancedPage/ProductLevelSupportEmailsForm";
+import { Layout } from "$app/components/Settings/Layout";
+import { TagInput } from "$app/components/TagInput";
+import { Toggle } from "$app/components/Toggle";
+import { Pill } from "$app/components/ui/Pill";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "$app/components/ui/Table";
+
+type ProductLevelSupportEmail = {
+  email: string;
+  product_ids: string[];
+};
+
+type MainPageProps = {
+  settings_pages: SettingPage[];
+  is_form_disabled: boolean;
+  invalidate_active_sessions: boolean;
+  ios_app_store_url: string;
+  android_app_store_url: string;
+  timezones: { name: string; offset: string }[];
+  currencies: { name: string; code: string }[];
+  user: {
+    email: string | null;
+    support_email: string | null;
+    locale: string;
+    timezone: string;
+    currency_type: string;
+    has_unconfirmed_email: boolean;
+    compliance_country: string | null;
+    purchasing_power_parity_enabled: boolean;
+    purchasing_power_parity_limit: number | null;
+    purchasing_power_parity_payment_verification_disabled: boolean;
+    products: { id: string; name: string }[];
+    purchasing_power_parity_excluded_product_ids: string[];
+    enable_payment_email: boolean;
+    enable_payment_push_notification: boolean;
+    enable_recurring_subscription_charge_email: boolean;
+    enable_recurring_subscription_charge_push_notification: boolean;
+    enable_free_downloads_email: boolean;
+    enable_free_downloads_push_notification: boolean;
+    announcement_notification_enabled: boolean;
+    disable_comments_email: boolean;
+    disable_reviews_email: boolean;
+    show_nsfw_products: boolean;
+    disable_affiliate_requests: boolean;
+    seller_refund_policy: {
+      enabled: boolean;
+      allowed_refund_periods_in_days: { key: number; value: string }[];
+      max_refund_period_in_days: number;
+      fine_print_enabled: boolean;
+      fine_print: string | null;
+    };
+    product_level_support_emails: ProductLevelSupportEmail[] | null;
+  };
+};
+
+export default function MainPage() {
+  const props = cast<MainPageProps>(usePage().props);
+  const uid = React.useId();
+
+  const form = useForm({
+    user: {
+      ...props.user,
+      email: props.user.email ?? "",
+      support_email: props.user.support_email ?? "",
+      tax_id: null,
+      purchasing_power_parity_excluded_product_ids: props.user.purchasing_power_parity_excluded_product_ids,
+      product_level_support_emails: props.user.product_level_support_emails ?? [],
+    },
+  });
+
+  const isFormDisabled = props.is_form_disabled || form.processing;
+
+  const updateUserSettings = (settings: Partial<typeof form.data.user>) =>
+    form.setData("user", { ...form.data.user, ...settings });
+  const handleProductLevelSupportEmailsChange = (emails: ProductLevelSupportEmail[]) =>
+    updateUserSettings({ product_level_support_emails: emails });
+
+  const [resentConfirmationEmail, setResentConfirmationEmail] = React.useState(false);
+  const formRef = React.useRef<HTMLFormElement>(null);
+
+  const resendConfirmationEmailForm = useForm({});
+
+  const resendConfirmationEmail = () => {
+    resendConfirmationEmailForm.post(Routes.resend_confirmation_email_settings_main_path(), {
+      onSuccess: () => {
+        setResentConfirmationEmail(true);
+      },
+    });
+  };
+
+  const onSave = () => {
+    if (props.is_form_disabled) return;
+    if (!formRef.current?.reportValidity()) return;
+
+    form.put(Routes.settings_main_path(), {
+      preserveScroll: true,
+    });
+  };
+
+  return (
+    <Layout currentPage="main" pages={props.settings_pages} onSave={onSave} canUpdate={!isFormDisabled}>
+      <form ref={formRef}>
+        <section className="p-4! md:p-8!">
+          <header>
+            <h2>User details</h2>
+          </header>
+          <fieldset>
+            <legend>
+              <label htmlFor={`${uid}-email`}>Email</label>
+            </legend>
+            <input
+              type="email"
+              id={`${uid}-email`}
+              value={form.data.user.email}
+              disabled={isFormDisabled}
+              required
+              onChange={(e) => updateUserSettings({ email: e.target.value })}
+            />
+            {props.user.has_unconfirmed_email && !props.is_form_disabled ? (
+              <small>
+                This email address has not been confirmed yet.{" "}
+                {resentConfirmationEmail ? null : (
+                  <button
+                    className="cursor-pointer underline all-unset"
+                    onClick={(e) => {
+                      e.preventDefault();
+                      resendConfirmationEmail();
+                    }}
+                  >
+                    {resendConfirmationEmailForm.processing ? "Resending..." : "Resend confirmation?"}
+                  </button>
+                )}
+              </small>
+            ) : null}
+          </fieldset>
+        </section>
+        <section className="p-4! md:p-8!">
+          <header>
+            <h2>Notifications</h2>
+            <div>
+              Depending on your preferences, you can choose whether to receive mobile notifications or email
+              notifications. If you want to get notifications on a mobile device, install the Gumroad app over on the{" "}
+              <a href={props.ios_app_store_url} target="_blank" rel="noopener noreferrer">
+                App Store
+              </a>{" "}
+              or{" "}
+              <a href={props.android_app_store_url} target="_blank" rel="noopener noreferrer">
+                Play Store
+              </a>
+              .
+            </div>
+          </header>
+          <fieldset>
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Notifications</TableHead>
+                  <TableHead>Email</TableHead>
+                  <TableHead>Mobile</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                <TableRow>
+                  <TableHead scope="row">Purchases</TableHead>
+                  <TableCell>
+                    <Toggle
+                      value={form.data.user.enable_payment_email}
+                      onChange={(value) => updateUserSettings({ enable_payment_email: value })}
+                      disabled={isFormDisabled}
+                    />
+                  </TableCell>
+                  <TableCell>
+                    <Toggle
+                      value={form.data.user.enable_payment_push_notification}
+                      onChange={(value) => updateUserSettings({ enable_payment_push_notification: value })}
+                      disabled={isFormDisabled}
+                    />
+                  </TableCell>
+                </TableRow>
+                <TableRow>
+                  <TableHead scope="row">Recurring payments</TableHead>
+                  <TableCell>
+                    <Toggle
+                      value={form.data.user.enable_recurring_subscription_charge_email}
+                      onChange={(value) => updateUserSettings({ enable_recurring_subscription_charge_email: value })}
+                      disabled={isFormDisabled}
+                    />
+                  </TableCell>
+                  <TableCell>
+                    <Toggle
+                      value={form.data.user.enable_recurring_subscription_charge_push_notification}
+                      onChange={(value) =>
+                        updateUserSettings({
+                          enable_recurring_subscription_charge_push_notification: value,
+                        })
+                      }
+                      disabled={isFormDisabled}
+                    />
+                  </TableCell>
+                </TableRow>
+                <TableRow>
+                  <TableHead scope="row">Free downloads</TableHead>
+                  <TableCell>
+                    <Toggle
+                      value={form.data.user.enable_free_downloads_email}
+                      onChange={(value) => updateUserSettings({ enable_free_downloads_email: value })}
+                      disabled={isFormDisabled}
+                    />
+                  </TableCell>
+                  <TableCell>
+                    <Toggle
+                      value={form.data.user.enable_free_downloads_push_notification}
+                      onChange={(value) => updateUserSettings({ enable_free_downloads_push_notification: value })}
+                      disabled={isFormDisabled}
+                    />
+                  </TableCell>
+                </TableRow>
+                <TableRow>
+                  <TableHead scope="row">Personalized product announcements</TableHead>
+                  <TableCell>
+                    <Toggle
+                      value={form.data.user.announcement_notification_enabled}
+                      onChange={(value) => updateUserSettings({ announcement_notification_enabled: value })}
+                      disabled={isFormDisabled}
+                    />
+                  </TableCell>
+                  <TableCell></TableCell>
+                </TableRow>
+                <TableRow>
+                  <TableHead scope="row">Comments</TableHead>
+                  <TableCell>
+                    <Toggle
+                      value={!form.data.user.disable_comments_email}
+                      onChange={(value) => updateUserSettings({ disable_comments_email: !value })}
+                      disabled={isFormDisabled}
+                    />
+                  </TableCell>
+                  <TableCell></TableCell>
+                </TableRow>
+                <TableRow>
+                  <TableHead scope="row">Reviews</TableHead>
+                  <TableCell>
+                    <Toggle
+                      value={!form.data.user.disable_reviews_email}
+                      onChange={(value) => updateUserSettings({ disable_reviews_email: !value })}
+                      disabled={isFormDisabled}
+                      ariaLabel="Reviews"
+                    />
+                  </TableCell>
+                  <TableCell></TableCell>
+                </TableRow>
+              </TableBody>
+            </Table>
+          </fieldset>
+        </section>
+        <section className="p-4! md:p-8!">
+          <header>
+            <h2>Support</h2>
+          </header>
+          <fieldset>
+            <legend>
+              <label htmlFor={`${uid}-support-email`}>Email</label>
+            </legend>
+            <input
+              type="email"
+              id={`${uid}-support-email`}
+              value={form.data.user.support_email}
+              placeholder={props.user.email ?? ""}
+              disabled={isFormDisabled}
+              onChange={(e) => updateUserSettings({ support_email: e.target.value })}
+            />
+            <small>This email is listed on the receipt of every sale.</small>
+          </fieldset>
+          {props.user.product_level_support_emails !== null && (
+            <ProductLevelSupportEmailsForm
+              productLevelSupportEmails={form.data.user.product_level_support_emails}
+              products={props.user.products}
+              isDisabled={isFormDisabled}
+              onChange={handleProductLevelSupportEmailsChange}
+            />
+          )}
+        </section>
+        {props.user.seller_refund_policy.enabled ? (
+          <section className="p-4! md:p-8!">
+            <header>
+              <h2>Refund policy</h2>
+              <div>Choose how refunds will be handled for your products.</div>
+            </header>
+            <fieldset>
+              <legend>
+                <label htmlFor="max-refund-period-in-days">Refund period</label>
+              </legend>
+              <select
+                id="max-refund-period-in-days"
+                value={form.data.user.seller_refund_policy.max_refund_period_in_days}
+                disabled={isFormDisabled}
+                onChange={(e) =>
+                  updateUserSettings({
+                    seller_refund_policy: {
+                      ...form.data.user.seller_refund_policy,
+                      max_refund_period_in_days: Number(e.target.value),
+                    },
+                  })
+                }
+              >
+                {form.data.user.seller_refund_policy.allowed_refund_periods_in_days.map(({ key, value }) => (
+                  <option key={key} value={key}>
+                    {value}
+                  </option>
+                ))}
+              </select>
+            </fieldset>
+            <fieldset>
+              <ToggleSettingRow
+                value={
+                  form.data.user.seller_refund_policy.fine_print_enabled
+                    ? form.data.user.seller_refund_policy.max_refund_period_in_days > 0
+                    : false
+                }
+                onChange={(value) =>
+                  updateUserSettings({
+                    seller_refund_policy: {
+                      ...form.data.user.seller_refund_policy,
+                      fine_print_enabled: value,
+                    },
+                  })
+                }
+                disabled={isFormDisabled || form.data.user.seller_refund_policy.max_refund_period_in_days === 0}
+                label="Add a fine print to your refund policy"
+                dropdown={
+                  <fieldset>
+                    <legend>
+                      <label htmlFor="seller-refund-policy-fine-print">Fine print</label>
+                    </legend>
+                    <textarea
+                      id="seller-refund-policy-fine-print"
+                      maxLength={3000}
+                      rows={10}
+                      value={form.data.user.seller_refund_policy.fine_print || ""}
+                      placeholder="Describe your refund policy"
+                      disabled={isFormDisabled}
+                      onChange={(e) =>
+                        updateUserSettings({
+                          seller_refund_policy: {
+                            ...form.data.user.seller_refund_policy,
+                            fine_print: e.target.value,
+                          },
+                        })
+                      }
+                    />
+                  </fieldset>
+                }
+              />
+            </fieldset>
+          </section>
+        ) : null}
+        <section className="p-4! md:p-8!">
+          <header>
+            <h2>Local</h2>
+          </header>
+          <fieldset>
+            <legend>
+              <label htmlFor={`${uid}-timezone`}>Time zone</label>
+            </legend>
+            <select
+              id={`${uid}-timezone`}
+              disabled={isFormDisabled}
+              value={form.data.user.timezone}
+              onChange={(e) => updateUserSettings({ timezone: e.target.value })}
+            >
+              {props.timezones.map((tz) => (
+                <option key={tz.name} value={tz.name}>
+                  {`${tz.offset} | ${tz.name}`}
+                </option>
+              ))}
+            </select>
+          </fieldset>
+          <fieldset>
+            <legend>
+              <label htmlFor={`${uid}-local-currency`}>Sell in...</label>
+            </legend>
+            <select
+              id={`${uid}-local-currency`}
+              disabled={isFormDisabled}
+              value={form.data.user.currency_type}
+              onChange={(e) => updateUserSettings({ currency_type: e.target.value })}
+            >
+              {props.currencies.map((currency) => (
+                <option key={currency.code} value={currency.code}>
+                  {currency.name}
+                </option>
+              ))}
+            </select>
+            <small>Applies only to new products.</small>
+            <small>
+              Charges will happen in USD, using an up-to-date exchange rate. Customers may incur an additional foreign
+              transaction fee according to their cardmember agreement.
+            </small>
+          </fieldset>
+          <fieldset>
+            <ToggleSettingRow
+              value={form.data.user.purchasing_power_parity_enabled}
+              onChange={(value) => updateUserSettings({ purchasing_power_parity_enabled: value })}
+              disabled={isFormDisabled}
+              label="Enable purchasing power parity"
+              dropdown={
+                <div className="flex flex-col gap-4">
+                  <fieldset>
+                    <legend>
+                      <label htmlFor={`${uid}-ppp-discount-percentage`}>Maximum PPP discount</label>
+                    </legend>
+                    <div className={cx("input", { disabled: props.is_form_disabled })}>
+                      <NumberInput
+                        value={form.data.user.purchasing_power_parity_limit}
+                        onChange={(value) => {
+                          if (value === null || (value > 0 && value <= 100)) {
+                            updateUserSettings({ purchasing_power_parity_limit: value });
+                          }
+                        }}
+                      >
+                        {(inputProps) => (
+                          <input
+                            id={`${uid}-ppp-discount-percentage`}
+                            type="text"
+                            placeholder="60"
+                            disabled={isFormDisabled}
+                            aria-label="Percentage"
+                            {...inputProps}
+                          />
+                        )}
+                      </NumberInput>
+                      <Pill className="-mr-2 shrink-0">%</Pill>
+                    </div>
+                  </fieldset>
+                  <Toggle
+                    value={!form.data.user.purchasing_power_parity_payment_verification_disabled}
+                    disabled={isFormDisabled}
+                    onChange={(newValue) =>
+                      updateUserSettings({ purchasing_power_parity_payment_verification_disabled: !newValue })
+                    }
+                  >
+                    Apply only if the customer is currently located in the country of their payment method
+                  </Toggle>
+                  <fieldset>
+                    <legend>
+                      <label htmlFor={`${uid}-ppp-exclude-products`}>Products to exclude</label>
+                    </legend>
+
+                    <TagInput
+                      inputId={`${uid}-ppp-exclude-products`}
+                      tagIds={form.data.user.purchasing_power_parity_excluded_product_ids}
+                      tagList={props.user.products.map(({ id, name }) => ({ id, label: name }))}
+                      isDisabled={isFormDisabled}
+                      onChangeTagIds={(productIds) =>
+                        updateUserSettings({ purchasing_power_parity_excluded_product_ids: productIds })
+                      }
+                    />
+
+                    <label>
+                      <input
+                        type="checkbox"
+                        disabled={isFormDisabled}
+                        checked={
+                          form.data.user.purchasing_power_parity_excluded_product_ids.length ===
+                          props.user.products.length
+                        }
+                        onChange={(evt) =>
+                          updateUserSettings({
+                            purchasing_power_parity_excluded_product_ids: evt.target.checked
+                              ? props.user.products.map(({ id }) => id)
+                              : [],
+                          })
+                        }
+                      />
+                      All products
+                    </label>
+                  </fieldset>
+                </div>
+              }
+            />
+            <small>
+              Charge customers different amounts depending on the cost of living in their country.{" "}
+              <a href="/help/article/327-purchasing-power-parity" target="_blank" rel="noreferrer">
+                Learn more
+              </a>
+            </small>
+          </fieldset>
+        </section>
+        <section className="p-4! md:p-8!">
+          <header>
+            <h2>Adult content</h2>
+          </header>
+          <fieldset>
+            <ToggleSettingRow
+              value={form.data.user.show_nsfw_products}
+              onChange={(value) => updateUserSettings({ show_nsfw_products: value })}
+              disabled={isFormDisabled}
+              label="Show adult content in recommendations and search results"
+            />
+          </fieldset>
+        </section>
+        <section className="p-4! md:p-8!">
+          <header>
+            <h2>Affiliates</h2>
+          </header>
+          <fieldset>
+            <ToggleSettingRow
+              value={form.data.user.disable_affiliate_requests}
+              onChange={(value) => updateUserSettings({ disable_affiliate_requests: value })}
+              disabled={isFormDisabled}
+              label="Prevent others from adding me as an affiliate"
+            />
+            <small>When enabled, other users cannot add you as an affiliate or request to become your affiliate.</small>
+          </fieldset>
+        </section>
+        {props.invalidate_active_sessions ? <InvalidateActiveSessionsSection /> : null}
+      </form>
+    </Layout>
+  );
+}
+
+const InvalidateActiveSessionsSection = () => {
+  const [isConfirmationDialogOpen, setIsConfirmationDialogOpen] = React.useState(false);
+  const [isInvalidating, setIsInvalidating] = React.useState(false);
+
+  const invalidateActiveSessions = asyncVoid(async () => {
+    setIsInvalidating(true);
+
+    try {
+      await request({ url: Routes.user_invalidate_active_sessions_path(), method: "PUT", accept: "json" });
+
+      location.reload();
+    } catch (e) {
+      assertResponseError(e);
+      showAlert("Sorry, something went wrong. Please try again.", "error");
+    }
+
+    setIsConfirmationDialogOpen(false);
+    setIsInvalidating(false);
+  });
+
+  return (
+    <section className="p-4! md:p-8!">
+      <fieldset>
+        <button
+          className="cursor-pointer underline all-unset"
+          type="button"
+          onClick={() => setIsConfirmationDialogOpen(true)}
+        >
+          Sign out from all active sessions
+        </button>
+        <small>You will be signed out from all your active sessions including this session.</small>
+      </fieldset>
+      {isConfirmationDialogOpen ? (
+        <Modal
+          open
+          title="Sign out from all active sessions"
+          onClose={() => !isInvalidating && setIsConfirmationDialogOpen(false)}
+          footer={
+            <>
+              <Button onClick={() => setIsConfirmationDialogOpen(false)} disabled={isInvalidating}>
+                Cancel
+              </Button>
+              <Button color="accent" onClick={() => invalidateActiveSessions()} disabled={isInvalidating}>
+                {isInvalidating ? "Signing out from all active sessions..." : "Yes, sign out"}
+              </Button>
+            </>
+          }
+        >
+          Are you sure that you would like to sign out from all active sessions? You will be signed out from this
+          session as well.
+        </Modal>
+      ) : null}
+    </section>
+  );
+};

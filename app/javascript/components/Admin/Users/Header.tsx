@@ -19,10 +19,12 @@ type HeaderProps = {
 
 const Header = ({ user, isAffiliateUser = false, url }: HeaderProps) => {
   const displayName = user.name || `User ${user.username}`;
-  const adminUserUrl = isAffiliateUser ? Routes.admin_affiliate_url(user.id) : Routes.admin_user_url(user.id);
+  const adminUserUrl = isAffiliateUser
+    ? Routes.admin_affiliate_url(user.external_id)
+    : Routes.admin_user_url(user.external_id);
 
   return (
-    <div className="paragraphs">
+    <div className="flex flex-col gap-4">
       <div className="flex items-center gap-4">
         <img src={user.avatar_url} className="user-avatar" style={{ width: "var(--form-element-height)" }} alt="" />
         <div className="grid gap-2">
@@ -65,16 +67,16 @@ const Header = ({ user, isAffiliateUser = false, url }: HeaderProps) => {
                   tip="Custom fee that will be charged on all their new direct (non-discover) sales"
                   position="bottom"
                 >
-                  <span>Custom fee: {user.custom_fee_per_thousand / 10}%</span>
+                  <span>Custom fee: {(user.custom_fee_per_thousand / 10).toFixed(1)}%</span>
                 </WithTooltip>
               </li>
             ) : null}
             <li>
-              <Link href={Routes.admin_user_payouts_url(user)}>Payouts</Link>
+              <Link href={Routes.admin_user_payouts_url(user.external_id)}>Payouts</Link>
             </li>
           </ul>
 
-          <AdminUserStats user_id={user.id} />
+          <AdminUserStats user_external_id={user.external_id} />
         </div>
       </div>
     </div>

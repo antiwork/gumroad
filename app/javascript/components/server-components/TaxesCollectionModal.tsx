@@ -65,7 +65,7 @@ export const TaxesCollectionModal = ({ taxesOwed, creditCreationDate, name }: Pr
             </div>
           }
         >
-          <div className="paragraphs">
+          <div className="flex flex-col gap-4">
             After opt-in, a negative credit in the amount of {taxesOwed || ""} will be applied to your account on{" "}
             {creditCreationDate || ""}.
             <fieldset>

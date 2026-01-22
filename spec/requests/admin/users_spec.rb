@@ -13,7 +13,7 @@ describe "Admin::UsersController Scenario", type: :system, js: true do
 
   context "when user has no products" do
     it "shows no products alert" do
-      visit admin_user_path(user.id)
+      visit admin_user_path(user.external_id)
 
       click_on "Products"
 
@@ -23,14 +23,15 @@ describe "Admin::UsersController Scenario", type: :system, js: true do
 
   context "when user has products" do
     before do
-      %w(a b c).each_with_index do |l, i|
-        create(:product, user:, unique_permalink: l, name: "Product #{l}", created_at: i.minutes.ago)
-      end
-      stub_const("Admin::UsersController::PRODUCTS_PER_PAGE", 2)
+      create(:product, user:, unique_permalink: "a", name: "Product a", created_at: 1.minute.ago)
+      create(:product, user:, unique_permalink: "b", name: "Product b", created_at: 2.minutes.ago)
+      create(:product, user:, unique_permalink: "c", name: "Product c", created_at: 3.minutes.ago)
+
+      stub_const("Admin::Users::ListPaginatedProducts::PRODUCTS_PER_PAGE", 2)
     end
 
     it "shows products" do
-      visit admin_user_path(user.id)
+      visit admin_user_path(user.external_id)
       click_on "Products"
 
       expect(page).to have_text("Product a")
@@ -41,14 +42,14 @@ describe "Admin::UsersController Scenario", type: :system, js: true do
       expect(page).not_to have_text("Product a")
       expect(page).not_to have_text("Product b")
       expect(page).to have_text("Product c")
-      within("[aria-label='Pagination']") { expect(page).to have_link("1") }
+      within("[aria-label='Pagination']") { expect(page).to have_button("1") }
     end
   end
 
   describe "user memberships" do
     context "when the user has no user memberships" do
       it "doesn't render user memberships" do
-        visit admin_user_path(user.id)
+        visit admin_user_path(user.external_id)
 
         expect(page).not_to have_text("User memberships")
       end
@@ -64,7 +65,7 @@ describe "Admin::UsersController Scenario", type: :system, js: true do
       let!(:team_membership_three) { create(:team_membership, user:, seller: seller_three, deleted_at: 1.hour.ago) }
 
       it "renders user memberships" do
-        visit admin_user_path(user.id)
+        visit admin_user_path(user.external_id)
 
         find_and_click "h3", text: "User memberships"
         expect(page).to have_text(seller_one.display_name(prefer_email_over_default_username: true))
@@ -77,11 +78,11 @@ describe "Admin::UsersController Scenario", type: :system, js: true do
   describe "custom fees" do
     context "when the user has a custom fee set" do
       before do
-        user.update(custom_fee_per_thousand: 50)
+        user.update!(custom_fee_per_thousand: 50)
       end
 
       it "shows the custom fee percentage" do
-        visit admin_user_path(user.id)
+        visit admin_user_path(user.external_id)
 
         expect(page).to have_text("Custom fee: 5.0%")
       end
@@ -89,7 +90,7 @@ describe "Admin::UsersController Scenario", type: :system, js: true do
 
     context "when the user does not have a custom fee set" do
       it "does not show the custom fee heading" do
-        visit admin_user_path(user.id)
+        visit admin_user_path(user.external_id)
 
         expect(page).not_to have_text("Custom fee:")
       end
@@ -98,7 +99,7 @@ describe "Admin::UsersController Scenario", type: :system, js: true do
     it "allows setting new custom fee" do
       expect(user.reload.custom_fee_per_thousand).to be_nil
 
-      visit admin_user_path(user.id)
+      visit admin_user_path(user.external_id)
       find_and_click "h3", text: "Custom fee"
       fill_in "custom_fee_percent", with: "2.5"
       click_on "Submit"
@@ -112,7 +113,7 @@ describe "Admin::UsersController Scenario", type: :system, js: true do
       user.update(custom_fee_per_thousand: 50)
       expect(user.reload.custom_fee_per_thousand).to eq(50)
 
-      visit admin_user_path(user.id)
+      visit admin_user_path(user.external_id)
       find_and_click "h3", text: "Custom fee"
       fill_in "custom_fee_percent", with: "2.5"
       click_on "Submit"
@@ -126,7 +127,7 @@ describe "Admin::UsersController Scenario", type: :system, js: true do
       user.update(custom_fee_per_thousand: 75)
       expect(user.reload.custom_fee_per_thousand).to eq(75)
 
-      visit admin_user_path(user.id)
+      visit admin_user_path(user.external_id)
       find_and_click "h3", text: "Custom fee"
       fill_in "custom_fee_percent", with: ""
       click_on "Submit"
@@ -144,7 +145,7 @@ describe "Admin::UsersController Scenario", type: :system, js: true do
       end
 
       it "shows 'Mark as adult' button" do
-        visit admin_user_path(user.id)
+        visit admin_user_path(user.external_id)
 
         expect(page).to have_button("Mark as adult")
         expect(page).not_to have_button("Unmark as adult")
@@ -153,7 +154,7 @@ describe "Admin::UsersController Scenario", type: :system, js: true do
       it "allows marking user as adult" do
         expect(user.reload.all_adult_products).to be(false)
 
-        visit admin_user_path(user.id)
+        visit admin_user_path(user.external_id)
         click_on "Mark as adult"
         accept_browser_dialog
         wait_for_ajax
@@ -170,7 +171,7 @@ describe "Admin::UsersController Scenario", type: :system, js: true do
       end
 
       it "shows 'Unmark as adult' button" do
-        visit admin_user_path(user.id)
+        visit admin_user_path(user.external_id)
 
         expect(page).to have_button("Unmark as adult")
         expect(page).not_to have_button("Mark as adult")
@@ -179,7 +180,7 @@ describe "Admin::UsersController Scenario", type: :system, js: true do
       it "allows unmarking user as adult" do
         expect(user.reload.all_adult_products).to be(true)
 
-        visit admin_user_path(user.id)
+        visit admin_user_path(user.external_id)
         click_on "Unmark as adult"
         accept_browser_dialog
         wait_for_ajax
@@ -197,14 +198,14 @@ describe "Admin::UsersController Scenario", type: :system, js: true do
       end
 
       it "shows 'Mark as adult' button" do
-        visit admin_user_path(user.id)
+        visit admin_user_path(user.external_id)
 
         expect(page).to have_button("Mark as adult")
         expect(page).not_to have_button("Unmark as adult")
       end
 
       it "allows marking user as adult" do
-        visit admin_user_path(user.id)
+        visit admin_user_path(user.external_id)
         click_on "Mark as adult"
         accept_browser_dialog
         wait_for_ajax
@@ -213,6 +214,40 @@ describe "Admin::UsersController Scenario", type: :system, js: true do
         expect(page).to have_button("Unmark as adult")
         expect(page).not_to have_button("Mark as adult")
       end
+    end
+  end
+
+  describe "blocked user indicator" do
+    before { BlockedObject.delete_all }
+    after { BlockedObject.delete_all }
+
+    it "shows blocked user indicator with appropriate tooltips for email and domain blocks" do
+      # Initially no block should exist
+      visit admin_user_path(user.external_id)
+      expect(page).not_to have_css(".icon-solid-shield-exclamation")
+
+      # Block by email
+      BlockedObject.block!(BLOCKED_OBJECT_TYPES[:email], user.form_email, admin.id)
+      page.refresh
+
+      # Verify icon appears and tooltip shows email block
+      expect(page).to have_css(".icon-solid-shield-exclamation")
+      icon = find(".icon-solid-shield-exclamation")
+      icon.hover
+      expect(page).to have_text("Email blocked")
+      expect(page).to have_text("block created")
+
+      # Add domain block
+      BlockedObject.block!(BLOCKED_OBJECT_TYPES[:email_domain], user.form_email_domain, admin.id)
+      page.refresh
+
+      # Verify icon still appears and tooltip shows both blocks
+      expect(page).to have_css(".icon-solid-shield-exclamation")
+      icon = find(".icon-solid-shield-exclamation")
+      icon.hover
+      expect(page).to have_text("Email blocked")
+      expect(page).to have_text("#{user.form_email_domain} blocked")
+      expect(page).to have_text("block created")
     end
   end
 end

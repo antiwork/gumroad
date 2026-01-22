@@ -15,6 +15,7 @@ import { Product, WishlistForProduct } from "$app/components/Product";
 import { PriceSelection } from "$app/components/Product/ConfigurationSelector";
 import { showAlert } from "$app/components/server-components/Alert";
 import { TwitterShareButton } from "$app/components/TwitterShareButton";
+import { Alert } from "$app/components/ui/Alert";
 import { WithTooltip } from "$app/components/WithTooltip";
 
 type SuccessState = { newlyCreated: boolean; wishlist: Wishlist };
@@ -34,6 +35,9 @@ export const ShareSection = ({
   const [saveState, setSaveState] = React.useState<
     { type: "initial" | "saving" } | ({ type: "success" } & SuccessState)
   >({ type: "initial" });
+  const [dropdownState, setDropdownState] = React.useState<
+    { state: "closed" } | { state: "open" } | { state: "creating"; newWishlistName: string }
+  >({ state: "closed" });
 
   const isSelectionInWishlist = (wishlist: WishlistForProduct) =>
     wishlist.selections_in_wishlist.some(
@@ -46,6 +50,7 @@ export const ShareSection = ({
 
   const addProduct = async (resolveWishlist: Promise<SuccessState>) => {
     setSaveState({ type: "saving" });
+    setDropdownState({ state: "closed" });
 
     try {
       const { newlyCreated, wishlist } = await resolveWishlist;
@@ -80,8 +85,8 @@ export const ShareSection = ({
     }
   };
 
-  const newWishlist = async () => {
-    const { wishlist } = await createWishlist();
+  const newWishlist = async (name: string): Promise<SuccessState> => {
+    const { wishlist } = await createWishlist(name);
     setWishlists([...wishlists, { ...wishlist, selections_in_wishlist: [] }]);
     return { newlyCreated: true, wishlist };
   };
@@ -91,7 +96,11 @@ export const ShareSection = ({
       <div className="grid grid-cols-[1fr_auto] gap-2">
         <ComboBox
           input={(props) => (
-            <div {...props} className="input" aria-label="Add to wishlist">
+            <div
+              {...props}
+              className={`input ${dropdownState.state !== "closed" ? "!rounded-b-none" : ""}`}
+              aria-label="Add to wishlist"
+            >
               <span className="fake-input text-singleline">
                 {saveState.type === "success"
                   ? saveState.wishlist.name
@@ -118,25 +127,52 @@ export const ShareSection = ({
                   <Icon name="file-text" /> {wishlist.name}
                 </div>
               </div>
-            ) : (
-              <div
-                {...props}
-                onClick={(e) => {
-                  props.onClick?.(e);
-                  void addProduct(newWishlist());
+            ) : dropdownState.state === "creating" ? (
+              <form
+                role={props.role}
+                className="flex gap-2 p-2"
+                onSubmit={(e) => {
+                  e.preventDefault();
+                  if (!dropdownState.newWishlistName.trim()) {
+                    showAlert("Please enter a wishlist name", "error");
+                    return;
+                  }
+                  void addProduct(newWishlist(dropdownState.newWishlistName));
                 }}
               >
+                <input
+                  type="text"
+                  autoFocus
+                  placeholder="Wishlist name"
+                  value={dropdownState.newWishlistName}
+                  onChange={(e) => setDropdownState({ state: "creating", newWishlistName: e.target.value })}
+                  className="input"
+                  aria-label="Wishlist name"
+                />
+                <Button type="submit" aria-label="Create wishlist" color="primary">
+                  <Icon name="outline-check" />
+                </Button>
+              </form>
+            ) : (
+              <div {...props} onClick={() => setDropdownState({ state: "creating", newWishlistName: "" })}>
                 <div>
                   <Icon name="plus" /> New wishlist
                 </div>
               </div>
             )
           }
-          onClick={() => {
-            if (loggedInUser) return;
-            window.location.href = Routes.login_url({ host: appDomain, next: product.long_url });
+          open={loggedInUser ? dropdownState.state !== "closed" : false}
+          onToggle={(open) => {
+            if (!loggedInUser) {
+              window.location.href = Routes.login_url({ host: appDomain, next: product.long_url });
+              return;
+            }
+            if (open) {
+              setDropdownState({ state: "open" });
+            } else {
+              setDropdownState({ state: "closed" });
+            }
           }}
-          open={loggedInUser ? undefined : false}
         />
 
         <Popover
@@ -161,15 +197,15 @@ export const ShareSection = ({
         </Popover>
       </div>
       {saveState.type === "success" ? (
-        <div role="alert" className="success">
+        <Alert variant="success">
           {saveState.newlyCreated ? (
-            <span>
+            <>
               Wishlist created! <a href={Routes.wishlists_url()}>Edit it here.</a>
-            </span>
+            </>
           ) : (
             "Added to wishlist!"
           )}
-        </div>
+        </Alert>
       ) : null}
     </>
   );

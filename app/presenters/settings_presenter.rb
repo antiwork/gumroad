@@ -42,15 +42,6 @@ class SettingsPresenter
     end
   end
 
-  def page_title(page)
-    case page
-    when "main" then "Settings"
-    when "authorized_applications" then "Applications"
-    when "third_party_analytics" then "Third-party analytics"
-    else page.humanize
-    end
-  end
-
   def main_props
     {
       settings_pages: pages,
@@ -329,8 +320,8 @@ class SettingsPresenter
       bank_account = seller.active_bank_account
 
       {
-        show_bank_account: bank_account.present? || seller.native_payouts_supported? || seller.signed_up_from_united_arab_emirates?,
-        show_paypal: seller.payment_address.present? || !seller.native_payouts_supported? || seller.signed_up_from_united_arab_emirates?,
+        show_bank_account: seller.can_setup_bank_payouts?,
+        show_paypal: seller.can_setup_paypal_payouts?,
         card_data_handling_mode: CardDataHandlingMode.get_card_data_handling_mode(seller),
         is_a_card: bank_account.is_a?(CardBankAccount),
         card: bank_account.is_a?(CardBankAccount) ? {

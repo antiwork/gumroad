@@ -1,0 +1,121 @@
+---
+http_interactions:
+- request:
+    method: post
+    uri: https://api.sandbox.paypal.com/v1/oauth2/token
+    body:
+      encoding: UTF-8
+      string: grant_type=client_credentials
+    headers:
+      Accept:
+      - application/json
+      Accept-Language:
+      - en_US
+      Accept-Encoding:
+      - gzip;q=1.0,deflate;q=0.6,identity;q=0.3
+      User-Agent:
+      - Ruby
+      Authorization:
+      - Basic QWFEdkxJeUYwVFRlVUJqUEIwM3BBVkdjRFM1S0JNenFkcktyNU9VRXN2TWdBNnM5czNTNHdaY1U0cm1VUDI0WjczeEk2eHRlY2I2MjVibDY6RVBMQ2dJOE9CY2g2RzUyeHRTeHNBSVVDbGdobVJqZ3o2T2FvNndmT1RXMGtZN3F1UXFCa1ZsT3c0RFdqU2NlWnNQQ0x4OWczSEEyOFhUbzU=
+  response:
+    status:
+      code: 200
+      message: OK
+    headers:
+      Content-Type:
+      - application/json
+      Content-Length:
+      - '1723'
+      Connection:
+      - keep-alive
+      Date:
+      - Sat, 01 Nov 2025 15:33:18 GMT
+      Access-Control-Expose-Headers:
+      - Server-Timing
+      Cache-Control:
+      - max-age=0, no-cache, no-store, must-revalidate
+      Paypal-Debug-Id:
+      - e7d61895bcaed
+      Pragma:
+      - no-cache
+      Server-Timing:
+      - traceparent;desc="00-0000000000000000000e7d61895bcaed-30de3fbe7cb37c09-01"
+      Vary:
+      - Accept-Encoding
+      X-Paypal-Token-Service:
+      - IAAS
+      Http-X-Pp-Az-Locator:
+      - ccg18.slc
+      Strict-Transport-Security:
+      - max-age=31536000; includeSubDomains
+    body:
+      encoding: UTF-8
+      string: '{"scope":"https://uri.paypal.com/services/customer/partner-referrals/readwrite
+        https://uri.paypal.com/services/payments/partnerfee https://uri.paypal.com/services/invoicing
+        https://uri.paypal.com/services/payments/futurepayments https://uri.paypal.com/services/payments/realtimepayment
+        https://uri.paypal.com/services/customer/onboarding/user https://api.paypal.com/v1/vault/credit-card
+        https://api.paypal.com/v1/payments/.* https://uri.paypal.com/services/payments/referenced-payouts-items/readwrite
+        https://uri.paypal.com/services/reporting/search/read https://uri.paypal.com/services/customer/partner
+        https://uri.paypal.com/services/customer/merchant-integrations/read https://uri.paypal.com/services/applications/webhooks
+        https://uri.paypal.com/services/disputes/update-seller https://uri.paypal.com/services/payments/payment/authcapture
+        openid https://uri.paypal.com/services/disputes/read-seller https://uri.paypal.com/services/payments/refund
+        https://uri.paypal.com/services/risk/raas/transaction-context https://uri.paypal.com/services/customer/consumer-referrals/create
+        https://uri.paypal.com/services/partners/merchant-accounts/readwrite https://uri.paypal.com/services/identity/grantdelegation
+        https://uri.paypal.com/services/customer/onboarding/account https://uri.paypal.com/payments/payouts
+        https://uri.paypal.com/services/customer/onboarding/sessions https://api.paypal.com/v1/vault/credit-card/.*
+        https://uri.paypal.com/services/subscriptions","access_token":"A21AAKhOhlen-7Om_jW_YyeGRyridhpjDghUVAq-Znpi-RvFQIVY_c0_WofnaBUGQR9rxgCLfWKgwk4pdWry18EX_bQxAztDw","token_type":"Bearer","app_id":"APP-80W284485P519543T","expires_in":32400,"nonce":"2025-11-01T15:33:18ZCmVGtOoYruyIKMk4A4j2LRHapX5tzBk7GdZg5qviQAo"}'
+  recorded_at: Sat, 01 Nov 2025 15:33:18 GMT
+- request:
+    method: get
+    uri: https://api.sandbox.paypal.com/v1/customer/partners/<PAYPAL_PARTNER_MERCHANT_ID>/merchant-integrations/B66YJBBNCRW6L
+    body:
+      encoding: US-ASCII
+      string: ''
+    headers:
+      Content-Type:
+      - application/json
+      Authorization:
+      - Bearer A21AAKhOhlen-7Om_jW_YyeGRyridhpjDghUVAq-Znpi-RvFQIVY_c0_WofnaBUGQR9rxgCLfWKgwk4pdWry18EX_bQxAztDw
+      Accept-Encoding:
+      - gzip;q=1.0,deflate;q=0.6,identity;q=0.3
+      Accept:
+      - "*/*"
+      User-Agent:
+      - Ruby
+  response:
+    status:
+      code: 200
+      message: OK
+    headers:
+      Content-Type:
+      - application/json
+      Content-Length:
+      - '99'
+      Connection:
+      - keep-alive
+      Date:
+      - Sat, 01 Nov 2025 15:33:20 GMT
+      Access-Control-Expose-Headers:
+      - Server-Timing
+      Application-Id:
+      - APP-80W284485P519543T
+      Cache-Control:
+      - max-age=0, no-cache, no-store, must-revalidate
+      Caller-Acct-Num:
+      - HU29XVVCZXNFN
+      Paypal-Debug-Id:
+      - 77331acd53163
+      Server-Timing:
+      - traceparent;desc="00-000000000000000000077331acd53163-153066c251213560-01"
+      Vary:
+      - Accept-Encoding
+      Http-X-Pp-Az-Locator:
+      - ccg18.slc
+      Strict-Transport-Security:
+      - max-age=31536000; includeSubDomains
+    body:
+      encoding: UTF-8
+      string: '{"merchant_id":"B66YJBBNCRW6L","tracking_id":"1592901550","products":[{"name":"MOBILE_PAYMENT_ACCEPTANCE","status":"ACTIVE"},{"name":"PPCP_CUSTOM","vetting_status":"SUBSCRIBED","capabilities":["CARD_PROCESSING_VIRTUAL_TERMINAL","COMMERCIAL_ENTITY","DEBIT_CARD_SWITCH","FRAUD_TOOL_ACCESS","AMEX_OPTBLUE","CUSTOM_CARD_PROCESSING"]},{"name":"PPCP_STANDARD","vetting_status":"SUBSCRIBED","capabilities":["SPEND_FROM_BALANCE"]}],"capabilities":[{"name":"FRAUD_TOOL_ACCESS","status":"ACTIVE"},{"name":"CARD_PROCESSING_VIRTUAL_TERMINAL","status":"ACTIVE"},{"name":"COMMERCIAL_ENTITY","status":"ACTIVE"},{"name":"DEBIT_CARD_SWITCH","status":"ACTIVE"},{"name":"CUSTOM_CARD_PROCESSING","status":"ACTIVE"},{"name":"AMEX_OPTBLUE","status":"ACTIVE"},{"name":"SPEND_FROM_BALANCE","status":"ACTIVE"}],"payments_receivable":true,"legal_name":"John
+        Doe''s Test Store","primary_email":"sb-byx2u2205460@business.example.com","primary_email_confirmed":true,"oauth_integrations":[{"integration_type":"OAUTH_THIRD_PARTY","integration_method":"PAYPAL","oauth_third_party":[{"partner_client_id":"<PAYPAL_PARTNER_CLIENT_ID>","merchant_client_id":"AaqC6zBkZjZFpVepKOa8jeJzpnsJw5aF61sa5r-6-WDYhP7hI2_z8tvoJ3i007IaGcJJxx03dPHKpAlO","scopes":["https://uri.paypal.com/services/payments/delay-funds-disbursement","https://uri.paypal.com/services/payments/realtimepayment","https://uri.paypal.com/services/payments/partnerfee","https://uri.paypal.com/services/payments/refund","https://uri.paypal.com/services/customer/merchant-integrations/read","https://uri.paypal.com/services/payments/payment/authcapture"]}]}],"primary_currency":"USD","country":"US"}'
+  recorded_at: Sat, 01 Nov 2025 15:33:20 GMT
+recorded_with: VCR 6.2.0

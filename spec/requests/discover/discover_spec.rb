@@ -215,6 +215,38 @@ describe("Discover", js: true, type: :system) do
         expect_product_cards_in_order([related_wishlist, *wishlists.first(3)])
       end
     end
+
+    it "allows users to follow and unfollow a wishlist from the discover page" do
+      login_as @buyer
+      visit discover_url(host: discover_host)
+      wait_for_ajax
+
+      within_section "Wishlists you might like", section_element: :section do
+        wishlist_card = find_product_card(wishlists.first)
+        within wishlist_card do
+          follow_button = find("a[role='button'] .icon-bookmark-plus")
+          follow_button.click
+          wait_for_ajax
+          expect(page).to have_selector("a[role='button'] .icon-bookmark-check-fill")
+        end
+      end
+
+      expect(WishlistFollower.where(wishlist: wishlists.first, follower_user: @buyer)).to exist
+      expect(wishlists.first.reload.follower_count).to eq(1)
+
+      within_section "Wishlists you might like", section_element: :section do
+        wishlist_card = find_product_card(wishlists.first)
+        within wishlist_card do
+          unfollow_button = find("a[role='button'] .icon-bookmark-check-fill")
+          unfollow_button.click
+          wait_for_ajax
+          expect(page).to have_selector("a[role='button'] .icon-bookmark-plus")
+        end
+      end
+
+      expect(WishlistFollower.alive.where(wishlist: wishlists.first, follower_user: @buyer)).not_to exist
+      expect(wishlists.first.reload.follower_count).to eq(0)
+    end
   end
 
   describe "category pages" do
@@ -440,7 +472,7 @@ describe("Discover", js: true, type: :system) do
       visit "#{discover_host}/software-development/programming/c-sharp?tags=some-tag"
 
       expect(page).to have_title("some tag | Software Development » Programming » C# | Gumroad")
-      expect(page).to have_selector("[aria-label='Breadcrumbs']", text: "Software Development\nProgramming\nC#")
+      expect(page).to have_selector("[aria-label='Breadcrumbs']", text: "Software Development\n/Programming\n/C#")
     end
 
     it "shows breadcrumbs with taxonomy links and handles back and forward buttons" do
@@ -466,7 +498,7 @@ describe("Discover", js: true, type: :system) do
       end
       expect(page).to have_current_path("/software-development/programming")
       expect(page).to have_title("Software Development » Programming | Gumroad")
-      expect(page).to have_selector("[aria-label='Breadcrumbs']", text: "Software Development\nProgramming")
+      expect(page).to have_selector("[aria-label='Breadcrumbs']", text: "Software Development\n/Programming")
 
       within_section "Featured products", section_element: :section do
         expect_product_cards_with_names("product 0", "product 2", "product 3")
@@ -481,7 +513,7 @@ describe("Discover", js: true, type: :system) do
       wait_for_ajax
       expect(page).to have_current_path("/software-development/programming/c-sharp?sort=featured")
       expect(page).to have_title("Software Development » Programming » C# | Gumroad")
-      expect(page).to have_selector("[aria-label='Breadcrumbs']", text: "Software Development\nProgramming\nC#")
+      expect(page).to have_selector("[aria-label='Breadcrumbs']", text: "Software Development\n/Programming\n/C#")
       within_section "Featured products", section_element: :section do
         expect_product_cards_with_names("product 0", "product 3")
       end
@@ -492,7 +524,7 @@ describe("Discover", js: true, type: :system) do
       wait_for_ajax
       expect(page).to have_current_path("/software-development/programming")
       expect(page).to have_title("Software Development » Programming | Gumroad")
-      expect(page).to have_selector("[aria-label='Breadcrumbs']", text: "Software Development\nProgramming")
+      expect(page).to have_selector("[aria-label='Breadcrumbs']", text: "Software Development\n/Programming")
       within_section "Featured products", section_element: :section do
         expect_product_cards_with_names("product 0", "product 2", "product 3")
       end
@@ -526,7 +558,7 @@ describe("Discover", js: true, type: :system) do
         click_on "Entrepreneurship"
         click_on "Courses"
 
-        expect(page).to have_selector("[aria-label='Breadcrumbs']", text: "Business & Money\nEntrepreneurship\nCourses")
+        expect(page).to have_selector("[aria-label='Breadcrumbs']", text: "Business & Money\n/Entrepreneurship\n/Courses")
         within "[role=menubar]" do
           expect(page).to have_selector("[aria-current=true]", text: "Business & Money")
         end

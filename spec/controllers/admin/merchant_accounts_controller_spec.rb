@@ -2,8 +2,9 @@
 
 require "spec_helper"
 require "shared_examples/admin_base_controller_concern"
+require "inertia_rails/rspec"
 
-describe Admin::MerchantAccountsController do
+describe Admin::MerchantAccountsController, type: :controller, inertia: true do
   render_views
 
   it_behaves_like "inherits from Admin::BaseController"
@@ -15,36 +16,29 @@ describe Admin::MerchantAccountsController do
   end
 
   describe "GET show" do
-    let(:merchant_account) { MerchantAccount.gumroad(StripeChargeProcessor.charge_processor_id) }
+    let(:merchant_account) { create(:merchant_account) }
 
-    it "renders the page successfully" do
-      get :show, params: { id: merchant_account }
+    before do
+      allow(Stripe::Account).to receive(:retrieve).and_return(double(:account, charges_enabled: true, payouts_enabled: true, requirements: double(:requirements, disabled_reason: nil, as_json: {})))
+    end
+
+    it "redirects numeric ID to external_id" do
+      get :show, params: { external_id: merchant_account.id }
+      expect(response).to redirect_to admin_merchant_account_path(merchant_account.external_id)
+    end
+
+    it "renders the page successfully with external_id" do
+      get :show, params: { external_id: merchant_account.external_id }
 
       expect(response).to be_successful
-      expect(response).to render_template(:show)
+      expect(inertia.component).to eq("Admin/MerchantAccounts/Show")
     end
 
-    context "for merchant accounts of type paypal", :vcr do
-      it "returns the email address associated with the paypal account" do
-        paypal_merchant_account = create(:merchant_account_paypal, charge_processor_merchant_id: "B66YJBBNCRW6L")
+    it "renders the page successfully with charge_processor_merchant_id" do
+      get :show, params: { external_id: merchant_account.charge_processor_merchant_id }
 
-        get :show, params: { id: paypal_merchant_account.id }
-
-        expect(response.body).to have_content("Email \"sb-byx2u2205460@business.example.com\"", normalize_ws: true)
-      end
-    end
-
-    context "for merchant accounts of type stripe", :vcr do
-      it "returns the charges and payouts related flags" do
-        stripe_merchant_account = create(:merchant_account, charge_processor_merchant_id: "acct_19paZxAQqMpdRp2I")
-
-        get :show, params: { id: stripe_merchant_account.id }
-
-        expect(response.body).to have_content("Charges enabled false", normalize_ws: true)
-        expect(response.body).to have_content("Payout enabled false", normalize_ws: true)
-        expect(response.body).to have_content("Disabled reason \"rejected.fraud\"", normalize_ws: true)
-        expect(response.body).to have_content("Fields needed", normalize_ws: true)
-      end
+      expect(response).to be_successful
+      expect(inertia.component).to eq("Admin/MerchantAccounts/Show")
     end
   end
 end

@@ -16,13 +16,8 @@ export const FacebookShareButton = ({ url, text = "Join me on Gumroad!" }: { url
   };
 
   return (
-    <NavigationButton
-      className="button-social-facebook button-w-i button-facebook"
-      onClick={handleClick}
-      href={shareUrl}
-      target="_blank"
-      rel="noopener noreferrer"
-    >
+    <NavigationButton color="facebook" onClick={handleClick} href={shareUrl} target="_blank" rel="noopener noreferrer">
+      <span className="brand-icon brand-icon-facebook" />
       Share on Facebook
     </NavigationButton>
   );

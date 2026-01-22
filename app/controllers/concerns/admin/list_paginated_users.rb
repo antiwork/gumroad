@@ -33,10 +33,7 @@ module Admin::ListPaginatedUsers
                      .includes(:admin_manageable_user_memberships)
                      .with_blocked_attributes_for(:form_email, :form_email_domain)
                      .map do |user|
-                       Admin::UserPresenter::Card.new(
-                         user:,
-                         impersonatable: policy([:admin, :impersonators, user]).create?
-                       ).props
+                       Admin::UserPresenter::Card.new(user: user, pundit_user:).props
                      end
               end,
               pagination:

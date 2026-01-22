@@ -36,7 +36,8 @@ describe "RenderingExtension" do
             csp_nonce: SecureHeaders.content_security_policy_script_nonce(stubbed_view_context.request),
             locale: "en-US",
             feature_flags: {
-              require_email_typo_acknowledgment: false
+              require_email_typo_acknowledgment: false,
+              disable_stripe_signup: false
             }
           }
         )
@@ -132,6 +133,9 @@ describe "RenderingExtension" do
                   },
                   community: {
                     index: false,
+                  },
+                  churn: {
+                    show: false,
                   }
                 },
                 is_gumroad_admin: false,
@@ -142,7 +146,8 @@ describe "RenderingExtension" do
               csp_nonce: SecureHeaders.content_security_policy_script_nonce(stubbed_view_context.request),
               locale: "en-US",
               feature_flags: {
-                require_email_typo_acknowledgment: false
+                require_email_typo_acknowledgment: false,
+                disable_stripe_signup: false
               }
             }
           )

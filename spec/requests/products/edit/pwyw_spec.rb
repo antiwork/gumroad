@@ -14,11 +14,12 @@ describe("Product Edit pay what you want setting", type: :system, js: true) do
   it "displays the setting" do
     visit edit_link_path(product.unique_permalink)
     fill_in("Amount", with: "0")
-    check "Allow customers to pay what they want"
+
+    pwyw_toggle = find_field("Allow customers to pay what they want", disabled: true)
+    expect(pwyw_toggle).to be_checked
 
     expect(page).to have_field("Minimum amount", disabled: true)
     expect(page).to have_field("Suggested amount")
-    expect(page).to have_field("Allow customers to pay what they want")
     save_change
     wait_for_ajax
     expect(product.reload.customizable_price).to eq(true)
@@ -28,7 +29,10 @@ describe("Product Edit pay what you want setting", type: :system, js: true) do
   it "tests that PWYW is still available" do
     visit edit_link_path(product.unique_permalink)
     fill_in "Amount", with: "0"
-    check "Allow customers to pay what they want"
+
+    pwyw_toggle = find_field("Allow customers to pay what they want", disabled: true)
+    expect(pwyw_toggle).to be_checked
+
     fill_in "Suggested amount", with: "10"
     save_change
     wait_for_ajax
@@ -37,5 +41,22 @@ describe("Product Edit pay what you want setting", type: :system, js: true) do
     end
     expect(product.reload.suggested_price_cents).to eq(10_00)
     expect(find_field("Suggested amount").value).to eq "10"
+  end
+
+  it "hides info alert and enables toggle when price is changed from $0 to a positive value" do
+    visit edit_link_path(product.unique_permalink)
+    fill_in "Amount", with: "0"
+
+    expect(page).to have_content("Free products require a pay what they want price.")
+    pwyw_toggle = find_field("Allow customers to pay what they want", disabled: true)
+    expect(pwyw_toggle).to be_checked
+    expect(pwyw_toggle).to be_disabled
+
+    fill_in "Amount", with: "10"
+
+    expect(page).not_to have_content("Free products require a pay what they want price.")
+    pwyw_toggle = find_field("Allow customers to pay what they want")
+    expect(pwyw_toggle).to be_checked
+    expect(pwyw_toggle).not_to be_disabled
   end
 end

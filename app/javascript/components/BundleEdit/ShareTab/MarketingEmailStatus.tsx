@@ -1,11 +1,10 @@
 import * as React from "react";
 
 import { formatPriceCentsWithCurrencySymbol } from "$app/utils/currency";
-import { paramsToQueryString } from "$app/utils/url";
 
 import { computeStandalonePrice, useBundleEditContext } from "$app/components/BundleEdit/state";
 import { NavigationButton } from "$app/components/Button";
-import { newEmailPath } from "$app/components/server-components/EmailsPage";
+import { Alert } from "$app/components/ui/Alert";
 
 export const MarketingEmailStatus = () => {
   const { bundle, uniquePermalink, currencyType } = useBundleEditContext();
@@ -28,8 +27,8 @@ export const MarketingEmailStatus = () => {
   };
 
   return (
-    <div role="status" className="info">
-      <div className="paragraphs">
+    <Alert role="status" variant="info">
+      <div className="flex flex-col gap-4">
         <strong>
           Your product bundle is ready. Would you like to send an email about this offer to existing customers?
         </strong>
@@ -51,10 +50,15 @@ export const MarketingEmailStatus = () => {
             All customers
           </label>
         </fieldset>
-        <NavigationButton color="primary" href={`${newEmailPath}?${paramsToQueryString(queryParams)}`} target="_blank">
+        <NavigationButton
+          color="primary"
+          href={Routes.new_email_path(queryParams)}
+          target="_blank"
+          rel="noopener noreferrer"
+        >
           Draft and send
         </NavigationButton>
       </div>
-    </div>
+    </Alert>
   );
 };

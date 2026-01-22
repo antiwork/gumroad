@@ -25,7 +25,7 @@ RSpec.describe SecureExternalId do
 
   before do
     allow(GlobalConfig).to receive(:dig)
-      .with(:secure_external_id, default: {})
+      .with(:secure_external_id, default: nil)
       .and_return({
                     primary_key_version: "1",
                     keys: { "1" => "a" * 32 }
@@ -98,7 +98,7 @@ RSpec.describe SecureExternalId do
       token_v1 = test_instance.secure_external_id(scope: "test")
 
       allow(GlobalConfig).to receive(:dig)
-        .with(:secure_external_id, default: {})
+        .with(:secure_external_id, default: nil)
         .and_return({
                       primary_key_version: "2",
                       keys: {
@@ -117,7 +117,7 @@ RSpec.describe SecureExternalId do
   describe "configuration validation" do
     it "raises error when configuration is blank" do
       allow(GlobalConfig).to receive(:dig)
-        .with(:secure_external_id, default: {})
+        .with(:secure_external_id, default: nil)
         .and_return({})
 
       expect do
@@ -127,7 +127,7 @@ RSpec.describe SecureExternalId do
 
     it "raises error when primary_key_version is missing" do
       allow(GlobalConfig).to receive(:dig)
-        .with(:secure_external_id, default: {})
+        .with(:secure_external_id, default: nil)
         .and_return({
                       keys: { "1" => "a" * 32 }
                     })
@@ -139,7 +139,7 @@ RSpec.describe SecureExternalId do
 
     it "raises error when primary_key_version is blank" do
       allow(GlobalConfig).to receive(:dig)
-        .with(:secure_external_id, default: {})
+        .with(:secure_external_id, default: nil)
         .and_return({
                       primary_key_version: "",
                       keys: { "1" => "a" * 32 }
@@ -152,7 +152,7 @@ RSpec.describe SecureExternalId do
 
     it "raises error when keys are missing" do
       allow(GlobalConfig).to receive(:dig)
-        .with(:secure_external_id, default: {})
+        .with(:secure_external_id, default: nil)
         .and_return({
                       primary_key_version: "1"
                     })
@@ -164,7 +164,7 @@ RSpec.describe SecureExternalId do
 
     it "raises error when keys are blank" do
       allow(GlobalConfig).to receive(:dig)
-        .with(:secure_external_id, default: {})
+        .with(:secure_external_id, default: nil)
         .and_return({
                       primary_key_version: "1",
                       keys: {}
@@ -177,7 +177,7 @@ RSpec.describe SecureExternalId do
 
     it "raises error when primary key version is not found in keys" do
       allow(GlobalConfig).to receive(:dig)
-        .with(:secure_external_id, default: {})
+        .with(:secure_external_id, default: nil)
         .and_return({
                       primary_key_version: "2",
                       keys: { "1" => "a" * 32 }
@@ -190,7 +190,7 @@ RSpec.describe SecureExternalId do
 
     it "raises error when key is not exactly 32 bytes" do
       allow(GlobalConfig).to receive(:dig)
-        .with(:secure_external_id, default: {})
+        .with(:secure_external_id, default: nil)
         .and_return({
                       primary_key_version: "1",
                       keys: { "1" => "short_key" }
@@ -203,7 +203,7 @@ RSpec.describe SecureExternalId do
 
     it "raises error when any key in rotation is not exactly 32 bytes" do
       allow(GlobalConfig).to receive(:dig)
-        .with(:secure_external_id, default: {})
+        .with(:secure_external_id, default: nil)
         .and_return({
                       primary_key_version: "1",
                       keys: {
@@ -219,7 +219,7 @@ RSpec.describe SecureExternalId do
 
     it "passes validation with proper configuration" do
       allow(GlobalConfig).to receive(:dig)
-        .with(:secure_external_id, default: {})
+        .with(:secure_external_id, default: nil)
         .and_return({
                       primary_key_version: "1",
                       keys: {
@@ -231,6 +231,76 @@ RSpec.describe SecureExternalId do
       expect do
         test_instance.secure_external_id(scope: "test")
       end.not_to raise_error
+    end
+  end
+
+  describe "environment variable configuration" do
+    let(:primary_key_version_value) { "1" }
+    let(:key_versions) { { "1" => "a" * 32 } }
+
+    def stub_env_config(primary_version: primary_key_version_value, keys: key_versions)
+      allow(GlobalConfig).to receive(:dig)
+        .with(:secure_external_id, default: nil)
+        .and_return(nil)
+      allow(GlobalConfig).to receive(:dig)
+        .with(:secure_external_id, :primary_key_version, default: nil)
+        .and_return(primary_version)
+      (1..10).each do |version|
+        key_value = keys[version.to_s]
+        allow(GlobalConfig).to receive(:dig)
+          .with(:secure_external_id, :keys, version.to_s, default: nil)
+          .and_return(key_value)
+      end
+    end
+
+    context "when credentials are not present" do
+      before do
+        stub_env_config
+      end
+
+      it "builds config from environment variables" do
+        token = test_instance.secure_external_id(scope: "test")
+        expect(token).to be_a(String)
+        expect(test_class.find_by_secure_external_id(token, scope: "test")).to be_a(test_class)
+      end
+
+      it "builds config with multiple key versions" do
+        stub_env_config(primary_version: "2", keys: { "1" => "a" * 32, "2" => "b" * 32 })
+
+        token = test_instance.secure_external_id(scope: "test")
+        expect(token).to be_a(String)
+        expect(test_class.find_by_secure_external_id(token, scope: "test")).to be_a(test_class)
+      end
+
+      it "supports key rotation with env vars" do
+        token_v1 = test_instance.secure_external_id(scope: "test")
+
+        test_class.instance_variable_set(:@config, nil)
+        test_class.instance_variable_set(:@encryptors, nil)
+
+        stub_env_config(primary_version: "2", keys: { "1" => "a" * 32, "2" => "b" * 32 })
+
+        expect(test_class.find_by_secure_external_id(token_v1, scope: "test")).to be_a(test_class)
+
+        token_v2 = test_instance.secure_external_id(scope: "test")
+        expect(test_class.find_by_secure_external_id(token_v2, scope: "test")).to be_a(test_class)
+      end
+
+      it "raises error when primary_key_version is missing" do
+        stub_env_config(primary_version: nil, keys: {})
+
+        expect do
+          test_instance.secure_external_id(scope: "test")
+        end.to raise_error(SecureExternalId::Error, "SecureExternalId configuration is missing")
+      end
+
+      it "raises error when primary_key_version is blank" do
+        stub_env_config(primary_version: "", keys: {})
+
+        expect do
+          test_instance.secure_external_id(scope: "test")
+        end.to raise_error(SecureExternalId::Error, "SecureExternalId configuration is missing")
+      end
     end
   end
 end

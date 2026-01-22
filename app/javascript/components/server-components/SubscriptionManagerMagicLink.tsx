@@ -80,13 +80,13 @@ const SubscriptionManagerMagicLink = ({
                 {user_emails.length > 1 ? (
                   <>
                     Can't see the email? Please check your spam folder.{" "}
-                    <button className="underline" onClick={() => setHasSentEmail(false)}>
+                    <button className="cursor-pointer underline all-unset" onClick={() => setHasSentEmail(false)}>
                       Click here to choose another email
                     </button>{" "}
-                    or try resending the link below.
+                    or try resending the link above.
                   </>
                 ) : (
-                  "Can't see the email? Please check your spam folder or try resending the link below."
+                  "Can't see the email? Please check your spam folder or try resending the link above."
                 )}
               </p>
             </>

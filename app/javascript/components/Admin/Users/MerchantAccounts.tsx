@@ -8,6 +8,7 @@ import AdminActionButton from "$app/components/Admin/ActionButton";
 import { BooleanIcon } from "$app/components/Admin/Icons";
 import type { User } from "$app/components/Admin/Users/User";
 import { LoadingSpinner } from "$app/components/LoadingSpinner";
+import { Alert } from "$app/components/ui/Alert";
 import { useIsIntersecting } from "$app/components/useIsIntersecting";
 
 type AdminUserMerchantAccountsProps = {
@@ -20,16 +21,16 @@ type AdminUserMerchantAccountsData = {
 };
 
 export type MerchantAccountProps = {
-  id: number;
+  external_id: string;
   charge_processor_id: string;
   alive: boolean;
   charge_processor_alive: boolean;
 };
 
-const MerchantAccount = ({ id, charge_processor_id, alive, charge_processor_alive }: MerchantAccountProps) => (
+const MerchantAccount = ({ external_id, charge_processor_id, alive, charge_processor_alive }: MerchantAccountProps) => (
   <li>
-    <Link href={Routes.admin_merchant_account_path(id)}>
-      {id} - {charge_processor_id}
+    <Link href={Routes.admin_merchant_account_path(external_id)}>
+      {external_id} - {charge_processor_id}
     </Link>{" "}
     <BooleanIcon value={alive ? charge_processor_alive : false} />
   </li>
@@ -46,7 +47,7 @@ const AdminUserMerchantAccounts = ({ user }: AdminUserMerchantAccountsProps) => 
       setIsLoading(true);
       const response = await request({
         method: "GET",
-        url: Routes.admin_user_merchant_accounts_path(user.id),
+        url: Routes.admin_user_merchant_accounts_path(user.external_id),
         accept: "json",
       });
       setData(cast<AdminUserMerchantAccountsData>(await response.json()));
@@ -65,21 +66,21 @@ const AdminUserMerchantAccounts = ({ user }: AdminUserMerchantAccountsProps) => 
       {data?.merchant_accounts && data.merchant_accounts.length > 0 ? (
         <ul className="inline">
           {data.merchant_accounts.map((merchant_account: MerchantAccountProps) => (
-            <MerchantAccount key={merchant_account.id} {...merchant_account} />
+            <MerchantAccount key={merchant_account.external_id} {...merchant_account} />
           ))}
         </ul>
       ) : (
-        <div className="info" role="status">
+        <Alert role="status" variant="info">
           No merchant accounts.
-        </div>
+        </Alert>
       )}
 
       {!data?.has_stripe_account && (
-        <div className="button-group mt-2">
+        <div className="mt-2 flex flex-wrap gap-2">
           <AdminActionButton
             label="Create Managed Account"
-            url={Routes.create_stripe_managed_account_admin_user_path(user.id)}
-            confirm_message={`Are you sure you want to create a Stripe Managed Account for user ${user.id}?`}
+            url={Routes.create_stripe_managed_account_admin_user_path(user.external_id)}
+            confirm_message={`Are you sure you want to create a Stripe Managed Account for user ${user.external_id}?`}
             class="button-stripe"
           />
         </div>

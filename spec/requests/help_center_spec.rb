@@ -38,6 +38,7 @@ describe "Help Center", type: :system, js: true do
       visit "/help"
 
       expect(page).to have_button("Contact support")
+      expect(page).to have_link("Report a bug", href: "https://github.com/antiwork/gumroad/issues/new")
 
       click_on "Contact support"
 
@@ -45,6 +46,15 @@ describe "Help Center", type: :system, js: true do
       expect(page).to have_field("Your email address")
       expect(page).to have_field("Subject")
       expect(page).to have_field("Tell us about your issue or question...")
+    end
+
+    it "opens the new ticket modal when the new ticket parameter is present" do
+      visit "/help?new_ticket=true"
+      within_modal "How can we help you today?" do
+        expect(page).to have_field("Your email address")
+        expect(page).to have_field("Subject")
+        expect(page).to have_field("Tell us about your issue or question...")
+      end
     end
 
     it "successfully submits a support ticket form" do
@@ -59,6 +69,28 @@ describe "Help Center", type: :system, js: true do
       click_on "Send message"
       expect(page).to have_content("Your support ticket has been created successfully!")
       expect(page).not_to have_content("How can we help you today?")
+    end
+  end
+
+  describe "the user is authenticated with Helper session" do
+    before do
+      sign_in seller
+    end
+
+    it "shows the new ticket button and report a bug link" do
+      visit "/help"
+
+      expect(page).to have_button("New ticket")
+      expect(page).to have_link("Report a bug", href: "https://github.com/antiwork/gumroad/issues/new")
+    end
+
+    it "opens the new ticket modal when the new ticket parameter is present" do
+      visit "/help?new_ticket=true"
+      within_modal "How can we help you today?" do
+        expect(page).not_to have_field("Your email address")
+        expect(page).to have_field("Subject")
+        expect(page).to have_field("Tell us about your issue or question...")
+      end
     end
   end
 end

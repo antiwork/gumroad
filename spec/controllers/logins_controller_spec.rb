@@ -2,8 +2,9 @@
 
 require "spec_helper"
 require "shared_examples/merge_guest_cart_with_user_cart"
+require "inertia_rails/rspec"
 
-describe LoginsController do
+describe LoginsController, type: :controller, inertia: true do
   render_views
 
   before :each do
@@ -11,11 +12,36 @@ describe LoginsController do
   end
 
   describe "GET 'new'" do
-    it "assigns the required UI instance variables" do
+    it "renders successfully" do
       get :new
 
       expect(response).to be_successful
-      expect(assigns[:hide_layouts]).to eq(true)
+      expect(inertia.component).to eq("Logins/New")
+      expect(inertia.props[:current_user]).to be_nil
+      expect(inertia.props[:title]).to eq("Log In")
+      expect(inertia.props[:email]).to be_nil
+      expect(inertia.props[:application_name]).to be_nil
+      expect(inertia.props[:recaptcha_site_key]).to eq(GlobalConfig.get("RECAPTCHA_LOGIN_SITE_KEY"))
+    end
+
+    context "with an email in the query parameters" do
+      it "renders successfully" do
+        get :new, params: { email: "test@example.com" }
+
+        expect(response).to be_successful
+        expect(inertia.component).to eq("Logins/New")
+        expect(inertia.props[:email]).to eq("test@example.com")
+      end
+    end
+
+    context "with an email in the next parameter" do
+      it "renders successfully" do
+        get :new, params: { next: settings_team_invitations_path(email: "test@example.com", format: :json) }
+
+        expect(response).to be_successful
+        expect(inertia.component).to eq("Logins/New")
+        expect(inertia.props[:email]).to eq("test@example.com")
+      end
     end
 
     it "redirects with the 'next' value from the referrer if not supplied in the params" do
@@ -38,10 +64,14 @@ describe LoginsController do
         @next_url = oauth_authorization_path(client_id: @oauth_application.uid, redirect_uri: @oauth_application.redirect_uri, scope: "edit_products")
       end
 
-      it "renders the correct response for the provided format" do
+      it "renders successfully" do
         get :new, params: { next: @next_url }
         expect(response).to be_successful
+        expect(inertia.component).to eq("Logins/New")
+        expect(inertia.props[:application_name]).to eq(@oauth_application.name)
+      end
 
+      it "responds with bad request if format is json" do
         get :new, params: { next: @next_url }, format: :json
         expect(response).to be_a_bad_request
       end
@@ -50,7 +80,6 @@ describe LoginsController do
         get :new, params: { next: @next_url }
 
         expect(assigns[:application]).to eq @oauth_application
-        expect(assigns[:auth_presenter].application).to eq @oauth_application
       end
 
       it "sets noindex header when next param starts with /oauth/authorize" do
@@ -72,43 +101,42 @@ describe LoginsController do
 
     it "logs in if user already exists" do
       post "create", params: { user: { login_identifier: @user.email, password: "password" } }
-      expect(response).to be_successful
-      expect(response.parsed_body["redirect_location"]).to eq(dashboard_path)
+      expect(response).to redirect_to(dashboard_path)
     end
 
     it "shows proper error if password is incorrect" do
       post "create", params: { user: { login_identifier: @user.email, password: "hunter2" } }
-      expect(response).to have_http_status(:unprocessable_content)
-      expect(response.parsed_body["error_message"]).to eq("Please try another password. The one you entered was incorrect.")
+      expect(response).to redirect_to(login_path)
+      expect(flash[:warning]).to eq("Please try another password. The one you entered was incorrect.")
     end
 
     it "shows proper error if email doesn't exist" do
       post "create", params: { user: { login_identifier: "hithere@gumroaddddd.com", password: "password" } }
-      expect(response).to have_http_status(:unprocessable_content)
-      expect(response.parsed_body["error_message"]).to eq("An account does not exist with that email.")
+      expect(response).to redirect_to(login_path)
+      expect(flash[:warning]).to eq("An account does not exist with that email.")
     end
 
     it "returns an error with no params" do
       post "create"
-      expect(response).to have_http_status(:unprocessable_content)
-      expect(response.parsed_body["error_message"]).to eq("An account does not exist with that email.")
+      expect(response).to redirect_to(login_path)
+      expect(flash[:warning]).to eq("An account does not exist with that email.")
     end
 
     it "logs in if user already exists and redirects to next if present" do
       post "create", params: { user: { login_identifier: @user.email, password: "password" }, next: "/about" }
-      expect(response.parsed_body["redirect_location"]).to eq("/about")
+      expect(response).to redirect_to("/about")
     end
 
     it "does not redirect to absolute url" do
       post "create", params: { user: { login_identifier: @user.email, password: "password" }, next: "https://elite.haxor.net/home?steal=everything#yes" }
-      expect(response.parsed_body["redirect_location"]).to eq("/home?steal=everything")
+      expect(response).to redirect_to("/home?steal=everything")
     end
 
     it "redirects back to subdomain URL" do
       stub_const("ROOT_DOMAIN", "test.gumroad.com")
       post "create", params: { user: { login_identifier: @user.email, password: "password" }, next: "https://username.test.gumroad.com" }
 
-      expect(response.parsed_body["redirect_location"]).to eq("https://username.test.gumroad.com")
+      expect(response).to redirect_to("https://username.test.gumroad.com")
     end
 
     it "disallows logging in if the user has been deleted" do
@@ -117,23 +145,24 @@ describe LoginsController do
 
       post "create", params: { user: { login_identifier: @user.email, password: "password" } }
 
-      expect(response).to have_http_status(:unprocessable_content)
+      expect(response).to redirect_to(login_path)
+      expect(flash[:warning]).to eq("You cannot log in because your account was permanently deleted. Please sign up for a new account to start selling!")
     end
 
     it "does not log in a user when reCAPTCHA is not completed" do
       allow(controller).to receive(:valid_recaptcha_response?).and_return(false)
 
-      post :create, params: { user: { login_identifier: @user.email, password: "password" }, format: :json }
+      post :create, params: { user: { login_identifier: @user.email, password: "password" } }
 
-      expect(response).to have_http_status(:unprocessable_content)
-      expect(response.parsed_body["error_message"]).to eq "Sorry, we could not verify the CAPTCHA. Please try again."
+      expect(response).to redirect_to(login_path)
+      expect(flash[:warning]).to eq "Sorry, we could not verify the CAPTCHA. Please try again."
       expect(controller.user_signed_in?).to be(false)
     end
 
     it "logs in a user when reCAPTCHA is completed correctly" do
-      post :create, params: { user: { login_identifier: @user.email, password: "password" }, format: :json }
+      post :create, params: { user: { login_identifier: @user.email, password: "password" } }
 
-      expect(response).to be_successful
+      expect(response).to redirect_to(dashboard_path)
       expect(controller.user_signed_in?).to be(true)
     end
 
@@ -141,9 +170,9 @@ describe LoginsController do
       allow(Rails).to receive(:env).and_return(ActiveSupport::StringInquirer.new("development"))
       allow(GlobalConfig).to receive(:get).with("RECAPTCHA_LOGIN_SITE_KEY").and_return(nil)
 
-      post :create, params: { user: { login_identifier: @user.email, password: "password" }, format: :json }
+      post :create, params: { user: { login_identifier: @user.email, password: "password" } }
 
-      expect(response).to be_successful
+      expect(response).to redirect_to(dashboard_path)
       expect(controller.user_signed_in?).to be(true)
     end
 
@@ -152,14 +181,14 @@ describe LoginsController do
       allow(GlobalConfig).to receive(:get).with("RECAPTCHA_LOGIN_SITE_KEY").and_return(nil)
       allow_any_instance_of(LoginsController).to receive(:valid_recaptcha_response?).and_return(false)
 
-      post :create, params: { user: { login_identifier: @user.email, password: "password" }, format: :json }
+      post :create, params: { user: { login_identifier: @user.email, password: "password" } }
 
-      expect(response).not_to be_successful
+      expect(response).to redirect_to(login_path)
       expect(controller.user_signed_in?).to be(false)
     end
 
     it "sets the 'Remember Me' cookie" do
-      post :create, params: { user: { login_identifier: @user.email, password: "password" }, format: :json }
+      post :create, params: { user: { login_identifier: @user.email, password: "password" } }
 
       expect(response.cookies["remember_user_token"]).to be_present
     end
@@ -178,16 +207,16 @@ describe LoginsController do
 
         it "is allowed to login" do
           post :create, params: { user: { login_identifier: @user.email, password: "password" } }
-          expect(response).to be_successful
+          expect(response).to redirect_to(dashboard_path)
         end
       end
 
       it "does not log in a user who is suspended for fraud" do
-        user = create(:user, user_risk_state: "suspended_for_fraud")
+        user = create(:user, password: "password", user_risk_state: "suspended_for_fraud")
 
-        post :create, params: { user: { login_identifier: user.email, password: "password" }, format: :json }
+        post :create, params: { user: { login_identifier: user.email, password: "password" } }
 
-        expect(response).to have_http_status(:unprocessable_content)
+        expect(flash[:warning]).to eq("You can't perform this action because your account has been suspended.")
         expect(controller.user_signed_in?).to be(false)
       end
     end
@@ -206,7 +235,7 @@ describe LoginsController do
 
           it "redirects to library" do
             post :create, params: { user: { login_identifier: @user.email, password: "password" } }
-            expect(response.parsed_body["redirect_location"]).to eq(library_path)
+            expect(response).to redirect_to(library_path)
           end
         end
 
@@ -217,7 +246,7 @@ describe LoginsController do
 
           it "redirects to dashboard" do
             post :create, params: { user: { login_identifier: @user.email, password: "password" } }
-            expect(response.parsed_body["redirect_location"]).to eq(dashboard_path)
+            expect(response).to redirect_to(dashboard_path)
           end
         end
       end
@@ -230,7 +259,7 @@ describe LoginsController do
 
         it "redirects back to the last location" do
           post :create, params: { user: { login_identifier: @user.email, password: "password" } }
-          expect(response.parsed_body["redirect_location"]).to eq(short_link_path(@product))
+          expect(response).to redirect_to(short_link_path(@product))
         end
       end
     end
@@ -244,8 +273,7 @@ describe LoginsController do
       it "redirects to the OAuth authorization path after successful login" do
         post "create", params: { user: { login_identifier: @user.email, password: "password" }, next: @next_url }
 
-        expect(response).to be_successful
-        expect(response.parsed_body["redirect_location"]).to eq(CGI.unescape(@next_url))
+        expect(response).to redirect_to(CGI.unescape(@next_url))
       end
     end
 
@@ -259,9 +287,24 @@ describe LoginsController do
         post "create", params: { user: { login_identifier: @user.email, password: "password" }, next: settings_main_path }
 
         expect(session[:verify_two_factor_auth_for]).to eq @user.id
-        expect(response).to be_successful
-        expect(response.parsed_body["redirect_location"]).to eq two_factor_authentication_path(next: settings_main_path)
+        expect(response).to redirect_to(two_factor_authentication_path(next: settings_main_path))
         expect(controller.user_signed_in?).to eq false
+      end
+    end
+
+    describe "two factor authentication stale session" do
+      it "does not redirect to two factor auth when the pending 2FA session belongs to another user" do
+        other_user = create(:user, password: "password")
+        other_user.two_factor_authentication_enabled = true
+        other_user.save!
+
+        # Simulate a stale 2FA session from a previous/aborted login attempt.
+        session[:verify_two_factor_auth_for] = other_user.id
+
+        post "create", params: { user: { login_identifier: @user.email, password: "password" } }
+
+        expect(response).to redirect_to(dashboard_path)
+        expect(session[:verify_two_factor_auth_for]).to be_nil
       end
     end
 
@@ -301,6 +344,49 @@ describe LoginsController do
         expect(controller.impersonated_user).to eq(user)
 
         get :destroy
+
+        expect(controller.impersonated_user).to be_nil
+        expect($redis.get(RedisKey.impersonated_user(admin.id))).to be_nil
+      end
+    end
+  end
+
+  describe "DELETE destroy" do
+    let(:user) { create(:user) }
+
+    before do
+      sign_in user
+    end
+
+    it "signs out the user and redirects to root path with notice" do
+      delete :destroy
+
+      expect(response).to redirect_to(root_path)
+      expect(flash[:notice]).to eq("Signed out successfully.")
+      expect(controller.user_signed_in?).to be(false)
+    end
+
+    it "clears cookies on sign out" do
+      cookies["last_viewed_dashboard"] = "sales"
+
+      delete :destroy
+
+      expect(response.cookies.key?("last_viewed_dashboard")).to eq(true)
+      expect(response.cookies["last_viewed_dashboard"]).to be_nil
+    end
+
+    context "when impersonating" do
+      let(:admin) { create(:admin_user) }
+
+      before do
+        sign_in admin
+        controller.impersonate_user(user)
+      end
+
+      it "resets impersonated user" do
+        expect(controller.impersonated_user).to eq(user)
+
+        delete :destroy
 
         expect(controller.impersonated_user).to be_nil
         expect($redis.get(RedisKey.impersonated_user(admin.id))).to be_nil

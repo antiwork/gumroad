@@ -24,7 +24,7 @@ const AdminUserPermissionRisk = ({ user }: AdminUserPermissionRiskProps) => (
 
     <FlagForFraud user={user} />
     <SuspendForFraud user={user} />
-    <UserGuids user_id={user.id} />
+    <UserGuids user_external_id={user.external_id} />
     <Bio user={user} />
     <LatestPosts user={user} />
   </>

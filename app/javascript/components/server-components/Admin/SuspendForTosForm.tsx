@@ -3,6 +3,7 @@ import { createCast } from "ts-safe-cast";
 
 import { register } from "$app/utils/serverComponentUtil";
 
+import { Button } from "$app/components/Button";
 import { Form } from "$app/components/server-components/Admin/Form";
 import { showAlert } from "$app/components/server-components/Alert";
 
@@ -20,7 +21,7 @@ export const AdminSuspendForTosForm = ({
   default_reason: string;
 }) => (
   <Form
-    url={Routes.flag_seller_for_tos_violation_admin_link_path(product_id)}
+    url={Routes.flag_seller_for_tos_violation_admin_product_path(product_id)}
     method="POST"
     confirmMessage={confirm_message}
     onSuccess={() => showAlert(success_message, "success")}
@@ -35,9 +36,9 @@ export const AdminSuspendForTosForm = ({
             </option>
           ))}
         </select>
-        <button type="submit" className="button" disabled={isLoading}>
+        <Button type="submit" disabled={isLoading}>
           {isLoading ? "Suspending..." : "Submit"}
-        </button>
+        </Button>
       </>
     )}
   </Form>

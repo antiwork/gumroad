@@ -2,10 +2,9 @@
 
 require "spec_helper"
 require "shared_examples/authorize_called"
+require "inertia_rails/rspec"
 
-describe WishlistsController do
-  render_views
-
+describe WishlistsController, type: :controller, inertia: true do
   let(:user) { create(:user) }
   let(:wishlist) { create(:wishlist, user:) }
 
@@ -20,7 +19,7 @@ describe WishlistsController do
     end
 
     context "when html is requested" do
-      it "renders non-deleted wishlists for the current seller" do
+      it "renders Wishlists/Index with Inertia and non-deleted wishlists for the current seller" do
         wishlist.mark_deleted!
         alive_wishlist = create(:wishlist, user:)
         create(:wishlist)
@@ -28,7 +27,8 @@ describe WishlistsController do
         get :index
 
         expect(response).to be_successful
-        expect(assigns(:wishlists_props)).to contain_exactly(a_hash_including(id: alive_wishlist.external_id))
+        expect(inertia.component).to eq("Wishlists/Index")
+        expect(inertia.props[:wishlists]).to contain_exactly(a_hash_including(id: alive_wishlist.external_id))
       end
     end
 
@@ -54,31 +54,68 @@ describe WishlistsController do
       let(:record) { Wishlist }
     end
 
-    it "creates a wishlist with a default name" do
-      expect { post :create }.to change(Wishlist, :count).by(1)
+    it "creates a wishlist with the given name" do
+      expect { post :create, format: :json, params: { wishlist: { name: "My Favorite Products" } } }
+        .to change(Wishlist, :count).by(1)
 
-      expect(Wishlist.last).to have_attributes(name: "Wishlist 1", user:)
+      expect(Wishlist.last).to have_attributes(name: "My Favorite Products", user:)
       expect(response.parsed_body).to eq(
         "wishlist" => {
           "id" => Wishlist.last.external_id,
-          "name" => "Wishlist 1"
+          "name" => "My Favorite Products"
         }
       )
+    end
 
-      expect { post :create }.to change(Wishlist, :count).by(1)
+    it "returns an error when name is blank" do
+      expect { post :create, format: :json, params: { wishlist: { name: "" } } }
+        .not_to change(Wishlist, :count)
 
-      expect(Wishlist.last).to have_attributes(name: "Wishlist 2", user:)
+      expect(response).to have_http_status(:unprocessable_entity)
+    end
+
+    it "creates a wishlist and redirects with notice" do
+      expect { post :create, params: { wishlist: { name: "My Wishlist" } } }
+        .to change(Wishlist, :count).by(1)
+      expect(response).to redirect_to(wishlists_path)
+      expect(flash[:notice]).to eq("Wishlist created!")
     end
   end
 
   describe "GET show" do
-    it "finds the wishlist from the URL suffix" do
+    it "renders Wishlists/Show with Inertia and public props" do
       request.host = URI.parse(user.subdomain_with_protocol).host
       get :show, params: { id: wishlist.url_slug }
 
       expect(response).to be_successful
-      expect(assigns(:wishlist_presenter)).to be_a(WishlistPresenter)
-      expect(assigns(:wishlist_presenter).wishlist).to eq wishlist
+      expect(inertia.component).to eq("Wishlists/Show")
+      expect(inertia.props[:id]).to eq(wishlist.external_id)
+      expect(inertia.props[:name]).to eq(wishlist.name)
+      expect(inertia.props[:layout]).to be_nil
+    end
+
+    context "when layout is profile" do
+      it "includes creator_profile in props" do
+        request.host = URI.parse(user.subdomain_with_protocol).host
+        get :show, params: { id: wishlist.url_slug, layout: "profile" }
+
+        expect(response).to be_successful
+        expect(inertia.component).to eq("Wishlists/Show")
+        expect(inertia.props[:layout]).to eq("profile")
+        expect(inertia.props[:creator_profile]).to be_present
+      end
+    end
+
+    context "when layout is discover" do
+      it "includes taxonomies_for_nav in props" do
+        request.host = URI.parse(user.subdomain_with_protocol).host
+        get :show, params: { id: wishlist.url_slug, layout: "discover" }
+
+        expect(response).to be_successful
+        expect(inertia.component).to eq("Wishlists/Show")
+        expect(inertia.props[:layout]).to eq("discover")
+        expect(inertia.props).to have_key(:taxonomies_for_nav)
+      end
     end
 
     context "when the wishlist is deleted" do
@@ -104,7 +141,8 @@ describe WishlistsController do
     it "updates the wishlist name and description" do
       put :update, params: { id: wishlist.external_id, wishlist: { name: "New Name", description: "New Description" } }
 
-      expect(response).to be_successful
+      expect(response).to redirect_to(wishlists_path)
+      expect(flash[:notice]).to eq("Wishlist updated!")
       expect(wishlist.reload.name).to eq "New Name"
       expect(wishlist.description).to eq "New Description"
     end
@@ -114,8 +152,8 @@ describe WishlistsController do
         put :update, params: { id: wishlist.external_id, wishlist: { name: "" } }
       end.not_to change { wishlist.reload.name }
 
-      expect(response).to have_http_status(:unprocessable_content)
-      expect(response.parsed_body).to eq("error" => "Name can't be blank")
+      expect(response).to redirect_to(wishlists_path)
+      expect(response).to have_http_status(:see_other)
     end
   end
 
@@ -134,7 +172,8 @@ describe WishlistsController do
 
       delete :destroy, params: { id: wishlist.external_id }
 
-      expect(response).to be_successful
+      expect(response).to redirect_to(wishlists_path)
+      expect(flash[:notice]).to eq("Wishlist deleted!")
       expect(wishlist.reload).to be_deleted
       expect(wishlist_follower.reload).to be_deleted
     end

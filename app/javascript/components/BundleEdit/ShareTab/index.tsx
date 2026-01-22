@@ -29,7 +29,7 @@ export const ShareTab = () => {
           <header>
             <h2>Share</h2>
           </header>
-          <div className="button-group">
+          <div className="flex flex-wrap gap-2">
             <TwitterShareButton url={url} text={`Buy ${bundle.name} on @Gumroad`} />
             <FacebookShareButton url={url} text={bundle.name} />
             <CopyToClipboard text={url} tooltipPosition="top">
@@ -55,7 +55,7 @@ export const ShareTab = () => {
               Learn more
             </a>
           </header>
-          <div className="paragraphs">
+          <div className="flex flex-col gap-4">
             <p>
               Gumroad Discover recommends your products to prospective customers for a flat 30% fee on each sale,
               helping you grow beyond your existing following and find even more people who care about your work.

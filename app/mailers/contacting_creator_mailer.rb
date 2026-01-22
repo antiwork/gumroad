@@ -422,17 +422,15 @@ class ContactingCreatorMailer < ApplicationMailer
     do_not_send unless @link.present?
   end
 
-  def tax_form_1099k(user_id, year, form_download_url)
+  def tax_form_1099k(user_id, year)
     @seller = User.find(user_id)
     @year = year
-    @tax_form_download_url = form_download_url
     @subject = "Get your 1099-K form for #{@year}"
   end
 
-  def tax_form_1099misc(user_id, year, form_download_url)
+  def tax_form_1099misc(user_id, year)
     @seller = User.find(user_id)
     @year = year
-    @tax_form_download_url = form_download_url
     @subject = "Get your 1099-MISC form for #{@year}"
   end
 

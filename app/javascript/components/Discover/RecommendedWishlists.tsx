@@ -30,7 +30,7 @@ export const RecommendedWishlists = ({
   });
 
   return wishlists === null || wishlists.length > 0 ? (
-    <section className="paragraphs">
+    <section className="flex flex-col gap-4">
       <header>
         <h2>{title}</h2>
       </header>

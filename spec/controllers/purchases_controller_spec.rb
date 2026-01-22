@@ -687,16 +687,16 @@ describe PurchasesController, :vcr do
           stub_const("Exports::PurchaseExportService::SYNCHRONOUS_EXPORT_THRESHOLD", 1)
         end
 
-        it "queues sidekiq job and redirects back" do
-          request.env["HTTP_REFERER"] = "/customers"
+        it "queues sidekiq job and redirects to customers path with flash message" do
           get :export
 
           export = SalesExport.last!
           expect(export.recipient).to eq(user_with_role_for_seller)
 
           expect(Exports::Sales::CreateAndEnqueueChunksWorker).to have_enqueued_sidekiq_job(export.id)
-          expect(flash[:warning]).to eq("You will receive an email in your inbox with the data you've requested shortly.")
-          expect(response).to redirect_to("/customers")
+          expect(flash[:notice]).to eq("You will receive an email in your inbox with the data you've requested shortly.")
+          expect(response).to redirect_to(customers_path)
+          expect(response).to have_http_status(:see_other)
         end
 
         context "when running sidekiq jobs" do
@@ -725,8 +725,9 @@ describe PurchasesController, :vcr do
             expect(export.recipient).to eq(@admin_user)
 
             expect(Exports::Sales::CreateAndEnqueueChunksWorker).to have_enqueued_sidekiq_job(export.id)
-            expect(flash[:warning]).to eq("You will receive an email in your inbox with the data you've requested shortly.")
-            expect(response).to redirect_to("/customers")
+            expect(flash[:notice]).to eq("You will receive an email in your inbox with the data you've requested shortly.")
+            expect(response).to redirect_to(customers_path)
+            expect(response).to have_http_status(:see_other)
           end
         end
       end
@@ -1103,6 +1104,51 @@ describe PurchasesController, :vcr do
           expect(updated_purchase.state).to eq "CA"
           expect(updated_purchase.country).to eq "United States"
           expect(updated_purchase.zip_code).to eq "00000"
+        end
+      end
+
+      context "when params include custom field values" do
+        it "does not change existing purchase custom fields" do
+          color_field = @product.custom_fields.create!(
+            name: "Favorite Color",
+            required: false,
+            field_type: "text",
+            seller_id: @product.user.id
+          )
+          newsletter_field = @product.custom_fields.create!(
+            name: "Subscribe to Newsletter",
+            required: false,
+            field_type: "checkbox",
+            seller_id: @product.user.id
+          )
+
+          @subscription.original_purchase.purchase_custom_fields.create!(
+            custom_field: color_field,
+            name: color_field.name,
+            field_type: color_field.field_type,
+            value: "Blue"
+          )
+          @subscription.original_purchase.purchase_custom_fields.create!(
+            custom_field: newsletter_field,
+            name: newsletter_field.name,
+            field_type: newsletter_field.field_type,
+            value: "true"
+          )
+
+          travel_to(@originally_subscribed_at + 1.month) do
+            put :update_subscription,
+                params: params_existing_card.merge(
+                  custom_fields: {
+                    color_field.id.to_s => { value: "Red" },
+                    newsletter_field.id.to_s => { value: "false" }
+                  }
+                )
+          end
+
+          updated_purchase = @subscription.reload.original_purchase
+
+          expect(updated_purchase.purchase_custom_fields.find_by(custom_field: color_field).value).to eq("Blue")
+          expect(updated_purchase.purchase_custom_fields.find_by(custom_field: newsletter_field).value).to eq(true)
         end
       end
 

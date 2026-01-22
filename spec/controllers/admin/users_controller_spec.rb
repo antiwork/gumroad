@@ -2,8 +2,9 @@
 
 require "spec_helper"
 require "shared_examples/admin_base_controller_concern"
+require "inertia_rails/rspec"
 
-describe Admin::UsersController do
+describe Admin::UsersController, type: :controller, inertia: true do
   render_views
 
   it_behaves_like "inherits from Admin::BaseController"
@@ -21,7 +22,7 @@ describe Admin::UsersController do
       5.times do
         @purchases << create(:purchase, link: @product, seller: @product.user, stripe_transaction_id: rand(9_999))
       end
-      @params = { id: @user.id }
+      @params = { external_id: @user.external_id }
     end
 
     it "successfully verifies and unverifies users" do
@@ -53,68 +54,75 @@ describe Admin::UsersController do
     let(:user) { create(:user) }
 
     it "returns page successfully" do
-      get "show", params: { id: user.id }
-      expect(response.body).to have_text(user.name)
+      get "show", params: { external_id: user.external_id }
+      expect(response).to be_successful
+      expect(inertia.component).to eq("Admin/Users/Show")
+      expect(inertia.props[:user][:external_id]).to eq(user.external_id)
     end
 
     it "returns page successfully when using email" do
-      get "show", params: { id: user.email }
-      expect(response.body).to have_text(user.name)
+      get "show", params: { external_id: user.email }
+      expect(response).to be_successful
+      expect(inertia.component).to eq("Admin/Users/Show")
+      expect(inertia.props[:user][:external_id]).to eq(user.external_id)
     end
 
-    it "handles user with 1 product" do
-      product = create(:product, user:)
-
-      get :show, params: { id: user.id }
-
-      expect(response.body).to have_text(product.name)
-      expect(response.body).not_to have_selector("[aria-label='Pagination']")
-    end
-
-    it "handles user with more than PRODUCTS_PER_PAGE" do
-      products = []
-      # result is ordered by created_at desc
-      created_at = Time.zone.now
-      20.times do |i|
-        products << create(:product, user:, name: ("a".."z").to_a[i] * 10, created_at:)
-        created_at -= 1
-      end
-
-      get :show, params: { page: 1, id: user.id }
-
-      products.first(10).each do |product|
-        expect(response.body).to have_text(product.name)
-      end
-      products.last(10).each do |product|
-        expect(response.body).not_to have_text(product.name)
-      end
-      expect(response.body).to have_selector("[aria-label='Pagination']")
-
-      get :show, params: { page: 2, id: user.id }
-
-      products.first(10).each do |product|
-        expect(response.body).not_to have_text(product.name)
-      end
-      products.last(10).each do |product|
-        expect(response.body).to have_text(product.name)
-      end
-      expect(response.body).to have_selector("[aria-label='Pagination']")
-    end
-
-    describe "blocked email tooltip" do
-      let(:email) { "john@example.com" }
-      let!(:email_blocked_object) { BlockedObject.block!(:email, email, user) }
-      let!(:email_domain_blocked_object) { BlockedObject.block!(:email_domain, Mail::Address.new(email).domain, user) }
+    context "when username starts with a number" do
+      let(:user_with_id_1) { create(:user, id: 1) }
+      let(:user_with_numeric_username) { create(:user, username: "1gum") }
 
       before do
-        user.update!(email:)
+        user_with_id_1
+        user_with_numeric_username
       end
 
-      it "renders the tooltip" do
-        get "show", params: { id: user.id }
-        expect(response.body).to have_text("Email blocked")
-        expect(response.body).to have_text("example.com blocked")
+      it "does not redirect to user with matching id when accessing by username" do
+        get :show, params: { external_id: "1gum" }
+
+        expect(response).to be_successful
+        expect(inertia.component).to eq("Admin/Users/Show")
+        expect(inertia.props[:user][:external_id]).to eq(user_with_numeric_username.external_id)
       end
+    end
+
+    context "when user's id overlaps with another user's external_id" do
+      let(:user_1) { create(:user) }
+      let(:user_2) { create(:user) }
+
+      before do
+        user_2.update_column(:external_id, user_1.id.to_s)
+      end
+
+      it "finds user by external_id and does not redirect" do
+        get :show, params: { external_id: user_2.external_id }
+
+        expect(response).to be_successful
+        expect(inertia.component).to eq("Admin/Users/Show")
+        expect(inertia.props[:user][:external_id]).to eq(user_2.external_id)
+      end
+    end
+
+    context "when using internal user id" do
+      it "redirects GET requests to external_id URL" do
+        get :show, params: { external_id: user.id }
+
+        expect(response).to redirect_to(admin_user_path(user.external_id))
+        expect(response).to have_http_status(:see_other)
+      end
+    end
+  end
+
+  describe "fetch_user with internal id for non-GET requests" do
+    let(:user) { create(:user) }
+
+    it "does not redirect POST requests and processes the action" do
+      expect(user.verified).to be_nil
+
+      post :verify, params: { external_id: user.id }
+
+      expect(response).not_to be_redirect
+      expect(response.parsed_body["success"]).to be(true)
+      expect(user.reload.verified).to be(true)
     end
   end
 
@@ -134,12 +142,12 @@ describe Admin::UsersController do
       it "refunds user's purchases if the user is suspended" do
         @user.flag_for_fraud(author_id: @admin_user.id)
         @user.suspend_for_fraud(author_id: @admin_user.id)
-        post :refund_balance, params: { id: @user.id }
+        post :refund_balance, params: { external_id: @user.external_id }
         expect(@purchase.reload.stripe_refunded).to be(true)
       end
 
       it "does not refund user's purchases if the user is not suspended" do
-        post :refund_balance, params: { id: @user.id }
+        post :refund_balance, params: { external_id: @user.external_id }
         expect(@purchase.reload.stripe_refunded).to_not be(true)
       end
     end
@@ -148,7 +156,7 @@ describe Admin::UsersController do
   describe "POST 'add_credit'" do
     before do
       @user = create(:user)
-      @params = { id: @user.id,
+      @params = { external_id: @user.external_id,
                   credit: {
                     credit_amount: "100"
                   } }
@@ -169,7 +177,7 @@ describe Admin::UsersController do
     end
 
     it "successfully creates credits even with smaller amounts" do
-      @params = { id: @user.id,
+      @params = { external_id: @user.external_id,
                   credit: {
                     credit_amount: ".04"
                   } }
@@ -179,7 +187,7 @@ describe Admin::UsersController do
     end
 
     it "sends notification to user" do
-      @params = { id: @user.id,
+      @params = { external_id: @user.external_id,
                   credit: {
                     credit_amount: ".04"
                   } }
@@ -194,7 +202,7 @@ describe Admin::UsersController do
     let(:user) { create(:user) }
 
     it "marks the user as compliant" do
-      post :mark_compliant, params: { id: user.id }
+      post :mark_compliant, params: { external_id: user.external_id }
       expect(response).to be_successful
       expect(user.reload.user_risk_state).to eq "compliant"
     end
@@ -202,7 +210,7 @@ describe Admin::UsersController do
     it "creates a comment when marking compliant" do
       freeze_time do
         expect do
-          post :mark_compliant, params: { id: user.id }
+          post :mark_compliant, params: { external_id: user.external_id }
         end.to change(user.comments, :count).by(1)
 
         comment = user.comments.last
@@ -219,19 +227,19 @@ describe Admin::UsersController do
     let(:user) { create(:user) }
 
     it "sets the custom fee for the user" do
-      post :set_custom_fee, params: { id: user.id, custom_fee_percent: "2.5" }
+      post :set_custom_fee, params: { external_id: user.external_id, custom_fee_percent: "2.5" }
 
       expect(response).to be_successful
       expect(user.reload.custom_fee_per_thousand).to eq 25
     end
 
     it "returns error if custom fee parameter is invalid" do
-      post :set_custom_fee, params: { id: user.id, custom_fee_percent: "-5" }
+      post :set_custom_fee, params: { external_id: user.external_id, custom_fee_percent: "-5" }
       expect(response.parsed_body["success"]).to be(false)
       expect(response.parsed_body["message"]).to eq("Validation failed: Custom fee per thousand must be greater than or equal to 0")
       expect(user.reload.custom_fee_per_thousand).to be_nil
 
-      post :set_custom_fee, params: { id: user.id, custom_fee_percent: "101" }
+      post :set_custom_fee, params: { external_id: user.external_id, custom_fee_percent: "101" }
       expect(response.parsed_body["success"]).to be(false)
       expect(response.parsed_body["message"]).to eq("Validation failed: Custom fee per thousand must be less than or equal to 1000")
       expect(user.reload.custom_fee_per_thousand).to be_nil
@@ -241,7 +249,7 @@ describe Admin::UsersController do
       user.update!(custom_fee_per_thousand: 75)
       expect(user.reload.custom_fee_per_thousand).to eq 75
 
-      post :set_custom_fee, params: { id: user.id, custom_fee_percent: "5" }
+      post :set_custom_fee, params: { external_id: user.external_id, custom_fee_percent: "5" }
 
       expect(response).to be_successful
       expect(user.reload.custom_fee_per_thousand).to eq 50
@@ -257,7 +265,7 @@ describe Admin::UsersController do
       end
 
       it "toggles all_adult_products to true" do
-        post :toggle_adult_products, params: { id: user.id }
+        post :toggle_adult_products, params: { external_id: user.external_id }
 
         expect(response).to be_successful
         expect(response.parsed_body["success"]).to be(true)
@@ -271,7 +279,7 @@ describe Admin::UsersController do
       end
 
       it "toggles all_adult_products to false" do
-        post :toggle_adult_products, params: { id: user.id }
+        post :toggle_adult_products, params: { external_id: user.external_id }
 
         expect(response).to be_successful
         expect(response.parsed_body["success"]).to be(true)
@@ -285,7 +293,7 @@ describe Admin::UsersController do
       end
 
       it "toggles all_adult_products to true" do
-        post :toggle_adult_products, params: { id: user.id }
+        post :toggle_adult_products, params: { external_id: user.external_id }
 
         expect(response).to be_successful
         expect(response.parsed_body["success"]).to be(true)
@@ -297,7 +305,7 @@ describe Admin::UsersController do
       it "toggles all_adult_products successfully" do
         user.update!(all_adult_products: false)
 
-        post :toggle_adult_products, params: { id: user.email }
+        post :toggle_adult_products, params: { external_id: user.email }
 
         expect(response).to be_successful
         expect(response.parsed_body["success"]).to be(true)
@@ -309,7 +317,7 @@ describe Admin::UsersController do
       it "toggles all_adult_products successfully" do
         user.update!(all_adult_products: false, username: "testuser")
 
-        post :toggle_adult_products, params: { id: user.username }
+        post :toggle_adult_products, params: { external_id: user.username }
 
         expect(response).to be_successful
         expect(response.parsed_body["success"]).to be(true)

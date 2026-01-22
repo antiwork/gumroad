@@ -3,10 +3,11 @@ import { createCast } from "ts-safe-cast";
 
 import { register } from "$app/utils/serverComponentUtil";
 
-import { Button } from "$app/components/Button";
+import { Button, buttonVariants } from "$app/components/Button";
 import { Icon } from "$app/components/Icons";
 import { Popover } from "$app/components/Popover";
 import { Separator } from "$app/components/Separator";
+import { Pill } from "$app/components/ui/Pill";
 import { useOriginalLocation } from "$app/components/useOriginalLocation";
 import { WithTooltip } from "$app/components/WithTooltip";
 
@@ -22,7 +23,7 @@ export const SearchPopover = ({ card_types }: Props) => {
       aria-label="Toggle Search"
       trigger={
         <WithTooltip tip="Search" position="bottom">
-          <div className="button">
+          <div className={buttonVariants({ size: "default" })}>
             <Icon name="solid-search" />
           </div>
         </WithTooltip>
@@ -73,9 +74,9 @@ export const SearchPopover = ({ card_types }: Props) => {
           </Button>
         </form>
         <Separator>or search by card</Separator>
-        <form action={Routes.admin_cards_path()} method="get" style={{ display: "contents" }}>
+        <form action={Routes.admin_search_purchases_path()} method="get" style={{ display: "contents" }}>
           <select name="card_type" defaultValue={searchParams.get("card_type") || ""}>
-            <option>Choose card type</option>
+            <option value="">Choose card type</option>
             {card_types.map((cardType) => (
               <option key={cardType.id} value={cardType.id}>
                 {cardType.name}
@@ -114,7 +115,7 @@ export const SearchPopover = ({ card_types }: Props) => {
             />
           </div>
           <div className="input">
-            <div className="pill">$</div>
+            <Pill className="-ml-2 shrink-0">$</Pill>
             <input
               name="price"
               placeholder="Price (9.99)"

@@ -32,26 +32,19 @@ describe Products::ArchivedController, inertia: true do
       let(:policy_method) { :index? }
     end
 
-    it "returns the user's archived products, no unarchived products or deleted products" do
+    it "renders the Products/Archived/Index component with correct props" do
       get :index
 
       expect(response).to have_http_status(:ok)
       expect(assigns[:title]).to eq("Archived products")
-
       expect(inertia).to render_component("Products/Archived/Index")
-
-      memberships = inertia.props[:memberships]
-      products = inertia.props[:products]
-
-      expect(memberships.any? { |m| m[:name] == membership.name }).to be(false)
-      expect(memberships.any? { |m| m[:name] == archived_membership.name }).to be(true)
-      expect(memberships.any? { |m| m[:name] == deleted_membership.name }).to be(false)
-      expect(memberships.any? { |m| m[:name] == other_membership.name }).to be(false)
-
-      expect(products.any? { |p| p[:name] == product.name }).to be(false)
-      expect(products.any? { |p| p[:name] == archived_product.name }).to be(true)
-      expect(products.any? { |p| p[:name] == deleted_product.name }).to be(false)
-      expect(products.any? { |p| p[:name] == other_product.name }).to be(false)
+      expect(inertia.props).to include(
+        :can_create_product,
+        :products_data,
+        :memberships_data
+      )
+      expect(inertia.props[:products_data]).to include(:products, :pagination, :sort)
+      expect(inertia.props[:memberships_data]).to include(:memberships, :pagination, :sort)
     end
 
     context "when there are no archived products" do
@@ -60,124 +53,10 @@ describe Products::ArchivedController, inertia: true do
         archived_product.update(archived: false)
       end
 
-      it "redirects" do
+      it "redirects to products page" do
         get :index
 
         expect(response).to redirect_to(products_url)
-      end
-    end
-  end
-
-  describe "GET products_paged" do
-    it_behaves_like "authorize called for action", :get, :products_paged do
-      let(:record) { Link }
-      let(:policy_klass) { Products::Archived::LinkPolicy }
-      let(:policy_method) { :index? }
-    end
-
-    it "returns the user's archived products and not the unarchived products" do
-      get :products_paged, params: { page: 1 }, as: :json
-
-      expect(response).to have_http_status(:ok)
-
-      expect(response.parsed_body.keys).to include("pagination", "entries")
-      expect(response.parsed_body["entries"].map { _1["name"] }).not_to include(product.name)
-      expect(response.parsed_body["entries"].map { _1["name"] }).to include(archived_product.name)
-      expect(response.parsed_body["entries"].map { _1["name"] }).not_to include(deleted_product.name)
-      expect(response.parsed_body["entries"].map { _1["name"] }).not_to include(other_product.name)
-    end
-
-    it "returns empty entries for a query that doesn't match any products" do
-      get :products_paged, params: { query: "invalid" }
-
-      expect(response).to have_http_status(:ok)
-      expect(response.parsed_body["entries"]).to be_empty
-    end
-
-    it "returns products matching the search query" do
-      get :products_paged, params: { page: 1, query: archived_product.name }, as: :json
-
-      expect(response).to have_http_status(:ok)
-      expect(response.parsed_body["entries"].map { _1["name"] }).to include(archived_product.name)
-      expect(response.parsed_body["entries"].map { _1["name"] }).not_to include(product.name)
-    end
-
-    describe "non-membership sorting + pagination", :elasticsearch_wait_for_refresh do
-      before do
-        stub_const("Products::ArchivedController::PER_PAGE", 2)
-        Link.all.each(&:mark_deleted!)
-      end
-
-      include_context "with products and memberships", archived: true
-
-      it_behaves_like "an API for sorting and pagination", :products_paged do
-        let!(:default_order) { [product1, product3, product4, product2] }
-        let!(:columns) do
-          {
-            "name" => [product1, product2, product3, product4],
-            "successful_sales_count" => [product1, product2, product3, product4],
-            "revenue" => [product3, product2, product1, product4],
-            "display_price_cents" => [product3, product4, product2, product1]
-          }
-        end
-        let!(:boolean_columns) { { "status" => [product3, product4, product1, product2] } }
-      end
-    end
-  end
-
-  describe "GET memberships_paged" do
-    it_behaves_like "authorize called for action", :get, :memberships_paged do
-      let(:record) { Link }
-      let(:policy_klass) { Products::Archived::LinkPolicy }
-      let(:policy_method) { :index? }
-    end
-
-    it "returns the user's archived memberships and not the unarchived memberships" do
-      get :memberships_paged, params: { page: 1 }, as: :json
-
-      expect(response).to have_http_status(:ok)
-
-      expect(response.parsed_body.keys).to include("pagination", "entries")
-      expect(response.parsed_body["entries"].map { _1["name"] }).not_to include(membership.name)
-      expect(response.parsed_body["entries"].map { _1["name"] }).to include(archived_membership.name)
-      expect(response.parsed_body["entries"].map { _1["name"] }).not_to include(deleted_membership.name)
-      expect(response.parsed_body["entries"].map { _1["name"] }).not_to include(other_membership.name)
-    end
-
-    it "returns empty entries for a query that doesn't match any products" do
-      get :memberships_paged, params: { query: "invalid" }, as: :json
-
-      expect(response).to have_http_status(:ok)
-      expect(response.parsed_body["entries"]).to be_empty
-    end
-
-    it "returns memberships matching the search query" do
-      get :memberships_paged, params: { page: 1, query: archived_membership.name }, as: :json
-
-      expect(response).to have_http_status(:ok)
-      expect(response.parsed_body["entries"].map { _1["name"] }).to include(archived_membership.name)
-      expect(response.parsed_body["entries"].map { _1["name"] }).not_to include(membership.name)
-    end
-
-    describe "membership sorting + pagination", :elasticsearch_wait_for_refresh do
-      before do
-        stub_const("Products::ArchivedController::PER_PAGE", 2)
-        Link.all.each(&:mark_deleted!)
-      end
-
-      include_context "with products and memberships", archived: true
-
-      it_behaves_like "an API for sorting and pagination", :memberships_paged do
-        let!(:default_order) { [membership2, membership3, membership4, membership1] }
-        let!(:columns) do
-          {
-            "name" => [membership1, membership2, membership3, membership4],
-            "successful_sales_count" => [membership4, membership1, membership3, membership2],
-            "revenue" => [membership4, membership1, membership3, membership2],
-            "display_price_cents" => [membership4, membership3, membership2, membership1]
-          }
-        end
-        let!(:boolean_columns) { { "status" => [membership3, membership4, membership2, membership1] } }
       end
     end
   end
@@ -190,12 +69,28 @@ describe Products::ArchivedController, inertia: true do
       let(:request_format) { :json }
     end
 
-    it "archives the product" do
+    it "archives and unpublishes the product" do
+      expect(membership.purchase_disabled_at).to be_nil
+
       post :create, params: { id: membership.unique_permalink }, as: :json
 
       expect(response).to have_http_status(:ok)
       expect(response.parsed_body).to eq({ "success" => true })
-      expect(membership.reload.archived?).to be(true)
+      membership.reload
+      expect(membership.archived?).to be(true)
+      expect(membership.purchase_disabled_at).to be_present
+    end
+
+    it "does not change purchase_disabled_at on an already unpublished product" do
+      original_disabled_at = 1.week.ago.floor
+      membership.update!(purchase_disabled_at: original_disabled_at)
+
+      post :create, params: { id: membership.unique_permalink }, as: :json
+
+      expect(response).to have_http_status(:ok)
+      membership.reload
+      expect(membership.archived?).to be(true)
+      expect(membership.purchase_disabled_at).to eq(original_disabled_at)
     end
   end
 

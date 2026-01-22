@@ -646,6 +646,76 @@ describe UrlRedirectsController do
         expect(response).to redirect_to(custom_domain_coffee_url(host: url_redirect.seller.subdomain_with_protocol, purchase_email: "test@gumroad.com"))
       end
     end
+
+    describe "mobile app webview" do
+      let(:purchaser) { create(:user) }
+      let(:oauth_app) { create(:oauth_application, owner: purchaser) }
+
+      before do
+        @url_redirect.purchase.update!(purchaser:)
+      end
+
+      context "with valid mobile_api token for the purchaser" do
+        let(:access_token) { create("doorkeeper/access_token", application: oauth_app, resource_owner_id: purchaser.id, scopes: "mobile_api") }
+
+        it "grants access when the token owner is the purchaser and mobile_token is present" do
+          get :download_page, params: { id: @token, access_token: access_token.token, mobile_token: Api::Mobile::BaseController::MOBILE_TOKEN }
+
+          expect(response).to be_successful
+        end
+
+        it "requires mobile_token to match the expected value" do
+          @url_redirect.update!(has_been_seen: true)
+
+          get :download_page, params: { id: @token, access_token: access_token.token, mobile_token: "wrong_token" }
+
+          expect(response).to redirect_to(confirm_page_path(id: @url_redirect.token, destination: "download_page"))
+        end
+      end
+
+      context "with valid token but user is not the purchaser" do
+        let(:other_user) { create(:user) }
+        let(:access_token) { create("doorkeeper/access_token", application: oauth_app, resource_owner_id: other_user.id, scopes: "mobile_api") }
+
+        it "redirects to confirm page" do
+          @url_redirect.update!(has_been_seen: true)
+
+          get :download_page, params: { id: @token, access_token: access_token.token, mobile_token: Api::Mobile::BaseController::MOBILE_TOKEN }
+
+          expect(response).to redirect_to(confirm_page_path(id: @url_redirect.token, destination: "download_page"))
+        end
+      end
+
+      context "with invalid token" do
+        it "returns 401" do
+          get :download_page, params: { id: @token, access_token: "invalid_token", mobile_token: Api::Mobile::BaseController::MOBILE_TOKEN }
+
+          expect(response).to have_http_status(:unauthorized)
+        end
+      end
+
+      context "with token that has wrong scope" do
+        let(:access_token) { create("doorkeeper/access_token", application: oauth_app, resource_owner_id: purchaser.id, scopes: "creator_api") }
+
+        it "returns 403" do
+          get :download_page, params: { id: @token, access_token: access_token.token, mobile_token: Api::Mobile::BaseController::MOBILE_TOKEN }
+
+          expect(response).to have_http_status(:forbidden)
+        end
+      end
+
+      context "with valid token but no purchase is attached to the url redirect" do
+        let(:access_token) { create("doorkeeper/access_token", application: oauth_app, resource_owner_id: purchaser.id, scopes: "mobile_api") }
+
+        it "does not require redirect" do
+          @url_redirect.update!(purchase: nil, has_been_seen: true)
+
+          get :download_page, params: { id: @url_redirect.token, access_token: access_token.token, mobile_token: Api::Mobile::BaseController::MOBILE_TOKEN }
+
+          expect(response).to be_successful
+        end
+      end
+    end
   end
 
   describe "GET download_archive" do
@@ -803,7 +873,7 @@ describe UrlRedirectsController do
       loc = response.location
       expect(loc.include?(FILE_DOWNLOAD_DISTRIBUTION_URL)).to be(true)
       expect(loc.include?(s3_path)).to be(true)
-      expect(loc.include?("verify=")).to be(true)
+      expect(loc.include?("X-Amz-Signature=")).to be(true)
     end
 
     it "marks the url_redirect as seen" do
@@ -1031,11 +1101,11 @@ describe UrlRedirectsController do
           expect(response).to be_successful
           url = "#EXTM3U\n#EXT-X-STREAM-INF:PROGRAM-ID=1,RESOLUTION=854x480,CODECS=\"avc1.4d001f,mp4a.40.2\",BANDWIDTH=1191000\n"
           url += "https://d1jmbc8d0c0hid.cloudfront.net/attachments/2_1/original/chapter2/hls/hls_480p_.m3u8?Expires=1390824000&"
-          url += "Signature=Bfxuje0vDkMalfNebd5K4rRzZuSCUUP7R3d0LILa1P17fSU7jnd/I7dLrzlF2mQjhP4qO2IJnKnbnp9KfiU76eENu0L0b+Li/CgwWdtGFY4o162TN0TgWacERoaK6krAPlyeit32zoK4Ua5T34plvE7BfUlsrv8OHmr1dE75FEo=&"
+          url += "Signature=N/2AAyNvQKOmKTUsHWlhmjZZLU7F5ShwCBe6UY+gGSFU9aB1baTzCSDdXqaC5D5E91rxjhx+mPwUHL5vlDvxOA==&"
           url += "Key-Pair-Id=APKAISH5PKOS7WQUJ6SA\n"
           url += "#EXT-X-STREAM-INF:PROGRAM-ID=1,RESOLUTION=1280x720,CODECS=\"avc1.4d001f,mp4a.40.2\",BANDWIDTH=2805000\n"
           url += "https://d1jmbc8d0c0hid.cloudfront.net/attachments/2_1/original/chapter2/hls/hls_720p_.m3u8?Expires=1390824000&"
-          url += "Signature=WBaT6Vq9r4HQohMAMOGVZuB9GgLa2xd232p9t57qAsvpcC8sCend3xvE9f/CBu/3GPOlVFlBPRLxYXG8xDhBFo2j7YegVyETNiQ5UoUIYyzWh9y5r0LXbplhtiiOEoeAgb+k+X/JSQB/blIrZ7D64AnYzhkfUdsI7gyqSO4+bAM=&"
+          url += "Signature=dwQHj9bMxNUPKJxShSwXkuES8RjWE1V+nE7PkY8dFexMkPDn/retT5m1WFuccIlSY4cv0OMV+wLFjEaQbMoJcQ==&"
           url += "Key-Pair-Id=APKAISH5PKOS7WQUJ6SA\n"
           expect(response.body).to eq url
         end
@@ -1049,11 +1119,11 @@ describe UrlRedirectsController do
           expect(response).to be_successful
           url = "#EXTM3U\n#EXT-X-STREAM-INF:PROGRAM-ID=1,RESOLUTION=854x480,CODECS=\"avc1.4d001f,mp4a.40.2\",BANDWIDTH=1191000\n"
           url += "https://d1jmbc8d0c0hid.cloudfront.net/attachments/2_1/original/chapter+2+of+5+%281280%2A720%29/hls/hls_480p_.m3u8?Expires=1390824000&"
-          url += "Signature=FfsrujMgokLB+hwcLP5Jrtj/t7I3vsOtsqYVqbRj6dwdL5kD4yHCi+x6nqp2h0K2Oc3Pc/vE6Hf6xzDB3GucUTD/c8Omv7YNGhDEaHgRkZF/UeIzQyStiXgFuhJDcV6BF7idGg2B67EV5lWT6Xvb/d80x8lx3+Fh2z0nNhHngf4=&"
+          url += "Signature=CfWQL7x5JTw/TwtqRrzDP48cgyrDnH0dvZW64vWCTS3KOBJzCNGo5eXVpgnJdjZ1m5EJZ35SVXYe1oYgtoZ0lA==&"
           url += "Key-Pair-Id=APKAISH5PKOS7WQUJ6SA\n#EXT-X-STREAM-INF:PROGRAM-ID=1,RESOLUTION=1280x"
           url += "720,CODECS=\"avc1.4d001f,mp4a.40.2\",BANDWIDTH=2805000\nhttps://d1jmbc8d0c0hid.cloudfront.net/attachments/2_1/original/chapter+2+of+5+"
           url += "%281280%2A720%29/hls/hls_720p_.m3u8?Expires=1390824000&"
-          url += "Signature=gIpa3UtEum+imD2joAmK1Oe8qniRoWz0olqh4lLBaKCy0iPz9yTOJKl6hy8NfGw8sHBBzS7LGwazj1vm446eZfEEKERvdtP02B8pt4TfICihx4L2ercnP39OQIe7giLSbbSiw1lFT+GScYYZrTJQEjIbuemEzEBedp4WbUh0U+w=&"
+          url += "Signature=GeRM3ECQCMokXeWv7ldhYmCebQBkWLjWEJUMF8qhTxITJJMx10LIi+QJs8U+hkTWcRJmTyZXlboN+nDwG6l/xg==&"
           url += "Key-Pair-Id=APKAISH5PKOS7WQUJ6SA\n"
           expect(response.body).to eq url
         end
@@ -1067,11 +1137,11 @@ describe UrlRedirectsController do
           expect(response).to be_successful
           file = "#EXTM3U\n#EXT-X-STREAM-INF:PROGRAM-ID=1,RESOLUTION=854x480,CODECS=\"avc1.4d001f,mp4a.40.2\",BANDWIDTH=1191000\nhttps"
           file += "://d1jmbc8d0c0hid.cloudfront.net/attachments/2_1/original/me%2Byou/hls/hls_480p_.m3u8?Expires=1390824000&Signature="
-          file += "wsbm5kN7vYjkVGbk/rn8qdSBZy7D6n4j/uSblT0tjxhj2IfOfoWrH5MnFxjXsDsD5qP0oosVA12dcBOXIa/zUc6hoZq0STKKyVvKY/GOYyMfxO+NzbNu"
-          file += "/etWKjsncjbZt4kwEoh6BAPnRJjqBReK722RoTJ/EnPgLSpZGywTnSY=&Key-Pair-Id=APKAISH5PKOS7WQUJ6SA\n#EXT-X-STREAM-INF:PROGRAM-ID=1,RESOLUTION"
+          file += "EM9uQ7+I2rw9eZduFM4Hn4c8hpaVaIhad1g4Z8AeyZFNk4R459PnLwtRvJnWuBHZ3oC0Y6yU8DpZpFxlL/RHCg=="
+          file += "&Key-Pair-Id=APKAISH5PKOS7WQUJ6SA\n#EXT-X-STREAM-INF:PROGRAM-ID=1,RESOLUTION"
           file += "=1280x720,CODECS=\"avc1.4d001f,mp4a.40.2\",BANDWIDTH=2805000\nhttps://d1jmbc8d0c0hid.cloudfront.net/attachments/2_1/original/me"
-          file += "%2Byou/hls/hls_720p_.m3u8?Expires=1390824000&Signature=gQhfUdJR15hBTYTKwXWIfkAlvAqCMrM9hBpOGHUJF1HSRaf5UeGyBjk4sotsAReT0SrIS8jU"
-          file += "zt4SxOR/WPJ3H/Q2fYGEMd1T+f+4jmnEnBn4pQSULdWNO2zyZqP9S3ytaTILZn4OwNHFywRnxAZ6BX0D6Rm4kTuslaHgAlsrI6g=&Key-Pair-Id=APKAISH5PKOS7WQUJ6SA\n"
+          file += "%2Byou/hls/hls_720p_.m3u8?Expires=1390824000&Signature=bPtg2QpyCYmq/zsKnxoQAxmUyqR9mcBImiXPD1fDMNzPEv3yoUCiXGa"
+          file += "05YYro89CWG9JtmQVyvnCqUVuzIU+1w==&Key-Pair-Id=APKAISH5PKOS7WQUJ6SA\n"
           expect(response.body).to eq file
         end
 
@@ -1474,8 +1544,8 @@ describe UrlRedirectsController do
           get :read, params: { id: @token, product_file_id: @product.product_files.first.external_id }
           expect(response).to be_successful
           expect(assigns(:hide_layouts)).to eq(true)
-          expect(assigns(:read_url)).to include("cache_group=read")
-          expect(assigns(:read_url)).to include("staging-files.gumroad.com")
+          expect(assigns(:read_url)).to include("X-Amz-Signature=")
+          expect(assigns(:read_url)).to include(S3_BUCKET)
           expect(response.body).to have_selector("h1", text: "The Works of Edgar Gumstein")
         end
 

@@ -1,3 +1,4 @@
+import { Link } from "@inertiajs/react";
 import * as React from "react";
 
 import { assertDefined } from "$app/utils/assert";
@@ -10,29 +11,40 @@ export const AnalyticsLayout = ({
   selectedTab,
   children,
   actions,
+  title = "Analytics",
+  showTabs = true,
 }: {
-  selectedTab: "following" | "sales" | "utm_links";
+  selectedTab: "following" | "sales" | "churn" | "utm_links";
   children: React.ReactNode;
   actions?: React.ReactNode;
+  title?: string;
+  showTabs?: boolean;
 }) => {
   const user = assertDefined(useLoggedInUser());
 
   return (
     <div>
-      <PageHeader title="Analytics" actions={actions}>
-        <Tabs>
-          <Tab href={Routes.audience_dashboard_path()} isSelected={selectedTab === "following"}>
-            Following
-          </Tab>
-          <Tab href={Routes.sales_dashboard_path()} isSelected={selectedTab === "sales"}>
-            Sales
-          </Tab>
-          {user.policies.utm_link.index ? (
-            <Tab href={Routes.utm_links_dashboard_path()} isSelected={selectedTab === "utm_links"}>
-              Links
+      <PageHeader title={title} actions={actions}>
+        {showTabs ? (
+          <Tabs>
+            <Tab asChild isSelected={selectedTab === "following"}>
+              <Link href={Routes.audience_dashboard_path()}>Following</Link>
             </Tab>
-          ) : null}
-        </Tabs>
+            <Tab asChild isSelected={selectedTab === "sales"}>
+              <Link href={Routes.sales_dashboard_path()}>Sales</Link>
+            </Tab>
+            {user.policies.churn.show ? (
+              <Tab asChild isSelected={selectedTab === "churn"}>
+                <Link href={Routes.churn_dashboard_path()}>Churn</Link>
+              </Tab>
+            ) : null}
+            {user.policies.utm_link.index ? (
+              <Tab asChild isSelected={selectedTab === "utm_links"}>
+                <Link href={Routes.dashboard_utm_links_path()}>Links</Link>
+              </Tab>
+            ) : null}
+          </Tabs>
+        ) : null}
       </PageHeader>
       {children}
     </div>

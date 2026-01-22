@@ -9,11 +9,12 @@ import { BundleProductSelector } from "$app/components/BundleEdit/ContentTab/Bun
 import { Layout } from "$app/components/BundleEdit/Layout";
 import { BundleProduct, useBundleEditContext } from "$app/components/BundleEdit/state";
 import { Button } from "$app/components/Button";
+import { CartItemList } from "$app/components/CartItemList";
 import { Icon } from "$app/components/Icons";
 import { LoadingSpinner } from "$app/components/LoadingSpinner";
 import { Card } from "$app/components/Product/Card";
 import { showAlert } from "$app/components/server-components/Alert";
-import Placeholder from "$app/components/ui/Placeholder";
+import { Placeholder } from "$app/components/ui/Placeholder";
 import { ProductCardGrid } from "$app/components/ui/ProductCardGrid";
 import { useDebouncedCallback } from "$app/components/useDebouncedCallback";
 import { useOnChange } from "$app/components/useOnChange";
@@ -114,7 +115,7 @@ export const ContentTab = () => {
                 </label>
               </header>
               {bundle.products.length > 0 ? (
-                <div className="cart" role="list" aria-label="Bundle products">
+                <CartItemList aria-label="Bundle products">
                   {bundle.products.map((bundleProduct, idx) => (
                     <BundleProductItem
                       key={bundleProduct.id}
@@ -133,7 +134,7 @@ export const ContentTab = () => {
                       }
                     />
                   ))}
-                </div>
+                </CartItemList>
               ) : null}
               <div
                 className="grid gap-4 rounded-sm border border-border bg-background p-4"
@@ -153,7 +154,7 @@ export const ContentTab = () => {
                     <LoadingSpinner />
                   </div>
                 ) : results.length > 0 ? (
-                  <div className="cart" role="list">
+                  <CartItemList>
                     {results.map((bundleProduct) => {
                       const selected = bundle.products.some(({ id }) => id === bundleProduct.id);
                       return (
@@ -171,7 +172,7 @@ export const ContentTab = () => {
                         />
                       );
                     })}
-                  </div>
+                  </CartItemList>
                 ) : (
                   <div style={{ justifySelf: "center" }}>No products found</div>
                 )}

@@ -177,11 +177,11 @@ class ContactingCreatorMailerPreview < ActionMailer::Preview
   end
 
   def tax_form_1099k
-    ContactingCreatorMailer.tax_form_1099k(User.last&.id, Time.current.year.pred, "https://www.gumroad.com")
+    ContactingCreatorMailer.tax_form_1099k(User.last&.id, Time.current.year.pred)
   end
 
   def tax_form_1099misc
-    ContactingCreatorMailer.tax_form_1099misc(User.last&.id, Time.current.year.pred, "https://www.gumroad.com")
+    ContactingCreatorMailer.tax_form_1099misc(User.last&.id, Time.current.year.pred)
   end
 
   def review_submitted
@@ -219,7 +219,7 @@ class ContactingCreatorMailerPreview < ActionMailer::Preview
   private
     def sample_csv_file
       tempfile = Tempfile.new
-      CSV.open(tempfile, "wb") { |csv| 100.times { csv << ["Some", "CSV", "Data"] } }
+      CsvSafe.open(tempfile, "wb") { |csv| 100.times { csv << ["Some", "CSV", "Data"] } }
       tempfile.rewind
       tempfile
     end

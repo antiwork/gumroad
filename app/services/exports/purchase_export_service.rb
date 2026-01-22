@@ -11,7 +11,7 @@ class Exports::PurchaseExportService
     "Pre-order authorization time (UTC timezone)", "Custom Fields", "Item Price ($)",
     "Variants Price ($)", "Giftee Email", "SKU ID", "Quantity", "Recurrence",
     "Affiliate", "Affiliate commission ($)", "Discover?", "Subscription End Date", "Rating", "Review",
-    "License Key", "License Key Activation Count", "Payment Type", "PayPal Transaction ID", "PayPal Fee Amount", "PayPal Fee Currency",
+    "License Key", "License Key Activation Count", "License Key Enabled?", "Payment Type", "PayPal Transaction ID", "PayPal Fee Amount", "PayPal Fee Currency",
     "Stripe Transaction ID", "Stripe Fee Amount", "Stripe Fee Currency",
     "Purchasing Power Parity Discounted?", "Upsold?", "Sent Abandoned Cart Email?",
     "UTM Source", "UTM Medium", "UTM Campaign", "UTM Term", "UTM Content"
@@ -66,7 +66,7 @@ class Exports::PurchaseExportService
     tempfile = Tempfile.new(["Sales", ".csv"], "tmp", encoding: "UTF-8")
     totals = Hash.new(0)
 
-    CSV.open(tempfile, "wb") do |csv|
+    CsvSafe.open(tempfile, "wb") do |csv|
       csv << fields
       purchases_data_enumerator.each do |(purchase_fields_data, custom_fields_data)|
         row = Array.new(fields.size)
@@ -179,6 +179,7 @@ class Exports::PurchaseExportService
         "Review" => main_or_giftee_purchase&.original_product_review&.message,
         "License Key" => main_or_giftee_purchase&.license_key,
         "License Key Activation Count" => main_or_giftee_purchase&.license&.uses,
+        "License Key Enabled?" => main_or_giftee_purchase&.license&.then { |l| l.disabled? ? 0 : 1 },
         "Payment Type" => ((purchase.card_type == "paypal" ? "PayPal" : "Card") if purchase.card_type.present?),
         "PayPal Transaction ID" => (purchase.stripe_transaction_id if purchase.paypal_order_id?),
         "PayPal Fee Amount" => (purchase.processor_fee_dollars if purchase.paypal_order_id?),

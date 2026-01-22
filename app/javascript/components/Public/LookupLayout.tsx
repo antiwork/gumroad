@@ -4,7 +4,9 @@ import React, { useEffect, useRef } from "react"
 import { lookupCharges, lookupPaypalCharges } from "$app/data/charge"
 import { assertResponseError } from "$app/utils/request"
 
+import { Button } from "$app/components/Button"
 import { showAlert } from "$app/components/server-components/Alert"
+import { Alert } from "$app/components/ui/Alert"
 import { PageHeader } from "$app/components/ui/PageHeader"
 
 const LookupLayout = ({ children, title, type }: {
@@ -86,27 +88,25 @@ const LookupLayout = ({ children, title, type }: {
         {success !== null && (
           <div ref={messageRef} className="p-4! md:p-8!">
             {success ? (
-              <div className="success" role="status">
+              <Alert role="status" variant="success">
                 We were able to find a match! It has been emailed to you. Sorry about the inconvenience.
-              </div>
+              </Alert>
             ) : (
-              <div className="warning" role="status">
-                <div>
-                  <p>We weren't able to find a match. Email <a href="mailto:support@gumroad.com">support@gumroad.com</a> with more information, and we'll respond promptly with any information we find about the {type}.</p>
-                  {type === "charge" ? (
-                  <ul>
-                    <li>
-                      <strong>charge date</strong> (the date that your statement says you were charged)
-                    </li>
-                    <li>
-                      <strong>charge amount</strong> (the price you were charged)
-                    </li>
-                    <li>
-                      <strong>card details (last 4 and expiry date)</strong> or <strong>PayPal invoice ID</strong>
-                    </li>
-                  </ul>) : null}
-                </div>
-              </div>
+              <Alert role="status" variant="warning">
+                <p>We weren't able to find a match. Email <a href="mailto:support@gumroad.com">support@gumroad.com</a> with more information, and we'll respond promptly with any information we find about the {type}.</p>
+                {type === "charge" ? (
+                <ul>
+                  <li>
+                    <strong>charge date</strong> (the date that your statement says you were charged)
+                  </li>
+                  <li>
+                    <strong>charge amount</strong> (the price you were charged)
+                  </li>
+                  <li>
+                    <strong>card details (last 4 and expiry date)</strong> or <strong>PayPal invoice ID</strong>
+                  </li>
+                </ul>) : null}
+              </Alert>
             )}
           </div>
         )}
@@ -144,13 +144,9 @@ const LookupLayout = ({ children, title, type }: {
                 />
               </fieldset>
             )}
-            <button
-              className="button primary"
-              type="submit"
-              disabled={isCardLoading}
-            >
+            <Button color="primary" type="submit" disabled={isCardLoading}>
               {isCardLoading ? "Searching..." : "Search"}
-            </button>
+            </Button>
           </section>
         </form>
         <form onSubmit={(evt) => {
@@ -174,13 +170,14 @@ const LookupLayout = ({ children, title, type }: {
               />
             </fieldset>
             <fieldset>
-              <button
-                className="button button-paypal"
+              <Button
+                color="paypal"
                 type="submit"
                 disabled={isPaypalLoading}
               >
+                <span className="brand-icon brand-icon-paypal" />
                 {isPaypalLoading ? "Searching..." : "Search"}
-              </button>
+              </Button>
             </fieldset>
           </section>
         </form>

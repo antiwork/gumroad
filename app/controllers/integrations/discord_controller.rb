@@ -80,7 +80,7 @@ class Integrations::DiscordController < ApplicationController
       encrypted_product_id = state.dig("product_id")
       if is_admin && !encrypted_product_id.nil?
         decrypted_product_id = ObfuscateIds.decrypt(CGI.unescape(encrypted_product_id))
-        redirect_to join_discord_admin_link_path(decrypted_product_id, code: params[:code])
+        redirect_to join_discord_admin_product_path(decrypted_product_id, code: params[:code])
         return
       end
 

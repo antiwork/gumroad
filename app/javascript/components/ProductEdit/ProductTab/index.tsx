@@ -38,6 +38,7 @@ import { useProductEditContext } from "$app/components/ProductEdit/state";
 import { ToggleSettingRow } from "$app/components/SettingRow";
 import { Toggle } from "$app/components/Toggle";
 import { TypeSafeOptionSelect } from "$app/components/TypeSafeOptionSelect";
+import { Alert } from "$app/components/ui/Alert";
 
 export const ProductTab = () => {
   const uid = React.useId();
@@ -57,18 +58,12 @@ export const ProductTab = () => {
     googleCalendarEnabled,
     seller_refund_policy_enabled,
     cancellationDiscountsEnabled,
+    aiGenerated,
   } = useProductEditContext();
   const [initialProduct] = React.useState(product);
 
   const [thumbnail, setThumbnail] = React.useState(initialThumbnail);
-  const [showAiNotification, setShowAiNotification] = React.useState(false);
-
-  React.useEffect(() => {
-    if (window.location.hash === "#ai-generated") {
-      setShowAiNotification(true);
-      window.history.replaceState(null, "", window.location.pathname + window.location.search);
-    }
-  }, []);
+  const [showAiNotification, setShowAiNotification] = React.useState(aiGenerated);
 
   const { isUploading, setImagesUploading } = useImageUpload();
 
@@ -86,21 +81,21 @@ export const ProductTab = () => {
         <form>
           <section className="p-4! md:p-8!">
             {showAiNotification ? (
-              <div
-                role="status"
-                className="grid grid-cols-[auto_1fr_auto] items-start gap-4 rounded-lg !border-pink bg-pink/20 p-6"
-              >
-                <span className="self-center text-lg">
-                  <Icon name="sparkle" />
-                </span>
-                <div>
-                  <strong>Your AI product is ready!</strong> Take a moment to check out the product and content tabs.
-                  Tweak things and make it your own—this is your time to shine!
+              <Alert role="status" variant="accent">
+                <div className="flex items-center gap-4">
+                  <Icon className="text-lg" name="sparkle" />
+                  <div className="flex-1">
+                    <strong>Your AI product is ready!</strong> Take a moment to check out the product and content tabs.
+                    Tweak things and make it your own—this is your time to shine!
+                  </div>
+                  <button
+                    className="cursor-pointer self-center underline all-unset"
+                    onClick={() => setShowAiNotification(false)}
+                  >
+                    close
+                  </button>
                 </div>
-                <button className="col-start-3! self-center underline" onClick={() => setShowAiNotification(false)}>
-                  close
-                </button>
-              </div>
+              </Alert>
             ) : null}
             <BundleConversionNotice />
             <fieldset>
@@ -127,7 +122,7 @@ export const ProductTab = () => {
                   <legend>
                     <label htmlFor={`${uid}-url`}>URL</label>
                     <CopyToClipboard text={url}>
-                      <button type="button" className="font-normal underline">
+                      <button type="button" className="cursor-pointer font-normal underline all-unset">
                         Copy URL
                       </button>
                     </CopyToClipboard>
@@ -271,7 +266,12 @@ export const ProductTab = () => {
                       priceCents={product.price_cents}
                       suggestedPriceCents={product.suggested_price_cents}
                       isPWYW={product.customizable_price}
-                      setPriceCents={(priceCents) => updateProduct({ price_cents: priceCents })}
+                      setPriceCents={(priceCents) =>
+                        updateProduct({
+                          price_cents: priceCents,
+                          ...(priceCents === 0 && { customizable_price: true }),
+                        })
+                      }
                       setSuggestedPriceCents={(suggestedPriceCents) =>
                         updateProduct({ suggested_price_cents: suggestedPriceCents })
                       }

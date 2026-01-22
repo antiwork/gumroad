@@ -10,7 +10,7 @@ type AdminUserPermissionRiskActionsProps = {
 };
 
 const AdminUserPermissionRiskActions = ({ user }: AdminUserPermissionRiskActionsProps) => (
-  <div className="button-group">
+  <div className="flex flex-wrap gap-2">
     <MarkCompliantAction user={user} />
     <RefundBalanceAction user={user} />
     <DisablePaypalSalesAction user={user} />

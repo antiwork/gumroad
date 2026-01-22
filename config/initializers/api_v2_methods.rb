@@ -415,6 +415,14 @@ GUMROAD_API_V2_METHODS = [
         response_layout: :license,
         curl_layout: :decrement_uses_count,
         parameters_layout: :decrement_uses_count
+      },
+      {
+        type: :put,
+        path: "/licenses/rotate",
+        description: "Rotate a license key. The old license key will no longer be valid.",
+        response_layout: :license,
+        curl_layout: :rotate_license,
+        parameters_layout: :enable_disable_license
       }
     ]
   },

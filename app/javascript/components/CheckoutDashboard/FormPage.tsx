@@ -13,12 +13,14 @@ import { Button } from "$app/components/Button";
 import { CartItem } from "$app/components/Checkout/cartState";
 import { CheckoutPreview } from "$app/components/CheckoutDashboard/CheckoutPreview";
 import { Layout, Page } from "$app/components/CheckoutDashboard/Layout";
-import { useClientAlert } from "$app/components/ClientAlertProvider";
 import { Icon } from "$app/components/Icons";
 import { useLoggedInUser } from "$app/components/LoggedInUser";
+import { WithPreviewSidebar } from "$app/components/PreviewSidebar";
 import { Select } from "$app/components/Select";
+import { showAlert } from "$app/components/server-components/Alert";
 import { Toggle } from "$app/components/Toggle";
 import { TypeSafeOptionSelect } from "$app/components/TypeSafeOptionSelect";
+import { Card, CardContent } from "$app/components/ui/Card";
 
 export type SimpleProduct = { id: string; name: string; archived: boolean };
 
@@ -42,7 +44,6 @@ const FormPage = ({
   products,
 }: FormPageProps) => {
   const loggedInUser = useLoggedInUser();
-  const { showAlert } = useClientAlert();
 
   const cartItem = cart_item ?? PLACEHOLDER_CART_ITEM;
   const cardProduct = card_product ?? PLACEHOLDER_CARD_PRODUCT;
@@ -108,9 +109,8 @@ const FormPage = ({
           {isSaving ? "Saving changes..." : "Save changes"}
         </Button>
       }
-      hasAside
     >
-      <div className="fixed-aside flex-1 lg:grid lg:grid-cols-[1fr_30vw]">
+      <WithPreviewSidebar className="flex-1">
         <div>
           <section className="space-y-4 border-b border-border p-4 md:p-8">
             <header className="flex items-center justify-between">
@@ -124,10 +124,10 @@ const FormPage = ({
               name or more specific instructions.
             </div>
             {customFields.length > 0 ? (
-              <div className="stack">
+              <Card>
                 {customFields.map((field, i) => (
-                  <div key={field.key}>
-                    <div className="paragraphs">
+                  <CardContent key={field.key}>
+                    <div className="flex grow flex-col gap-4">
                       <fieldset>
                         <legend>
                           <label htmlFor={`${uid}-${field.key}-type`}>Type of field</label>
@@ -224,9 +224,9 @@ const FormPage = ({
                         ) : null}
                       </fieldset>
                     </div>
-                  </div>
+                  </CardContent>
                 ))}
-              </div>
+              </Card>
             ) : null}
             <div>
               <Button
@@ -350,7 +350,6 @@ const FormPage = ({
           </section>
         </div>
         <CheckoutPreview
-          className="hidden lg:block"
           cartItem={{
             ...cartItem,
             product: {
@@ -362,7 +361,7 @@ const FormPage = ({
           }}
           recommendedProduct={recommendationType !== "no_recommendations" ? cardProduct : undefined}
         />
-      </div>
+      </WithPreviewSidebar>
     </Layout>
   );
 };

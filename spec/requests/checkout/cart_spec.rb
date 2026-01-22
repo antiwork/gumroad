@@ -32,7 +32,7 @@ describe "Checkout cart", :js, type: :system do
         expect(page).to have_link(@versioned_product.name, href: @versioned_product.long_url)
         expect(page).to have_selector("a[href='#{@versioned_product.long_url}'] > img[src='#{@versioned_product.thumbnail.url}']")
         expect(page).to have_text("US$1")
-        select_disclosure "Configure" do
+        select_disclosure "Edit" do
           choose @variant2.name
           click_on "Save changes"
         end
@@ -47,7 +47,7 @@ describe "Checkout cart", :js, type: :system do
       visit @versioned_product.long_url
       add_to_cart(@versioned_product, option: @variant1.name)
       within_cart_item(@versioned_product.name) do
-        select_disclosure "Configure" do
+        select_disclosure "Edit" do
           choose @variant2.name
           click_on "Save changes"
         end
@@ -65,7 +65,7 @@ describe "Checkout cart", :js, type: :system do
         expect(page).to have_link(@membership_product.name, href: @membership_product.long_url)
         expect(page).to have_selector("a[href='#{@membership_product.long_url}'] > img")
         expect(page).to have_text("US$4 Yearly", normalize_ws: true)
-        select_disclosure "Configure" do
+        select_disclosure "Edit" do
           select "Monthly", from: "Recurrence"
           click_on "Save changes"
         end
@@ -73,7 +73,6 @@ describe "Checkout cart", :js, type: :system do
       within_cart_item(@membership_product.name) do
         expect(page).to have_link(@membership_product.name, href: @membership_product.long_url)
         expect(page).to have_text("US$2 Monthly", normalize_ws: true)
-        expect(page).to have_text("Membership: Monthly")
       end
       check_out(@membership_product)
     end
@@ -85,7 +84,7 @@ describe "Checkout cart", :js, type: :system do
         expect(page).to have_link(@product.name, href: @product.long_url)
         expect(page).to have_selector("a[href='#{@product.long_url}'] > img")
         expect(page).to have_text("US$10")
-        select_disclosure "Configure" do
+        select_disclosure "Edit" do
           fill_in "Quantity", with: 4
           click_on "Save changes"
         end
@@ -105,7 +104,7 @@ describe "Checkout cart", :js, type: :system do
         expect(page).to have_link(@pwyw_product.name, href: @pwyw_product.long_url)
         expect(page).to have_selector("a[href='#{@pwyw_product.long_url}'] > img[src='#{@pwyw_product.thumbnail.url}']")
         expect(page).to have_text("US$10")
-        select_disclosure "Configure" do
+        select_disclosure "Edit" do
           fill_in "Name a fair price", with: "5"
           click_on "Save changes"
           expect(find_field("Name a fair price")["aria-invalid"]).to eq("true")
@@ -128,7 +127,7 @@ describe "Checkout cart", :js, type: :system do
         expect(page).to have_link(@rental_product.name, href: @rental_product.long_url)
         expect(page).to have_selector("a[href='#{@rental_product.long_url}'] > img")
         expect(page).to have_text("US$5")
-        select_disclosure "Configure" do
+        select_disclosure "Edit" do
           choose "Rent"
           click_on "Save changes"
         end
@@ -183,6 +182,7 @@ describe "Checkout cart", :js, type: :system do
         click_on "Back to Library"
         toggle_disclosure buyer.username
         click_on "Logout"
+        expect(page).to have_content("Log in")
 
         visit @membership_product.long_url
         add_to_cart(@membership_product, recurrence: "Yearly", option: @membership_product.variants.first.name)
@@ -223,7 +223,7 @@ describe "Checkout cart", :js, type: :system do
         )
 
         within_cart_item(@membership_product.name) do
-          select_disclosure "Configure" do
+          select_disclosure "Edit" do
             select "Monthly", from: "Recurrence"
             choose @membership_product.variants.second.name
             click_on "Save changes"
@@ -340,7 +340,7 @@ describe "Checkout cart", :js, type: :system do
             create(:cart_product, cart: another_cart, product: create(:product, name: "Product 2"))
 
             login_as buyer
-            visit checkout_index_path(cart_id: another_cart.external_id)
+            visit checkout_index_path(cart_id: another_cart.secure_external_id(scope: "cart_login"))
             expect(page).to have_current_path(checkout_index_path)
             expect(page).to have_text("Product 1")
             expect(page).to_not have_text("Product 2")
@@ -362,7 +362,7 @@ describe "Checkout cart", :js, type: :system do
               wait.until { Cart.alive.count == 2 }
               guest_cart = Cart.alive.last
 
-              visit checkout_index_path(cart_id: user_cart.external_id)
+              visit checkout_index_path(cart_id: user_cart.secure_external_id(scope: "cart_login"))
               expect(page).to have_current_path(login_path(email: user_cart.user.email, next: checkout_index_path(referrer: UrlService.discover_domain_with_protocol)))
               fill_in "Password", with: user_cart.user.password
               click_on "Login"
@@ -389,7 +389,7 @@ describe "Checkout cart", :js, type: :system do
               current_browser_guid = Capybara.current_session.driver.browser.manage.all_cookies.find { _1[:name] == "_gumroad_guid" }&.[](:value)
               current_guest_cart.update!(browser_guid: current_browser_guid)
 
-              visit checkout_index_path(cart_id: cart.external_id)
+              visit checkout_index_path(cart_id: cart.secure_external_id(scope: "cart_login"))
               expect(page).to have_current_path(checkout_index_path)
               expect(page).to have_text("Product 1")
               expect(page).to have_text("Product 2")
@@ -409,7 +409,7 @@ describe "Checkout cart", :js, type: :system do
 
         visit @product.long_url
         add_to_cart(@product)
-        expect(page).to_not have_disclosure("Configure")
+        expect(page).to_not have_disclosure("Edit")
       end
     end
   end

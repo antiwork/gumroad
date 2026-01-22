@@ -15,6 +15,7 @@ import { TaxonomyEditor } from "$app/components/ProductEdit/ShareTab/TaxonomyEdi
 import { useProductEditContext } from "$app/components/ProductEdit/state";
 import { Toggle } from "$app/components/Toggle";
 import { TwitterShareButton } from "$app/components/TwitterShareButton";
+import { Alert } from "$app/components/ui/Alert";
 import { useRunOnce } from "$app/components/useRunOnce";
 
 export const ShareTab = () => {
@@ -38,7 +39,7 @@ export const ShareTab = () => {
             <header>
               <h2>Share</h2>
             </header>
-            <div className="button-group">
+            <div className="flex flex-wrap gap-2">
               <TwitterShareButton url={url} text={`Buy ${product.name} on @Gumroad`} />
               <FacebookShareButton url={url} text={product.name} />
               <CopyToClipboard text={url} tooltipPosition="top">
@@ -71,14 +72,14 @@ export const ShareTab = () => {
               </a>
             </header>
             {isListedOnDiscover ? (
-              <div role="status" className="success">
-                <div>{product.name} is listed on Gumroad Discover.</div>
-                <a className="close" href={discoverLink.toString()}>
-                  View
-                </a>
-              </div>
+              <Alert role="status" variant="success">
+                <div className="flex flex-col justify-between sm:flex-row">
+                  {product.name} is listed on Gumroad Discover.
+                  <a href={discoverLink.toString()}>View</a>
+                </div>
+              </Alert>
             ) : null}
-            <div className="paragraphs">
+            <div className="flex flex-col gap-4">
               <p>
                 Gumroad Discover recommends your products to prospective customers for a flat 30% fee on each sale,
                 helping you grow beyond your existing following and find even more people who care about your work.
@@ -123,28 +124,33 @@ const DiscoverEligibilityPromo = () => {
   if (!show) return null;
 
   return (
-    <div role="status" className="promo">
-      <img src={hands} />
-      <div>
-        To appear on Gumroad Discover, make sure to meet all the{" "}
-        <a href="/help/article/79-gumroad-discover" target="_blank" rel="noreferrer">
-          eligibility criteria
-        </a>
-        , which includes making at least one successful sale and completing the Risk Review process explained in detail{" "}
-        <a href="/help/article/13-getting-paid" target="_blank" rel="noreferrer">
-          here
-        </a>
-        .
+    <Alert role="status">
+      <div className="flex items-center gap-2">
+        <img src={hands} alt="" className="size-12" />
+        <div className="flex flex-1 flex-col gap-2">
+          <div>
+            To appear on Gumroad Discover, make sure to meet all the{" "}
+            <a href="/help/article/79-gumroad-discover" target="_blank" rel="noreferrer">
+              eligibility criteria
+            </a>
+            , which includes making at least one successful sale and completing the Risk Review process explained in
+            detail{" "}
+            <a href="/help/article/13-getting-paid" target="_blank" rel="noreferrer">
+              here
+            </a>
+            .
+          </div>
+          <button
+            className="w-max cursor-pointer underline all-unset"
+            onClick={() => {
+              localStorage.setItem("showDiscoverEligibilityPromo", "false");
+              setShow(false);
+            }}
+          >
+            Close
+          </button>
+        </div>
       </div>
-      <button
-        className="close underline"
-        onClick={() => {
-          localStorage.setItem("showDiscoverEligibilityPromo", "false");
-          setShow(false);
-        }}
-      >
-        Close
-      </button>
-    </div>
+    </Alert>
   );
 };

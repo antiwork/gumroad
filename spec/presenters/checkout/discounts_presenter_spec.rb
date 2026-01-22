@@ -128,6 +128,9 @@ describe Checkout::DiscountsPresenter do
                      is_tiered_membership: false,
                    },
                  ],
+                 show_black_friday_banner: false,
+                 black_friday_code: "BLACKFRIDAY2025",
+                 black_friday_code_name: "Black Friday 2025",
                })
     end
   end

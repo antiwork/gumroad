@@ -45,6 +45,7 @@ import {
   approveReviewVideo,
   rejectReviewVideo,
 } from "$app/data/customers";
+import { classNames } from "$app/utils/classNames";
 import {
   CurrencyCode,
   formatPriceCentsWithCurrencySymbol,
@@ -65,6 +66,7 @@ import { FileKindIcon } from "$app/components/FileRowContent";
 import { Icon } from "$app/components/Icons";
 import { LoadingSpinner } from "$app/components/LoadingSpinner";
 import { Modal } from "$app/components/Modal";
+import { NavigationButtonInertia } from "$app/components/NavigationButton";
 import { NumberInput } from "$app/components/NumberInput";
 import { Pagination, PaginationProps } from "$app/components/Pagination";
 import { Popover } from "$app/components/Popover";
@@ -75,8 +77,14 @@ import { ReviewVideoPlayer } from "$app/components/ReviewVideoPlayer";
 import { Select } from "$app/components/Select";
 import { showAlert } from "$app/components/server-components/Alert";
 import { Toggle } from "$app/components/Toggle";
+import { Alert } from "$app/components/ui/Alert";
+import { Card, CardContent } from "$app/components/ui/Card";
 import { PageHeader } from "$app/components/ui/PageHeader";
-import Placeholder from "$app/components/ui/Placeholder";
+import { Pill } from "$app/components/ui/Pill";
+import { Placeholder, PlaceholderImage } from "$app/components/ui/Placeholder";
+import { Row, RowActions, RowContent, Rows } from "$app/components/ui/Rows";
+import { Sheet, SheetHeader } from "$app/components/ui/Sheet";
+import { Table, TableBody, TableCaption, TableCell, TableHead, TableHeader, TableRow } from "$app/components/ui/Table";
 import { useDebouncedCallback } from "$app/components/useDebouncedCallback";
 import { useOnChange } from "$app/components/useOnChange";
 import { useUserAgentInfo } from "$app/components/UserAgent";
@@ -257,9 +265,9 @@ const CustomersPage = ({
               onToggle={() => searchInputRef.current?.focus()}
               trigger={
                 <WithTooltip tip="Search">
-                  <div className="button">
+                  <Button>
                     <Icon name="solid-search" />
-                  </div>
+                  </Button>
                 </WithTooltip>
               }
             >
@@ -277,16 +285,17 @@ const CustomersPage = ({
             </Popover>
             <Popover
               aria-label="Filter"
+              dropdownClassName="p-0!"
               trigger={
                 <WithTooltip tip="Filter">
-                  <div className="button">
+                  <Button>
                     <Icon name="filter" />
-                  </div>
+                  </Button>
                 </WithTooltip>
               }
             >
-              <div className="stack" style={{ width: "35rem" }}>
-                <div>
+              <Card className="w-140 border-none shadow-none">
+                <CardContent>
                   <ProductSelect
                     products={products.filter(
                       (product) => !excludedItems.find((excludedItem) => product.id === excludedItem.id),
@@ -294,9 +303,10 @@ const CustomersPage = ({
                     label="Customers who bought"
                     items={includedItems}
                     setItems={setIncludedItems}
+                    className="grow basis-0"
                   />
-                </div>
-                <div>
+                </CardContent>
+                <CardContent>
                   <ProductSelect
                     products={products.filter(
                       (product) => !includedItems.find((includedItem) => product.id === includedItem.id),
@@ -304,15 +314,17 @@ const CustomersPage = ({
                     label="Customers who have not bought"
                     items={excludedItems}
                     setItems={setExcludedItems}
+                    className="grow basis-0"
                   />
-                </div>
-                <div>
+                </CardContent>
+                <CardContent>
                   <div
                     style={{
                       display: "grid",
                       gap: "var(--spacer-4)",
                       gridTemplateColumns: "repeat(auto-fit, minmax(var(--dynamic-grid), 1fr))",
                     }}
+                    className="grow"
                   >
                     <fieldset>
                       <label htmlFor={`${uid}-minimum-amount`}>Paid more than</label>
@@ -335,14 +347,15 @@ const CustomersPage = ({
                       />
                     </fieldset>
                   </div>
-                </div>
-                <div>
+                </CardContent>
+                <CardContent>
                   <div
                     style={{
                       display: "grid",
                       gap: "var(--spacer-4)",
                       gridTemplateColumns: "repeat(auto-fit, minmax(var(--dynamic-grid), 1fr))",
                     }}
+                    className="grow"
                   >
                     <fieldset>
                       <label htmlFor={`${uid}-after-date`}>After</label>
@@ -365,9 +378,9 @@ const CustomersPage = ({
                       <small suppressHydrationWarning>{`11:59 ${timeZoneAbbreviation}`}</small>
                     </fieldset>
                   </div>
-                </div>
-                <div>
-                  <fieldset>
+                </CardContent>
+                <CardContent>
+                  <fieldset className="grow basis-0">
                     <label htmlFor={`${uid}-country`}>From</label>
                     <select
                       id={`${uid}-country`}
@@ -384,9 +397,9 @@ const CustomersPage = ({
                       ))}
                     </select>
                   </fieldset>
-                </div>
-                <div>
-                  <h4>
+                </CardContent>
+                <CardContent>
+                  <h4 className="font-bold">
                     <label htmlFor={`${uid}-active-customers-only`}>Show active customers only</label>
                   </h4>
                   <Toggle
@@ -394,64 +407,69 @@ const CustomersPage = ({
                     value={activeCustomersOnly}
                     onChange={(activeCustomersOnly) => updateQuery({ activeCustomersOnly })}
                   />
-                </div>
-              </div>
+                </CardContent>
+              </Card>
             </Popover>
             <Popover
               aria-label="Export"
               trigger={
                 <WithTooltip tip="Export">
-                  <div className="button">
+                  <Button>
                     <Icon name="download" />
-                  </div>
+                  </Button>
                 </WithTooltip>
               }
             >
-              <div className="paragraphs">
-                <h3>Download sales as CSV</h3>
-                <div>
-                  {exportNames
-                    ? `This will download sales of '${exportNames}' as a CSV, with each purchase on its own row.`
-                    : "This will download a CSV with each purchase on its own row."}
-                </div>
-                <DateRangePicker from={from} to={to} setFrom={setFrom} setTo={setTo} />
-                <NavigationButton
-                  color="primary"
-                  href={Routes.export_purchases_path({
-                    format: "csv",
-                    start_time: lightFormat(from, "yyyy-MM-dd"),
-                    end_time: lightFormat(to, "yyyy-MM-dd"),
-                    product_ids: includedProductIds,
-                    variant_ids: includedVariantIds,
-                  })}
-                >
-                  Download
-                </NavigationButton>
-                {count > 2000 && (
-                  <div className="mt-2 text-sm text-gray-600">
-                    Exports over 2,000 rows will be processed in the background and emailed to you.
+              {(close) => (
+                <div className="flex flex-col gap-4">
+                  <h3>Download sales as CSV</h3>
+                  <div>
+                    {exportNames
+                      ? `This will download sales of '${exportNames}' as a CSV, with each purchase on its own row.`
+                      : "This will download a CSV with each purchase on its own row."}
                   </div>
-                )}
-              </div>
+                  <DateRangePicker from={from} to={to} setFrom={setFrom} setTo={setTo} />
+                  <NavigationButtonInertia
+                    color="primary"
+                    href={Routes.export_purchases_path()}
+                    method="post"
+                    preserveScroll
+                    data={{
+                      start_time: lightFormat(from, "yyyy-MM-dd"),
+                      end_time: lightFormat(to, "yyyy-MM-dd"),
+                      product_ids: includedProductIds,
+                      variant_ids: includedVariantIds,
+                    }}
+                    onSuccess={() => close()}
+                  >
+                    Download
+                  </NavigationButtonInertia>
+                  {count > 2000 && (
+                    <div className="mt-2 text-sm text-gray-600">
+                      Exports over 2,000 rows will be processed in the background and emailed to you.
+                    </div>
+                  )}
+                </div>
+              )}
             </Popover>
           </>
         }
       />
       <section className="p-4 md:p-8">
         {customers.length > 0 ? (
-          <section className="paragraphs">
-            <table aria-live="polite" aria-busy={isLoading}>
-              <caption>{`All sales (${count})`}</caption>
-              <thead>
-                <tr>
-                  <th>Email</th>
-                  <th>Name</th>
-                  <th>Product</th>
-                  <th {...thProps("created_at")}>Purchase Date</th>
-                  <th {...thProps("price_cents")}>Price</th>
-                </tr>
-              </thead>
-              <tbody>
+          <section className="flex flex-col gap-4">
+            <Table aria-live="polite" className={cx(isLoading && "pointer-events-none opacity-50")}>
+              <TableCaption>{`All sales (${count})`}</TableCaption>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Email</TableHead>
+                  <TableHead>Name</TableHead>
+                  <TableHead>Product</TableHead>
+                  <TableHead {...thProps("created_at")}>Purchase Date</TableHead>
+                  <TableHead {...thProps("price_cents")}>Price</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
                 {customers.map((customer) => {
                   const price = formatPrice(
                     customer.price.cents,
@@ -460,74 +478,69 @@ const CustomersPage = ({
                   );
                   const createdAt = new Date(customer.created_at);
                   return (
-                    <tr
+                    <TableRow
                       key={customer.id}
-                      aria-selected={selectedCustomerId === customer.id}
+                      selected={selectedCustomerId === customer.id}
                       onClick={() => setSelectedCustomerId(customer.id)}
                     >
-                      <td>
+                      <TableCell>
                         {customer.shipping && !customer.shipping.tracking.shipped ? (
                           <WithTooltip tip="Not Shipped">
                             <Icon name="truck" style={{ marginRight: "var(--spacer-2)" }} aria-label="Not Shipped" />
                           </WithTooltip>
                         ) : null}
                         {customer.email.length <= 30 ? customer.email : `${customer.email.slice(0, 27)}...`}
-                      </td>
-                      <td>{customer.name}</td>
-                      <td>
+                      </TableCell>
+                      <TableCell>{customer.name}</TableCell>
+                      <TableCell>
                         {customer.product.name}
                         {customer.subscription?.is_installment_plan ? (
-                          <span className="pill small" style={{ marginLeft: "var(--spacer-2)" }}>
+                          <Pill size="small" className="ml-2">
                             Installments
-                          </span>
+                          </Pill>
                         ) : null}
                         {customer.is_bundle_purchase ? (
-                          <span className="pill small" style={{ marginLeft: "var(--spacer-2)" }}>
+                          <Pill size="small" className="ml-2">
                             Bundle
-                          </span>
+                          </Pill>
                         ) : null}
                         {customer.subscription ? (
                           !customer.subscription.is_installment_plan && customer.subscription.status !== "alive" ? (
-                            <span className="pill small" style={{ marginLeft: "var(--spacer-2)" }}>
+                            <Pill size="small" className="ml-2">
                               Inactive
-                            </span>
+                            </Pill>
                           ) : null
                         ) : (
                           <>
                             {customer.partially_refunded ? (
-                              <span className="pill small" style={{ marginLeft: "var(--spacer-2)" }}>
+                              <Pill size="small" className="ml-2">
                                 Partially refunded
-                              </span>
+                              </Pill>
                             ) : null}
                             {customer.refunded ? (
-                              <span className="pill small" style={{ marginLeft: "var(--spacer-2)" }}>
+                              <Pill size="small" className="ml-2">
                                 Refunded
-                              </span>
+                              </Pill>
                             ) : null}
                             {customer.chargedback ? (
-                              <span className="pill small" style={{ marginLeft: "var(--spacer-2)" }}>
+                              <Pill size="small" className="ml-2">
                                 Chargedback
-                              </span>
+                              </Pill>
                             ) : null}
                           </>
                         )}
                         {customer.utm_link ? (
-                          <div className="has-tooltip" aria-describedby={`utm-link-${customer.id}`}>
-                            <span className="pill small" style={{ marginLeft: "var(--spacer-2)" }}>
+                          <WithTooltip
+                            tooltipProps={{ className: "w-80 p-0" }}
+                            tip={<UtmLinkStack link={customer.utm_link} showHeader={false} />}
+                          >
+                            <Pill size="small" className="ml-2">
                               UTM
-                            </span>
-                            <div
-                              role="tooltip"
-                              id={`utm-link-${customer.id}`}
-                              style={{ padding: 0, width: "20rem" }}
-                              onClick={(e) => e.stopPropagation()}
-                            >
-                              <UtmLinkStack link={customer.utm_link} showHeader={false} />
-                            </div>
-                          </div>
+                            </Pill>
+                          </WithTooltip>
                         ) : null}
-                      </td>
-                      <td>
+                      </TableCell>
+                      <TableCell>
                         {createdAt.toLocaleDateString(userAgentInfo.locale, {
                           day: "numeric",
                           month: "short",
@@ -536,28 +549,26 @@ const CustomersPage = ({
                           minute: "numeric",
                           hour12: true,
                         })}
-                      </td>
-                      <td>
+                      </TableCell>
+                      <TableCell>
                         {customer.transaction_url_for_seller ? (
                           <a href={customer.transaction_url_for_seller}>{price}</a>
                         ) : (
                           price
                         )}
-                      </td>
-                    </tr>
+                      </TableCell>
+                    </TableRow>
                   );
                 })}
-              </tbody>
-            </table>
+              </TableBody>
+            </Table>
             {pagination && pagination.pages > 1 ? (
               <Pagination onChangePage={asyncVoid(loadCustomers)} pagination={pagination} />
             ) : null}
           </section>
         ) : (
           <Placeholder>
-            <figure>
-              <img src={placeholder} />
-            </figure>
+            <PlaceholderImage src={placeholder} />
             {searchQuery !== null ? (
               <h2>No sales found</h2>
             ) : (
@@ -603,15 +614,17 @@ const ProductSelect = ({
   products,
   items,
   setItems,
+  className,
 }: {
   label: string;
   products: Product[];
   items: Item[];
   setItems: (items: Item[]) => void;
+  className?: string;
 }) => {
   const uid = React.useId();
   return (
-    <fieldset>
+    <fieldset className={className}>
       <legend>
         <label htmlFor={uid}>{label}</label>
       </legend>
@@ -780,54 +793,50 @@ const CustomerDrawer = ({
     });
 
   return (
-    <aside>
-      <header>
-        {onBack ? (
-          <button onClick={onBack} aria-label="Return to bundle">
-            <Icon name="arrow-left" style={{ fontSize: "var(--big-icon-size)" }} />
-          </button>
-        ) : null}
-        <h2>{customer.product.name}</h2>
-        <button className="close" aria-label="Close" onClick={onClose} />
-      </header>
-      {commission ? <CommissionStatusPill commission={commission} /> : null}
-      {customer.is_additional_contribution ? (
-        <div role="status" className="info">
-          <div>
-            <strong>Additional amount: </strong>
-            This is an additional contribution, added to a previous purchase of this product.
-          </div>
+    <Sheet open onOpenChange={onClose}>
+      <SheetHeader>
+        <div className="flex gap-4">
+          {onBack ? (
+            <button onClick={onBack} aria-label="Return to bundle" className="cursor-pointer all-unset">
+              <Icon name="arrow-left" style={{ fontSize: "var(--big-icon-size)" }} />
+            </button>
+          ) : null}
+          <h2>{customer.product.name}</h2>
         </div>
+      </SheetHeader>
+      {commission ? (
+        <div>
+          <CommissionStatusPill commission={commission} />
+        </div>
+      ) : null}
+      {customer.is_additional_contribution ? (
+        <Alert role="status" variant="info">
+          <strong>Additional amount: </strong>
+          This is an additional contribution, added to a previous purchase of this product.
+        </Alert>
       ) : null}
       {customer.ppp ? (
-        <div role="status" className="info">
-          <div>
-            This customer received a purchasing power parity discount of <b>{customer.ppp.discount}</b> because they are
-            located in <b>{customer.ppp.country}</b>.
-          </div>
-        </div>
+        <Alert role="status" variant="info">
+          This customer received a purchasing power parity discount of <b>{customer.ppp.discount}</b> because they are
+          located in <b>{customer.ppp.country}</b>.
+        </Alert>
       ) : null}
       {customer.giftee_email ? (
-        <div role="status" className="info">
+        <Alert role="status" variant="info">
           {customer.email} purchased this for {customer.giftee_email}.
-        </div>
+        </Alert>
       ) : null}
       {customer.is_preorder ? (
-        <div role="status" className="info">
-          <div>
-            <strong>Pre-order: </strong>
-            This is a pre-order authorization. The customer's card has not been charged yet.
-          </div>
-        </div>
+        <Alert role="status" variant="info">
+          <strong>Pre-order: </strong>
+          This is a pre-order authorization. The customer's card has not been charged yet.
+        </Alert>
       ) : null}
       {customer.affiliate && customer.affiliate.type !== "Collaborator" ? (
-        <div role="status" className="info">
-          <div>
-            <strong>Affiliate: </strong>
-            An affiliate ({customer.affiliate.email}) helped you make this sale and received {customer.affiliate.amount}
-            .
-          </div>
-        </div>
+        <Alert role="status" variant="info">
+          <strong>Affiliate: </strong>
+          An affiliate ({customer.affiliate.email}) helped you make this sale and received {customer.affiliate.amount}.
+        </Alert>
       ) : null}
       <EmailSection
         label="Email"
@@ -888,113 +897,125 @@ const CustomerDrawer = ({
           }
         />
       ) : null}
-      <section className="stack">
-        <h3 className="flex gap-1">
-          Order information
-          {!subscription && customer.transaction_url_for_seller ? (
-            <a href={customer.transaction_url_for_seller} target="_blank" rel="noreferrer" aria-label="Transaction">
-              <Icon name="arrow-up-right-square" />
-            </a>
+      <Card asChild>
+        <section>
+          <CardContent asChild>
+            <h3 className="flex gap-1">
+              Order information
+              {!subscription && customer.transaction_url_for_seller ? (
+                <a
+                  href={customer.transaction_url_for_seller}
+                  target="_blank"
+                  rel="noreferrer"
+                  aria-label="Transaction"
+                  className="grow"
+                >
+                  <Icon name="arrow-up-right-square" />
+                </a>
+              ) : null}
+            </h3>
+          </CardContent>
+          <CardContent>
+            <h5 className="grow font-bold">Customer name</h5>
+            {customer.name}
+          </CardContent>
+          <CardContent>
+            <h5 className="grow font-bold">{customer.is_multiseat_license ? "Seats" : "Quantity"}</h5>
+            {customer.quantity}
+          </CardContent>
+          {customer.download_count ? (
+            <CardContent>
+              <h5 className="grow font-bold">Download count</h5>
+              {customer.download_count}
+            </CardContent>
           ) : null}
-        </h3>
-        <div>
-          <h5>Customer name</h5>
-          {customer.name}
-        </div>
-        <div>
-          <h5>{customer.is_multiseat_license ? "Seats" : "Quantity"}</h5>
-          {customer.quantity}
-        </div>
-        {customer.download_count ? (
-          <div>
-            <h5>Download count</h5>
-            {customer.download_count}
-          </div>
-        ) : null}
-        <div>
-          <h5>Price</h5>
-          <div>
-            {customer.price.cents_before_offer_code > customer.price.cents ? (
-              <>
-                <s>
-                  {formatPrice(
-                    customer.price.cents_before_offer_code,
-                    customer.price.currency_type,
-                    customer.price.recurrence,
-                  )}
-                </s>{" "}
-              </>
-            ) : null}
-            {formatPrice(
-              customer.price.cents - (customer.price.tip_cents ?? 0),
-              customer.price.currency_type,
-              customer.price.recurrence,
-            )}
-          </div>
-        </div>
-        {customer.price.tip_cents ? (
-          <div>
-            <h5>Tip</h5>
-            {formatPrice(customer.price.tip_cents, customer.price.currency_type, customer.price.recurrence)}
-          </div>
-        ) : null}
-        {customer.discount && !customer.upsell ? (
-          <div>
-            <h5>Discount</h5>
-            {customer.discount.code ? (
-              <div>
-                {formatDiscount(customer.discount, customer.price.currency_type)} off with code{" "}
-                <div className="pill small">{customer.discount.code.toUpperCase()}</div>
+          <CardContent>
+            <h5 className="grow font-bold">Price</h5>
+            <div>
+              {customer.price.cents_before_offer_code > customer.price.cents ? (
+                <>
+                  <s>
+                    {formatPrice(
+                      customer.price.cents_before_offer_code,
+                      customer.price.currency_type,
+                      customer.price.recurrence,
+                    )}
+                  </s>{" "}
+                </>
+              ) : null}
+              {formatPrice(
+                customer.price.cents - (customer.price.tip_cents ?? 0),
+                customer.price.currency_type,
+                customer.price.recurrence,
+              )}
+            </div>
+          </CardContent>
+          {customer.price.tip_cents ? (
+            <CardContent>
+              <h5 className="grow font-bold">Tip</h5>
+              {formatPrice(customer.price.tip_cents, customer.price.currency_type, customer.price.recurrence)}
+            </CardContent>
+          ) : null}
+          {customer.discount && !customer.upsell ? (
+            <CardContent>
+              <h5 className="grow font-bold">Discount</h5>
+              {customer.discount.code ? (
+                <div>
+                  {formatDiscount(customer.discount, customer.price.currency_type)} off with code{" "}
+                  <Pill size="small">{customer.discount.code.toUpperCase()}</Pill>
+                </div>
+              ) : (
+                `${formatDiscount(customer.discount, customer.price.currency_type)} off`
+              )}
+            </CardContent>
+          ) : null}
+          {customer.upsell ? (
+            <CardContent>
+              <h5 className="grow font-bold">Upsell</h5>
+              {`${customer.upsell}${
+                customer.discount ? ` (${formatDiscount(customer.discount, customer.price.currency_type)} off)` : ""
+              }`}
+            </CardContent>
+          ) : null}
+          {subscription?.status ? (
+            <CardContent>
+              <h5 className="grow font-bold">
+                {subscription.is_installment_plan ? "Installment plan status" : "Membership status"}
+              </h5>
+              <div
+                style={{
+                  color:
+                    subscription.status === "alive" || subscription.status === "fixed_subscription_period_ended"
+                      ? undefined
+                      : "var(--red)",
+                }}
+              >
+                {subscription.is_installment_plan
+                  ? INSTALLMENT_PLAN_STATUS_LABELS[subscription.status]
+                  : MEMBERSHIP_STATUS_LABELS[subscription.status]}
               </div>
-            ) : (
-              `${formatDiscount(customer.discount, customer.price.currency_type)} off`
-            )}
-          </div>
-        ) : null}
-        {customer.upsell ? (
-          <div>
-            <h5>Upsell</h5>
-            {`${customer.upsell}${
-              customer.discount ? ` (${formatDiscount(customer.discount, customer.price.currency_type)} off)` : ""
-            }`}
-          </div>
-        ) : null}
-        {subscription?.status ? (
-          <div>
-            <h5>{subscription.is_installment_plan ? "Installment plan status" : "Membership status"}</h5>
-            <div
-              style={{
-                color:
-                  subscription.status === "alive" || subscription.status === "fixed_subscription_period_ended"
-                    ? undefined
-                    : "var(--red)",
-              }}
-            >
-              {subscription.is_installment_plan
-                ? INSTALLMENT_PLAN_STATUS_LABELS[subscription.status]
-                : MEMBERSHIP_STATUS_LABELS[subscription.status]}
-            </div>
-          </div>
-        ) : null}
-        {customer.referrer ? (
-          <div>
-            <h5>Referrer</h5>
-            {customer.referrer}
-          </div>
-        ) : null}
-        {customer.physical ? (
-          <>
-            <div>
-              <h5>SKU</h5>
-              {customer.physical.sku}
-            </div>
-            <div>
-              <h5>Order number</h5>
-              {customer.physical.order_number}
-            </div>
-          </>
-        ) : null}
-      </section>
+            </CardContent>
+          ) : null}
+          {customer.referrer ? (
+            <CardContent>
+              <h5 className="grow font-bold">Referrer</h5>
+              {customer.referrer}
+            </CardContent>
+          ) : null}
+          {customer.physical ? (
+            <>
+              <CardContent>
+                <h5 className="grow font-bold">SKU</h5>
+                {customer.physical.sku}
+              </CardContent>
+              <CardContent>
+                <h5 className="grow font-bold">Order number</h5>
+                {customer.physical.order_number}
+              </CardContent>
+            </>
+          ) : null}
+        </section>
+      </Card>
       {customer.utm_link ? <UtmLinkStack link={customer.utm_link} showHeader /> : null}
       {customer.review ? (
         <ReviewSection
@@ -1004,28 +1025,34 @@ const CustomerDrawer = ({
         />
       ) : null}
       {customer.custom_fields.length > 0 ? (
-        <section className="stack">
-          <header>
-            <h3>Information provided</h3>
-          </header>
-          {customer.custom_fields.map((field, idx) => {
-            const content = (
-              <section key={idx}>
-                <h5>{field.attribute}</h5>
-                {field.type === "text" ? (
-                  field.value
-                ) : (
-                  <div role="tree" style={{ marginTop: "var(--spacer-2)" }}>
-                    {field.files.map((file) => (
-                      <FileRow file={file} key={file.key} />
-                    ))}
-                  </div>
-                )}
-              </section>
-            );
-            return field.type === "file" ? <div key={idx}>{content}</div> : content;
-          })}
-        </section>
+        <Card asChild>
+          <section>
+            <CardContent asChild>
+              <header>
+                <h3 className="grow">Information provided</h3>
+              </header>
+            </CardContent>
+            {customer.custom_fields.map((field, idx) => {
+              const content = (
+                <CardContent asChild>
+                  <section key={idx}>
+                    <h5 className="grow font-bold">{field.attribute}</h5>
+                    {field.type === "text" ? (
+                      field.value
+                    ) : (
+                      <Rows role="list" className="mt-2">
+                        {field.files.map((file) => (
+                          <FileRow file={file} key={file.key} />
+                        ))}
+                      </Rows>
+                    )}
+                  </section>
+                </CardContent>
+              );
+              return field.type === "file" ? <div key={idx}>{content}</div> : content;
+            })}
+          </section>
+        </Card>
       ) : null}
       {customer.has_options && !isCoffee && customer.product.native_type !== "call" ? (
         <OptionSection
@@ -1038,25 +1065,33 @@ const CustomerDrawer = ({
         />
       ) : null}
       {customer.is_bundle_purchase ? (
-        <section className="stack">
-          <header>
-            <h3>Content</h3>
-          </header>
-          {productPurchases.length > 0 ? (
-            productPurchases.map((customer) => (
-              <section key={customer.id}>
-                <h5>{customer.product.name}</h5>
-                <Button onClick={() => setSelectedProductPurchaseId(customer.id)}>Manage</Button>
-              </section>
-            ))
-          ) : (
-            <section>
-              <div className="text-center">
-                <LoadingSpinner className="size-8" />
-              </div>
-            </section>
-          )}
-        </section>
+        <Card asChild>
+          <section>
+            <CardContent asChild>
+              <header>
+                <h3 className="grow">Content</h3>
+              </header>
+            </CardContent>
+            {productPurchases.length > 0 ? (
+              productPurchases.map((customer) => (
+                <CardContent asChild key={customer.id}>
+                  <section>
+                    <h5 className="grow font-bold">{customer.product.name}</h5>
+                    <Button onClick={() => setSelectedProductPurchaseId(customer.id)}>Manage</Button>
+                  </section>
+                </CardContent>
+              ))
+            ) : (
+              <CardContent asChild>
+                <section>
+                  <div className="grow text-center">
+                    <LoadingSpinner className="size-8" />
+                  </div>
+                </section>
+              </CardContent>
+            )}
+          </section>
+        </Card>
       ) : null}
       {license ? (
         <LicenseSection
@@ -1130,29 +1165,36 @@ const CustomerDrawer = ({
       ) : null}
       {customer.call ? <CallSection call={customer.call} onChange={(call) => onChange({ ...customer, call })} /> : null}
       {!showCharges && !customer.refunded && !customer.chargedback && customer.price.cents_refundable > 0 ? (
-        <section className="stack">
-          <header>
-            <h3>Refund</h3>
-          </header>
+        <Card asChild>
           <section>
-            <RefundForm
-              purchaseId={customer.id}
-              currencyType={customer.price.currency_type}
-              amountRefundable={customer.price.cents_refundable}
-              showRefundFeeNotice={showRefundFeeNotice}
-              paypalRefundExpired={customer.paypal_refund_expired}
-              modalTitle="Purchase refund"
-              modalText="Would you like to confirm this purchase refund?"
-              onChange={(amountRefundable) =>
-                onChange({
-                  price: { ...customer.price, cents_refundable: amountRefundable },
-                  refunded: amountRefundable === 0,
-                  partially_refunded: amountRefundable > 0 && amountRefundable < customer.price.cents_refundable,
-                })
-              }
-            />
+            <CardContent asChild>
+              <header>
+                <h3 className="grow">Refund</h3>
+              </header>
+            </CardContent>
+            <CardContent asChild>
+              <section>
+                <RefundForm
+                  purchaseId={customer.id}
+                  currencyType={customer.price.currency_type}
+                  amountRefundable={customer.price.cents_refundable}
+                  showRefundFeeNotice={showRefundFeeNotice}
+                  paypalRefundExpired={customer.paypal_refund_expired}
+                  modalTitle="Purchase refund"
+                  modalText="Would you like to confirm this purchase refund?"
+                  onChange={(amountRefundable) =>
+                    onChange({
+                      price: { ...customer.price, cents_refundable: amountRefundable },
+                      refunded: amountRefundable === 0,
+                      partially_refunded: amountRefundable > 0 && amountRefundable < customer.price.cents_refundable,
+                    })
+                  }
+                  className="grow basis-0"
+                />
+              </section>
+            </CardContent>
           </section>
-        </section>
+        </Card>
       ) : null}
       {subscription?.status === "alive" ? (
         <SubscriptionCancellationSection
@@ -1172,11 +1214,13 @@ const CustomerDrawer = ({
         />
       ) : null}
       {canPing && !subscription ? (
-        <section className="stack">
-          <div>
-            <PingButton purchaseId={customer.id} />
-          </div>
-        </section>
+        <Card asChild>
+          <section>
+            <CardContent>
+              <PingButton purchaseId={customer.id} className="grow basis-0" />
+            </CardContent>
+          </section>
+        </Card>
       ) : null}
       {customer.is_access_revoked !== null && !isCoffee && !commission ? (
         <AccessSection
@@ -1200,133 +1244,154 @@ const CustomerDrawer = ({
         <CommissionSection commission={commission} onChange={(commission) => onChange({ commission })} />
       ) : null}
       {missedPosts?.length !== 0 ? (
-        <section className="stack">
-          <header>
-            <h3>Send missed posts</h3>
-          </header>
-          {missedPosts ? (
-            <>
-              {missedPosts.slice(0, shownMissedPosts).map((post) => (
-                <section key={post.id}>
-                  <div>
-                    <h5>
-                      <a href={post.url} target="_blank" rel="noreferrer">
-                        {post.name}
-                      </a>
-                    </h5>
-                    <small>{`Originally sent on ${formatDateWithoutTime(new Date(post.published_at))}`}</small>
-                  </div>
-                  <Button
-                    color="primary"
-                    disabled={!!loadingId || sentEmailIds.current.has(post.id)}
-                    onClick={() => void onSend(post.id, "post")}
-                  >
-                    {sentEmailIds.current.has(post.id) ? "Sent" : loadingId === post.id ? "Sending...." : "Send"}
-                  </Button>
-                </section>
-              ))}
-              {shownMissedPosts < missedPosts.length ? (
+        <Card asChild>
+          <section>
+            <CardContent asChild>
+              <header>
+                <h3 className="grow">Send missed posts</h3>
+              </header>
+            </CardContent>
+            {missedPosts ? (
+              <>
+                {missedPosts.slice(0, shownMissedPosts).map((post) => (
+                  <CardContent asChild key={post.id}>
+                    <section>
+                      <div className="grow">
+                        <h5 className="font-bold">
+                          <a href={post.url} target="_blank" rel="noreferrer">
+                            {post.name}
+                          </a>
+                        </h5>
+                        <small>{`Originally sent on ${formatDateWithoutTime(new Date(post.published_at))}`}</small>
+                      </div>
+                      <Button
+                        color="primary"
+                        disabled={!!loadingId || sentEmailIds.current.has(post.id)}
+                        onClick={() => void onSend(post.id, "post")}
+                      >
+                        {sentEmailIds.current.has(post.id) ? "Sent" : loadingId === post.id ? "Sending...." : "Send"}
+                      </Button>
+                    </section>
+                  </CardContent>
+                ))}
+                {shownMissedPosts < missedPosts.length ? (
+                  <CardContent asChild>
+                    <section>
+                      <Button
+                        onClick={() => setShownMissedPosts((prevShownMissedPosts) => prevShownMissedPosts + PAGE_SIZE)}
+                        className="grow basis-0"
+                      >
+                        Show more
+                      </Button>
+                    </section>
+                  </CardContent>
+                ) : null}
+              </>
+            ) : (
+              <CardContent asChild>
                 <section>
-                  <Button
-                    onClick={() => setShownMissedPosts((prevShownMissedPosts) => prevShownMissedPosts + PAGE_SIZE)}
-                  >
-                    Show more
-                  </Button>
+                  <div className="grow text-center">
+                    <LoadingSpinner className="size-8" />
+                  </div>
                 </section>
-              ) : null}
-            </>
-          ) : (
-            <section>
-              <div className="text-center">
-                <LoadingSpinner className="size-8" />
-              </div>
-            </section>
-          )}
-        </section>
+              </CardContent>
+            )}
+          </section>
+        </Card>
       ) : null}
       {emails?.length !== 0 ? (
-        <section className="stack">
-          <header>
-            <h3>Emails received</h3>
-          </header>
-          {emails ? (
-            <>
-              {emails.slice(0, shownEmails).map((email) => (
-                <section key={email.id}>
-                  <div>
-                    <h5>
+        <Card asChild>
+          <section>
+            <CardContent asChild>
+              <header>
+                <h3 className="grow">Emails received</h3>
+              </header>
+            </CardContent>
+            {emails ? (
+              <>
+                {emails.slice(0, shownEmails).map((email) => (
+                  <CardContent asChild key={email.id}>
+                    <section>
+                      <div className="grow">
+                        <h5>
+                          {email.type === "receipt" ? (
+                            <a href={email.url} target="_blank" rel="noreferrer">
+                              {email.name}
+                            </a>
+                          ) : (
+                            email.name
+                          )}
+                        </h5>
+                        <small>{`${email.state} ${formatDateWithoutTime(new Date(email.state_at))}`}</small>
+                      </div>
                       {email.type === "receipt" ? (
-                        <a href={email.url} target="_blank" rel="noreferrer">
-                          {email.name}
-                        </a>
+                        <Button
+                          color="primary"
+                          onClick={() => void onSend(email.id, "receipt")}
+                          disabled={!!loadingId || sentEmailIds.current.has(email.id)}
+                        >
+                          {sentEmailIds.current.has(email.id)
+                            ? "Receipt resent"
+                            : loadingId === email.id
+                              ? "Resending receipt..."
+                              : "Resend receipt"}
+                        </Button>
                       ) : (
-                        email.name
+                        <Button
+                          color="primary"
+                          onClick={() => void onSend(email.id, "post")}
+                          disabled={!!loadingId || sentEmailIds.current.has(email.id)}
+                        >
+                          {sentEmailIds.current.has(email.id)
+                            ? "Sent"
+                            : loadingId === email.id
+                              ? "Sending..."
+                              : "Resend email"}
+                        </Button>
                       )}
-                    </h5>
-                    <small>{`${email.state} ${formatDateWithoutTime(new Date(email.state_at))}`}</small>
-                  </div>
-                  {email.type === "receipt" ? (
-                    <Button
-                      color="primary"
-                      onClick={() => void onSend(email.id, "receipt")}
-                      disabled={!!loadingId || sentEmailIds.current.has(email.id)}
-                    >
-                      {sentEmailIds.current.has(email.id)
-                        ? "Receipt resent"
-                        : loadingId === email.id
-                          ? "Resending receipt..."
-                          : "Resend receipt"}
-                    </Button>
-                  ) : (
-                    <Button
-                      color="primary"
-                      onClick={() => void onSend(email.id, "post")}
-                      disabled={!!loadingId || sentEmailIds.current.has(email.id)}
-                    >
-                      {sentEmailIds.current.has(email.id)
-                        ? "Sent"
-                        : loadingId === email.id
-                          ? "Sending..."
-                          : "Resend email"}
-                    </Button>
-                  )}
-                </section>
-              ))}
-              {shownMissedPosts < emails.length ? (
+                    </section>
+                  </CardContent>
+                ))}
+                {shownMissedPosts < emails.length ? (
+                  <CardContent asChild>
+                    <section>
+                      <Button
+                        onClick={() => setShownEmails((prevShownEmails) => prevShownEmails + PAGE_SIZE)}
+                        className="grow basis-0"
+                      >
+                        Load more
+                      </Button>
+                    </section>
+                  </CardContent>
+                ) : null}
+              </>
+            ) : (
+              <CardContent>
                 <section>
-                  <Button onClick={() => setShownEmails((prevShownEmails) => prevShownEmails + PAGE_SIZE)}>
-                    Load more
-                  </Button>
+                  <div className="grow text-center">
+                    <LoadingSpinner className="size-8" />
+                  </div>
                 </section>
-              ) : null}
-            </>
-          ) : (
-            <section>
-              <div className="text-center">
-                <LoadingSpinner className="size-8" />
-              </div>
-            </section>
-          )}
-        </section>
+              </CardContent>
+            )}
+          </section>
+        </Card>
       ) : null}
-    </aside>
+    </Sheet>
   );
 };
 
 const CommissionStatusPill = ({ commission }: { commission: Commission }) => (
-  <span
-    className={cx("pill small", {
-      primary: commission.status === "completed",
-      danger: commission.status === "cancelled",
-    })}
-    style={{ width: "fit-content" }}
+  <Pill
+    size="small"
+    color={commission.status === "completed" ? "primary" : commission.status === "cancelled" ? "danger" : undefined}
   >
     {commission.status === "in_progress"
       ? "In progress"
       : commission.status === "completed"
         ? "Completed"
         : "Cancelled"}
-  </span>
+  </Pill>
 );
 
 const AddressSection = ({
@@ -1356,127 +1421,131 @@ const AddressSection = ({
   };
 
   return (
-    <section className="stack">
-      <header>
-        <h3>Shipping address</h3>
-      </header>
-      {isEditing ? (
-        <div>
-          <div className="paragraphs">
-            <fieldset>
-              <legend>
-                <label htmlFor={`${uid}-full-name`}>Full name</label>
-              </legend>
-              <input
-                id={`${uid}-full-name`}
-                type="text"
-                placeholder="Full name"
-                value={address.full_name}
-                onChange={(evt) => updateShipping({ full_name: evt.target.value })}
-              />
-            </fieldset>
-            <fieldset>
-              <legend>
-                <label htmlFor={`${uid}-street-address`}>Street address</label>
-              </legend>
-              <input
-                id={`${uid}-street-address`}
-                type="text"
-                placeholder="Street address"
-                value={address.street_address}
-                onChange={(evt) => updateShipping({ street_address: evt.target.value })}
-              />
-            </fieldset>
-            <div style={{ display: "grid", gridAutoFlow: "column", gridAutoColumns: "1fr", gap: "var(--spacer-2)" }}>
+    <Card asChild>
+      <section>
+        <CardContent asChild>
+          <header>
+            <h3 className="grow">Shipping address</h3>
+          </header>
+        </CardContent>
+        {isEditing ? (
+          <CardContent>
+            <div className="flex grow flex-col gap-4">
               <fieldset>
                 <legend>
-                  <label htmlFor={`${uid}-city`}>City</label>
+                  <label htmlFor={`${uid}-full-name`}>Full name</label>
                 </legend>
                 <input
-                  id={`${uid}-city`}
+                  id={`${uid}-full-name`}
                   type="text"
-                  placeholder="City"
-                  value={address.city}
-                  onChange={(evt) => updateShipping({ city: evt.target.value })}
+                  placeholder="Full name"
+                  value={address.full_name}
+                  onChange={(evt) => updateShipping({ full_name: evt.target.value })}
                 />
               </fieldset>
               <fieldset>
                 <legend>
-                  <label htmlFor={`${uid}-state`}>State</label>
+                  <label htmlFor={`${uid}-street-address`}>Street address</label>
                 </legend>
                 <input
-                  id={`${uid}-state`}
+                  id={`${uid}-street-address`}
                   type="text"
-                  placeholder="State"
-                  value={address.state}
-                  onChange={(evt) => updateShipping({ state: evt.target.value })}
+                  placeholder="Street address"
+                  value={address.street_address}
+                  onChange={(evt) => updateShipping({ street_address: evt.target.value })}
                 />
               </fieldset>
+              <div style={{ display: "grid", gridAutoFlow: "column", gridAutoColumns: "1fr", gap: "var(--spacer-2)" }}>
+                <fieldset>
+                  <legend>
+                    <label htmlFor={`${uid}-city`}>City</label>
+                  </legend>
+                  <input
+                    id={`${uid}-city`}
+                    type="text"
+                    placeholder="City"
+                    value={address.city}
+                    onChange={(evt) => updateShipping({ city: evt.target.value })}
+                  />
+                </fieldset>
+                <fieldset>
+                  <legend>
+                    <label htmlFor={`${uid}-state`}>State</label>
+                  </legend>
+                  <input
+                    id={`${uid}-state`}
+                    type="text"
+                    placeholder="State"
+                    value={address.state}
+                    onChange={(evt) => updateShipping({ state: evt.target.value })}
+                  />
+                </fieldset>
+                <fieldset>
+                  <legend>
+                    <label htmlFor={`${uid}-zip-code`}>ZIP code</label>
+                  </legend>
+                  <input
+                    id={`${uid}-zip-code`}
+                    type="text"
+                    placeholder="ZIP code"
+                    value={address.zip_code}
+                    onChange={(evt) => updateShipping({ zip_code: evt.target.value })}
+                  />
+                </fieldset>
+              </div>
               <fieldset>
-                <legend>
-                  <label htmlFor={`${uid}-zip-code`}>ZIP code</label>
-                </legend>
-                <input
-                  id={`${uid}-zip-code`}
-                  type="text"
-                  placeholder="ZIP code"
-                  value={address.zip_code}
-                  onChange={(evt) => updateShipping({ zip_code: evt.target.value })}
-                />
+                <label htmlFor={`${uid}-country`}>Country</label>
+                <select
+                  id={`${uid}-country`}
+                  value={address.country}
+                  onChange={(evt) => updateShipping({ country: evt.target.value })}
+                >
+                  {countries.map((country) => (
+                    <option value={country} key={country}>
+                      {country}
+                    </option>
+                  ))}
+                </select>
               </fieldset>
-            </div>
-            <fieldset>
-              <label htmlFor={`${uid}-country`}>Country</label>
-              <select
-                id={`${uid}-country`}
-                value={address.country}
-                onChange={(evt) => updateShipping({ country: evt.target.value })}
+              <div
+                style={{
+                  width: "100%",
+                  display: "grid",
+                  gap: "var(--spacer-2)",
+                  gridTemplateColumns: "repeat(auto-fit, minmax(var(--dynamic-grid), 1fr))",
+                }}
               >
-                {countries.map((country) => (
-                  <option value={country} key={country}>
-                    {country}
-                  </option>
-                ))}
-              </select>
-            </fieldset>
-            <div
-              style={{
-                width: "100%",
-                display: "grid",
-                gap: "var(--spacer-2)",
-                gridTemplateColumns: "repeat(auto-fit, minmax(var(--dynamic-grid), 1fr))",
-              }}
-            >
-              <Button onClick={() => setIsEditing(false)} disabled={isLoading}>
-                Cancel
-              </Button>
-              <Button color="primary" onClick={() => void handleSave()} disabled={isLoading}>
-                Save
-              </Button>
+                <Button onClick={() => setIsEditing(false)} disabled={isLoading}>
+                  Cancel
+                </Button>
+                <Button color="primary" onClick={() => void handleSave()} disabled={isLoading}>
+                  Save
+                </Button>
+              </div>
             </div>
-          </div>
-        </div>
-      ) : (
-        <div>
-          <p>
-            {currentAddress.full_name}
-            <br />
-            {currentAddress.street_address}
-            <br />
-            {`${currentAddress.city}, ${currentAddress.state} ${currentAddress.zip_code}`}
-            <br />
-            {currentAddress.country}
-          </p>
-          <button className="underline" onClick={() => setIsEditing(true)}>
-            Edit
-          </button>
-        </div>
-      )}
-      <div>
-        <h5>Shipping charged</h5>
-        {price}
-      </div>
-    </section>
+          </CardContent>
+        ) : (
+          <CardContent>
+            <p className="grow">
+              {currentAddress.full_name}
+              <br />
+              {currentAddress.street_address}
+              <br />
+              {`${currentAddress.city}, ${currentAddress.state} ${currentAddress.zip_code}`}
+              <br />
+              {currentAddress.country}
+            </p>
+            <button className="cursor-pointer underline all-unset" onClick={() => setIsEditing(true)}>
+              Edit
+            </button>
+          </CardContent>
+        )}
+        <CardContent>
+          <h5 className="grow font-bold">Shipping charged</h5>
+          {price}
+        </CardContent>
+      </section>
+    </Card>
   );
 };
 
@@ -1497,38 +1566,42 @@ const TrackingSection = ({
   };
 
   return (
-    <section className="stack">
-      <h3>Tracking information</h3>
-      {tracking.shipped ? (
-        tracking.url ? (
-          <div>
-            <NavigationButton color="primary" href={tracking.url} target="_blank">
-              Track shipment
-            </NavigationButton>
-          </div>
+    <Card asChild>
+      <section>
+        <CardContent asChild>
+          <h3>Tracking information</h3>
+        </CardContent>
+        {tracking.shipped ? (
+          tracking.url ? (
+            <CardContent>
+              <NavigationButton color="primary" href={tracking.url} target="_blank" className="grow">
+                Track shipment
+              </NavigationButton>
+            </CardContent>
+          ) : (
+            <CardContent>
+              <Alert role="status" variant="success" className="grow">
+                Shipped
+              </Alert>
+            </CardContent>
+          )
         ) : (
-          <div>
-            <div role="status" className="success">
-              Shipped
-            </div>
-          </div>
-        )
-      ) : (
-        <div>
-          <fieldset>
-            <input
-              type="text"
-              placeholder="Tracking URL (optional)"
-              value={url}
-              onChange={(evt) => setUrl(evt.target.value)}
-            />
-            <Button color="primary" disabled={isLoading} onClick={() => void handleSave()}>
-              Mark as shipped
-            </Button>
-          </fieldset>
-        </div>
-      )}
-    </section>
+          <CardContent>
+            <fieldset className="grow basis-0">
+              <input
+                type="text"
+                placeholder="Tracking URL (optional)"
+                value={url}
+                onChange={(evt) => setUrl(evt.target.value)}
+              />
+              <Button color="primary" disabled={isLoading} onClick={() => void handleSave()}>
+                Mark as shipped
+              </Button>
+            </fieldset>
+          </CardContent>
+        )}
+      </section>
+    </Card>
   );
 };
 
@@ -1567,73 +1640,92 @@ const EmailSection = ({
   };
 
   return (
-    <section className="stack">
-      <header>
-        <h3>{label}</h3>
-      </header>
-      {isEditing ? (
-        <fieldset>
-          <input
-            type="text"
-            value={email}
-            onChange={(evt) => setEmail(evt.target.value)}
-            disabled={isLoading}
-            placeholder={label}
-          />
-          <div
-            style={{
-              width: "100%",
-              display: "grid",
-              gap: "var(--spacer-2)",
-              gridTemplateColumns: "repeat(auto-fit, minmax(var(--dynamic-grid), 1fr))",
-            }}
-          >
-            <Button onClick={() => setIsEditing(false)} disabled={isLoading}>
-              Cancel
-            </Button>
-            <Button color="primary" onClick={() => void handleSave()} disabled={isLoading}>
-              Save
-            </Button>
-          </div>
-        </fieldset>
-      ) : (
-        <section>
-          <h5>{currentEmail}</h5>
-          {onSave ? (
-            <button className="underline" onClick={() => setIsEditing(true)}>
-              Edit
-            </button>
-          ) : (
-            <small>
-              You cannot change the email of this purchase, because it was made by an existing user. Please ask them to
-              go to gumroad.com/settings to update their email.
-            </small>
-          )}
-        </section>
-      )}
-      {onChangeCanContact ? (
-        <section>
-          <fieldset role="group">
-            <label>
-              Receives emails
+    <Card asChild>
+      <section>
+        <CardContent asChild>
+          <header>
+            <h3 className="grow">{label}</h3>
+          </header>
+        </CardContent>
+        {isEditing ? (
+          <CardContent asChild>
+            <fieldset>
               <input
-                type="checkbox"
-                checked={canContact}
-                onChange={(evt) => {
-                  setIsLoading(true);
-                  void onChangeCanContact(evt.target.checked).then(() => setIsLoading(false));
-                }}
+                type="text"
+                value={email}
+                onChange={(evt) => setEmail(evt.target.value)}
                 disabled={isLoading}
+                placeholder={label}
+                className="grow"
               />
-            </label>
-          </fieldset>
-        </section>
-      ) : null}
-    </section>
+              <div
+                style={{
+                  width: "100%",
+                  display: "grid",
+                  gap: "var(--spacer-2)",
+                  gridTemplateColumns: "repeat(auto-fit, minmax(var(--dynamic-grid), 1fr))",
+                }}
+              >
+                <Button onClick={() => setIsEditing(false)} disabled={isLoading}>
+                  Cancel
+                </Button>
+                <Button color="primary" onClick={() => void handleSave()} disabled={isLoading}>
+                  Save
+                </Button>
+              </div>
+            </fieldset>
+          </CardContent>
+        ) : (
+          <CardContent asChild>
+            <section>
+              <h5 className="grow font-bold">{currentEmail}</h5>
+              {onSave ? (
+                <button className="cursor-pointer underline all-unset" onClick={() => setIsEditing(true)}>
+                  Edit
+                </button>
+              ) : (
+                <small>
+                  You cannot change the email of this purchase, because it was made by an existing user. Please ask them
+                  to go to gumroad.com/settings to update their email.
+                </small>
+              )}
+            </section>
+          </CardContent>
+        )}
+        {onChangeCanContact ? (
+          <CardContent asChild>
+            <section>
+              <fieldset role="group" className="grow basis-0">
+                <label>
+                  Receives emails
+                  <input
+                    type="checkbox"
+                    checked={canContact}
+                    onChange={(evt) => {
+                      setIsLoading(true);
+                      void onChangeCanContact(evt.target.checked).then(() => setIsLoading(false));
+                    }}
+                    disabled={isLoading}
+                  />
+                </label>
+              </fieldset>
+            </section>
+          </CardContent>
+        ) : null}
+      </section>
+    </Card>
   );
 };
 
-const ReviewVideosSubsections = ({ review, onChange }: { review: Review; onChange: (review: Review) => void }) => {
+const ReviewVideosSubsections = ({
+  review,
+  onChange,
+  className,
+}: {
+  review: Review;
+  className?: string;
+  onChange: (review: Review) => void;
+}) => {
   const [loading, setLoading] = React.useState(false);
   const [approvedVideoRemovalModalOpen, setApprovedVideoRemovalModalOpen] = React.useState(false);
 
@@ -1672,7 +1764,7 @@ const ReviewVideosSubsections = ({ review, onChange }: { review: Review; onChang
   };
 
   const approvedVideoSubsection = approvedVideo ? (
-    <section>
+    <section className={className}>
       <div className="flex flex-col gap-4">
         <h5>Approved video</h5>
         <ReviewVideoPlayer videoId={approvedVideo.id} thumbnail={approvedVideo.thumbnail_url} />
@@ -1743,33 +1835,47 @@ const ReviewSection = ({
   purchaseId: string;
   onChange: (review: Review) => void;
 }) => (
-  <section className="stack">
-    <h3>Review</h3>
+  <Card asChild>
     <section>
-      <h5>Rating</h5>
-      <div aria-label={`${review.rating} ${review.rating === 1 ? "star" : "stars"}`}>
-        <RatingStars rating={review.rating} />
-      </div>
+      <CardContent asChild>
+        <h3>Review</h3>
+      </CardContent>
+      <CardContent asChild>
+        <section>
+          <h5 className="grow font-bold">Rating</h5>
+          <div aria-label={`${review.rating} ${review.rating === 1 ? "star" : "stars"}`}>
+            <RatingStars rating={review.rating} />
+          </div>
+        </section>
+      </CardContent>
+      {review.message ? (
+        <CardContent asChild>
+          <section>
+            <h5 className="grow font-bold">Message</h5>
+            {review.message}
+          </section>
+        </CardContent>
+      ) : null}
+      <CardContent asChild>
+        <ReviewVideosSubsections review={review} onChange={onChange} className="grow" />
+      </CardContent>
+      {review.response ? (
+        <CardContent asChild>
+          <section>
+            <h5 className="grow font-bold">Response</h5>
+            {review.response.message}
+          </section>
+        </CardContent>
+      ) : null}
+      <CardContent asChild>
+        <ReviewResponseForm
+          message={review.response?.message}
+          purchaseId={purchaseId}
+          onChange={(response) => onChange({ ...review, response })}
+        />
+      </CardContent>
     </section>
-    {review.message ? (
-      <section>
-        <h5>Message</h5>
-        {review.message}
-      </section>
-    ) : null}
-    <ReviewVideosSubsections review={review} onChange={onChange} />
-    {review.response ? (
-      <section>
-        <h5>Response</h5>
-        {review.response.message}
-      </section>
-    ) : null}
-    <ReviewResponseForm
-      message={review.response?.message}
-      purchaseId={purchaseId}
-      onChange={(response) => onChange({ ...review, response })}
-    />
-  </section>
+  </Card>
 );
 
 const OptionSection = ({
@@ -1824,58 +1930,64 @@ const OptionSection = ({
   const title = isSubscription ? "Tier" : "Version";
 
   return (
-    <section className="stack">
-      <header>
-        <h3>{title}</h3>
-      </header>
+    <Card asChild>
       <section>
-        {options.length > 0 ? (
-          isEditing ? (
-            <fieldset className={cx({ danger: selectedOptionId.error })}>
-              <select
-                value={selectedOptionId.value ?? "None selected"}
-                name={title}
-                onChange={(evt) => setSelectedOptionId({ value: evt.target.value })}
-                aria-invalid={selectedOptionId.error}
-              >
-                {!selectedOptionId.value ? <option>None selected</option> : null}
-                {options.map((option) => (
-                  <option value={option.id} key={option.id}>
-                    {option.name}
-                  </option>
-                ))}
-              </select>
-              <div
-                style={{
-                  width: "100%",
-                  display: "grid",
-                  gap: "var(--spacer-2)",
-                  gridTemplateColumns: "repeat(auto-fit, minmax(var(--dynamic-grid), 1fr))",
-                }}
-              >
-                <Button onClick={() => setIsEditing(false)} disabled={isLoading}>
-                  Cancel
-                </Button>
-                <Button color="primary" onClick={() => void handleSave()} disabled={isLoading}>
-                  Save
-                </Button>
+        <CardContent asChild>
+          <header>
+            <h3 className="grow">{title}</h3>
+          </header>
+        </CardContent>
+        <CardContent asChild>
+          <section>
+            {options.length > 0 ? (
+              isEditing ? (
+                <fieldset className={classNames({ danger: selectedOptionId.error }, "grow basis-0")}>
+                  <select
+                    value={selectedOptionId.value ?? "None selected"}
+                    name={title}
+                    onChange={(evt) => setSelectedOptionId({ value: evt.target.value })}
+                    aria-invalid={selectedOptionId.error}
+                  >
+                    {!selectedOptionId.value ? <option>None selected</option> : null}
+                    {options.map((option) => (
+                      <option value={option.id} key={option.id}>
+                        {option.name}
+                      </option>
+                    ))}
+                  </select>
+                  <div
+                    style={{
+                      width: "100%",
+                      display: "grid",
+                      gap: "var(--spacer-2)",
+                      gridTemplateColumns: "repeat(auto-fit, minmax(var(--dynamic-grid), 1fr))",
+                    }}
+                  >
+                    <Button onClick={() => setIsEditing(false)} disabled={isLoading}>
+                      Cancel
+                    </Button>
+                    <Button color="primary" onClick={() => void handleSave()} disabled={isLoading}>
+                      Save
+                    </Button>
+                  </div>
+                </fieldset>
+              ) : (
+                <>
+                  <h5>{option?.name ?? "None selected"}</h5>
+                  <button className="cursor-pointer underline all-unset" onClick={() => setIsEditing(true)}>
+                    Edit
+                  </button>
+                </>
+              )
+            ) : (
+              <div className="grow text-center">
+                <LoadingSpinner className="size-8" />
               </div>
-            </fieldset>
-          ) : (
-            <>
-              <h5>{option?.name ?? "None selected"}</h5>
-              <button className="underline" onClick={() => setIsEditing(true)}>
-                Edit
-              </button>
-            </>
-          )
-        ) : (
-          <div className="text-center">
-            <LoadingSpinner className="size-8" />
-          </div>
-        )}
+            )}
+          </section>
+        </CardContent>
       </section>
-    </section>
+    </Card>
   );
 };
 
@@ -1883,56 +1995,58 @@ const UtmLinkStack = ({ link, showHeader }: { link: Customer["utm_link"]; showHe
   if (!link) return null;
 
   return (
-    <section className="stack">
-      {showHeader ? (
-        <>
-          <section>
-            <h3>UTM link</h3>
-          </section>
-          <div>
-            <small role="status" className="info">
-              <span>
+    <Card asChild>
+      <section>
+        {showHeader ? (
+          <>
+            <CardContent asChild>
+              <section>
+                <h3 className="grow">UTM link</h3>
+              </section>
+            </CardContent>
+            <CardContent>
+              <Alert className="grow text-sm" role="status" variant="info">
                 This sale was driven by a{" "}
                 <a href={link.utm_url} target="_blank" rel="noreferrer">
                   UTM link
                 </a>
                 .
-              </span>
-            </small>
-          </div>
-        </>
-      ) : null}
-      <div>
-        <h5>Title</h5>
-        <a href={Routes.utm_links_dashboard_path({ query: link.title })} target="_blank" rel="noreferrer">
-          {link.title}
-        </a>
-      </div>
-      <div>
-        <h5>Source</h5>
-        {link.source}
-      </div>
-      <div>
-        <h5>Medium</h5>
-        {link.medium}
-      </div>
-      <div>
-        <h5>Campaign</h5>
-        {link.campaign}
-      </div>
-      {link.term ? (
-        <div>
-          <h5>Term</h5>
-          {link.term}
-        </div>
-      ) : null}
-      {link.content ? (
-        <div>
-          <h5>Content</h5>
-          {link.content}
-        </div>
-      ) : null}
-    </section>
+              </Alert>
+            </CardContent>
+          </>
+        ) : null}
+        <CardContent>
+          <h5 className="grow font-bold">Title</h5>
+          <a href={Routes.dashboard_utm_links_path({ query: link.title })} target="_blank" rel="noreferrer">
+            {link.title}
+          </a>
+        </CardContent>
+        <CardContent>
+          <h5 className="grow font-bold">Source</h5>
+          {link.source}
+        </CardContent>
+        <CardContent>
+          <h5 className="grow font-bold">Medium</h5>
+          {link.medium}
+        </CardContent>
+        <CardContent>
+          <h5 className="grow font-bold">Campaign</h5>
+          {link.campaign}
+        </CardContent>
+        {link.term ? (
+          <CardContent>
+            <h5 className="grow font-bold">Term</h5>
+            {link.term}
+          </CardContent>
+        ) : null}
+        {link.content ? (
+          <CardContent>
+            <h5 className="grow font-bold">Content</h5>
+            {link.content}
+          </CardContent>
+        ) : null}
+      </section>
+    </Card>
   );
 };
 
@@ -1946,27 +2060,31 @@ const LicenseSection = ({ license, onSave }: { license: License; onSave: (enable
   };
 
   return (
-    <section className="stack">
-      <header>
-        <h3>License key</h3>
-      </header>
-      <div>
-        <pre>
-          <code>{license.key}</code>
-        </pre>
-      </div>
-      <div>
-        {license.enabled ? (
-          <Button color="danger" disabled={isLoading} onClick={() => void handleSave(false)}>
-            Disable
-          </Button>
-        ) : (
-          <Button disabled={isLoading} onClick={() => void handleSave(true)}>
-            Enable
-          </Button>
-        )}
-      </div>
-    </section>
+    <Card asChild>
+      <section>
+        <CardContent asChild>
+          <header>
+            <h3 className="grow">License key</h3>
+          </header>
+        </CardContent>
+        <CardContent>
+          <pre className="grow">
+            <code>{license.key}</code>
+          </pre>
+        </CardContent>
+        <CardContent>
+          {license.enabled ? (
+            <Button color="danger" disabled={isLoading} onClick={() => void handleSave(false)} className="grow basis-0">
+              Disable
+            </Button>
+          ) : (
+            <Button disabled={isLoading} onClick={() => void handleSave(true)} className="grow basis-0">
+              Enable
+            </Button>
+          )}
+        </CardContent>
+      </section>
+    </Card>
   );
 };
 
@@ -1983,40 +2101,48 @@ const SeatSection = ({ seats: currentSeats, onSave }: { seats: number; onSave: (
   };
 
   return (
-    <section className="stack">
-      <header>
-        <h3>Seats</h3>
-      </header>
-      {isEditing ? (
-        <fieldset>
-          <NumberInput value={seats} onChange={(seats) => setSeats(seats ?? 0)}>
-            {(props) => <input type="number" {...props} min={1} aria-label="Seats" />}
-          </NumberInput>
-          <div
-            style={{
-              width: "100%",
-              display: "grid",
-              gap: "var(--spacer-2)",
-              gridTemplateColumns: "repeat(auto-fit, minmax(var(--dynamic-grid), 1fr))",
-            }}
-          >
-            <Button onClick={() => setIsEditing(false)} disabled={isLoading}>
-              Cancel
-            </Button>
-            <Button color="primary" onClick={() => void handleSave()} disabled={isLoading}>
-              Save
-            </Button>
-          </div>
-        </fieldset>
-      ) : (
-        <section>
-          <h5>{seats}</h5>
-          <button className="underline" onClick={() => setIsEditing(true)}>
-            Edit
-          </button>
-        </section>
-      )}
-    </section>
+    <Card asChild>
+      <section>
+        <CardContent asChild>
+          <header>
+            <h3 className="grow">Seats</h3>
+          </header>
+        </CardContent>
+        {isEditing ? (
+          <CardContent asChild>
+            <fieldset>
+              <NumberInput value={seats} onChange={(seats) => setSeats(seats ?? 0)}>
+                {(props) => <input type="number" {...props} min={1} aria-label="Seats" className="grow" />}
+              </NumberInput>
+              <div
+                style={{
+                  width: "100%",
+                  display: "grid",
+                  gap: "var(--spacer-2)",
+                  gridTemplateColumns: "repeat(auto-fit, minmax(var(--dynamic-grid), 1fr))",
+                }}
+              >
+                <Button onClick={() => setIsEditing(false)} disabled={isLoading}>
+                  Cancel
+                </Button>
+                <Button color="primary" onClick={() => void handleSave()} disabled={isLoading}>
+                  Save
+                </Button>
+              </div>
+            </fieldset>
+          </CardContent>
+        ) : (
+          <CardContent asChild>
+            <section>
+              <h5 className="grow font-bold">{seats}</h5>
+              <button className="cursor-pointer underline all-unset" onClick={() => setIsEditing(true)}>
+                Edit
+              </button>
+            </section>
+          </CardContent>
+        )}
+      </section>
+    </Card>
   );
 };
 
@@ -2030,32 +2156,34 @@ const SubscriptionCancellationSection = ({
   const [open, setOpen] = React.useState(false);
   const constructor = isInstallmentPlan ? "installment plan" : "subscription";
   return (
-    <section className="stack">
-      <div>
-        <Button color="danger" onClick={() => setOpen(true)}>
-          Cancel {constructor}
-        </Button>
-        <Modal
-          open={open}
-          title={`Cancel ${constructor}`}
-          onClose={() => setOpen(false)}
-          footer={
-            <>
-              <Button onClick={() => setOpen(false)}>Cancel</Button>
-              <Button color="accent" onClick={onCancel}>
-                Cancel {constructor}
-              </Button>
-            </>
-          }
-        >
-          Would you like to cancel this {constructor}?
-        </Modal>
-      </div>
-    </section>
+    <Card asChild>
+      <section>
+        <CardContent>
+          <Button color="danger" onClick={() => setOpen(true)} className="grow basis-0">
+            Cancel {constructor}
+          </Button>
+          <Modal
+            open={open}
+            title={`Cancel ${constructor}`}
+            onClose={() => setOpen(false)}
+            footer={
+              <>
+                <Button onClick={() => setOpen(false)}>Cancel</Button>
+                <Button color="accent" onClick={onCancel}>
+                  Cancel {constructor}
+                </Button>
+              </>
+            }
+          >
+            Would you like to cancel this {constructor}?
+          </Modal>
+        </CardContent>
+      </section>
+    </Card>
   );
 };
 
-const PingButton = ({ purchaseId }: { purchaseId: string }) => {
+const PingButton = ({ purchaseId, className }: { purchaseId: string; className?: string }) => {
   const [isLoading, setIsLoading] = React.useState(false);
 
   const handleClick = async () => {
@@ -2072,7 +2200,7 @@ const PingButton = ({ purchaseId }: { purchaseId: string }) => {
   };
 
   return (
-    <Button color="primary" disabled={isLoading} onClick={() => void handleClick()}>
+    <Button color="primary" disabled={isLoading} onClick={() => void handleClick()} className={className}>
       {isLoading ? "Resending ping..." : "Resend ping"}
     </Button>
   );
@@ -2109,19 +2237,26 @@ const AccessSection = ({
   };
 
   return (
-    <section className="stack">
-      <div>
-        {isAccessRevoked ? (
-          <Button disabled={isLoading} onClick={() => void handleClick(false)}>
-            Re-enable access
-          </Button>
-        ) : (
-          <Button color="primary" disabled={isLoading} onClick={() => void handleClick(true)}>
-            Revoke access
-          </Button>
-        )}
-      </div>
-    </section>
+    <Card asChild>
+      <section>
+        <CardContent>
+          {isAccessRevoked ? (
+            <Button disabled={isLoading} onClick={() => void handleClick(false)} className="grow basis-0">
+              Re-enable access
+            </Button>
+          ) : (
+            <Button
+              color="primary"
+              disabled={isLoading}
+              onClick={() => void handleClick(true)}
+              className="grow basis-0"
+            >
+              Revoke access
+            </Button>
+          )}
+        </CardContent>
+      </section>
+    </Card>
   );
 };
 
@@ -2135,6 +2270,7 @@ const RefundForm = ({
   modalText,
   onChange,
   onClose,
+  className,
 }: {
   purchaseId: string;
   currencyType: CurrencyCode;
@@ -2145,6 +2281,7 @@ const RefundForm = ({
   modalText: string;
   onChange: (amountRefundable: number) => void;
   onClose?: () => void;
+  className?: string;
 }) => {
   const [isLoading, setIsLoading] = React.useState(false);
   const [isModalShowing, setIsModalShowing] = React.useState(false);
@@ -2183,7 +2320,7 @@ const RefundForm = ({
 
   return (
     <>
-      <fieldset className={cx({ danger: refundAmountCents.error })}>
+      <fieldset className={classNames({ danger: refundAmountCents.error }, className)}>
         <PriceInput
           cents={refundAmountCents.value}
           onChange={(value) => setRefundAmountCents({ value })}
@@ -2213,14 +2350,12 @@ const RefundForm = ({
           )}
         </div>
         {showRefundFeeNotice ? (
-          <div role="status" className="info">
-            <p>
-              Going forward, Gumroad does not return any fees when a payment is refunded.{" "}
-              <a href="/help/article/47-how-to-refund-a-customer" target="_blank" rel="noreferrer">
-                Learn more
-              </a>
-            </p>
-          </div>
+          <Alert role="status" variant="info">
+            Going forward, Gumroad does not return any fees when a payment is refunded.{" "}
+            <a href="/help/article/47-how-to-refund-a-customer" target="_blank" rel="noreferrer">
+              Learn more
+            </a>
+          </Alert>
         ) : null}
       </fieldset>
       <div style={{ display: "contents" }}>
@@ -2287,19 +2422,19 @@ const ChargeRow = ({
             <Icon name="arrow-up-right-square" />
           </a>
           {purchase.partially_refunded ? (
-            <span className="pill small">Partial refund</span>
+            <Pill size="small">Partial refund</Pill>
           ) : purchase.refunded ? (
-            <span className="pill small">Refunded</span>
+            <Pill size="small">Refunded</Pill>
           ) : null}
           {purchase.is_upgrade_purchase ? (
             <WithTooltip tip="This is an upgrade charge, generated when the subscriber upgraded to a more expensive plan.">
-              <span className="pill small">Upgrade</span>
+              <Pill size="small">Upgrade</Pill>
             </WithTooltip>
           ) : null}
-          {purchase.chargedback ? <span className="pill small">Chargedback</span> : null}
+          {purchase.chargedback ? <Pill size="small">Chargedback</Pill> : null}
         </section>
         {!purchase.refunded && !purchase.chargedback && purchase.amount_refundable > 0 ? (
-          <button className="underline" onClick={() => setIsRefunding((prev) => !prev)}>
+          <button className="cursor-pointer underline all-unset" onClick={() => setIsRefunding((prev) => !prev)}>
             Refund Options
           </button>
         ) : null}
@@ -2350,42 +2485,51 @@ const ChargesSection = ({
     onChange(charges.map((charge) => (charge.id === id ? { ...charge, ...update } : charge)));
 
   return (
-    <section className="stack">
-      <header>
-        <h3>Charges</h3>
-      </header>
-      {loading ? (
-        <section>
-          <div className="text-center">
-            <LoadingSpinner className="size-8" />
-          </div>
-        </section>
-      ) : charges.length > 0 ? (
-        <>
-          {remainingCharges !== null ? (
+    <Card asChild>
+      <section>
+        <CardContent asChild>
+          <header>
+            <h3 className="grow">Charges</h3>
+          </header>
+        </CardContent>
+        {loading ? (
+          <CardContent asChild>
             <section>
-              <div role="status" className="info">
-                {`${remainingCharges} ${remainingCharges > 1 ? "charges" : "charge"} remaining`}
+              <div className="grow text-center">
+                <LoadingSpinner className="size-8" />
               </div>
             </section>
-          ) : null}
-          {charges.map((charge) => (
-            <ChargeRow
-              key={charge.id}
-              purchase={charge}
-              customerEmail={customerEmail}
-              onChange={(update) => updateCharge(charge.id, update)}
-              showRefundFeeNotice={showRefundFeeNotice}
-              canPing={canPing}
-            />
-          ))}
-        </>
-      ) : (
-        <section>
-          <div>No charges yet</div>
-        </section>
-      )}
-    </section>
+          </CardContent>
+        ) : charges.length > 0 ? (
+          <>
+            {remainingCharges !== null ? (
+              <CardContent>
+                <section>
+                  <Alert role="status" variant="info" className="grow">
+                    {`${remainingCharges} ${remainingCharges > 1 ? "charges" : "charge"} remaining`}
+                  </Alert>
+                </section>
+              </CardContent>
+            ) : null}
+            {charges.map((charge) => (
+              <CardContent asChild key={charge.id}>
+                <ChargeRow
+                  purchase={charge}
+                  customerEmail={customerEmail}
+                  onChange={(update) => updateCharge(charge.id, update)}
+                  showRefundFeeNotice={showRefundFeeNotice}
+                  canPing={canPing}
+                />
+              </CardContent>
+            ))}
+          </>
+        ) : (
+          <section>
+            <div>No charges yet</div>
+          </section>
+        )}
+      </section>
+    </Card>
   );
 };
 
@@ -2407,45 +2551,56 @@ const CallSection = ({ call, onChange }: { call: Call; onChange: (call: Call) =>
   };
 
   return (
-    <section className="stack">
-      <header>
-        <h3>Call</h3>
-      </header>
+    <Card asChild>
       <section>
-        <h5>Start time</h5>
-        {formatCallDate(new Date(call.start_time), { timeZone: { userTimeZone: currentSeller?.timeZone.name } })}
+        <CardContent asChild>
+          <header>
+            <h3 className="grow">Call</h3>
+          </header>
+        </CardContent>
+        <CardContent asChild>
+          <section>
+            <h5 className="grow font-bold">Start time</h5>
+            {formatCallDate(new Date(call.start_time), { timeZone: { userTimeZone: currentSeller?.timeZone.name } })}
+          </section>
+        </CardContent>
+        <CardContent asChild>
+          <section>
+            <h5 className="grow font-bold">End time</h5>
+            {formatCallDate(new Date(call.end_time), { timeZone: { userTimeZone: currentSeller?.timeZone.name } })}
+          </section>
+        </CardContent>
+        <CardContent asChild>
+          <section>
+            <form
+              onSubmit={(evt) => {
+                evt.preventDefault();
+                void handleSave();
+              }}
+              className="grow"
+            >
+              <fieldset>
+                <input
+                  type="text"
+                  value={callUrl}
+                  onChange={(evt) => setCallUrl(evt.target.value)}
+                  placeholder="Call URL"
+                />
+                <Button color="primary" type="submit" disabled={isLoading}>
+                  {isLoading ? "Saving..." : "Save"}
+                </Button>
+              </fieldset>
+            </form>
+          </section>
+        </CardContent>
       </section>
-      <section>
-        <h5>End time</h5>
-        {formatCallDate(new Date(call.end_time), { timeZone: { userTimeZone: currentSeller?.timeZone.name } })}
-      </section>
-      <section>
-        <form
-          onSubmit={(evt) => {
-            evt.preventDefault();
-            void handleSave();
-          }}
-        >
-          <fieldset>
-            <input
-              type="text"
-              value={callUrl}
-              onChange={(evt) => setCallUrl(evt.target.value)}
-              placeholder="Call URL"
-            />
-            <Button color="primary" type="submit" disabled={isLoading}>
-              {isLoading ? "Saving..." : "Save"}
-            </Button>
-          </fieldset>
-        </form>
-      </section>
-    </section>
+    </Card>
   );
 };
 
 const FileRow = ({ file, disabled, onDelete }: { file: File; disabled?: boolean; onDelete?: () => void }) => (
-  <div role="treeitem">
-    <div className="content">
+  <Row role="listitem">
+    <RowContent>
       <FileKindIcon extension={file.extension} />
       <div>
         <h4>{file.name}</h4>
@@ -2454,8 +2609,8 @@ const FileRow = ({ file, disabled, onDelete }: { file: File; disabled?: boolean;
           <li>{FileUtils.getFullFileSizeString(file.size)}</li>
         </ul>
       </div>
-    </div>
-    <div className="actions">
+    </RowContent>
+    <RowActions>
       {onDelete ? (
         <Button color="danger" onClick={onDelete} disabled={disabled} aria-label="Delete">
           <Icon name="trash2" />
@@ -2470,8 +2625,8 @@ const FileRow = ({ file, disabled, onDelete }: { file: File; disabled?: boolean;
       >
         <Icon name="download-fill" />
       </NavigationButton>
-    </div>
-  </div>
+    </RowActions>
+  </Row>
 );
 
 const CommissionSection = ({
@@ -2565,31 +2720,48 @@ const CommissionSection = ({
   };
 
   return (
-    <section className="stack">
-      <header>
-        <h3>Files</h3>
-      </header>
+    <Card asChild>
       <section>
-        <section className="grid gap-2">
-          {commission.files.length ? (
-            <div role="tree">
-              {commission.files.map((file) => (
-                <FileRow key={file.id} file={file} onDelete={() => void handleDelete(file.id)} disabled={isLoading} />
-              ))}
-            </div>
-          ) : null}
-          <label className="button">
-            <input type="file" onChange={handleFileChange} disabled={isLoading} multiple style={{ display: "none" }} />
-            <Icon name="paperclip" /> Upload files
-          </label>
-          {commission.status === "in_progress" ? (
-            <Button color="primary" disabled={isLoading} onClick={() => void handleCompletion()}>
-              Submit and mark as complete
-            </Button>
-          ) : null}
-        </section>
+        <CardContent asChild>
+          <header>
+            <h3 className="grow">Files</h3>
+          </header>
+        </CardContent>
+        <CardContent asChild>
+          <section>
+            <section className="grid grow gap-2">
+              {commission.files.length ? (
+                <Rows role="list">
+                  {commission.files.map((file) => (
+                    <FileRow
+                      key={file.id}
+                      file={file}
+                      onDelete={() => void handleDelete(file.id)}
+                      disabled={isLoading}
+                    />
+                  ))}
+                </Rows>
+              ) : null}
+              <label className="button">
+                <input
+                  type="file"
+                  onChange={handleFileChange}
+                  disabled={isLoading}
+                  multiple
+                  style={{ display: "none" }}
+                />
+                <Icon name="paperclip" /> Upload files
+              </label>
+              {commission.status === "in_progress" ? (
+                <Button color="primary" disabled={isLoading} onClick={() => void handleCompletion()}>
+                  Submit and mark as complete
+                </Button>
+              ) : null}
+            </section>
+          </section>
+        </CardContent>
       </section>
-    </section>
+    </Card>
   );
 };
 

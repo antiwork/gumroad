@@ -8,6 +8,8 @@ import {
 } from "$app/utils/currency";
 import { formatRecurrenceWithDuration, RecurrenceId } from "$app/utils/recurringPricing";
 
+import { WithTooltip } from "$app/components/WithTooltip";
+
 type Props = {
   url?: string;
   currencyCode: CurrencyCode;
@@ -55,28 +57,23 @@ export const PriceTag = ({
       {recurrenceLabel ? ` ${recurrenceLabel}` : null}
     </>
   );
-  const tooltipUid = React.useId();
   const borderClasses = "border-r-transparent border-[calc(0.5lh+--spacing(1))] border-l-1";
 
   return (
     <div itemScope itemProp="offers" itemType="https://schema.org/Offer" className="flex items-center">
-      <div
-        className={`has-tooltip ${tooltipPosition} grid-flow-col border border-r-0 border-border`}
-        aria-describedby={tooltipUid}
-      >
-        <div
-          className="bg-accent px-2 py-1 text-accent-foreground"
-          itemProp="price"
-          content={formatPriceCentsWithoutCurrencySymbolAndComma(currencyCode, price)}
-        >
-          {priceTag}
+      <WithTooltip position={tooltipPosition} tip={priceTag}>
+        <div className="relative grid grid-flow-col border border-r-0 border-border">
+          <div
+            className="bg-accent px-2 py-1 text-accent-foreground"
+            itemProp="price"
+            content={formatPriceCentsWithoutCurrencySymbolAndComma(currencyCode, price)}
+          >
+            {priceTag}
+          </div>
+          <div className={classNames("border-border", borderClasses)} />
+          <div className={classNames("absolute top-0 right-px bottom-0 border-accent", borderClasses)} />
         </div>
-        <div className={classNames("border-border", borderClasses)} />
-        <div className={classNames("absolute top-0 right-px bottom-0 border-accent", borderClasses)} />
-        <div role="tooltip" id={tooltipUid}>
-          {priceTag}
-        </div>
-      </div>
+      </WithTooltip>
       <link itemProp="url" href={url} />
       <div itemProp="availability" hidden>
         {`https://schema.org/${isSalesLimited ? "LimitedAvailability" : "InStock"}`}

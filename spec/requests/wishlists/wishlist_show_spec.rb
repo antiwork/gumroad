@@ -88,7 +88,7 @@ describe "Wishlist show page", :js, type: :system do
 
     within_cart_item(membership_product.name) do
       expect(page).to have_text("Tier: First Tier")
-      expect(page).to have_text("Membership: Yearly")
+      expect(page).to have_text("Yearly")
     end
 
     page.go_back
@@ -122,7 +122,7 @@ describe "Wishlist show page", :js, type: :system do
 
     within_cart_item(membership_product.name) do
       expect(page).to have_text("Tier: First Tier")
-      expect(page).to have_text("Membership: Yearly")
+      expect(page).to have_text("Yearly")
     end
 
     within_cart_item(rental_product.name) do
@@ -271,7 +271,7 @@ describe "Wishlist show page", :js, type: :system do
 
     click_button "Edit"
 
-    within_section wishlist.name, section_element: :aside do
+    within_modal wishlist.name do
       fill_in "Name", with: "New Wishlist Name"
       click_on "Close"
     end
@@ -280,7 +280,7 @@ describe "Wishlist show page", :js, type: :system do
 
     click_button "Edit"
 
-    within_section "New Wishlist Name", section_element: :aside do
+    within_modal "New Wishlist Name" do
       fill_in "Description", with: "Description Goes Here"
 
       click_on "Close"

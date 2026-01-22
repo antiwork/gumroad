@@ -76,7 +76,7 @@ describe("Settings > Team Scenario", type: :system, js: true) do
           expect(page).to have_content seller.display_name
 
           expect find(:table_row, { "Member" => "Seller", "Role" => "Owner" })
-          expect find(:table_row, { "Member" => user_with_role_for_seller.display_name })
+          expect(find(:table_row, { "Member" => user_with_role_for_seller.display_name, "Role" => "Admin" })).to have_button("Leave team")
         end
       end
 

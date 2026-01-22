@@ -17,6 +17,7 @@ import ReactSelect, {
 import { escapeRegExp } from "$app/utils";
 
 import { Icon } from "$app/components/Icons";
+import { Pill } from "$app/components/ui/Pill";
 
 export type Option = { id: string; label: string; isSubOption?: boolean; disabled?: boolean };
 
@@ -176,7 +177,7 @@ const IndicatorSeparator = () => null;
 
 const ClearIndicator = <IsMulti extends boolean>(props: ClearIndicatorProps<Option, IsMulti>) => (
   <components.ClearIndicator {...props}>
-    <button aria-label="Clear value">
+    <button className="cursor-pointer all-unset" aria-label="Clear value">
       <Icon name="x" />
     </button>
   </components.ClearIndicator>
@@ -212,7 +213,12 @@ const MenuList = <IsMulti extends boolean>(props: MenuListProps<Option, IsMulti>
 
 const MultiValue = <IsMulti extends boolean>(props: MultiValueProps<Option, IsMulti>) => (
   <div {...props.removeProps}>
-    <button className="pill primary dismissable">{props.data.label}</button>
+    <Pill asChild color="primary" className="cursor-pointer font-[inherit] text-[length:inherit]">
+      <button>
+        {props.data.label}
+        <Icon name="x" className="ml-2" />
+      </button>
+    </Pill>
   </div>
 );
 

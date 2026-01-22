@@ -27,14 +27,12 @@ import { createBillingAgreement, createBillingAgreementToken } from "$app/data/p
 import { PurchasePaymentMethod } from "$app/data/purchase";
 import { VerificationResult, verifyShippingAddress } from "$app/data/shipping";
 import { assert, assertDefined } from "$app/utils/assert";
-import { formatPriceCentsWithoutCurrencySymbol } from "$app/utils/currency";
 import { checkEmailForTypos as checkEmailForTyposUtil } from "$app/utils/email";
 import { asyncVoid } from "$app/utils/promise";
 
 import { Button } from "$app/components/Button";
 import { CreditCardInput, StripeElementsProvider } from "$app/components/Checkout/CreditCardInput";
 import { CustomFields } from "$app/components/Checkout/CustomFields";
-import { GiftForm } from "$app/components/Checkout/GiftForm";
 import {
   addressFields,
   getErrors,
@@ -47,15 +45,14 @@ import {
   usePayLabel,
   requiresReusablePaymentMethod,
   isSubmitDisabled,
-  isTippingEnabled,
-  getTotalPriceFromProducts,
 } from "$app/components/Checkout/payment";
 import { Icon } from "$app/components/Icons";
 import { LoadingSpinner } from "$app/components/LoadingSpinner";
 import { useLoggedInUser } from "$app/components/LoggedInUser";
-import { PriceInput } from "$app/components/PriceInput";
 import { showAlert } from "$app/components/server-components/Alert";
-import { Tabs } from "$app/components/ui/Tabs";
+import { Alert } from "$app/components/ui/Alert";
+import { Card, CardContent } from "$app/components/ui/Card";
+import { Tab, Tabs } from "$app/components/ui/Tabs";
 import { useIsDarkTheme } from "$app/components/useIsDarkTheme";
 import { useOnChangeSync } from "$app/components/useOnChange";
 import { RecaptchaCancelledError, useRecaptcha } from "$app/components/useRecaptcha";
@@ -192,7 +189,7 @@ const ZipCodeInput = () => {
   );
 };
 
-const EmailAddress = () => {
+const EmailAddress = ({ card }: { card: boolean }) => {
   const uid = React.useId();
   const loggedInUser = useLoggedInUser();
   const [state, dispatch] = useState();
@@ -216,8 +213,8 @@ const EmailAddress = () => {
   };
 
   return (
-    <div>
-      <div className="paragraphs">
+    <div className={card ? "flex flex-wrap items-center justify-between gap-4 p-4" : ""}>
+      <div className={`flex flex-col gap-4 ${card ? "grow" : ""}`}>
         <fieldset className={cx({ danger: errors.has("email") })}>
           <legend>
             <label htmlFor={`${uid}email`}>
@@ -240,7 +237,7 @@ const EmailAddress = () => {
               <div className="dropdown grid gap-2">
                 <div>Did you mean {state.emailTypoSuggestion}?</div>
 
-                <div className="button-group">
+                <div className="flex flex-wrap gap-2">
                   <Button onClick={rejectEmailTypoSuggestion}>No</Button>
                   <Button onClick={acceptEmailTypoSuggestion}>Yes</Button>
                 </div>
@@ -253,7 +250,13 @@ const EmailAddress = () => {
   );
 };
 
-const SharedInputs = () => {
+const SharedInputs = ({
+  showCustomFields,
+  className,
+}: {
+  showCustomFields: boolean;
+  className?: string | undefined;
+}) => {
   const uid = React.useId();
   const [state, dispatch] = useState();
   const errors = getErrors(state);
@@ -367,9 +370,9 @@ const SharedInputs = () => {
   return (
     <>
       {showCountryInput || showVatIdInput ? (
-        <div>
-          <div className="paragraphs">
-            <h4>Contact information</h4>
+        <div className={className}>
+          <div className="flex grow flex-col gap-4">
+            <h4 className="font-bold">Contact information</h4>
             {showCountryInput ? (
               <div
                 style={{
@@ -401,7 +404,7 @@ const SharedInputs = () => {
           </div>
         </div>
       ) : null}
-      <CustomFields />
+      {showCustomFields ? <CustomFields className={className} /> : null}
     </>
   );
 };
@@ -416,16 +419,16 @@ const PaymentMethodRadio = ({
   const [state, dispatch] = useState();
   const selected = state.paymentMethod === paymentMethod;
   return (
-    <Button
-      role="tab"
-      aria-selected={selected}
+    <Tab
+      isSelected={selected}
       onClick={() => {
         if (paymentMethod !== state.paymentMethod) dispatch({ type: "set-value", paymentMethod });
       }}
       disabled={!selected && isProcessing(state)}
+      className="px-1"
     >
       {children}
-    </Button>
+    </Tab>
   );
 };
 
@@ -437,7 +440,7 @@ const useFail = () => {
   };
 };
 
-const CustomerDetails = () => {
+const CustomerDetails = ({ showCustomFields, className }: { showCustomFields: boolean; className?: string }) => {
   const isLoggedIn = !!useLoggedInUser();
   const [state, dispatch] = useState();
   const uid = React.useId();
@@ -484,10 +487,10 @@ const CustomerDetails = () => {
 
   return (
     <>
-      <SharedInputs />
+      <SharedInputs showCustomFields={showCustomFields} className={className} />
       {hasShipping(state) ? (
-        <div>
-          <div className="paragraphs">
+        <div className={className}>
+          <div className="flex grow flex-col gap-4">
             <h4 style={{ display: "flex", justifyContent: "space-between" }}>
               Shipping information
               {isLoggedIn ? (
@@ -552,7 +555,7 @@ const CustomerDetails = () => {
             <CountryInput />
           </div>
           {addressVerification && addressVerification.type !== "done" ? (
-            <div className="dropdown paragraphs">
+            <div className="dropdown flex flex-col gap-4">
               {addressVerification.type === "verification-required" ? (
                 <>
                   <div>
@@ -565,7 +568,7 @@ const CustomerDetails = () => {
                     <br />
                     {addressVerification.formattedSuggestedAddress}
                   </div>
-                  <div className="button-group">
+                  <div className="flex flex-wrap gap-2">
                     <Button onClick={verifyAddress}>No, continue</Button>
                     <Button
                       color="primary"
@@ -591,19 +594,20 @@ const CustomerDetails = () => {
         </div>
       ) : null}
       {state.warning ? (
-        <div>
-          <div role="status" className="warning">
+        <div className={className}>
+          <Alert role="status" variant="warning" className="grow">
             {state.warning}
-          </div>
+          </Alert>
         </div>
       ) : null}
-      {isTippingEnabled(state) ? <TipSelector /> : null}
-      {state.products.length === 1 && state.products[0]?.canGift && !state.products[0]?.payInInstallments ? (
-        <GiftForm isMembership={state.products[0]?.nativeType === "membership"} />
-      ) : null}
-      {state.paymentMethod !== "paypal" ? (
-        <div>
-          <Button color="primary" onClick={() => dispatch({ type: "offer" })} disabled={isSubmitDisabled(state)}>
+      {state.paymentMethod !== "paypal" && state.paymentMethod !== "stripePaymentRequest" ? (
+        <div className={className}>
+          <Button
+            color="primary"
+            onClick={() => dispatch({ type: "offer" })}
+            disabled={isSubmitDisabled(state)}
+            className="grow basis-0"
+          >
             {payLabel}
           </Button>
         </div>
@@ -612,7 +616,7 @@ const CustomerDetails = () => {
   );
 };
 
-const CreditCard = () => {
+const CreditCard = ({ card }: { card?: boolean }) => {
   const [state, dispatch] = useState();
   const fail = useFail();
   const isLoggedIn = !!useLoggedInUser();
@@ -633,8 +637,10 @@ const CreditCard = () => {
           type: "card",
           button: (
             <PaymentMethodRadio paymentMethod="card">
-              <Icon name="outline-credit-card" />
-              <h4>Card</h4>
+              <div className="flex w-full flex-col items-center justify-center gap-2 self-center">
+                <Icon name="outline-credit-card" />
+                <h4 className="text-center">Card</h4>
+              </div>
             </PaymentMethodRadio>
           ),
         },
@@ -682,8 +688,8 @@ const CreditCard = () => {
   if (state.paymentMethod !== "card") return null;
 
   return (
-    <div style={{ borderTop: "none", paddingTop: "0" }}>
-      <div className="paragraphs">
+    <div className={card ? "flex flex-wrap items-center justify-between gap-4 p-4 pt-0!" : ""}>
+      <div className={`flex flex-col gap-4 ${card ? "grow" : ""}`}>
         {!useSavedCard ? (
           <fieldset>
             <legend>
@@ -719,87 +725,6 @@ const CreditCard = () => {
           setUseSavedCard={setUseSavedCard}
           onChange={(evt) => setCardError(!!evt.error)}
         />
-      </div>
-    </div>
-  );
-};
-
-const TipSelector = () => {
-  const [state, dispatch] = useState();
-  const errors = getErrors(state);
-  const showPercentageOptions = getTotalPriceFromProducts(state) > 0;
-
-  React.useEffect(() => {
-    if (!showPercentageOptions && state.tip.type === "percentage")
-      dispatch({ type: "set-value", tip: { type: "fixed", amount: null } });
-  }, [showPercentageOptions]);
-
-  const defaultOther = state.surcharges.type === "loaded" ? state.surcharges.result.subtotal * 0.3 : 5;
-
-  return (
-    <div>
-      <div className="paragraphs">
-        <h4>Add a tip</h4>
-        {showPercentageOptions ? (
-          <div
-            role="radiogroup"
-            className="radio-buttons"
-            style={{ gridTemplateColumns: "repeat(auto-fit, minmax(min(5rem, 100%), 1fr))" }}
-          >
-            {state.tipOptions.map((tip) => (
-              <Button
-                key={tip}
-                role="radio"
-                aria-checked={state.tip.type === "percentage" && tip === state.tip.percentage}
-                onClick={() => {
-                  dispatch({
-                    type: "set-value",
-                    tip: {
-                      type: "percentage",
-                      percentage: tip,
-                    },
-                  });
-                }}
-                disabled={isProcessing(state)}
-                style={{ justifyContent: "center" }}
-              >
-                {tip}%
-              </Button>
-            ))}
-            <Button
-              role="radio"
-              aria-checked={state.tip.type === "fixed"}
-              onClick={() => {
-                dispatch({
-                  type: "set-value",
-                  tip: {
-                    type: "fixed",
-                    amount: state.tip.type === "fixed" ? state.tip.amount : defaultOther,
-                  },
-                });
-              }}
-              disabled={isProcessing(state)}
-              style={{ justifyContent: "center" }}
-            >
-              Other
-            </Button>
-          </div>
-        ) : null}
-        {state.tip.type === "fixed" ? (
-          <fieldset className={cx({ danger: errors.has("tip") })}>
-            <PriceInput
-              hasError={errors.has("tip")}
-              ariaLabel="Tip"
-              currencyCode="usd"
-              cents={state.tip.amount}
-              onChange={(newAmount) => {
-                dispatch({ type: "set-value", tip: { type: "fixed", amount: newAmount } });
-              }}
-              placeholder={formatPriceCentsWithoutCurrencySymbol("usd", defaultOther)}
-              disabled={isProcessing(state)}
-            />
-          </fieldset>
-        ) : null}
       </div>
     </div>
   );
@@ -864,7 +789,8 @@ const BraintreePayPal = ({ token }: { token: string }) => {
   }, [state.status.type]);
 
   return (
-    <Button className="button-paypal" onClick={() => dispatch({ type: "offer" })} disabled={isSubmitDisabled(state)}>
+    <Button color="paypal" onClick={() => dispatch({ type: "offer" })} disabled={isSubmitDisabled(state)}>
+      <span className="brand-icon brand-icon-paypal" />
       {payLabel}
     </Button>
   );
@@ -964,7 +890,7 @@ const NativePayPal = ({ implementation }: { implementation: PayPalNamespace }) =
   );
 };
 
-const PayPal = () => {
+const PayPal = ({ className }: { className?: string | undefined }) => {
   const [state, dispatch] = useState();
 
   const [nativePaypal, setNativePaypal] = React.useState<PayPalNamespace | null>(null);
@@ -988,8 +914,10 @@ const PayPal = () => {
         type: "paypal",
         button: (
           <PaymentMethodRadio paymentMethod="paypal">
-            <span className="brand-icon brand-icon-paypal" />
-            <h4>PayPal</h4>
+            <div className="flex w-full flex-col items-center justify-center gap-2 self-center">
+              <span className="brand-icon brand-icon-paypal" />
+              <h4 className="text-center">PayPal</h4>
+            </div>
           </PaymentMethodRadio>
         ),
       },
@@ -1014,7 +942,7 @@ const PayPal = () => {
 
   if (state.paymentMethod !== "paypal" || !implementation) return null;
   return (
-    <div>
+    <div className={className}>
       {nativePaypal && implementation === "native" ? (
         <NativePayPal implementation={nativePaypal} />
       ) : braintreeToken.type === "available" ? (
@@ -1024,7 +952,7 @@ const PayPal = () => {
   );
 };
 
-const StripePaymentRequest = () => {
+const StripePaymentRequest = ({ className }: { className?: string | undefined }) => {
   const [state, dispatch] = useState();
   const stripe = useStripe();
   const fail = useFail();
@@ -1140,13 +1068,15 @@ const StripePaymentRequest = () => {
         type: "stripePaymentRequest",
         button: (
           <PaymentMethodRadio paymentMethod="stripePaymentRequest">
-            <span
-              className={cx("brand-icon", {
-                "brand-icon-google": paymentMethods.googlePay,
-                "brand-icon-apple": paymentMethods.applePay,
-              })}
-            />
-            <h4>{paymentMethods.googlePay ? "Google Pay" : "Apple Pay"}</h4>
+            <div className="flex w-full flex-col items-center justify-center gap-2 self-center">
+              <span
+                className={cx("brand-icon", {
+                  "brand-icon-google": paymentMethods.googlePay,
+                  "brand-icon-apple": paymentMethods.applePay,
+                })}
+              />
+              <h4 className="text-center">{paymentMethods.googlePay ? "Google Pay" : "Apple Pay"}</h4>
+            </div>
           </PaymentMethodRadio>
         ),
       },
@@ -1155,8 +1085,13 @@ const StripePaymentRequest = () => {
   if (!canPay || state.paymentMethod !== "stripePaymentRequest") return null;
 
   return (
-    <div>
-      <Button color="primary" onClick={() => dispatch({ type: "offer" })} disabled={isSubmitDisabled(state)}>
+    <div className={className}>
+      <Button
+        color="primary"
+        onClick={() => dispatch({ type: "offer" })}
+        disabled={isSubmitDisabled(state)}
+        className="grow basis-0"
+      >
         {payLabel}
       </Button>
     </div>
@@ -1166,7 +1101,8 @@ const StripePaymentRequest = () => {
 export const PaymentForm = ({
   className,
   notice,
-}: React.HTMLAttributes<HTMLDivElement> & { notice?: string | null }) => {
+  showCustomFields = true,
+}: React.HTMLAttributes<HTMLDivElement> & { notice?: string | null; showCustomFields?: boolean }) => {
   const [state, dispatch] = useState();
   const loggedInUser = useLoggedInUser();
   const isTestPurchase = loggedInUser && state.products.find((product) => product.testPurchase);
@@ -1203,50 +1139,53 @@ export const PaymentForm = ({
   }, [state.status.type]);
 
   return (
-    <div ref={paymentFormRef} className={cx("stack", className)} aria-label="Payment form">
+    <Card ref={paymentFormRef} className={className} aria-label="Payment form">
       {isTestPurchase ? (
-        <div>
-          <div role="alert" className="info">
+        <CardContent>
+          <Alert variant="info" className="grow">
             This will be a test purchase as you are the creator of at least one of the products. Your payment method
             will not be charged.
-          </div>
-        </div>
+          </Alert>
+        </CardContent>
       ) : null}
-      <EmailAddress />
+      <EmailAddress card />
       {!isFreePurchase ? (
         <>
-          <div>
-            <div className="paragraphs">
-              <h4>Pay with</h4>
+          <CardContent className={state.paymentMethod === "card" ? "border-b-0" : ""}>
+            <div className="flex grow flex-col gap-4">
+              <h4 className="font-bold">Pay with</h4>
               {state.availablePaymentMethods.length > 1 ? (
-                <Tabs>
+                <Tabs variant="buttons" className="auto-cols-fr grid-flow-col">
                   {state.availablePaymentMethods.map((method) => (
                     <React.Fragment key={method.type}>{method.button}</React.Fragment>
                   ))}
                 </Tabs>
               ) : null}
             </div>
-          </div>
+          </CardContent>
           {notice ? (
-            <div>
-              <div role="alert" className="info">
+            <CardContent>
+              <Alert variant="info" className="grow">
                 {notice}
-              </div>
-            </div>
+              </Alert>
+            </CardContent>
           ) : null}
-          <CreditCard />
+          <CreditCard card />
         </>
       ) : null}
-      <CustomerDetails />
+      <CustomerDetails
+        showCustomFields={showCustomFields}
+        className="flex flex-wrap items-center justify-between gap-4 p-4"
+      />
       {!isFreePurchase ? (
         <>
-          <PayPal />
+          <PayPal className="flex flex-wrap items-center justify-between gap-4 p-4" />
           <StripeElementsProvider>
-            <StripePaymentRequest />
+            <StripePaymentRequest className="flex flex-wrap items-center justify-between gap-4 p-4" />
           </StripeElementsProvider>
         </>
       ) : null}
       {recaptcha.container}
-    </div>
+    </Card>
   );
 };

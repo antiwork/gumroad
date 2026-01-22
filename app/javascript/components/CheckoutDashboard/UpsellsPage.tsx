@@ -20,23 +20,28 @@ import { CurrencyCode, formatPriceCentsWithCurrencySymbol } from "$app/utils/cur
 import { asyncVoid } from "$app/utils/promise";
 import { AbortError, assertResponseError } from "$app/utils/request";
 
-import { Button } from "$app/components/Button";
+import { Button, buttonVariants } from "$app/components/Button";
 import { ProductToAdd, CartItem } from "$app/components/Checkout/cartState";
 import { CheckoutPreview } from "$app/components/CheckoutDashboard/CheckoutPreview";
 import { DiscountInput, InputtedDiscount } from "$app/components/CheckoutDashboard/DiscountInput";
 import { Layout, Page } from "$app/components/CheckoutDashboard/Layout";
-import { useClientAlert } from "$app/components/ClientAlertProvider";
 import { Details } from "$app/components/Details";
 import { Icon } from "$app/components/Icons";
 import { useLoggedInUser } from "$app/components/LoggedInUser";
 import { Modal } from "$app/components/Modal";
 import { Pagination, PaginationProps } from "$app/components/Pagination";
 import { Popover } from "$app/components/Popover";
+import { WithPreviewSidebar } from "$app/components/PreviewSidebar";
 import { applySelection } from "$app/components/Product/ConfigurationSelector";
 import { Select } from "$app/components/Select";
+import { showAlert } from "$app/components/server-components/Alert";
 import { CrossSellModal, UpsellModal } from "$app/components/server-components/CheckoutPage";
+import { Skeleton } from "$app/components/Skeleton";
+import { Card, CardContent } from "$app/components/ui/Card";
 import { PageHeader } from "$app/components/ui/PageHeader";
-import Placeholder from "$app/components/ui/Placeholder";
+import { Placeholder, PlaceholderImage } from "$app/components/ui/Placeholder";
+import { Sheet, SheetHeader } from "$app/components/ui/Sheet";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "$app/components/ui/Table";
 import { useDebouncedCallback } from "$app/components/useDebouncedCallback";
 import { Sort, useSortingTableDriver } from "$app/components/useSortingTableDriver";
 
@@ -89,7 +94,6 @@ export type UpsellsPageProps = {
 };
 
 const UpsellsPage = (props: UpsellsPageProps) => {
-  const { showAlert } = useClientAlert();
   const loggedInUser = useLoggedInUser();
   const isReadOnly = !loggedInUser?.policies.upsell.create;
 
@@ -234,7 +238,7 @@ const UpsellsPage = (props: UpsellsPageProps) => {
               onToggle={setIsSearchPopoverOpen}
               aria-label="Search"
               trigger={
-                <div className="button">
+                <div className={buttonVariants({ size: "default" })}>
                   <Icon name="solid-search" />
                 </div>
               }
@@ -262,58 +266,55 @@ const UpsellsPage = (props: UpsellsPageProps) => {
     >
       <section className="p-4 md:p-8">
         {upsells.length > 0 ? (
-          <section className="paragraphs">
-            <table aria-busy={isLoading} aria-label="Upsells">
-              <thead>
-                <tr>
-                  <th {...thProps("name")}>Upsell</th>
-                  <th {...thProps("revenue")}>Revenue</th>
-                  <th {...thProps("uses")}>Uses</th>
-                  <th {...thProps("status")}>Status</th>
-                </tr>
-              </thead>
-              <tbody>
+          <section className="flex flex-col gap-4">
+            <Table
+              aria-live="polite"
+              className={cx(isLoading && "pointer-events-none opacity-50")}
+              aria-label="Upsells"
+            >
+              <TableHeader>
+                <TableRow>
+                  <TableHead {...thProps("name")}>Upsell</TableHead>
+                  <TableHead {...thProps("revenue")}>Revenue</TableHead>
+                  <TableHead {...thProps("uses")}>Uses</TableHead>
+                  <TableHead {...thProps("status")}>Status</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
                 {upsells.map((upsell) => {
                   const statistics = upsellStatistics[upsell.id];
                   return (
-                    <tr
+                    <TableRow
                       key={upsell.id}
                       onClick={() => setSelectedUpsellId(upsell.id)}
-                      aria-selected={selectedUpsellId === upsell.id}
+                      selected={selectedUpsellId === upsell.id}
                     >
-                      <td>
+                      <TableCell>
                         <div>
                           <div>
                             <b>{upsell.name}</b>
                           </div>
                           <small>{formatOfferedProductName(upsell.product.name, upsell.product.variant?.name)}</small>
                         </div>
-                      </td>
-                      {statistics ? (
-                        <>
-                          <td>
-                            {formatPriceCentsWithCurrencySymbol(
-                              upsell.product.currency_type,
-                              statistics.revenue_cents,
-                              {
-                                symbolFormat: "short",
-                              },
-                            )}
-                          </td>
-                          <td>{statistics.uses.total}</td>
-                        </>
-                      ) : (
-                        <>
-                          <td aria-busy></td>
-                          <td aria-busy> </td>
-                        </>
-                      )}
-                      <td>{upsell.paused ? "Paused" : "Live"}</td>
-                    </tr>
+                      </TableCell>
+                      <TableCell aria-busy={!statistics}>
+                        {statistics ? (
+                          formatPriceCentsWithCurrencySymbol(upsell.product.currency_type, statistics.revenue_cents, {
+                            symbolFormat: "short",
+                          })
+                        ) : (
+                          <Skeleton className="w-16" />
+                        )}
+                      </TableCell>
+                      <TableCell aria-busy={!statistics}>
+                        {statistics ? statistics.uses.total : <Skeleton className="w-16" />}
+                      </TableCell>
+                      <TableCell>{upsell.paused ? "Paused" : "Live"}</TableCell>
+                    </TableRow>
                   );
                 })}
-              </tbody>
-            </table>
+              </TableBody>
+            </Table>
             {pagination.pages > 1 ? (
               <Pagination
                 onChangePage={(newPage) => loadUpsells({ page: newPage, query: searchQuery, sort })}
@@ -323,9 +324,7 @@ const UpsellsPage = (props: UpsellsPageProps) => {
           </section>
         ) : (
           <Placeholder>
-            <figure>
-              <img src={placeholder} />
-            </figure>
+            <PlaceholderImage src={placeholder} />
             <h2>Offering an upsell at checkout</h2>
             Upsells allow you to suggest additional products to your customer at checkout. You can nudge them to
             purchase either an upgraded version or an extra product add-on.
@@ -394,104 +393,123 @@ const UpsellDrawer = ({
   const loggedInUser = useLoggedInUser();
   const isReadOnly = !loggedInUser?.policies.upsell.create;
   return (
-    <aside>
-      <header>
-        <h2>{selectedUpsell.name}</h2>
-        <button className="close" aria-label="Close" onClick={onClose} />
-      </header>
-      <section className="stack">
-        <h3>Details</h3>
-        <div>
-          <h5>Offer text</h5>
-          {selectedUpsell.text}
-        </div>
-        {selectedUpsell.discount ? (
-          <div>
-            <h5>Discount</h5>
-            {selectedUpsell.discount.type === "percent"
-              ? `${selectedUpsell.discount.percents}%`
-              : formatPriceCentsWithCurrencySymbol(
-                  selectedUpsell.product.currency_type,
-                  selectedUpsell.discount.cents,
-                  {
-                    symbolFormat: "long",
-                  },
-                )}
-          </div>
-        ) : null}
-        {statistics ? (
-          <>
-            <div>
-              <h5>Uses</h5>
-              {statistics.uses.total}
-            </div>
-            <div>
-              <h5>Revenue</h5>
-              {formatPriceCentsWithCurrencySymbol(selectedUpsell.product.currency_type, statistics.revenue_cents, {
-                symbolFormat: "short",
-              })}
-            </div>
-          </>
-        ) : null}
-        <div>
-          <h5>Status</h5>
-          <span>{selectedUpsell.paused ? "Paused" : "Live"}</span>
-        </div>
-      </section>
+    <Sheet open onOpenChange={onClose}>
+      <SheetHeader>{selectedUpsell.name}</SheetHeader>
+      <Card asChild>
+        <section>
+          <CardContent asChild>
+            <h3>Details</h3>
+          </CardContent>
+          <CardContent>
+            <h5 className="grow font-bold">Offer text</h5>
+            {selectedUpsell.text}
+          </CardContent>
+          {selectedUpsell.discount ? (
+            <CardContent>
+              <h5 className="grow font-bold">Discount</h5>
+              {selectedUpsell.discount.type === "percent"
+                ? `${selectedUpsell.discount.percents}%`
+                : formatPriceCentsWithCurrencySymbol(
+                    selectedUpsell.product.currency_type,
+                    selectedUpsell.discount.cents,
+                    {
+                      symbolFormat: "long",
+                    },
+                  )}
+            </CardContent>
+          ) : null}
+          {statistics ? (
+            <>
+              <CardContent>
+                <h5 className="grow font-bold">Uses</h5>
+                {statistics.uses.total}
+              </CardContent>
+              <CardContent>
+                <h5 className="grow font-bold">Revenue</h5>
+                {formatPriceCentsWithCurrencySymbol(selectedUpsell.product.currency_type, statistics.revenue_cents, {
+                  symbolFormat: "short",
+                })}
+              </CardContent>
+            </>
+          ) : null}
+          <CardContent>
+            <h5 className="grow font-bold">Status</h5>
+            <span>{selectedUpsell.paused ? "Paused" : "Live"}</span>
+          </CardContent>
+        </section>
+      </Card>
       <section className="grid auto-cols-fr grid-flow-col gap-4">
         <Button onClick={onTogglePause} disabled={isLoading || isReadOnly}>
           {selectedUpsell.paused ? "Resume upsell" : "Pause upsell"}
         </Button>
       </section>
       {selectedUpsell.cross_sell ? (
-        <section className="stack">
-          <h3>Selected products</h3>
-          {selectedUpsell.universal ? (
-            <div>
-              <h5>All products</h5>
-            </div>
-          ) : (
-            selectedUpsell.selected_products.map(({ id, name }) => (
-              <div key={id}>
-                <div>
-                  <h5>{name}</h5>
-                  {statistics
-                    ? `${statistics.uses.selected_products[id] ?? 0} ${(statistics.uses.selected_products[id] ?? 0) === 1 ? "use" : "uses"} from this product`
-                    : null}
-                </div>
-              </div>
-            ))
-          )}
-        </section>
+        <Card asChild>
+          <section>
+            <CardContent asChild>
+              <h3>Selected products</h3>
+            </CardContent>
+            {selectedUpsell.universal ? (
+              <CardContent>
+                <h5 className="grow font-bold">All products</h5>
+              </CardContent>
+            ) : (
+              selectedUpsell.selected_products.map(({ id, name }) => (
+                <CardContent key={id}>
+                  <div className="grow">
+                    <h5 className="font-bold">{name}</h5>
+                    {statistics
+                      ? `${statistics.uses.selected_products[id] ?? 0} ${(statistics.uses.selected_products[id] ?? 0) === 1 ? "use" : "uses"} from this product`
+                      : null}
+                  </div>
+                </CardContent>
+              ))
+            )}
+          </section>
+        </Card>
       ) : (
-        <section className="stack">
-          <h3>Selected product</h3>
-          <div>
-            <h5>{selectedUpsell.product.name}</h5>
-          </div>
-        </section>
+        <Card asChild>
+          <section>
+            <CardContent asChild>
+              <h3>Selected product</h3>
+            </CardContent>
+            <CardContent>
+              <h5 className="grow font-bold">{selectedUpsell.product.name}</h5>
+            </CardContent>
+          </section>
+        </Card>
       )}
       {selectedUpsell.cross_sell ? (
-        <section className="stack">
-          <h3>Offered product</h3>
-          <div>
-            <h5>{formatOfferedProductName(selectedUpsell.product.name, selectedUpsell.product.variant?.name)}</h5>
-          </div>
-        </section>
+        <Card asChild>
+          <section>
+            <CardContent asChild>
+              <h3>Offered product</h3>
+            </CardContent>
+            <CardContent>
+              <h5 className="grow font-bold">
+                {formatOfferedProductName(selectedUpsell.product.name, selectedUpsell.product.variant?.name)}
+              </h5>
+            </CardContent>
+          </section>
+        </Card>
       ) : (
-        <section className="stack">
-          <h3>Offers</h3>
-          {selectedUpsell.upsell_variants.map((upsellVariant) => (
-            <div key={upsellVariant.id}>
-              <div>
-                <h5>{`${upsellVariant.selected_variant.name} → ${upsellVariant.offered_variant.name}`}</h5>
-                {statistics
-                  ? `${statistics.uses.upsell_variants[upsellVariant.id] ?? 0} ${(statistics.uses.upsell_variants[upsellVariant.id] ?? 0) === 1 ? "use" : "uses"}`
-                  : null}
-              </div>
-            </div>
-          ))}
-        </section>
+        <Card asChild>
+          <section>
+            <CardContent asChild>
+              <h3>Offers</h3>
+            </CardContent>
+            {selectedUpsell.upsell_variants.map((upsellVariant) => (
+              <CardContent key={upsellVariant.id}>
+                <div className="grow">
+                  <h5 className="font-bold">{`${upsellVariant.selected_variant.name} → ${upsellVariant.offered_variant.name}`}</h5>
+                  {statistics
+                    ? `${statistics.uses.upsell_variants[upsellVariant.id] ?? 0} ${(statistics.uses.upsell_variants[upsellVariant.id] ?? 0) === 1 ? "use" : "uses"}`
+                    : null}
+                </div>
+              </CardContent>
+            ))}
+          </section>
+        </Card>
       )}
       <section className="grid auto-cols-fr grid-flow-row gap-4 sm:grid-flow-col">
         <Button onClick={onCreate} disabled={isLoading || isReadOnly}>
@@ -504,7 +522,7 @@ const UpsellDrawer = ({
           {isLoading ? "Deleting..." : "Delete"}
         </Button>
       </section>
-    </aside>
+    </Sheet>
   );
 };
 
@@ -524,7 +542,6 @@ const Form = ({
   isLoading: boolean;
 }) => {
   const uid = React.useId();
-  const { showAlert } = useClientAlert();
   const [name, setName] = React.useState<{ value: string; error?: boolean }>({ value: upsell?.name ?? "" });
   const [offerText, setOfferText] = React.useState<{ value: string; error?: boolean }>({ value: upsell?.text ?? "" });
   const [offerDescription, setOfferDescription] = React.useState(upsell?.description ?? "");
@@ -696,7 +713,7 @@ const Form = ({
           </>
         }
       />
-      <div className="squished fixed-aside flex-1 lg:grid lg:grid-cols-[1fr_30vw]">
+      <WithPreviewSidebar className="flex-1">
         <form>
           <section className="p-8!">
             <p>
@@ -1005,7 +1022,7 @@ const Form = ({
             )}
           </Modal>
         </CheckoutPreview>
-      </div>
+      </WithPreviewSidebar>
     </>
   );
 };

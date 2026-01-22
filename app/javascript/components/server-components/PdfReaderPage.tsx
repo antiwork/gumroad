@@ -9,6 +9,7 @@ import { Button } from "$app/components/Button";
 import { Icon } from "$app/components/Icons";
 import { Popover } from "$app/components/Popover";
 import { useRunOnce } from "$app/components/useRunOnce";
+import { WithTooltip } from "$app/components/WithTooltip";
 
 const zoomLevelMin = 0.1;
 const zoomLevelMax = 5.0;
@@ -188,7 +189,7 @@ export const PdfReaderPage = ({
       <div role="application" className="scoped-tailwind-preflight flex h-full flex-col">
         <div role="menubar" className="flex text-sm md:text-base">
           <div className="border-r">
-            <button aria-label="Back" onClick={() => history.back()} className="p-4">
+            <button aria-label="Back" onClick={() => history.back()} className="cursor-pointer p-4 all-unset">
               <Icon name="x" />
             </button>
           </div>
@@ -220,30 +221,35 @@ export const PdfReaderPage = ({
               {pageNumber} of {pageCount}
             </div>
             <button
-              className="icon icon-arrow-left previous"
+              className="cursor-pointer all-unset"
               aria-label="Previous"
               onClick={() => updatePage("previous")}
               disabled={pageNumber === 1 || pageCount === 1}
-            />
+            >
+              <Icon name="arrow-left" />
+            </button>
             <button
-              className="icon icon-arrow-right next"
+              className="cursor-pointer all-unset"
               aria-label="Next"
               onClick={() => updatePage("next")}
               disabled={pageNumber === pageCount || pageCount === 1}
-            />
+            >
+              <Icon name="arrow-right" />
+            </button>
           </div>
         </div>
 
-        <div
-          className="has-tooltip"
-          style={{ display: "flex", zIndex: "var(--z-index-menubar)" }}
+        <WithTooltip
+          tip={pageTooltip ? `Page ${pageTooltip.pageNumber}` : null}
+          className="z-20 grid"
+          tooltipProps={{ style: { left: pageTooltip?.left, pointerEvents: "none" } }}
           onMouseMove={(e) => {
             const width = e.currentTarget.offsetWidth;
             const percent = Math.ceil((100 * e.clientX) / width) / 100;
             const pageNumber = Math.floor(percent * (pageCount - 1)) + 1;
             setPageTooltip({ left: e.clientX, pageNumber });
           }}
-          onMouseOut={() => setPageTooltip(null)}
+          onMouseLeave={() => setPageTooltip(null)}
         >
           <input
             type="range"
@@ -251,19 +257,9 @@ export const PdfReaderPage = ({
             max={pageCount}
             value={pageNumber}
             onChange={(e) => updatePage(parseInt(e.target.value, 10))}
-            style={{
-              flexGrow: 1,
-              "--progress": `${((pageNumber - 1) / (pageCount - 1)) * 100}%`,
-            }}
+            style={{ "--progress": `${((pageNumber - 1) / (pageCount - 1)) * 100}%` }}
           />
-          <div
-            className="js-page-slider-popover"
-            role="tooltip"
-            style={{ left: pageTooltip?.left, display: pageTooltip ? "block" : "none" }}
-          >
-            Page {pageTooltip?.pageNumber}
-          </div>
-        </div>
+        </WithTooltip>
 
         <div className="main relative flex-1 overflow-auto bg-background" role="document">
           <div className="pdf-reader-container">

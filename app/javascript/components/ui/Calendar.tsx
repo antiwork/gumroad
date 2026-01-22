@@ -25,7 +25,7 @@ export function Calendar({ defaultMonth, ...props }: React.ComponentProps<typeof
         nav: classNames("flex absolute top-0 inset-x-0 justify-between", defaultClassNames.nav),
         month_caption: classNames("text-center", defaultClassNames.month_caption),
         caption_label: classNames("!p-0 !border-0 font-bold", defaultClassNames.caption_label),
-        month_grid: "custom-table grid",
+        month_grid: "grid",
         weekdays: classNames("grid grid-cols-[repeat(7,1fr)]", defaultClassNames.weekdays),
         weekday: classNames("py-2", defaultClassNames.weekday),
         weeks: classNames("rounded border border-current", defaultClassNames.weeks),

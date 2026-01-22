@@ -77,14 +77,13 @@ describe("Followers", js: true, type: :system) do
     end
 
     it "shows and hides a drawer with the follower's information" do
-      expect(page).to_not have_selector("aside")
+      expect(page).to_not have_modal
       find(:table_row, text: "test@example.com").click
-      within "aside" do
-        expect(page).to have_selector("h2", text: "Details")
+      within_modal "Details" do
         expect(page).to have_content("test@example.com")
         click_on "Close"
       end
-      expect(page).to_not have_selector("aside")
+      expect(page).to_not have_modal
     end
 
     it "deletes a follower" do
@@ -93,7 +92,7 @@ describe("Followers", js: true, type: :system) do
       wait_for_ajax
 
       expect(page).to have_content("Follower removed!")
-      expect(page).to_not have_selector("aside")
+      expect(page).to_not have_modal
 
       follower = seller.followers.where(email: "test@example.com").first
       expect(follower.deleted?).to be true

@@ -1,19 +1,19 @@
 # frozen_string_literal: true
 
 class Admin::UserPresenter::Card
-  attr_reader :user, :impersonatable
+  attr_reader :user, :pundit_user
 
-  def initialize(user:, impersonatable:)
+  def initialize(user:, pundit_user:)
     @user = user
-    @impersonatable = impersonatable
+    @pundit_user = pundit_user
   end
 
   def props
     {
-      impersonatable:,
+      impersonatable: Admin::Impersonators::UserPolicy.new(pundit_user, user).create?,
 
       # Identification
-      id: user.id,
+      external_id: user.external_id,
 
       # Basic user fields
       name: user.name,
@@ -78,10 +78,12 @@ class Admin::UserPresenter::Card
       user.admin_manageable_user_memberships.map do |membership|
         {
           id: membership.id,
+          role: membership.role,
+          last_accessed_at: membership.last_accessed_at,
           created_at: membership.created_at,
           updated_at: membership.updated_at,
           seller: {
-            id: membership.seller.id,
+            external_id: membership.seller.external_id,
             avatar_url: membership.seller.avatar_url,
             display_name_or_email: membership.seller.display_name_or_email
           }

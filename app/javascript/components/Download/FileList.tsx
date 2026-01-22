@@ -1,13 +1,15 @@
 import cx from "classnames";
-import throttle from "lodash/throttle";
+import { throttle } from "lodash-es";
 import * as React from "react";
-import { cast } from "ts-safe-cast";
+import { cast, is } from "ts-safe-cast";
 
 import { createConsumptionEvent } from "$app/data/consumption_analytics";
 import { trackMediaLocationChanged } from "$app/data/media_location";
+import { classNames } from "$app/utils/classNames";
 import { humanizedDuration } from "$app/utils/duration";
 import FileUtils from "$app/utils/file";
 import { createJWPlayer } from "$app/utils/jwPlayer";
+import Mobile from "$app/utils/mobile";
 import { asyncVoid } from "$app/utils/promise";
 import { assertResponseError, request, ResponseError } from "$app/utils/request";
 
@@ -24,6 +26,7 @@ import {
   useMediaUrls,
   usePurchaseInfo,
 } from "$app/components/server-components/DownloadPage/WithContent";
+import { Row, RowActions, RowContent, RowDetails, Rows } from "$app/components/ui/Rows";
 import { useOnOutsideClick } from "$app/components/useOnOutsideClick";
 import { useRefToLatest } from "$app/components/useRefToLatest";
 import { WithTooltip } from "$app/components/WithTooltip";
@@ -86,7 +89,7 @@ export const FileList = ({ content_items }: Props) => {
   );
 
   return (
-    <div role="tree" aria-label="Files">
+    <Rows role="tree" aria-label="Files">
       {content_items.map((item) =>
         item.type === "folder" ? (
           <FolderRow key={`folder${item.id}`} folder={item}>
@@ -96,7 +99,7 @@ export const FileList = ({ content_items }: Props) => {
           getFileRow(item)
         ),
       )}
-    </div>
+    </Rows>
   );
 };
 
@@ -104,13 +107,16 @@ const FolderRow = ({ folder, children }: { folder: FolderItem; children: React.R
   const [isExpanded, setIsExpanded] = React.useState(false);
 
   return (
-    <div role="treeitem" aria-expanded={isExpanded}>
-      <div className="content" onClick={() => setIsExpanded(!isExpanded)}>
+    <Row role="treeitem" aria-expanded={isExpanded}>
+      <RowContent onClick={() => setIsExpanded(!isExpanded)}>
+        <Icon name={isExpanded ? "outline-cheveron-down" : "outline-cheveron-right"} />
         <Icon name="solid-folder-open" className="type-icon" />
         <h4>{folder.name}</h4>
-      </div>
-      <div role="group">{children}</div>
-    </div>
+      </RowContent>
+      <RowDetails role="group" className={classNames({ hidden: !isExpanded })}>
+        {children}
+      </RowDetails>
+    </Row>
   );
 };
 
@@ -152,7 +158,7 @@ export const FileRow = ({
   const [isCollapsed, setIsCollapsed] = React.useState(initialCollapsed);
   const downloadUrl = file.download_url;
   const downloadButton = downloadUrl ? (
-    <TrackClick eventName="download_click" resourceId={file.id}>
+    <TrackClick eventName="download_click" file={file}>
       <NavigationButton href={downloadUrl}>Download</NavigationButton>
     </TrackClick>
   ) : null;
@@ -192,22 +198,27 @@ export const FileRow = ({
   const isEmbeddedVideo = isEmbed && !!streamUrl;
 
   return (
-    <div
+    <Row
       className={cx({ embed: isEmbed }, className)}
       role={isTreeItem || shouldShowSubtitlesForFile(file) ? "treeitem" : undefined}
       aria-expanded={shouldShowSubtitlesForFile(file) ? isExpanded : undefined}
     >
       {isEmbeddedVideo && !isCollapsed ? (
-        <VideoEmbedPreview
-          file={file}
-          resumeLocation={resumeLocation}
-          setResumeLocation={setResumeLocation}
-          fetchMediaUrls={fetchMediaUrls}
-          isFetchingMediaUrls={isFetchingMediaUrls}
-          autoPlay={initialCollapsed}
-        />
+        <RowDetails asChild>
+          <VideoEmbedPreview
+            file={file}
+            resumeLocation={resumeLocation}
+            setResumeLocation={setResumeLocation}
+            fetchMediaUrls={fetchMediaUrls}
+            isFetchingMediaUrls={isFetchingMediaUrls}
+            autoPlay={initialCollapsed}
+          />
+        </RowDetails>
       ) : null}
-      <div className="content" onClick={() => setIsExpanded(!isExpanded)}>
+      <RowContent onClick={() => setIsExpanded(!isExpanded)}>
+        {shouldShowSubtitlesForFile(file) ? (
+          <Icon name={isExpanded ? "outline-cheveron-down" : "outline-cheveron-right"} />
+        ) : null}
         {isEmbeddedVideo && file.thumbnail_url && isCollapsed ? (
           <div className="thumbnail">
             <img src={file.thumbnail_url} />
@@ -238,9 +249,9 @@ export const FileRow = ({
             </>
           }
         />
-      </div>
+      </RowContent>
 
-      <div className="actions">
+      <RowActions>
         {file.latest_media_location && file.content_length ? (
           <div>
             <ProgressPie progress={file.latest_media_location.location / file.content_length} />
@@ -250,7 +261,7 @@ export const FileRow = ({
         {downloadButton}
 
         {!isEmbed && streamUrl != null ? (
-          <TrackClick eventName="stream_click" resourceId={file.id}>
+          <TrackClick eventName="stream_click" file={file}>
             <NavigationButton color="primary" href={streamUrl} target="_blank">
               {file.latest_media_location != null && file.latest_media_location.location === file.content_length
                 ? "Watch again"
@@ -266,7 +277,7 @@ export const FileRow = ({
         ) : null}
 
         {externalLinkUrl !== null ? (
-          <TrackClick eventName="external_link_click" resourceId={file.id}>
+          <TrackClick eventName="external_link_click" file={file}>
             <NavigationButton color="primary" href={externalLinkUrl} target="_blank">
               Open
             </NavigationButton>
@@ -274,7 +285,7 @@ export const FileRow = ({
         ) : null}
 
         {FileUtils.isAudioExtension(file.extension) ? (
-          <TrackClick eventName="play_click" resourceId={file.id}>
+          <TrackClick eventName="play_click" file={file}>
             <Button
               color={isShowingAudioDrawer ? undefined : "primary"}
               aria-label="Play Button"
@@ -305,15 +316,16 @@ export const FileRow = ({
         {!file.processing ? (
           <>
             {file.kindle_data != null ? (
-              <TrackClick eventName="send_to_kindle_click" resourceId={file.id}>
-                <Button className="button-kindle" onClick={toggleKindleDrawer}>
+              <TrackClick eventName="send_to_kindle_click" file={file}>
+                <Button color="kindle" onClick={toggleKindleDrawer}>
+                  <span className="brand-icon brand-icon-kindle" />
                   Send to Kindle
                 </Button>
               </TrackClick>
             ) : null}
 
             {file.read_url != null ? (
-              <NativeAppLink resourceId={file.id}>
+              <NativeAppLink file={file}>
                 <NavigationButton color="primary" href={file.read_url}>
                   {file.latest_media_location != null && file.latest_media_location.location === file.content_length
                     ? "Read again"
@@ -323,10 +335,10 @@ export const FileRow = ({
             ) : null}
           </>
         ) : null}
-      </div>
+      </RowActions>
 
       {FileUtils.isAudioExtension(file.extension) && isShowingAudioDrawer ? (
-        <div className="drawer">
+        <RowDetails className="drawer">
           <AudioPlayerContainer
             fileId={file.id}
             playingAudioForId={playingAudioForId}
@@ -335,7 +347,7 @@ export const FileRow = ({
             setResumeLocation={setResumeLocation}
             contentLength={file.content_length}
           />
-        </div>
+        </RowDetails>
       ) : null}
 
       {file.kindle_data != null && isShowingKindleDrawer ? (
@@ -348,15 +360,17 @@ export const FileRow = ({
       ) : null}
 
       {shouldShowSubtitlesForFile(file) ? (
-        <div role="group">
-          {file.subtitle_files?.map((subtitleFile) => (
-            <SubtitleRow key={subtitleFile.url} subtitleFile={subtitleFile} />
-          ))}
-        </div>
+        <RowDetails role="group" className={classNames({ hidden: !isExpanded })}>
+          <Rows role="list">
+            {file.subtitle_files?.map((subtitleFile) => (
+              <SubtitleRow key={subtitleFile.url} subtitleFile={subtitleFile} />
+            ))}
+          </Rows>
+        </RowDetails>
       ) : null}
 
       {file.description?.trim() ? <p style={{ whiteSpace: "pre-wrap" }}>{file.description}</p> : null}
-    </div>
+    </Row>
   );
 };
 
@@ -427,6 +441,30 @@ const MobileAppAudioFileRow = ({ file }: { file: FileItem }) => {
     }
   });
 
+  const messageListener = useRefToLatest((event: MessageEvent) => {
+    if (typeof event.data !== "string" || !event.data.startsWith("{")) return;
+    let data: unknown;
+    try {
+      data = JSON.parse(event.data);
+    } catch {
+      return;
+    }
+    if (is<{ type: "mobileAppAudioPlayerInfo"; payload: MobileAppAudioPlayerInfo }>(data)) {
+      if (data.payload.fileId !== file.id) return;
+      setIsPlaying(data.payload.isPlaying);
+      setLatestMediaLocation(parseFloat(data.payload.latestMediaLocation ?? "0"));
+    }
+  });
+
+  React.useEffect(() => {
+    const target = Mobile.isOnAndroidDevice() ? document : window;
+    const listener = (e: MessageEvent) => messageListener.current(e);
+    // @ts-expect-error - React Native sends message events to Android webviews via the document object, not window
+    target.addEventListener("message", listener);
+    // @ts-expect-error - React Native sends message events to Android webviews via the document object, not window
+    return () => target.removeEventListener("message", listener);
+  }, []);
+
   const [showTooltip, setShowTooltip] = React.useState(false);
   const touchAndHoldEventListeners = useTouchAndHold({
     onFinish: () => setShowTooltip(true),
@@ -441,68 +479,70 @@ const MobileAppAudioFileRow = ({ file }: { file: FileItem }) => {
   const isProcessing = file.duration === null;
 
   return (
-    <div ref={selfRef} className="embed" {...touchAndHoldEventListeners}>
+    <Row ref={selfRef} className="embed" {...touchAndHoldEventListeners}>
       <WithTooltip tip={showTooltip ? file.file_name : null} position="top">
         <TrackClick
           eventName="play_click"
-          resourceId={isProcessing || showTooltip ? null : file.id} // Prevent playback when processing or showing tooltip
+          file={isProcessing || showTooltip ? null : file} // Prevent playback when processing or showing tooltip
           type="audio"
           isPlaying={isPlaying}
           resumeAt={latestMediaLocation || 0}
           contentLength={file.duration || 0}
         >
-          <button
-            className={cx("content", { "text-muted": isProcessing })}
-            style={{
-              gridColumn: "3 span",
-              userSelect: "none",
-              WebkitUserSelect: "none",
-              WebkitTouchCallout: "none",
-              outline: "none",
-            }}
-            disabled={isProcessing}
-          >
-            <FileRowContent
-              hideIcon
-              extension={file.extension}
-              name={file.file_name}
-              externalLinkUrl={file.external_link_url}
-              details={
-                isProcessing ? (
-                  <li>Processing...</li>
-                ) : (
-                  <>
-                    {file.extension ? <li>{file.extension}</li> : null}
-                    {file.file_size ? <li>{FileUtils.getFullFileSizeString(file.file_size)}</li> : null}
-                    {file.duration ? <li>{humanizedDuration(file.duration)}</li> : null}
-                  </>
-                )
-              }
-            />
-          </button>
+          <RowContent asChild>
+            <button
+              className={classNames("content all-unset", { "text-muted": isProcessing })}
+              style={{
+                gridColumn: "3 span",
+                userSelect: "none",
+                WebkitUserSelect: "none",
+                WebkitTouchCallout: "none",
+                outline: "none",
+              }}
+              disabled={isProcessing}
+            >
+              <FileRowContent
+                hideIcon
+                extension={file.extension}
+                name={file.file_name}
+                externalLinkUrl={file.external_link_url}
+                details={
+                  isProcessing ? (
+                    <li>Processing...</li>
+                  ) : (
+                    <>
+                      {file.extension ? <li>{file.extension}</li> : null}
+                      {file.file_size ? <li>{FileUtils.getFullFileSizeString(file.file_size)}</li> : null}
+                      {file.duration ? <li>{humanizedDuration(file.duration)}</li> : null}
+                    </>
+                  )
+                }
+              />
+            </button>
+          </RowContent>
         </TrackClick>
       </WithTooltip>
-      <div
-        className={cx("actions", { "text-muted": isProcessing })}
+      <RowActions
+        className={classNames({ "text-muted": isProcessing })}
         style={{ gridColumn: "4", gap: "var(--spacer-4)", flexWrap: "nowrap" }}
       >
         {file.download_url ? (
-          <TrackClick eventName="download_click" resourceId={file.id}>
-            <button aria-label="Download">
+          <TrackClick eventName="download_click" file={file}>
+            <button aria-label="Download" className="cursor-pointer all-unset">
               <Icon name="download" className="type-icon" />
             </button>
           </TrackClick>
         ) : null}
         <TrackClick
           eventName="play_click"
-          resourceId={isProcessing ? null : file.id}
+          file={isProcessing ? null : file}
           type="audio"
           isPlaying={isPlaying}
           resumeAt={latestMediaLocation || 0}
           contentLength={file.duration || 0}
         >
           {isPlaying ? (
-            <button aria-label="Pause" disabled={isProcessing}>
+            <button aria-label="Pause" disabled={isProcessing} className="cursor-pointer all-unset">
               <Icon
                 className="type-icon"
                 name="circle-pause"
@@ -510,7 +550,7 @@ const MobileAppAudioFileRow = ({ file }: { file: FileItem }) => {
               />
             </button>
           ) : isCompleted ? (
-            <button aria-label="Play" disabled={isProcessing}>
+            <button aria-label="Play" disabled={isProcessing} className="cursor-pointer all-unset">
               <Icon
                 className="type-icon text-muted"
                 name="outline-check-circle"
@@ -518,7 +558,7 @@ const MobileAppAudioFileRow = ({ file }: { file: FileItem }) => {
               />
             </button>
           ) : (
-            <button aria-label="Play" disabled={isProcessing}>
+            <button aria-label="Play" disabled={isProcessing} className="cursor-pointer all-unset">
               <Icon
                 className="type-icon"
                 name={latestMediaLocation && latestMediaLocation > 0 ? "outline-circle-play" : "circle-play"}
@@ -527,31 +567,33 @@ const MobileAppAudioFileRow = ({ file }: { file: FileItem }) => {
             </button>
           )}
         </TrackClick>
-      </div>
-      {!isCompleted &&
-      latestMediaLocation !== null &&
-      (isPlaying || latestMediaLocation > 0) &&
-      file.duration &&
-      file.duration > 0 ? (
-        <div style={{ display: "grid", gridColumn: "4 span", gap: "var(--spacer-1)" }}>
-          <meter
-            value={latestMediaLocation / file.duration}
-            className="border-0"
-            style={{
-              ...{
-                background: "var(--active-bg)",
-                height: "var(--spacer-1)",
-              },
-              ...(isPlaying ? {} : { "--optimum-value-background": "currentColor" }),
-            }}
-          />
-          <small>{humanizedDuration(file.duration - latestMediaLocation)} left</small>
-        </div>
-      ) : null}
-      {file.description?.trim() ? (
-        <p style={{ gridColumn: "4 span", whiteSpace: "pre-wrap" }}>{file.description}</p>
-      ) : null}
-    </div>
+      </RowActions>
+      <RowDetails>
+        {!isCompleted &&
+        latestMediaLocation !== null &&
+        (isPlaying || latestMediaLocation > 0) &&
+        file.duration &&
+        file.duration > 0 ? (
+          <div style={{ display: "grid", gridColumn: "4 span", gap: "var(--spacer-1)" }}>
+            <meter
+              value={latestMediaLocation / file.duration}
+              className="border-0"
+              style={{
+                ...{
+                  background: "var(--active-bg)",
+                  height: "var(--spacer-1)",
+                },
+                ...(isPlaying ? {} : { "--optimum-value-background": "currentColor" }),
+              }}
+            />
+            <small>{humanizedDuration(file.duration - latestMediaLocation)} left</small>
+          </div>
+        ) : null}
+        {file.description?.trim() ? (
+          <p style={{ gridColumn: "4 span", whiteSpace: "pre-wrap" }}>{file.description}</p>
+        ) : null}
+      </RowDetails>
+    </Row>
   );
 };
 
@@ -564,6 +606,7 @@ type VideoEmbedPreviewProps = {
   fetchMediaUrls: () => Promise<void>;
   isFetchingMediaUrls: boolean;
   autoPlay?: boolean;
+  className?: string;
 };
 const VideoEmbedPreview = ({
   file,
@@ -572,6 +615,7 @@ const VideoEmbedPreview = ({
   fetchMediaUrls,
   isFetchingMediaUrls,
   autoPlay = false,
+  className,
 }: VideoEmbedPreviewProps) => {
   const [isVideoPlayerShowing, setIsVideoPlayerShowing] = React.useState(false);
   const [duration, setDuration] = React.useState(0);
@@ -652,11 +696,11 @@ const VideoEmbedPreview = ({
   }, [autoPlay]);
 
   return isVideoPlayerShowing ? (
-    <div className="preview">
+    <div className={classNames("preview", className)}>
       <div id={videoPlayerId}></div>
     </div>
   ) : (
-    <figure className="preview">
+    <figure className={classNames("preview", className)}>
       <img
         src={file.thumbnail_url ?? thumbnailPlaceholder}
         style={{
@@ -666,9 +710,9 @@ const VideoEmbedPreview = ({
           borderRadius: "var(--border-radius-1) var(--border-radius-1) 0 0",
         }}
       />
-      <TrackClick eventName="watch" resourceId={file.id}>
+      <TrackClick eventName="watch" file={file}>
         <button
-          className="underline"
+          className="cursor-pointer underline all-unset"
           style={{
             position: "absolute",
             top: "50%",
@@ -723,8 +767,8 @@ const SendToKindleContainer = ({
 
   return (
     <div>
-      <div className="input-with-button">
-        <fieldset className={cx({ danger: hasError })}>
+      <div className="flex gap-2">
+        <fieldset className={cx("flex-1", { danger: hasError })}>
           <input
             type="text"
             value={emailEntry}
@@ -752,18 +796,18 @@ const SendToKindleContainer = ({
 };
 
 const SubtitleRow = ({ subtitleFile }: { subtitleFile: SubtitleFile }) => (
-  <div role="treeitem">
-    <div className="content">
+  <Row role="listitem">
+    <RowContent>
       <FileRowContent
         extension={subtitleFile.extension}
         name={`${subtitleFile.file_name} (${subtitleFile.language})`}
         externalLinkUrl={null}
         details={subtitleFile.file_size ? <li>{FileUtils.getFullFileSizeString(subtitleFile.file_size)}</li> : null}
       />
-    </div>
+    </RowContent>
 
-    <div className="actions">
+    <RowActions>
       <NavigationButton href={subtitleFile.download_url}>Download</NavigationButton>
-    </div>
-  </div>
+    </RowActions>
+  </Row>
 );

@@ -1,10 +1,11 @@
+import { Link } from "@inertiajs/react";
 import cx from "classnames";
 import * as React from "react";
 
 import { formatPriceCentsWithCurrencySymbol } from "$app/utils/currency";
 
 import { ActivityFeed, ActivityItem } from "$app/components/ActivityFeed";
-import { NavigationButton } from "$app/components/Button";
+import { Button, NavigationButton } from "$app/components/Button";
 import { useAppDomain } from "$app/components/DomainSettings";
 import { Icon } from "$app/components/Icons";
 import { CustomizeProfileIcon } from "$app/components/icons/getting-started/CustomizeProfileIcon";
@@ -17,10 +18,13 @@ import { GettingStartedIconProps } from "$app/components/icons/getting-started/G
 import { MakeAccountIcon } from "$app/components/icons/getting-started/MakeAccountIcon";
 import { SmallBetsIcon } from "$app/components/icons/getting-started/SmallBetsIcon";
 import { useLoggedInUser } from "$app/components/LoggedInUser";
+import { ProductIconCell } from "$app/components/ProductsPage/ProductIconCell";
 import { DownloadTaxFormsPopover } from "$app/components/server-components/DashboardPage/DownloadTaxFormsPopover";
 import { Stats } from "$app/components/Stats";
+import { Alert } from "$app/components/ui/Alert";
 import { PageHeader } from "$app/components/ui/PageHeader";
-import Placeholder from "$app/components/ui/Placeholder";
+import { Placeholder, PlaceholderImage } from "$app/components/ui/Placeholder";
+import { Table, TableBody, TableCaption, TableCell, TableHead, TableHeader, TableRow } from "$app/components/ui/Table";
 import { useUserAgentInfo } from "$app/components/UserAgent";
 import { useRunOnce } from "$app/components/useRunOnce";
 import { useClientSortingTableDriver } from "$app/components/useSortingTableDriver";
@@ -62,6 +66,7 @@ export type DashboardPageProps = {
   stripe_verification_message?: string | null;
   tax_forms: Record<number, string>;
   show_1099_download_notice: boolean;
+  tax_center_enabled: boolean;
 };
 type TableProps = { sales: ProductRow[] };
 
@@ -143,9 +148,7 @@ type GettingStartedItemProps = {
 
 const Greeter = () => (
   <Placeholder>
-    <figure>
-      <img src={placeholderImage} />
-    </figure>
+    <PlaceholderImage src={placeholderImage} />
     <h2>We're here to help you get paid for your work.</h2>
     <NavigationButton href={Routes.new_product_path()} color="accent">
       Create your first product
@@ -186,9 +189,9 @@ const GettingStartedItem = ({
 
   if (completed) {
     return (
-      <div className={cx(commonClasses, "button filled cursor-default!")} data-status="completed">
+      <Button color="filled" className={cx(commonClasses, "cursor-default!")} data-status="completed">
         {content}
-      </div>
+      </Button>
     );
   }
 
@@ -231,60 +234,56 @@ const ProductsTable = ({ sales }: TableProps) => {
   }
 
   return (
-    <table>
-      <caption>Best selling</caption>
-      <thead>
-        <tr>
-          <th colSpan={2} {...thProps("name")}>
+    <Table>
+      <TableCaption>Best selling</TableCaption>
+      <TableHeader>
+        <TableRow>
+          <TableHead colSpan={2} {...thProps("name")}>
             Products
-          </th>
-          <th {...thProps("sales")}>Sales</th>
-          <th {...thProps("revenue")}>Revenue</th>
-          <th {...thProps("visits")}>Visits</th>
-          <th {...thProps("today")}>Today</th>
-          <th className="text-singleline" {...thProps("last_7")}>
+          </TableHead>
+          <TableHead {...thProps("sales")}>Sales</TableHead>
+          <TableHead {...thProps("revenue")}>Revenue</TableHead>
+          <TableHead {...thProps("visits")}>Visits</TableHead>
+          <TableHead {...thProps("today")}>Today</TableHead>
+          <TableHead className="text-singleline" {...thProps("last_7")}>
             Last 7 days
-          </th>
-          <th className="text-singleline" {...thProps("last_30")}>
+          </TableHead>
+          <TableHead className="text-singleline" {...thProps("last_30")}>
             Last 30 days
-          </th>
-        </tr>
-      </thead>
-      <tbody>
+          </TableHead>
+        </TableRow>
+      </TableHeader>
+      <TableBody>
         {items.map(({ id, name, thumbnail, today, last_7, last_30, sales, visits, revenue }) => (
-          <tr key={id}>
-            <td className="icon-cell">
-              <a href={Routes.edit_link_url({ id }, { host: appDomain })}>
-                {thumbnail ? <img alt={name} src={thumbnail} /> : <Icon name="card-image-fill" />}
-              </a>
-            </td>
-            <td data-label="Products">
+          <TableRow key={id}>
+            <ProductIconCell href={Routes.edit_link_url({ id }, { host: appDomain })} thumbnail={thumbnail} />
+            <TableCell label="Products">
               <a href={Routes.edit_link_url({ id }, { host: appDomain })} className="line-clamp-2" title={name}>
                 {name}
               </a>
-            </td>
-            <td data-label="Sales" title={sales.toLocaleString(locale)} className="text-nowrap">
+            </TableCell>
+            <TableCell label="Sales" title={sales.toLocaleString(locale)} className="whitespace-nowrap">
               {sales.toLocaleString(locale, { notation: "compact" })}
-            </td>
-            <td data-label="Revenue" title={formatPrice(revenue)} className="text-nowrap">
+            </TableCell>
+            <TableCell label="Revenue" title={formatPrice(revenue)} className="whitespace-nowrap">
               {formatPrice(revenue)}
-            </td>
-            <td data-label="Visits" title={visits.toLocaleString(locale)} className="text-nowrap">
+            </TableCell>
+            <TableCell label="Visits" title={visits.toLocaleString(locale)} className="whitespace-nowrap">
               {visits.toLocaleString(locale, { notation: "compact" })}
-            </td>
-            <td data-label="Today" className="text-nowrap">
+            </TableCell>
+            <TableCell label="Today" className="whitespace-nowrap">
               {formatPrice(today)}
-            </td>
-            <td data-label="Last 7 days" className="text-nowrap">
+            </TableCell>
+            <TableCell label="Last 7 days" className="whitespace-nowrap">
               {formatPrice(last_7)}
-            </td>
-            <td data-label="Last 30 days" className="text-nowrap">
+            </TableCell>
+            <TableCell label="Last 30 days" className="whitespace-nowrap">
               {formatPrice(last_30)}
-            </td>
-          </tr>
+            </TableCell>
+          </TableRow>
         ))}
-      </tbody>
-    </table>
+      </TableBody>
+    </Table>
   );
 };
 
@@ -298,6 +297,7 @@ export const DashboardPage = ({
   stripe_verification_message,
   tax_forms,
   show_1099_download_notice,
+  tax_center_enabled,
 }: DashboardPageProps) => {
   const loggedInUser = useLoggedInUser();
   const [gettingStartedMinimized, setGettingStartedMinimized] = React.useState<boolean>(false);
@@ -316,23 +316,28 @@ export const DashboardPage = ({
     <div>
       <PageHeader
         title="Dashboard"
-        actions={Object.keys(tax_forms).length > 0 && <DownloadTaxFormsPopover taxForms={tax_forms} />}
+        actions={
+          tax_center_enabled
+            ? null
+            : Object.keys(tax_forms).length > 0 && <DownloadTaxFormsPopover taxForms={tax_forms} />
+        }
         className="border-b-0 sm:border-b"
       />
       {stripe_verification_message ? (
-        <div role="alert" className="warning">
-          <div>
-            {stripe_verification_message} <a href={Routes.settings_payments_path()}>Update</a>
-          </div>
-        </div>
+        <Alert variant="warning">
+          {stripe_verification_message} <a href={Routes.settings_payments_path()}>Update</a>
+        </Alert>
       ) : null}
       {show_1099_download_notice ? (
-        <div role="alert" className="info">
-          <div>
-            Your 1099 tax form for {new Date().getFullYear() - 1} is ready!{" "}
-            <a href={Routes.dashboard_download_tax_form_path()}>Click here to download</a>.
-          </div>
-        </div>
+        <Alert variant="info">
+          Your 1099 tax form for {new Date().getFullYear() - 1} is ready!{" "}
+          {tax_center_enabled ? (
+            <Link href={Routes.tax_center_path({ year: new Date().getFullYear() - 1 })}>Click here to download</Link>
+          ) : (
+            <a href={Routes.dashboard_download_tax_form_path()}>Click here to download</a>
+          )}
+          .
+        </Alert>
       ) : null}
 
       {loggedInUser?.policies.settings_payments_user.show
@@ -386,7 +391,7 @@ export const DashboardPage = ({
       <div className="grid gap-4 p-4 md:p-8">
         <h2>Activity</h2>
 
-        <div className="stats-grid">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
           <Stats title="Balance" description="Your current balance available for payout" value={balances.balance} />
           <Stats
             title="Last 7 days"

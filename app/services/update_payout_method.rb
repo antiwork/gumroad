@@ -65,7 +65,7 @@ class UpdatePayoutMethod
     KazakhstanBankAccount.name => { class: KazakhstanBankAccount, permitted_params: [:bank_code] },
     EcuadorBankAccount.name => { class: EcuadorBankAccount, permitted_params: [:bank_code] },
     MalaysiaBankAccount.name => { class: MalaysiaBankAccount, permitted_params: [:bank_code] },
-    GibraltarBankAccount.name => { class: GibraltarBankAccount, permitted_params: [] },
+    GibraltarBankAccount.name => { class: GibraltarBankAccount, permitted_params: [:sort_code] },
     UruguayBankAccount.name => { class: UruguayBankAccount, permitted_params: [:bank_code] },
     MauritiusBankAccount.name => { class: MauritiusBankAccount, permitted_params: [:bank_code] },
     AngolaBankAccount.name => { class: AngolaBankAccount, permitted_params: [:bank_code] },
@@ -194,7 +194,7 @@ class UpdatePayoutMethod
     end
 
     def paypal_payouts_supported?
-      !user.native_payouts_supported? || switching_to_uae_individual_account?
+      user.can_setup_paypal_payouts? || switching_to_uae_individual_account?
     end
 
     def switching_to_uae_individual_account?

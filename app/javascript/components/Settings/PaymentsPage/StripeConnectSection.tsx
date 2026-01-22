@@ -8,6 +8,7 @@ import { Button } from "$app/components/Button";
 import { Icon } from "$app/components/Icons";
 import { showAlert } from "$app/components/server-components/Alert";
 import { SocialAuthButton } from "$app/components/SocialAuthButton";
+import { Alert } from "$app/components/ui/Alert";
 
 export type StripeConnect = {
   has_connected_stripe: boolean;
@@ -54,7 +55,7 @@ const StripeConnectSection = ({
   return (
     <section>
       <div className="grid gap-8">
-        <div className="paragraphs">
+        <div className="flex flex-col gap-4">
           <div
             dangerouslySetInnerHTML={{
               __html: `${connectAccountFeeInfoText}\n${stripeConnect.supported_countries_help_text}`,
@@ -70,24 +71,24 @@ const StripeConnectSection = ({
               </legend>
               <div className="input input-wrapper">
                 <div className="fake-input">{stripeConnect.stripe_connect_account_id}</div>
-                <Icon name="solid-check-circle" style={{ color: "rgb(var(--success))" }} />
+                <Icon name="solid-check-circle" className="text-success" />
               </div>
             </fieldset>
             <p>
               <Button
-                color="danger"
-                className="button-stripe"
+                color="stripe"
                 disabled={isFormDisabled || isDisconnecting || !stripeConnect.stripe_disconnect_allowed}
                 onClick={disconnectStripe}
               >
+                <span className="brand-icon brand-icon-stripe" />
                 Disconnect Stripe account
               </Button>
             </p>
             {!stripeConnect.stripe_disconnect_allowed ? (
-              <div role="alert" className="warning">
+              <Alert variant="warning">
                 You cannot disconnect your Stripe account because it is being used for active subscription or preorder
                 payments.
-              </div>
+              </Alert>
             ) : null}
           </div>
         ) : (

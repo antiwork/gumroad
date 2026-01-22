@@ -11,7 +11,8 @@ class Payouts
     payout_date = Time.current.to_fs(:formatted_date_full_month)
 
     unless user.compliant? || from_admin
-      user.add_payout_note(content: "Payout on #{payout_date} was skipped because the account was not compliant.") if add_comment
+      reason = user.not_reviewed? ? "under review" : "not compliant"
+      user.add_payout_note(content: "Payout on #{payout_date} was skipped because the account was #{reason}.") if add_comment
       return false
     end
 

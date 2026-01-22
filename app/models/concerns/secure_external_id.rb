@@ -109,10 +109,28 @@ module SecureExternalId
     private
       def config
         @config ||= begin
-          raw_config = GlobalConfig.dig(:secure_external_id, default: {})
+          raw_config = GlobalConfig.dig(:secure_external_id, default: nil) || build_config_from_env
           validate_config!(raw_config)
           raw_config
         end
+      end
+
+      def build_config_from_env
+        primary_key_version = GlobalConfig.dig(:secure_external_id, :primary_key_version, default: nil)
+        return {} if primary_key_version.blank?
+
+        # Build the keys hash from environment variables
+        # Looks for SECURE_EXTERNAL_ID__KEYS__1, SECURE_EXTERNAL_ID__KEYS__2, etc.
+        keys = {}
+        (1..10).each do |version|
+          key = GlobalConfig.dig(:secure_external_id, :keys, version.to_s, default: nil)
+          keys[version.to_s] = key if key.present?
+        end
+
+        {
+          primary_key_version: primary_key_version,
+          keys: keys
+        }
       end
 
       def validate_config!(config)

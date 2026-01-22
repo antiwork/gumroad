@@ -22,6 +22,7 @@ import { FollowForm } from "$app/components/Profile/FollowForm";
 import { useRichTextEditor } from "$app/components/RichTextEditor";
 import { CoffeeProduct } from "$app/components/server-components/Profile/CoffeePage";
 import { formatPostDate } from "$app/components/server-components/Profile/PostPage";
+import { CardContent } from "$app/components/ui/Card";
 import { useUserAgentInfo } from "$app/components/UserAgent";
 import { Card as WishlistCard, CardGrid as WishlistCardGrid, CardWishlist } from "$app/components/Wishlist/Card";
 
@@ -123,7 +124,7 @@ const ProductsSectionView = ({
       currencyCode={currencyCode}
       defaults={defaultParams}
       prependFilters={
-        <div>
+        <CardContent>
           <input
             aria-label="Search products"
             placeholder="Search products"
@@ -135,8 +136,9 @@ const ProductsSectionView = ({
                 dispatch({ type: "set-params", params: { ...params, query: enteredQuery } });
               }
             }}
+            className="grow"
           />
-        </div>
+        </CardContent>
       }
     />
   );
@@ -167,7 +169,7 @@ export const WishlistsView = ({ wishlists }: { wishlists: CardWishlist[] }) =>
       ))}
     </WishlistCardGrid>
   ) : (
-    <div className="paragraphs" style={{ textAlign: "center", height: "100%", alignContent: "center" }}>
+    <div className="flex h-full flex-col content-center gap-4 text-center">
       <h1>
         <Icon name="archive-fill" />
       </h1>

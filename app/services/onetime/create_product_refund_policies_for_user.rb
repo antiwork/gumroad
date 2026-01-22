@@ -20,10 +20,14 @@ class Onetime::CreateProductRefundPoliciesForUser
     Rails.logger.info("Found #{total_count} products without refund policies")
 
     products_without_policy.find_each do |product|
-      refund_policy = product.create_product_refund_policy!(
-        seller: user,
-        max_refund_period_in_days:
-      )
+      refund_policy = product.transaction do
+        refund_policy = product.create_product_refund_policy!(
+          seller: user,
+          max_refund_period_in_days:
+        )
+        product.update!(product_refund_policy_enabled: true)
+        refund_policy
+      end
 
       success_message = "✓ Created refund policy for product #{product.id}: #{product.name}. Policy: #{refund_policy.title}"
       Rails.logger.info(success_message)
@@ -34,7 +38,7 @@ class Onetime::CreateProductRefundPoliciesForUser
         policy_title: refund_policy.title
       }
     rescue StandardError => e
-      error_message = "✗ Error creating refund policy for product #{product.id}: #{product.name} - #{e.message}"
+      error_message = "✗ Error creating refund policy for product #{product.id}: #{product.name} - #{e.message} - #{e.backtrace.join("\n")}"
       Rails.logger.error(error_message)
 
       results[:errors] << {

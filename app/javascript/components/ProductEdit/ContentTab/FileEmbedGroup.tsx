@@ -8,15 +8,17 @@ import { cast } from "ts-safe-cast";
 
 import { getFolderArchiveDownloadUrl, getProductFileDownloadInfos } from "$app/data/products";
 import { isTuple } from "$app/utils/array";
+import { classNames } from "$app/utils/classNames";
 import GuidGenerator from "$app/utils/guid_generator";
 import { assertResponseError } from "$app/utils/request";
 
-import { Button, NavigationButton } from "$app/components/Button";
+import { Button, NavigationButton, buttonVariants } from "$app/components/Button";
 import { Icon } from "$app/components/Icons";
 import { LoadingSpinner } from "$app/components/LoadingSpinner";
 import { Popover } from "$app/components/Popover";
 import { showAlert } from "$app/components/server-components/Alert";
 import { NodeActionsMenu } from "$app/components/TiptapExtensions/NodeActionsMenu";
+import { Row, RowActions, RowContent, RowDetails, Rows } from "$app/components/ui/Rows";
 import { useRunOnce } from "$app/components/useRunOnce";
 
 type FileEntry = {
@@ -32,22 +34,23 @@ type FileGroupConfig = {
   productId: string;
   variantId: string | null;
   prepareDownload: () => Promise<void>;
-  files: FileEntry[];
+  filesById: Map<string, FileEntry>;
 };
 type FileEmbedGroupStorage = { lastCreatedUid: string | null };
 
 export const titleWithFallback = (title: unknown) => (title ? String(title).trim() : "") || "Untitled";
 
-export const useFilesInGroup = (node: ProseMirrorNode | null, allFiles: FileEntry[]) =>
+export const useFilesInGroup = (node: ProseMirrorNode | null, filesById: Map<string, FileEntry>) =>
   React.useMemo(() => {
     if (!node) return { files: [], hasStreamable: false };
     const filesInGroup: FileEntry[] = [];
     node.content.forEach((c) => {
-      const file = allFiles.find((file) => file.id === c.attrs.id);
+      if (typeof c.attrs.id !== "string") return;
+      const file = filesById.get(c.attrs.id);
       if (file) filesInGroup.push(file);
     });
     return { files: filesInGroup, hasStreamable: filesInGroup.some((file) => file.is_streamable) };
-  }, [node, allFiles]);
+  }, [node, filesById]);
 
 // The actual archive size limit is 500 MB (524288000B)
 const ARCHIVE_SIZE_LIMIT_IN_BYTES = 500000000;
@@ -65,7 +68,7 @@ const FileEmbedGroupNodeView = ({
   // eslint-disable-next-line @typescript-eslint/consistent-type-assertions -- https://tiptap.dev/guide/typescript#storage-types
   const storage = extension.storage as FileEmbedGroupStorage;
   const isNew = node.attrs.uid === storage.lastCreatedUid;
-  const { files, hasStreamable } = useFilesInGroup(node, config.files);
+  const { files, hasStreamable } = useFilesInGroup(node, config.filesById);
   const downloadableFiles = files.filter((file) => !!file.url && !file.stream_only);
 
   const folderTitle = titleWithFallback(node.attrs.name);
@@ -135,7 +138,7 @@ const FileEmbedGroupNodeView = ({
 
   return (
     <NodeViewWrapper contentEditable={false}>
-      <div
+      <Rows
         role="tree"
         onDragOver={() => {
           if (!expanded && editor.view.dragging?.slice.content.firstChild?.type.name === "fileEmbed") {
@@ -143,9 +146,10 @@ const FileEmbedGroupNodeView = ({
           }
         }}
       >
-        <div role="treeitem" aria-expanded={expanded} className={cx({ selected })}>
+        <Row role="treeitem" aria-expanded={expanded} className={cx({ selected })}>
           {editor.isEditable ? <NodeActionsMenu editor={editor} /> : null}
-          <div className="content" onClick={() => setExpanded(!expanded)} contentEditable={false}>
+          <RowContent onClick={() => setExpanded(!expanded)} contentEditable={false}>
+            <Icon name={expanded ? "outline-cheveron-down" : "outline-cheveron-right"} />
             <Icon name="solid-folder-open" className="type-icon" />
             {editing ? (
               <input
@@ -167,13 +171,13 @@ const FileEmbedGroupNodeView = ({
                 <h4>{folderTitle}</h4>
               </div>
             )}
-          </div>
+          </RowContent>
           {showDownloadButton || editor.isEditable ? (
-            <div className="actions">
+            <RowActions>
               {showDownloadButton ? (
                 <Popover
                   trigger={
-                    <div className="button">
+                    <div className={buttonVariants({ size: "default" })}>
                       Download all
                       <Icon name="outline-cheveron-down" />
                     </div>
@@ -222,17 +226,19 @@ const FileEmbedGroupNodeView = ({
                   <Icon name={editing ? "outline-check" : "pencil"} />
                 </Button>
               ) : null}
-            </div>
+            </RowActions>
           ) : null}
-          {hasStreamable ? (
-            <NodeViewContent id={uid} role="group" />
-          ) : (
-            <div role="group">
-              <NodeViewContent id={uid} className="rows" />
-            </div>
-          )}
-        </div>
-      </div>
+          <RowDetails role="group" className={classNames({ hidden: !expanded })}>
+            {hasStreamable ? (
+              <NodeViewContent id={uid} />
+            ) : (
+              <Rows>
+                <NodeViewContent id={uid} />
+              </Rows>
+            )}
+          </RowDetails>
+        </Row>
+      </Rows>
     </NodeViewWrapper>
   );
 };

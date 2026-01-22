@@ -48,7 +48,13 @@ export const Covers = ({
   );
 
   return (
-    <figure className={classNames("group relative col-[1/-1]", className)} aria-label="Product preview">
+    <figure
+      className={classNames(
+        "group relative col-span-full overflow-hidden rounded-t border-b border-border bg-(image:--product-cover-placeholder) bg-cover",
+        className,
+      )}
+      aria-label="Product preview"
+    >
       {closeButton}
       {prevCover ? <PreviewArrow direction="previous" onClick={() => setActiveCoverId(prevCover.id)} /> : null}
       {nextCover ? <PreviewArrow direction="next" onClick={() => setActiveCoverId(nextCover.id)} /> : null}
@@ -100,9 +106,9 @@ const PreviewArrow = ({ direction, onClick }: { direction: "previous" | "next"; 
   return (
     <button
       className={classNames(
-        "absolute top-1/2 z-1 mx-3 h-8 w-8 -translate-y-1/2 items-center justify-center",
+        "absolute top-1/2 z-1 mx-3 h-8 w-8 -translate-y-1/2 items-center justify-center all-unset",
         "rounded-full border border-border bg-background",
-        "hidden group-legacy-hover:flex",
+        "hidden group-hover:flex",
         positionClass,
       )}
       onClick={(e) => {

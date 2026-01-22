@@ -16,7 +16,7 @@ describe AffiliateMailer do
         expect(mail.to).to eq([affiliate.affiliate_user.form_email])
         expect(mail.subject).to include(email_subject)
         expect(mail.body.encoded).to include(email_body)
-        expect(mail.body.encoded).to include("Thanks for being a part of the team.")
+        expect(mail.body.encoded).to include("Thanks for being part of the team and helping make another sale happen!")
       end
 
       context "for a subscription purchase" do
@@ -34,7 +34,9 @@ describe AffiliateMailer do
           purchase = create(:free_trial_membership_purchase, affiliate:, link: product, seller:)
           formatted_amount = MoneyFormatter.format(purchase.affiliate_credit_cents, :usd, no_cents_if_whole: true, symbol: true)
           mail = AffiliateMailer.notify_affiliate_of_sale(purchase.id)
-          expect(mail.body.encoded).to include "If the subscriber continues with their subscription after their free trial has expired on #{purchase.subscription.free_trial_end_date_formatted}, we will update your balance to reflect your #{affiliate.affiliate_percentage}% commission net of fees (#{formatted_amount})"
+          expect(mail.body.encoded).to include "Your commission rate: #{affiliate.affiliate_percentage}%"
+          expect(mail.body.encoded).to include "Your earnings (after fees): #{formatted_amount}"
+          expect(mail.body.encoded).to include "If the subscriber continues with their subscription after their free trial has expired on #{purchase.subscription.free_trial_end_date_formatted}, we'll add your commission to your balance"
         end
       end
     end
@@ -42,7 +44,7 @@ describe AffiliateMailer do
     context "for a direct affiliate" do
       let(:affiliate) { create(:direct_affiliate, seller:) }
       let(:email_subject) { "You helped #{seller.name_or_username} make a sale" }
-      let(:email_body) { "#{seller.name_or_username} just made a sale of #{product_name} to #{purchaser_email} thanks to you" }
+      let(:email_body) { "Great news - #{seller.name_or_username} just sold a copy of #{product_name} to #{purchaser_email} thanks to your referral." }
 
       it_behaves_like "notifies affiliate of a sale"
 
@@ -55,14 +57,17 @@ describe AffiliateMailer do
         expect(mail.to).to eq([affiliate.affiliate_user.form_email])
         expect(mail.subject).to include(email_subject)
         expect(mail.body.encoded).to include(email_body)
-        expect(mail.body.encoded).to include("The purchase price was $10. We've updated your balance to reflect your 25% commission net of fees ($1.97).")
+        expect(mail.body.encoded).to include("We've added your commission to your balance.")
+        expect(mail.body.encoded).to include "Purchase amount: $10"
+        expect(mail.body.encoded).to include "Your commission rate: 25%"
+        expect(mail.body.encoded).to include "Your earnings (after fees): $1.97"
       end
     end
 
     context "for a global affiliate" do
       let(:affiliate) { create(:user).global_affiliate }
-      let(:email_subject) { "You helped make a sale through the global affiliate program." }
-      let(:email_body) { "A creator just made a sale thanks to you!" }
+      let(:email_subject) { "🎉 You earned a commission!" }
+      let(:email_body) { "Great news - #{seller.name_or_username} just sold a copy of #{product_name} thanks to your referral." }
 
       it_behaves_like "notifies affiliate of a sale"
     end

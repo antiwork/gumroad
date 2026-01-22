@@ -9,6 +9,7 @@ import { useProductEditContext } from "$app/components/ProductEdit/state";
 import { showAlert } from "$app/components/server-components/Alert";
 import { ToggleSettingRow } from "$app/components/SettingRow";
 import { Toggle } from "$app/components/Toggle";
+import { Alert } from "$app/components/ui/Alert";
 import { useRunOnce } from "$app/components/useRunOnce";
 
 export type CircleIntegration = {
@@ -109,7 +110,7 @@ export const CircleIntegrationEditor = ({
       }}
       label="Invite your customers to a Circle community"
       dropdown={
-        <div className="paragraphs">
+        <div className="flex flex-col gap-4">
           People who purchase your product will be automatically invited to your Circle community. To get your API
           token, visit your-community.circle.so/settings/API.
           <fieldset>
@@ -139,9 +140,7 @@ export const CircleIntegrationEditor = ({
                 <LoadingSpinner />
               </div>
             ) : communities.status === "error" ? (
-              <div role="alert" className="danger">
-                Could not retrieve communities from Circle. Please check your API key.
-              </div>
+              <Alert variant="danger">Could not retrieve communities from Circle. Please check your API key.</Alert>
             ) : (
               <fieldset>
                 <legend>
@@ -170,9 +169,7 @@ export const CircleIntegrationEditor = ({
                 <LoadingSpinner />
               </div>
             ) : spaceGroups.status === "error" ? (
-              <div role="alert" className="danger">
-                Could not retrieve space groups from Circle. Please try again.
-              </div>
+              <Alert variant="danger">Could not retrieve space groups from Circle. Please try again.</Alert>
             ) : (
               <>
                 <fieldset>
@@ -212,11 +209,11 @@ export const CircleIntegrationEditor = ({
                 {product.variants.length > 0 ? (
                   <>
                     {product.variants.every(({ integrations }) => !integrations.circle) ? (
-                      <div role="status" className="warning">
+                      <Alert role="status" variant="warning">
                         {product.native_type === "membership"
                           ? "Your integration is not assigned to any tier. Check your tiers' settings."
                           : "Your integration is not assigned to any version. Check your versions' settings."}
-                      </div>
+                      </Alert>
                     ) : null}
                     <Toggle
                       value={product.variants.every(({ integrations }) => integrations.circle)}

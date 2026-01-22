@@ -1,6 +1,6 @@
 import { Channel } from "@anycable/web";
 import cx from "classnames";
-import debounce from "lodash/debounce";
+import { debounce } from "lodash-es";
 import * as React from "react";
 import { useNavigate, useLocation } from "react-router-dom";
 import { is } from "ts-safe-cast";
@@ -29,7 +29,7 @@ import { Modal } from "$app/components/Modal";
 import { Popover } from "$app/components/Popover";
 import { showAlert } from "$app/components/server-components/Alert";
 import { ToggleSettingRow } from "$app/components/SettingRow";
-import Placeholder from "$app/components/ui/Placeholder";
+import { Placeholder, PlaceholderImage } from "$app/components/ui/Placeholder";
 import { useDebouncedCallback } from "$app/components/useDebouncedCallback";
 import { useIsAboveBreakpoint } from "$app/components/useIsAboveBreakpoint";
 import { useRunOnce } from "$app/components/useRunOnce";
@@ -655,7 +655,7 @@ export const CommunityView = () => {
 
                 <button
                   onClick={() => setSidebarOpen(false)}
-                  className={cx("flex h-8 w-8 justify-center", {
+                  className={cx("flex h-8 w-8 cursor-pointer justify-center all-unset", {
                     hidden: isAboveBreakpoint,
                   })}
                   aria-label="Close sidebar"
@@ -825,7 +825,7 @@ const CommunityChatHeader = ({
     aria-label="Community chat header"
   >
     <button
-      className={cx("shrink-0", { hidden: isAboveBreakpoint })}
+      className={cx("shrink-0 cursor-pointer all-unset", { hidden: isAboveBreakpoint })}
       aria-label="Open sidebar"
       onClick={() => setSidebarOpen(true)}
     >
@@ -849,7 +849,7 @@ const GoBackHeader = () => {
       <div className="flex items-center">
         <button
           onClick={handleGoBack}
-          className="flex cursor-pointer items-center border-none bg-transparent p-0 text-sm no-underline"
+          className="flex cursor-pointer items-center border-none bg-transparent p-0 text-sm no-underline all-unset"
         >
           <Icon name="arrow-left" className="mr-1" /> Go back
         </button>
@@ -862,9 +862,7 @@ const EmptyCommunitiesPlaceholder = ({ hasProducts }: { hasProducts: boolean }) 
   <div>
     <section>
       <Placeholder>
-        <figure>
-          <img src={placeholderImage} />
-        </figure>
+        <PlaceholderImage src={placeholderImage} />
         <h2>Build your community, one product at a time!</h2>
         <p className="max-w-prose">
           When you publish a product, we automatically create a dedicated community chat—your own space to connect with

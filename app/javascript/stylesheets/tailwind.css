@@ -1,6 +1,7 @@
 @layer theme, base, components, utilities;
 @import "tailwindcss/theme.css" layer(theme);
-@import "tailwindcss/utilities.css" source(none); /* Should be layer(utilties) but that conflicts with the legacy non-layer CSS */
+@import "tailwindcss/utilities.css" source(none);
+/* Should be layer(utilities) but that conflicts with the legacy non-layer CSS */
 @plugin "@tailwindcss/typography";
 /*
  * By default Tailwind checks all files in the project for classes, but in Gumroad that causes performance issues.
@@ -11,10 +12,13 @@
 @source "../../../public/help/**/*.html";
 
 /*
- * Capybara tests don't support the media query used by Tailwind v4's default hover variant.
- * Defining a legacy-hover variant that uses a basic :hover selector for cases like Capybara test compatibility.
+ * Tailwind's default hover variant is only applied in user agents that actually support mouse hovering.
+ * This makes sense as hover-only UX is an issue on phones and especially screenreaders.
+ * However, this breaks hover in *headless* Capybara (CI), so we're overriding this for now.
+ * Once all hover UX supports alternative methods like keyboard focus and these tests have been adjusted,
+ * we should remove this override.
  */
-@custom-variant legacy-hover (&:hover);
+@custom-variant hover (&:hover);
 
 @theme {
   --color-black: #000000;
@@ -36,11 +40,17 @@
   --color-backdrop: rgb(0 0 0 / 0.8);
   --color-accent: rgb(var(--accent));
   --color-accent-foreground: rgb(var(--contrast-accent));
+  --color-primary: rgb(var(--primary));
+  --color-primary-foreground: rgb(var(--contrast-primary));
   --color-active-bg: rgb(var(--color) / var(--gray-1));
   --color-muted: rgb(var(--color) / var(--gray-3));
   --color-success: rgb(var(--success));
+  --color-success-foreground: rgb(var(--contrast-success));
   --color-danger: rgb(var(--danger));
+  --color-danger-foreground: rgb(var(--contrast-danger));
   --color-warning: rgb(var(--warning));
+  --color-warning-foreground: rgb(var(--contrast-warning));
+  --color-info: rgb(var(--info));
 
   --shadow: 0.25rem 0.25rem 0 currentColor;
   --shadow-lg: 0.5rem 0.5rem 0 currentColor;
@@ -49,26 +59,7 @@
   --grid-cols-sidebar: 1fr 3fr;
 
   --loading-spinner: url("~images/loading-rainbow.svg");
-  --animate-fade-in-down-out-up: fade-in-down-out-up 5s both;
-
-  @keyframes fade-in-down-out-up {
-    0% {
-      transform: translateY(-100%);
-      opacity: 0;
-    }
-    5% {
-      transform: translateY(0);
-      opacity: 1;
-    }
-    95% {
-      transform: translateY(0);
-      opacity: 1;
-    }
-    100% {
-      transform: translateY(-100%);
-      opacity: 0;
-    }
-  }
+  --product-cover-placeholder: url("~images/placeholders/product-cover.png");
 }
 
 @layer base {
@@ -79,6 +70,13 @@
     * {
       border-color: var(--color-border);
     }
+  }
+}
+
+@utility all-unset {
+  /* Ensure low precedence so it doesn't override other styles */
+  :where(&) {
+    all: unset;
   }
 }
 
@@ -104,10 +102,22 @@
   0% {
     transform: translateX(0);
   }
+
   50% {
     transform: translateX(-50%);
   }
+
   100% {
     transform: translateX(0);
+  }
+}
+
+@keyframes marquee-scroll {
+  0% {
+    transform: translateX(0);
+  }
+
+  100% {
+    transform: translateX(-50%);
   }
 }

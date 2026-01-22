@@ -1,7 +1,6 @@
 # frozen_string_literal: true
 
 class Api::Internal::Helper::PayoutsController < Api::Internal::Helper::BaseController
-  before_action :authorize_helper_token!
   before_action :fetch_user
 
   PAYOUT_INDEX_OPENAPI = {

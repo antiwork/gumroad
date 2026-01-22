@@ -92,7 +92,6 @@ module User::Compliance
     Compliance::Countries::BTN,
     Compliance::Countries::LAO,
     Compliance::Countries::MOZ,
-    Compliance::Countries::KAZ,
     Compliance::Countries::ECU,
     Compliance::Countries::MYS,
     Compliance::Countries::URY,
@@ -216,9 +215,7 @@ module User::Compliance
         signed_up_from_saudi_arabia? ||
         signed_up_from_norway? ||
         signed_up_from_saudi_arabia? ||
-        signed_up_from_gibraltar? ||
         signed_up_from_mauritius? ||
-        signed_up_from_kazakhstan? ||
         signed_up_from_tunisia? ||
         signed_up_from_el_salvador? ||
         signed_up_from_kuwait? ||

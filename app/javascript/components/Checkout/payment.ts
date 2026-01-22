@@ -1,5 +1,5 @@
 import { enableMapSet, produce } from "immer";
-import groupBy from "lodash/groupBy";
+import { groupBy } from "lodash-es";
 import * as React from "react";
 
 import { getSurcharges, SurchargesResponse } from "$app/data/customer_surcharge";
@@ -160,7 +160,8 @@ export const getTotalPriceFromProducts = (state: State) => state.products.reduce
 export function isTippingEnabled(state: State) {
   return (
     state.products.every((product) => product.hasTippingEnabled) &&
-    !state.products.every((product) => product.nativeType === "coffee")
+    !state.products.every((product) => product.nativeType === "coffee") &&
+    getTotalPriceFromProducts(state) > 0
   );
 }
 

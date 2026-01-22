@@ -30,8 +30,8 @@ describe "Calls Edit", type: :system, js: true do
     end
     wait_for_ajax
 
-    within_section "Cover", section_element: :section do
-      expect(page).to have_selector("button[role='tab']", count: 2)
+    within "[role=tablist][aria-label='Product covers']" do
+      expect(page).to have_tab_button(count: 2)
     end
   end
 

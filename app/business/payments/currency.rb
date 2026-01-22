@@ -11,7 +11,6 @@ module Currency
   # These cannot be used as account's default currency or to set product prices.
   # Currency conversion helpers do not support for these currencies.
   THB = "thb"
-  BGN = "bgn"
   BAM = "bam"
   BDT = "bdt"
   BTN = "btn"
