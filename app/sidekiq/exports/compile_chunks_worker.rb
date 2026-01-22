@@ -1,9 +1,8 @@
 # frozen_string_literal: true
-require 'csv'
 
 class Exports::CompileAudienceExportChunksJob
   include Sidekiq::Worker
-  sidekiq_options retry: 3, queue: :low
+  sidekiq_options retry: 3, queue: :low, lock: :until_executed
 
   FIELDS = ["Subscriber Email", "Subscribed Time"].freeze
 
