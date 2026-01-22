@@ -133,7 +133,7 @@ export const Nav = ({ title, children, footer }: Props) => {
             <span className="logo-g" />
           </a>
           <h1 className="w-full truncate text-center text-base">{title}</h1>
-          <button aria-label="Toggle navigation" onClick={toggle}>
+          <button className="all-unset" aria-label="Toggle navigation" onClick={toggle}>
             <Icon name={open ? "x" : "outline-menu"} />
           </button>
         </div>

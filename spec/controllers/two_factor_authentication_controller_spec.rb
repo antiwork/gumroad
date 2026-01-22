@@ -240,7 +240,7 @@ describe TwoFactorAuthenticationController, type: :controller, inertia: true do
     it "resends the authentication token and redirects with notice" do
       expect do
         post :resend_authentication_token, params: { user_id: @user.encrypted_external_id }
-      end.to have_enqueued_mail(TwoFactorAuthenticationMailer, :authentication_token).with(@user.id)
+      end.to have_enqueued_mail(TwoFactorAuthenticationMailer, :authentication_token).with(@user.id, email_provider: nil)
 
       expect(response).to redirect_to(two_factor_authentication_path)
       expect(flash[:notice]).to eq "Resent the authentication token, please check your inbox."

@@ -1,6 +1,7 @@
 import { formatDistanceToNow, parseISO } from "date-fns";
 import * as React from "react";
 
+import { Button } from "$app/components/Button";
 import { Icon } from "$app/components/Icons";
 import { Row, RowActions, RowContent, Rows } from "$app/components/ui/Rows";
 import { useUserAgentInfo } from "$app/components/UserAgent";
@@ -36,10 +37,10 @@ export const DownloadPagePostList = ({ posts }: { posts: Post[] }) => {
               </div>
             </RowContent>
             <RowActions>
-              <TrackClick eventName="post_click" resourceId={post.id}>
-                <a href={post.view_url} className="button">
-                  View
-                </a>
+              <TrackClick eventName="post_click" post={post}>
+                <Button asChild>
+                  <a href={post.view_url}>View</a>
+                </Button>
               </TrackClick>
             </RowActions>
           </Row>

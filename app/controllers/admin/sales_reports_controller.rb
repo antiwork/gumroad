@@ -17,7 +17,7 @@ class Admin::SalesReportsController < Admin::BaseController
       sales_report.generate_later
       redirect_to admin_sales_reports_path, status: :see_other, notice: "Sales report job enqueued successfully!"
     else
-      redirect_to admin_sales_reports_path, inertia: { errors: sales_report.errors_hash }, alert: "Invalid form submission. Please fix the errors."
+      redirect_to admin_sales_reports_path, inertia: inertia_errors(sales_report), alert: "Invalid form submission. Please fix the errors."
     end
   end
 
