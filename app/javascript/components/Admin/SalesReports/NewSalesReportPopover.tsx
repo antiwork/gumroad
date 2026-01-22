@@ -3,7 +3,7 @@ import * as React from "react";
 
 import AdminSalesReportsForm from "$app/components/Admin/SalesReports/Form";
 import { buttonVariants } from "$app/components/Button";
-import { Popover, PopoverContent, PopoverTrigger } from "$app/components/Popover";
+import { PopoverRoot as Popover, PopoverContent, PopoverTrigger } from "$app/components/Popover";
 
 type PageProps = {
   countries: [string, string][];

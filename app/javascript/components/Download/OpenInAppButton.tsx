@@ -1,7 +1,7 @@
 import * as React from "react";
 
 import { Button, buttonVariants } from "$app/components/Button";
-import { Popover, PopoverContent, PopoverTrigger } from "$app/components/Popover";
+import { PopoverRoot as Popover, PopoverContent, PopoverTrigger } from "$app/components/Popover";
 
 type Props = { iosAppUrl: string; androidAppUrl: string };
 

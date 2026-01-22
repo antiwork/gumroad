@@ -12,7 +12,7 @@ import { classNames } from "$app/utils/classNames";
 import { Button } from "$app/components/Button";
 import { Icon } from "$app/components/Icons";
 import { Modal } from "$app/components/Modal";
-import { Popover, PopoverContent, PopoverTrigger } from "$app/components/Popover";
+import { PopoverRoot as Popover, PopoverContent, PopoverTrigger } from "$app/components/Popover";
 import { MenuItem, validateUrl } from "$app/components/RichTextEditor";
 import { showAlert } from "$app/components/server-components/Alert";
 

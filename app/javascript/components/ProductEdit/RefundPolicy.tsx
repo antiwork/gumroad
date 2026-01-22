@@ -7,7 +7,7 @@ import { Button } from "$app/components/Button";
 import { Details } from "$app/components/Details";
 import { Dropdown } from "$app/components/Dropdown";
 import { Modal } from "$app/components/Modal";
-import { Popover, PopoverClose, PopoverContent, PopoverTrigger } from "$app/components/Popover";
+import { PopoverRoot as Popover, PopoverClose, PopoverContent, PopoverTrigger } from "$app/components/Popover";
 import { Select } from "$app/components/Select";
 import { Toggle } from "$app/components/Toggle";
 import { useUserAgentInfo } from "$app/components/UserAgent";

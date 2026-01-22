@@ -21,9 +21,13 @@ export const useAnalyticsDateRange = () => {
   });
 
   React.useEffect(() => {
-    url.searchParams.set("from", lightFormat(from, "yyyy-MM-dd"));
-    url.searchParams.set("to", lightFormat(to, "yyyy-MM-dd"));
-    history.pushState(null, "", url);
+    const currentUrl = new URL(window.location.href);
+    currentUrl.searchParams.set("from", lightFormat(from, "yyyy-MM-dd"));
+    currentUrl.searchParams.set("to", lightFormat(to, "yyyy-MM-dd"));
+    const timer = setTimeout(() => {
+      history.pushState(null, "", currentUrl.toString());
+    }, 0);
+    return () => clearTimeout(timer);
   }, [from.getTime(), to.getTime()]);
 
   return { from, to, setFrom, setTo };

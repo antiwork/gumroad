@@ -8,7 +8,7 @@ import { generatePageIcon } from "$app/utils/rich_content_page";
 
 import { PageListItem } from "$app/components/Download/PageListLayout";
 import { Icon } from "$app/components/Icons";
-import { Popover, PopoverContent, PopoverTrigger } from "$app/components/Popover";
+import { PopoverRoot as Popover, PopoverContent, PopoverTrigger } from "$app/components/Popover";
 import { BlurOnEnter } from "$app/components/TiptapExtensions/BlurOnEnter";
 import PlainTextStarterKit from "$app/components/TiptapExtensions/PlainTextStarterKit";
 

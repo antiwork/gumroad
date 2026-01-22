@@ -4,7 +4,7 @@ import { type SaveActionName } from "$app/types/workflow";
 
 import { Button } from "$app/components/Button";
 import { Icon } from "$app/components/Icons";
-import { Popover, PopoverContent, PopoverTrigger } from "$app/components/Popover";
+import { PopoverRoot as Popover, PopoverContent, PopoverTrigger } from "$app/components/Popover";
 import { Toggle } from "$app/components/Toggle";
 
 type PublishButtonProps = {

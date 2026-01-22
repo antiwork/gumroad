@@ -2,7 +2,7 @@ import * as React from "react";
 
 import { Button, NavigationButton } from "$app/components/Button";
 import { Icon } from "$app/components/Icons";
-import { Popover, PopoverContent, PopoverTrigger } from "$app/components/Popover";
+import { PopoverRoot as Popover, PopoverContent, PopoverTrigger } from "$app/components/Popover";
 
 type Props = { zip_path: string; files: { url: string; filename: string | null }[] };
 

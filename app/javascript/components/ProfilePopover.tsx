@@ -1,7 +1,7 @@
 import * as React from "react";
 
 import { Icon } from "$app/components/Icons";
-import { Popover, PopoverContent, PopoverTrigger } from "$app/components/Popover";
+import { PopoverRoot as Popover, PopoverContent, PopoverTrigger } from "$app/components/Popover";
 
 type User = { name: string | null; email: string | null; avatarUrl: string };
 
