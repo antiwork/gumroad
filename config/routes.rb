@@ -665,6 +665,7 @@ Rails.application.routes.draw do
       scope module: :products, format: true, constraints: { format: :json } do
         resources :other_refund_policies, only: :index
         resources :remaining_call_availabilities, only: :index
+        resources :available_offer_codes, only: :index
       end
     end
 

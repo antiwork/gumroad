@@ -42,5 +42,5 @@ export const ReceiptPreview = () => {
   useRunOnce(() => void fetchReceiptPreview());
   useOnChange(debouncedFetchReceiptPreview, [uniquePermalink, custom_receipt_text, custom_view_content_button_text]);
 
-  return <div dangerouslySetInnerHTML={{ __html: receiptHtml }} />;
+  return <div className="dark:[&_.wordmark_img]:invert" dangerouslySetInnerHTML={{ __html: receiptHtml }} />;
 };

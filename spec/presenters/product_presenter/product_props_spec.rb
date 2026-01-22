@@ -386,6 +386,67 @@ describe ProductPresenter::ProductProps do
       end
     end
 
+    context "with default discount code" do
+      let(:product) { create(:product, user: seller, price_cents: 1000) }
+      let(:default_offer_code) { create(:offer_code, products: [product], code: "DEFAULT10", amount_cents: 200) }
+
+      before do
+        product.update!(default_offer_code: default_offer_code)
+      end
+
+      it "uses the default offer code when no discount code is provided" do
+        discount_code_props = presenter.props(seller_custom_domain_url: nil, request:, pundit_user: nil)[:discount_code]
+
+        expect(discount_code_props[:valid]).to be(true)
+        expect(discount_code_props[:code]).to eq(default_offer_code.code)
+        expect(discount_code_props[:discount][:cents]).to eq(200)
+      end
+
+      it "uses a better offer code when provided and overrides the default" do
+        better_offer_code = create(:offer_code, products: [product], code: "BETTER20", amount_cents: 300)
+
+        discount_code_props = presenter.props(seller_custom_domain_url: nil, request:, pundit_user: nil, discount_code: better_offer_code.code)[:discount_code]
+
+        expect(discount_code_props[:valid]).to be(true)
+        expect(discount_code_props[:code]).to eq(better_offer_code.code)
+        expect(discount_code_props[:discount][:cents]).to eq(300)
+      end
+
+      it "uses the default offer code when an inferior offer code is provided" do
+        inferior_offer_code = create(:offer_code, products: [product], code: "INFERIOR5", amount_cents: 100)
+
+        discount_code_props = presenter.props(seller_custom_domain_url: nil, request:, pundit_user: nil, discount_code: inferior_offer_code.code)[:discount_code]
+
+        expect(discount_code_props[:valid]).to be(true)
+        expect(discount_code_props[:code]).to eq(default_offer_code.code)
+        expect(discount_code_props[:discount][:cents]).to eq(200)
+      end
+
+      context "with percentage-based offer codes" do
+        let(:default_offer_code) { create(:offer_code, products: [product], code: "DEFAULT10", amount_percentage: 20, amount_cents: nil) }
+
+        it "uses a better percentage offer code when provided" do
+          better_offer_code = create(:offer_code, products: [product], code: "BETTER30", amount_percentage: 30, amount_cents: nil)
+
+          discount_code_props = presenter.props(seller_custom_domain_url: nil, request:, pundit_user: nil, discount_code: better_offer_code.code)[:discount_code]
+
+          expect(discount_code_props[:valid]).to be(true)
+          expect(discount_code_props[:code]).to eq(better_offer_code.code)
+          expect(discount_code_props[:discount][:percents]).to eq(30)
+        end
+
+        it "uses the default when an inferior percentage offer code is provided" do
+          inferior_offer_code = create(:offer_code, products: [product], code: "INFERIOR10", amount_percentage: 10, amount_cents: nil)
+
+          discount_code_props = presenter.props(seller_custom_domain_url: nil, request:, pundit_user: nil, discount_code: inferior_offer_code.code)[:discount_code]
+
+          expect(discount_code_props[:valid]).to be(true)
+          expect(discount_code_props[:code]).to eq(default_offer_code.code)
+          expect(discount_code_props[:discount][:percents]).to eq(20)
+        end
+      end
+    end
+
     context "bundle product" do
       let(:bundle) { create(:product, user: seller, is_bundle: true) }
 

@@ -174,10 +174,10 @@ class LinksController < ApplicationController
 
   def search
     search_params = params
-    on_profile = search_params[:user_id].present?
-    if on_profile
+    in_section = search_params[:user_id].present?
+    if in_section
       user = User.find_by_external_id(search_params[:user_id])
-      section = user && user.seller_profile_products_sections.on_profile.find_by_external_id(search_params[:section_id])
+      section = user && user.seller_profile_products_sections.find_by_external_id(search_params[:section_id])
       return render json: { total: 0, filetypes_data: [], tags_data: [], products: [] } if section.nil?
       search_params[:section] = section
       search_params[:is_alive_on_profile] = true
@@ -196,7 +196,7 @@ class LinksController < ApplicationController
       search_params[:include_taxonomy_descendants] = true
     end
 
-    if on_profile
+    if in_section
       recommended_by = search_params[:recommended_by]
     else
       recommended_by = RecommendationType::GUMROAD_SEARCH_RECOMMENDATION
@@ -209,10 +209,10 @@ class LinksController < ApplicationController
         product:,
         request:,
         recommended_by:,
-        target: on_profile ? Product::Layout::PROFILE : Product::Layout::DISCOVER,
-        show_seller: !on_profile,
-        query: (search_params[:query] unless on_profile),
-        offer_code: (search_params[:offer_code] unless on_profile)
+        target: in_section ? Product::Layout::PROFILE : Product::Layout::DISCOVER,
+        show_seller: !in_section,
+        query: (search_params[:query] unless in_section),
+        offer_code: (search_params[:offer_code] unless in_section)
       )
     end
     render json: results
@@ -313,7 +313,8 @@ class LinksController < ApplicationController
           :shipping_destinations,
           :call_limitation_info,
           :installment_plan,
-          :community_chat_enabled
+          :community_chat_enabled,
+          :default_offer_code_id
         ))
         @product.description = SaveContentUpsellsService.new(seller: @product.user, content: product_permitted_params[:description], old_content: @product.description_was).from_html
         @product.skus_enabled = false
@@ -366,6 +367,7 @@ class LinksController < ApplicationController
         update_availabilities
         update_call_limitation_info
         update_installment_plan
+        update_default_offer_code
 
         Product::SavePostPurchaseCustomFieldsService.new(@product).perform
 
@@ -685,6 +687,25 @@ class LinksController < ApplicationController
       if product_permitted_params[:installment_plan].present?
         @product.create_installment_plan!(product_permitted_params[:installment_plan])
       end
+    end
+
+    def update_default_offer_code
+      default_offer_code_id = product_permitted_params[:default_offer_code_id]
+
+      return @product.default_offer_code = nil if default_offer_code_id.blank?
+
+      offer_code = @product.user.offer_codes.alive.find_by_external_id!(default_offer_code_id)
+
+      raise Link::LinkInvalid, "Offer code cannot be expired" if offer_code.inactive?
+      raise Link::LinkInvalid, "Offer code must be associated with this product or be universal" unless valid_for_product?(offer_code)
+
+      @product.default_offer_code = offer_code
+    rescue ActiveRecord::RecordNotFound
+      raise Link::LinkInvalid, "Invalid offer code"
+    end
+
+    def valid_for_product?(offer_code)
+      offer_code.universal? || @product.offer_codes.where(id: offer_code.id).exists?
     end
 
     def toggle_community_chat!(enabled)

@@ -5,7 +5,7 @@ class ProductPresenter::Card
   include ProductsHelper
 
   ASSOCIATIONS = [
-    :alive_prices, :product_review_stat, :tiers, :variant_categories_alive,
+    :alive_prices, :product_review_stat, :tiers, :variant_categories_alive, :default_offer_code,
     {
       user: [:avatar_attachment, :avatar_blob],
       thumbnail_alive: { file_attachment: { blob: { variant_records: { image_attachment: :blob } } } },
@@ -21,6 +21,9 @@ class ProductPresenter::Card
 
   def for_web(request: nil, recommended_by: nil, recommender_model_name: nil, target: nil, show_seller: true, affiliate_id: nil, query: nil, offer_code: nil, compute_description: true)
     default_recurrence = product.default_price_recurrence
+    base_price_cents = product.display_price_cents(for_default_duration: true)
+    price_cents = compute_discounted_price_cents(base_price_cents)
+
     props = {
       id: product.external_id,
       permalink: product.unique_permalink,
@@ -34,13 +37,18 @@ class ProductPresenter::Card
       native_type: product.native_type,
       quantity_remaining: product.remaining_for_sale_count,
       is_sales_limited: product.max_purchase_count?,
-      price_cents: product.display_price_cents(for_default_duration: true),
+      price_cents:,
       currency_code: product.price_currency_type.downcase,
       is_pay_what_you_want: product.has_customizable_price_option?,
       url: url_for_product_page(product, request:, recommended_by:, recommender_model_name:, layout: target, affiliate_id:, query:, offer_code:),
       duration_in_months: product.duration_in_months,
       recurrence: default_recurrence&.recurrence,
     }
+
+    # Include base_price_cents when there's a discount to show original price with strikethrough
+    if price_cents < base_price_cents
+      props[:original_price_cents] = base_price_cents
+    end
 
     if compute_description
       props[:description] = product.plaintext_description.truncate(100)
@@ -61,4 +69,13 @@ class ProductPresenter::Card
       },
     }
   end
+
+  private
+    def compute_discounted_price_cents(base_price_cents)
+      offer_code = product.default_offer_code
+      return base_price_cents unless offer_code.present?
+
+      discount_amount_cents = offer_code.amount_off(base_price_cents)
+      [base_price_cents - discount_amount_cents, 0].max
+    end
 end
