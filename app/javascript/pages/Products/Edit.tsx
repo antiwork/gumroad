@@ -125,6 +125,7 @@ const ProductEditPage = (props: Props) => {
   const [product, setProduct] = React.useState(props.product);
   const [contentUpdates, setContentUpdates] = React.useState<ContentUpdates>(null);
   const [currencyType, setCurrencyType] = React.useState<CurrencyCode>(props.currency_type);
+  const [activeTab, setActiveTab] = React.useState<TabName>(props.active_tab);
   const lastSavedProductRef = React.useRef<Product>(structuredClone(props.product));
 
   const updateProduct = (update: Partial<Product> | ((product: Product) => void)) =>
@@ -194,9 +195,10 @@ const ProductEditPage = (props: Props) => {
       saving: form.processing,
       contentUpdates,
       setContentUpdates,
-      activeTab: props.active_tab,
+      activeTab,
+      setActiveTab,
     }),
-    [props, product, currencyType, existingFiles, form.processing, contentUpdates],
+    [props, product, currencyType, existingFiles, form.processing, contentUpdates, activeTab],
   );
 
   const imageSettings = React.useMemo(
@@ -234,23 +236,16 @@ const ProductEditPage = (props: Props) => {
     [imagesUploading.size],
   );
 
-  const renderTab = () => {
-    switch (props.active_tab) {
-      case "content":
-        return <ContentTab />;
-      case "share":
-        return <ShareTab />;
-      case "receipt":
-        return <ReceiptTab />;
-      case "product":
-      default:
-        return <ProductTab />;
-    }
-  };
-
   return (
     <ProductEditContext.Provider value={contextValue}>
-      <ImageUploadSettingsContext.Provider value={imageSettings}>{renderTab()}</ImageUploadSettingsContext.Provider>
+      <ImageUploadSettingsContext.Provider value={imageSettings}>
+        <div style={{ display: activeTab === "product" ? "contents" : "none" }}>
+          <ProductTab />
+        </div>
+        {activeTab === "content" && <ContentTab />}
+        {activeTab === "share" && <ShareTab />}
+        {activeTab === "receipt" && <ReceiptTab />}
+      </ImageUploadSettingsContext.Provider>
     </ProductEditContext.Provider>
   );
 };

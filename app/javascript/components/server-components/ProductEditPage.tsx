@@ -123,6 +123,7 @@ const createContextValue = (props: Props) => ({
   filesById: new Map(props.product.files.map((file) => [file.id, { ...file, url: getDownloadUrl(props.id, file) }])),
   aiGenerated: props.ai_generated,
   activeTab: "product" as const,
+  setActiveTab: () => {},
 });
 
 const pagesHaveSameContent = (pages1: Page[], pages2: Page[]): boolean => isEqual(pages1, pages2);

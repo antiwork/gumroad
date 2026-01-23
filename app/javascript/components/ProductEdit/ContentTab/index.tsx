@@ -1132,7 +1132,6 @@ export const ContentTab = () => {
                   </>
                 ) : null
               }
-              activeTab="content"
             >
               <ContentTabContent selectedVariantId={selectedVariantId} />
             </Layout>

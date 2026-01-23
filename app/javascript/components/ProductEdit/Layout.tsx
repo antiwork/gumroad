@@ -1,4 +1,4 @@
-import { Link, router } from "@inertiajs/react";
+import { router } from "@inertiajs/react";
 import cx from "classnames";
 import * as React from "react";
 
@@ -126,7 +126,6 @@ export const Layout = ({
   previewScaleFactor = 0.4,
   showBorder = true,
   showNavigationButton = true,
-  activeTab = "product",
 }: {
   children: React.ReactNode;
   preview?: React.ReactNode;
@@ -135,15 +134,22 @@ export const Layout = ({
   previewScaleFactor?: number;
   showBorder?: boolean;
   showNavigationButton?: boolean;
-  activeTab?: TabName;
 }) => {
-  const { product, updateProduct, uniquePermalink, saving, save } = useProductEditContext();
+  const {
+    product,
+    updateProduct,
+    uniquePermalink,
+    saving,
+    save,
+    activeTab: contextActiveTab,
+    setActiveTab,
+  } = useProductEditContext();
   const rootPath = `/products/${uniquePermalink}/edit`;
 
   const url = useProductUrl();
   const checkoutUrl = useProductUrl({ wanted: true });
 
-  const tab = activeTab;
+  const tab = contextActiveTab;
 
   const navigateTo = React.useCallback((path: string) => {
     router.visit(path);
@@ -285,40 +291,58 @@ export const Layout = ({
           )}
         >
           <Tabs style={{ gridColumn: 1 }}>
-            <Tab asChild isSelected={tab === "product"}>
-              <Link href={rootPath} onClick={onTabClick}>
-                Product
-              </Link>
+            <Tab
+              isSelected={tab === "product"}
+              onClick={(e) => {
+                onTabClick(e, () => {
+                  setActiveTab("product");
+                  window.history.replaceState(window.history.state, "", rootPath);
+                });
+              }}
+            >
+              Product
             </Tab>
             {!isCoffee ? (
-              <Tab asChild isSelected={tab === "content"}>
-                <Link href={`${rootPath}/content`} onClick={onTabClick}>
-                  Content
-                </Link>
-              </Tab>
-            ) : null}
-            <Tab asChild isSelected={tab === "receipt"}>
-              <Link href={`${rootPath}/receipt`} onClick={onTabClick}>
-                Receipt
-              </Link>
-            </Tab>
-            <Tab asChild isSelected={tab === "share"}>
-              <Link
-                href={`${rootPath}/share`}
-                onClick={(evt) => {
-                  onTabClick(evt, () => {
-                    if (!product.is_published) {
-                      evt.preventDefault();
-                      showAlert(
-                        "Not yet! You've got to publish your awesome product before you can share it with your audience and the world.",
-                        "warning",
-                      );
-                    }
+              <Tab
+                isSelected={tab === "content"}
+                onClick={(e) => {
+                  onTabClick(e, () => {
+                    setActiveTab("content");
+                    window.history.replaceState(window.history.state, "", `${rootPath}/content`);
                   });
                 }}
               >
-                Share
-              </Link>
+                Content
+              </Tab>
+            ) : null}
+            <Tab
+              isSelected={tab === "receipt"}
+              onClick={(e) => {
+                onTabClick(e, () => {
+                  setActiveTab("receipt");
+                  window.history.replaceState(window.history.state, "", `${rootPath}/receipt`);
+                });
+              }}
+            >
+              Receipt
+            </Tab>
+            <Tab
+              isSelected={tab === "share"}
+              onClick={(e) => {
+                onTabClick(e, () => {
+                  if (!product.is_published) {
+                    showAlert(
+                      "Not yet! You've got to publish your awesome product before you can share it with your audience and the world.",
+                      "warning",
+                    );
+                    return;
+                  }
+                  setActiveTab("share");
+                  window.history.replaceState(window.history.state, "", `${rootPath}/share`);
+                });
+              }}
+            >
+              Share
             </Tab>
           </Tabs>
           {headerActions}

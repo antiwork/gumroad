@@ -31,7 +31,7 @@ export const ShareTab = () => {
   discoverLink.searchParams.set("query", product.name);
 
   return (
-    <Layout preview={<ProductPreview />} activeTab="share">
+    <Layout preview={<ProductPreview />}>
       <div className="squished">
         <form>
           <section className="p-4! md:p-8!">

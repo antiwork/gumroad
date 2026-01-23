@@ -206,6 +206,7 @@ export const ProductEditContext = React.createContext<{
   filesById: Map<string, FileEntry>;
   aiGenerated: boolean;
   activeTab: "product" | "content" | "share" | "receipt";
+  setActiveTab: (tab: "product" | "content" | "share" | "receipt") => void;
 } | null>(null);
 export const useProductEditContext = () => assertDefined(React.useContext(ProductEditContext));
 

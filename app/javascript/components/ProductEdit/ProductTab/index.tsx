@@ -76,7 +76,7 @@ export const ProductTab = () => {
   if (!currentSeller) return null;
 
   return (
-    <Layout preview={<ProductPreview showRefundPolicyModal={showRefundPolicyPreview} />} isLoading={isUploading} activeTab="product">
+    <Layout preview={<ProductPreview showRefundPolicyModal={showRefundPolicyPreview} />} isLoading={isUploading}>
       <div className="squished">
         <form>
           <section className="p-4! md:p-8!">
