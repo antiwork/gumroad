@@ -1,7 +1,9 @@
 # frozen_string_literal: true
 
 class HelpCenter::BaseController < ApplicationController
-  layout "help_center"
+  include HelperWidget
+
+  layout "inertia"
 
   rescue_from ActiveHash::RecordNotFound, with: :redirect_to_help_center_root
 
@@ -13,5 +15,13 @@ class HelpCenter::BaseController < ApplicationController
   private
     def redirect_to_help_center_root
       redirect_to help_center_root_path, status: :found
+    end
+
+    def helper_props
+      {
+        helper_host: helper_widget_host,
+        helper_session: helper_session,
+        recaptcha_site_key: user_signed_in? ? nil : GlobalConfig.get("RECAPTCHA_LOGIN_SITE_KEY")
+      }
     end
 end
