@@ -151,6 +151,11 @@ export const Layout = ({
 
   const tab = contextActiveTab;
 
+  React.useEffect(() => {
+    const path = tab === "product" ? rootPath : `${rootPath}/${tab}`;
+    window.history.replaceState(window.history.state, "", path);
+  }, [tab, rootPath]);
+
   const navigateTo = React.useCallback((path: string) => {
     router.visit(path);
   }, []);
@@ -291,39 +296,15 @@ export const Layout = ({
           )}
         >
           <Tabs style={{ gridColumn: 1 }}>
-            <Tab
-              isSelected={tab === "product"}
-              onClick={(e) => {
-                onTabClick(e, () => {
-                  setActiveTab("product");
-                  window.history.replaceState(window.history.state, "", rootPath);
-                });
-              }}
-            >
+            <Tab isSelected={tab === "product"} onClick={(e) => onTabClick(e, () => setActiveTab("product"))}>
               Product
             </Tab>
             {!isCoffee ? (
-              <Tab
-                isSelected={tab === "content"}
-                onClick={(e) => {
-                  onTabClick(e, () => {
-                    setActiveTab("content");
-                    window.history.replaceState(window.history.state, "", `${rootPath}/content`);
-                  });
-                }}
-              >
+              <Tab isSelected={tab === "content"} onClick={(e) => onTabClick(e, () => setActiveTab("content"))}>
                 Content
               </Tab>
             ) : null}
-            <Tab
-              isSelected={tab === "receipt"}
-              onClick={(e) => {
-                onTabClick(e, () => {
-                  setActiveTab("receipt");
-                  window.history.replaceState(window.history.state, "", `${rootPath}/receipt`);
-                });
-              }}
-            >
+            <Tab isSelected={tab === "receipt"} onClick={(e) => onTabClick(e, () => setActiveTab("receipt"))}>
               Receipt
             </Tab>
             <Tab
@@ -338,7 +319,6 @@ export const Layout = ({
                     return;
                   }
                   setActiveTab("share");
-                  window.history.replaceState(window.history.state, "", `${rootPath}/share`);
                 });
               }}
             >
