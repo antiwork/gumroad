@@ -1,29 +1,112 @@
-import { Link } from "@inertiajs/react";
+import { Link, usePage } from "@inertiajs/react";
+import cx from "classnames";
 import React from "react";
+
+import { Icon } from "$app/components/Icons";
 
 type Props = {
   children: React.ReactNode;
 };
 
-function BlogNav() {
+const GithubStars = () => {
+  const [stars, setStars] = React.useState<string | null>(null);
+
+  React.useEffect(() => {
+    fetch("/github_stars")
+      .then((res) => res.json())
+      .then((data) => {
+        const count = data.stars;
+        if (count >= 1000) {
+          setStars((count / 1000).toFixed(1) + "K");
+        } else {
+          setStars(count.toString());
+        }
+      })
+      .catch(() => {});
+  }, []);
+
   return (
-    <nav className="flex flex-col justify-center items-center lg:flex-row lg:gap-1 lg:px-6">
-      <Link href={Routes.discover_path()} className="px-4 py-2 no-underline hover:text-pink-600">
+    <a
+      href="https://github.com/antiwork/gumroad"
+      target="_blank"
+      rel="noopener noreferrer"
+      className="flex items-center gap-1.5 rounded-full border border-white/35 p-1.5 text-white no-underline transition-all duration-100 hover:-translate-x-[2px] hover:-translate-y-[2px] hover:bg-gray-700 hover:shadow-[2px_2px_0_0_rgba(255,255,255,0.35)]"
+      aria-label="Visit Gumroad on GitHub"
+    >
+      <svg width="20" height="20" viewBox="0 0 98 96" xmlns="http://www.w3.org/2000/svg" className="fill-current">
+        <path
+          fillRule="evenodd"
+          clipRule="evenodd"
+          d="M48.854 0C21.839 0 0 22 0 49.217c0 21.756 13.993 40.172 33.405 46.69 2.427.49 3.316-1.059 3.316-2.362 0-1.141-.08-5.052-.08-9.127-13.59 2.934-16.42-5.867-16.42-5.867-2.184-5.704-5.42-7.17-5.42-7.17-4.448-3.015.324-3.015.324-3.015 4.934.326 7.523 5.052 7.523 5.052 4.367 7.496 11.404 5.378 14.235 4.074.404-3.178 1.699-5.378 3.074-6.6-10.839-1.141-22.243-5.378-22.243-24.283 0-5.378 1.94-9.778 5.014-13.2-.485-1.222-2.184-6.275.486-13.038 0 0 4.125-1.304 13.426 5.052a46.97 46.97 0 0 1 12.214-1.63c4.125 0 8.33.571 12.213 1.63 9.302-6.356 13.427-5.052 13.427-5.052 2.67 6.763.97 11.816.485 13.038 3.155 3.422 5.015 7.822 5.015 13.2 0 18.905-11.404 23.06-22.324 24.283 1.78 1.548 3.316 4.481 3.316 9.126 0 6.6-.08 11.897-.08 13.526 0 1.304.89 2.853 3.316 2.364 19.412-6.52 33.405-24.935 33.405-46.691C97.707 22 75.788 0 48.854 0z"
+          fill="currentColor"
+        />
+      </svg>
+      {stars ? (
+        <div className="flex items-center gap-1.5 whitespace-nowrap">
+          <span className="text-base leading-none font-medium">{stars}</span>
+          <Icon name="solid-star" style={{ width: 18, height: 18 }} />
+        </div>
+      ) : (
+        <div className="flex items-center gap-1.5">
+          <span className="text-base leading-none font-medium">GitHub</span>
+          <Icon name="arrow-diagonal-up-right" style={{ width: 14, height: 14 }} />
+        </div>
+      )}
+    </a>
+  );
+};
+
+const AuthLinks = () => {
+  const { current_user } = usePage<any>().props;
+
+  const linkClass =
+    "flex w-full items-center justify-center h-full p-4 text-lg text-white no-underline transition-colors duration-200 hover:bg-pink hover:text-black lg:w-auto lg:border-l lg:border-white/35 lg:py-2 lg:px-6";
+
+  if (current_user) {
+    return (
+      <a href={Routes.dashboard_url()} className={cx(linkClass, "lg:bg-pink lg:text-black lg:hover:bg-white")}>
+        Dashboard
+      </a>
+    );
+  }
+
+  return (
+    <div className="flex flex-col lg:h-full lg:flex-row">
+      <a href={Routes.new_user_session_path()} className={linkClass}>
+        Log in
+      </a>
+      <a href={Routes.new_user_registration_path()} className={cx(linkClass, "bg-pink text-black hover:bg-white")}>
+        Start selling
+      </a>
+    </div>
+  );
+};
+
+function BlogNav() {
+  const { url } = usePage();
+  const isActive = (path: string) => url.startsWith(path);
+
+  const navLinkClass = (path: string) =>
+    cx(
+      "flex w-full items-center justify-center p-4 text-lg no-underline transition-all duration-200 lg:w-auto lg:rounded-full lg:py-2 lg:px-4 whitespace-nowrap",
+      isActive(path) ? "bg-white text-black font-medium" : "text-white hover:border-white/35",
+    );
+
+  return (
+    <nav className="flex flex-col items-center justify-center lg:flex-row lg:gap-1 lg:px-6">
+      <Link href={Routes.discover_path()} className={navLinkClass(Routes.discover_path())}>
         Discover
       </Link>
-      <Link
-        href={Routes.gumroad_blog_root_path()}
-        className="px-4 py-2 no-underline hover:text-pink-600"
-      >
+      <Link href={Routes.gumroad_blog_root_path()} className={navLinkClass(Routes.gumroad_blog_root_path())}>
         Blog
       </Link>
-      <Link href={Routes.pricing_path()} className="px-4 py-2 no-underline hover:text-pink-600">
+      <Link href={Routes.pricing_path()} className={navLinkClass(Routes.pricing_path())}>
         Pricing
       </Link>
-      <Link href={Routes.features_path()} className="px-4 py-2 no-underline hover:text-pink-600">
+      <Link href={Routes.features_path()} className={navLinkClass(Routes.features_path())}>
         Features
       </Link>
-      <Link href={Routes.about_path()} className="px-4 py-2 no-underline hover:text-pink-600">
+      <Link href={Routes.about_path()} className={navLinkClass(Routes.about_path())}>
         About
       </Link>
     </nav>
@@ -32,10 +115,10 @@ function BlogNav() {
 
 function BlogFooter() {
   return (
-    <div className="flex flex-col justify-between gap-16 bg-black text-white py-16 px-8 lg:flex-row lg:px-[4vw] lg:py-24 leading-relaxed">
-      <div className="max-w-3xl flex flex-col gap-16 w-full">
+    <div className="flex flex-col justify-between gap-16 bg-black px-8 py-16 leading-relaxed text-white lg:flex-row lg:px-[4vw] lg:py-24">
+      <div className="flex w-full max-w-3xl flex-col gap-16">
         <div className="flex flex-col gap-8">
-          <div className="text-3xl lg:leading-tight lg:text-5xl">
+          <div className="text-3xl lg:text-5xl lg:leading-tight">
             Subscribe to get tips and tactics to grow the way you want.
           </div>
           <form action="https://gumroad.com/follow_from_embed_form" method="post" className="flex gap-1">
@@ -43,19 +126,19 @@ function BlogFooter() {
             <div className="lg:flex-1">
               <input name="email" placeholder="Your email address" type="email" />
             </div>
-            <button type="submit" className="px-4 py-2 bg-pink-600 text-white rounded">
+            <button type="submit" className="rounded bg-pink-600 px-4 py-2 text-white">
               →
             </button>
           </form>
         </div>
         <div className="flex items-center gap-2">
-          <span className="logo-g w-6 h-6" />
+          <span className="logo-g h-6 w-6" />
           <div>Ⓒ Gumroad, Inc.</div>
         </div>
       </div>
-      <div className="max-w-3xl flex flex-col w-full gap-16">
-        <div className="flex-1 flex gap-16">
-          <div className="flex-1 flex flex-col gap-3">
+      <div className="flex w-full max-w-3xl flex-col gap-16">
+        <div className="flex flex-1 gap-16">
+          <div className="flex flex-1 flex-col gap-3">
             <Link href={Routes.discover_path()} className="no-underline hover:text-pink">
               Discover
             </Link>
@@ -75,7 +158,7 @@ function BlogFooter() {
               Small Bets
             </Link>
           </div>
-          <div className="flex-1 flex flex-col gap-3">
+          <div className="flex flex-1 flex-col gap-3">
             <Link href={Routes.help_center_root_path()} className="no-underline hover:text-pink">
               Help
             </Link>
@@ -145,14 +228,55 @@ function BlogFooter() {
 }
 
 export function BlogLayout({ children }: Props) {
+  const [isMenuOpen, setIsMenuOpen] = React.useState(false);
+
   return (
-    <div className="flex-1 flex flex-col bg-white text-black font-['ABC_Favorit'] text-base font-normal leading-relaxed tracking-tight">
-      <header className="flex justify-between items-center px-8 py-4">
-        <Link href={Routes.root_path()} className="no-underline">
-          <span className="logo-full text-4xl" />
-        </Link>
-        <BlogNav />
+    <div className="flex flex-1 flex-col bg-white font-['ABC_Favorit'] text-base leading-relaxed font-normal tracking-tight text-black">
+      <header className="sticky top-0 right-0 left-0 z-50 flex h-20 justify-between border-b border-white/35 bg-black pr-4 pl-4 lg:pr-0 lg:pl-8">
+        <div className="flex items-center gap-2 lg:gap-4">
+          <Link href={Routes.root_path()} className="flex items-center no-underline">
+            <span className="logo-full text-3xl text-white sm:text-4xl" />
+          </Link>
+          <GithubStars />
+        </div>
+
+        <div className="hidden h-full lg:flex lg:items-center">
+          <BlogNav />
+          <AuthLinks />
+        </div>
+
+        <div className="flex items-center lg:hidden">
+          <button
+            className="relative flex h-8 w-8 flex-col items-center justify-center focus:outline-hidden"
+            onClick={() => setIsMenuOpen(!isMenuOpen)}
+            aria-label="Toggle navigation"
+          >
+            <div
+              className={cx(
+                "mb-1 h-0.5 w-8 origin-center transform-gpu bg-white transition-all duration-200",
+                isMenuOpen && "translate-y-[5px] -rotate-45",
+              )}
+            />
+            <div
+              className={cx(
+                "mt-1 h-0.5 w-8 origin-center transform-gpu bg-white transition-all duration-200",
+                isMenuOpen && "-translate-y-[5px] rotate-45",
+              )}
+            />
+          </button>
+        </div>
       </header>
+
+      <div
+        className={cx(
+          "fixed top-20 right-0 left-0 z-50 flex flex-col border-b border-white/35 bg-black transition-all duration-200 lg:hidden",
+          isMenuOpen ? "flex" : "hidden",
+        )}
+      >
+        <BlogNav />
+        <AuthLinks />
+      </div>
+
       <div className="flex-1 overflow-hidden">{children}</div>
       <BlogFooter />
     </div>

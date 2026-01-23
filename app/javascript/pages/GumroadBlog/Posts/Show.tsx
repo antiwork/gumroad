@@ -50,12 +50,14 @@ function ShowPage({ external_id, subject, published_at, message, call_to_action 
       <div className="scoped-tailwind-preflight">
         <div className="container mx-auto px-8 py-16 sm:px-6 md:py-24 lg:px-8">
           <div className="mx-auto max-w-3xl">
-            <BackToBlog />
-            <header>
-              <h1 className="mb-4">{subject}</h1>
-              <time className="text-dark-gray">{publishedAtFormatted}</time>
+            <div className="mb-12 hover:cursor-pointer">
+              <BackToBlog />
+            </div>
+            <header className="mb-8">
+              <h1 className="mb-4 text-5xl">{subject}</h1>
+              <time className="text-dark-gray text-lg">{publishedAtFormatted}</time>
             </header>
-            <div className="mx-auto mt-6 grid max-w-3xl justify-items-center gap-6 border-t py-12 text-xl">
+            <div className="mx-auto mt-8 grid max-w-3xl justify-items-center gap-6 border-t border-black py-12 text-xl">
               {pageLoaded ? null : <LoadingSpinner className="size-8" />}
               <EditorContent className="rich-text" editor={editor} />
 
