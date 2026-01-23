@@ -94,7 +94,7 @@ export const extensions = (productId: string, extraExtensions: TiptapNode[] = []
 ];
 
 const ContentTabContent = ({ selectedVariantId }: { selectedVariantId: string | null }) => {
-  const { id, product, updateProduct, seller, save, existingFiles, setExistingFiles, uniquePermalink, filesById } =
+  const { id, product, updateProduct, seller, save, existingFiles, uniquePermalink, filesById } =
     useProductEditContext();
   const uid = React.useId();
   const isDesktop = useIsAboveBreakpoint("lg");

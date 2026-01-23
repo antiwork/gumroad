@@ -137,7 +137,7 @@ export const Layout = ({
   showNavigationButton?: boolean;
   activeTab?: TabName;
 }) => {
-  const { id, product, updateProduct, uniquePermalink, saving, save, currencyType } = useProductEditContext();
+  const { product, updateProduct, uniquePermalink, saving, save } = useProductEditContext();
   const rootPath = `/products/${uniquePermalink}/edit`;
 
   const url = useProductUrl();
