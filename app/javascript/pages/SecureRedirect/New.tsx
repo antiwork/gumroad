@@ -41,34 +41,34 @@ function SecureRedirectNew() {
   };
 
   return (
-    <Layout header={<h1>Security Check</h1>}>
-      <form onSubmit={handleSubmit}>
-        <section>
-          <AuthAlert />
-          <p className="text-subdued mb-4">{message}</p>
-          <fieldset>
-            <legend>
-              <label htmlFor={`${uid}-confirmation-text`}>{field_name}</label>
-            </legend>
-            <input
-              id={`${uid}-confirmation-text`}
-              type="text"
-              value={form.data.confirmation_text}
-              onChange={(e) => form.setData("confirmation_text", e.target.value)}
-              required
-              autoFocus
-              className="w-full"
-            />
-            {form.errors.confirmation_text && <div className="error-message">{form.errors.confirmation_text}</div>}
-          </fieldset>
+    <form onSubmit={handleSubmit}>
+      <section>
+        <AuthAlert />
+        <p className="text-subdued mb-4">{message}</p>
+        <fieldset>
+          <legend>
+            <label htmlFor={`${uid}-confirmation-text`}>{field_name}</label>
+          </legend>
+          <input
+            id={`${uid}-confirmation-text`}
+            type="text"
+            value={form.data.confirmation_text}
+            onChange={(e) => form.setData("confirmation_text", e.target.value)}
+            required
+            autoFocus
+            className="w-full"
+          />
+          {form.errors.confirmation_text && <div className="error-message">{form.errors.confirmation_text}</div>}
+        </fieldset>
 
-          <Button color="primary" type="submit" disabled={form.processing}>
-            {form.processing ? "Verifying..." : "Continue"}
-          </Button>
-        </section>
-      </form>
-    </Layout>
+        <Button color="primary" type="submit" disabled={form.processing}>
+          {form.processing ? "Verifying..." : "Continue"}
+        </Button>
+      </section>
+    </form>
   );
 }
+
+SecureRedirectNew.layout = (page: React.ReactNode) => <Layout header={<h1>Security Check</h1>}>{page}</Layout>;
 
 export default SecureRedirectNew;
