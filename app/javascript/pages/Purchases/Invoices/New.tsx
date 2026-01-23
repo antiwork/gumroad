@@ -1,11 +1,11 @@
+import { usePage } from "@inertiajs/react";
 import cx from "classnames";
 import * as React from "react";
-import { createCast } from "ts-safe-cast";
+import { cast } from "ts-safe-cast";
 
 import { sendInvoice } from "$app/data/invoice";
 import { classNames } from "$app/utils/classNames";
 import { assertResponseError } from "$app/utils/request";
-import { register } from "$app/utils/serverComponentUtil";
 
 import { Button } from "$app/components/Button";
 import { PoweredByFooter } from "$app/components/PoweredByFooter";
@@ -14,15 +14,7 @@ import { Card, CardContent } from "$app/components/ui/Card";
 
 type FieldState = { value: string; error?: boolean };
 
-const GenerateInvoicePage = ({
-  form_info,
-  supplier_info,
-  seller_info,
-  order_info,
-  email,
-  id,
-  countries,
-}: {
+type Props = {
   form_info: {
     heading: string;
     display_vat_id: boolean;
@@ -52,7 +44,11 @@ const GenerateInvoicePage = ({
   email: string;
   id: string;
   countries: Record<string, string>;
-}) => {
+};
+
+export default function New() {
+  const { form_info, supplier_info, seller_info, order_info, email, id, countries } = cast<Props>(usePage().props);
+
   const [isLoading, setIsLoading] = React.useState(false);
 
   const [fullName, setFullName] = React.useState<FieldState>({ value: form_info.data.full_name ?? "" });
@@ -284,9 +280,6 @@ const GenerateInvoicePage = ({
       <PoweredByFooter />
     </>
   );
-};
+}
 
-export default register({
-  component: GenerateInvoicePage,
-  propParser: createCast(),
-});
+New.disableLayout = true;

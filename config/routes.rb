@@ -100,14 +100,14 @@ Rails.application.routes.draw do
 
     if named_routes
       get "/braintree/client_token", to: "braintree#client_token", as: :braintree_client_token
-      get "/purchases/:id/generate_invoice", to: "purchases#generate_invoice", as: :generate_invoice_by_buyer
-      get "/purchases/:id/generate_invoice/confirm", to: "purchases#confirm_generate_invoice", as: :confirm_generate_invoice
-      post "/purchases/:id/send_invoice", to: "purchases#send_invoice", as: :send_invoice
+      get "/purchases/:id/generate_invoice", to: "purchases/invoices#new", as: :generate_invoice_by_buyer
+      get "/purchases/:id/generate_invoice/confirm", to: "purchases/invoices#confirm", as: :confirm_generate_invoice
+      post "/purchases/:id/send_invoice", to: "purchases/invoices#create", as: :send_invoice
     else
       get "/braintree/client_token", to: "braintree#client_token"
-      get "/purchases/:id/generate_invoice/confirm", to: "purchases#confirm_generate_invoice"
-      get "/purchases/:id/generate_invoice", to: "purchases#generate_invoice"
-      post "/purchases/:id/send_invoice", to: "purchases#send_invoice"
+      get "/purchases/:id/generate_invoice/confirm", to: "purchases/invoices#confirm"
+      get "/purchases/:id/generate_invoice", to: "purchases/invoices#new"
+      post "/purchases/:id/send_invoice", to: "purchases/invoices#create"
     end
 
     post "/braintree/generate_transient_customer_token", to: "braintree#generate_transient_customer_token"
@@ -753,8 +753,8 @@ Rails.application.routes.draw do
     get "/dashboard/consumption" => redirect("/dashboard/audience")
 
     # invoices
-    get "/purchases/:id/generate_invoice/confirm", to: "purchases#confirm_generate_invoice"
-    get "/purchases/:id/generate_invoice", to: "purchases#generate_invoice"
+    get "/purchases/:id/generate_invoice/confirm", to: "purchases/invoices#confirm"
+    get "/purchases/:id/generate_invoice", to: "purchases/invoices#new"
 
     # preorder
     post "/purchases/:id/cancel_preorder_by_seller", to: "purchases#cancel_preorder_by_seller", as: :cancel_preorder_by_seller
