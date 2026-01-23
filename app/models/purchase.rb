@@ -71,6 +71,8 @@ class Purchase < ApplicationRecord
   attr_json_data_accessor :perceived_price_cents
   attr_json_data_accessor :recommender_model_name
   attr_json_data_accessor :custom_fee_per_thousand
+  attr_json_data_accessor :last_content_page_id
+  attr_json_data_accessor :default_offer_code_id
 
   alias_attribute :total_transaction_cents_usd, :total_transaction_cents
 
@@ -349,6 +351,7 @@ class Purchase < ApplicationRecord
   before_create :validate_quantity
   before_create :assign_is_multiseat_license
   before_create :check_for_fraud
+  before_create :toggle_off_can_contact_if_buyer_has_unsubscribed
 
   before_save :assign_default_rental_expired
   before_save :to_mongo
@@ -3865,5 +3868,13 @@ class Purchase < ApplicationRecord
       else
         fetch_installment_plan.calculate_installment_payment_price_cents(total_price_cents)
       end
+    end
+
+    def toggle_off_can_contact_if_buyer_has_unsubscribed
+      return unless new_record?
+      return unless can_contact?
+      return unless Purchase.where(email:, seller_id:, can_contact: false).exists?
+
+      self.can_contact = false
     end
 end
