@@ -7,7 +7,7 @@ import { Button } from "$app/components/Button";
 import { Form } from "$app/components/server-components/Admin/Form";
 import { showAlert } from "$app/components/server-components/Alert";
 import { Input } from "$app/components/ui/Input";
-import { Fieldset } from "$app/components/ui/Fieldset";
+import { Fieldset, FieldsetDescription } from "$app/components/ui/Fieldset";
 
 export const MassTransferPurchasesForm = ({ user_id }: { user_id: number }) => (
   <Form
@@ -24,7 +24,7 @@ export const MassTransferPurchasesForm = ({ user_id }: { user_id: number }) => (
             {isLoading ? "Transferring..." : "Transfer"}
           </Button>
         </div>
-        <small className="text-muted">Are you sure you want to Mass Transfer purchases for this user?</small>
+        <FieldsetDescription>Are you sure you want to Mass Transfer purchases for this user?</FieldsetDescription>
       </Fieldset>
     )}
   </Form>

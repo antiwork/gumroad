@@ -8,7 +8,7 @@ import { Form } from "$app/components/server-components/Admin/Form";
 import { showAlert } from "$app/components/server-components/Alert";
 import { Pill } from "$app/components/ui/Pill";
 import { InputGroup } from "$app/components/ui/InputGroup";
-import { Fieldset } from "$app/components/ui/Fieldset";
+import { Fieldset, FieldsetDescription } from "$app/components/ui/Fieldset";
 import { Input } from "$app/components/ui/Input";
 
 export const AdminAddCreditForm = ({ user_id }: { user_id: number }) => (
@@ -29,7 +29,7 @@ export const AdminAddCreditForm = ({ user_id }: { user_id: number }) => (
             {isLoading ? "Saving..." : "Add credits"}
           </Button>
         </div>
-        <small className="text-muted">Subtract credits by providing a negative value</small>
+        <FieldsetDescription>Subtract credits by providing a negative value</FieldsetDescription>
       </Fieldset>
     )}
   </Form>

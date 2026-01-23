@@ -8,7 +8,7 @@ import { Button } from "$app/components/Button";
 import { Form } from "$app/components/server-components/Admin/Form";
 import { showAlert } from "$app/components/server-components/Alert";
 import { Checkbox } from "$app/components/ui/Checkbox";
-import { Fieldset } from "$app/components/ui/Fieldset";
+import { Fieldset, FieldsetDescription } from "$app/components/ui/Fieldset";
 import { Label } from "$app/components/ui/Label";
 
 export const AdminManualPayoutForm = ({
@@ -71,10 +71,10 @@ export const AdminManualPayoutForm = ({
             {isLoading ? "Issuing Payout..." : "Issue Payout"}
           </Button>
         </div>
-        <small className="text-muted">
+        <FieldsetDescription>
           Balance that will be paid by clicking this button:{" "}
           {formatPriceCentsWithCurrencySymbol("usd", unpaid_balance_up_to_date, { symbolFormat: "short" })}
-        </small>
+        </FieldsetDescription>
       </Fieldset>
     )}
   </Form>

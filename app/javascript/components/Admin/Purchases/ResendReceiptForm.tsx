@@ -3,7 +3,7 @@ import * as React from "react";
 import { Form } from "$app/components/Admin/Form";
 import { Button } from "$app/components/Button";
 import { showAlert } from "$app/components/server-components/Alert";
-import { Fieldset } from "$app/components/ui/Fieldset";
+import { Fieldset, FieldsetDescription } from "$app/components/ui/Fieldset";
 import { Input } from "$app/components/ui/Input";
 
 type AdminResendReceiptFormProps = {
@@ -26,7 +26,7 @@ export const AdminResendReceiptForm = ({ purchase_external_id, email }: AdminRes
             {isLoading ? "Sending..." : "Send"}
           </Button>
         </div>
-        <small className="text-muted">This will update the purchase email to this new one!</small>
+        <FieldsetDescription>This will update the purchase email to this new one!</FieldsetDescription>
       </Fieldset>
     )}
   </Form>

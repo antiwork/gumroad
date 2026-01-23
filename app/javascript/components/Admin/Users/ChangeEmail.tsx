@@ -5,7 +5,7 @@ import type { User } from "$app/components/Admin/Users/User";
 import { Button } from "$app/components/Button";
 import { showAlert } from "$app/components/server-components/Alert";
 import { Input } from "$app/components/ui/Input";
-import { Fieldset } from "$app/components/ui/Fieldset";
+import { Fieldset, FieldsetDescription } from "$app/components/ui/Fieldset";
 
 type AdminUserChangeEmailProps = {
   user: User;
@@ -32,7 +32,7 @@ const AdminUserChangeEmail = ({ user }: AdminUserChangeEmailProps) => (
                 {isLoading ? "Updating..." : "Update email"}
               </Button>
             </div>
-            <small className="text-muted">This will update the user's email to this new one!</small>
+            <FieldsetDescription>This will update the user's email to this new one!</FieldsetDescription>
           </Fieldset>
         )}
       </Form>

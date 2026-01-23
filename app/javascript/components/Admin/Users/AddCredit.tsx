@@ -7,7 +7,7 @@ import { showAlert } from "$app/components/server-components/Alert";
 import { Pill } from "$app/components/ui/Pill";
 import { InputGroup } from "$app/components/ui/InputGroup";
 import { Input } from "$app/components/ui/Input";
-import { Fieldset } from "$app/components/ui/Fieldset";
+import { Fieldset, FieldsetDescription } from "$app/components/ui/Fieldset";
 
 type AdminUserAddCreditProps = {
   user: User;
@@ -39,7 +39,7 @@ const AdminUserAddCredit = ({ user }: AdminUserAddCreditProps) => (
               </Button>
             </div>
 
-            <small className="text-muted">Subtract credits by providing a negative value</small>
+            <FieldsetDescription>Subtract credits by providing a negative value</FieldsetDescription>
           </Fieldset>
         )}
       </Form>

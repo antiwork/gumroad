@@ -4,7 +4,7 @@ import { Form } from "$app/components/Admin/Form";
 import type { User } from "$app/components/Admin/Users/User";
 import { Button } from "$app/components/Button";
 import { showAlert } from "$app/components/server-components/Alert";
-import { Fieldset } from "$app/components/ui/Fieldset";
+import { Fieldset, FieldsetDescription } from "$app/components/ui/Fieldset";
 import { Input } from "$app/components/ui/Input";
 
 type AdminUserMassTransferPurchasesProps = {
@@ -32,7 +32,7 @@ const AdminUserMassTransferPurchases = ({ user }: AdminUserMassTransferPurchases
                 {isLoading ? "Transferring..." : "Transfer"}
               </Button>
             </div>
-            <small className="text-muted">Are you sure you want to Mass Transfer purchases for this user?</small>
+            <FieldsetDescription>Are you sure you want to Mass Transfer purchases for this user?</FieldsetDescription>
           </Fieldset>
         )}
       </Form>
