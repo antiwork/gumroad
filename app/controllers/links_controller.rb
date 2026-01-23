@@ -30,7 +30,7 @@ class LinksController < ApplicationController
   before_action :fetch_product_and_enforce_ownership, only: %i[destroy]
   before_action :fetch_product_and_enforce_access, only: %i[update publish unpublish release_preorder update_sections]
 
-  layout "inertia", only: [:index, :new]
+  layout "inertia", only: [:index, :new, :cart_items_count]
 
   def index
     authorize Link
@@ -170,6 +170,10 @@ class LinksController < ApplicationController
   def cart_items_count
     @hide_layouts = true
     @disable_third_party_analytics = true
+
+    render inertia: "Links/CartItemsCount", props: {
+      cart: CartPresenter.new(logged_in_user:, ip: request.remote_ip, browser_guid: cookies[:_gumroad_guid]).cart_props
+    }
   end
 
   def search
