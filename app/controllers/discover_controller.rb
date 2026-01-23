@@ -49,7 +49,7 @@ class DiscoverController < ApplicationController
 
     prepare_discover_page
 
-    @react_discover_props = {
+    render inertia: "Discover/Index", props: {
       search_results: @search_results,
       currency_code: logged_in_user&.currency_type || "usd",
       taxonomies_for_nav:,
@@ -60,6 +60,8 @@ class DiscoverController < ApplicationController
       is_black_friday_page: params[:offer_code] == SearchProducts::BLACK_FRIDAY_CODE,
       black_friday_offer_code: SearchProducts::BLACK_FRIDAY_CODE,
       black_friday_stats: black_friday_feature_active? ? BlackFridayStatsService.fetch_stats : nil,
+      canonical_url: @canonical_url,
+      meta_description: @discover_tag_meta_description,
     }
   end
 

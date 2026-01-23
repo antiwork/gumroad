@@ -20,48 +20,31 @@ describe DiscoverController do
 
       get :index
 
-      expect(response.body).to have_field "Search products"
+      expect_inertia.to render_component "Discover/Index"
     end
 
     it "renders the proper meta tags with no extra parameters" do
       get :index
 
-      expect(response.body).to have_selector("title:contains('Gumroad')", visible: false)
-      expect(response.body).to have_selector("meta[property='og:type'][content='website']", visible: false)
-      expect(response.body).to have_selector("meta[property='og:description'][content='Browse over 1.6 million free and premium digital products in education, tech, design, and more categories from Gumroad creators and online entrepreneurs.']", visible: false)
-      expect(response.body).to have_selector("meta[name='description'][content='Browse over 1.6 million free and premium digital products in education, tech, design, and more categories from Gumroad creators and online entrepreneurs.']", visible: false)
-      expect(response.body).to have_selector("link[rel='canonical'][href='#{discover_domain_with_protocol}/']", visible: false)
+      expect(inertia.props[:canonical_url]).to eq("#{discover_domain_with_protocol}/")
     end
 
     it "renders the proper meta tags when a search query was submitted" do
       get :index, params: { query: "tests" }
 
-      expect(response.body).to have_selector("title:contains('Gumroad')", visible: false)
-      expect(response.body).to have_selector("meta[property='og:description'][content='Browse over 1.6 million free and premium digital products in education, tech, design, and more categories from Gumroad creators and online entrepreneurs.']", visible: false)
-      expect(response.body).to have_selector("meta[name='description'][content='Browse over 1.6 million free and premium digital products in education, tech, design, and more categories from Gumroad creators and online entrepreneurs.']", visible: false)
-      expect(response.body).to have_selector("link[rel='canonical'][href='#{discover_domain_with_protocol}/?query=tests']", visible: false)
+      expect(inertia.props[:canonical_url]).to eq("#{discover_domain_with_protocol}/?query=tests")
     end
 
     it "renders the proper meta tags when a specific tag has been selected" do
       get :index, params: { tags: "3d models" }
 
-      description = "Browse over 0 3D assets including 3D models, CG textures, HDRI environments & more" \
-                    " for VFX, game development, AR/VR, architecture, and animation."
-      expect(response.body).to have_selector("title:contains('Professional 3D Modeling Assets | Gumroad')", visible: false)
-      expect(response.body).to have_selector("meta[property='og:description'][content='#{description}']", visible: false)
-      expect(response.body).to have_selector("meta[name='description'][content='#{description}']", visible: false)
-      expect(response.body).to have_selector("link[rel='canonical'][href='#{discover_domain_with_protocol}/?tags=3d+models']", visible: false)
+      expect(inertia.props[:canonical_url]).to eq("#{discover_domain_with_protocol}/?tags=3d+models")
     end
 
     it "renders the proper meta tags when a specific tag has been selected" do
       get :index, params: { tags: "3d      - mODELs" }
 
-      description = "Browse over 0 3D assets including 3D models, CG textures, HDRI environments & more" \
-                    " for VFX, game development, AR/VR, architecture, and animation."
-      expect(response.body).to have_selector("title:contains('Professional 3D Modeling Assets | Gumroad')", visible: false)
-      expect(response.body).to have_selector("meta[property='og:description'][content='#{description}']", visible: false)
-      expect(response.body).to have_selector("meta[name='description'][content='#{description}']", visible: false)
-      expect(response.body).to have_selector("link[rel='canonical'][href='#{discover_domain_with_protocol}/?tags=3d+models']", visible: false)
+      expect(inertia.props[:canonical_url]).to eq("#{discover_domain_with_protocol}/?tags=3d+models")
     end
 
     it "stores the search query" do
@@ -82,21 +65,7 @@ describe DiscoverController do
       expect(DiscoverSearch.last!.discover_search_suggestion).to be_present
     end
 
-    context "nav first render" do
-      it "renders as mobile if the user-agent is of an iPhone" do
-        @request.user_agent = "Mozilla/5.0 (iPhone; CPU OS 13_7 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/13.1.2 Mobile/15E148 Safari/604.1"
-        get :index
 
-        expect(response.body).to have_selector("[role='nav'] > * > [aria-haspopup='menu'][aria-label='Categories']")
-      end
-
-      it "renders as desktop if the user-agent is windows chrome" do
-        @request.user_agent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/104.0.0.0 Safari/537.36."
-        get :index
-
-        expect(response.body).to have_selector("[role='nav'] > * > [role='menubar']")
-      end
-    end
 
     context "meta description total count" do
       let(:total_products) { Link::RECOMMENDED_PRODUCTS_PER_PAGE + 2 }
@@ -114,8 +83,7 @@ describe DiscoverController do
 
         description = "Browse over #{total_products} 3D assets including 3D models, CG textures, HDRI environments & more" \
                       " for VFX, game development, AR/VR, architecture, and animation."
-        expect(response.body).to have_selector("meta[property='og:description'][content='#{description}']", visible: false)
-        expect(response.body).to have_selector("meta[name='description'][content='#{description}']", visible: false)
+        expect(inertia.props[:meta_description]).to eq(description)
       end
     end
   end

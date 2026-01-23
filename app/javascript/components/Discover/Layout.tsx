@@ -11,6 +11,7 @@ import { Search } from "$app/components/Discover/Search";
 import { useDomains } from "$app/components/DomainSettings";
 import { Icon } from "$app/components/Icons";
 import { useIsAboveBreakpoint } from "$app/components/useIsAboveBreakpoint";
+import { Footer } from "$app/components/Footer";
 
 const UserActionButtons: React.FC = () => {
   const currentSeller = useCurrentSeller();
@@ -207,6 +208,7 @@ export const Layout: React.FC<{
         ) : null}
       </header>
       {children}
+      <Footer />
     </div>
   );
 };

@@ -199,7 +199,7 @@ const BlackFridayButton = ({
   );
 };
 
-const Discover = (props: Props) => {
+export const Discover = (props: Props) => {
   const location = useOriginalLocation();
 
   const defaultSortOrder = props.curated_product_ids.length > 0 ? "curated" : undefined;
