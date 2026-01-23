@@ -619,7 +619,7 @@ Rails.application.routes.draw do
       resources :variants, only: [:index], controller: "products/variants"
       resource :mobile_tracking, only: [:show], path: "in_app", controller: "products/mobile_tracking"
       member do
-        post :update
+        match :update, via: %i[patch put post]
         post :publish
         post :unpublish
         post :increment_views

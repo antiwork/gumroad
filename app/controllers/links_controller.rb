@@ -291,9 +291,9 @@ class LinksController < ApplicationController
     end
 
     ai_generated = params[:ai_generated] == "true"
-    presenter = ProductPresenter.new(product: @product, pundit_user:, ai_generated:)
+    @presenter = ProductPresenter.new(product: @product, pundit_user:, ai_generated:)
 
-    render inertia: "Products/Edit", props: presenter.edit_props.merge(active_tab:)
+    render inertia: "Products/Edit", props: @presenter.edit_props.merge(active_tab:)
   end
 
   def update
@@ -397,9 +397,18 @@ class LinksController < ApplicationController
       else
         error_message = @product.errors.full_messages.first || e.message
       end
-      return redirect_back fallback_location: edit_link_path(@product.unique_permalink),
-                           inertia: { errors: { base: error_message } },
-                           alert: error_message
+
+      presenter = ProductPresenter.new(product: @product, pundit_user:)
+      active_tab = case request.referer
+                   when %r{/edit/content} then "content"
+                   when %r{/edit/share} then "share"
+                   when %r{/edit/receipt} then "receipt"
+                   else "product"
+      end
+
+      return render inertia: "Products/Edit",
+                    props: presenter.edit_props.merge(active_tab:, errors: { base: error_message }),
+                    status: :unprocessable_entity
     end
     invalid_currency_offer_codes = @product.product_and_universal_offer_codes.reject do |offer_code|
       offer_code.is_currency_valid?(@product)

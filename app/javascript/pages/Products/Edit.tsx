@@ -1,11 +1,10 @@
 import { useForm, usePage } from "@inertiajs/react";
 import { DirectUpload } from "@rails/activestorage";
-import { Editor, findChildren } from "@tiptap/core";
 import { isEqual } from "lodash-es";
 import * as React from "react";
 import { cast } from "ts-safe-cast";
 
-import { buildProductPayload } from "$app/data/product_edit";
+import { buildProductPayload, filterFilesInContent } from "$app/data/product_edit";
 import { OtherRefundPolicy } from "$app/data/products/other_refund_policies";
 import { Thumbnail } from "$app/data/thumbnails";
 import { RatingsWithPercentages } from "$app/parsers/product";
@@ -15,8 +14,8 @@ import { ALLOWED_EXTENSIONS } from "$app/utils/file";
 import { assertResponseError, request } from "$app/utils/request";
 
 import { Seller } from "$app/components/Product";
-import { ContentTab, extensions } from "$app/components/ProductEdit/ContentTab";
-import { FileEmbed, getDownloadUrl } from "$app/components/ProductEdit/ContentTab/FileEmbed";
+import { ContentTab } from "$app/components/ProductEdit/ContentTab";
+import { getDownloadUrl } from "$app/components/ProductEdit/ContentTab/FileEmbed";
 import { Page } from "$app/components/ProductEdit/ContentTab/PageTab";
 import { type TabName } from "$app/components/ProductEdit/Layout";
 import { ProductTab } from "$app/components/ProductEdit/ProductTab";
@@ -31,7 +30,7 @@ import {
   ShippingCountry,
   ContentUpdates,
 } from "$app/components/ProductEdit/state";
-import { baseEditorOptions, ImageUploadSettingsContext } from "$app/components/RichTextEditor";
+import { ImageUploadSettingsContext } from "$app/components/RichTextEditor";
 import { showAlert } from "$app/components/server-components/Alert";
 
 type Props = {
@@ -63,6 +62,7 @@ type Props = {
   cancellation_discounts_enabled: boolean;
   ai_generated: boolean;
   active_tab: TabName;
+  errors?: Record<string, string>;
 };
 
 const createContextValue = (props: Props) => ({
@@ -121,27 +121,6 @@ const findUpdatedContent = (product: Product, lastSavedProduct: Product) => {
   };
 };
 
-const filterFilesInContent = (id: string, product: Product): Product => {
-  const editor = new Editor(baseEditorOptions(extensions(id)));
-  const richContents =
-    product.has_same_rich_content_for_all_variants || !product.variants.length
-      ? product.rich_content
-      : product.variants.flatMap((variant) => variant.rich_content);
-  const fileIds = new Set(
-    richContents.flatMap((content) =>
-      findChildren(
-        editor.schema.nodeFromJSON(content.description),
-        (node) => node.type.name === FileEmbed.name,
-      ).map<unknown>((child) => child.node.attrs.id),
-    ),
-  );
-  editor.destroy();
-  return {
-    ...product,
-    files: product.files.filter((file) => fileIds.has(file.id)),
-  };
-};
-
 const ProductEditPage = (props: Props) => {
   const [product, setProduct] = React.useState(props.product);
   const [contentUpdates, setContentUpdates] = React.useState<ContentUpdates>(null);
@@ -159,18 +138,15 @@ const ProductEditPage = (props: Props) => {
 
   const [imagesUploading, setImagesUploading] = React.useState<Set<File>>(new Set());
 
-  const form = useForm(buildProductPayload(product, currencyType));
-
-  React.useEffect(() => {
-    form.setData(buildProductPayload(product, currencyType));
-  }, [product, currencyType]);
+  const form = useForm({});
 
   const save = () => {
     const filteredProduct = filterFilesInContent(props.id, product);
+    const payload = buildProductPayload(filteredProduct, currencyType);
 
     return new Promise<void>((resolve, reject) => {
-      form.transform(() => buildProductPayload(filteredProduct, currencyType));
-      form.post(Routes.link_path(props.unique_permalink), {
+      form.transform(() => payload);
+      form.patch(Routes.link_path(props.unique_permalink), {
         preserveScroll: true,
         onSuccess: () => {
           const { contentUpdatedVariantIds, sharedContentUpdated } = findUpdatedContent(
@@ -199,6 +175,12 @@ const ProductEditPage = (props: Props) => {
       });
     });
   };
+
+  React.useEffect(() => {
+    if (props.errors?.base) {
+      showAlert(props.errors.base, "error");
+    }
+  }, [props.errors]);
 
   const contextValue = React.useMemo(
     () => ({
