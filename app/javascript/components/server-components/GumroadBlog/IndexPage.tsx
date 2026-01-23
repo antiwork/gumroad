@@ -5,7 +5,7 @@ import { createCast } from "ts-safe-cast";
 
 import { register } from "$app/utils/serverComponentUtil";
 
-import { formatPostDate } from "$app/components/server-components/Profile/PostPage";
+import { formatPostDate } from "$app/utils/date";
 import { Tabs, Tab } from "$app/components/ui/Tabs";
 
 import placeholderFeatureImage from "../../../../assets/images/blog/post-placeholder.jpg";

@@ -1,12 +1,12 @@
 import { usePage } from "@inertiajs/react";
 import { EditorContent } from "@tiptap/react";
-import { parseISO } from "date-fns";
 import * as React from "react";
 import { cast } from "ts-safe-cast";
 
 import { PaginatedComments } from "$app/data/comments";
 import { incrementPostViews } from "$app/data/view_event";
 import { CreatorProfile } from "$app/parsers/profile";
+import { formatPostDate } from "$app/utils/date";
 
 import { Button } from "$app/components/Button";
 import { Icon } from "$app/components/Icons";
@@ -16,10 +16,6 @@ import { Layout } from "$app/components/Profile/Layout";
 import { useRichTextEditor } from "$app/components/RichTextEditor";
 import { useUserAgentInfo } from "$app/components/UserAgent";
 import { useRunOnce } from "$app/components/useRunOnce";
-
-const dateFormatOptions: Intl.DateTimeFormatOptions = { month: "long", day: "numeric", year: "numeric" };
-const formatPostDate = (date: string | null, locale: string): string =>
-  (date ? parseISO(date) : new Date()).toLocaleDateString(locale, dateFormatOptions);
 
 type Props = {
   subject: string;
