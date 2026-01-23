@@ -1,17 +1,20 @@
 # frozen_string_literal: true
 
 require "spec_helper"
-require "shared_examples/sellers_base_controller_concern"
-require "shared_examples/authorize_called"
+require "inertia_rails/rspec"
 
-describe CheckoutController do
+describe CheckoutController, type: :controller, inertia: true do
   describe "GET index" do
-    it "returns HTTP success and assigns correct instance variables" do
+    it "renders Inertia Checkout/Index component with correct instance variables and props" do
       get :index
 
-      expect(assigns[:hide_layouts]).to eq(true)
       expect(assigns[:on_checkout_page]).to eq(true)
       expect(response).to be_successful
+      expect(inertia.component).to eq("Checkout/Index")
+      expect(inertia.props[:countries]).to be_present
+      expect(inertia.props[:us_states]).to be_present
+      expect(inertia.props[:ca_provinces]).to be_present
+      expect(inertia.props[:paypal_client_id]).to be_present
     end
 
     describe "process_cart_id_param check" do
@@ -76,7 +79,7 @@ describe CheckoutController do
           end
         end
 
-        context "when the cart matching the `cart_id` query param has the `browser_guid` same as the current `_gumroad_guid` cookie value"  do
+        context "when the cart matching the `cart_id` query param has the `browser_guid` same as the current `_gumroad_guid` cookie value" do
           it "redirects to the same path without modifying the cart" do
             browser_guid = SecureRandom.uuid
             cookies[:_gumroad_guid] = browser_guid
