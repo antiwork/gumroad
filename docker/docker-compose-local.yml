@@ -11,7 +11,6 @@ services:
       - MYSQL_ROOT_PASSWORD=password
     command:
       - "mysqld"
-      - "--default-authentication-plugin=mysql_native_password"
       - "--collation-server=utf8mb4_unicode_ci"
       - "--character-set-server=utf8mb4"
 

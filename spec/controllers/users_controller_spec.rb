@@ -2,6 +2,7 @@
 
 require "spec_helper"
 require "shared_examples/authorize_called"
+require "inertia_rails/rspec"
 
 describe UsersController do
   render_views
@@ -692,7 +693,7 @@ describe UsersController do
     end
   end
 
-  describe "GET unsubscribe_review_reminders" do
+  describe "GET unsubscribe_review_reminders", inertia: true do
     before do
       @user = create(:user)
     end
@@ -704,6 +705,7 @@ describe UsersController do
           get :unsubscribe_review_reminders
         end.to change { @user.reload.opted_out_of_review_reminders? }.from(false).to(true)
         expect(response).to be_successful
+        expect(inertia).to render_component("ReviewReminders/Unsubscribe")
       end
     end
 
@@ -716,7 +718,7 @@ describe UsersController do
     end
   end
 
-  describe "GET subscribe_review_reminders" do
+  describe "GET subscribe_review_reminders", inertia: true do
     before do
       @user = create(:user, opted_out_of_review_reminders: true)
     end
@@ -728,6 +730,7 @@ describe UsersController do
           get :subscribe_review_reminders
         end.to change { @user.reload.opted_out_of_review_reminders? }.from(true).to(false)
         expect(response).to be_successful
+        expect(inertia).to render_component("ReviewReminders/Subscribe")
       end
     end
 
