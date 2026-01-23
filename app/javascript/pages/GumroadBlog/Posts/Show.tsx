@@ -54,8 +54,8 @@ function ShowPage({ external_id, subject, published_at, message, call_to_action 
               <BackToBlog />
             </div>
             <header className="mb-8">
-              <h1 className="mb-4 text-5xl">{subject}</h1>
-              <time className="text-dark-gray text-lg">{publishedAtFormatted}</time>
+              <h1 className="mb-4 text-[2.5rem] leading-[1.2] font-normal">{subject}</h1>
+              <time className="text-lg text-dark-gray">{publishedAtFormatted}</time>
             </header>
             <div className="mx-auto mt-8 grid max-w-3xl justify-items-center gap-6 border-t border-black py-12 text-xl">
               {pageLoaded ? null : <LoadingSpinner className="size-8" />}
