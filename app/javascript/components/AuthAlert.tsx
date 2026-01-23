@@ -17,7 +17,7 @@ export const AuthAlert: React.FC = () => {
     }
   }, [flash]);
 
-  if (flash?.status === "warning" && flash.message) {
+  if ((flash?.status === "warning" || flash?.status === "danger") && flash.message) {
     return <Alert variant="danger">{flash.message}</Alert>;
   }
 
