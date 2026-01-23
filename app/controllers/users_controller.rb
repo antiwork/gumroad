@@ -135,10 +135,12 @@ class UsersController < ApplicationController
 
   def unsubscribe_review_reminders
     logged_in_user.update!(opted_out_of_review_reminders: true)
+    render inertia: "ReviewReminders/Unsubscribe"
   end
 
   def subscribe_review_reminders
     logged_in_user.update!(opted_out_of_review_reminders: false)
+    render inertia: "ReviewReminders/Subscribe"
   end
 
   private
