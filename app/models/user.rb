@@ -167,6 +167,7 @@ class User < ApplicationRecord
   attr_json_data_accessor :payout_frequency, default: User::PayoutSchedule::WEEKLY
   attr_json_data_accessor :custom_fee_per_thousand
   attr_json_data_accessor :payouts_paused_by
+  attr_json_data_accessor :daily_product_creation_limit
 
   attr_blockable :email
   attr_blockable :form_email, object_type: :email
