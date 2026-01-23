@@ -8,7 +8,7 @@ class UsersController < ApplicationController
 
   after_action :verify_authorized, only: %i[deactivate]
 
-  before_action :hide_layouts, only: %i[show coffee subscribe subscribe_preview unsubscribe_review_reminders subscribe_review_reminders]
+  before_action :hide_layouts, only: %i[show coffee subscribe subscribe_preview]
   before_action :set_as_modal, only: %i[show]
   before_action :set_frontend_performance_sensitive, only: %i[show]
   before_action :set_user_and_custom_domain_config, only: %i[show coffee subscribe subscribe_preview]
