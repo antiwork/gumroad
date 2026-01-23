@@ -1,4 +1,4 @@
-import { router } from "@inertiajs/react";
+import { usePoll } from "@inertiajs/react";
 import * as React from "react";
 
 import AdminSalesReportsForm from "$app/components/Admin/SalesReports/Form";
@@ -31,14 +31,11 @@ const AdminSalesReportsJobHistory = ({ countries, sales_types, jobHistory, authe
 
   const hasProcessingJobs = jobHistory.some((job) => job.status === "processing");
 
+  const { start, stop } = usePoll(3000, { only: ["job_history"] }, { autoStart: false });
+
   React.useEffect(() => {
-    if (!hasProcessingJobs) return;
-
-    const intervalId = setInterval(() => {
-      router.reload({ only: ["job_history"] });
-    }, 3000);
-
-    return () => clearInterval(intervalId);
+    if (hasProcessingJobs) start();
+    else stop();
   }, [hasProcessingJobs]);
 
   const countryCodeToName = React.useMemo(() => {

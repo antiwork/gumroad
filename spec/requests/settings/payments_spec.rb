@@ -1513,6 +1513,7 @@ describe("Payments Settings Scenario", type: :system, js: true) do
 
       it "allows to enter bank account details" do
         visit settings_payments_path
+        expect(page).to have_field("IBAN")
 
         fill_in("First name", with: "barnabas")
         fill_in("Last name", with: "barnabastein")
