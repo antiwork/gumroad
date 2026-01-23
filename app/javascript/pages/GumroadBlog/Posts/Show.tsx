@@ -7,7 +7,7 @@ import { formatPostDate } from "$app/components/server-components/Profile/PostPa
 import { useRichTextEditor } from "$app/components/RichTextEditor";
 import { useUserAgentInfo } from "$app/components/UserAgent";
 import { useRunOnce } from "$app/components/useRunOnce";
-import { Button } from "$app/components/Button";
+import { NavigationButton } from "$app/components/Button";
 import { Icon } from "$app/components/Icons";
 import { LoadingSpinner } from "$app/components/LoadingSpinner";
 import { BlogLayout } from "$app/components/GumroadBlog/Layout";
@@ -62,16 +62,15 @@ function ShowPage({ external_id, subject, published_at, message, call_to_action 
               {call_to_action ? (
                 <div className="grid">
                   <p>
-                    <Button asChild color="accent">
-                      <a
-                        href={call_to_action.url}
-                        target="_blank"
-                        style={{ whiteSpace: "normal" }}
-                        rel="noopener noreferrer"
-                      >
-                        {call_to_action.text}
-                      </a>
-                    </Button>
+                    <NavigationButton
+                      href={call_to_action.url}
+                      target="_blank"
+                      style={{ whiteSpace: "normal" }}
+                      rel="noopener noreferrer"
+                      color="accent"
+                    >
+                      {call_to_action.text}
+                    </NavigationButton>
                   </p>
                 </div>
               ) : null}
