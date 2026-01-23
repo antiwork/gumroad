@@ -38,10 +38,10 @@ class GenerateSalesReportJob
                  purchase.seller.user_compliance_infos.last&.legal_entity_country,
                  purchase.email&.gsub(/.{0,4}@/, '####@'), purchase.card_visual&.gsub(/.{0,4}@/, '####@'),
                  purchase.price_cents_net_of_refunds, purchase.fee_cents_net_of_refunds, purchase.gumroad_tax_cents_net_of_refunds,
-                 purchase.shipping_cents, purchase.total_cents_net_of_refunds]
+                 purchase.shipping_cents, purchase.total_cents_net_of_refunds, purchase.purchase_sales_tax_info&.business_vat_id]
 
           if %w(AU SG).include?(country_code)
-            row += [purchase.link.is_physical? ? "DTC" : "BS", purchase.zip_tax_rate_id, purchase.purchase_sales_tax_info.business_vat_id]
+            row += [purchase.link.is_physical? ? "DTC" : "BS", purchase.zip_tax_rate_id]
           end
 
           # Do not include free recommendations like library and more-like-this in the discover sales report
@@ -83,12 +83,10 @@ class GenerateSalesReportJob
                  "Seller Country",
                  "Buyer Email", "Buyer Card",
                  "Price", "Gumroad Fee", "GST",
-                 "Shipping", "Total"]
+                 "Shipping", "Total", "Customer Tax ID"]
 
-      if country_code == "AU"
-        headers += ["Direct-To-Customer / Buy-Sell", "Zip Tax Rate ID", "Customer ABN Number"]
-      elsif country_code == "SG"
-        headers += ["Direct-To-Customer / Buy-Sell", "Zip Tax Rate ID", "Customer GST Number"]
+      if %w(AU SG).include?(country_code)
+        headers += ["Direct-To-Customer / Buy-Sell", "Zip Tax Rate ID"]
       end
 
       headers

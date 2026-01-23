@@ -166,6 +166,12 @@ module StripeMerchantAccountManager
     end
 
     if last_user_compliance_info&.is_business? && user_compliance_info.is_individual?
+      # Clear structure first - Stripe rejects company[structure] when business_type is "individual"
+      if last_user_compliance_info.country_code == Compliance::Countries::USA.alpha2 &&
+        last_user_compliance_info.business_type == UserComplianceInfo::BusinessTypes::SOLE_PROPRIETORSHIP
+        Stripe::Account.update(stripe_account.id, { company: { structure: "" } })
+      end
+
       # Set the company's name to the individual's first and last name so that this is used as the Stripe account name and during payouts
       # Ref: https://github.com/gumroad/web/issues/19882
       diff_attributes[:company] = { name: user_compliance_info.first_and_last_name }

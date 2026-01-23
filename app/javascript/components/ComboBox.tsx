@@ -18,6 +18,7 @@ type Props<Option> = {
     props: React.HTMLAttributes<HTMLElement> & { ref: React.RefCallback<HTMLElement> },
     index: number,
   ) => React.ReactElement;
+  maxHeight?: string | number;
 };
 
 export const ComboBox = <Option extends unknown>({
@@ -30,6 +31,7 @@ export const ComboBox = <Option extends unknown>({
   options,
   option,
   className,
+  maxHeight,
   ...rest
 }: Props<Option> & Omit<React.HTMLAttributes<HTMLDivElement>, keyof Props<Option>>) => {
   const [open, setOpen] = React.useState(openProp ?? false);
@@ -118,6 +120,7 @@ export const ComboBox = <Option extends unknown>({
           id={uid}
           onMouseOut={() => setFocusedOptionIndex(null)}
           aria-multiselectable={multiple}
+          style={maxHeight ? { maxHeight } : undefined}
           className={classNames(
             "absolute top-full left-0 z-10 block w-full overflow-auto rounded-b border border-t-0 border-border bg-background py-2 shadow",
           )}

@@ -427,13 +427,32 @@ describe Checkout::DiscountsController do
         offer_code.save(validate: false)
       end
 
-      it "returns HTTP success and marks the offer code as deleted" do
+      it "returns HTTP unprocessable entity and prevents deletion" do
         delete :destroy, params: { id: offer_code.external_id }, as: :json
 
-        expect(response).to be_successful
-        expect(response.parsed_body["success"]).to eq(true)
+        expect(response).to have_http_status(:unprocessable_entity)
+        expect(response.parsed_body["success"]).to eq(false)
 
-        expect(offer_code.reload.deleted_at).to_not be_nil
+        expect(offer_code.reload.deleted_at).to be_nil
+      end
+    end
+
+    context "when the offer code is set as a default on a product" do
+      let(:product) { create(:product, user: seller) }
+
+      before do
+        offer_code.products << product
+        product.update!(default_offer_code_id: offer_code.id)
+      end
+
+      it "returns HTTP unprocessable entity and prevents deletion" do
+        delete :destroy, params: { id: offer_code.external_id }, as: :json
+
+        expect(response).to have_http_status(:unprocessable_entity)
+        expect(response.parsed_body["success"]).to eq(false)
+        expect(response.parsed_body["error_message"]).to eq("This discount code is currently set as the default discount for one or more active or archived products. Please remove it from all products before deleting.")
+
+        expect(offer_code.reload.deleted_at).to be_nil
       end
     end
 
