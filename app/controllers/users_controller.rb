@@ -13,6 +13,8 @@ class UsersController < ApplicationController
   before_action :set_frontend_performance_sensitive, only: %i[show]
   before_action :set_user_and_custom_domain_config, only: %i[show coffee subscribe subscribe_preview]
   before_action :set_page_attributes, only: %i[show]
+
+  layout "inertia", only: %i[unsubscribe_review_reminders subscribe_review_reminders]
   before_action :set_user_for_action, only: %i[email_unsubscribe]
   before_action :check_if_needs_redirect, only: %i[show]
   before_action :set_affiliate_cookie, only: %i[show]

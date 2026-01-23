@@ -119,7 +119,6 @@ ReactOnRails.register({
   SecureRedirectPage,
   SubscribePage,
   SubscribePreview,
-
   SubscriptionManager,
   SubscriptionManagerMagicLink,
   TaxesCollectionModal,
