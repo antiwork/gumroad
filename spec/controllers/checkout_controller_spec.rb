@@ -1,25 +1,32 @@
 # frozen_string_literal: true
 
 require "spec_helper"
-require "shared_examples/sellers_base_controller_concern"
-require "shared_examples/authorize_called"
+require "inertia_rails/rspec"
 
-describe CheckoutController do
-  render_views
-
+describe CheckoutController, type: :controller, inertia: true do
   describe "GET index" do
-    it "returns HTTP success and assigns correct instance variables and force enables analytics" do
+    it "renders Inertia Checkout/Index component with correct instance variables and props" do
       get :index
 
-      expect(assigns[:hide_layouts]).to eq(true)
+      expect(assigns[:on_checkout_page]).to eq(true)
       expect(response).to be_successful
+      expect(inertia.component).to eq("Checkout/Index")
 
-      html = Nokogiri::HTML.parse(response.body)
-      expect(html.xpath("//meta[@property='gr:google_analytics:enabled']/@content").text).to eq("true")
-      expect(html.xpath("//meta[@property='gr:fb_pixel:enabled']/@content").text).to eq("true")
-      expect(html.xpath("//meta[@property='gr:logged_in_user:id']/@content").text).to eq("")
-      expect(html.xpath("//meta[@property='gr:page:type']/@content").text).to eq("")
-      expect(html.xpath("//meta[@property='gr:facebook_sdk:enabled']/@content").text).to eq("true")
+      expect(inertia.props[:countries].size).to eq(Compliance::Countries.for_select.to_h.size)
+      expect(inertia.props[:countries][:US]).to eq("United States")
+      expect(inertia.props[:countries][:CA]).to eq("Canada")
+      expect(inertia.props[:us_states]).to eq(STATES)
+      expect(inertia.props[:ca_provinces]).to eq(Compliance::Countries.subdivisions_for_select(Compliance::Countries::CAN.alpha2).map(&:first))
+      expect(inertia.props[:paypal_client_id]).to eq(PAYPAL_PARTNER_CLIENT_ID)
+      expect(inertia.props[:recaptcha_key]).to eq(GlobalConfig.get("RECAPTCHA_MONEY_SITE_KEY"))
+      expect(inertia.props[:discover_url]).to include(DISCOVER_DOMAIN)
+      expect(inertia.props[:gift]).to be_nil
+      expect(inertia.props[:clear_cart]).to eq(false)
+      expect(inertia.props[:saved_credit_card]).to be_nil
+      expect(inertia.props[:max_allowed_cart_products]).to eq(Cart::MAX_ALLOWED_CART_PRODUCTS)
+      expect(inertia.props[:tip_options]).to eq(TipOptionsService.get_tip_options)
+      expect(inertia.props[:default_tip_option]).to eq(TipOptionsService.get_default_tip_option)
+      expect(inertia.props[:add_products]).to eq([])
     end
 
     describe "process_cart_id_param check" do
@@ -36,8 +43,6 @@ describe CheckoutController do
           get :index
 
           expect(response).to be_successful
-          html = Nokogiri::HTML.parse(response.body)
-          expect(html.xpath("//meta[@property='gr:logged_in_user:id']/@content").text).to eq(user.external_id)
         end
 
         it "redirects to the same path removing the `cart_id` query param" do
@@ -86,7 +91,7 @@ describe CheckoutController do
           end
         end
 
-        context "when the cart matching the `cart_id` query param has the `browser_guid` same as the current `_gumroad_guid` cookie value"  do
+        context "when the cart matching the `cart_id` query param has the `browser_guid` same as the current `_gumroad_guid` cookie value" do
           it "redirects to the same path without modifying the cart" do
             browser_guid = SecureRandom.uuid
             cookies[:_gumroad_guid] = browser_guid
