@@ -1,4 +1,5 @@
 import { Head } from "@inertiajs/react";
+import React from "react";
 
 import { Card, CardContent } from "$app/components/ui/Card";
 import { useDomains } from "$app/components/DomainSettings";
@@ -32,4 +33,5 @@ const SubscribeReviewReminders = () => {
   );
 };
 
+SubscribeReviewReminders.disableLayout = true;
 export default SubscribeReviewReminders;
