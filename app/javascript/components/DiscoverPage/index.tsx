@@ -249,7 +249,7 @@ export const DiscoverPage = (props: DiscoverPageProps) => {
       serializeParams(["sort", "query", "offer_code"], (value) => value);
       serializeParams(["min_price", "max_price", "rating"], (value) => value.toString());
       serializeParams(["filetypes", "tags"], (value) => value.join(","));
-      window.history.replaceState(state.params, "", url);
+      window.history.pushState(state.params, "", url);
     } else fromUrl.current = false;
     document.title = discoverTitleGenerator(state.params, props.taxonomies_for_nav);
   }, [state.params, props.taxonomies_for_nav, defaultSortOrder]);
