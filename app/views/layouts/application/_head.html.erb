@@ -113,6 +113,9 @@
   <meta property="stripe:api_version" value="<%= Stripe.api_version %>">
   <link href="/opensearch.xml" rel="search" type="application/opensearchdescription+xml" title="Gumroad">
   <%= yield :meta %>
+  <% if @canonical_url.present? %>
+    <link href="<%= @canonical_url %>" rel="canonical">
+  <% end %>
   <% if @user && @user.avatar_url.present? && @show_user_favicon %>
     <link href="<%= @user.avatar_url %>" rel="shortcut icon">
   <% else %>

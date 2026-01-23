@@ -1,8 +1,9 @@
 # frozen_string_literal: true
 
 require "spec_helper"
+require "inertia_rails/rspec"
 
-describe DiscoverController do
+describe DiscoverController, inertia: true do
   render_views
 
   let(:discover_domain_with_protocol) { UrlService.discover_domain_with_protocol }
@@ -15,12 +16,20 @@ describe DiscoverController do
   end
 
   describe "#index" do
-    it "displays navigation" do
+    it "renders the Discover/Index Inertia component with required props" do
       sign_in @buyer
 
       get :index
 
-      expect(response.body).to have_field "Search products"
+      expect(response).to be_successful
+      expect_inertia.to render_component("Discover/Index")
+      expect(inertia.props).to include(
+        :search_results,
+        :currency_code,
+        :taxonomies_for_nav,
+        :recommended_products,
+        :curated_product_ids
+      )
     end
 
     it "renders the proper meta tags with no extra parameters" do
@@ -80,22 +89,6 @@ describe DiscoverController do
         "autocomplete" => false
       )
       expect(DiscoverSearch.last!.discover_search_suggestion).to be_present
-    end
-
-    context "nav first render" do
-      it "renders as mobile if the user-agent is of an iPhone" do
-        @request.user_agent = "Mozilla/5.0 (iPhone; CPU OS 13_7 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/13.1.2 Mobile/15E148 Safari/604.1"
-        get :index
-
-        expect(response.body).to have_selector("[role='nav'] > * > [aria-haspopup='menu'][aria-label='Categories']")
-      end
-
-      it "renders as desktop if the user-agent is windows chrome" do
-        @request.user_agent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/104.0.0.0 Safari/537.36."
-        get :index
-
-        expect(response.body).to have_selector("[role='nav'] > * > [role='menubar']")
-      end
     end
 
     context "meta description total count" do
