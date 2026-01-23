@@ -1,46 +1,48 @@
 # frozen_string_literal: true
 
 require "spec_helper"
+require "inertia_rails/rspec"
 
-describe HelpCenter::ArticlesController do
+describe HelpCenter::ArticlesController, inertia: true do
   describe "GET index" do
-    it "returns http success" do
+    it "returns http success and renders Inertia component" do
       get :index
 
       expect(response).to have_http_status(:ok)
+      expect(inertia.component).to eq("HelpCenter/Index")
+      expect(inertia.props[:categories]).to be_present
     end
   end
 
   describe "GET show" do
     let(:article) { HelpCenter::Article.find(43) }
 
-    it "returns http success" do
+    it "returns http success and renders Inertia component with article props" do
       get :show, params: { slug: article.slug }
+
       expect(response).to have_http_status(:ok)
+      expect(inertia.component).to eq("HelpCenter/Article")
+      expect(inertia.props[:article][:title]).to eq(article.title)
+      expect(inertia.props[:article][:slug]).to eq(article.slug)
+      expect(inertia.props[:article]).to have_key(:content_html)
     end
 
-    context "render views" do
-      render_views
+    it "includes categories for the same audience" do
+      get :show, params: { slug: article.slug }
 
-      it "renders the article and categories for the same audience" do
+      expect(inertia.props[:categories]).to be_present
+      category_titles = inertia.props[:categories].map { |c| c[:title] }
+      article.category.categories_for_same_audience.each do |c|
+        expect(category_titles).to include(c.title)
+      end
+    end
+
+    HelpCenter::Article.all.each do |article|
+      it "renders the article #{article.slug}" do
         get :show, params: { slug: article.slug }
 
         expect(response).to have_http_status(:ok)
-
-        article.category.categories_for_same_audience.each do |c|
-          expect(response.body).to include(c.title)
-        end
-
-        expect(response.body).to include(article.title)
-      end
-
-      HelpCenter::Article.all.each do |article|
-        it "renders the article #{article.slug}" do
-          get :show, params: { slug: article.slug }
-
-          expect(response).to have_http_status(:ok)
-          expect(response.body).to include(ERB::Util.html_escape(article.title))
-        end
+        expect(inertia.props[:article][:title]).to eq(article.title)
       end
     end
 
