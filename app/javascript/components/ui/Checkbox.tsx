@@ -14,13 +14,13 @@ export const Checkbox = React.forwardRef<
       type="checkbox"
       className={classNames(
         "appearance-none",
-        "aspect-square size-[calc(1lh+0.125rem)]",
+        "size-[calc(1lh+0.125rem)]",
         "border border-border",
         "bg-background",
         "text-base leading-[1.4]",
         "shrink-0 cursor-pointer",
         "disabled:cursor-not-allowed disabled:opacity-30",
-        "checked:bg-accent checked:text-accent-foreground",
+        "checked:bg-accent",
         "rounded-lg",
         "peer",
         className,
