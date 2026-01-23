@@ -205,6 +205,7 @@ export const ProductEditContext = React.createContext<{
   setContentUpdates: React.Dispatch<React.SetStateAction<ContentUpdates>>;
   filesById: Map<string, FileEntry>;
   aiGenerated: boolean;
+  activeTab: "product" | "content" | "share" | "receipt";
 } | null>(null);
 export const useProductEditContext = () => assertDefined(React.useContext(ProductEditContext));
 

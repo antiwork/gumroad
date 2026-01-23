@@ -1,11 +1,8 @@
+import { Link, router } from "@inertiajs/react";
 import cx from "classnames";
 import * as React from "react";
-import { Link, useMatches, useNavigate } from "react-router-dom";
 
-import { saveProduct } from "$app/data/product_edit";
-import { setProductPublished } from "$app/data/publish_product";
 import { classNames } from "$app/utils/classNames";
-import { assertResponseError } from "$app/utils/request";
 
 import { Button, NavigationButton } from "$app/components/Button";
 import { CopyToClipboard } from "$app/components/CopyToClipboard";
@@ -20,7 +17,6 @@ import { SubtitleFile } from "$app/components/SubtitleList/Row";
 import { Alert } from "$app/components/ui/Alert";
 import { PageHeader } from "$app/components/ui/PageHeader";
 import { Tabs, Tab } from "$app/components/ui/Tabs";
-import { useRefToLatest } from "$app/components/useRefToLatest";
 import { WithTooltip } from "$app/components/WithTooltip";
 
 import { FileEntry, useProductEditContext } from "./state";
@@ -120,6 +116,8 @@ const NotifyAboutProductUpdatesAlert = () => {
   );
 };
 
+export type TabName = "product" | "content" | "share" | "receipt";
+
 export const Layout = ({
   children,
   preview,
@@ -128,6 +126,7 @@ export const Layout = ({
   previewScaleFactor = 0.4,
   showBorder = true,
   showNavigationButton = true,
+  activeTab = "product",
 }: {
   children: React.ReactNode;
   preview?: React.ReactNode;
@@ -136,6 +135,7 @@ export const Layout = ({
   previewScaleFactor?: number;
   showBorder?: boolean;
   showNavigationButton?: boolean;
+  activeTab?: TabName;
 }) => {
   const { id, product, updateProduct, uniquePermalink, saving, save, currencyType } = useProductEditContext();
   const rootPath = `/products/${uniquePermalink}/edit`;
@@ -143,30 +143,41 @@ export const Layout = ({
   const url = useProductUrl();
   const checkoutUrl = useProductUrl({ wanted: true });
 
-  const [match] = useMatches();
-  const tab = match?.handle ?? "product";
+  const tab = activeTab;
 
-  const navigate = useRefToLatest(useNavigate());
+  const navigateTo = React.useCallback((path: string) => {
+    router.visit(path);
+  }, []);
 
   const [isPublishing, setIsPublishing] = React.useState(false);
   const setPublished = async (published: boolean) => {
-    try {
-      setIsPublishing(true);
-      await saveProduct(uniquePermalink, id, product, currencyType);
-      await setProductPublished(uniquePermalink, published);
-      updateProduct({ is_published: published });
-      showAlert(published ? "Published!" : "Unpublished!", "success");
-      if (tab === "share") {
-        if (product.native_type === "coffee") navigate.current(rootPath);
-        else navigate.current(`${rootPath}/content`);
-      } else if (published) {
-        navigate.current(`${rootPath}/share`);
-      }
-    } catch (e) {
-      assertResponseError(e);
-      showAlert(e.message, "error", { html: true });
+    setIsPublishing(true);
+    await save();
+    const publishUrl = published
+      ? Routes.publish_link_path(uniquePermalink)
+      : Routes.unpublish_link_path(uniquePermalink);
+
+    let targetPath = rootPath;
+    if (tab === "share") {
+      targetPath = product.native_type === "coffee" ? rootPath : `${rootPath}/content`;
+    } else if (published) {
+      targetPath = `${rootPath}/share`;
     }
-    setIsPublishing(false);
+
+    router.post(
+      publishUrl,
+      {},
+      {
+        preserveScroll: true,
+        onSuccess: () => {
+          updateProduct({ is_published: published });
+          if (targetPath !== rootPath || tab !== "product") {
+            navigateTo(targetPath);
+          }
+        },
+        onFinish: () => setIsPublishing(false),
+      },
+    );
   };
 
   const isUploadingFile = (file: FileEntry | SubtitleFile) =>
@@ -203,7 +214,7 @@ export const Layout = ({
     </WithTooltip>
   );
 
-  const onTabClick = (e: React.MouseEvent<HTMLAnchorElement>, callback?: () => void) => {
+  const onTabClick = (e: React.MouseEvent, callback?: () => void) => {
     const message = isUploadingFiles
       ? "Some files are still uploading, please wait..."
       : isUploadingFilesOrImages
@@ -251,7 +262,7 @@ export const Layout = ({
             <Button
               color="primary"
               disabled={isBusy}
-              onClick={() => void save().then(() => navigate.current(`${rootPath}/content`))}
+              onClick={() => void save().then(() => navigateTo(`${rootPath}/content`))}
             >
               {saving ? "Saving changes..." : "Save and continue"}
             </Button>
@@ -275,25 +286,25 @@ export const Layout = ({
         >
           <Tabs style={{ gridColumn: 1 }}>
             <Tab asChild isSelected={tab === "product"}>
-              <Link to={rootPath} onClick={onTabClick}>
+              <Link href={rootPath} onClick={onTabClick}>
                 Product
               </Link>
             </Tab>
             {!isCoffee ? (
               <Tab asChild isSelected={tab === "content"}>
-                <Link to={`${rootPath}/content`} onClick={onTabClick}>
+                <Link href={`${rootPath}/content`} onClick={onTabClick}>
                   Content
                 </Link>
               </Tab>
             ) : null}
             <Tab asChild isSelected={tab === "receipt"}>
-              <Link to={`${rootPath}/receipt`} onClick={onTabClick}>
+              <Link href={`${rootPath}/receipt`} onClick={onTabClick}>
                 Receipt
               </Link>
             </Tab>
             <Tab asChild isSelected={tab === "share"}>
               <Link
-                to={`${rootPath}/share`}
+                href={`${rootPath}/share`}
                 onClick={(evt) => {
                   onTabClick(evt, () => {
                     if (!product.is_published) {

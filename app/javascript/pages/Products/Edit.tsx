@@ -1,11 +1,11 @@
-import { usePage } from "@inertiajs/react";
+import { useForm, usePage } from "@inertiajs/react";
 import { DirectUpload } from "@rails/activestorage";
+import { Editor, findChildren } from "@tiptap/core";
 import { isEqual } from "lodash-es";
 import * as React from "react";
-import { createBrowserRouter, RouteObject, RouterProvider } from "react-router-dom";
 import { cast } from "ts-safe-cast";
 
-import { saveProduct } from "$app/data/product_edit";
+import { buildProductPayload } from "$app/data/product_edit";
 import { OtherRefundPolicy } from "$app/data/products/other_refund_policies";
 import { Thumbnail } from "$app/data/thumbnails";
 import { RatingsWithPercentages } from "$app/parsers/product";
@@ -15,9 +15,10 @@ import { ALLOWED_EXTENSIONS } from "$app/utils/file";
 import { assertResponseError, request } from "$app/utils/request";
 
 import { Seller } from "$app/components/Product";
-import { ContentTab } from "$app/components/ProductEdit/ContentTab";
-import { getDownloadUrl } from "$app/components/ProductEdit/ContentTab/FileEmbed";
+import { ContentTab, extensions } from "$app/components/ProductEdit/ContentTab";
+import { FileEmbed, getDownloadUrl } from "$app/components/ProductEdit/ContentTab/FileEmbed";
 import { Page } from "$app/components/ProductEdit/ContentTab/PageTab";
+import { type TabName } from "$app/components/ProductEdit/Layout";
 import { ProductTab } from "$app/components/ProductEdit/ProductTab";
 import { ReceiptTab } from "$app/components/ProductEdit/ReceiptTab";
 import { RefundPolicy } from "$app/components/ProductEdit/RefundPolicy";
@@ -30,31 +31,8 @@ import {
   ShippingCountry,
   ContentUpdates,
 } from "$app/components/ProductEdit/state";
-import { ImageUploadSettingsContext } from "$app/components/RichTextEditor";
+import { baseEditorOptions, ImageUploadSettingsContext } from "$app/components/RichTextEditor";
 import { showAlert } from "$app/components/server-components/Alert";
-
-const routes: RouteObject[] = [
-  {
-    path: "/products/:id/edit",
-    element: <ProductTab />,
-    handle: "product",
-  },
-  {
-    path: "/products/:id/edit/content",
-    element: <ContentTab />,
-    handle: "content",
-  },
-  {
-    path: "/products/:id/edit/share",
-    element: <ShareTab />,
-    handle: "share",
-  },
-  {
-    path: "/products/:id/edit/receipt",
-    element: <ReceiptTab />,
-    handle: "receipt",
-  },
-];
 
 type Props = {
   product: Product;
@@ -84,6 +62,7 @@ type Props = {
   seller_refund_policy: Pick<RefundPolicy, "title" | "fine_print">;
   cancellation_discounts_enabled: boolean;
   ai_generated: boolean;
+  active_tab: TabName;
 };
 
 const createContextValue = (props: Props) => ({
@@ -121,6 +100,7 @@ const createContextValue = (props: Props) => ({
   setContentUpdates: () => {},
   filesById: new Map(props.product.files.map((file) => [file.id, { ...file, url: getDownloadUrl(props.id, file) }])),
   aiGenerated: props.ai_generated,
+  activeTab: props.active_tab,
 });
 
 const pagesHaveSameContent = (pages1: Page[], pages2: Page[]): boolean => isEqual(pages1, pages2);
@@ -141,6 +121,27 @@ const findUpdatedContent = (product: Product, lastSavedProduct: Product) => {
   };
 };
 
+const filterFilesInContent = (id: string, product: Product): Product => {
+  const editor = new Editor(baseEditorOptions(extensions(id)));
+  const richContents =
+    product.has_same_rich_content_for_all_variants || !product.variants.length
+      ? product.rich_content
+      : product.variants.flatMap((variant) => variant.rich_content);
+  const fileIds = new Set(
+    richContents.flatMap((content) =>
+      findChildren(
+        editor.schema.nodeFromJSON(content.description),
+        (node) => node.type.name === FileEmbed.name,
+      ).map<unknown>((child) => child.node.attrs.id),
+    ),
+  );
+  editor.destroy();
+  return {
+    ...product,
+    files: product.files.filter((file) => fileIds.has(file.id)),
+  };
+};
+
 const ProductEditPage = (props: Props) => {
   const [product, setProduct] = React.useState(props.product);
   const [contentUpdates, setContentUpdates] = React.useState<ContentUpdates>(null);
@@ -155,40 +156,48 @@ const ProductEditPage = (props: Props) => {
       return updated;
     });
   const [existingFiles, setExistingFiles] = React.useState(props.existing_files);
-  const router = createBrowserRouter(routes);
 
-  const [saving, setSaving] = React.useState(false);
   const [imagesUploading, setImagesUploading] = React.useState<Set<File>>(new Set());
-  const save = async () => {
-    try {
-      setSaving(true);
-      const response = await saveProduct(props.unique_permalink, props.id, product, currencyType);
-      if (response.warning_message) showAlert(response.warning_message, "warning");
-      else {
-        const { contentUpdatedVariantIds, sharedContentUpdated } = findUpdatedContent(
-          product,
-          lastSavedProductRef.current,
-        );
-        const contentUpdated = sharedContentUpdated || contentUpdatedVariantIds.length > 0;
 
-        if (props.successful_sales_count > 0 && contentUpdated) {
-          const uniquePermalinkOrVariantIds = product.has_same_rich_content_for_all_variants
-            ? [props.unique_permalink]
-            : contentUpdatedVariantIds;
+  const form = useForm(buildProductPayload(product, currencyType));
 
-          setContentUpdates({
-            uniquePermalinkOrVariantIds,
-          });
-        } else {
-          showAlert("Changes saved!", "success");
-        }
-        lastSavedProductRef.current = structuredClone(product);
-      }
-    } catch (e) {
-      assertResponseError(e);
-      showAlert(e.message, "error");
-    }
-    setSaving(false);
+  React.useEffect(() => {
+    form.setData(buildProductPayload(product, currencyType));
+  }, [product, currencyType]);
+
+  const save = () => {
+    const filteredProduct = filterFilesInContent(props.id, product);
+
+    return new Promise<void>((resolve, reject) => {
+      form.transform(() => buildProductPayload(filteredProduct, currencyType));
+      form.post(Routes.link_path(props.unique_permalink), {
+        preserveScroll: true,
+        onSuccess: () => {
+          const { contentUpdatedVariantIds, sharedContentUpdated } = findUpdatedContent(
+            product,
+            lastSavedProductRef.current,
+          );
+          const contentUpdated = sharedContentUpdated || contentUpdatedVariantIds.length > 0;
+
+          if (props.successful_sales_count > 0 && contentUpdated) {
+            const uniquePermalinkOrVariantIds = product.has_same_rich_content_for_all_variants
+              ? [props.unique_permalink]
+              : contentUpdatedVariantIds;
+
+            setContentUpdates({
+              uniquePermalinkOrVariantIds,
+            });
+          }
+          lastSavedProductRef.current = structuredClone(product);
+          resolve();
+        },
+        onError: (errors) => {
+          const errorMessage = Object.values(errors)[0];
+          if (errorMessage) showAlert(errorMessage, "error");
+          reject(new Error(errorMessage ?? "Save failed"));
+        },
+      });
+    });
   };
 
   const contextValue = React.useMemo(
@@ -200,11 +209,12 @@ const ProductEditPage = (props: Props) => {
       setExistingFiles,
       updateProduct,
       save,
-      saving,
+      saving: form.processing,
       contentUpdates,
       setContentUpdates,
+      activeTab: props.active_tab,
     }),
-    [product, updateProduct, existingFiles, setExistingFiles],
+    [props, product, currencyType, existingFiles, form.processing, contentUpdates],
   );
 
   const imageSettings = React.useMemo(
@@ -242,11 +252,23 @@ const ProductEditPage = (props: Props) => {
     [imagesUploading.size],
   );
 
+  const renderTab = () => {
+    switch (props.active_tab) {
+      case "content":
+        return <ContentTab />;
+      case "share":
+        return <ShareTab />;
+      case "receipt":
+        return <ReceiptTab />;
+      case "product":
+      default:
+        return <ProductTab />;
+    }
+  };
+
   return (
     <ProductEditContext.Provider value={contextValue}>
-      <ImageUploadSettingsContext.Provider value={imageSettings}>
-        <RouterProvider router={router} />
-      </ImageUploadSettingsContext.Provider>
+      <ImageUploadSettingsContext.Provider value={imageSettings}>{renderTab()}</ImageUploadSettingsContext.Provider>
     </ProductEditContext.Provider>
   );
 };

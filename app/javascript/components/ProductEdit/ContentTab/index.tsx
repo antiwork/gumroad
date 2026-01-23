@@ -1,3 +1,4 @@
+import { router } from "@inertiajs/react";
 import { findChildren, generateJSON, Node as TiptapNode } from "@tiptap/core";
 import { DOMSerializer } from "@tiptap/pm/model";
 import { EditorContent } from "@tiptap/react";
@@ -340,26 +341,21 @@ const ContentTabContent = ({ selectedVariantId }: { selectedVariantId: string | 
     return existingFiles.filter((file) => regex.test(file.display_name));
   }, [existingFiles, selectingExistingFiles?.query]);
 
-  const fetchLatestExistingFiles = async () => {
-    try {
-      const [response] = await Promise.all([
-        request({
-          method: "GET",
-          url: Routes.internal_product_existing_product_files_path(uniquePermalink),
-          accept: "json",
-        }),
-        // Enforce minimum loading time to prevent jarring spinner flicker UX on fast connections
-        new Promise((resolve) => setTimeout(resolve, 250)),
-      ]);
-      if (!response.ok) throw new ResponseError();
-      const parsedResponse = cast<{ existing_files: ExistingFileEntry[] }>(await response.json());
-      setExistingFiles(parsedResponse.existing_files);
-    } catch (error) {
-      assertResponseError(error);
-      showAlert(error.message, "error");
-    } finally {
-      setSelectingExistingFiles((state) => (state ? { ...state, isLoading: false } : null));
-    }
+  const fetchLatestExistingFiles = () => {
+    const minLoadingTime = new Promise((resolve) => setTimeout(resolve, 250));
+
+    router.reload({
+      only: ["existing_files"],
+      onSuccess: () => {
+        void minLoadingTime.then(() => {
+          setSelectingExistingFiles((state) => (state ? { ...state, isLoading: false } : null));
+        });
+      },
+      onError: () => {
+        showAlert("Failed to load existing files", "error");
+        setSelectingExistingFiles((state) => (state ? { ...state, isLoading: false } : null));
+      },
+    });
   };
 
   const addDropboxFiles = (files: ResponseDropboxFile[]) => {
@@ -511,7 +507,7 @@ const ContentTabContent = ({ selectedVariantId }: { selectedVariantId: string | 
                           role="menuitem"
                           onClick={() => {
                             setSelectingExistingFiles({ selected: [], query: "", isLoading: true });
-                            void fetchLatestExistingFiles();
+                            fetchLatestExistingFiles();
                           }}
                         >
                           <Icon name="files-earmark" />
@@ -1136,6 +1132,7 @@ export const ContentTab = () => {
                   </>
                 ) : null
               }
+              activeTab="content"
             >
               <ContentTabContent selectedVariantId={selectedVariantId} />
             </Layout>

@@ -280,11 +280,20 @@ class LinksController < ApplicationController
     redirect_to bundle_path(@product.external_id) if @product.is_bundle?
 
     @title = @product.name
+    @load_dropbox_dropins = true
+
+    # Determine active tab from the request path
+    active_tab = case request.path
+                 when %r{/edit/content$} then "content"
+                 when %r{/edit/share$} then "share"
+                 when %r{/edit/receipt$} then "receipt"
+                 else "product"
+    end
 
     ai_generated = params[:ai_generated] == "true"
     presenter = ProductPresenter.new(product: @product, pundit_user:, ai_generated:)
 
-    render inertia: "Products/Edit", props: presenter.edit_props
+    render inertia: "Products/Edit", props: presenter.edit_props.merge(active_tab:)
   end
 
   def update
@@ -338,7 +347,7 @@ class LinksController < ApplicationController
           begin
             Product::SaveCancellationDiscountService.new(@product, product_permitted_params[:cancellation_discount]).perform
           rescue ActiveRecord::RecordInvalid => e
-            return render json: { error_message: e.record.errors.full_messages.first }, status: :unprocessable_entity
+            raise Link::LinkInvalid, e.record.errors.full_messages.first
           end
         end
 
@@ -388,7 +397,9 @@ class LinksController < ApplicationController
       else
         error_message = @product.errors.full_messages.first || e.message
       end
-      return render json: { error_message: }, status: :unprocessable_entity
+      return redirect_back fallback_location: edit_link_path(@product.unique_permalink),
+                           inertia: { errors: { base: error_message } },
+                           alert: error_message
     end
     invalid_currency_offer_codes = @product.product_and_universal_offer_codes.reject do |offer_code|
       offer_code.is_currency_valid?(@product)
@@ -410,38 +421,47 @@ class LinksController < ApplicationController
         issue_description = "#{all_invalid_offer_codes.count > 1 ? "discount" : "discounts"} this product below #{@product.min_price_formatted}, but not to #{MoneyFormatter.format(0, @product.price_currency_type.to_sym, no_cents_if_whole: true, symbol: true)}"
       end
 
-      return render json: {
-        warning_message: "The following offer #{"code".pluralize(all_invalid_offer_codes.count)} #{issue_description}: #{all_invalid_offer_codes.join(", ")}. Please update #{all_invalid_offer_codes.length > 1 ? "them or they" : "it or it"} will not work at checkout."
-      }
+      warning_message = "The following offer #{"code".pluralize(all_invalid_offer_codes.count)} #{issue_description}: #{all_invalid_offer_codes.join(", ")}. Please update #{all_invalid_offer_codes.length > 1 ? "them or they" : "it or it"} will not work at checkout."
+      return redirect_back fallback_location: edit_link_path(@product.unique_permalink),
+                           warning: warning_message
     end
 
-    head :no_content
+    redirect_back fallback_location: edit_link_path(@product.unique_permalink),
+                  notice: "Changes saved!"
   end
 
   def unpublish
     authorize @product
 
     @product.unpublish!
-    render json: { success: true }
+    redirect_back fallback_location: edit_link_path(@product.unique_permalink),
+                  notice: "Unpublished!"
   end
 
   def publish
     authorize @product
 
     if @product.user.email.blank?
-      return render json: { success: false, error_message: "<span>To publish a product, we need you to have an email. <a href=\"#{settings_main_url}\">Set an email</a> to continue.</span>" }
+      return redirect_back fallback_location: edit_link_path(@product.unique_permalink),
+                           inertia: { errors: { base: "To publish a product, we need you to have an email." } },
+                           alert: "<span>To publish a product, we need you to have an email. <a href=\"#{settings_main_url}\">Set an email</a> to continue.</span>"
     end
 
     begin
       @product.publish!
     rescue Link::LinkInvalid, ActiveRecord::RecordInvalid
-      return render json: { success: false, error_message: @product.errors.full_messages[0] }
+      return redirect_back fallback_location: edit_link_path(@product.unique_permalink),
+                           inertia: { errors: { base: @product.errors.full_messages[0] } },
+                           alert: @product.errors.full_messages[0]
     rescue => e
       Bugsnag.notify(e)
-      return render json: { success: false, error_message: "Something broke. We're looking into what happened. Sorry about this!" }
+      return redirect_back fallback_location: edit_link_path(@product.unique_permalink),
+                           inertia: { errors: { base: "Something broke. We're looking into what happened. Sorry about this!" } },
+                           alert: "Something broke. We're looking into what happened. Sorry about this!"
     end
 
-    render json: { success: true }
+    redirect_back fallback_location: edit_link_path(@product.unique_permalink),
+                  notice: "Published!"
   end
 
   def destroy

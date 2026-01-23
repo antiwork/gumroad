@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[7.1].define(version: 2026_11_19_011936) do
+ActiveRecord::Schema[7.1].define(version: 2026_11_19_011937) do
   create_table "active_storage_attachments", charset: "utf8mb4", collation: "utf8mb4_unicode_ci", force: :cascade do |t|
     t.string "name", limit: 191, null: false
     t.string "record_type", limit: 191, null: false
@@ -1123,7 +1123,7 @@ ActiveRecord::Schema[7.1].define(version: 2026_11_19_011936) do
     t.string "native_type", default: "digital", null: false
     t.integer "discover_fee_per_thousand", default: 100, null: false
     t.string "support_email"
-    t.bigint "default_offer_code_id"
+    t.integer "default_offer_code_id"
     t.index ["banned_at"], name: "index_links_on_banned_at"
     t.index ["custom_permalink"], name: "index_links_on_custom_permalink", length: 191
     t.index ["default_offer_code_id"], name: "index_links_on_default_offer_code_id"
@@ -1216,28 +1216,6 @@ ActiveRecord::Schema[7.1].define(version: 2026_11_19_011936) do
     t.index ["uid"], name: "index_oauth_applications_on_uid", unique: true
   end
 
-  create_table "offer_code_upgrade_requirements", charset: "utf8mb4", collation: "utf8mb4_unicode_ci", force: :cascade do |t|
-    t.bigint "offer_code_id", null: false
-    t.bigint "required_product_id", null: false
-    t.datetime "created_at", null: false
-    t.datetime "updated_at", null: false
-    t.index ["offer_code_id", "required_product_id"], name: "index_offer_code_upgrade_req_on_offer_code_and_product", unique: true
-    t.index ["offer_code_id"], name: "index_offer_code_upgrade_requirements_on_offer_code_id"
-    t.index ["required_product_id"], name: "index_offer_code_upgrade_requirements_on_required_product_id"
-  end
-
-  create_table "offer_code_upgrade_tiers", charset: "utf8mb4", collation: "utf8mb4_unicode_ci", force: :cascade do |t|
-    t.bigint "offer_code_upgrade_requirement_id", null: false
-    t.integer "percent_off", null: false
-    t.datetime "created_at", null: false
-    t.datetime "updated_at", null: false
-    t.bigint "max_age_in_seconds"
-    t.string "max_age_unit", default: "months"
-    t.integer "amount_cents"
-    t.string "discount_type", default: "percent", null: false
-    t.index ["offer_code_upgrade_requirement_id"], name: "index_offer_code_upgrade_tiers_on_requirement_id"
-  end
-
   create_table "offer_codes", id: :integer, charset: "utf8mb4", collation: "utf8mb4_unicode_ci", force: :cascade do |t|
     t.integer "link_id"
     t.string "name"
@@ -1257,8 +1235,6 @@ ActiveRecord::Schema[7.1].define(version: 2026_11_19_011936) do
     t.integer "duration_in_months"
     t.integer "minimum_amount_cents"
     t.bigint "flags", default: 0, null: false
-    t.json "required_product_ids"
-    t.json "minimum_quantity_discount_tiers"
     t.index ["code", "link_id"], name: "index_offer_codes_on_code_and_link_id"
     t.index ["link_id"], name: "index_offer_codes_on_link_id"
     t.index ["name", "link_id"], name: "index_offer_codes_on_name_and_link_id", length: { name: 191 }

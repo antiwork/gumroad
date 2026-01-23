@@ -19,6 +19,9 @@
     <% end %>
     <%= javascript_include_tag "application" %>
     <%= load_pack("base") unless @hide_layouts %>
+    <% if @load_dropbox_dropins %>
+      <%= render("shared/load_dropbox_dropins_js", async: true) %>
+    <% end %>
     <%= yield :script %>
   </body>
 </html>

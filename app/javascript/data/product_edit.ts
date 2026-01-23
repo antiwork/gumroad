@@ -9,8 +9,7 @@ import { FileEmbed } from "$app/components/ProductEdit/ContentTab/FileEmbed";
 import { Product } from "$app/components/ProductEdit/state";
 import { baseEditorOptions } from "$app/components/RichTextEditor";
 
-export const saveProduct = async (permalink: string, id: string, product: Product, currencyType: CurrencyCode) => {
-  // TODO remove this once we have a better content uploader
+export const filterFilesInContent = (id: string, product: Product): Product => {
   const editor = new Editor(baseEditorOptions(extensions(id)));
   const richContents =
     product.has_same_rich_content_for_all_variants || !product.variants.length
@@ -25,22 +24,31 @@ export const saveProduct = async (permalink: string, id: string, product: Produc
     ),
   );
   editor.destroy();
-  product.files = product.files.filter((file) => fileIds.has(file.id));
+  return {
+    ...product,
+    files: product.files.filter((file) => fileIds.has(file.id)),
+  };
+};
+
+export const buildProductPayload = (product: Product, currencyType: CurrencyCode) => ({
+  ...product,
+  price_currency_type: currencyType,
+  covers: product.covers.map(({ id }) => id),
+  variants: product.variants.map(({ newlyAdded, ...variant }) => (newlyAdded ? { ...variant, id: null } : variant)),
+  availabilities: product.availabilities.map(({ newlyAdded, ...availability }) =>
+    newlyAdded ? { ...availability, id: null } : availability,
+  ),
+  installment_plan: product.allow_installment_plan ? product.installment_plan : null,
+});
+
+export const saveProduct = async (permalink: string, id: string, product: Product, currencyType: CurrencyCode) => {
+  const filteredProduct = filterFilesInContent(id, product);
 
   const response = await request({
     method: "POST",
     accept: "json",
     url: Routes.link_path(permalink),
-    data: {
-      ...product,
-      price_currency_type: currencyType,
-      covers: product.covers.map(({ id }) => id),
-      variants: product.variants.map(({ newlyAdded, ...variant }) => (newlyAdded ? { ...variant, id: null } : variant)),
-      availabilities: product.availabilities.map(({ newlyAdded, ...availability }) =>
-        newlyAdded ? { ...availability, id: null } : availability,
-      ),
-      installment_plan: product.allow_installment_plan ? product.installment_plan : null,
-    },
+    data: buildProductPayload(filteredProduct, currencyType),
   });
   if (!response.ok) throw new ResponseError(cast<{ error_message: string }>(await response.json()).error_message);
   if (response.status === 204) return {};

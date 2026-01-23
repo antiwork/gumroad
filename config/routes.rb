@@ -670,7 +670,9 @@ Rails.application.routes.draw do
     end
 
     get "/products/:id/edit", to: "links#edit", as: :edit_link
-    get "/products/:id/edit/*other", to: "links#edit"
+    get "/products/:id/edit/content", to: "links#edit", as: :edit_link_content
+    get "/products/:id/edit/share", to: "links#edit", as: :edit_link_share
+    get "/products/:id/edit/receipt", to: "links#edit", as: :edit_link_receipt
     get "/products/:id/card", to: "links#card", as: :product_card
     get "/products/search", to: "links#search"
 
