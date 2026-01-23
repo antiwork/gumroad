@@ -1,4 +1,4 @@
-import { Head } from "@inertiajs/react";
+import { Head, Link } from "@inertiajs/react";
 import React from "react";
 
 import { Card, CardContent } from "$app/components/ui/Card";
@@ -15,7 +15,7 @@ const UnsubscribeReviewReminders = () => (
       <CardContent asChild>
         <p>
           If you wish to resubscribe to all review reminder emails, please click{" "}
-          <a href={Routes.user_subscribe_review_reminders_url()}>here</a>.
+          <Link href={Routes.user_subscribe_review_reminders_path()}>here</Link>.
         </p>
       </CardContent>
     </Card>
@@ -26,7 +26,7 @@ const UnsubscribeReviewReminders = () => (
       }}
     >
       Powered by&ensp;
-      <a href={Routes.root_url()} className="logo-full" aria-label="Gumroad" />
+      <Link href={Routes.root_path()} className="logo-full" aria-label="Gumroad" />
     </footer>
   </>
 );

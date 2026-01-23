@@ -1,4 +1,4 @@
-import { Head } from "@inertiajs/react";
+import { Head, Link } from "@inertiajs/react";
 import React from "react";
 
 import { Card, CardContent } from "$app/components/ui/Card";
@@ -23,7 +23,7 @@ const SubscribeReviewReminders = () => (
       }}
     >
       Powered by&ensp;
-      <a href={Routes.root_url()} className="logo-full" aria-label="Gumroad" />
+      <Link href={Routes.root_path()} className="logo-full" aria-label="Gumroad" />
     </footer>
   </>
 );
