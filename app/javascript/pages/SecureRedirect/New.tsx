@@ -1,9 +1,9 @@
 import { useForm, usePage } from "@inertiajs/react";
 import * as React from "react";
 
+import { AuthAlert } from "$app/components/AuthAlert";
 import { Layout } from "$app/components/Authentication/Layout";
 import { Button } from "$app/components/Button";
-import { AuthAlert } from "$app/components/AuthAlert";
 
 type PageProps = {
   message: string;
@@ -28,11 +28,11 @@ function SecureRedirectNew() {
 
   const form = useForm<FormData>({
     confirmation_text: "",
-    encrypted_payload: encrypted_payload,
-    authenticity_token: authenticity_token,
-    message: message,
-    field_name: field_name,
-    error_message: error_message,
+    encrypted_payload,
+    authenticity_token,
+    message,
+    field_name,
+    error_message,
   });
 
   const handleSubmit = (e: React.FormEvent<HTMLFormElement>) => {
@@ -58,7 +58,7 @@ function SecureRedirectNew() {
             autoFocus
             className="w-full"
           />
-          {form.errors.confirmation_text && <div className="error-message">{form.errors.confirmation_text}</div>}
+          {form.errors.confirmation_text ? <div className="error-message">{form.errors.confirmation_text}</div> : null}
         </fieldset>
 
         <Button color="primary" type="submit" disabled={form.processing}>
