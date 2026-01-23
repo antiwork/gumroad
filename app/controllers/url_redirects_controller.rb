@@ -13,7 +13,8 @@ class UrlRedirectsController < ApplicationController
   before_action :redirect_to_coffee_page_if_needed, only: :download_page
   before_action :check_permissions, only: %i[show stream download_page
                                              hls_playlist download_subtitle_file read
-                                             download_archive latest_media_locations download_product_files audio_durations]
+                                             download_archive latest_media_locations download_product_files audio_durations
+                                             save_last_content_page]
   before_action :hide_layouts, only: %i[
     confirm_page membership_inactive_page expired rental_expired_page show download_page download_product_files stream smil hls_playlist download_subtitle_file read
   ]
@@ -277,6 +278,13 @@ class UrlRedirectsController < ApplicationController
     end
 
     render json:
+  end
+
+  def save_last_content_page
+    return render json: { success: false, error: "Purchase not found" }, status: :unprocessable_entity if @url_redirect.purchase.blank?
+
+    @url_redirect.purchase.update!(last_content_page_id: params[:page_id])
+    render json: { success: true }
   end
 
   private
