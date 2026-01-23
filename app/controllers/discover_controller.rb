@@ -7,6 +7,8 @@ class DiscoverController < ApplicationController
   include ActionView::Helpers::NumberHelper, RecommendationType, CreateDiscoverSearch,
           DiscoverCuratedProducts, SearchProducts, AffiliateCookie
 
+  layout "inertia", only: [:index]
+
   before_action :set_affiliate_cookie, only: [:index]
 
   def index
@@ -49,17 +51,17 @@ class DiscoverController < ApplicationController
 
     prepare_discover_page
 
-    @react_discover_props = {
+    render inertia: "Discover/Index", props: {
       search_results: @search_results,
       currency_code: logged_in_user&.currency_type || "usd",
       taxonomies_for_nav:,
-      recommended_products: recommendations,
+      recommended_products: -> { recommendations },
       curated_product_ids: curated_products.map { _1.product.external_id },
       search_offset: params[:from] || 0,
-      show_black_friday_hero: black_friday_feature_active?,
+      show_black_friday_hero: -> { black_friday_feature_active? },
       is_black_friday_page: params[:offer_code] == SearchProducts::BLACK_FRIDAY_CODE,
       black_friday_offer_code: SearchProducts::BLACK_FRIDAY_CODE,
-      black_friday_stats: black_friday_feature_active? ? BlackFridayStatsService.fetch_stats : nil,
+      black_friday_stats: -> { black_friday_feature_active? ? BlackFridayStatsService.fetch_stats : nil },
     }
   end
 
