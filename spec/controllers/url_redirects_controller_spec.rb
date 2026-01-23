@@ -1807,4 +1807,89 @@ describe UrlRedirectsController do
       end
     end
   end
+
+  describe "POST 'save_last_content_page'" do
+    let(:product) { create(:product_with_pdf_file) }
+    let(:purchase) { create(:purchase, link: product) }
+    let!(:url_redirect) { create(:url_redirect, link: product, purchase:) }
+
+    it "saves the last content page id for the purchase" do
+      expect do
+        post :save_last_content_page, params: { id: url_redirect.token, page_id: "page_123" }
+      end.to change { purchase.reload.last_content_page_id }.from(nil).to("page_123")
+
+      expect(response).to be_successful
+      expect(response.parsed_body).to eq("success" => true)
+    end
+
+    it "updates an existing last content page id" do
+      purchase.update!(last_content_page_id: "old_page")
+
+      expect do
+        post :save_last_content_page, params: { id: url_redirect.token, page_id: "new_page" }
+      end.to change { purchase.reload.last_content_page_id }.from("old_page").to("new_page")
+
+      expect(response).to be_successful
+    end
+
+    context "when there is no purchase" do
+      let!(:url_redirect_without_purchase) { create(:url_redirect, link: product, purchase: nil) }
+
+      it "returns an error" do
+        post :save_last_content_page, params: { id: url_redirect_without_purchase.token, page_id: "page_123" }
+
+        expect(response).to have_http_status(:unprocessable_entity)
+        expect(response.parsed_body).to eq("success" => false, "error" => "Purchase not found")
+      end
+    end
+
+    it "handles missing page_id parameter by setting nil" do
+      purchase.update!(last_content_page_id: "existing_page")
+
+      expect do
+        post :save_last_content_page, params: { id: url_redirect.token }
+      end.to change { purchase.reload.last_content_page_id }.from("existing_page").to(nil)
+
+      expect(response).to be_successful
+    end
+
+    context "when access is revoked for purchase" do
+      before do
+        purchase.update!(is_access_revoked: true)
+      end
+
+      it "redirects to expired page" do
+        post :save_last_content_page, params: { id: url_redirect.token, page_id: "page_123" }
+
+        expect(response).to redirect_to(url_redirect_expired_page_path(id: url_redirect.token))
+      end
+    end
+
+    context "when purchase is refunded" do
+      before do
+        purchase.update!(stripe_refunded: true)
+      end
+
+      it "raises an e404" do
+        expect do
+          post :save_last_content_page, params: { id: url_redirect.token, page_id: "page_123" }
+        end.to raise_error(ActionController::RoutingError)
+      end
+    end
+
+    context "with custom domain route", type: :request do
+      let!(:custom_domain) { create(:custom_domain, user: product.user) }
+
+      it "saves the last content page id via custom domain" do
+        expect do
+          post "/r/#{url_redirect.token}/save_last_content_page",
+               params: { page_id: "page_123" },
+               headers: { "HOST" => custom_domain.domain }
+        end.to change { purchase.reload.last_content_page_id }.from(nil).to("page_123")
+
+        expect(response).to be_successful
+        expect(response.parsed_body).to eq("success" => true)
+      end
+    end
+  end
 end
