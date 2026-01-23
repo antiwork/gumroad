@@ -36,7 +36,6 @@ module Onetime
 
         begin
           puts "\nSubscription #{subscription.id}"
-          puts "  Product: #{subscription.link&.name}"
           puts "  Customer: #{subscription.email}"
           puts "  Next renewal: #{subscription.end_time_of_subscription.strftime('%Y-%m-%d %H:%M')}"
           puts "  Reminder at: #{subscription.send_renewal_reminder_at.strftime('%Y-%m-%d %H:%M')}"
