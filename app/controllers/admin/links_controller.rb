@@ -79,23 +79,6 @@ class Admin::LinksController < Admin::BaseController
     redirect_to url_redirect.signed_location_for_file(product_file), allow_other_host: true
   end
 
-  def legacy_purchases
-    if parse_boolean(params[:is_affiliate_user])
-      affiliate_user = User.find(params[:user_id])
-      sales = Purchase.where(link_id: @product.id, affiliate_id: affiliate_user.direct_affiliate_accounts.select(:id))
-    else
-      sales = @product.sales
-    end
-
-    @purchases = sales.where("purchase_state IN ('preorder_authorization_successful', 'preorder_concluded_unsuccessfully', 'successful', 'failed', 'not_charged')").exclude_not_charged_except_free_trial
-    @purchases = @purchases.order("created_at DESC, id DESC").page_with_kaminari(params[:page]).per(params[:per_page])
-
-    respond_to do |format|
-      purchases_json = @purchases.as_json(admin_review: true)
-      format.json { render json: { purchases: purchases_json, page: params[:page].to_i } }
-    end
-  end
-
   def flag_seller_for_tos_violation
     user = @product.user
     suspend_tos_reason = params.try(:[], :suspend_tos).try(:[], :reason) || params[:reason]
