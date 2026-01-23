@@ -282,7 +282,6 @@ class LinksController < ApplicationController
     @title = @product.name
     @load_dropbox_dropins = true
 
-    # Determine active tab from the request path
     active_tab = case request.path
                  when %r{/edit/content$} then "content"
                  when %r{/edit/share$} then "share"
