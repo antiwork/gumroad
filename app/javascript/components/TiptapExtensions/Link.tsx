@@ -237,7 +237,7 @@ const LinkNodeView = ({ node, editor, getPos, deleteNode }: NodeViewProps) => {
               rel="noopener noreferrer nofollow"
             />
           </PopoverTrigger>
-          <PopoverContent>
+          <PopoverContent usePortal>
             <fieldset>
               <input
                 placeholder="Enter text"
