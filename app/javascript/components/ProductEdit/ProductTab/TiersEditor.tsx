@@ -289,9 +289,7 @@ const TierEditor = ({
               ))}
             </fieldset>
             {allEnabledPricesAreZero ? (
-              <div role="alert" className="info">
-                Free tiers require a pay what they want price.
-              </div>
+              <Alert variant="info">Free tiers require a pay what they want price.</Alert>
             ) : null}
             <Details
               summary={
@@ -463,7 +461,7 @@ You can modify or cancel your membership at any time.`;
             </strong>{" "}
             <button
               type="button"
-              className="underline"
+              className="cursor-pointer underline all-unset"
               onClick={() =>
                 void sendSamplePriceChangeEmail({
                   productPermalink: uniquePermalink,

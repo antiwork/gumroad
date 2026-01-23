@@ -16,9 +16,9 @@ describe "Public affiliate request onboarding form", type: :system, js: true do
       expect(page).to have_text("Applying to be an affiliate is easy. Fill out the form below and let #{creator.display_name} know how you'll be promoting their products.")
       expect(page).to have_text("To help speed up your approval, include things like social urls, audience size, audience engagement, etc...")
 
-      # Ensure form validations work
-      click_on("Submit affiliate request")
-      expect(page).to have_alert(text: "Name can't be blank")
+      # Verify required fields have HTML5 validation
+      expect(page).to have_field("Name", type: "text") { |field| field[:required] }
+      expect(page).to have_field("Email", type: "email") { |field| field[:required] }
 
       # Request submission status message when the requester already has an account
       create(:user, email: "jane@example.com")

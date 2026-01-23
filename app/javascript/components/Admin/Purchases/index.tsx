@@ -9,6 +9,7 @@ import DateTimeWithRelativeTooltip from "$app/components/Admin/DateTimeWithRelat
 import { Form } from "$app/components/Admin/Form";
 import { NoIcon, BooleanIcon } from "$app/components/Admin/Icons";
 import AdminResendReceiptForm from "$app/components/Admin/Purchases/ResendReceiptForm";
+import { Button } from "$app/components/Button";
 import { CopyToClipboard } from "$app/components/CopyToClipboard";
 import { Icon } from "$app/components/Icons";
 import { showAlert } from "$app/components/server-components/Alert";
@@ -65,7 +66,7 @@ export type Purchase = PurchaseStatesInfo & {
   external_id_numeric: number;
   quantity: number;
   refunds: {
-    user: { id: number; name: string | null } | null;
+    user: { external_id: string; name: string | null } | null;
     status: string;
     created_at: string;
   }[];
@@ -273,8 +274,8 @@ const Info = ({ purchase }: { purchase: Purchase }) => (
                   <li>
                     Refunder:
                     {refund.user ? (
-                      <Link href={Routes.admin_user_path(refund.user.id)}>
-                        {refund.user.name || `User ${refund.user.id}`}
+                      <Link href={Routes.admin_user_path(refund.user.external_id)}>
+                        {refund.user.name || `User ${refund.user.external_id}`}
                       </Link>
                     ) : (
                       "(unknown)"
@@ -503,9 +504,9 @@ const GiftInfo = ({ purchaseExternalId, gift }: { purchaseExternalId: string; gi
           {(isLoading) => (
             <div className="flex gap-2">
               <input type="text" className="flex-1" name="giftee_email" placeholder="Enter new giftee email" required />
-              <button type="submit" className="button" disabled={isLoading}>
+              <Button type="submit" disabled={isLoading}>
                 {isLoading ? "Updating..." : "Update"}
-              </button>
+              </Button>
             </div>
           )}
         </Form>
@@ -633,9 +634,11 @@ const ActionButtons = ({ purchase }: { purchase: Purchase }) => (
       />
     ) : null}
     {purchase.successful ? (
-      <Link href={Routes.receipt_purchase_path(purchase.external_id)} target="_blank" className="button small">
-        Go to Receipt
-      </Link>
+      <Button asChild small>
+        <Link href={Routes.receipt_purchase_path(purchase.external_id)} target="_blank">
+          Go to Receipt
+        </Link>
+      </Button>
     ) : null}
   </div>
 );

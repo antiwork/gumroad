@@ -13,7 +13,8 @@ class UrlRedirectsController < ApplicationController
   before_action :redirect_to_coffee_page_if_needed, only: :download_page
   before_action :check_permissions, only: %i[show stream download_page
                                              hls_playlist download_subtitle_file read
-                                             download_archive latest_media_locations download_product_files audio_durations]
+                                             download_archive latest_media_locations download_product_files audio_durations
+                                             save_last_content_page]
   before_action :hide_layouts, only: %i[
     confirm_page membership_inactive_page expired rental_expired_page show download_page download_product_files stream smil hls_playlist download_subtitle_file read
   ]
@@ -279,6 +280,13 @@ class UrlRedirectsController < ApplicationController
     render json:
   end
 
+  def save_last_content_page
+    return render json: { success: false, error: "Purchase not found" }, status: :unprocessable_entity if @url_redirect.purchase.blank?
+
+    @url_redirect.purchase.update!(last_content_page_id: params[:page_id])
+    render json: { success: true }
+  end
+
   private
     def trigger_files_lifecycle_events
       @url_redirect.update_transcoded_videos_last_accessed_at
@@ -354,6 +362,11 @@ class UrlRedirectsController < ApplicationController
 
       if purchase&.subscription && !purchase.subscription.grant_access_to_product?
         return redirect_to url_redirect_membership_inactive_page_path(@url_redirect.token)
+      end
+
+      if params[:access_token].present? && params[:mobile_token] == Api::Mobile::BaseController::MOBILE_TOKEN
+        doorkeeper_authorize! :mobile_api
+        return if purchase && purchase.purchaser && purchase.purchaser == current_api_user
       end
 
       if cookies.encrypted[:confirmed_redirect] == @url_redirect.token ||

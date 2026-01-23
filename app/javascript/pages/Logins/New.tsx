@@ -14,30 +14,35 @@ type PageProps = {
   email: string | null;
   application_name: string | null;
   recaptcha_site_key: string | null;
+  authenticity_token: string;
+};
+
+type FormData = {
+  user: {
+    login_identifier: string;
+    password: string;
+  };
+  next: string | null;
+  "g-recaptcha-response": string | null;
+  authenticity_token: string;
 };
 
 function LoginPage() {
-  const { email: initialEmail, application_name, recaptcha_site_key } = usePage<PageProps>().props;
+  const { email: initialEmail, application_name, recaptcha_site_key, authenticity_token } = usePage<PageProps>().props;
 
   const url = new URL(useOriginalLocation());
   const next = url.searchParams.get("next");
   const recaptcha = useRecaptcha({ siteKey: recaptcha_site_key });
   const uid = React.useId();
 
-  const form = useForm<{
-    user: {
-      login_identifier: string;
-      password: string;
-    };
-    next: string | null;
-    "g-recaptcha-response": string | null;
-  }>({
+  const form = useForm<FormData>({
     user: {
       login_identifier: initialEmail ?? "",
       password: "",
     },
     next,
     "g-recaptcha-response": null,
+    authenticity_token,
   });
 
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {

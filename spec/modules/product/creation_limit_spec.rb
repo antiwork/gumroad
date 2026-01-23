@@ -52,6 +52,45 @@ describe Product::CreationLimit, :enforce_product_creation_limit do
     end
   end
 
+  context "with custom daily_product_creation_limit" do
+    it "uses the user's custom limit when set" do
+      user_with_custom_limit = create(:user, user_risk_state: "not_reviewed", daily_product_creation_limit: 5)
+      create_products_in_bulk(user_with_custom_limit, 4)
+
+      product_5 = build(:product, user: user_with_custom_limit)
+      expect(product_5).to be_valid
+      product_5.save!
+
+      product_6 = build(:product, user: user_with_custom_limit)
+      expect(product_6).not_to be_valid
+      expect(product_6.errors.full_messages).to include("Sorry, you can only create 5 products per day.")
+    end
+
+    it "allows increasing the limit beyond the default for compliant users" do
+      user_with_higher_limit = create(:user, user_risk_state: "compliant", daily_product_creation_limit: 150)
+      create_products_in_bulk(user_with_higher_limit, 100)
+
+      product_101 = build(:product, user: user_with_higher_limit)
+      expect(product_101).to be_valid
+      product_101.save!
+
+      create_products_in_bulk(user_with_higher_limit, 49)
+
+      product_151 = build(:product, user: user_with_higher_limit)
+      expect(product_151).not_to be_valid
+      expect(product_151.errors.full_messages).to include("Sorry, you can only create 150 products per day.")
+    end
+
+    it "falls back to default limit when custom limit is not set" do
+      user_without_custom_limit = create(:user, user_risk_state: "not_reviewed", daily_product_creation_limit: nil)
+      create_products_in_bulk(user_without_custom_limit, 10)
+
+      product_11 = build(:product, user: user_without_custom_limit)
+      expect(product_11).not_to be_valid
+      expect(product_11.errors.full_messages).to include("Sorry, you can only create 10 products per day.")
+    end
+  end
+
   describe ".bypass_product_creation_limit" do
     it "bypasses the limit within the block and restores it afterwards" do
       create_products_in_bulk(non_compliant_user, 10)

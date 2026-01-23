@@ -12,6 +12,7 @@ import { EmailsLayout } from "$app/components/EmailsPage/Layout";
 import { DeleteEmailModal, EmailSheetActions, LoadMoreButton } from "$app/components/EmailsPage/shared";
 import { useEmailSearch } from "$app/components/EmailsPage/useEmailSearch";
 import { Icon } from "$app/components/Icons";
+import { Card, CardContent } from "$app/components/ui/Card";
 import { Sheet, SheetHeader } from "$app/components/ui/Sheet";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "$app/components/ui/Table";
 import { useUserAgentInfo } from "$app/components/UserAgent";
@@ -138,43 +139,43 @@ export default function EmailsPublished() {
             {selectedInstallment ? (
               <Sheet open onOpenChange={() => setSelectedInstallmentId(null)}>
                 <SheetHeader>{selectedInstallment.name}</SheetHeader>
-                <div className="stack">
-                  <div>
+                <Card>
+                  <CardContent>
                     <h5>Sent</h5>
                     {new Date(selectedInstallment.published_at).toLocaleString(userAgentInfo.locale, {
                       timeZone: currentSeller.timeZone.name,
                     })}
-                  </div>
-                  <div>
-                    <h5>Emailed</h5>
+                  </CardContent>
+                  <CardContent>
+                    <h5 className="grow font-bold">Emailed</h5>
                     {selectedInstallment.send_emails
                       ? formatStatNumber({ value: selectedInstallment.sent_count })
                       : "n/a"}
-                  </div>
-                  <div>
-                    <h5>Opened</h5>
+                  </CardContent>
+                  <CardContent>
+                    <h5 className="grow font-bold">Opened</h5>
                     {selectedInstallment.send_emails
                       ? selectedInstallment.open_rate !== null
                         ? `${formatStatNumber({ value: selectedInstallment.open_count })} (${formatStatNumber({ value: selectedInstallment.open_rate, suffix: "%" })})`
                         : formatStatNumber({ value: selectedInstallment.open_rate })
                       : "n/a"}
-                  </div>
-                  <div>
-                    <h5>Clicks</h5>
+                  </CardContent>
+                  <CardContent>
+                    <h5 className="grow font-bold">Clicks</h5>
                     {selectedInstallment.send_emails
                       ? selectedInstallment.click_rate !== null
                         ? `${formatStatNumber({ value: selectedInstallment.click_count })} (${formatStatNumber({ value: selectedInstallment.click_rate, suffix: "%" })})`
                         : formatStatNumber({ value: selectedInstallment.click_rate })
                       : "n/a"}
-                  </div>
-                  <div>
-                    <h5>Views</h5>
+                  </CardContent>
+                  <CardContent>
+                    <h5 className="grow font-bold">Views</h5>
                     {formatStatNumber({
                       value: selectedInstallment.view_count,
                       placeholder: "n/a",
                     })}
-                  </div>
-                </div>
+                  </CardContent>
+                </Card>
                 <EmailSheetActions
                   installment={selectedInstallment}
                   onDelete={() =>
