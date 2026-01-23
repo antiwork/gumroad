@@ -13,13 +13,13 @@ class Admin::LinksController < Admin::BaseController
 
     if @product_matches.many?
       @title = "Multiple products matched"
-      render inertia: "Admin/Products/MultipleMatches", legacy_template: "admin/links/multiple_matches", props: {
+      render inertia: "Admin/Products/MultipleMatches", props: {
         product_matches: @product_matches.map { |product| Admin::ProductPresenter::MultipleMatches.new(product:).props }
       }
     elsif @product_matches.one?
       @product = @product_matches.first
       @title = @product.name
-      render inertia: "Admin/Products/Show", legacy_template: "admin/links/show", props: {
+      render inertia: "Admin/Products/Show", props: {
         title: @product.name,
         product: Admin::ProductPresenter::Card.new(product: @product, pundit_user:).props,
         user: Admin::UserPresenter::Card.new(user: @product.user, pundit_user:).props
