@@ -84,7 +84,7 @@ describe SuspendAccountsWithStripeFingerprintWorker do
       expect { described_class.new.perform(999999999) }.to raise_error(ActiveRecord::RecordNotFound)
     end
 
-    it "continues suspending other accounts even if one cannot be suspended" do
+    it "skips already suspended accounts" do
       user_1 = create(:user)
       create(:ach_account, user: user_1, stripe_fingerprint: stripe_fingerprint)
 
@@ -98,6 +98,31 @@ describe SuspendAccountsWithStripeFingerprintWorker do
 
       expect(user_2.reload.user_risk_state).to eq("suspended_for_fraud")
       expect(user_3.reload.suspended?).to be(true)
+    end
+
+    it "suspends users who are already flagged for fraud" do
+      user_1 = create(:user)
+      create(:ach_account, user: user_1, stripe_fingerprint: stripe_fingerprint)
+
+      user_2 = create(:user, user_risk_state: "flagged_for_fraud")
+      create(:ach_account, user: user_2, stripe_fingerprint: stripe_fingerprint)
+
+      described_class.new.perform(user_1.id)
+
+      expect(user_2.reload.suspended_for_fraud?).to be(true)
+    end
+
+    it "does not trigger cascading suspensions due to skip_transition_callback" do
+      user_1 = create(:user)
+      create(:ach_account, user: user_1, stripe_fingerprint: stripe_fingerprint)
+
+      user_2 = create(:user)
+      create(:ach_account, user: user_2, stripe_fingerprint: stripe_fingerprint)
+
+      expect(SuspendAccountsWithStripeFingerprintWorker).not_to receive(:perform_in)
+      expect(SuspendAccountsWithPaymentAddressWorker).not_to receive(:perform_in)
+
+      described_class.new.perform(user_1.id)
     end
   end
 end

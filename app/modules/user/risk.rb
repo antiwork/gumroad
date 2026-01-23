@@ -137,6 +137,8 @@ module User::Risk
     if payment_address.present?
       User.where(payment_address:).where.not(id:).find_each do |user|
         user.mark_compliant!(author_name: "enable_sellers_other_accounts", content: "Marked compliant automatically on #{Time.current.to_fs(:formatted_date_full_month)} as payment address #{payment_address} is now unblocked (from User##{id})", skip_transition_callback: :enable_sellers_other_accounts)
+      rescue StandardError => e
+        Rails.logger.error("enable_sellers_other_accounts: Failed to mark user #{user.id} compliant: #{e.message}")
       end
     end
 
@@ -149,6 +151,8 @@ module User::Risk
           .distinct
           .find_each do |user|
         user.mark_compliant!(author_name: "enable_sellers_other_accounts", content: "Marked compliant automatically on #{Time.current.to_fs(:formatted_date_full_month)} as bank account fingerprint is now unblocked (from User##{id})", skip_transition_callback: :enable_sellers_other_accounts)
+      rescue StandardError => e
+        Rails.logger.error("enable_sellers_other_accounts: Failed to mark user #{user.id} compliant: #{e.message}")
       end
     end
   end

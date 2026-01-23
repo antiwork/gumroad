@@ -17,9 +17,11 @@ class SuspendAccountsWithStripeFingerprintWorker
         .merge(BankAccount.alive)
         .where(bank_accounts: { stripe_fingerprint: stripe_fingerprint })
         .where.not(id: suspended_user.id)
+        .not_suspended
         .distinct
         .find_each do |user|
-      unless user.flag_for_fraud(
+      # Skip flagging if already flagged for fraud, but proceed to suspension
+      unless user.flagged_for_fraud? || user.flag_for_fraud(
         author_name: "suspend_sellers_other_accounts",
         content: "Flagged for fraud automatically on #{Time.current.to_fs(:formatted_date_full_month)} because of usage of bank account fingerprint from User##{suspended_user.id}"
       )
@@ -29,7 +31,8 @@ class SuspendAccountsWithStripeFingerprintWorker
 
       unless user.suspend_for_fraud(
         author_name: "suspend_sellers_other_accounts",
-        content: "Suspended for fraud automatically on #{Time.current.to_fs(:formatted_date_full_month)} because of usage of bank account fingerprint from User##{suspended_user.id}"
+        content: "Suspended for fraud automatically on #{Time.current.to_fs(:formatted_date_full_month)} because of usage of bank account fingerprint from User##{suspended_user.id}",
+        skip_transition_callback: :suspend_sellers_other_accounts
       )
         Rails.logger.warn("SuspendAccountsWithStripeFingerprintWorker: Failed to suspend user #{user.id} (state: #{user.user_risk_state})")
       end
