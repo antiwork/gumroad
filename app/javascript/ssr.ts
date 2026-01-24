@@ -30,7 +30,6 @@ import ProfilePostPage from "$app/components/server-components/Profile/PostPage"
 import ProfileProductPage from "$app/components/server-components/Profile/ProductPage";
 import ProfileWishlistPage from "$app/components/server-components/Profile/WishlistPage";
 import DisputeEvidencePage from "$app/components/server-components/Purchase/DisputeEvidencePage";
-import PurchaseProductPage from "$app/components/server-components/Purchase/ProductPage";
 import SubscribeReviewReminders from "$app/components/server-components/ReviewReminders/SubscribeReviewReminders";
 import UnsubscribeReviewReminders from "$app/components/server-components/ReviewReminders/UnsubscribeReviewReminders";
 import SecureRedirectPage from "$app/components/server-components/SecureRedirectPage";
@@ -70,7 +69,6 @@ ReactOnRails.register({
   Pill,
   ProductEditPage,
   ProductIframePage,
-  PurchaseProductPage,
   ProductPage,
   Profile,
   ProfileCoffeePage,
