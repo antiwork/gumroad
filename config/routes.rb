@@ -400,7 +400,7 @@ Rails.application.routes.draw do
       end
     end
 
-    get "/communities/*other", to: "communities#index" # route handled by react-router
+
 
     get "/a/:affiliate_id", to: "affiliate_redirect#set_cookie_and_redirect", as: :affiliate_redirect
     get "/a/:affiliate_id/:unique_permalink", to: "affiliate_redirect#set_cookie_and_redirect", as: :affiliate_product
@@ -779,7 +779,8 @@ Rails.application.routes.draw do
     post "/posts/:id/send_for_purchase/:purchase_id", to: "posts#send_for_purchase", as: :send_for_purchase
 
     # communities
-    get "/communities(/:seller_id/:community_id)", to: "communities#index", as: :community
+    resources :communities, only: [:index, :show]
+    get "/communities/:seller_id/:community_iid", to: "communities#show", as: :community_with_seller
 
     # emails
     resources :emails, only: [:index, :new, :create, :edit, :update, :destroy] do

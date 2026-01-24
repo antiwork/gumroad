@@ -48,9 +48,9 @@ const routes: RouteObject[] = [
   },
 ];
 
-const CommunitiesPage = () => {
-  const router = createBrowserRouter(routes);
 
+export const CommunitiesPage = () => {
+  const router = createBrowserRouter(routes);
   return <RouterProvider router={router} />;
 };
 
