@@ -2,6 +2,7 @@ import { usePage } from "@inertiajs/react";
 import * as React from "react";
 import { cast } from "ts-safe-cast";
 
+import { LoggedInUserProvider, parseLoggedInUser } from "$app/components/LoggedInUser";
 import { PoweredByFooter } from "$app/components/PoweredByFooter";
 import { Product, useSelectionFromUrl, Props as ProductProps } from "$app/components/Product";
 
@@ -11,8 +12,22 @@ type CustomStyles = {
   font: string;
 };
 
+type RawLoggedInUser = {
+  id: string;
+  email: string | null;
+  name: string | null;
+  avatar_url: string;
+  team_memberships: unknown[];
+  policies: Record<string, unknown>;
+  confirmed: boolean;
+  is_gumroad_admin: boolean;
+  is_impersonating: boolean;
+  lazy_load_offscreen_discover_images: boolean;
+};
+
 type PageProps = ProductProps & {
   custom_styles: CustomStyles;
+  logged_in_user: RawLoggedInUser | null;
 };
 
 // Generate CSS custom properties for seller custom styles
@@ -81,8 +96,8 @@ function getCustomStylesCss(styles: CustomStyles): string {
 
 function PurchaseProductPage() {
   const props = cast<PageProps>(usePage().props);
-  const { custom_styles, ...productProps } = props;
-  const [selection, setSelection] = useSelectionFromUrl(props.product);
+  const { product, purchase, discount_code, wishlists, custom_styles, logged_in_user } = props;
+  const [selection, setSelection] = useSelectionFromUrl(product);
 
   // Apply custom styles via a style tag
   React.useEffect(() => {
@@ -120,14 +135,23 @@ function PurchaseProductPage() {
   }, [custom_styles]);
 
   return (
-    <div>
+    <LoggedInUserProvider value={parseLoggedInUser(logged_in_user)}>
       <div>
-        <section>
-          <Product {...productProps} selection={selection} setSelection={setSelection} />
-        </section>
-        <PoweredByFooter className="p-0" />
+        <div>
+          <section>
+            <Product
+              product={product}
+              purchase={purchase}
+              discountCode={discount_code}
+              wishlists={wishlists}
+              selection={selection}
+              setSelection={setSelection}
+            />
+          </section>
+          <PoweredByFooter className="p-0" />
+        </div>
       </div>
-    </div>
+    </LoggedInUserProvider>
   );
 }
 
