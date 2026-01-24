@@ -2549,6 +2549,56 @@ describe Purchase::CreateService, :vcr do
       end
     end
 
+    context "with default discount code" do
+      let(:default_offer_code) { create(:offer_code, products: [product], code: "DEFAULT10", amount_cents: discount_cents) }
+
+      before do
+        create(:merchant_account, user: product.user)
+        product.update!(default_offer_code: default_offer_code)
+      end
+
+      it "tracks default_offer_code_id when the product's default offer code is used" do
+        params[:purchase].merge!(
+          discount_code: default_offer_code.code,
+          perceived_price_cents: discounted_price,
+        )
+
+        purchase, _ = Purchase::CreateService.new(product:, params:).perform
+
+        expect(purchase).to be_successful
+        expect(purchase.offer_code).to eq(default_offer_code)
+        expect(purchase.default_offer_code_id).to eq(default_offer_code.id)
+      end
+
+      it "does not track default_offer_code_id when a non-default offer code is used" do
+        url_offer_code = create(:offer_code, products: [product], code: "URL20", amount_cents: discount_cents)
+
+        params[:purchase].merge!(
+          discount_code: url_offer_code.code,
+          perceived_price_cents: discounted_price,
+        )
+
+        purchase, _ = Purchase::CreateService.new(product:, params:).perform
+
+        expect(purchase).to be_successful
+        expect(purchase.offer_code).to eq(url_offer_code)
+        expect(purchase.default_offer_code_id).to be_nil
+      end
+
+      it "does not track default_offer_code_id when no discount code is used" do
+        params[:purchase].merge!(
+          discount_code: nil,
+          perceived_price_cents: price,
+        )
+
+        purchase, _ = Purchase::CreateService.new(product:, params:).perform
+
+        expect(purchase).to be_successful
+        expect(purchase.offer_code).to be_nil
+        expect(purchase.default_offer_code_id).to be_nil
+      end
+    end
+
     it "updates the used_count value for the offer code" do
       offer_code = create(:offer_code, products: [product], amount_cents: discount_cents)
 

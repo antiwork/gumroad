@@ -239,35 +239,36 @@ const MenubarItem = ({
   const hasChildren = menuItem.children.length > 0;
 
   const menuItemAnchor = (
-    <a
-      href={menuItem.href ?? "#"}
-      className={classNames(
-        "button",
-        "rounded-full! px-3! py-2! align-middle aria-[current]:bg-background aria-[current]:text-foreground",
-        showExpandableIcon ? "relative cursor-pointer" : "",
-        hasChildren ? "aria-[current=true]:hover:shadow!" : "hover:shadow!",
-        { "border-transparent! bg-transparent! text-inherit!": !isHighlighted },
-        { expandable: showExpandableIcon },
-      )}
-      role="menuitem"
-      aria-current={isHighlighted}
-      aria-haspopup={hasChildren ? "menu" : undefined}
-      aria-expanded={hasChildren ? menuOpen : undefined}
-      aria-controls={hasChildren ? uid : undefined}
-      {...extraAriaAttrs}
-      onClick={(e) => {
-        if (hasChildren) {
-          if (isOnTouchDevice) e.preventDefault();
-          else onSelectItem?.(menuItem, e);
-        } else {
-          onHighlightIn();
-          onSelectItem?.(menuItem, e);
-        }
-      }}
-    >
-      {menuItem.label}
-      {showExpandableIcon ? <Icon name="outline-cheveron-down" className="float-right" /> : null}
-    </a>
+    <Button asChild>
+      <a
+        href={menuItem.href ?? "#"}
+        className={classNames(
+          "rounded-full! px-3! py-2! align-middle aria-[current]:bg-background aria-[current]:text-foreground",
+          showExpandableIcon ? "relative cursor-pointer" : "",
+          hasChildren ? "aria-[current=true]:hover:shadow!" : "hover:shadow!",
+          { "border-transparent! bg-transparent! text-inherit!": !isHighlighted },
+          { expandable: showExpandableIcon },
+        )}
+        role="menuitem"
+        aria-current={isHighlighted}
+        aria-haspopup={hasChildren ? "menu" : undefined}
+        aria-expanded={hasChildren ? menuOpen : undefined}
+        aria-controls={hasChildren ? uid : undefined}
+        {...extraAriaAttrs}
+        onClick={(e) => {
+          if (hasChildren) {
+            if (isOnTouchDevice) e.preventDefault();
+            else onSelectItem?.(menuItem, e);
+          } else {
+            onHighlightIn();
+            onSelectItem?.(menuItem, e);
+          }
+        }}
+      >
+        {menuItem.label}
+        {showExpandableIcon ? <Icon name="outline-cheveron-down" className="float-right" /> : null}
+      </a>
+    </Button>
   );
 
   return (

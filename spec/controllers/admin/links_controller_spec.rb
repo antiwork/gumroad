@@ -17,61 +17,6 @@ describe Admin::LinksController, type: :controller, inertia: true do
     @request.env["HTTP_REFERER"] = "where_i_came_from"
   end
 
-  describe "GET legacy_purchases" do
-    def create_purchases_in_order(count, product, options = {})
-      count.times.map do |n|
-        create(:purchase, options.merge(link: product, created_at: Time.current + n.minutes))
-      end
-    end
-
-    def purchase_admin_review_json(purchases)
-      purchases.map { |purchase| purchase.as_json(admin_review: true) }
-    end
-
-    describe "pagination" do
-      before do
-        @purchases = create_purchases_in_order(10, product)
-      end
-
-      it "returns the purchases of the specified page" do
-        get :legacy_purchases, params: { external_id: product.external_id, is_affiliate_user: "false", page: 2, per_page: 2, format: :json }
-
-        expect(response).to be_successful
-        expect(response.parsed_body["purchases"]).to eq purchase_admin_review_json(@purchases.reverse[2..3])
-        expect(response.parsed_body["page"]).to eq 2
-      end
-    end
-
-    context "when user purchases are requested" do
-      before do
-        @purchases = create_purchases_in_order(2, product)
-      end
-
-      it "returns user purchases" do
-        get :legacy_purchases, params: { external_id: product.external_id, is_affiliate_user: "false", format: :json }
-
-        expect(response).to be_successful
-        expect(response.parsed_body["purchases"]).to eq purchase_admin_review_json(@purchases.reverse)
-      end
-    end
-
-    context "when affiliate purchases are requested" do
-      before do
-        affiliate = create(:direct_affiliate)
-        @affiliate_user = affiliate.affiliate_user
-
-        @purchases = create_purchases_in_order(2, product, affiliate_id: affiliate.id)
-      end
-
-      it "returns affiliate purchases" do
-        get :legacy_purchases, params: { external_id: product.external_id, is_affiliate_user: "true", user_id: @affiliate_user.id, format: :json }
-
-        expect(response).to be_successful
-        expect(response.parsed_body["purchases"]).to eq purchase_admin_review_json(@purchases.reverse)
-      end
-    end
-  end
-
   describe "GET show" do
     it "redirects numeric ID to external_id" do
       get :show, params: { external_id: product.id }

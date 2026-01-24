@@ -265,6 +265,11 @@ export const Product = ({
 
   const notForSaleMessage = getNotForSaleMessage(product);
   const [discountCode, setDiscountCode] = React.useState(initialDiscountCode);
+
+  React.useEffect(() => {
+    setDiscountCode(initialDiscountCode);
+  }, [initialDiscountCode]);
+
   const selectionAttributes = applySelection(product, discountCode?.valid ? discountCode.discount : null, selection);
   let { basePriceCents } = selectionAttributes;
   const { priceCents, discountedPriceCents, pppDiscounted, isPWYW, maxQuantity } = selectionAttributes;
@@ -309,6 +314,12 @@ export const Product = ({
       if (selection.price.value === null) {
         configurationSelectorRef?.current?.focusRequiredInput();
         showAlert("You must input an amount", "warning");
+      } else if (selection.price.value < discountedPriceCents) {
+        const formattedMinPrice = formatPriceCentsWithCurrencySymbol(product.currency_code, discountedPriceCents, {
+          symbolFormat: "short",
+        });
+        configurationSelectorRef?.current?.focusRequiredInput();
+        showAlert(`Minimum price for this product is ${formattedMinPrice}.`, "error");
       }
       return false;
     }
@@ -792,7 +803,11 @@ const Reviews = ({
             />
           ))}
           {state.pagination.page < state.pagination.pages ? (
-            <button className="underline" onClick={() => void loadNextPage()} disabled={isLoading}>
+            <button
+              className="cursor-pointer underline all-unset"
+              onClick={() => void loadNextPage()}
+              disabled={isLoading}
+            >
               Load more
             </button>
           ) : null}

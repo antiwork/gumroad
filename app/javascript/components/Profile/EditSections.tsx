@@ -135,7 +135,8 @@ export const useSectionImageUploadSettings = () => {
   return imageUploadSettings;
 };
 
-const sectionButtonClasses = "w-[calc(1lh+--spacing(2))] py-1 text-center hover:bg-gray-300/50";
+const sectionButtonClasses =
+  "cursor-pointer w-[calc(1lh+--spacing(2))] py-1 text-center hover:bg-gray-300/50 all-unset";
 
 type SubmenuProps = { heading: string; children: React.ReactNode; text: React.ReactNode };
 export const EditorSubmenu = ({ children }: SubmenuProps) => children;
@@ -171,7 +172,7 @@ export const EditorMenu = ({
       {isSubmenu(activeSubmenu) ? (
         <div className="flex w-75 flex-col gap-4 p-4">
           <h4 style={{ display: "grid", gridTemplateColumns: "1em 1fr 1em" }}>
-            <button onClick={() => setMenuState("menu")} aria-label="Go back">
+            <button className="cursor-pointer all-unset" onClick={() => setMenuState("menu")} aria-label="Go back">
               <Icon name="outline-cheveron-left" />
             </button>
             <div className="text-center">{activeSubmenu.props.heading}</div>
@@ -183,7 +184,7 @@ export const EditorMenu = ({
           {items.map((item, key) =>
             isSubmenu(item) ? (
               <CardContent asChild key={key}>
-                <button onClick={() => setMenuState(key)}>
+                <button className="cursor-pointer all-unset" onClick={() => setMenuState(key)}>
                   <h5 className="grow font-bold">{item.props.heading}</h5>
                   <div>
                     {item.props.text} <Icon name="outline-cheveron-right" />
@@ -281,13 +282,17 @@ export const SectionLayout = ({
           </EditorSubmenu>
           {menuItems}
           <CardContent asChild>
-            <button onClick={copyLink}>
+            <button className="cursor-pointer all-unset" onClick={copyLink}>
               <h5 className="grow font-bold">{linkCopied ? "Copied!" : "Copy link"}</h5>
               <Icon name="link" />
             </button>
           </CardContent>
           <CardContent asChild>
-            <button onClick={() => void remove()} style={{ color: "rgb(var(--danger))" }}>
+            <button
+              className="cursor-pointer all-unset"
+              onClick={() => void remove()}
+              style={{ color: "rgb(var(--danger))" }}
+            >
               <h5 className="grow font-bold">Remove</h5>
               <Icon name="trash2" />
             </button>

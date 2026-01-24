@@ -1,7 +1,7 @@
 import * as React from "react";
 import { cast, createCast } from "ts-safe-cast";
 
-import { getFolderArchiveDownloadUrl, getProductFileDownloadInfos } from "$app/data/products";
+import { getFolderArchiveDownloadUrl, getProductFileDownloadInfos, saveLastContentPage } from "$app/data/products";
 import { RichContent, RichContentPage } from "$app/parsers/richContent";
 import { assertDefined } from "$app/utils/assert";
 import FileUtils from "$app/utils/file";
@@ -96,6 +96,7 @@ const WithContent = ({
 }: LayoutProps & {
   content: {
     rich_content_pages: RichContentPage[] | null;
+    last_content_page_id: string | null;
     license: License | null;
     content_items: (FileItem | FolderItem)[];
     posts: Post[];
@@ -208,8 +209,24 @@ const WithContent = ({
   });
   const isDesktop = useIsAboveBreakpoint("lg");
   const pages = content.rich_content_pages ?? [];
-  const [activePageIndex, setActivePageIndex] = React.useState(0);
+  const getInitialPageIndex = () => {
+    if (!content.last_content_page_id) return 0;
+    const index = pages.findIndex((page) => page.page_id === content.last_content_page_id);
+    return index >= 0 ? index : 0;
+  };
+  const [activePageIndex, setActivePageIndex] = React.useState(getInitialPageIndex());
   const activePage = pages[activePageIndex];
+
+  const handlePageChange = React.useCallback(
+    (newIndex: number) => {
+      setActivePageIndex(newIndex);
+      const newPage = pages[newIndex];
+      if (newPage && props.purchase) {
+        void saveLastContentPage(props.token, newPage.page_id);
+      }
+    },
+    [pages, props.token, props.purchase],
+  );
   const showPageList = pages.length > 1 || (pages.length === 1 && (pages[0]?.title ?? "").trim() !== "");
   const hasPreviousPage = activePageIndex > 0;
   const hasNextPage = activePageIndex < pages.length - 1;
@@ -265,9 +282,11 @@ const WithContent = ({
             <DiscordButton purchaseId={props.purchase.id} connected={content.discord.connected} />
           ) : null}
           {content.community_chat_url ? (
-            <a className="button accent" href={content.community_chat_url}>
-              Community
-            </a>
+            <Button asChild>
+              <a className="accent" href={content.community_chat_url}>
+                Community
+              </a>
+            </Button>
           ) : null}
           <OpenInAppButton iosAppUrl={content.ios_app_url} androidAppUrl={content.android_app_url} />
           {content.download_all_button ? (
@@ -285,7 +304,7 @@ const WithContent = ({
               <PageListItem
                 key={page.page_id}
                 isSelected={index === activePageIndex}
-                onClick={() => setActivePageIndex(index)}
+                onClick={() => handlePageChange(index)}
                 role="tab"
               >
                 <Icon
@@ -333,7 +352,6 @@ const WithContent = ({
           </IsMobileAppViewProvider>
         </MediaUrlsProvider>
       </PurchaseInfoProvider>
-
       {showPageList ? (
         <div role="navigation" className="mt-auto flex gap-4 border-t border-border pt-4 lg:justify-end lg:pb-4">
           {isDesktop ? null : (
@@ -341,9 +359,11 @@ const WithContent = ({
               aria-label="Table of Contents"
               position="bottom"
               trigger={
-                <div className="button">
-                  <Icon name="unordered-list" />
-                </div>
+                <Button asChild>
+                  <div>
+                    <Icon name="unordered-list" />
+                  </div>
+                </Button>
               }
             >
               {(close) => (
@@ -354,7 +374,7 @@ const WithContent = ({
                       role="menuitemradio"
                       aria-checked={index === activePageIndex}
                       onClick={() => {
-                        setActivePageIndex(index);
+                        handlePageChange(index);
                         close();
                       }}
                     >
@@ -373,7 +393,7 @@ const WithContent = ({
           <WithTooltip position="top" tip={hasPreviousPage ? null : "No more pages"}>
             <Button
               disabled={!hasPreviousPage}
-              onClick={() => setActivePageIndex(activePageIndex - 1)}
+              onClick={() => handlePageChange(activePageIndex - 1)}
               className="flex-1 lg:flex-none"
             >
               <Icon name="arrow-left" />
@@ -383,7 +403,7 @@ const WithContent = ({
           <WithTooltip position="top" tip={hasNextPage ? null : "No more pages"}>
             <Button
               disabled={!hasNextPage}
-              onClick={() => setActivePageIndex(activePageIndex + 1)}
+              onClick={() => handlePageChange(activePageIndex + 1)}
               className="flex-1 lg:flex-none"
             >
               Next
@@ -392,11 +412,9 @@ const WithContent = ({
           </WithTooltip>
         </div>
       ) : null}
-
       {content.video_transcoding_info ? (
         <TranscodingNoticeModal transcodeOnFirstSale={content.video_transcoding_info.transcode_on_first_sale} />
       ) : null}
-
       {content.rich_content_pages === null && content.posts.length > 0 ? (
         <div className="flex flex-col gap-4">
           <DownloadPagePostList posts={content.posts} />

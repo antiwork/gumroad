@@ -8,7 +8,6 @@ class Admin::RefundQueuesController < Admin::BaseController
     @users = User.refund_queue
 
     list_paginated_users users: @users,
-                         template: "Admin/RefundQueues/Show",
-                         legacy_template: "admin/users/refund_queue"
+                         template: "Admin/RefundQueues/Show"
   end
 end
