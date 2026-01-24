@@ -2,7 +2,7 @@ import { Channel } from "@anycable/web";
 import cx from "classnames";
 import { debounce } from "lodash-es";
 import * as React from "react";
-import { useNavigate, useLocation } from "react-router-dom";
+import { router, Link } from "@inertiajs/react";
 import { is } from "ts-safe-cast";
 
 import cable from "$app/channels/consumer";
@@ -111,11 +111,9 @@ const getComparedTimestamp = (
   return assertDefined(timestampToISOString.get(resultTime));
 };
 
-export const CommunityView = () => {
+export const CommunityView = (props: any) => {
   const currentSeller = useCurrentSeller();
   const isAboveBreakpoint = useIsAboveBreakpoint("lg");
-  const navigate = useNavigate();
-  const location = useLocation();
   const {
     hasProducts,
     communities,
@@ -128,7 +126,7 @@ export const CommunityView = () => {
     updateCommunity,
     updateCommunityDraft,
     updateCommunityChat,
-  } = useCommunities();
+  } = useCommunities(props);
   const [switcherOpen, setSwitcherOpen] = React.useState(false);
   const [sidebarOpen, setSidebarOpen] = React.useState(true);
   const activeFetchMessageRequest = React.useRef<{ cancel: () => void } | null>(null);
@@ -148,15 +146,15 @@ export const CommunityView = () => {
 
   React.useEffect(() => {
     if (selectedCommunity) {
-      const searchParams = new URLSearchParams(location.search);
+      const searchParams = new URLSearchParams(window.location.search);
       if (searchParams.has("notifications")) {
         searchParams.delete("notifications");
         const newSearch = searchParams.toString() ? `?${searchParams.toString()}` : "";
-        navigate(`${location.pathname}${newSearch}${location.hash}`, { replace: true });
+        router.visit(`${window.location.pathname}${newSearch}${window.location.hash}`, { replace: true });
         setShowNotificationsSettings(true);
       }
     }
-  }, [selectedCommunity, location, navigate]);
+  }, [selectedCommunity]);
 
   const debouncedMarkAsRead = React.useMemo(
     () =>
@@ -492,7 +490,7 @@ export const CommunityView = () => {
     const community = communities.find((community) => community.seller.id === sellerId);
     if (community) {
       setSelectedCommunityId(community.id);
-      navigate(`/communities/${community.seller.id}/${community.id}`);
+      router.visit(`/communities/${community.seller.id}/${community.id}`);
       setSwitcherOpen(false);
     }
   };
@@ -517,7 +515,7 @@ export const CommunityView = () => {
 
     const community = communities.find((community) => community.id === communityId);
     if (!community) return;
-    window.location.replace(`/communities/${community.seller.id}/${community.id}`);
+    router.visit(`/communities/${community.seller.id}/${community.id}`);
   });
 
   const sellers = React.useMemo(() => {
@@ -836,23 +834,15 @@ const CommunityChatHeader = ({
 );
 
 const GoBackHeader = () => {
-  const handleGoBack = (e: React.MouseEvent) => {
-    e.preventDefault();
-    const referrerUrl = new URL(document.referrer.trim() !== "" ? document.referrer : Routes.dashboard_url());
-    window.location.href = referrerUrl.pathname.startsWith("/communities")
-      ? Routes.dashboard_path()
-      : referrerUrl.toString();
-  };
-
   return (
     <header className="flex h-12 items-center border-b px-4 dark:border-[rgb(var(--parent-color)/var(--border-alpha))]">
       <div className="flex items-center">
-        <button
-          onClick={handleGoBack}
+        <Link
+          href={Routes.dashboard_path()}
           className="flex cursor-pointer items-center border-none bg-transparent p-0 text-sm no-underline all-unset"
         >
           <Icon name="arrow-left" className="mr-1" /> Go back
-        </button>
+        </Link>
       </div>
     </header>
   );

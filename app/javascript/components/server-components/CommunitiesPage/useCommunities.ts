@@ -1,6 +1,4 @@
 import * as React from "react";
-import { useLoaderData } from "react-router-dom";
-import { cast } from "ts-safe-cast";
 
 import { Community, CommunityChatMessage, CommunityNotificationSettings } from "$app/data/communities";
 import { assertDefined } from "$app/utils/assert";
@@ -23,13 +21,12 @@ const sortByCreatedAt = <T extends { created_at: string }>(items: readonly T[]) 
 const sortByName = <T extends { name: string }>(items: readonly T[]) =>
   [...items].sort((a, b) => a.name.localeCompare(b.name));
 
-export const useCommunities = () => {
-  const data = cast<{
-    has_products: boolean;
-    communities: Community[];
-    notification_settings: CommunityNotificationSettings;
-    selectedCommunityId?: string;
-  }>(useLoaderData());
+export const useCommunities = (data: {
+  has_products: boolean;
+  communities: Community[];
+  notification_settings: CommunityNotificationSettings;
+  selectedCommunityId?: string;
+}) => {
   const [communities, setCommunities] = React.useState<Community[]>(sortByName(data.communities));
   const [notificationSettings, setNotificationSettings] = React.useState<CommunityNotificationSettings>(
     data.notification_settings,
@@ -114,11 +111,12 @@ export const useCommunities = () => {
     [],
   );
 
+
   React.useEffect(() => {
     setSelectedCommunityId(data.selectedCommunityId ?? null);
     setCommunities(sortByName(data.communities));
     setNotificationSettings(data.notification_settings);
-  }, [data]);
+  }, [data.selectedCommunityId, data.communities, data.notification_settings]);
 
   const selectedCommunity = React.useMemo(
     () => communities.find((community) => community.id === selectedCommunityId),
