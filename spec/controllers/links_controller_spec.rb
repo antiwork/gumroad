@@ -3799,19 +3799,15 @@ describe LinksController, :vcr, inertia: true do
     end
 
     describe "GET cart_items_count" do
-      it "assigns the correct instance variables and excludes third-party analytics scripts" do
+      it "renders the CartItemsCount/Index component and assigns the correct variables" do
         get :cart_items_count
 
         expect(assigns(:hide_layouts)).to eq(true)
         expect(assigns(:disable_third_party_analytics)).to eq(true)
 
-        html = Nokogiri::HTML.parse(response.body)
-        [
-          "gr:google_analytics:enabled",
-          "gr:fb_pixel:enabled",
-        ].each do |property|
-          expect(html.xpath("//meta[@property='#{property}']/@content").text).to eq("false")
-        end
+        expect(response).to be_successful
+        expect(inertia).to render_component("CartItemsCount/Index")
+        expect(inertia.props).to have_key(:cart)
       end
     end
 
