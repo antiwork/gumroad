@@ -1,5 +1,5 @@
+import { Link, router, usePage } from "@inertiajs/react";
 import * as React from "react";
-import { Link, useMatches, useNavigate } from "react-router-dom";
 
 import { saveBundle } from "$app/data/bundle";
 import { setProductPublished } from "$app/data/publish_product";
@@ -40,11 +40,15 @@ export const Layout = ({
   isLoading?: boolean;
 }) => {
   const { bundle, updateBundle, id, uniquePermalink } = useBundleEditContext();
+  const { url: currentUrlPath } = usePage();
 
   const url = useProductUrl();
 
-  const [match] = useMatches();
-  const tab = match?.handle ?? "product";
+  const tab = React.useMemo(() => {
+    if (currentUrlPath.endsWith("/content")) return "content";
+    if (currentUrlPath.endsWith("/share")) return "share";
+    return "product";
+  }, [currentUrlPath]);
 
   const isDesktop = useIsAboveBreakpoint("lg");
 
@@ -69,8 +73,8 @@ export const Layout = ({
       await setProductPublished(uniquePermalink, published);
       updateBundle({ is_published: published });
       showAlert(published ? "Published!" : "Unpublished!", "success");
-      if (tab === "share") navigate(`/bundles/${id}/content`);
-      else if (published) navigate(`/bundles/${id}/share`);
+      if (tab === "share") router.get(`/bundles/${id}/content`);
+      else if (published) router.get(`/bundles/${id}/share`);
     } catch (e) {
       assertResponseError(e);
       showAlert(e.message, "error");
@@ -91,8 +95,6 @@ export const Layout = ({
         ? "Please wait..."
         : undefined;
 
-  const navigate = useNavigate();
-
   const saveButton = (
     <WithTooltip tip={saveButtonTooltip}>
       <Button color="primary" disabled={isBusy} onClick={asyncVoid(handleSave)}>
@@ -101,7 +103,7 @@ export const Layout = ({
     </WithTooltip>
   );
 
-  const onTabClick = (e: React.MouseEvent<HTMLAnchorElement>, callback?: () => void) => {
+  const onTabClick = (e: React.MouseEvent, callback?: () => void) => {
     const message = isUploadingFiles
       ? "Some files are still uploading, please wait..."
       : isUploadingFilesOrImages
@@ -143,7 +145,7 @@ export const Layout = ({
             <Button
               color="primary"
               disabled={isBusy}
-              onClick={() => void handleSave().then(() => navigate(`/bundles/${id}/content`))}
+              onClick={() => void handleSave().then(() => router.get(`/bundles/${id}/content`))}
             >
               {isSaving ? "Saving changes..." : "Save and continue"}
             </Button>
@@ -161,19 +163,19 @@ export const Layout = ({
       >
         <Tabs style={{ gridColumn: 1 }}>
           <Tab asChild isSelected={tab === "product"}>
-            <Link to={`/bundles/${id}`} onClick={onTabClick}>
+            <Link href={`/bundles/${id}`} onClick={onTabClick}>
               Product
             </Link>
           </Tab>
           <Tab asChild isSelected={tab === "content"}>
-            <Link to={`/bundles/${id}/content`} onClick={onTabClick}>
+            <Link href={`/bundles/${id}/content`} onClick={onTabClick}>
               Content
             </Link>
           </Tab>
           <Tab asChild isSelected={tab === "share"}>
             <Link
-              to={`/bundles/${id}/share`}
-              onClick={(evt: React.MouseEvent<HTMLAnchorElement>) => {
+              href={`/bundles/${id}/share`}
+              onClick={(evt: React.MouseEvent) => {
                 onTabClick(evt, () => {
                   if (!bundle.is_published) {
                     evt.preventDefault();
@@ -190,6 +192,7 @@ export const Layout = ({
           </Tab>
         </Tabs>
       </PageHeader>
+
       {preview ? (
         <WithPreviewSidebar className="flex-1">
           {children}

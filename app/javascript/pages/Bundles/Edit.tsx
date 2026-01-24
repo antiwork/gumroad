@@ -1,6 +1,5 @@
 import { usePage } from "@inertiajs/react";
 import * as React from "react";
-import { createBrowserRouter, RouterProvider } from "react-router-dom";
 import { cast } from "ts-safe-cast";
 
 import { OtherRefundPolicy } from "$app/data/products/other_refund_policies";
@@ -17,24 +16,6 @@ import { RefundPolicy } from "$app/components/ProductEdit/RefundPolicy";
 import { ProfileSection } from "$app/components/ProductEdit/state";
 import { showAlert } from "$app/components/server-components/Alert";
 import { useRunOnce } from "$app/components/useRunOnce";
-
-const routes = [
-  {
-    path: "/bundles/:id",
-    element: <ProductTab />,
-    handle: "product",
-  },
-  {
-    path: "/bundles/:id/content",
-    element: <ContentTab />,
-    handle: "content",
-  },
-  {
-    path: "/bundles/:id/share",
-    element: <ShareTab />,
-    handle: "share",
-  },
-];
 
 type Props = {
   bundle: Bundle;
@@ -55,6 +36,10 @@ type Props = {
 };
 
 export default function BundlesEdit() {
+  const pageProps = usePage().props;
+  const { url: currentUrlPath } = usePage();
+  const props = cast<Props>(pageProps);
+
   const {
     bundle: initialBundle,
     id,
@@ -71,23 +56,31 @@ export default function BundlesEdit() {
     has_outdated_purchases,
     seller_refund_policy_enabled,
     seller_refund_policy,
-  } = cast<Props>(usePage().props);
+  } = props;
 
   const [bundle, setBundle] = React.useState(initialBundle);
-  const updateBundle = (update: Partial<Bundle> | ((bundle: Bundle) => void)) =>
-    setBundle((prevBundle) => {
-      const updated = { ...prevBundle };
-      if (typeof update === "function") update(updated);
-      else Object.assign(updated, update);
-      return updated;
-    });
+  const updateBundle = React.useCallback(
+    (update: Partial<Bundle> | ((bundle: Bundle) => void)) =>
+      setBundle((prevBundle) => {
+        const updated = { ...prevBundle };
+        if (typeof update === "function") update(updated);
+        else Object.assign(updated, update);
+        return updated;
+      }),
+    [],
+  );
 
   useRunOnce(() => {
-    if (!is_bundle)
+    if (initialBundle && !is_bundle) {
       showAlert("Select products and save your changes to finish converting this product to a bundle.", "warning");
+    }
   });
 
-  const router = createBrowserRouter(routes);
+  const tab = React.useMemo(() => {
+    if (currentUrlPath.endsWith("/content")) return "content";
+    if (currentUrlPath.endsWith("/share")) return "share";
+    return "product";
+  }, [currentUrlPath]);
 
   const contextValue = React.useMemo(
     () => ({
@@ -107,12 +100,34 @@ export default function BundlesEdit() {
       seller_refund_policy_enabled,
       seller_refund_policy,
     }),
-    [bundle],
+    [
+      bundle,
+      updateBundle,
+      id,
+      unique_permalink,
+      currency_type,
+      thumbnail,
+      sales_count_for_inventory,
+      ratings,
+      taxonomies,
+      profile_sections,
+      refund_policies,
+      products_count,
+      has_outdated_purchases,
+      seller_refund_policy_enabled,
+      seller_refund_policy,
+    ],
   );
+
+  if (!initialBundle) {
+    return null;
+  }
 
   return (
     <BundleEditContext.Provider value={contextValue}>
-      <RouterProvider router={router} />
+      {tab === "product" && <ProductTab />}
+      {tab === "content" && <ContentTab />}
+      {tab === "share" && <ShareTab />}
     </BundleEditContext.Provider>
   );
 }
