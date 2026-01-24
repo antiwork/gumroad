@@ -6,19 +6,21 @@ class CommunitiesController < ApplicationController
   after_action :verify_authorized
   before_action :set_body_id_as_app
 
+  layout "inertia"
+
   def index
-
     authorize Community
-
-    render inertia: 'Communities/Index',
-           props: CommunitiesPresenter.new(current_user: current_seller).props
+    props = CommunitiesPresenter.new(
+      current_user: current_seller
+    ).props
+    render inertia: "Communities/Index", props: props
   end
 
   def show
-    render inertia: 'Communities/Show',
-           props: CommunitiesPresenter.new(current_user: current_seller).props.merge(
-             selectedCommunityId: @community.external_id
-           )
+    props = CommunitiesPresenter.new(current_user: current_seller).props.merge(
+      selectedCommunityId: @community.external_id
+    )
+    render inertia: "Communities/Show", props: props
   end
 
   private
