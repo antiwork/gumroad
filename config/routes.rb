@@ -400,8 +400,6 @@ Rails.application.routes.draw do
       end
     end
 
-    get "/communities/*other", to: "communities#index" # route handled by react-router
-
     get "/a/:affiliate_id", to: "affiliate_redirect#set_cookie_and_redirect", as: :affiliate_redirect
     get "/a/:affiliate_id/:unique_permalink", to: "affiliate_redirect#set_cookie_and_redirect", as: :affiliate_product
     post "/links/:id/send_sample_price_change_email", to: "links#send_sample_price_change_email", as: :sample_membership_price_change_email
@@ -779,8 +777,9 @@ Rails.application.routes.draw do
     post "/posts/:id/send_for_purchase/:purchase_id", to: "posts#send_for_purchase", as: :send_for_purchase
 
     # communities
-    get "/communities(/:seller_id/:community_id)", to: "communities#index", as: :community
-
+    resources :communities, only: [:index]
+    get "/communities/:community_id", to: "communities#show", as: :community
+    get "/communities/:seller_id/:community_iid", to: "communities#show", as: :community_with_seller
     # emails
     resources :emails, only: [:index, :new, :create, :edit, :update, :destroy] do
       collection do
@@ -867,6 +866,7 @@ Rails.application.routes.draw do
     post "/confirm-redirect", to: "url_redirects#confirm"
     post "/r/:id/send_to_kindle", to: "url_redirects#send_to_kindle", as: :send_to_kindle
     post "/r/:id/change_purchaser", to: "url_redirects#change_purchaser", as: :url_redirect_change_purchaser
+    post "/r/:id/save_last_content_page", to: "url_redirects#save_last_content_page", as: :url_redirect_save_last_content_page
 
     get "crossdomain", to: "public#crossdomain"
 
@@ -1053,6 +1053,7 @@ Rails.application.routes.draw do
     post "/confirm-redirect", to: "url_redirects#confirm"
     post "/r/:id/send_to_kindle", to: "url_redirects#send_to_kindle", as: :custom_domain_send_to_kindle
     post "/r/:id/change_purchaser", to: "url_redirects#change_purchaser", as: :custom_domain_url_redirect_change_purchaser
+    post "/r/:id/save_last_content_page", to: "url_redirects#save_last_content_page", as: :custom_domain_url_redirect_save_last_content_page
 
     get "/library", to: "library#index"
     patch "/library/purchase/:id/archive", to: "library#archive"
