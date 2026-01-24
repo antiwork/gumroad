@@ -1,8 +1,10 @@
 import React from "react";
 
+import { CurrentSellerProvider, parseCurrentSeller } from "$app/components/CurrentSeller";
 import { DesignContextProvider, DesignSettings } from "$app/components/DesignSettings";
 import { DomainSettingsProvider } from "$app/components/DomainSettings";
 import { FeatureFlags, FeatureFlagsProvider } from "$app/components/FeatureFlags";
+import { LoggedInUserProvider, parseLoggedInUser } from "$app/components/LoggedInUser";
 import { SSRLocationProvider } from "$app/components/useOriginalLocation";
 import { UserAgentProvider } from "$app/components/UserAgent";
 
@@ -23,6 +25,8 @@ type GlobalProps = {
   href: string;
   locale: string;
   feature_flags: FeatureFlags;
+  logged_in_user: unknown;
+  current_seller: unknown;
 };
 
 export default function AppWrapper({ children, global }: { children: React.ReactNode; global: GlobalProps }) {
@@ -46,7 +50,11 @@ export default function AppWrapper({ children, global }: { children: React.React
           }}
         >
           <FeatureFlagsProvider value={global.feature_flags}>
-            <SSRLocationProvider value={global.href}>{children}</SSRLocationProvider>
+            <LoggedInUserProvider value={parseLoggedInUser(global.logged_in_user)}>
+              <CurrentSellerProvider value={parseCurrentSeller(global.current_seller)}>
+                <SSRLocationProvider value={global.href}>{children}</SSRLocationProvider>
+              </CurrentSellerProvider>
+            </LoggedInUserProvider>
           </FeatureFlagsProvider>
         </UserAgentProvider>
       </DomainSettingsProvider>

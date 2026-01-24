@@ -5,7 +5,7 @@ import ToastAlert from "$app/components/server-components/Alert";
 
 export type ProductPageMeta = {
   canonical: string;
-  structured_data: unknown[] | null;
+  structured_data: unknown;
   custom_styles: string | null;
 };
 
@@ -15,7 +15,7 @@ type ProductPageHeadProps = {
 };
 
 export const ProductPageHead = ({ meta, title }: ProductPageHeadProps) => {
-  const structuredData = meta.structured_data ?? [];
+  const structuredData = Array.isArray(meta.structured_data) ? meta.structured_data : [];
   const customStyles = meta.custom_styles ?? "";
 
   return (

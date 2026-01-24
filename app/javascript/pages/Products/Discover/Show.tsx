@@ -29,7 +29,6 @@ const DiscoverProductShowPage = () => {
         forceDomain
       >
         <Layout cart hasHero {...product} />
-        {"products" in product ? <div /> : null}
       </DiscoverLayout>
     </>
   );

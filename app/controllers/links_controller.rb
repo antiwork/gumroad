@@ -574,7 +574,8 @@ class LinksController < ApplicationController
           canonical: @product.long_url,
           structured_data: @product.structured_data,
           custom_styles: @user&.seller_profile&.custom_styles.to_s
-        }
+        },
+        title: @title
       }
     end
 
