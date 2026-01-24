@@ -30,7 +30,7 @@ class LinksController < ApplicationController
   before_action :fetch_product_and_enforce_ownership, only: %i[destroy]
   before_action :fetch_product_and_enforce_access, only: %i[update publish unpublish release_preorder update_sections]
 
-  layout "inertia", only: [:index, :new]
+  layout "inertia", only: %i[index new show]
 
   def index
     authorize Link
@@ -127,7 +127,7 @@ class LinksController < ApplicationController
 
       unless (@product.customizable_price || cart_item[:option]&.[](:is_pwyw)) &&
              (params[:price].blank? || params[:price] < cart_item[:price])
-        redirect_to checkout_index_url(**params.permit!, host: DOMAIN, product: @product.unique_permalink,
+        return redirect_to checkout_index_url(**params.permit!, host: DOMAIN, product: @product.unique_permalink,
                                                          rent: cart_item[:rental], recurrence: cart_item[:recurrence],
                                                          price: cart_item[:price],
                                                          code: params[:offer_code] || params[:code],
@@ -160,8 +160,10 @@ class LinksController < ApplicationController
     end
 
     set_noindex_header if !@product.alive?
+    @hide_layouts = false
+
     respond_to do |format|
-      format.html
+      format.html { render inertia: product_inertia_template, props: product_inertia_props }
       format.json { render json: @product.as_json }
       format.any { e404 }
     end
@@ -551,6 +553,41 @@ class LinksController < ApplicationController
       @body_id               = "product_page"
       @is_on_product_page    = true
       @debug                 = params[:debug] && !Rails.env.production?
+    end
+
+    def product_inertia_template
+      if params[:layout] == Product::Layout::PROFILE
+        "Products/Profile/Show"
+      elsif params[:layout] == Product::Layout::DISCOVER
+        "Products/Discover/Show"
+      elsif params[:embed] || params[:overlay]
+        "Products/Iframe/Show"
+      else
+        "Products/Show"
+      end
+    end
+
+    def product_inertia_props
+      {
+        product: product_inertia_page_props,
+        meta: {
+          canonical: @product.long_url,
+          structured_data: @product.structured_data,
+          custom_styles: @user&.seller_profile&.custom_styles.to_s
+        }
+      }
+    end
+
+    def product_inertia_page_props
+      if params[:layout] == Product::Layout::PROFILE
+        @product_props.merge(
+          creator_profile: ProfilePresenter.new(pundit_user:, seller: @product.user).creator_profile
+        )
+      elsif params[:layout] == Product::Layout::DISCOVER
+        @product_props.merge(@discover_props)
+      else
+        @product_props
+      end
     end
 
     def link_params
