@@ -30,11 +30,9 @@ type PageProps = ProductProps & {
   logged_in_user: RawLoggedInUser | null;
 };
 
-// Generate CSS custom properties for seller custom styles
 function getCustomStylesCss(styles: CustomStyles): string {
   const { background_color, highlight_color, font } = styles;
 
-  // Determine if colors are dark or light for contrast
   const hexToRgb = (hex: string) => {
     const result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/iu.exec(hex);
     if (!result?.[1] || !result[2] || !result[3]) {
@@ -99,7 +97,6 @@ function PurchaseProductPage() {
   const { product, purchase, discount_code, wishlists, custom_styles, logged_in_user } = props;
   const [selection, setSelection] = useSelectionFromUrl(product);
 
-  // Apply custom styles via a style tag
   React.useEffect(() => {
     const styleId = "seller-custom-styles";
     let styleElement = document.getElementById(styleId);
@@ -113,7 +110,6 @@ function PurchaseProductPage() {
 
     styleElement.textContent = getCustomStylesCss(custom_styles);
 
-    // Load custom font if not ABC Favorit
     if (custom_styles.font !== "ABC Favorit") {
       const fontUrl = `https://fonts.googleapis.com/css2?family=${encodeURIComponent(custom_styles.font)}:wght@400;600&display=swap`;
       const existingLink = document.querySelector(`link[href="${fontUrl}"]`);
@@ -126,7 +122,6 @@ function PurchaseProductPage() {
     }
 
     return () => {
-      // Cleanup style element on unmount
       const element = document.getElementById(styleId);
       if (element) {
         element.remove();
