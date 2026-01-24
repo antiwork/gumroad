@@ -15,6 +15,7 @@ class LinksController < ApplicationController
 
   before_action :fetch_product_for_show, only: :show
   before_action :check_banned, only: :show
+  before_action :no_scroll, only: :edit
   before_action :set_x_robots_tag_header, only: :show
   before_action :check_payment_details, only: :index
 
@@ -499,6 +500,10 @@ class LinksController < ApplicationController
 
     def fetch_product_by_custom_domain
       @product = product_by_custom_domain
+    end
+
+    def no_scroll
+      @no_scroll = true
     end
 
     # *** DO NOT USE THIS METHOD for actions that respond to non-subdomain URLs ***
