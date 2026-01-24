@@ -1,6 +1,6 @@
+import { Link } from "@inertiajs/react";
 import cx from "classnames";
 import * as React from "react";
-import { Link } from "react-router-dom";
 
 import { Community } from "$app/data/communities";
 
@@ -24,7 +24,7 @@ export const CommunityList = ({
       return (
         <Link
           key={community.id}
-          to={`/communities/${community.seller.id}/${community.id}`}
+          href={`/communities/${community.seller.id}/${community.id}`}
           aria-selected={isCommunitySelected}
           onClick={(e) => {
             if (isCommunitySelected) {
