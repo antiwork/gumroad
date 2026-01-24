@@ -3,21 +3,22 @@
 require "spec_helper"
 require "shared_examples/sellers_base_controller_concern"
 require "shared_examples/authorize_called"
+require "inertia_rails/rspec"
 
-describe BundlesController do
+describe BundlesController, inertia: true do
   let(:seller) { create(:named_seller, :eligible_for_service_products) }
   let(:bundle) { create(:product, :bundle, user: seller, price_cents: 2000) }
 
   include_context "with user signed in as admin for seller"
 
   describe "GET show" do
-    render_views
-
-    it "initializes the presenter with the correct arguments and sets the title to the bundle's name" do
+    it "renders the bundle edit page" do
       expect(BundlePresenter).to receive(:new).with(bundle:).and_call_original
       get :show, params: { id: bundle.external_id }
-      expect(response.body).to have_selector("title:contains('#{bundle.name}')", visible: false)
       expect(response).to be_successful
+      expect(inertia.component).to eq("Bundles/Edit")
+      expect(inertia.props[:bundle]).to be_present
+      expect(inertia.props[:id]).to eq(bundle.external_id)
     end
 
     context "when the bundle doesn't exist" do

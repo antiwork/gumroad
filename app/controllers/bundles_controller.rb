@@ -5,6 +5,8 @@ class BundlesController < Sellers::BaseController
 
   PER_PAGE = 10
 
+  layout "inertia", only: [:show]
+
   def show
     bundle = Link.can_be_bundle.find_by_external_id!(params[:id])
 
@@ -12,8 +14,9 @@ class BundlesController < Sellers::BaseController
 
     @title = bundle.name
 
-    @props = BundlePresenter.new(bundle:).bundle_props
+    render inertia: "Bundles/Edit", props: BundlePresenter.new(bundle:).bundle_props
   end
+
 
   def create_from_email
     authorize Link, :create?
