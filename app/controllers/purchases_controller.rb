@@ -257,13 +257,15 @@ class PurchasesController < ApplicationController
   end
 
   def confirm_generate_invoice
-    @react_component_props = { invoice_url: generate_invoice_by_buyer_path(params[:id]) }
+    render inertia: "Purchases/GenerateInvoice/Confirm",
+           props: { invoice_url: generate_invoice_by_buyer_path(params[:id]) }
   end
 
   def generate_invoice
     chargeable = Charge::Chargeable.find_by_purchase_or_charge!(purchase: @purchase)
-    @invoice_presenter = InvoicePresenter.new(chargeable)
-    @title = "Generate invoice"
+    invoice_presenter = InvoicePresenter.new(chargeable)
+    render inertia: "Purchases/GenerateInvoice/Show",
+           props: invoice_presenter.invoice_generation_props
   end
 
   def send_invoice
@@ -350,13 +352,21 @@ class PurchasesController < ApplicationController
         message << " " << notice
       end
       file_url = s3_obj.presigned_url(:get, expires_in: SignedUrlHelper::SIGNED_S3_URL_VALID_FOR_MAXIMUM.to_i)
-      render json: { success: true, message:, file_location: file_url }
+
+      invoice_presenter_props = invoice_presenter.invoice_generation_props.merge(file_location: file_url)
+      flash[:notice] = message
+      render inertia: "Purchases/GenerateInvoice/Show",
+             props: invoice_presenter_props
     rescue StandardError => e
       Rails.logger.error("Chargeable #{@chargeable.class.name} (#{@chargeable.external_id}) invoice generation failed due to: #{e.inspect}")
       Rails.logger.error(e.message)
       Rails.logger.error(e.backtrace.join("\n"))
 
-      render json: { success: false, message: "Sorry, something went wrong." }
+      chargeable = Charge::Chargeable.find_by_purchase_or_charge!(purchase: @purchase)
+      invoice_presenter = InvoicePresenter.new(chargeable)
+      flash[:alert] = "Sorry, something went wrong."
+      render inertia: "Purchases/GenerateInvoice/Show",
+             props: invoice_presenter.invoice_generation_props
     end
   end
 
@@ -500,9 +510,14 @@ class PurchasesController < ApplicationController
     end
 
     def check_for_successful_purchase_for_vat_refund
-      return if params["vat_id"].blank? || @purchase.successful?
+      return if params["vat_id"].blank?
+      return if @purchase.purchase_state.in?(Purchase::ALL_SUCCESS_STATES_INCLUDING_TEST)
 
-      render json: { success: false, message: "Your purchase has not been completed by PayPal yet. Please try again soon." }
+
+      invoice_presenter = InvoicePresenter.new(@purchase)
+      flash[:alert] = "Your purchase has not been completed by PayPal yet. Please try again soon."
+      render inertia: "Purchases/GenerateInvoice/Show",
+             props: invoice_presenter.invoice_generation_props
     end
 
     def skip_recaptcha?

@@ -3,6 +3,7 @@
 require "spec_helper"
 require "shared_examples/authorize_called"
 require "shared_examples/order_association_with_cart_post_checkout"
+require "inertia_rails/rspec"
 
 include CurrencyHelper
 
@@ -1540,21 +1541,31 @@ describe PurchasesController, :vcr do
       end
     end
 
-    describe "GET confirm_generate_invoice" do
-      let(:purchase) { create(:purchase) }
+    describe "GET confirm_generate_invoice", inertia: true do
+      before do
+        stub_const("GumroadAddress::COUNTRY", ISO3166::Country["US"])
+      end
 
-      it "returns success" do
+      let(:purchase) { create(:test_purchase) }
+
+      it "returns success and renders Inertia component" do
         get :confirm_generate_invoice, params: { id: purchase.external_id }
 
         expect(response).to be_successful
+        expect(inertia).to render_component("Purchases/GenerateInvoice/Confirm")
+        expect(inertia.props[:invoice_url]).to be_present
       end
     end
 
-    describe "GET generate_invoice" do
+    describe "GET generate_invoice", inertia: true do
+      before do
+        stub_const("GumroadAddress::COUNTRY", ISO3166::Country["US"])
+      end
+
       let(:date) { Time.find_zone("UTC").local(2024, 04, 10) }
       let(:seller) { create(:named_seller) }
       let(:product_one) { create(:product, user: seller, name: "Product One") }
-      let(:purchase_one) { create(:purchase, created_at: date, link: product_one) }
+      let(:purchase_one) { create(:test_purchase, created_at: date, link: product_one, seller: seller) }
       let(:purchase) { purchase_one }
       let(:params) { { id: purchase.external_id, email: purchase.email } }
 
@@ -1564,21 +1575,17 @@ describe PurchasesController, :vcr do
           expect(response.headers["X-Robots-Tag"]).to eq("noindex")
         end
 
-        it "renders the page" do
+        it "renders the Inertia page with correct props" do
           get :generate_invoice, params: params
           expect(response).to be_successful
-          expect(response.body).to have_text("Generate invoice")
-        end
-
-        it "assigns the purchase as the chargeable for the presenter" do
-          get :generate_invoice, params: params
-          expect(assigns(:invoice_presenter).send(:chargeable)).to eq(purchase)
+          expect(inertia).to render_component("Purchases/GenerateInvoice/Show")
+          expect(inertia.props).to include(:form_info, :supplier_info, :seller_info, :order_info, :email, :id, :countries)
         end
       end
 
       describe "for Charge" do
         let(:product_two) { create(:product, user: seller, name: "Product Two") }
-        let(:purchase_two) { create(:purchase, created_at: date, link: product_two) }
+        let(:purchase_two) { create(:test_purchase, created_at: date, link: product_two, seller: seller) }
         let(:charge) { create(:charge, seller:, purchases: [purchase_one, purchase_two]) }
         let(:order) { charge.order }
 
@@ -1587,17 +1594,20 @@ describe PurchasesController, :vcr do
           order.update!(created_at: date)
         end
 
-        it "assigns the charge as the chargeable for the presenter" do
+        it "renders the Inertia page with charge data" do
           get :generate_invoice, params: params
-          expect(assigns(:invoice_presenter).send(:chargeable)).to eq(charge)
+          expect(response).to be_successful
+          expect(inertia).to render_component("Purchases/GenerateInvoice/Show")
+          expect(inertia.props).to include(:form_info, :supplier_info, :seller_info, :order_info)
         end
 
         context "when the second purchase is used as a param" do
           let(:purchase) { purchase_two }
 
-          it "assigns the charge as the chargeable for the presenter" do
+          it "renders the Inertia page with charge data" do
             get :generate_invoice, params: params
-            expect(assigns(:invoice_presenter).send(:chargeable)).to eq(charge)
+            expect(response).to be_successful
+            expect(inertia).to render_component("Purchases/GenerateInvoice/Show")
           end
         end
 
@@ -1623,11 +1633,15 @@ describe PurchasesController, :vcr do
       end
     end
 
-    describe "POST send_invoice" do
+    describe "POST send_invoice", inertia: true do
+      before do
+        stub_const("GumroadAddress::COUNTRY", ISO3166::Country["US"])
+      end
+
       let(:date) { Time.find_zone("UTC").local(2024, 04, 10) }
       let(:seller) { create(:named_seller) }
       let(:product_one) { create(:product, user: seller, name: "Product One") }
-      let(:purchase_one) { create(:purchase, created_at: date, link: product_one) }
+      let(:purchase_one) { create(:test_purchase, created_at: date, link: product_one, seller: seller) }
       let(:purchase) { purchase_one }
       let(:payload) do
         {
@@ -1646,37 +1660,43 @@ describe PurchasesController, :vcr do
         @s3_obj_public_url = "#{AWS_S3_ENDPOINT}/#{S3_BUCKET}/attachment/manual.pdf"
 
         s3_obj_double = double
-        allow(s3_obj_double).to receive(:presigned_url).and_return(@s3_obj_public_url)
+        allow(s3_obj_double).to receive(:presigned_url).with(:get, expires_in: anything).and_return(@s3_obj_public_url)
 
         allow_any_instance_of(Purchase).to receive(:upload_invoice_pdf) do |purchase, pdf|
+          @generated_pdf = pdf
+          s3_obj_double
+        end
+
+        allow_any_instance_of(Charge).to receive(:upload_invoice_pdf) do |charge, pdf|
           @generated_pdf = pdf
           s3_obj_double
         end
       end
 
       describe "for Purchase" do
-        it "assigns the purchase as the chargeable" do
-          post :send_invoice, params: payload
-          expect(assigns(:chargeable)).to eq(purchase)
-        end
-
         describe "when user is issuing an invoice" do
-          it "returns success json response" do
+          it "renders Inertia page with file_location in props" do
             post :send_invoice, params: payload
 
-            expect(response.parsed_body["success"]).to be(true)
-            expect(response.parsed_body["file_location"]).to eq(@s3_obj_public_url)
+            expect(response).to be_successful
+            expect(inertia).to render_component("Purchases/GenerateInvoice/Show")
+            # Inertia props may be string keys or symbol keys
+            file_location = inertia.props["file_location"] || inertia.props[:file_location]
+            expect(file_location).to eq(@s3_obj_public_url)
+            expect(flash[:notice]).to be_present
           end
 
-          it "returns unsuccessful json response if the process fails" do
+          it "renders Inertia page with error flash if the process fails" do
             allow_any_instance_of(Purchase).to receive(:upload_invoice_pdf).and_raise("error")
 
             post :send_invoice, params: payload
 
-            expect(response.parsed_body["success"]).to be(false)
+            expect(response).to be_successful
+            expect(inertia).to render_component("Purchases/GenerateInvoice/Show")
+            expect(flash[:alert]).to eq("Sorry, something went wrong.")
           end
 
-          it "returns unsuccessful json response if purchase doesn't exist" do
+          it "raises error if purchase doesn't exist" do
             expect do
               post :send_invoice, params: payload.merge!(id: "invalid")
             end.to raise_error(ActionController::RoutingError)
@@ -1767,29 +1787,35 @@ describe PurchasesController, :vcr do
           end
         end
 
-        describe "when user provides a vat id" do
+        describe "when user provides a vat id", :stub_tax_id_validation do
           before do
             @zip_tax_rate = create(:zip_tax_rate, combined_rate: 0.20, is_seller_responsible: false)
-            @purchase = create(:purchase_in_progress, zip_tax_rate: @zip_tax_rate, chargeable: create(:chargeable))
-            @purchase.process!
-            @purchase.mark_successful!
+            @purchase = create(:test_purchase, zip_tax_rate: @zip_tax_rate, link: product_one, seller: seller)
             @purchase.gumroad_tax_cents = 20
             @purchase.save!
+
+            # Stub ChargeProcessor to avoid actual refund calls
+            charge_refund_double = double(id: "refund_123", flow_of_funds: double(to_h: {}))
+            allow(ChargeProcessor).to receive(:refund!).and_return(charge_refund_double)
           end
 
           it "refunds tax" do
             post :send_invoice, params: payload.merge(vat_id: "IE6388047V", id: @purchase.external_id, email: @purchase.email)
 
-            expect(response.parsed_body["success"]).to be(true)
-            expect(response.parsed_body["file_location"]).to eq(@s3_obj_public_url)
+            expect(response).to be_successful
+            expect(inertia).to render_component("Purchases/GenerateInvoice/Show")
+            expect(inertia.props[:file_location]).to eq(@s3_obj_public_url)
             expect(Refund.last.total_transaction_cents).to be(20)
           end
 
           it "does not refund tax when provided an invalid vat id" do
+            allow_any_instance_of(VatValidationService).to receive(:process).and_return(false)
+
             post :send_invoice, params: payload.merge(vat_id: "EU123456789", id: @purchase.external_id, email: @purchase.email)
 
-            expect(response.parsed_body["success"]).to be(true)
-            expect(response.parsed_body["file_location"]).to eq(@s3_obj_public_url)
+            expect(response).to be_successful
+            expect(inertia).to render_component("Purchases/GenerateInvoice/Show")
+            expect(inertia.props[:file_location]).to eq(@s3_obj_public_url)
             expect(Refund.last).to eq nil
           end
 
@@ -1799,19 +1825,22 @@ describe PurchasesController, :vcr do
 
             post :send_invoice, params: payload.merge(vat_id: "51824753556", id: @purchase.external_id, email: @purchase.email)
 
-            expect(response.parsed_body["success"]).to be(true)
-            expect(response.parsed_body["file_location"]).to eq(@s3_obj_public_url)
+            expect(response).to be_successful
+            expect(inertia).to render_component("Purchases/GenerateInvoice/Show")
+            expect(inertia.props[:file_location]).to eq(@s3_obj_public_url)
             expect(Refund.last.total_transaction_cents).to be(20)
           end
 
           it "does not refund tax for an invalid ABN id" do
+            allow_any_instance_of(AbnValidationService).to receive(:process).and_return(false)
             purchase_sales_tax_info = PurchaseSalesTaxInfo.new(country_code: Compliance::Countries::AUS.alpha2)
             @purchase.update!(purchase_sales_tax_info:)
 
             post :send_invoice, params: payload.merge(vat_id: "11111111111", id: @purchase.external_id, email: @purchase.email)
 
-            expect(response.parsed_body["success"]).to be(true)
-            expect(response.parsed_body["file_location"]).to eq(@s3_obj_public_url)
+            expect(response).to be_successful
+            expect(inertia).to render_component("Purchases/GenerateInvoice/Show")
+            expect(inertia.props[:file_location]).to eq(@s3_obj_public_url)
             expect(Refund.last).to eq nil
           end
 
@@ -1821,19 +1850,22 @@ describe PurchasesController, :vcr do
 
             post :send_invoice, params: payload.merge(vat_id: "T9100001B", id: @purchase.external_id, email: @purchase.email)
 
-            expect(response.parsed_body["success"]).to be(true)
-            expect(response.parsed_body["file_location"]).to eq(@s3_obj_public_url)
+            expect(response).to be_successful
+            expect(inertia).to render_component("Purchases/GenerateInvoice/Show")
+            expect(inertia.props[:file_location]).to eq(@s3_obj_public_url)
             expect(Refund.last.total_transaction_cents).to be(20)
           end
 
           it "does not refund tax for an invalid GST id" do
+            allow_any_instance_of(GstValidationService).to receive(:process).and_return(false)
             purchase_sales_tax_info = PurchaseSalesTaxInfo.new(country_code: Compliance::Countries::SGP.alpha2)
             @purchase.update!(purchase_sales_tax_info:)
 
             post :send_invoice, params: payload.merge(vat_id: "T9100001C", id: @purchase.external_id, email: @purchase.email)
 
-            expect(response.parsed_body["success"]).to be(true)
-            expect(response.parsed_body["file_location"]).to eq(@s3_obj_public_url)
+            expect(response).to be_successful
+            expect(inertia).to render_component("Purchases/GenerateInvoice/Show")
+            expect(inertia.props[:file_location]).to eq(@s3_obj_public_url)
             expect(Refund.last).to eq nil
           end
 
@@ -1843,19 +1875,22 @@ describe PurchasesController, :vcr do
 
             post :send_invoice, params: payload.merge(vat_id: "1002092821TQ0001", id: @purchase.external_id, email: @purchase.email)
 
-            expect(response.parsed_body["success"]).to be(true)
-            expect(response.parsed_body["file_location"]).to eq(@s3_obj_public_url)
+            expect(response).to be_successful
+            expect(inertia).to render_component("Purchases/GenerateInvoice/Show")
+            expect(inertia.props[:file_location]).to eq(@s3_obj_public_url)
             expect(Refund.last.total_transaction_cents).to be(20)
           end
 
           it "does not refund tax for an invalid QST id" do
+            allow_any_instance_of(QstValidationService).to receive(:process).and_return(false)
             purchase_sales_tax_info = PurchaseSalesTaxInfo.new(country_code: Compliance::Countries::CAN.alpha2, state_code: QUEBEC)
             @purchase.update!(purchase_sales_tax_info:)
 
             post :send_invoice, params: payload.merge(vat_id: "NR00005576", id: @purchase.external_id, email: @purchase.email)
 
-            expect(response.parsed_body["success"]).to be(true)
-            expect(response.parsed_body["file_location"]).to eq(@s3_obj_public_url)
+            expect(response).to be_successful
+            expect(inertia).to render_component("Purchases/GenerateInvoice/Show")
+            expect(inertia.props[:file_location]).to eq(@s3_obj_public_url)
             expect(Refund.last).to eq nil
           end
 
@@ -1865,17 +1900,19 @@ describe PurchasesController, :vcr do
 
             post :send_invoice, params: payload.merge(vat_id: "IE6388047V", id: @purchase.external_id, email: @purchase.email)
 
-            expect(response.parsed_body["success"]).to be(true)
-            expect(response.parsed_body["file_location"]).to eq(@s3_obj_public_url)
+            expect(response).to be_successful
+            expect(inertia).to render_component("Purchases/GenerateInvoice/Show")
+            expect(inertia.props[:file_location]).to eq(@s3_obj_public_url)
             expect(Refund.count).to be(1)
           end
 
-          it "returns error if purchase is not successful" do
+          it "renders Inertia page with error flash if purchase is not successful" do
             @purchase.update_attribute(:purchase_state, "in_progress")
             post :send_invoice, params: payload.merge(vat_id: "IE6388047V", id: @purchase.external_id, email: @purchase.email)
 
-            expect(response.parsed_body["success"]).to be(false)
-            expect(response.parsed_body["message"]).to eq("Your purchase has not been completed by PayPal yet. Please try again soon.")
+            expect(response).to be_successful
+            expect(inertia).to render_component("Purchases/GenerateInvoice/Show")
+            expect(flash[:alert]).to be_present
             expect(Refund.count).to be(0)
           end
         end
@@ -1891,7 +1928,7 @@ describe PurchasesController, :vcr do
 
       describe "for Charge" do
         let(:product_two) { create(:product, user: seller, name: "Product Two") }
-        let(:purchase_two) { create(:purchase, created_at: date, link: product_two) }
+        let(:purchase_two) { create(:test_purchase, created_at: date, link: product_two, seller: seller) }
         let(:charge) { create(:charge, seller:, purchases: [purchase_one, purchase_two]) }
         let(:order) { charge.order }
 
@@ -1900,37 +1937,27 @@ describe PurchasesController, :vcr do
           order.update!(created_at: date)
         end
 
-        it "assigns the charge as the chargeable" do
-          post :send_invoice, params: payload
-          expect(assigns(:chargeable)).to eq(charge)
-        end
-
-        context "when the second purchase is used as a param" do
-          let(:purchase) { purchase_two }
-
-          it "assigns the charge as the chargeable" do
-            post :send_invoice, params: payload
-            expect(assigns(:chargeable)).to eq(charge)
-          end
-        end
-
         describe "when user is issuing an invoice" do
-          it "returns success json response" do
+          it "renders Inertia page with file_location in props" do
             post :send_invoice, params: payload
 
-            expect(response.parsed_body["success"]).to be(true)
-            expect(response.parsed_body["file_location"]).to eq(@s3_obj_public_url)
+            expect(response).to be_successful
+            expect(inertia).to render_component("Purchases/GenerateInvoice/Show")
+            expect(inertia.props[:file_location]).to eq(@s3_obj_public_url)
+            expect(flash[:notice]).to be_present
           end
 
-          it "returns unsuccessful json response if the process fails" do
-            allow_any_instance_of(Purchase).to receive(:upload_invoice_pdf).and_raise("error")
+          it "renders Inertia page with error flash if the process fails" do
+            allow_any_instance_of(Charge).to receive(:upload_invoice_pdf).and_raise("error")
 
             post :send_invoice, params: payload
 
-            expect(response.parsed_body["success"]).to be(false)
+            expect(response).to be_successful
+            expect(inertia).to render_component("Purchases/GenerateInvoice/Show")
+            expect(flash[:alert]).to eq("Sorry, something went wrong.")
           end
 
-          it "returns unsuccessful json response if purchase doesn't exist" do
+          it "raises error if purchase doesn't exist" do
             expect do
               post :send_invoice, params: payload.merge!(id: "invalid")
             end.to raise_error(ActionController::RoutingError)
@@ -2024,21 +2051,23 @@ describe PurchasesController, :vcr do
           end
         end
 
-        describe "when user provides a vat id" do
+        describe "when user provides a vat id", :stub_tax_id_validation do
           let(:zip_tax_rate) { create(:zip_tax_rate, combined_rate: 0.20, is_seller_responsible: false) }
           let(:purchase_one) do
-            purchase = create(:purchase_in_progress, zip_tax_rate: zip_tax_rate, chargeable: create(:chargeable), link: product_one)
-            purchase.process!
-            purchase.mark_successful!
+            purchase = create(:test_purchase, zip_tax_rate: zip_tax_rate, link: product_one, seller: seller)
             purchase.update!(gumroad_tax_cents: 20, was_purchase_taxable: true)
             purchase
           end
           let(:purchase_two) do
-            purchase = create(:purchase_in_progress, zip_tax_rate: zip_tax_rate, chargeable: create(:chargeable), link: product_two)
-            purchase.process!
-            purchase.mark_successful!
+            purchase = create(:test_purchase, zip_tax_rate: zip_tax_rate, link: product_two, seller: seller)
             purchase.update!(gumroad_tax_cents: 20, was_purchase_taxable: true)
             purchase
+          end
+
+          before do
+            # Stub ChargeProcessor to avoid actual refund calls
+            charge_refund_double = double(id: "refund_123", flow_of_funds: double(to_h: {}))
+            allow(ChargeProcessor).to receive(:refund!).and_return(charge_refund_double)
           end
 
           it "refunds tax" do
@@ -2047,18 +2076,22 @@ describe PurchasesController, :vcr do
               post :send_invoice, params: payload.merge(vat_id: "IE6388047V", id: purchase.external_id)
             end.to change(Refund, :count).by(2)
 
-            expect(response.parsed_body["success"]).to be(true)
-            expect(response.parsed_body["file_location"]).to eq(@s3_obj_public_url)
+            expect(response).to be_successful
+            expect(inertia).to render_component("Purchases/GenerateInvoice/Show")
+            expect(inertia.props[:file_location]).to eq(@s3_obj_public_url)
             expect(Refund.last(2).sum(&:total_transaction_cents)).to be(40)
           end
 
           it "does not refund tax when provided an invalid vat id" do
+            allow_any_instance_of(VatValidationService).to receive(:process).and_return(false)
+
             expect do
               post :send_invoice, params: payload.merge(vat_id: "EU123456789", id: purchase.external_id)
             end.to_not change(Refund, :count)
 
-            expect(response.parsed_body["success"]).to be(true)
-            expect(response.parsed_body["file_location"]).to eq(@s3_obj_public_url)
+            expect(response).to be_successful
+            expect(inertia).to render_component("Purchases/GenerateInvoice/Show")
+            expect(inertia.props[:file_location]).to eq(@s3_obj_public_url)
           end
 
           context "with a valid ABN id" do
@@ -2073,19 +2106,27 @@ describe PurchasesController, :vcr do
                 post :send_invoice, params: payload.merge(vat_id: "IE6388047V", id: purchase.external_id)
               end.to change(Refund, :count).by(2)
 
-              expect(response.parsed_body["success"]).to be(true)
-              expect(response.parsed_body["file_location"]).to eq(@s3_obj_public_url)
+              expect(response).to be_successful
+              expect(inertia).to render_component("Purchases/GenerateInvoice/Show")
+              expect(inertia.props[:file_location]).to eq(@s3_obj_public_url)
               expect(Refund.last(2).sum(&:total_transaction_cents)).to be(40)
             end
 
             context "with an invalid ABN id" do
               it "does not refund tax" do
+                # Override all validation services to return false for this test
+                allow_any_instance_of(AbnValidationService).to receive(:process).and_return(false)
+                allow_any_instance_of(VatValidationService).to receive(:process).and_return(false)
+                allow_any_instance_of(GstValidationService).to receive(:process).and_return(false)
+                allow_any_instance_of(QstValidationService).to receive(:process).and_return(false)
+
                 expect do
                   post :send_invoice, params: payload.merge(vat_id: "11111111111", id: purchase.external_id)
                 end.to_not change(Refund, :count)
 
-                expect(response.parsed_body["success"]).to be(true)
-                expect(response.parsed_body["file_location"]).to eq(@s3_obj_public_url)
+                expect(response).to be_successful
+                expect(inertia).to render_component("Purchases/GenerateInvoice/Show")
+                expect(inertia.props[:file_location]).to eq(@s3_obj_public_url)
               end
             end
           end
@@ -2101,19 +2142,23 @@ describe PurchasesController, :vcr do
                 post :send_invoice, params: payload.merge(vat_id: "T9100001B", id: purchase.external_id)
               end.to change(Refund, :count).by(2)
 
-              expect(response.parsed_body["success"]).to be(true)
-              expect(response.parsed_body["file_location"]).to eq(@s3_obj_public_url)
+              expect(response).to be_successful
+              expect(inertia).to render_component("Purchases/GenerateInvoice/Show")
+              expect(inertia.props[:file_location]).to eq(@s3_obj_public_url)
               expect(Refund.last(2).sum(&:total_transaction_cents)).to be(40)
             end
 
             context "with an invalid GST id" do
               it "does not refund tax" do
+                allow_any_instance_of(GstValidationService).to receive(:process).and_return(false)
+
                 expect do
                   post :send_invoice, params: payload.merge(vat_id: "T9100001C", id: purchase.external_id)
                 end.to_not change(Refund, :count)
 
-                expect(response.parsed_body["success"]).to be(true)
-                expect(response.parsed_body["file_location"]).to eq(@s3_obj_public_url)
+                expect(response).to be_successful
+                expect(inertia).to render_component("Purchases/GenerateInvoice/Show")
+                expect(inertia.props[:file_location]).to eq(@s3_obj_public_url)
               end
             end
           end
@@ -2130,8 +2175,9 @@ describe PurchasesController, :vcr do
                 post :send_invoice, params: payload.merge(vat_id: "IE6388047V", id: purchase.external_id)
               end.to_not change(Refund, :count)
 
-              expect(response.parsed_body["success"]).to be(true)
-              expect(response.parsed_body["file_location"]).to eq(@s3_obj_public_url)
+              expect(response).to be_successful
+              expect(inertia).to render_component("Purchases/GenerateInvoice/Show")
+              expect(inertia.props[:file_location]).to eq(@s3_obj_public_url)
             end
           end
 
@@ -2141,11 +2187,12 @@ describe PurchasesController, :vcr do
               purchase_two.update_attribute(:purchase_state, "in_progress")
             end
 
-            it "returns error if purchase is not successful" do
+            it "renders Inertia page with error flash if purchase is not successful" do
               post :send_invoice, params: payload.merge(vat_id: "IE6388047V", id: purchase.external_id)
 
-              expect(response.parsed_body["success"]).to be(false)
-              expect(response.parsed_body["message"]).to eq("Your purchase has not been completed by PayPal yet. Please try again soon.")
+              expect(response).to be_successful
+              expect(inertia).to render_component("Purchases/GenerateInvoice/Show")
+              expect(flash[:alert]).to be_present
               expect(Refund.count).to be(0)
             end
           end
