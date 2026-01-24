@@ -4,7 +4,7 @@ import { classNames } from "$app/utils/classNames";
 
 declare module "react" {
   export interface CSSProperties {
-    "--progress"?: string;
+    "--progress"?: number | string;
   }
 }
 

@@ -10,6 +10,7 @@ import { Icon } from "$app/components/Icons";
 import { Popover } from "$app/components/Popover";
 import { useRunOnce } from "$app/components/useRunOnce";
 import { WithTooltip } from "$app/components/WithTooltip";
+import { Range } from "$app/components/ui/Range";
 
 const zoomLevelMin = 0.1;
 const zoomLevelMax = 5.0;
@@ -251,13 +252,12 @@ export const PdfReaderPage = ({
           }}
           onMouseLeave={() => setPageTooltip(null)}
         >
-          <input
-            type="range"
+          <Range
             min={1}
             max={pageCount}
             value={pageNumber}
             onChange={(e) => updatePage(parseInt(e.target.value, 10))}
-            style={{ "--progress": `${((pageNumber - 1) / (pageCount - 1)) * 100}%` }}
+            progress={((pageNumber - 1) / (pageCount - 1)) * 100}
           />
         </WithTooltip>
 
