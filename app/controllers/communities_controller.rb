@@ -16,14 +16,9 @@ class CommunitiesController < ApplicationController
 
   def show
     render inertia: 'Communities/Show',
-           props: {
-             community: CommunityPresenter.new(community: @community, current_user: current_seller).props,
-             messages: PaginatedCommunityChatMessagesPresenter.new(
-               community: @community,
-               timestamp: Time.current.iso8601,
-               fetch_type: 'older'
-             ).props[:messages]
-           }
+           props: CommunitiesPresenter.new(current_user: current_seller).props.merge(
+             selectedCommunityId: @community.external_id
+           )
   end
 
   private
