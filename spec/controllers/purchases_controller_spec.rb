@@ -2065,7 +2065,6 @@ describe PurchasesController, :vcr do
           end
 
           before do
-            # Stub ChargeProcessor to avoid actual refund calls
             charge_refund_double = double(id: "refund_123", flow_of_funds: double(to_h: {}))
             allow(ChargeProcessor).to receive(:refund!).and_return(charge_refund_double)
           end

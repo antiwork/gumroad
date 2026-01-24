@@ -65,13 +65,10 @@ export default function GenerateInvoicePage() {
   }, [props.file_location, downloadUrl]);
 
   const handleDownload = () => {
-    // Client-side validation
     const requiredFields: Array<keyof typeof form.data> = ["full_name", "street_address", "city", "state", "zip_code", "country_code"];
     const hasErrors = requiredFields.some((field) => !form.data[field]);
 
     if (hasErrors) {
-      // Client-side validation - just prevent submission
-      // Server will return validation errors if needed
       return;
     }
 
