@@ -37,21 +37,6 @@ export type CommunityChatMessage = {
   };
 };
 
-export async function getCommunities({ abortSignal }: { abortSignal: AbortSignal }) {
-  const response = await request({
-    method: "GET",
-    accept: "json",
-    url: Routes.internal_communities_path(),
-    abortSignal,
-  });
-  if (!response.ok) throw new ResponseError();
-  return cast<{
-    has_products: boolean;
-    communities: Community[];
-    notification_settings: CommunityNotificationSettings;
-  }>(await response.json());
-}
-
 export function getCommunityChatMessages({
   communityId,
   timestamp,

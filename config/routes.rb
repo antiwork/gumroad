@@ -901,7 +901,7 @@ Rails.application.routes.draw do
           resource :receipt_preview, only: [:show]
         end
         resources :product_public_files, only: [:create]
-        resources :communities, only: [:index] do
+        resources :communities, only: [] do
           resources :chat_messages, only: [:index, :create, :update, :destroy], controller: "communities/chat_messages", as: "chat_messages"
           resource :last_read_chat_message, only: [:create], controller: "communities/last_read_chat_messages"
           resource :notification_setting, only: [:update], controller: "communities/notification_settings", as: "notification_setting"

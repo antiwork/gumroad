@@ -1,5 +1,5 @@
+import { usePage } from "@inertiajs/react";
 import * as React from "react";
-import { useLoaderData } from "react-router-dom";
 import { cast } from "ts-safe-cast";
 
 import { Community, CommunityChatMessage, CommunityNotificationSettings } from "$app/data/communities";
@@ -17,6 +17,13 @@ export type CommunityChat = {
   isLoading: boolean;
 };
 
+interface PageProps {
+  has_products: boolean;
+  communities: Community[];
+  notification_settings: CommunityNotificationSettings;
+  selectedCommunityId?: string;
+}
+
 const sortByCreatedAt = <T extends { created_at: string }>(items: readonly T[]) =>
   [...items].sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime());
 
@@ -24,17 +31,13 @@ const sortByName = <T extends { name: string }>(items: readonly T[]) =>
   [...items].sort((a, b) => a.name.localeCompare(b.name));
 
 export const useCommunities = () => {
-  const data = cast<{
-    has_products: boolean;
-    communities: Community[];
-    notification_settings: CommunityNotificationSettings;
-    selectedCommunityId?: string;
-  }>(useLoaderData());
-  const [communities, setCommunities] = React.useState<Community[]>(sortByName(data.communities));
+  const { has_products, communities: initialCommunities, notification_settings, selectedCommunityId: initialSelectedCommunityId } = cast<PageProps>(usePage().props);
+
+  const [communities, setCommunities] = React.useState<Community[]>(sortByName(initialCommunities));
   const [notificationSettings, setNotificationSettings] = React.useState<CommunityNotificationSettings>(
-    data.notification_settings,
+    notification_settings,
   );
-  const [selectedCommunityId, setSelectedCommunityId] = React.useState<string | null>(data.selectedCommunityId ?? null);
+  const [selectedCommunityId, setSelectedCommunityId] = React.useState<string | null>(initialSelectedCommunityId ?? null);
   const [communityDrafts, setCommunityDrafts] = React.useState<Record<string, CommunityDraft>>({});
   const [communityChats, setCommunityChats] = React.useState<Record<string, CommunityChat>>({});
 
@@ -115,10 +118,10 @@ export const useCommunities = () => {
   );
 
   React.useEffect(() => {
-    setSelectedCommunityId(data.selectedCommunityId ?? null);
-    setCommunities(sortByName(data.communities));
-    setNotificationSettings(data.notification_settings);
-  }, [data]);
+    setSelectedCommunityId(initialSelectedCommunityId ?? null);
+    setCommunities(sortByName(initialCommunities));
+    setNotificationSettings(notification_settings);
+  }, [initialSelectedCommunityId, initialCommunities, notification_settings]);
 
   const selectedCommunity = React.useMemo(
     () => communities.find((community) => community.id === selectedCommunityId),
@@ -136,7 +139,7 @@ export const useCommunities = () => {
   );
 
   return {
-    hasProducts: data.has_products,
+    hasProducts: has_products,
     communities,
     notificationSettings,
     selectedCommunity,
