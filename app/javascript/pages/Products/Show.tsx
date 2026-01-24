@@ -5,7 +5,7 @@ import { cast } from "ts-safe-cast";
 import { PoweredByFooter } from "$app/components/PoweredByFooter";
 import { Layout, Props as ProductLayoutProps } from "$app/components/Product/Layout";
 
-import { ProductPageHead, ProductPageMeta, ProductPageNoScript } from "$app/pages/Products/ProductPageHead";
+import { ProductPageAlert, ProductPageHead, ProductPageMeta, ProductPageNoScript } from "$app/pages/Products/ProductPageHead";
 
 type ProductShowPageProps = {
   product: ProductLayoutProps;
@@ -20,6 +20,7 @@ const ProductShowPage = () => {
     <>
       <ProductPageHead meta={meta} title={title} />
       <ProductPageNoScript />
+      <ProductPageAlert />
       <Layout {...product} />
       <PoweredByFooter />
     </>

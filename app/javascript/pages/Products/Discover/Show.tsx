@@ -7,7 +7,7 @@ import { Taxonomy } from "$app/utils/discover";
 import { Layout as DiscoverLayout } from "$app/components/Discover/Layout";
 import { Layout, Props as ProductLayoutProps } from "$app/components/Product/Layout";
 
-import { ProductPageHead, ProductPageMeta, ProductPageNoScript } from "$app/pages/Products/ProductPageHead";
+import { ProductPageAlert, ProductPageHead, ProductPageMeta, ProductPageNoScript } from "$app/pages/Products/ProductPageHead";
 
 type DiscoverProductShowPageProps = {
   product: ProductLayoutProps & { taxonomy_path: string | null; taxonomies_for_nav: Taxonomy[] };
@@ -22,6 +22,7 @@ const DiscoverProductShowPage = () => {
     <>
       <ProductPageHead meta={meta} title={title} />
       <ProductPageNoScript />
+      <ProductPageAlert />
       <DiscoverLayout
         taxonomyPath={product.taxonomy_path ?? undefined}
         taxonomiesForNav={product.taxonomies_for_nav}

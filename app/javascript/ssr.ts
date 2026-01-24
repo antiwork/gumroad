@@ -10,7 +10,6 @@ import CommunitiesPage from "$app/components/server-components/CommunitiesPage";
 import CustomersDownloadPopover from "$app/components/server-components/CustomersPage/DownloadPopover";
 import CustomersFilterPopover from "$app/components/server-components/CustomersPage/FilterPopover";
 import Discover from "$app/components/server-components/Discover";
-import DiscoverProductPage from "$app/components/server-components/Discover/ProductPage";
 import DiscoverWishlistPage from "$app/components/server-components/Discover/WishlistPage";
 import DownloadPageWithContent from "$app/components/server-components/DownloadPage/WithContent";
 import DownloadPageWithoutContent from "$app/components/server-components/DownloadPage/WithoutContent";
@@ -21,13 +20,10 @@ import GumroadBlogPostPage from "$app/components/server-components/GumroadBlog/P
 import HelpCenterArticlesIndexPage from "$app/components/server-components/HelpCenter/ArticlesIndexPage";
 import Nav from "$app/components/server-components/Nav";
 import PdfReaderPage from "$app/components/server-components/PdfReaderPage";
-import ProductPage from "$app/components/server-components/Product";
-import ProductIframePage from "$app/components/server-components/Product/IframePage";
 import ProductEditPage from "$app/components/server-components/ProductEditPage";
 import Profile from "$app/components/server-components/Profile";
 import ProfileCoffeePage from "$app/components/server-components/Profile/CoffeePage";
 import ProfilePostPage from "$app/components/server-components/Profile/PostPage";
-import ProfileProductPage from "$app/components/server-components/Profile/ProductPage";
 import ProfileWishlistPage from "$app/components/server-components/Profile/WishlistPage";
 import DisputeEvidencePage from "$app/components/server-components/Purchase/DisputeEvidencePage";
 import PurchaseProductPage from "$app/components/server-components/Purchase/ProductPage";
@@ -56,7 +52,6 @@ ReactOnRails.register({
   CustomersDownloadPopover,
   CustomersFilterPopover,
   Discover,
-  DiscoverProductPage,
   DiscoverWishlistPage,
   DisputeEvidencePage,
   DownloadPageWithContent,
@@ -69,13 +64,10 @@ ReactOnRails.register({
   PdfReaderPage,
   Pill,
   ProductEditPage,
-  ProductIframePage,
   PurchaseProductPage,
-  ProductPage,
   Profile,
   ProfileCoffeePage,
   ProfilePostPage,
-  ProfileProductPage,
   ProfileWishlistPage,
   SecureRedirectPage,
   SubscribePage,

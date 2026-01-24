@@ -7,7 +7,7 @@ import { Product, useSelectionFromUrl, Props as ProductProps } from "$app/compon
 import { useElementDimensions } from "$app/components/useElementDimensions";
 import { useRunOnce } from "$app/components/useRunOnce";
 
-import { ProductPageHead, ProductPageMeta, ProductPageNoScript } from "$app/pages/Products/ProductPageHead";
+import { ProductPageAlert, ProductPageHead, ProductPageMeta, ProductPageNoScript } from "$app/pages/Products/ProductPageHead";
 
 type IframeProductShowPageProps = {
   product: ProductProps;
@@ -33,6 +33,7 @@ const IframeProductShowPage = () => {
     <>
       <ProductPageHead meta={meta} title={title} />
       <ProductPageNoScript />
+      <ProductPageAlert />
       <div>
         <div ref={mainRef}>
           <section>

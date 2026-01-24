@@ -1,6 +1,8 @@
 import { Head } from "@inertiajs/react";
 import * as React from "react";
 
+import ToastAlert from "$app/components/server-components/Alert";
+
 export type ProductPageMeta = {
   canonical: string;
   structured_data: unknown[] | null;
@@ -35,3 +37,5 @@ export const ProductPageNoScript = () => (
     </div>
   </noscript>
 );
+
+export const ProductPageAlert = () => <ToastAlert initial={null} />;

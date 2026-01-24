@@ -5,7 +5,7 @@ import { cast } from "ts-safe-cast";
 import { Layout as ProductLayout, Props as ProductLayoutProps } from "$app/components/Product/Layout";
 import { Layout as ProfileLayout } from "$app/components/Profile/Layout";
 
-import { ProductPageHead, ProductPageMeta, ProductPageNoScript } from "$app/pages/Products/ProductPageHead";
+import { ProductPageAlert, ProductPageHead, ProductPageMeta, ProductPageNoScript } from "$app/pages/Products/ProductPageHead";
 
 type ProfileProductShowPageProps = {
   product: ProductLayoutProps;
@@ -20,6 +20,7 @@ const ProfileProductShowPage = () => {
     <>
       <ProductPageHead meta={meta} title={title} />
       <ProductPageNoScript />
+      <ProductPageAlert />
       <ProfileLayout creatorProfile={product.creator_profile}>
         <ProductLayout cart {...product} />
       </ProfileLayout>
