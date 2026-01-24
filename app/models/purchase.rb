@@ -71,6 +71,7 @@ class Purchase < ApplicationRecord
   attr_json_data_accessor :perceived_price_cents
   attr_json_data_accessor :recommender_model_name
   attr_json_data_accessor :custom_fee_per_thousand
+  attr_json_data_accessor :last_content_page_id
   attr_json_data_accessor :default_offer_code_id
 
   alias_attribute :total_transaction_cents_usd, :total_transaction_cents
