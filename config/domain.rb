@@ -53,21 +53,23 @@ configuration_by_env = {
     anycable_host: "cable.test.gumroad.com",
   },
   development: {
-    protocol: "https",
-    domain: "gumroad.dev",
-    asset_domain: "app.gumroad.dev",
-    root_domain: "gumroad.dev",
-    short_domain: "short-domain.gumroad.dev",
-    discover_domain: "gumroad.dev",
-    api_domain: "api.gumroad.dev",
-    third_party_analytics_domain: "analytics.gumroad.dev",
-    valid_request_hosts: ["app.gumroad.dev", "gumroad.dev"],
-    valid_api_request_hosts: ["api.gumroad.dev"],
-    valid_discover_host: "gumroad.dev",
+    # Default to plain HTTP on localhost (no local SSL/certs required).
+    protocol: "http",
+    domain: "localhost:3000",
+    asset_domain: "localhost:3000",
+    root_domain: "localhost:3000",
+    # Use a distinct short-domain so the host constraint doesn't loop redirects.
+    short_domain: "short.localhost",
+    discover_domain: "localhost:3000",
+    api_domain: "localhost:3000",
+    third_party_analytics_domain: "localhost:3000",
+    valid_request_hosts: ["localhost", "127.0.0.1", "short.localhost"],
+    valid_api_request_hosts: ["localhost", "127.0.0.1"],
+    valid_discover_host: "localhost",
     valid_cors_origins: [],
     internal_gumroad_domain: "internal.gumroad.dev",
     default_email_domain: "staging.gumroad.com",
-    anycable_host: "cable.gumroad.dev",
+    anycable_host: "localhost",
   }
 }
 

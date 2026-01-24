@@ -165,6 +165,8 @@ App can be booted without any custom credentials. But if you would like to use s
 
 #### Local SSL Certificates
 
+> Note: Local SSL is optional. By default, `bin/dev` runs on plain HTTP at `http://localhost:3000`.
+
 1. Install mkcert on macOS:
 
 ```shell
@@ -212,7 +214,7 @@ bin/dev
 
 This starts the Rails server, the JavaScript build system, and a Sidekiq worker.
 
-You can now access the application at `https://gumroad.dev`.
+You can now access the application at `http://localhost:3000`.
 
 ## Development
 

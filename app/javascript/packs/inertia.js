@@ -15,6 +15,9 @@ router.on("before", (event) => {
     };
   }
 
+
+  console.log("before", event.detail.visit);
+
   // Track previous route for navigation (only for GET requests)
   const method = event.detail.visit.method?.toLowerCase() || "get";
   if (method === "get") {
