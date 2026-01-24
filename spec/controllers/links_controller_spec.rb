@@ -202,13 +202,12 @@ describe LinksController, :vcr, inertia: true do
         let(:request_params) { { id: product.unique_permalink } }
       end
 
-      it "assigns the correct instance variables" do
+      it "renders the Products/Edit component with correct props" do
         get :edit, params: { id: product.unique_permalink }
         expect(response).to be_successful
 
-        product_presenter = assigns(:presenter)
-        expect(product_presenter.product).to eq(product)
-        expect(product_presenter.pundit_user).to eq(controller.pundit_user)
+        expect(inertia).to render_component("Products/Edit")
+        expect(inertia.props).to include(:product, :id, :unique_permalink)
       end
 
       context "with other user not owning the product" do
