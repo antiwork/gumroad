@@ -1,12 +1,12 @@
+import { usePage } from "@inertiajs/react";
 import { EditorContent } from "@tiptap/react";
-import { parseISO } from "date-fns";
 import * as React from "react";
-import { createCast } from "ts-safe-cast";
+import { cast } from "ts-safe-cast";
 
 import { PaginatedComments } from "$app/data/comments";
 import { incrementPostViews } from "$app/data/view_event";
 import { CreatorProfile } from "$app/parsers/profile";
-import { register } from "$app/utils/serverComponentUtil";
+import { formatPostDate } from "$app/utils/formatPostDate";
 
 import { Button } from "$app/components/Button";
 import { Icon } from "$app/components/Icons";
@@ -16,10 +16,6 @@ import { Layout } from "$app/components/Profile/Layout";
 import { useRichTextEditor } from "$app/components/RichTextEditor";
 import { useUserAgentInfo } from "$app/components/UserAgent";
 import { useRunOnce } from "$app/components/useRunOnce";
-
-const dateFormatOptions: Intl.DateTimeFormatOptions = { month: "long", day: "numeric", year: "numeric" };
-export const formatPostDate = (date: string | null, locale: string): string =>
-  (date ? parseISO(date) : new Date()).toLocaleDateString(locale, dateFormatOptions);
 
 type Props = {
   subject: string;
@@ -43,20 +39,22 @@ type Props = {
   creator_profile: CreatorProfile;
 };
 
-const PostPage = ({
-  subject,
-  external_id,
-  purchase_id,
-  published_at,
-  message,
-  call_to_action,
-  download_url,
-  has_posts_on_profile,
-  recent_posts,
-  paginated_comments,
-  comments_max_allowed_depth,
-  creator_profile,
-}: Props) => {
+function PostShowPage() {
+  const {
+    subject,
+    external_id,
+    purchase_id,
+    published_at,
+    message,
+    call_to_action,
+    download_url,
+    has_posts_on_profile,
+    recent_posts,
+    paginated_comments,
+    comments_max_allowed_depth,
+    creator_profile,
+  } = cast<Props>(usePage().props);
+
   const userAgentInfo = useUserAgentInfo();
   const [pageLoaded, setPageLoaded] = React.useState(false);
   React.useEffect(() => setPageLoaded(true), []);
@@ -148,6 +146,7 @@ const PostPage = ({
       ) : null}
     </Layout>
   );
-};
+}
 
-export default register({ component: PostPage, propParser: createCast() });
+PostShowPage.loggedInUserLayout = true;
+export default PostShowPage;

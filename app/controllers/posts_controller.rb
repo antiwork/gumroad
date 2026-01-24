@@ -2,6 +2,9 @@
 
 class PostsController < ApplicationController
   include CustomDomainConfig
+  include InertiaRendering
+
+  layout "inertia", only: [:show]
 
   before_action :authenticate_user!, only: %i[send_for_purchase]
   after_action :verify_authorized, only: %i[send_for_purchase]
@@ -15,11 +18,7 @@ class PostsController < ApplicationController
     @post || fetch_post(false)
 
     @title = "#{@post.name} - #{@post.user.name_or_username}"
-    @hide_layouts = true
     @show_user_favicon = true
-    @body_class = "post-page"
-    @body_id = "post_page"
-
     @on_posts_page = true
 
     # Set @user instance variable to apply third-party analytics config in layouts/_head partial.
@@ -40,6 +39,8 @@ class PostsController < ApplicationController
     end
 
     e404 if @post_presenter.e404?
+
+    render inertia: "Posts/Show", props: @post_presenter.post_component_props
   end
 
   def redirect_from_purchase_id
