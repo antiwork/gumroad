@@ -6,7 +6,7 @@ import { Community, CommunityChatMessage } from "$app/data/communities";
 import { ChatMessage } from "./ChatMessage";
 import { scrollTo } from "./CommunityView";
 import { DateSeparator, UnreadSeparator } from "./Separator";
-import { CommunityChat } from "./useCommunities";
+import { CommunityChat } from "../CommunitiesContext";
 
 type ChatMessageListProps = {
   community: Community;
@@ -148,7 +148,7 @@ export const ChatMessageList = ({
       >
         {data.nextOlderTimestamp === null ? (
           <div className="px-6 pt-8">
-            <div className="mb-2 text-3xl">👋</div>
+            <div className="mb-2 text-3xl">&#128075;</div>
             <h2 className="mb-2 text-xl font-bold">Welcome to {community.name}</h2>
             <p className="text-sm text-gray-500">This is the start of this community chat.</p>
           </div>

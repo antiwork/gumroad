@@ -1,6 +1,4 @@
 import * as React from "react";
-import { useLoaderData } from "react-router-dom";
-import { cast } from "ts-safe-cast";
 
 import { Community, CommunityChatMessage, CommunityNotificationSettings } from "$app/data/communities";
 import { assertDefined } from "$app/utils/assert";
@@ -17,24 +15,51 @@ export type CommunityChat = {
   isLoading: boolean;
 };
 
+type CommunitiesContextType = {
+  hasProducts: boolean;
+  communities: Community[];
+  notificationSettings: CommunityNotificationSettings;
+  selectedCommunity: Community | undefined;
+  selectedCommunityDraft: CommunityDraft | null;
+  selectedCommunityChat: CommunityChat | null;
+  updateCommunity: (communityId: string, value: Partial<Omit<Community, "id" | "seller">>) => void;
+  setSelectedCommunityId: (id: string | null) => void;
+  setNotificationSettings: React.Dispatch<React.SetStateAction<CommunityNotificationSettings>>;
+  updateCommunityDraft: (communityId: string, value: Partial<CommunityDraft>) => void;
+  updateCommunityChat: (
+    communityId: string,
+    value: Partial<CommunityChat> | ((prev: CommunityChat) => Partial<CommunityChat>),
+    options: { messagesUpdateStrategy: "replace" | "merge" },
+  ) => void;
+};
+
+type CommunitiesProviderProps = {
+  initialData: {
+    has_products: boolean;
+    communities: Community[];
+    notification_settings: CommunityNotificationSettings;
+    selected_seller_id: string | null;
+    selected_community_id: string | null;
+  };
+  children: React.ReactNode;
+};
+
 const sortByCreatedAt = <T extends { created_at: string }>(items: readonly T[]) =>
   [...items].sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime());
 
 const sortByName = <T extends { name: string }>(items: readonly T[]) =>
   [...items].sort((a, b) => a.name.localeCompare(b.name));
 
-export const useCommunities = () => {
-  const data = cast<{
-    has_products: boolean;
-    communities: Community[];
-    notification_settings: CommunityNotificationSettings;
-    selectedCommunityId?: string;
-  }>(useLoaderData());
-  const [communities, setCommunities] = React.useState<Community[]>(sortByName(data.communities));
+export const CommunitiesContext = React.createContext<CommunitiesContextType | null>(null);
+
+export const CommunitiesProvider = ({ initialData, children }: CommunitiesProviderProps) => {
+  const [communities, setCommunities] = React.useState<Community[]>(sortByName(initialData.communities));
   const [notificationSettings, setNotificationSettings] = React.useState<CommunityNotificationSettings>(
-    data.notification_settings,
+    initialData.notification_settings,
   );
-  const [selectedCommunityId, setSelectedCommunityId] = React.useState<string | null>(data.selectedCommunityId ?? null);
+  const [selectedCommunityId, setSelectedCommunityId] = React.useState<string | null>(
+    initialData.selected_community_id ?? null,
+  );
   const [communityDrafts, setCommunityDrafts] = React.useState<Record<string, CommunityDraft>>({});
   const [communityChats, setCommunityChats] = React.useState<Record<string, CommunityChat>>({});
 
@@ -114,38 +139,53 @@ export const useCommunities = () => {
     [],
   );
 
-  React.useEffect(() => {
-    setSelectedCommunityId(data.selectedCommunityId ?? null);
-    setCommunities(sortByName(data.communities));
-    setNotificationSettings(data.notification_settings);
-  }, [data]);
-
   const selectedCommunity = React.useMemo(
     () => communities.find((community) => community.id === selectedCommunityId),
     [communities, selectedCommunityId],
   );
 
   const selectedCommunityDraft = React.useMemo(
-    () => (selectedCommunity ? communityDrafts[selectedCommunity.id] : null),
+    () => (selectedCommunity ? (communityDrafts[selectedCommunity.id] ?? null) : null),
     [communityDrafts, selectedCommunity],
   );
 
   const selectedCommunityChat = React.useMemo(
-    () => (selectedCommunity ? communityChats[selectedCommunity.id] : null),
+    () => (selectedCommunity ? (communityChats[selectedCommunity.id] ?? null) : null),
     [communityChats, selectedCommunity],
   );
 
-  return {
-    hasProducts: data.has_products,
-    communities,
-    notificationSettings,
-    selectedCommunity,
-    selectedCommunityDraft,
-    selectedCommunityChat,
-    updateCommunity,
-    setSelectedCommunityId,
-    setNotificationSettings,
-    updateCommunityDraft,
-    updateCommunityChat,
-  };
+  const contextValue = React.useMemo(
+    () => ({
+      hasProducts: initialData.has_products,
+      communities,
+      notificationSettings,
+      selectedCommunity,
+      selectedCommunityDraft,
+      selectedCommunityChat,
+      updateCommunity,
+      setSelectedCommunityId,
+      setNotificationSettings,
+      updateCommunityDraft,
+      updateCommunityChat,
+    }),
+    [
+      initialData.has_products,
+      communities,
+      notificationSettings,
+      selectedCommunity,
+      selectedCommunityDraft,
+      selectedCommunityChat,
+      updateCommunity,
+      updateCommunityDraft,
+      updateCommunityChat,
+    ],
+  );
+
+  return <CommunitiesContext.Provider value={contextValue}>{children}</CommunitiesContext.Provider>;
+};
+
+export const useCommunities = () => {
+  const context = React.useContext(CommunitiesContext);
+  if (!context) throw new Error("useCommunities must be used within CommunitiesProvider");
+  return context;
 };

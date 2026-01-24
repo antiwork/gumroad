@@ -3,12 +3,18 @@
 class CommunitiesController < ApplicationController
   before_action :authenticate_user!
   after_action :verify_authorized
-  before_action :set_body_id_as_app
+
+  layout "inertia"
 
   def index
-    @hide_layouts = true
-
     authorize Community
+
+    presenter = CommunitiesPresenter.new(current_user: current_seller)
+    render inertia: "Communities/Index", props: {
+      **presenter.props,
+      selected_seller_id: params[:seller_id],
+      selected_community_id: params[:community_id]
+    }
   end
 
   private

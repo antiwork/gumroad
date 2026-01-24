@@ -3,8 +3,9 @@
 require "spec_helper"
 require "shared_examples/sellers_base_controller_concern"
 require "shared_examples/authorize_called"
+require "inertia_rails/rspec"
 
-describe CommunitiesController do
+describe CommunitiesController, inertia: true do
   let(:seller) { create(:user) }
   let(:pundit_user) { SellerContext.new(user: seller, seller:) }
   let(:product) { create(:product, user: seller, community_chat_enabled: true) }
@@ -26,10 +27,19 @@ describe CommunitiesController do
         sign_in seller
       end
 
-      it "renders the page" do
+      it "renders Communities/Index with Inertia" do
         get :index
         expect(response).to be_successful
-        expect(assigns(:title)).to eq("Communities")
+        expect(inertia.component).to eq("Communities/Index")
+        expect(inertia.props[:communities]).to be_an(Array)
+        expect(inertia.props[:has_products]).to be_in([true, false])
+        expect(inertia.props[:notification_settings]).to be_a(Hash)
+      end
+
+      it "passes selected params when provided" do
+        get :index, params: { seller_id: "abc", community_id: "xyz" }
+        expect(inertia.props[:selected_seller_id]).to eq("abc")
+        expect(inertia.props[:selected_community_id]).to eq("xyz")
       end
 
       it "returns unauthorized response if the :communities feature flag is disabled" do

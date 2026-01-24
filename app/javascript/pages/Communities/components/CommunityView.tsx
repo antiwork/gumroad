@@ -39,7 +39,7 @@ import { ChatMessageList } from "./ChatMessageList";
 import { CommunityList } from "./CommunityList";
 import { ScrollToBottomButton } from "./ScrollToBottomButton";
 import { DateSeparator } from "./Separator";
-import { useCommunities } from "./useCommunities";
+import { useCommunities } from "../CommunitiesContext";
 import { UserAvatar } from "./UserAvatar";
 
 import placeholderImage from "$assets/images/placeholders/community.png";
