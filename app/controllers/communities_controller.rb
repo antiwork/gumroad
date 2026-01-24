@@ -27,7 +27,7 @@ class CommunitiesController < ApplicationController
     end
 
     def set_community
-      external_id = params[:id] || params[:community_iid]
+      external_id = params[:id] || params[:community_id]
       @community = Community.find_by_external_id(external_id)
       return head :not_found unless @community
 

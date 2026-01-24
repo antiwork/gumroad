@@ -2,7 +2,7 @@ import { Channel } from "@anycable/web";
 import cx from "classnames";
 import { debounce } from "lodash-es";
 import * as React from "react";
-import { useNavigate, useLocation } from "react-router-dom";
+import { router } from "@inertiajs/react";
 import { is } from "ts-safe-cast";
 
 import cable from "$app/channels/consumer";
@@ -114,8 +114,6 @@ const getComparedTimestamp = (
 export const CommunityView = () => {
   const currentSeller = useCurrentSeller();
   const isAboveBreakpoint = useIsAboveBreakpoint("lg");
-  const navigate = useNavigate();
-  const location = useLocation();
   const {
     hasProducts,
     communities,
@@ -148,15 +146,15 @@ export const CommunityView = () => {
 
   React.useEffect(() => {
     if (selectedCommunity) {
-      const searchParams = new URLSearchParams(location.search);
+      const searchParams = new URLSearchParams(window.location.search);
       if (searchParams.has("notifications")) {
         searchParams.delete("notifications");
         const newSearch = searchParams.toString() ? `?${searchParams.toString()}` : "";
-        navigate(`${location.pathname}${newSearch}${location.hash}`, { replace: true });
+        router.visit(`${window.location.pathname}${newSearch}${window.location.hash}`, { replace: true });
         setShowNotificationsSettings(true);
       }
     }
-  }, [selectedCommunity, location, navigate]);
+  }, [selectedCommunity]);
 
   const debouncedMarkAsRead = React.useMemo(
     () =>
@@ -492,7 +490,7 @@ export const CommunityView = () => {
     const community = communities.find((community) => community.seller.id === sellerId);
     if (community) {
       setSelectedCommunityId(community.id);
-      navigate(`/communities/${community.seller.id}/${community.id}`);
+      router.visit(`/communities/${community.seller.id}/${community.id}`);
       setSwitcherOpen(false);
     }
   };
