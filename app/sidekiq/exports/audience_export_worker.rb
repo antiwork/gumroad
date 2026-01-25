@@ -11,7 +11,7 @@ class Exports::AudienceExportWorker
     export = AudienceExport.create!(
       seller:,
       recipient:,
-      options: audience_options
+      audience_options:
     )
 
     Exports::Audience::CreateAndEnqueueChunksWorker.perform_async(export.id)

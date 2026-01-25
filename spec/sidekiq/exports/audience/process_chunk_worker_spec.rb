@@ -4,7 +4,7 @@ require "spec_helper"
 
 describe Exports::Audience::ProcessChunkWorker do
   let(:seller) { create(:user) }
-  let!(:export) { create(:audience_export, seller:, options: { followers: true }) }
+  let!(:export) { create(:audience_export, seller:, audience_options: { followers: true }) }
 
   before do
     @worker = described_class.new

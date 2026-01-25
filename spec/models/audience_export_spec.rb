@@ -10,14 +10,14 @@ describe AudienceExport do
   end
 
   describe "validations" do
-    it { is_expected.to validate_presence_of(:options) }
+    it { is_expected.to validate_presence_of(:audience_options) }
   end
 
   describe "serialization" do
-    it "serializes options as YAML" do
-      export = create(:audience_export, options: { followers: true, customers: true })
+    it "serializes audience_options as YAML" do
+      export = create(:audience_export, audience_options: { followers: true, customers: true })
       export.reload
-      expect(export.options).to eq({ followers: true, customers: true })
+      expect(export.audience_options).to eq({ followers: true, customers: true })
     end
   end
 end

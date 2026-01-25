@@ -4,6 +4,6 @@ FactoryBot.define do
   factory :audience_export do
     association :seller, factory: :user
     association :recipient, factory: :user
-    options { { followers: true } }
+    audience_options { { followers: true } }
   end
 end

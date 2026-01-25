@@ -6,7 +6,6 @@ class AudienceExport < ApplicationRecord
   # We use :delete_all instead of :destroy to prevent needlessly loading
   # a lot of data in memory (column `audience_data`).
   has_many :chunks, class_name: "AudienceExportChunk", foreign_key: :export_id, dependent: :delete_all
-  serialize :options, type: Hash, coder: YAML
-  validates_presence_of :options
+  serialize :audience_options, type: Hash, coder: YAML
+  validates_presence_of :audience_options
 end
-

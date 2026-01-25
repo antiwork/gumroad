@@ -14,7 +14,7 @@ describe Exports::AudienceExportWorker do
       export = AudienceExport.last
       expect(export.seller).to eq(seller)
       expect(export.recipient).to eq(seller)
-      expect(export.options).to eq(audience_options)
+      expect(export.audience_options).to eq(audience_options)
     end
 
     it "creates an AudienceExport with separate recipient" do

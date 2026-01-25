@@ -160,7 +160,7 @@ ActiveRecord::Schema[7.1].define(version: 2026_11_19_011936) do
   create_table "audience_exports", charset: "utf8mb4", collation: "utf8mb4_unicode_ci", force: :cascade do |t|
     t.bigint "seller_id", null: false
     t.bigint "recipient_id", null: false
-    t.text "options"
+    t.text "audience_options"
     t.datetime "created_at", null: false
     t.datetime "updated_at", null: false
     t.index ["recipient_id"], name: "index_audience_exports_on_recipient_id"

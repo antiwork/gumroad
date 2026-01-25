@@ -20,8 +20,7 @@ class Exports::Audience::CreateAndEnqueueChunksWorker
       # Delete stale chunks if this job is being retried.
       @export.chunks.in_batches(of: 1).delete_all
 
-      query = build_query
-      query.select(:id).find_in_batches(batch_size: MAX_MEMBERS_PER_CHUNK) do |batch|
+      build_query.find_in_batches(batch_size: MAX_MEMBERS_PER_CHUNK) do |batch|
         @export.chunks.create!(audience_member_ids: batch.map(&:id))
       end
     end
@@ -31,15 +30,14 @@ class Exports::Audience::CreateAndEnqueueChunksWorker
     end
 
     def build_query
-      options = @export.options.with_indifferent_access
-      query = @export.seller.audience_members
+      seller = @export.seller
+      options = @export.audience_options.with_indifferent_access
 
       conditions = []
       conditions << "follower = true" if options[:followers]
       conditions << "customer = true" if options[:customers]
       conditions << "affiliate = true" if options[:affiliates]
 
-      query.where(conditions.join(" OR ")).order(:min_created_at)
+      seller.audience_members.select(:id).where(conditions.join(" OR ")).order(:min_created_at)
     end
 end
-

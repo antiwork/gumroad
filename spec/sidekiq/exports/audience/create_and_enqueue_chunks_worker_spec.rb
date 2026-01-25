@@ -13,7 +13,7 @@ describe Exports::Audience::CreateAndEnqueueChunksWorker do
   end
 
   describe "#perform" do
-    let!(:export) { create(:audience_export, seller:, options: { followers: true }) }
+    let!(:export) { create(:audience_export, seller:, audience_options: { followers: true }) }
 
     it "creates and enqueues a job for each generated chunk" do
       described_class.new.perform(export.id)
@@ -42,7 +42,7 @@ describe Exports::Audience::CreateAndEnqueueChunksWorker do
     context "with multiple audience types" do
       let(:product) { create(:product, user: seller, name: "Product 1") }
       let!(:customer) { create(:free_purchase, seller:, link: product, created_at: 5.days.ago) }
-      let!(:export) { create(:audience_export, seller:, options: { followers: true, customers: true }) }
+      let!(:export) { create(:audience_export, seller:, audience_options: { followers: true, customers: true }) }
 
       it "includes all selected audience types" do
         described_class.new.perform(export.id)

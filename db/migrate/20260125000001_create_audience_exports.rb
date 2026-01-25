@@ -5,7 +5,7 @@ class CreateAudienceExports < ActiveRecord::Migration[7.1]
     create_table :audience_exports do |t|
       t.bigint :seller_id, null: false, index: true
       t.bigint :recipient_id, null: false, index: true
-      t.text :options
+      t.text :audience_options
       t.timestamps
     end
   end
