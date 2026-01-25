@@ -150,7 +150,7 @@ export const CommunityView = () => {
       if (searchParams.has("notifications")) {
         searchParams.delete("notifications");
         const newSearch = searchParams.toString() ? `?${searchParams.toString()}` : "";
-        router.get(`${window.location.pathname}${newSearch}${window.location.hash}`, { replace: true });
+        router.replace({ url: `${window.location.pathname}${newSearch}${window.location.hash}`, preserveState: true, preserveScroll: true });
         setShowNotificationsSettings(true);
       }
     }
