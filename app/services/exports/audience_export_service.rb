@@ -18,16 +18,9 @@ class Exports::AudienceExportService
     @tempfile = Tempfile.new(["Subscribers", ".csv"], encoding: "UTF-8")
 
     CsvSafe.open(@tempfile, "wb", headers: FIELDS, write_headers: true) do |csv|
-      query = @user.audience_members.select(:id, :email, :min_created_at)
+      query = build_query
 
-      conditions = []
-      conditions << "follower = true" if @options[:followers]
-      conditions << "customer = true" if @options[:customers]
-      conditions << "affiliate = true" if @options[:affiliates]
-
-      query = query.where(conditions.join(" OR "))
-
-      query.order(:min_created_at).find_each do |member|
+      query.find_each do |member|
         csv << [member.email, member.min_created_at]
       end
     end
@@ -36,6 +29,22 @@ class Exports::AudienceExportService
 
     self
   end
+
+  def build_query
+    # NOTE: Build separate queries for each type to allow efficient index usage using UNION.
+    queries = []
+    queries << @user.audience_members.where(follower: true) if @options[:followers]
+    queries << @user.audience_members.where(customer: true) if @options[:customers]
+    queries << @user.audience_members.where(affiliate: true) if @options[:affiliates]
+
+    return AudienceMember.none if queries.empty?
+
+    union_sql = queries.map { |q| q.select(:id, :email, :min_created_at).to_sql }.join(" UNION ")
+
+    # NOTE: Wrap in subquery to allow ordering.
+    AudienceMember.from("(#{union_sql}) AS audience_members").order(:min_created_at)
+  end
+
 
   private
     def validate_options!
