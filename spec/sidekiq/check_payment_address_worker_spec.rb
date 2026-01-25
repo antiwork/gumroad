@@ -23,7 +23,7 @@ describe CheckPaymentAddressWorker do
 
       expect(user.reload.flagged?).to be(true)
       comment = user.comments.where(author_name: CheckPaymentAddressWorker::CHECK_PAYMENT_ADDRESS_AUTHOR_NAME).last
-      actual_uids = User.where(payment_address: "tuhins@gmail.com").with_user_risk_state(:suspended_for_fraud).order(created_at: :desc).pluck(:external_id)
+      actual_uids = User.where(payment_address: "tuhins@gmail.com").with_user_risk_state(:suspended_for_fraud).order(updated_at: :desc).pluck(:external_id)
       expect(comment.content).to eq("Flagged for fraud automatically on #{CheckPaymentAddressWorker.formatted_date} because of usage of payment address tuhins@gmail.com (from suspended for fraud Users #{CheckPaymentAddressWorker.format_uids(actual_uids)})")
     end
 
@@ -46,7 +46,7 @@ describe CheckPaymentAddressWorker do
       expect(user.reload.flagged?).to be(true)
       expect(user.on_probation?).to be(false)
       comment = user.comments.where(author_name: CheckPaymentAddressWorker::CHECK_PAYMENT_ADDRESS_AUTHOR_NAME).last
-      actual_fraud_uids = User.where(payment_address: "tuhins@gmail.com").with_user_risk_state(:suspended_for_fraud).order(created_at: :desc).pluck(:external_id)
+      actual_fraud_uids = User.where(payment_address: "tuhins@gmail.com").with_user_risk_state(:suspended_for_fraud).order(updated_at: :desc).pluck(:external_id)
       expect(comment.content).to eq("Flagged for fraud automatically on #{CheckPaymentAddressWorker.formatted_date} because of usage of payment address tuhins@gmail.com (from suspended for fraud User #{CheckPaymentAddressWorker.format_uids(actual_fraud_uids)})")
     end
 
@@ -79,7 +79,7 @@ describe CheckPaymentAddressWorker do
 
       expect(user.reload.on_probation?).to be(true)
       comment = user.comments.where(author_name: CheckPaymentAddressWorker::CHECK_PAYMENT_ADDRESS_AUTHOR_NAME).last
-      actual_uids = User.where(payment_address: "tos@example.com").with_user_risk_state(:suspended_for_tos_violation).order(created_at: :desc).pluck(:external_id)
+      actual_uids = User.where(payment_address: "tos@example.com").with_user_risk_state(:suspended_for_tos_violation).order(updated_at: :desc).pluck(:external_id)
       expect(comment.content).to eq("Probated (payouts suspended) automatically on #{CheckPaymentAddressWorker.formatted_date} because of usage of payment address tos@example.com (from suspended for TOS violation Users #{CheckPaymentAddressWorker.format_uids(actual_uids)})")
     end
   end

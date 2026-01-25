@@ -14,7 +14,7 @@ class CheckPaymentAddressWorker
     banned_accounts_with_same_payment_address = User.where(
       payment_address: user.payment_address,
       user_risk_state: ["suspended_for_tos_violation", "suspended_for_fraud"]
-    ).order(created_at: :desc) # Ordered by created_at descending so that support can backtrace accounts causing the issue in reverse chronological order
+    ).order(updated_at: :desc) # Ordered by updated_at descending so that support can backtrace accounts by most recent activity in reverse chronological order
 
     blocked_email = BlockedObject.find_active_object(user.payment_address)
 
