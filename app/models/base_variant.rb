@@ -203,7 +203,7 @@ class BaseVariant < ApplicationRecord
 
     def update_product_search_index
       if link.present? && saved_change_to_price_difference_cents?
-        link.enqueue_index_update_for(["available_price_cents"])
+        link.enqueue_index_update_for(["available_price_cents", "available_price_usd_cents"])
       end
     end
 

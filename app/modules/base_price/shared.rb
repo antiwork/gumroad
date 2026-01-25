@@ -42,7 +42,7 @@ module BasePrice::Shared
     prices_to_delete = prices.alive.where(recurrence: recurrences_to_delete)
     prices_to_delete.map(&:mark_deleted!)
 
-    enqueue_index_update_for(["price_cents", "available_price_cents"]) if prices_to_delete.any?
+    enqueue_index_update_for(["price_cents", "available_price_cents", "available_price_usd_cents"]) if prices_to_delete.any?
 
     save!
   end
@@ -94,7 +94,7 @@ module BasePrice::Shared
 
         if changed
           alive_prices.reset
-          enqueue_index_update_for(["price_cents", "available_price_cents"])
+          enqueue_index_update_for(["price_cents", "available_price_cents", "available_price_usd_cents"])
         end
       end
     end
