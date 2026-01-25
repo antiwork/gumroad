@@ -53,7 +53,7 @@ export const ProductsDashboardPage = ({
       archivedTabVisible={enableArchiveTab}
       ctaButton={
         <>
-          {products.length > 0 ? (
+          {products.length > 0 || memberships.length > 0 ? (
             <Popover
               open={isSearchPopoverOpen}
               onToggle={setIsSearchPopoverOpen}
@@ -86,35 +86,34 @@ export const ProductsDashboardPage = ({
       }
     >
       <section className="p-4 md:p-8">
-        {memberships.length === 0 && products.length === 0 ? (
-          <Placeholder>
-            <PlaceholderImage src={placeholder} />
-            <h2>We’ve never met an idea we didn’t like.</h2>
-            <p>Your first product doesn’t need to be perfect. Just put it out there, and see if it sticks.</p>
-            <div>
-              <NavigationButtonInertia href={Routes.new_product_path()} disabled={!canCreateProduct} color="accent">
-                New product
-              </NavigationButtonInertia>
-            </div>
-            <span>
-              or{" "}
-              <a href="/help/article/304-products-dashboard" target="_blank" rel="noreferrer">
-                learn more about the products dashboard
-              </a>
-            </span>
-          </Placeholder>
-        ) : (
-          <ProductsPage
-            memberships={memberships}
-            membershipsPagination={membershipsPagination}
-            membershipsSort={membershipsSort}
-            products={products}
-            productsPagination={productsPagination}
-            productsSort={productsSort}
-            query={query}
-            setEnableArchiveTab={setEnableArchiveTab}
-          />
-        )}
+        <ProductsPage
+          memberships={memberships}
+          membershipsPagination={membershipsPagination}
+          membershipsSort={membershipsSort}
+          products={products}
+          productsPagination={productsPagination}
+          productsSort={productsSort}
+          query={query}
+          setEnableArchiveTab={setEnableArchiveTab}
+          emptyPlaceholder={
+            <Placeholder>
+              <PlaceholderImage src={placeholder} />
+              <h2>We've never met an idea we didn't like.</h2>
+              <p>Your first product doesn't need to be perfect. Just put it out there, and see if it sticks.</p>
+              <div>
+                <NavigationButtonInertia href={Routes.new_product_path()} disabled={!canCreateProduct} color="accent">
+                  New product
+                </NavigationButtonInertia>
+              </div>
+              <span>
+                or{" "}
+                <a href="/help/article/304-products-dashboard" target="_blank" rel="noreferrer">
+                  learn more about the products dashboard
+                </a>
+              </span>
+            </Placeholder>
+          }
+        />
       </section>
     </ProductsLayout>
   );

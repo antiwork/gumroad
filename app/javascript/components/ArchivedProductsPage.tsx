@@ -9,6 +9,7 @@ import { PaginationProps } from "$app/components/Pagination";
 import { Popover } from "$app/components/Popover";
 import { ProductsLayout } from "$app/components/ProductsLayout";
 import ProductsPage from "$app/components/ProductsPage";
+import { Placeholder } from "$app/components/ui/Placeholder";
 import { Sort } from "$app/components/useSortingTableDriver";
 import { WithTooltip } from "$app/components/WithTooltip";
 
@@ -85,6 +86,17 @@ export const ArchivedProductsPage = ({
           productsSort={productsSort}
           query={query}
           type="archived"
+          emptyPlaceholder={
+            <Placeholder>
+              <h2>No archived products</h2>
+              <p>Products you archive will appear here.</p>
+              <div>
+                <NavigationButtonInertia href={Routes.products_path()} color="accent">
+                  Back to products
+                </NavigationButtonInertia>
+              </div>
+            </Placeholder>
+          }
         />
       </section>
     </ProductsLayout>
