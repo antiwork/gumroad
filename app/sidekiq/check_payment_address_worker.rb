@@ -2,7 +2,6 @@
 
 class CheckPaymentAddressWorker
   include Sidekiq::Job
-
   sidekiq_options retry: 0, queue: :default
 
   CHECK_PAYMENT_ADDRESS_AUTHOR_NAME = "CheckPaymentAddress"
