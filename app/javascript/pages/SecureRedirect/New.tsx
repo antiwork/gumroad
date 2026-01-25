@@ -41,7 +41,7 @@ function SecureRedirectNew() {
   };
 
   return (
-    <>
+    <div className="flex h-full flex-col">
       <Card className="single-page-form horizontal-form">
         <CardContent asChild>
           <header>
@@ -75,10 +75,13 @@ function SecureRedirectNew() {
           </form>
         </CardContent>
       </Card>
-      <footer className="text-subdued mt-8 text-center">
-        Powered by <strong>Gumroad</strong>
+      <footer className="text-subdued mt-auto pb-4 text-center">
+        Powered by{" "}
+        <span className="logo-full" aria-label="Gumroad">
+          Gumroad
+        </span>
       </footer>
-    </>
+    </div>
   );
 }
 
