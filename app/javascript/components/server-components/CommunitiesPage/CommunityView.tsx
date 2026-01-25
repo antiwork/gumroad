@@ -515,7 +515,7 @@ export const CommunityView = () => {
 
     const community = communities.find((community) => community.id === communityId);
     if (!community) return;
-    window.location.replace(`/communities/${community.seller.id}/${community.id}`);
+    router.get(`/communities/${community.seller.id}/${community.id}`);
   });
 
   const sellers = React.useMemo(() => {
@@ -837,9 +837,10 @@ const GoBackHeader = () => {
   const handleGoBack = (e: React.MouseEvent) => {
     e.preventDefault();
     const referrerUrl = new URL(document.referrer.trim() !== "" ? document.referrer : Routes.dashboard_url());
-    window.location.href = referrerUrl.pathname.startsWith("/communities")
+    const targetUrl = referrerUrl.pathname.startsWith("/communities")
       ? Routes.dashboard_path()
       : referrerUrl.toString();
+    router.visit(targetUrl);
   };
 
   return (
