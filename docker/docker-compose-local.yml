@@ -42,6 +42,12 @@ services:
 
       ANYCABLE_HOST: 0.0.0.0
       SHAKAPACKER_DEV_SERVER_HOST: 0.0.0.0
+
+      AWS_S3_ENDPOINT: https://minio.gumroad.dev
+      AWS_ACCESS_KEY_ID: minioadmin
+      AWS_SECRET_ACCESS_KEY: minioadmin
+      S3_DELETER_ACCESS_KEY_ID: minioadmin
+      S3_DELETER_SECRET_ACCESS_KEY: minioadmin
     volumes:
       - ..:/workspace
       - bundle:/bundle_path
@@ -209,6 +215,10 @@ services:
     restart: unless-stopped
     depends_on:
       app: *service_healthy
+    networks:
+      default:
+        aliases:
+          - minio.gumroad.dev
     volumes:
       - ./local-nginx/gumroad_dev.conf:/etc/nginx/conf.d/default.conf:Z
       - ./local-nginx/helperai_dev.conf:/etc/nginx/conf.d/helperai_dev.conf:Z
