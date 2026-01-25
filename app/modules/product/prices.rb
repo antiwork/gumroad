@@ -240,6 +240,11 @@ module Product::Prices
     available_prices.uniq
   end
 
+  # Returns available prices normalized to USD cents for currency-aware comparisons/sorting in search index
+  def available_price_usd_cents
+    available_price_cents.map { |price_cents| get_usd_cents(price_currency_type, price_cents) }.uniq
+  end
+
   private
     # Private: Called only on create to instantiate Price object(s) and associate it to the newly created product.
     def associate_price

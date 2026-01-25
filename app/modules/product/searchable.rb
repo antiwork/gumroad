@@ -41,6 +41,7 @@ module Product::Searchable
     filetypes
     price_cents
     available_price_cents
+    available_price_usd_cents
     updated_at
     creator_external_id
     content_updated_at
@@ -127,6 +128,7 @@ module Product::Searchable
         indexes :is_alive, type: :boolean
         indexes :price_cents, type: :long
         indexes :available_price_cents, type: :long
+        indexes :available_price_usd_cents, type: :long
         indexes :recommendable, type: :text do # unused
           indexes :keyword, type: :keyword, ignore_above: 256
         end
@@ -317,8 +319,8 @@ module Product::Searchable
           when ProductSortKey::HOT_AND_NEW
             by :sales_volume, order: "desc"
           when ProductSortKey::NEWEST           then by :created_at,     order: "desc"
-          when ProductSortKey::AVAILABLE_PRICE_DESCENDING, ProductSortKey::PRICE_DESCENDING then by :available_price_cents,    order: "desc", mode: "min"
-          when ProductSortKey::AVAILABLE_PRICE_ASCENDING, ProductSortKey::PRICE_ASCENDING  then by :available_price_cents,    order: "asc", mode: "min"
+          when ProductSortKey::AVAILABLE_PRICE_DESCENDING, ProductSortKey::PRICE_DESCENDING then by :available_price_usd_cents,    order: "desc", mode: "min"
+          when ProductSortKey::AVAILABLE_PRICE_ASCENDING, ProductSortKey::PRICE_ASCENDING  then by :available_price_usd_cents,    order: "asc", mode: "min"
           when ProductSortKey::IS_RECOMMENDABLE_DESCENDING then by :is_recommendable,    order: "desc"
           when ProductSortKey::IS_RECOMMENDABLE_ASCENDING  then by :is_recommendable,    order: "asc"
           when ProductSortKey::REVENUE_ASCENDING   then by :sales_volume,    order: "asc"
@@ -475,6 +477,7 @@ module Product::Searchable
       when "reviews_count"     then reviews_count
       when "price_cents"       then price_cents
       when "available_price_cents" then available_price_cents
+      when "available_price_usd_cents" then available_price_usd_cents
       when "is_physical"       then is_physical
       when "is_subscription"   then is_recurring_billing
       when "is_bundle"         then is_bundle
