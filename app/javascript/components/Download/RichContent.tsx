@@ -145,7 +145,7 @@ const TiptapButton = TiptapNode.create<{ saleInfo: SaleInfo | null }>({
       "a",
       {
         ...HTMLAttributes,
-        class: "button primary",
+        class: buttonVariants({ size: "default", color: "primary" }),
         target: "_blank",
         rel: "noopener noreferrer nofollow",
         href: addSaleInfoQueryParams(cast<string>(HTMLAttributes.href), this.options.saleInfo),
