@@ -639,7 +639,7 @@ const CartItemComponent = ({
                 <PopoverTrigger asChild>
                   <Button className="h-8 w-15 !p-0 !text-xs">Edit</Button>
                 </PopoverTrigger>
-                <PopoverContent className="max-h-[80vh] overflow-auto">
+                <PopoverContent className="max-h-[var(--radix-popover-content-available-height,80vh)] overflow-auto">
                   <div className="flex w-96 flex-col gap-4">
                     <ConfigurationSelector
                       selection={selection}

@@ -43,21 +43,23 @@ function Audience() {
     <AnalyticsLayout
       selectedTab="following"
       actions={
-        <>
-          <Popover>
-            <WithTooltip tip="Export" position="bottom">
-              <PopoverTrigger aria-label="Export" asChild>
-                <Button>
-                  <Icon aria-label="Download" name="download" />
-                </Button>
-              </PopoverTrigger>
-            </WithTooltip>
-            <PopoverContent sideOffset={4}>
-              <ExportSubscribersPopover />
-            </PopoverContent>
-          </Popover>
-          <DateRangePicker {...dateRange} />
-        </>
+        hasContent ? (
+          <>
+            <Popover>
+              <WithTooltip tip="Export" position="bottom">
+                <PopoverTrigger aria-label="Export" asChild>
+                  <Button>
+                    <Icon aria-label="Download" name="download" />
+                  </Button>
+                </PopoverTrigger>
+              </WithTooltip>
+              <PopoverContent sideOffset={4}>
+                <ExportSubscribersPopover />
+              </PopoverContent>
+            </Popover>
+            <DateRangePicker {...dateRange} />
+          </>
+        ) : null
       }
     >
       {hasContent ? (
