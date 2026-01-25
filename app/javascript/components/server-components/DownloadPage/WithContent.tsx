@@ -216,6 +216,7 @@ const WithContent = ({
   };
   const [activePageIndex, setActivePageIndex] = React.useState(getInitialPageIndex());
   const activePage = pages[activePageIndex];
+  const contentRef = React.useRef<HTMLDivElement>(null);
 
   const handlePageChange = React.useCallback(
     (newIndex: number) => {
@@ -224,6 +225,7 @@ const WithContent = ({
       if (newPage && props.purchase) {
         void saveLastContentPage(props.token, newPage.page_id);
       }
+      contentRef.current?.scrollTo({ top: 0, behavior: "smooth" });
     },
     [pages, props.token, props.purchase],
   );
@@ -276,6 +278,7 @@ const WithContent = ({
   return (
     <Layout
       {...props}
+      contentRef={contentRef}
       headerActions={
         <>
           {props.purchase && content.discord ? (

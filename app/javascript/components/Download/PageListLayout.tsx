@@ -7,19 +7,28 @@ export const PageListLayout = ({
   pageList,
   children,
   className,
+  contentRef,
 }: {
   pageList: React.ReactNode;
   children: React.ReactNode;
   className?: string;
+  contentRef?: React.RefObject<HTMLDivElement>;
 }) => (
   <div
     className={classNames(
-      "flex min-h-0 flex-col gap-6 bg-background p-4 [scrollbar-gutter:stable] md:p-8 lg:flex-row lg:gap-16 lg:overflow-y-auto",
+      "flex min-h-0 flex-col gap-6 bg-background p-4 [scrollbar-gutter:stable] md:p-8 lg:flex-row lg:gap-16",
       className,
     )}
   >
-    <div className="flex flex-col gap-4 lg:sticky lg:top-0 lg:w-80 lg:pb-8">{pageList}</div>
-    <div className="h-0 flex-1">{children}</div>
+    <div className="flex flex-col gap-4 lg:w-80 lg:max-h-[calc(100vh-4rem)] lg:overflow-y-auto lg:pb-8 [scrollbar-gutter:stable]">
+      {pageList}
+    </div>
+    <div
+      ref={contentRef}
+      className="h-0 flex-1 lg:max-h-[calc(100vh-4rem)] lg:overflow-y-auto [scrollbar-gutter:stable]"
+    >
+      {children}
+    </div>
   </div>
 );
 

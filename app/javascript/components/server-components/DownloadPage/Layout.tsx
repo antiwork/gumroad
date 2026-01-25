@@ -79,7 +79,13 @@ export const Layout = ({
   headerActions,
   pageList,
   children,
-}: LayoutProps & { headerActions?: React.ReactNode; pageList?: React.ReactNode; children: React.ReactNode }) => {
+  contentRef,
+}: LayoutProps & {
+  headerActions?: React.ReactNode;
+  pageList?: React.ReactNode;
+  children: React.ReactNode;
+  contentRef?: React.RefObject<HTMLDivElement>;
+}) => {
   const loggedInUser = useLoggedInUser();
   const [isResendingReceipt, setIsResendingReceipt] = React.useState(false);
   const isDesktop = useIsAboveBreakpoint("lg");
@@ -256,6 +262,7 @@ export const Layout = ({
         {settings || pageList ? (
           <PageListLayout
             className="flex-1"
+            contentRef={contentRef}
             pageList={
               <>
                 {pageList}
