@@ -643,7 +643,7 @@ const ContentTabContent = ({ selectedVariantId }: { selectedVariantId: string | 
                   open={insertMenuState != null}
                   onOpenChange={(open) => setInsertMenuState(open ? "open" : null)}
                 >
-                  <PopoverTrigger className="toolbar-item">
+                  <PopoverTrigger className="toolbar-item all-unset">
                     Insert <Icon name="outline-cheveron-down" />
                   </PopoverTrigger>
                   <PopoverContent className="border-0 p-0 shadow-none">
@@ -737,7 +737,7 @@ const ContentTabContent = ({ selectedVariantId }: { selectedVariantId: string | 
                   </PopoverContent>
                 </Popover>
                 <Separator aria-orientation="vertical" />
-                <button className="toolbar-item" onClick={handleCreatePageClick}>
+                <button className="toolbar-item all-unset" onClick={handleCreatePageClick}>
                   <Icon name="plus" /> Page
                 </button>
               </>

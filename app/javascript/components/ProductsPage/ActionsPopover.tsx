@@ -91,10 +91,10 @@ const ActionsPopover = ({
   return (
     <>
       <Popover open={open} onOpenChange={setOpen}>
-        <PopoverTrigger aria-label="Open product action menu">
+        <PopoverTrigger aria-label="Open product action menu" className="cursor-pointer all-unset">
           <Icon name="three-dots" />
         </PopoverTrigger>
-        <PopoverContent className="border-0 p-0 shadow-none">
+        <PopoverContent className="border-0 p-0 shadow-none" arrowClassName="dark:fill-black">
           <div role="menu">
             <div role="menuitem" inert={!product.can_duplicate || isDuplicating} onClick={() => void handleDuplicate()}>
               <Icon name="outline-duplicate" />

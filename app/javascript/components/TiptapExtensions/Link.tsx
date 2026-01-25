@@ -228,7 +228,7 @@ const LinkNodeView = ({ node, editor, getPos, deleteNode }: NodeViewProps) => {
             setIsPopoverShown(open);
           }}
         >
-          <PopoverTrigger className={classNames("invisible", { visible: isButton || isPopoverVisible })}>
+          <PopoverTrigger className={classNames("invisible all-unset", { visible: isButton || isPopoverVisible })}>
             <NodeViewContent
               as="a"
               href={cast<string>(node.attrs.href)}

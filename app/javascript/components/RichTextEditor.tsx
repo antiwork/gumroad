@@ -110,7 +110,7 @@ export const PopoverMenuItem = ({
   children: React.ReactNode;
 }) => (
   <Popover>
-    <PopoverTrigger aria-label={name}>
+    <PopoverTrigger aria-label={name} className="all-unset">
       <MenuItemTooltip tip={name}>
         <div className="toolbar-item">
           <Icon name={icon} />
@@ -389,7 +389,7 @@ export const RichTextEditorToolbar = ({
         onMouseLeave={() => setShowTooltip(false)}
       >
         <Popover>
-          <PopoverTrigger aria-label="Text formats" className="toolbar-item">
+          <PopoverTrigger aria-label="Text formats" className="toolbar-item all-unset">
             {activeFormatOption?.name ?? "Text"} <Icon name="outline-cheveron-down" />
           </PopoverTrigger>
           <PopoverContent className="border-0 p-0 shadow-none" arrowClassName="fill-white dark:fill-black/35">
@@ -467,7 +467,7 @@ export const RichTextEditorToolbar = ({
               <>
                 <Separator aria-orientation="vertical" />
                 <Popover>
-                  <PopoverTrigger className="toolbar-item">
+                  <PopoverTrigger className="toolbar-item all-unset">
                     Insert <Icon name="outline-cheveron-down" />
                   </PopoverTrigger>
                   <PopoverContent className="border-0 p-0 shadow-none" arrowClassName="fill-white dark:fill-black/35">

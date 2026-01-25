@@ -160,16 +160,21 @@ export const EditorMenu = ({
         setMenuState("menu");
       }}
     >
-      <PopoverTrigger aria-label={label}>
-        <div className={sectionButtonClasses}>
+      <PopoverTrigger aria-label={label} asChild>
+        <button
+          className={classNames(
+            "box-border cursor-pointer font-[inherit] text-[inherit] all-unset",
+            sectionButtonClasses,
+          )}
+        >
           <Icon name="three-dots" />
-        </div>
+        </button>
       </PopoverTrigger>
-      <PopoverContent>
+      <PopoverContent arrowClassName="fill-black dark:fill-black">
         {isSubmenu(activeSubmenu) ? (
           <div className="flex w-75 flex-col gap-4">
             <h4 className="grid grid-cols-[1em_1fr_1em]">
-              <button onClick={() => setMenuState("menu")} aria-label="Go back">
+              <button onClick={() => setMenuState("menu")} aria-label="Go back" className="cursor-pointer all-unset">
                 <Icon name="outline-cheveron-left" />
               </button>
               <div className="text-center">{activeSubmenu.props.heading}</div>
@@ -177,12 +182,16 @@ export const EditorMenu = ({
             {activeSubmenu}
           </div>
         ) : (
-          <div className="stack -m-4! w-80 max-w-none border-0! shadow-none!">
+          <div className="stack -m-4! w-75 max-w-none border-0! shadow-none!">
             {items.map((item, key) =>
               isSubmenu(item) ? (
-                <button onClick={() => setMenuState(key)} key={key}>
-                  <h5>{item.props.heading}</h5>
-                  <div>
+                <button
+                  onClick={() => setMenuState(key)}
+                  key={key}
+                  className="box-border flex w-full cursor-pointer items-center justify-between p-4 all-unset"
+                >
+                  <h5 className="m-0">{item.props.heading}</h5>
+                  <div className="flex items-center gap-2">
                     {item.props.text} <Icon name="outline-cheveron-right" />
                   </div>
                 </button>
@@ -664,13 +673,17 @@ export const AddSectionButton = ({ side = "bottom", index }: { index: number; si
 
   return (
     <Popover open={open} onOpenChange={setOpen}>
-      <PopoverTrigger
-        aria-label="Add section"
-        className={classNames("absolute -top-px aspect-square place-self-center", { "top-full": side === "top" })}
-      >
-        <div className={classNames(sectionButtonClasses, "rounded-b border")}>
+      <PopoverTrigger aria-label="Add section" asChild>
+        <button
+          className={classNames(
+            "absolute -top-px box-border aspect-square cursor-pointer place-self-center font-[inherit] text-[inherit] all-unset",
+            { "top-full": side === "top" },
+            sectionButtonClasses,
+            "rounded-b border",
+          )}
+        >
           <Icon name="plus" />
-        </div>
+        </button>
       </PopoverTrigger>
       <PopoverContent side={side} className="border-0 p-0 shadow-none" arrowClassName="dark:fill-black">
         <PopoverClose asChild>
