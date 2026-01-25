@@ -1,0 +1,71 @@
+---
+http_interactions:
+- request:
+    method: delete
+    uri: https://discord.com/api/v9/users/@me/guilds/0
+    body:
+      encoding: US-ASCII
+      string: ''
+    headers:
+      Accept:
+      - "*/*"
+      User-Agent:
+      - DiscordBot (https://github.com/shardlab/discordrb, v3.5.0) rest-client/2.1.0
+        ruby/3.4.3p32 discordrb/3.5.0
+      Authorization:
+      - Bot
+      Accept-Encoding:
+      - gzip;q=1.0,deflate;q=0.6,identity;q=0.3
+      Host:
+      - discord.com
+  response:
+    status:
+      code: 401
+      message: Unauthorized
+    headers:
+      Date:
+      - Sun, 25 Jan 2026 08:06:02 GMT
+      Content-Type:
+      - application/json
+      Content-Length:
+      - '43'
+      Connection:
+      - keep-alive
+      Server:
+      - cloudflare
+      Content-Security-Policy:
+      - frame-ancestors 'none'; default-src https://o64374.ingest.sentry.io; report-to
+        csp-sentry; report-uri https://o64374.ingest.sentry.io/api/5441894/security/?sentry_key=8fbbce30bf5244ec9429546beef21870&sentry_environment=stable
+      Strict-Transport-Security:
+      - max-age=31536000; includeSubDomains; preload
+      X-Discord-Features:
+      - guilds
+      Via:
+      - 1.1 google
+      Alt-Svc:
+      - h3=":443"; ma=86400
+      Set-Cookie:
+      - __dcfduid=b0982504f9c411f0b561575dc73520df; Expires=Fri, 24-Jan-2031 08:06:02
+        GMT; Max-Age=157680000; Secure; HttpOnly; Path=/; SameSite=Lax
+      - __sdcfduid=b0982504f9c411f0b561575dc73520df6bf4c8d23c6511f857509037cd5fdcdf4496ecdf695824a605d5ee58ce0c8cea;
+        Expires=Fri, 24-Jan-2031 08:06:02 GMT; Max-Age=157680000; Secure; HttpOnly;
+        Path=/; SameSite=Lax
+      - _cfuvid=OLIz_zbRKe3KlhkD5dRdDjN3x00rChLykigdnofz26E-1769328361.802279-1.0.1.1-SZzw8hc8mc0ul1wI3kgUFYntoYEM2H3bL7R9HNll7OM;
+        HttpOnly; SameSite=None; Secure; Path=/; Domain=discord.com
+      Reporting-Endpoints:
+      - csp-sentry="https://o64374.ingest.sentry.io/api/5441894/security/?sentry_key=8fbbce30bf5244ec9429546beef21870&sentry_environment=stable"
+      Cf-Cache-Status:
+      - DYNAMIC
+      X-Content-Type-Options:
+      - nosniff
+      Report-To:
+      - '{"group":"cf-nel","max_age":604800,"endpoints":[{"url":"https://a.nel.cloudflare.com/report/v4?s=znDkfZm2IFHWjh47neCz1eNqZvl1rnGBq4fBpg4TK3piJE3lgrhldHzwfhr9DiT1buSadK7b7ZfjPoCfoIMV5ddDIY5AgVbs"}]}'
+      Nel:
+      - '{"report_to":"cf-nel","success_fraction":0.0,"max_age":604800}'
+      Cf-Ray:
+      - 9c3644d54e62a76c-DEL
+    body:
+      encoding: UTF-8
+      string: '{"message": "401: Unauthorized", "code": 0}'
+  recorded_at: Sun, 25 Jan 2026 08:06:02 GMT
+recorded_with: VCR 6.2.0

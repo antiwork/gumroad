@@ -39,6 +39,11 @@ class ApplicationController < ActionController::Base
 
   add_flash_types :warning
 
+  def params
+    _params = super
+    _params.is_a?(Hash) ? ActionController::Parameters.new(_params) : _params
+  end
+
   def redirect_to_next
     safe_redirect_to(params[:next])
   end

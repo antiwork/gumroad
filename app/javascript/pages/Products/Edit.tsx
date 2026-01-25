@@ -1,9 +1,7 @@
 import { usePage } from "@inertiajs/react";
-import React, { ComponentProps } from "react";
+import React from "react";
 
-import { default as ProductEditPage } from "$app/components/server-components/ProductEditPage";
-
-type ProductEditPageProps = ComponentProps<typeof ProductEditPage>;
+import { ProductEditPage, type Props as ProductEditPageProps } from "$app/components/server-components/ProductEditPage";
 
 function Edit() {
   const props = usePage<ProductEditPageProps>().props;

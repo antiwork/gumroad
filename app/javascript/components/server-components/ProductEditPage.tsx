@@ -57,7 +57,7 @@ const routes: RouteObject[] = [
   },
 ];
 
-type Props = {
+export type Props = {
   product: Product;
   id: string;
   unique_permalink: string;
@@ -142,7 +142,7 @@ const findUpdatedContent = (product: Product, lastSavedProduct: Product) => {
   };
 };
 
-const ProductEditPage = (props: Props) => {
+export const ProductEditPage = (props: Props) => {
   const [product, setProduct] = React.useState(props.product);
   const [contentUpdates, setContentUpdates] = React.useState<ContentUpdates>(null);
   const [currencyType, setCurrencyType] = React.useState<CurrencyCode>(props.currency_type);

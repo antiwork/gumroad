@@ -248,7 +248,7 @@ class ReactRuntime < ExecJS::MiniRacerRuntime
         params = res
         params = params.merge(settings["body"]) if settings["body"].is_a? Hash
         params = params.merge(query_params)
-        controller.params = params
+        controller.params = ActionController::Parameters.new(params)
         controller.process(res[:action])
         { body: response.body, status: response.status, headers: response.headers }
       }
