@@ -15,7 +15,7 @@ class Admin::AffiliatesController < Admin::BaseController
     @users = @users.joins(:direct_affiliate_accounts).distinct
     @users = @users.with_blocked_attributes_for(:form_email, :form_email_domain)
 
-    list_paginated_users users: @users, template: "Admin/Affiliates/Index", legacy_template: "admin/affiliates/index", single_result_redirect_path: ->(user) { admin_affiliate_path(user.external_id) }
+    list_paginated_users users: @users, template: "Admin/Affiliates/Index", single_result_redirect_path: ->(user) { admin_affiliate_path(user.external_id) }
   end
 
   def show

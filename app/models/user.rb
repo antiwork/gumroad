@@ -167,6 +167,7 @@ class User < ApplicationRecord
   attr_json_data_accessor :payout_frequency, default: User::PayoutSchedule::WEEKLY
   attr_json_data_accessor :custom_fee_per_thousand
   attr_json_data_accessor :payouts_paused_by
+  attr_json_data_accessor :daily_product_creation_limit
 
   attr_blockable :email
   attr_blockable :form_email, object_type: :email
@@ -293,6 +294,7 @@ class User < ApplicationRecord
   after_save :trigger_iffy_ingest
   after_update :update_audience_members_affiliates
   after_update :update_product_search_index!
+  after_update :update_alive_cart_email, if: :saved_change_to_email?
   after_commit :move_purchases_to_new_email, on: :update, if: :email_previously_changed?
   after_commit :make_affiliate_of_the_matching_approved_affiliate_requests, on: [:create, :update], if: ->(user) { user.confirmed_at_previously_changed? && user.confirmed? }
   after_commit :generate_subscribe_preview, on: [:create, :update], if: :should_subscribe_preview_be_regenerated?
@@ -1074,6 +1076,10 @@ class User < ApplicationRecord
       if unconfirmed_email.blank? && purchases.exists?
         UpdatePurchaseEmailToMatchAccountWorker.perform_in(10.seconds, id)
       end
+    end
+
+    def update_alive_cart_email
+      reload_alive_cart&.update!(email: email)
     end
 
     def products_recommendable_conditions_changed?
