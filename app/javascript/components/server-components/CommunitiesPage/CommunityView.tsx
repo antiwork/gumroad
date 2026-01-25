@@ -150,7 +150,7 @@ export const CommunityView = () => {
       if (searchParams.has("notifications")) {
         searchParams.delete("notifications");
         const newSearch = searchParams.toString() ? `?${searchParams.toString()}` : "";
-        router.visit(`${window.location.pathname}${newSearch}${window.location.hash}`, { replace: true });
+        router.get(`${window.location.pathname}${newSearch}${window.location.hash}`, { replace: true });
         setShowNotificationsSettings(true);
       }
     }
@@ -490,7 +490,7 @@ export const CommunityView = () => {
     const community = communities.find((community) => community.seller.id === sellerId);
     if (community) {
       setSelectedCommunityId(community.id);
-      router.visit(`/communities/${community.seller.id}/${community.id}`);
+      router.get(`/communities/${community.seller.id}/${community.id}`);
       setSwitcherOpen(false);
     }
   };
