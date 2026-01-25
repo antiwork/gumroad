@@ -1,8 +1,8 @@
 import { useForm, usePage } from "@inertiajs/react";
 import * as React from "react";
 
-import { AuthAlert } from "$app/components/AuthAlert";
 import { Button } from "$app/components/Button";
+import { showAlert } from "$app/components/server-components/Alert";
 import { Card, CardContent } from "$app/components/ui/Card";
 
 type PageProps = {
@@ -35,6 +35,12 @@ function SecureRedirectNew() {
     error_message,
   });
 
+  React.useEffect(() => {
+    if (form.errors.confirmation_text) {
+      showAlert(form.errors.confirmation_text, "error");
+    }
+  }, [form.errors.confirmation_text]);
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     form.post(Routes.secure_url_redirect_path(), { preserveScroll: true });
@@ -52,7 +58,6 @@ function SecureRedirectNew() {
         <CardContent className="mini-rule legacy-only"></CardContent>
         <CardContent asChild>
           <form onSubmit={handleSubmit}>
-            <AuthAlert />
             <label htmlFor={`${uid}-confirmation-text`} className="form-label grow">
               {field_name}
             </label>
@@ -66,9 +71,6 @@ function SecureRedirectNew() {
               autoFocus
               disabled={form.processing}
             />
-            {!!form.errors.confirmation_text && (
-              <div className="error-message w-full">{form.errors.confirmation_text}</div>
-            )}
             <Button color="primary" type="submit" disabled={form.processing}>
               {form.processing ? "Processing..." : "Continue"}
             </Button>
