@@ -37,7 +37,7 @@ function SecureRedirectNew() {
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    form.post(Routes.secure_url_redirect_path());
+    form.post(Routes.secure_url_redirect_path(), { preserveScroll: true });
   };
 
   return (
