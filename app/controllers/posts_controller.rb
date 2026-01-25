@@ -3,10 +3,10 @@
 class PostsController < ApplicationController
   include CustomDomainConfig
 
-  before_action :authenticate_user!, only: %i[send_for_purchase]
-  after_action :verify_authorized, only: %i[send_for_purchase]
+  before_action :authenticate_user!, only: %i[send_for_purchase send_all_for_purchase]
+  after_action :verify_authorized, only: %i[send_for_purchase send_all_for_purchase]
   before_action :fetch_post, only: %i[send_for_purchase]
-  before_action :ensure_seller_is_eligible_to_send_emails, only: %i[send_for_purchase]
+  before_action :ensure_seller_is_eligible_to_send_emails, only: %i[send_for_purchase send_all_for_purchase]
   before_action :set_user_and_custom_domain_config, only: %i[show]
   before_action :check_if_needs_redirect, only: %i[show]
 
@@ -74,6 +74,38 @@ class PostsController < ApplicationController
     end
 
     head :no_content
+  end
+
+  def send_all_for_purchase
+    authorize Installment
+
+    purchase = current_seller.sales.find_by_external_id!(params[:purchase_id])
+    missed_posts = Installment.missed_for_purchase(purchase)
+
+    sent_count = 0
+    missed_posts.each do |post|
+      cache_key = "post_email:#{post.id}:#{purchase.id}"
+      next if Rails.cache.exist?(cache_key)
+
+      Rails.cache.fetch(cache_key, expires_in: 8.hours) do
+        CreatorContactingCustomersEmailInfo.where(purchase:, installment: post).destroy_all
+
+        PostEmailApi.process(
+          post: post,
+          recipients: [
+            {
+              email: purchase.email,
+              purchase:,
+              url_redirect: purchase.url_redirect,
+              subscription: purchase.subscription,
+            }.compact_blank
+          ])
+        true
+      end
+      sent_count += 1
+    end
+
+    render json: { sent_count: sent_count, total_count: missed_posts.count }
   end
 
   def increment_post_views

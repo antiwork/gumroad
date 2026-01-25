@@ -25,6 +25,7 @@ import {
   resendPing,
   refund,
   resendPost,
+  resendAllPosts,
   resendReceipt,
   updateLicense,
   updatePurchase,
@@ -708,6 +709,7 @@ const CustomerDrawer = ({
   const [emails, setEmails] = React.useState<CustomerEmail[] | null>(null);
   const [shownEmails, setShownEmails] = React.useState(PAGE_SIZE);
   const sentEmailIds = React.useRef<Set<string>>(new Set());
+  const [isSendingAll, setIsSendingAll] = React.useState(false);
   useRunOnce(() => {
     getMissedPosts(customer.id, customer.email).then(setMissedPosts, (e: unknown) => {
       assertResponseError(e);
@@ -730,6 +732,21 @@ const CustomerDrawer = ({
       showAlert(e.message, "error");
     }
     setLoadingId(null);
+  };
+
+  const onSendAll = async () => {
+    if (!missedPosts || missedPosts.length === 0) return;
+
+    setIsSendingAll(true);
+    try {
+      const result = await resendAllPosts(customer.id);
+      missedPosts.forEach((post) => sentEmailIds.current.add(post.id));
+      showAlert(`Successfully sent ${result.sent_count} of ${result.total_count} emails`, "success");
+    } catch (e) {
+      assertResponseError(e);
+      showAlert(e.message, "error");
+    }
+    setIsSendingAll(false);
   };
 
   const [productPurchases, setProductPurchases] = React.useState<Customer[]>([]);
@@ -1249,6 +1266,15 @@ const CustomerDrawer = ({
             <CardContent asChild>
               <header>
                 <h3 className="grow">Send missed posts</h3>
+                {missedPosts && missedPosts.length > 0 ? (
+                  <Button
+                    color="primary"
+                    disabled={isSendingAll || !!loadingId}
+                    onClick={() => void onSendAll()}
+                  >
+                    {isSendingAll ? "Sending all..." : "Send all"}
+                  </Button>
+                ) : null}
               </header>
             </CardContent>
             {missedPosts ? (
