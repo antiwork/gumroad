@@ -31,7 +31,8 @@ const sortByName = <T extends { name: string }>(items: readonly T[]) =>
   [...items].sort((a, b) => a.name.localeCompare(b.name));
 
 export const useCommunities = () => {
-  const { has_products, communities: initialCommunities, notification_settings, selectedCommunityId: initialSelectedCommunityId } = cast<PageProps>(usePage().props);
+  const pageProps = cast<PageProps>(usePage().props);
+  const { has_products, communities: initialCommunities, notification_settings, selectedCommunityId: initialSelectedCommunityId } = pageProps;
 
   const [communities, setCommunities] = React.useState<Community[]>(sortByName(initialCommunities));
   const [notificationSettings, setNotificationSettings] = React.useState<CommunityNotificationSettings>(
@@ -118,10 +119,10 @@ export const useCommunities = () => {
   );
 
   React.useEffect(() => {
-    setSelectedCommunityId(initialSelectedCommunityId ?? null);
-    setCommunities(sortByName(initialCommunities));
-    setNotificationSettings(notification_settings);
-  }, [initialSelectedCommunityId, initialCommunities, notification_settings]);
+    setSelectedCommunityId(pageProps.selectedCommunityId ?? null);
+    setCommunities(sortByName(pageProps.communities));
+    setNotificationSettings(pageProps.notification_settings);
+  }, [pageProps]);
 
   const selectedCommunity = React.useMemo(
     () => communities.find((community) => community.id === selectedCommunityId),

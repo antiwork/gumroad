@@ -5,6 +5,23 @@ import { createRoot } from "react-dom/client";
 import AppWrapper from "../inertia/app_wrapper.tsx";
 import Layout, { LoggedInUserLayout } from "../inertia/layout.tsx";
 
+// Track active Inertia requests for Capybara wait_for_ajax helper
+if (typeof window !== "undefined") {
+  window.__activeRequests = window.__activeRequests || 0;
+}
+
+router.on("start", () => {
+  if (typeof window !== "undefined") {
+    window.__activeRequests++;
+  }
+});
+
+router.on("finish", () => {
+  if (typeof window !== "undefined") {
+    window.__activeRequests = Math.max(0, window.__activeRequests - 1);
+  }
+});
+
 // Configure Inertia to send CSRF token with all requests
 router.on("before", (event) => {
   const token = document.querySelector('meta[name="csrf-token"]')?.getAttribute("content");

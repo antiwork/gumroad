@@ -121,7 +121,6 @@ export const CommunityView = () => {
     selectedCommunity,
     selectedCommunityDraft,
     selectedCommunityChat,
-    setSelectedCommunityId,
     setNotificationSettings,
     updateCommunity,
     updateCommunityDraft,
@@ -489,7 +488,6 @@ export const CommunityView = () => {
   const switchSeller = (sellerId: string) => {
     const community = communities.find((community) => community.seller.id === sellerId);
     if (community) {
-      setSelectedCommunityId(community.id);
       router.get(`/communities/${community.seller.id}/${community.id}`);
       setSwitcherOpen(false);
     }
