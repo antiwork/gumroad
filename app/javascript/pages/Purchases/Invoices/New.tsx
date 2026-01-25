@@ -1,28 +1,15 @@
 import cx from "classnames";
 import * as React from "react";
-import { createCast } from "ts-safe-cast";
 
-import { sendInvoice } from "$app/data/invoice";
 import { classNames } from "$app/utils/classNames";
-import { assertResponseError } from "$app/utils/request";
-import { register } from "$app/utils/serverComponentUtil";
+import { assertResponseError, request, ResponseError } from "$app/utils/request";
 
 import { Button } from "$app/components/Button";
 import { PoweredByFooter } from "$app/components/PoweredByFooter";
 import { showAlert } from "$app/components/server-components/Alert";
 import { Card, CardContent } from "$app/components/ui/Card";
 
-type FieldState = { value: string; error?: boolean };
-
-const GenerateInvoicePage = ({
-  form_info,
-  supplier_info,
-  seller_info,
-  order_info,
-  email,
-  id,
-  countries,
-}: {
+type Props = {
   form_info: {
     heading: string;
     display_vat_id: boolean;
@@ -52,45 +39,126 @@ const GenerateInvoicePage = ({
   email: string;
   id: string;
   countries: Record<string, string>;
-}) => {
-  const [isLoading, setIsLoading] = React.useState(false);
+};
 
-  const [fullName, setFullName] = React.useState<FieldState>({ value: form_info.data.full_name ?? "" });
-  const [vatId, setVatId] = React.useState("");
-  const [streetAddress, setStreetAddress] = React.useState<FieldState>({
-    value: form_info.data.street_address ?? "",
+type FormData = {
+  full_name: string;
+  vat_id: string;
+  street_address: string;
+  city: string;
+  state: string;
+  zip_code: string;
+  country: string;
+  additional_notes: string;
+};
+
+type FormErrors = {
+  [K in keyof FormData]?: boolean;
+};
+
+async function sendInvoice({
+  id,
+  email,
+  full_name,
+  vat_id,
+  street_address,
+  city,
+  state,
+  zip_code,
+  country_code,
+  additional_notes,
+}: {
+  id: string;
+  email: string;
+  full_name: string;
+  vat_id: string | null;
+  street_address: string;
+  city: string;
+  state: string;
+  zip_code: string;
+  country_code: string;
+  additional_notes: string;
+}) {
+  const response = await request({
+    method: "POST",
+    url: Routes.send_invoice_path(id, { email }),
+    accept: "json",
+    data: {
+      id,
+      email,
+      full_name,
+      vat_id,
+      street_address,
+      city,
+      state,
+      zip_code,
+      country_code,
+      additional_notes,
+    },
   });
-  const [city, setCity] = React.useState<FieldState>({ value: form_info.data.city ?? "" });
-  const [state, setState] = React.useState<FieldState>({ value: form_info.data.state ?? "" });
-  const [zipCode, setZipCode] = React.useState<FieldState>({ value: form_info.data.zip_code ?? "" });
-  const [country, setCountry] = React.useState<FieldState>({ value: form_info.data.country_iso2 ?? "" });
-  const [additionalNotes, setAdditionalNotes] = React.useState<FieldState>({ value: "" });
+  if (!response.ok) throw new ResponseError();
+  return (await response.json()) as
+    | { success: true; message: string; file_location: string }
+    | { success: false; message: string };
+}
 
+export default function New({
+  form_info,
+  supplier_info,
+  seller_info,
+  order_info,
+  email,
+  id,
+  countries,
+}: Props) {
+  const [isLoading, setIsLoading] = React.useState(false);
   const [downloadUrl, setDownloadUrl] = React.useState<string | null>(null);
 
-  const handleDownload = async () => {
-    setFullName((prev) => ({ ...prev, error: !prev.value.length }));
-    setStreetAddress((prev) => ({ ...prev, error: !prev.value.length }));
-    setCity((prev) => ({ ...prev, error: !prev.value.length }));
-    setState((prev) => ({ ...prev, error: !prev.value.length }));
-    setZipCode((prev) => ({ ...prev, error: !prev.value.length }));
-    setCountry((prev) => ({ ...prev, error: !prev.value.length }));
+  const [formData, setFormData] = React.useState<FormData>({
+    full_name: form_info.data.full_name ?? "",
+    vat_id: "",
+    street_address: form_info.data.street_address ?? "",
+    city: form_info.data.city ?? "",
+    state: form_info.data.state ?? "",
+    zip_code: form_info.data.zip_code ?? "",
+    country: form_info.data.country_iso2 ?? "",
+    additional_notes: "",
+  });
 
-    if ([fullName, streetAddress, city, state, zipCode, country].some((field) => !field.value.length)) return;
+  const [errors, setErrors] = React.useState<FormErrors>({});
+
+  const setData = <K extends keyof FormData>(key: K, value: FormData[K]) => {
+    setFormData((prev) => ({ ...prev, [key]: value }));
+    setErrors((prev) => ({ ...prev, [key]: false }));
+  };
+
+  const handleDownload = async () => {
+    const requiredFields: (keyof FormData)[] = ["full_name", "street_address", "city", "state", "zip_code", "country"];
+    const newErrors: FormErrors = {};
+
+    for (const field of requiredFields) {
+      if (!formData[field].length) {
+        newErrors[field] = true;
+      }
+    }
+
+    setErrors(newErrors);
+
+    if (Object.values(newErrors).some(Boolean)) return;
 
     setIsLoading(true);
     try {
       const result = await sendInvoice({
         id,
         email,
-        full_name: fullName.value,
-        vat_id: form_info.display_vat_id ? vatId : null,
-        street_address: streetAddress.value,
-        city: city.value,
-        state: state.value,
-        zip_code: zipCode.value,
-        country_code: country.value,
-        additional_notes: additionalNotes.value,
+        full_name: formData.full_name,
+        vat_id: form_info.display_vat_id ? formData.vat_id : null,
+        street_address: formData.street_address,
+        city: formData.city,
+        state: formData.state,
+        zip_code: formData.zip_code,
+        country_code: formData.country,
+        additional_notes: formData.additional_notes,
       });
 
       showAlert(result.message, result.success ? "success" : "error");
@@ -118,14 +186,14 @@ const GenerateInvoicePage = ({
               </header>
             </CardContent>
             <CardContent>
-              <fieldset className={classNames({ danger: fullName.error }, "grow basis-0")}>
+              <fieldset className={classNames({ danger: errors.full_name }, "grow basis-0")}>
                 <label htmlFor="full_name">Full name</label>
                 <input
                   id="full_name"
                   placeholder="Full name"
                   type="text"
-                  value={fullName.value}
-                  onChange={(e) => setFullName({ value: e.target.value })}
+                  value={formData.full_name}
+                  onChange={(e) => setData("full_name", e.target.value)}
                 />
               </fieldset>
               {form_info.display_vat_id ? (
@@ -133,54 +201,59 @@ const GenerateInvoicePage = ({
                   <legend>
                     <label htmlFor="chargeable_vat_id">{form_info.vat_id_label}</label>
                   </legend>
-                  <input id="chargeable_vat_id" type="text" value={vatId} onChange={(e) => setVatId(e.target.value)} />
+                  <input
+                    id="chargeable_vat_id"
+                    type="text"
+                    value={formData.vat_id}
+                    onChange={(e) => setData("vat_id", e.target.value)}
+                  />
                 </fieldset>
               ) : null}
-              <fieldset className={classNames({ danger: streetAddress.error }, "flex-1")}>
+              <fieldset className={classNames({ danger: errors.street_address }, "flex-1")}>
                 <label htmlFor="street_address">Street address</label>
                 <input
                   id="street_address"
                   type="text"
                   placeholder="Street address"
-                  value={streetAddress.value}
-                  onChange={(e) => setStreetAddress({ value: e.target.value })}
+                  value={formData.street_address}
+                  onChange={(e) => setData("street_address", e.target.value)}
                 />
               </fieldset>
               <div style={{ display: "grid", gap: "var(--spacer-2)", gridTemplateColumns: "2fr 1fr 1fr" }}>
-                <fieldset className={cx({ danger: city.error })}>
+                <fieldset className={cx({ danger: errors.city })}>
                   <label htmlFor="city">City</label>
                   <input
                     id="city"
                     type="text"
                     placeholder="City"
-                    value={city.value}
-                    onChange={(e) => setCity({ value: e.target.value })}
+                    value={formData.city}
+                    onChange={(e) => setData("city", e.target.value)}
                   />
                 </fieldset>
-                <fieldset className={cx({ danger: state.error })}>
+                <fieldset className={cx({ danger: errors.state })}>
                   <label htmlFor="state">State</label>
                   <input
                     id="state"
                     type="text"
                     placeholder="State"
-                    value={state.value}
-                    onChange={(e) => setState({ value: e.target.value })}
+                    value={formData.state}
+                    onChange={(e) => setData("state", e.target.value)}
                   />
                 </fieldset>
-                <fieldset className={cx({ danger: zipCode.error })}>
+                <fieldset className={cx({ danger: errors.zip_code })}>
                   <label htmlFor="zip_code">ZIP code</label>
                   <input
                     id="zip_code"
                     type="text"
                     placeholder="ZIP code"
-                    value={zipCode.value}
-                    onChange={(e) => setZipCode({ value: e.target.value })}
+                    value={formData.zip_code}
+                    onChange={(e) => setData("zip_code", e.target.value)}
                   />
                 </fieldset>
               </div>
-              <fieldset className={cx({ danger: country.error })}>
+              <fieldset className={cx({ danger: errors.country })}>
                 <label htmlFor="country">Country</label>
-                <select id="country" value={country.value} onChange={(e) => setCountry({ value: e.target.value })}>
+                <select id="country" value={formData.country} onChange={(e) => setData("country", e.target.value)}>
                   <option value="">Select country</option>
                   {Object.entries(countries).map(([code, name]) => (
                     <option key={code} value={code}>
@@ -189,7 +262,7 @@ const GenerateInvoicePage = ({
                   ))}
                 </select>
               </fieldset>
-              <fieldset className={classNames({ danger: additionalNotes.error }, "flex-1")}>
+              <fieldset className={classNames({ danger: errors.additional_notes }, "flex-1")}>
                 <legend>
                   <label htmlFor="additional_notes">Additional notes</label>
                 </legend>
@@ -197,8 +270,8 @@ const GenerateInvoicePage = ({
                   id="additional_notes"
                   name="additional_notes"
                   placeholder="Enter anything else you'd like to appear on your invoice (Optional)"
-                  value={additionalNotes.value}
-                  onChange={(e) => setAdditionalNotes({ value: e.target.value })}
+                  value={formData.additional_notes}
+                  onChange={(e) => setData("additional_notes", e.target.value)}
                 />
               </fieldset>
             </CardContent>
@@ -226,31 +299,31 @@ const GenerateInvoicePage = ({
               </div>
               <div>
                 <h6 className="font-bold">To</h6>
-                <div style={{ opacity: fullName.value.length ? undefined : "var(--disabled-opacity)" }}>
-                  {fullName.value || "Edgar Gumstein"}
+                <div style={{ opacity: formData.full_name.length ? undefined : "var(--disabled-opacity)" }}>
+                  {formData.full_name || "Edgar Gumstein"}
                 </div>
-                <div style={{ opacity: streetAddress.value.length ? undefined : "var(--disabled-opacity)" }}>
-                  {streetAddress.value || "123 Gum Road"}
+                <div style={{ opacity: formData.street_address.length ? undefined : "var(--disabled-opacity)" }}>
+                  {formData.street_address || "123 Gum Road"}
                 </div>
                 <div>
-                  <span style={{ opacity: city.value.length ? undefined : "var(--disabled-opacity)" }}>
-                    {`${city.value || "San Francisco"},`}
+                  <span style={{ opacity: formData.city.length ? undefined : "var(--disabled-opacity)" }}>
+                    {`${formData.city || "San Francisco"},`}
                   </span>{" "}
-                  <span style={{ opacity: state.value.length ? undefined : "var(--disabled-opacity)" }}>
-                    {state.value || "CA"}
+                  <span style={{ opacity: formData.state.length ? undefined : "var(--disabled-opacity)" }}>
+                    {formData.state || "CA"}
                   </span>{" "}
-                  <span style={{ opacity: zipCode.value.length ? undefined : "var(--disabled-opacity)" }}>
-                    {zipCode.value || "94107"}
+                  <span style={{ opacity: formData.zip_code.length ? undefined : "var(--disabled-opacity)" }}>
+                    {formData.zip_code || "94107"}
                   </span>
                 </div>
-                <div style={{ opacity: country.value.length ? undefined : "var(--disabled-opacity)" }}>
-                  {countries[country.value] || "United States"}
+                <div style={{ opacity: formData.country.length ? undefined : "var(--disabled-opacity)" }}>
+                  {countries[formData.country] || "United States"}
                 </div>
               </div>
-              {additionalNotes.value.length ? (
+              {formData.additional_notes.length ? (
                 <div>
                   <h6 className="font-bold">Additional notes</h6>
-                  {additionalNotes.value}
+                  {formData.additional_notes}
                 </div>
               ) : null}
               {order_info.form_attributes.map((attribute, index) => (
@@ -284,9 +357,6 @@ const GenerateInvoicePage = ({
       <PoweredByFooter />
     </>
   );
-};
+}
 
-export default register({
-  component: GenerateInvoicePage,
-  propParser: createCast(),
-});
+New.disableLayout = true;
