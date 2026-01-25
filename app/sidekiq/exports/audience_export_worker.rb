@@ -8,12 +8,12 @@ class Exports::AudienceExportWorker
     seller, recipient = User.find(seller_id, recipient_id)
     recipient ||= seller
 
-    result = Exports::AudienceExportService.new(seller, audience_options).perform
-
-    ContactingCreatorMailer.subscribers_data(
+    export = AudienceExport.create!(
+      seller:,
       recipient:,
-      tempfile: result.tempfile,
-      filename: result.filename,
-    ).deliver_now
+      options: audience_options
+    )
+
+    Exports::Audience::CreateAndEnqueueChunksWorker.perform_async(export.id)
   end
 end

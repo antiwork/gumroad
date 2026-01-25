@@ -6,24 +6,32 @@ describe Exports::AudienceExportWorker do
     let(:audience_options) { { followers: true } }
     let(:recipient) { create(:user) }
 
-    before do
-      ActionMailer::Base.deliveries.clear
+    it "creates an AudienceExport with seller as recipient when seller is also the recipient" do
+      expect do
+        described_class.new.perform(seller.id, seller.id, audience_options)
+      end.to change(AudienceExport, :count).by(1)
+
+      export = AudienceExport.last
+      expect(export.seller).to eq(seller)
+      expect(export.recipient).to eq(seller)
+      expect(export.options).to eq(audience_options)
     end
 
-    it "sends email to seller when it is also the recipient" do
-      expect(ContactingCreatorMailer).to receive(:subscribers_data).and_call_original
-      described_class.new.perform(seller.id, seller.id, audience_options)
+    it "creates an AudienceExport with separate recipient" do
+      expect do
+        described_class.new.perform(seller.id, recipient.id, audience_options)
+      end.to change(AudienceExport, :count).by(1)
 
-      mail = ActionMailer::Base.deliveries.last
-      expect(mail.to).to eq([seller.email])
+      export = AudienceExport.last
+      expect(export.seller).to eq(seller)
+      expect(export.recipient).to eq(recipient)
     end
 
-    it "sends email to recipient" do
-      expect(ContactingCreatorMailer).to receive(:subscribers_data).and_call_original
+    it "enqueues CreateAndEnqueueChunksWorker" do
       described_class.new.perform(seller.id, recipient.id, audience_options)
 
-      mail = ActionMailer::Base.deliveries.last
-      expect(mail.to).to eq([recipient.email])
+      export = AudienceExport.last
+      expect(Exports::Audience::CreateAndEnqueueChunksWorker).to have_enqueued_sidekiq_job(export.id)
     end
   end
 end
