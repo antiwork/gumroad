@@ -41,49 +41,45 @@ function SecureRedirectNew() {
   };
 
   return (
-    <Card className="single-page-form horizontal-form">
-      <CardContent asChild>
-        <header>
-          <h2 className="grow">Confirm access</h2>
-          <p>{message}</p>
-        </header>
-      </CardContent>
-      <CardContent className="mini-rule legacy-only"></CardContent>
-      <CardContent asChild>
-        <form onSubmit={handleSubmit}>
-          <AuthAlert />
-          <label htmlFor={`${uid}-confirmation-text`} className="form-label grow">
-            {field_name}
-          </label>
-          <input
-            id={`${uid}-confirmation-text`}
-            type="text"
-            placeholder={field_name}
-            value={form.data.confirmation_text}
-            onChange={(e) => form.setData("confirmation_text", e.target.value)}
-            required
-            autoFocus
-            disabled={form.processing}
-          />
-          {!!form.errors.confirmation_text && (
-            <div className="error-message w-full">{form.errors.confirmation_text}</div>
-          )}
-          <Button color="primary" type="submit" disabled={form.processing}>
-            {form.processing ? "Processing..." : "Continue"}
-          </Button>
-        </form>
-      </CardContent>
-    </Card>
+    <>
+      <Card className="single-page-form horizontal-form">
+        <CardContent asChild>
+          <header>
+            <h2 className="grow">Confirm access</h2>
+            <p>{message}</p>
+          </header>
+        </CardContent>
+        <CardContent className="mini-rule legacy-only"></CardContent>
+        <CardContent asChild>
+          <form onSubmit={handleSubmit}>
+            <AuthAlert />
+            <label htmlFor={`${uid}-confirmation-text`} className="form-label grow">
+              {field_name}
+            </label>
+            <input
+              id={`${uid}-confirmation-text`}
+              type="text"
+              placeholder={field_name}
+              value={form.data.confirmation_text}
+              onChange={(e) => form.setData("confirmation_text", e.target.value)}
+              required
+              autoFocus
+              disabled={form.processing}
+            />
+            {!!form.errors.confirmation_text && (
+              <div className="error-message w-full">{form.errors.confirmation_text}</div>
+            )}
+            <Button color="primary" type="submit" disabled={form.processing}>
+              {form.processing ? "Processing..." : "Continue"}
+            </Button>
+          </form>
+        </CardContent>
+      </Card>
+      <footer className="text-subdued mt-8 text-center">
+        Powered by <strong>Gumroad</strong>
+      </footer>
+    </>
   );
 }
-
-SecureRedirectNew.layout = (page: React.ReactNode) => (
-  <div className="flex min-h-screen flex-col items-center justify-center p-4">
-    {page}
-    <footer className="text-subdued mt-8 text-center">
-      Powered by <strong>Gumroad</strong>
-    </footer>
-  </div>
-);
 
 export default SecureRedirectNew;
