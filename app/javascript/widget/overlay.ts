@@ -16,7 +16,7 @@ content.className = "mx-auto max-w-product-page p-4 lg:px-8 lg:py-16";
 overlay.appendChild(content);
 
 const overlayCloseButton = document.createElement("button");
-overlayCloseButton.className = "button filled fixed right-3 top-3";
+overlayCloseButton.className = "gumroad-button-filled fixed right-3 top-3";
 overlayCloseButton.innerHTML = '<span class="icon icon-x"></span>';
 overlay.appendChild(overlayCloseButton);
 

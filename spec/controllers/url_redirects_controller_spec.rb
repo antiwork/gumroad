@@ -646,6 +646,76 @@ describe UrlRedirectsController do
         expect(response).to redirect_to(custom_domain_coffee_url(host: url_redirect.seller.subdomain_with_protocol, purchase_email: "test@gumroad.com"))
       end
     end
+
+    describe "mobile app webview" do
+      let(:purchaser) { create(:user) }
+      let(:oauth_app) { create(:oauth_application, owner: purchaser) }
+
+      before do
+        @url_redirect.purchase.update!(purchaser:)
+      end
+
+      context "with valid mobile_api token for the purchaser" do
+        let(:access_token) { create("doorkeeper/access_token", application: oauth_app, resource_owner_id: purchaser.id, scopes: "mobile_api") }
+
+        it "grants access when the token owner is the purchaser and mobile_token is present" do
+          get :download_page, params: { id: @token, access_token: access_token.token, mobile_token: Api::Mobile::BaseController::MOBILE_TOKEN }
+
+          expect(response).to be_successful
+        end
+
+        it "requires mobile_token to match the expected value" do
+          @url_redirect.update!(has_been_seen: true)
+
+          get :download_page, params: { id: @token, access_token: access_token.token, mobile_token: "wrong_token" }
+
+          expect(response).to redirect_to(confirm_page_path(id: @url_redirect.token, destination: "download_page"))
+        end
+      end
+
+      context "with valid token but user is not the purchaser" do
+        let(:other_user) { create(:user) }
+        let(:access_token) { create("doorkeeper/access_token", application: oauth_app, resource_owner_id: other_user.id, scopes: "mobile_api") }
+
+        it "redirects to confirm page" do
+          @url_redirect.update!(has_been_seen: true)
+
+          get :download_page, params: { id: @token, access_token: access_token.token, mobile_token: Api::Mobile::BaseController::MOBILE_TOKEN }
+
+          expect(response).to redirect_to(confirm_page_path(id: @url_redirect.token, destination: "download_page"))
+        end
+      end
+
+      context "with invalid token" do
+        it "returns 401" do
+          get :download_page, params: { id: @token, access_token: "invalid_token", mobile_token: Api::Mobile::BaseController::MOBILE_TOKEN }
+
+          expect(response).to have_http_status(:unauthorized)
+        end
+      end
+
+      context "with token that has wrong scope" do
+        let(:access_token) { create("doorkeeper/access_token", application: oauth_app, resource_owner_id: purchaser.id, scopes: "creator_api") }
+
+        it "returns 403" do
+          get :download_page, params: { id: @token, access_token: access_token.token, mobile_token: Api::Mobile::BaseController::MOBILE_TOKEN }
+
+          expect(response).to have_http_status(:forbidden)
+        end
+      end
+
+      context "with valid token but no purchase is attached to the url redirect" do
+        let(:access_token) { create("doorkeeper/access_token", application: oauth_app, resource_owner_id: purchaser.id, scopes: "mobile_api") }
+
+        it "does not require redirect" do
+          @url_redirect.update!(purchase: nil, has_been_seen: true)
+
+          get :download_page, params: { id: @url_redirect.token, access_token: access_token.token, mobile_token: Api::Mobile::BaseController::MOBILE_TOKEN }
+
+          expect(response).to be_successful
+        end
+      end
+    end
   end
 
   describe "GET download_archive" do
@@ -1734,6 +1804,91 @@ describe UrlRedirectsController do
         expect(response.parsed_body.count).to eq(2)
         expect(response.parsed_body[@audio.external_id]).to eq([@url_redirect.signed_location_for_file(@audio)])
         expect(response.parsed_body[@video.external_id]).to eq([@url_redirect.hls_playlist_or_smil_xml_path(@video), @url_redirect.signed_location_for_file(@video)])
+      end
+    end
+  end
+
+  describe "POST 'save_last_content_page'" do
+    let(:product) { create(:product_with_pdf_file) }
+    let(:purchase) { create(:purchase, link: product) }
+    let!(:url_redirect) { create(:url_redirect, link: product, purchase:) }
+
+    it "saves the last content page id for the purchase" do
+      expect do
+        post :save_last_content_page, params: { id: url_redirect.token, page_id: "page_123" }
+      end.to change { purchase.reload.last_content_page_id }.from(nil).to("page_123")
+
+      expect(response).to be_successful
+      expect(response.parsed_body).to eq("success" => true)
+    end
+
+    it "updates an existing last content page id" do
+      purchase.update!(last_content_page_id: "old_page")
+
+      expect do
+        post :save_last_content_page, params: { id: url_redirect.token, page_id: "new_page" }
+      end.to change { purchase.reload.last_content_page_id }.from("old_page").to("new_page")
+
+      expect(response).to be_successful
+    end
+
+    context "when there is no purchase" do
+      let!(:url_redirect_without_purchase) { create(:url_redirect, link: product, purchase: nil) }
+
+      it "returns an error" do
+        post :save_last_content_page, params: { id: url_redirect_without_purchase.token, page_id: "page_123" }
+
+        expect(response).to have_http_status(:unprocessable_entity)
+        expect(response.parsed_body).to eq("success" => false, "error" => "Purchase not found")
+      end
+    end
+
+    it "handles missing page_id parameter by setting nil" do
+      purchase.update!(last_content_page_id: "existing_page")
+
+      expect do
+        post :save_last_content_page, params: { id: url_redirect.token }
+      end.to change { purchase.reload.last_content_page_id }.from("existing_page").to(nil)
+
+      expect(response).to be_successful
+    end
+
+    context "when access is revoked for purchase" do
+      before do
+        purchase.update!(is_access_revoked: true)
+      end
+
+      it "redirects to expired page" do
+        post :save_last_content_page, params: { id: url_redirect.token, page_id: "page_123" }
+
+        expect(response).to redirect_to(url_redirect_expired_page_path(id: url_redirect.token))
+      end
+    end
+
+    context "when purchase is refunded" do
+      before do
+        purchase.update!(stripe_refunded: true)
+      end
+
+      it "raises an e404" do
+        expect do
+          post :save_last_content_page, params: { id: url_redirect.token, page_id: "page_123" }
+        end.to raise_error(ActionController::RoutingError)
+      end
+    end
+
+    context "with custom domain route", type: :request do
+      let!(:custom_domain) { create(:custom_domain, user: product.user) }
+
+      it "saves the last content page id via custom domain" do
+        expect do
+          post "/r/#{url_redirect.token}/save_last_content_page",
+               params: { page_id: "page_123" },
+               headers: { "HOST" => custom_domain.domain }
+        end.to change { purchase.reload.last_content_page_id }.from(nil).to("page_123")
+
+        expect(response).to be_successful
+        expect(response.parsed_body).to eq("success" => true)
       end
     end
   end

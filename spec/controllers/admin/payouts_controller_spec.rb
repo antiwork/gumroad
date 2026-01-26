@@ -13,10 +13,18 @@ describe Admin::PayoutsController, type: :controller, inertia: true do
   describe "GET show" do
     it "shows a payout" do
       sign_in admin_user
-      get :show, params: { id: payment.id }
+      get :show, params: { external_id: payment.external_id }
 
       expect(response).to be_successful
       expect(inertia.component).to eq("Admin/Payouts/Show")
+      expect(inertia.props[:payout][:external_id]).to eq(payment.external_id)
+    end
+
+    it "redirects numeric ID to external_id URL" do
+      sign_in admin_user
+      get :show, params: { external_id: payment.id.to_s }
+
+      expect(response).to redirect_to(admin_payout_path(payment.external_id))
     end
   end
 
@@ -24,7 +32,7 @@ describe Admin::PayoutsController, type: :controller, inertia: true do
     it "retries a failed payout" do
       failed_payment = create(:payment_failed)
       sign_in admin_user
-      post :retry, params: { id: failed_payment.id }
+      post :retry, params: { external_id: failed_payment.external_id }
 
       expect(response).to be_successful
     end
@@ -34,7 +42,7 @@ describe Admin::PayoutsController, type: :controller, inertia: true do
     it "cancels an unclaimed paypal payout" do
       unclaimed_payment = create(:payment_unclaimed, processor: PayoutProcessorType::PAYPAL)
       sign_in admin_user
-      post :cancel, params: { id: unclaimed_payment.id }
+      post :cancel, params: { external_id: unclaimed_payment.external_id }
 
       expect(response).to be_successful
     end
@@ -44,7 +52,7 @@ describe Admin::PayoutsController, type: :controller, inertia: true do
     it "marks a processing payout as failed" do
       processing_payment = create(:payment, created_at: 3.days.ago)
       sign_in admin_user
-      post :fail, params: { id: processing_payment.id }
+      post :fail, params: { external_id: processing_payment.external_id }
 
       expect(response).to be_successful
     end
@@ -54,7 +62,7 @@ describe Admin::PayoutsController, type: :controller, inertia: true do
     it "syncs a paypal payout" do
       paypal_payment = create(:payment, processor: PayoutProcessorType::PAYPAL)
       sign_in admin_user
-      post :sync, params: { id: paypal_payment.id }
+      post :sync, params: { external_id: paypal_payment.external_id }
 
       expect(response).to be_successful
     end

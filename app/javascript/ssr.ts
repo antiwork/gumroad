@@ -3,27 +3,6 @@ import "abortcontroller-polyfill/dist/abortcontroller-polyfill-only";
 import "whatwg-fetch";
 import ReactOnRails from "react-on-rails";
 
-import AdminActionButton from "$app/components/server-components/Admin/ActionButton";
-import AdminAddCommentForm from "$app/components/server-components/Admin/AddCommentForm";
-import AdminAddCreditForm from "$app/components/server-components/Admin/AddCreditForm";
-import AdminChangeEmailForm from "$app/components/server-components/Admin/ChangeEmailForm";
-import AdminFlagForFraudForm from "$app/components/server-components/Admin/FlagForFraudForm";
-import AdminManualPayoutForm from "$app/components/server-components/Admin/ManualPayoutForm";
-import AdminMassTransferPurchasesForm from "$app/components/server-components/Admin/MassTransferPurchasesForm";
-import AdminNav from "$app/components/server-components/Admin/Nav";
-import AdminPausePayoutsForm from "$app/components/server-components/Admin/PausePayoutsForm";
-import AdminProductAttributesAndInfo from "$app/components/server-components/Admin/ProductAttributesAndInfo";
-import AdminProductPurchases from "$app/components/server-components/Admin/ProductPurchases";
-import AdminProductStats from "$app/components/server-components/Admin/ProductStats";
-import AdminResendReceiptForm from "$app/components/server-components/Admin/ResendReceiptForm";
-import AdminSalesReportsPage from "$app/components/server-components/Admin/SalesReportsPage";
-import AdminSearchPopover from "$app/components/server-components/Admin/SearchPopover";
-import AdminSetCustomFeeForm from "$app/components/server-components/Admin/SetCustomFeeForm";
-import AdminSuspendForFraudForm from "$app/components/server-components/Admin/SuspendForFraudForm";
-import AdminSuspendForTosForm from "$app/components/server-components/Admin/SuspendForTosForm";
-import AdminUserGuids from "$app/components/server-components/Admin/UserGuids";
-import AdminUserStats from "$app/components/server-components/Admin/UserStats";
-import AffiliateRequestPage from "$app/components/server-components/AffiliateRequestPage";
 import Alert from "$app/components/server-components/Alert";
 import BundleEditPage from "$app/components/server-components/BundleEditPage";
 import CheckoutPage from "$app/components/server-components/CheckoutPage";
@@ -50,8 +29,6 @@ import ProfileCoffeePage from "$app/components/server-components/Profile/CoffeeP
 import ProfilePostPage from "$app/components/server-components/Profile/PostPage";
 import ProfileProductPage from "$app/components/server-components/Profile/ProductPage";
 import ProfileWishlistPage from "$app/components/server-components/Profile/WishlistPage";
-import PublicChargePage from "$app/components/server-components/Public/ChargePage";
-import PublicLicenseKeyPage from "$app/components/server-components/Public/LicenseKeyPage";
 import DisputeEvidencePage from "$app/components/server-components/Purchase/DisputeEvidencePage";
 import PurchaseProductPage from "$app/components/server-components/Purchase/ProductPage";
 import SubscribeReviewReminders from "$app/components/server-components/ReviewReminders/SubscribeReviewReminders";
@@ -69,28 +46,7 @@ import CodeSnippet from "$app/components/ui/CodeSnippet";
 import { Pill } from "$app/components/ui/Pill";
 
 ReactOnRails.register({
-  AdminActionButton,
-  AdminAddCommentForm,
-  AdminChangeEmailForm,
-  AdminFlagForFraudForm,
-  AdminManualPayoutForm,
-  AdminMassTransferPurchasesForm,
-  AdminNav,
-  AdminPausePayoutsForm,
-  AdminProductAttributesAndInfo,
-  AdminProductPurchases,
-  AdminProductStats,
-  AdminSalesReportsPage,
-  AdminResendReceiptForm,
-  AdminSearchPopover,
-  AdminSetCustomFeeForm,
-  AdminSuspendForFraudForm,
-  AdminSuspendForTosForm,
-  AdminUserGuids,
-  AdminUserStats,
-  AffiliateRequestPage,
   Alert,
-  AdminAddCreditForm,
   HelpCenterArticlesIndexPage,
   SupportHeader,
   BundleEditPage,
@@ -121,8 +77,6 @@ ReactOnRails.register({
   ProfilePostPage,
   ProfileProductPage,
   ProfileWishlistPage,
-  PublicChargePage,
-  PublicLicenseKeyPage,
   SecureRedirectPage,
   SubscribePage,
   SubscribePreview,

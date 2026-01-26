@@ -2,7 +2,7 @@ import { router, useForm, usePage } from "@inertiajs/react";
 import * as React from "react";
 import { cast } from "ts-safe-cast";
 
-import { Button } from "$app/components/Button";
+import { Button, buttonVariants } from "$app/components/Button";
 import { CopyToClipboard } from "$app/components/CopyToClipboard";
 import { useCurrentSeller } from "$app/components/CurrentSeller";
 import { ExportSubscribersPopover } from "$app/components/Followers/ExportSubscribersPopover";
@@ -10,6 +10,7 @@ import { Icon } from "$app/components/Icons";
 import { useLoggedInUser } from "$app/components/LoggedInUser";
 import { Popover } from "$app/components/Popover";
 import { showAlert } from "$app/components/server-components/Alert";
+import { Card, CardContent } from "$app/components/ui/Card";
 import { PageHeader } from "$app/components/ui/PageHeader";
 import { Placeholder, PlaceholderImage } from "$app/components/ui/Placeholder";
 import { Sheet, SheetHeader } from "$app/components/ui/Sheet";
@@ -139,7 +140,7 @@ export default function FollowersPage() {
               aria-label="Search"
               trigger={
                 <WithTooltip tip="Search" position="bottom">
-                  <div className="button">
+                  <div className={buttonVariants({ size: "default" })}>
                     <Icon name="solid-search" />
                   </div>
                 </WithTooltip>
@@ -218,10 +219,10 @@ export default function FollowersPage() {
                 className={selectedFollower.can_update ? "" : "js-team-member-read-only"}
               >
                 <SheetHeader>Details</SheetHeader>
-                <div className="stack">
-                  <div>
-                    <div>
-                      <h4>Email</h4>
+                <Card>
+                  <CardContent>
+                    <div className="grow">
+                      <h4 className="font-bold">Email</h4>
                       <div>{selectedFollower.email}</div>
                       <Button
                         color="danger"
@@ -232,8 +233,8 @@ export default function FollowersPage() {
                         {deleteForm.processing ? "Removing..." : "Remove follower"}
                       </Button>
                     </div>
-                  </div>
-                </div>
+                  </CardContent>
+                </Card>
               </Sheet>
             ) : null}
           </div>

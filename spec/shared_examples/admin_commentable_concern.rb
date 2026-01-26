@@ -56,7 +56,7 @@ RSpec.shared_examples_for "Admin::Commentable" do
               "id" => comment2.id,
               "content" => "Second comment",
               "author" => {
-                "id" => admin_user.id,
+                "external_id" => admin_user.external_id,
                 "name" => admin_user.name,
                 "email" => admin_user.email
               },
@@ -68,7 +68,7 @@ RSpec.shared_examples_for "Admin::Commentable" do
               "id" => comment1.id,
               "content" => "First comment",
               "author" => {
-                "id" => admin_user.id,
+                "external_id" => admin_user.external_id,
                 "name" => admin_user.name,
                 "email" => admin_user.email
               },
@@ -141,7 +141,7 @@ RSpec.shared_examples_for "Admin::Commentable" do
         "id" => comment.id,
         "content" => "This is a test comment",
         "author" => {
-          "id" => admin_user.id,
+          "external_id" => admin_user.external_id,
           "name" => admin_user.name,
           "email" => admin_user.email
         },
