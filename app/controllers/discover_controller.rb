@@ -136,9 +136,30 @@ class DiscoverController < ApplicationController
       set_meta_tag(property: "og:site_name", content: "Gumroad")
       set_meta_tag(tag_name: "link", rel: "canonical", href: Discover::CanonicalUrlPresenter.canonical_url(params), head_key: "canonical")
 
+      title_parts = []
+      if params[:query].present?
+        title_parts << "Search results for \"#{params[:query]}\""
+      elsif params[:tags].present?
+        if taxonomy.present?
+          tags_title = Array(params[:tags]).map { |t| t.squish.gsub(/[-\s]+/, " ") }.join(", ")
+          title_parts << tags_title
+        else
+          presenter = Discover::TagPageMetaPresenter.new(Array(params[:tags]), @search_results[:total])
+          title_parts << presenter.title
+        end
+      end
+      if taxonomy.present?
+        taxonomy_labels = Discover::TaxonomyPresenter::TAXONOMY_LABELS
+        taxonomy_title = taxonomy.self_and_ancestors.reverse.map do |t|
+          taxonomy_labels[t.slug] || t.slug.titleize
+        end.join(" » ")
+        title_parts << taxonomy_title
+      end
+      title_parts << "Gumroad"
+      set_meta_tag(title: title_parts.join(" | "))
+
       if !params[:taxonomy].present? && !params[:query].present? && params[:tags].present?
         presenter = Discover::TagPageMetaPresenter.new(params[:tags], @search_results[:total])
-        set_meta_tag(title: "#{presenter.title} | Gumroad")
         set_meta_tag(name: "description", content: presenter.meta_description)
         set_meta_tag(property: "og:description", content: presenter.meta_description)
       else
