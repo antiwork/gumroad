@@ -5,7 +5,7 @@ class SuspendAccountsWithPaymentAddressWorker
   sidekiq_options retry: 5, queue: :default
 
   def perform(user_id)
-    suspended_user = User.find(user_id)
+    suspended_user = User.with_user_risk_state(:suspended_for_fraud).find(user_id)
 
     return if suspended_user.payment_address.blank?
 

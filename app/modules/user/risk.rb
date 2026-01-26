@@ -126,6 +126,10 @@ module User::Risk
     SuspendAccountsWithPaymentAddressWorker.perform_in(5.seconds, id)
   end
 
+  def probate_sellers_other_accounts
+    ProbateAccountsWithPaymentAddressWorker.perform_in(5.seconds, id)
+  end
+
   def block_seller_ip!
     BlockSuspendedAccountIpWorker.perform_in(5.seconds, id)
   end
