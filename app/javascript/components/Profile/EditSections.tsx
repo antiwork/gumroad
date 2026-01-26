@@ -180,7 +180,7 @@ export const EditorMenu = ({
           {activeSubmenu}
         </div>
       ) : (
-        <div className="grid w-75 !divide-y !divide-border rounded  bg-background shadow-none">
+        <div className="grid w-75 !divide-y !divide-border rounded bg-background shadow-none">
           {items.map((item, key) =>
             isSubmenu(item) ? (
               <CardContent asChild key={key}>
