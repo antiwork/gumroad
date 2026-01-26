@@ -23,13 +23,13 @@ describe DiscoverController, inertia: true do
 
       expect(response).to be_successful
       expect_inertia.to render_component("Discover/Index")
-      expect(inertia.props).to include(
-        :search_results,
-        :currency_code,
-        :taxonomies_for_nav,
-        :recommended_products,
-        :curated_product_ids
-      )
+      expect(inertia.props[:search_results]).to include(:products, :total)
+      expect(inertia.props[:currency_code]).to eq(@buyer.currency_type)
+      expect(inertia.props[:taxonomies_for_nav]).to be_an(Array)
+      expect(inertia.props[:recommended_products]).to be_an(Array)
+      expect(inertia.props[:curated_product_ids]).to be_an(Array)
+      expect(inertia.props[:show_black_friday_hero]).to be_in([true, false])
+      expect(inertia.props[:black_friday_offer_code]).to eq("BLACKFRIDAY2025")
     end
 
     it "renders the proper meta tags with no extra parameters" do
