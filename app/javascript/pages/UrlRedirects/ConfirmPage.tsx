@@ -33,7 +33,6 @@ function ConfirmPage() {
     purchase,
   } = props;
 
-  // Native form submission needs CSRF token from meta tag
   const [csrfToken, setCsrfToken] = React.useState("");
   useRunOnce(() => setCsrfToken(cast(document.querySelector("meta[name=csrf-token]")?.getAttribute("content"))));
 
