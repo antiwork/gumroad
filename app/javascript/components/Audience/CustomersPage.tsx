@@ -431,15 +431,13 @@ const CustomersPage = ({
                   <DateRangePicker from={from} to={to} setFrom={setFrom} setTo={setTo} />
                   <NavigationButtonInertia
                     color="primary"
-                    href={Routes.export_purchases_path()}
-                    method="post"
-                    preserveScroll
-                    data={{
+                    href={Routes.export_purchases_path({
                       start_time: lightFormat(from, "yyyy-MM-dd"),
                       end_time: lightFormat(to, "yyyy-MM-dd"),
                       product_ids: includedProductIds,
                       variant_ids: includedVariantIds,
-                    }}
+                    })}
+                    preserveScroll
                     onSuccess={() => close()}
                   >
                     Download

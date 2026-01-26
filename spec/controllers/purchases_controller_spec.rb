@@ -780,6 +780,20 @@ describe PurchasesController, :vcr do
         expect(response.body).to include(variant_purchase.external_id)
       end
 
+      it "filters by start_time and end_time" do
+        in_range_purchase = create(:purchase, link: @product, seller: seller, created_at: Time.utc(2023, 6, 15, 12, 0, 0))
+        before_purchase = create(:purchase, link: @product, seller: seller, created_at: Time.utc(2023, 6, 1, 12, 0, 0))
+        after_purchase = create(:purchase, link: @product, seller: seller, created_at: Time.utc(2023, 6, 30, 12, 0, 0))
+        index_model_records(Purchase)
+
+        get :export, params: { start_time: "2023-06-10", end_time: "2023-06-20" }
+
+        expect(response.body).to include(in_range_purchase.external_id)
+        expect(response.body).not_to include(before_purchase.external_id)
+        expect(response.body).not_to include(after_purchase.external_id)
+        expect(response.body.lines.size - 2).to eq(1)
+      end
+
       it "filters out non-charged sales, and sales from other sellers" do
         create(:purchase)
         create(:failed_purchase, link: @product)
