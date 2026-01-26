@@ -77,4 +77,6 @@ function ConfirmPage() {
   );
 }
 
+ConfirmPage.loggedInUserLayout = true;
+
 export default ConfirmPage;

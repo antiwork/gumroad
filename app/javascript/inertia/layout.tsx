@@ -72,7 +72,7 @@ export function LoggedInUserLayout({ children }: { children: React.ReactNode }) 
       <CurrentSellerProvider value={parseCurrentSeller(current_seller)}>
         <MetaTags />
         <Alert initial={null} />
-        {children}
+        <div className="flex h-screen flex-col">{children}</div>
       </CurrentSellerProvider>
     </LoggedInUserProvider>
   );
