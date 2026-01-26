@@ -3,13 +3,20 @@
 class SignupController < Devise::RegistrationsController
   include OauthApplicationConfig, ValidateRecaptcha, InertiaRendering
 
+  include PageMeta::Base
+
   before_action :verify_captcha_and_handle_existing_users, only: :create
   before_action :set_noindex_header, only: :new, if: -> { params[:next]&.start_with?("/oauth/authorize") }
+
+  before_action :set_default_page_title
+  before_action :set_csrf_meta_tags
+  before_action :set_default_meta_tags
+  helper_method :erb_meta_tags
 
   layout "inertia", only: [:new]
 
   def new
-    @title = "Sign Up"
+    set_meta_tag(title: "Sign Up")
     auth_presenter = AuthPresenter.new(params:, application: @application)
     render inertia: "Signup/New", props: auth_presenter.signup_props
   end

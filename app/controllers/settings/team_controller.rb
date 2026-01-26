@@ -5,7 +5,7 @@ class Settings::TeamController < Settings::BaseController
   before_action :check_email_presence
 
   def show
-    @title = "Team"
+    set_meta_tag(title: "Team")
     team_presenter = Settings::TeamPresenter.new(pundit_user:)
 
     render inertia: "Settings/Team/Show", props: {

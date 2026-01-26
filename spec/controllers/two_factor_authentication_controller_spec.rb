@@ -119,7 +119,7 @@ describe TwoFactorAuthenticationController, type: :controller, inertia: true do
     it "sets the page title" do
       get :show
 
-      expect(assigns[:title]).to eq("Two-Factor Authentication")
+      expect(controller.send(:page_title)).to eq("Two-Factor Authentication")
     end
   end
 

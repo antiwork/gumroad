@@ -1437,7 +1437,7 @@ describe PurchasesController, :vcr do
         get :confirm_receipt_email, params: { id: purchase.external_id }
         expect(response).to be_successful
         expect(assigns(:purchase)).to eq(purchase)
-        expect(assigns(:title)).to eq("Confirm Email")
+        expect(controller.send(:page_title)).to eq("Confirm Email")
         expect(assigns(:hide_layouts)).to be(true)
       end
     end

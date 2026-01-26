@@ -263,7 +263,7 @@ class PurchasesController < ApplicationController
   def generate_invoice
     chargeable = Charge::Chargeable.find_by_purchase_or_charge!(purchase: @purchase)
     @invoice_presenter = InvoicePresenter.new(chargeable)
-    @title = "Generate invoice"
+    set_meta_tag(title: "Generate invoice")
   end
 
   def send_invoice
@@ -380,7 +380,7 @@ class PurchasesController < ApplicationController
   end
 
   def confirm_receipt_email
-    @title = "Confirm Email"
+    set_meta_tag(title: "Confirm Email")
     @hide_layouts = true
   end
 
