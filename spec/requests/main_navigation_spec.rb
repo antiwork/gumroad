@@ -50,7 +50,7 @@ describe "Main Navigation", type: :system, js: true do
         visit library_path
 
         within "nav[aria-label='Main']" do
-          expect(page).to have_link("Community", href: community_path)
+          expect(page).to have_link("Community", href: communities_path)
         end
       end
 
@@ -59,13 +59,13 @@ describe "Main Navigation", type: :system, js: true do
         Feature.activate_user(:communities, seller)
 
         product = create(:product, user: seller, community_chat_enabled: true)
-        create(:community, resource: product, seller:)
-        create(:purchase, seller:, link: product, purchaser: user)
+        create(:community, resource: product, seller: seller)
+        create(:purchase, seller: seller, link: product, purchaser: user)
 
         visit library_path
 
         within "nav[aria-label='Main']" do
-          expect(page).to have_link("Community", href: community_path)
+          expect(page).to have_link("Community", href: communities_path)
         end
       end
 
@@ -76,7 +76,7 @@ describe "Main Navigation", type: :system, js: true do
         visit library_path
 
         within "nav[aria-label='Main']" do
-          expect(page).not_to have_link("Community", href: community_path)
+          expect(page).not_to have_link("Community", href: communities_path)
         end
       end
     end

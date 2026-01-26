@@ -253,7 +253,7 @@ describe("Download Page", type: :system, js: true) do
 
       visit("/d/#{url_redirect.token}")
 
-      expect(page).to have_link("Community", href: community_path(seller.external_id, community.external_id))
+      expect(page).to have_link("Community", href: community_path(community.external_id))
     end
   end
 

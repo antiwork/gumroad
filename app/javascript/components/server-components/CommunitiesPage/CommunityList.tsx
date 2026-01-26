@@ -24,7 +24,7 @@ export const CommunityList = ({
       return (
         <Link
           key={community.id}
-          href={`/communities/${community.seller.id}/${community.id}`}
+          href={Routes.community_path(community.id)}
           replace
           aria-selected={isCommunitySelected}
           onClick={(e) => {

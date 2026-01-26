@@ -2,7 +2,7 @@
 
 class CommunitiesController < ApplicationController
   before_action :authenticate_user!
-  before_action :set_community, if: -> { params[:community_id].present? }
+  before_action :set_community, only: [:show]
   before_action :set_title
   after_action :verify_authorized
 
@@ -10,13 +10,12 @@ class CommunitiesController < ApplicationController
 
   def index
     authorize Community
-
     props = CommunitiesPresenter.new(current_user: current_seller).props
+    render inertia: "Communities/Index", props: props
+  end
 
-    if @community
-      props = props.merge(selectedCommunityId: @community.external_id)
-    end
-
+  def show
+    props = CommunitiesPresenter.new(current_user: current_seller).props.merge(selectedCommunityId: @community.external_id)
     render inertia: "Communities/Index", props: props
   end
 
@@ -26,10 +25,8 @@ class CommunitiesController < ApplicationController
     end
 
     def set_community
-      external_id = params[:community_id]
-      @community = Community.find_by_external_id(external_id)
+      @community = Community.find_by_external_id(params[:id])
       return head :not_found unless @community
-
       authorize @community, :show?
     end
 end

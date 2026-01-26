@@ -27,11 +27,11 @@ describe "Communities", :js, type: :system do
     end
 
     it "shows the community and allows the seller to send, edit, and delete own messages" do
-      visit community_path
+      visit communities_path
 
       wait_for_ajax
 
-      expect(page).to have_current_path(community_path(seller.external_id, community.external_id))
+      expect(page).to have_current_path(community_path(community.external_id))
 
       within "[aria-label='Sidebar']" do
         within "[aria-label='Community switcher area']" do
@@ -39,7 +39,7 @@ describe "Communities", :js, type: :system do
         end
 
         within "[aria-label='Community list']" do
-          expect(page).to have_link("Mastering Rails", href: community_path(seller.external_id, community.external_id))
+          expect(page).to have_link("Mastering Rails", href: community_path(community.external_id))
           expect(find_link("Mastering Rails")["aria-selected"]).to eq("true")
         end
       end
@@ -104,7 +104,7 @@ describe "Communities", :js, type: :system do
       customer = create(:user, name: "John Customer")
       customer_message = create(:community_chat_message, community:, user: customer, content: "Hello, world!")
 
-      visit community_path
+      visit communities_path
 
       customer_message_element = find_message("Hello, world!")
       customer_message_element.hover
@@ -128,7 +128,7 @@ describe "Communities", :js, type: :system do
     end
 
     it "allows seller to manage community notification settings" do
-      visit community_path
+      visit communities_path
 
       expect(seller.community_notification_settings.find_by(seller:)).to be_nil
 
@@ -197,13 +197,13 @@ describe "Communities", :js, type: :system do
       community2 = create(:community, resource: product2, seller:)
       create(:community_chat_message, community: community2, user: seller, content: "Are you ready to scale your web app?")
 
-      visit community_path
+      visit communities_path
 
       wait_for_ajax
       within "[aria-label='Sidebar']" do
         within "[aria-label='Community list']" do
-          expect(page).to have_link("Mastering Rails", href: community_path(seller.external_id, community.external_id))
-          expect(page).to have_link("Scaling web apps", href: community_path(seller.external_id, community2.external_id))
+          expect(page).to have_link("Mastering Rails", href: community_path(community.external_id))
+          expect(page).to have_link("Scaling web apps", href: community_path(community2.external_id))
           expect(find_link("Mastering Rails")["aria-selected"]).to eq("true")
           expect(find_link("Scaling web apps")["aria-selected"]).to eq("false")
         end
@@ -293,7 +293,7 @@ describe "Communities", :js, type: :system do
     end
 
     it "shows the community and allows the buyer to send, edit, and delete own messages" do
-      visit community_path
+      visit community_path(community.external_id)
 
       wait_for_ajax
       within "[aria-label='Sidebar']" do
@@ -302,7 +302,7 @@ describe "Communities", :js, type: :system do
         end
 
         within "[aria-label='Community list']" do
-          expect(page).to have_link("Mastering Rails", href: community_path(seller.external_id, community.external_id))
+          expect(page).to have_link("Mastering Rails", href: community_path(community.external_id))
           expect(find_link("Mastering Rails")["aria-selected"]).to eq("true")
         end
       end
@@ -385,7 +385,7 @@ describe "Communities", :js, type: :system do
     end
 
     it "allows buyer to manage community notification settings" do
-      visit community_path
+      visit community_path(community.external_id)
 
       expect(buyer.community_notification_settings.find_by(seller:)).to be_nil
 
@@ -455,11 +455,11 @@ describe "Communities", :js, type: :system do
       create(:purchase, seller:, purchaser: buyer, link: product2)
       create(:community_chat_message, community: community2, user: seller, content: "Are you ready to scale your web app?")
 
-      visit community_path
+      visit community_path(community.external_id)
 
       wait_for_ajax
 
-      expect(page).to have_current_path(community_path(seller.external_id, community.external_id))
+      expect(page).to have_current_path(community_path(community.external_id))
 
       within "[aria-label='Sidebar']" do
         within "[aria-label='Community switcher area']" do
@@ -467,8 +467,8 @@ describe "Communities", :js, type: :system do
         end
 
         within "[aria-label='Community list']" do
-          expect(page).to have_link("Mastering Rails", href: community_path(seller.external_id, community.external_id))
-          expect(page).to have_link("Scaling web apps", href: community_path(seller.external_id, community2.external_id))
+          expect(page).to have_link("Mastering Rails", href: community_path(community.external_id))
+          expect(page).to have_link("Scaling web apps", href: community_path(community2.external_id))
           community1_link_element = find_link("Mastering Rails")
           expect(community1_link_element["aria-selected"]).to eq("true")
           within community1_link_element do
@@ -504,7 +504,7 @@ describe "Communities", :js, type: :system do
         end
       end
 
-      expect(page).to have_current_path(community_path(seller.external_id, community2.external_id))
+      expect(page).to have_current_path(community_path(community2.external_id))
 
       within "[aria-label='Chat window']" do
         within "[aria-label='Community chat header']" do
@@ -569,11 +569,11 @@ describe "Communities", :js, type: :system do
       create(:purchase, seller: other_seller, purchaser: buyer, link: other_product)
       create(:community_chat_message, community: other_community, user: other_seller, content: "Get excited!")
 
-      visit community_path
+      visit community_path(community.external_id)
 
       wait_for_ajax
 
-      expect(page).to have_current_path(community_path(seller.external_id, community.external_id))
+      expect(page).to have_current_path(community_path(community.external_id))
 
       within "[aria-label='Sidebar']" do
         within "[aria-label='Community switcher area']" do
@@ -581,7 +581,7 @@ describe "Communities", :js, type: :system do
         end
 
         within "[aria-label='Community list']" do
-          expect(page).to have_link("Mastering Rails", href: community_path(seller.external_id, community.external_id))
+          expect(page).to have_link("Mastering Rails", href: community_path(community.external_id))
           expect(page).not_to have_link("The ultimate guide to design systems")
           expect(find_link("Mastering Rails")["aria-selected"]).to eq("true")
 
@@ -611,11 +611,11 @@ describe "Communities", :js, type: :system do
           expect(page).to have_text("Alice")
         end
 
-        expect(page).to have_current_path(community_path(other_seller.external_id, other_community.external_id))
+        expect(page).to have_current_path(community_path(other_community.external_id))
         refresh
 
         within "[aria-label='Community list']" do
-          expect(page).to have_link("The ultimate guide to design systems", href: community_path(other_seller.external_id, other_community.external_id))
+          expect(page).to have_link("The ultimate guide to design systems", href: community_path(other_community.external_id))
           expect(page).not_to have_link("Mastering Rails")
           expect(find_link("The ultimate guide to design systems")["aria-selected"]).to eq("true")
 
@@ -663,7 +663,7 @@ describe "Communities", :js, type: :system do
           expect(page).to have_text("Bob")
         end
 
-        expect(page).to have_current_path(community_path(seller.external_id, community.external_id))
+        expect(page).to have_current_path(community_path(community.external_id))
         refresh
 
         within "[aria-label='Community list']" do
@@ -688,7 +688,7 @@ describe "Communities", :js, type: :system do
     end
 
     it "allows accessing a community directly via URL" do
-      visit community_path(seller.external_id, community.external_id)
+      visit community_path(community.external_id)
 
       wait_for_ajax
       within "[aria-label='Sidebar']" do
@@ -697,7 +697,7 @@ describe "Communities", :js, type: :system do
         end
 
         within "[aria-label='Community list']" do
-          expect(page).to have_link("Mastering Rails", href: community_path(seller.external_id, community.external_id))
+          expect(page).to have_link("Mastering Rails", href: community_path(community.external_id))
           expect(find_link("Mastering Rails")["aria-selected"]).to eq("true")
         end
       end
@@ -718,14 +718,14 @@ describe "Communities", :js, type: :system do
     it "does not allow accessing a community directly via URL if user cannot access it" do
       purchase.destroy!
 
-      visit community_path(seller.external_id, community.external_id)
+      visit community_path(community.external_id)
 
       expect(page).to have_alert(text: "You are not allowed to perform this action.")
       expect(page).to have_current_path(dashboard_path)
     end
 
     it "opens notifications modal when accessing community URL with notifications parameter" do
-      visit community_path(seller.external_id, community.external_id, notifications: "true")
+      visit community_path(community.external_id, notifications: "true")
 
       wait_for_ajax
       within "[aria-label='Sidebar']" do

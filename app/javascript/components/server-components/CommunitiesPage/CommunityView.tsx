@@ -149,7 +149,7 @@ export const CommunityView = () => {
       if (searchParams.has("notifications")) {
         searchParams.delete("notifications");
         const newSearch = searchParams.toString() ? `?${searchParams.toString()}` : "";
-        router.replace({ url: `${window.location.pathname}${newSearch}${window.location.hash}`, preserveState: true, preserveScroll: true });
+        router.visit(`${window.location.pathname}${newSearch}${window.location.hash}`, { replace: true, preserveState: true, preserveScroll: true });
         setShowNotificationsSettings(true);
       }
     }
@@ -488,7 +488,7 @@ export const CommunityView = () => {
   const switchSeller = (sellerId: string) => {
     const community = communities.find((community) => community.seller.id === sellerId);
     if (community) {
-      router.get(`/communities/${community.seller.id}/${community.id}`, {}, { replace: true });
+      router.visit(Routes.community_path(community.id), { replace: true });
       setSwitcherOpen(false);
     }
   };
@@ -513,8 +513,7 @@ export const CommunityView = () => {
 
     const community = communities.find((community) => community.id === communityId);
     if (!community) return;
-    // Use replace option to avoid creating a history entry - prevents back button loop
-    router.get(`/communities/${community.seller.id}/${community.id}`, {}, { replace: true });
+    router.visit(Routes.community_path(community.id), { replace: true });
   });
 
   const sellers = React.useMemo(() => {
@@ -835,8 +834,11 @@ const CommunityChatHeader = ({
 const GoBackHeader = () => {
   const handleGoBack = (e: React.MouseEvent) => {
     e.preventDefault();
-    // Use browser's native back button - Inertia preserves the history stack
-    window.history.back();
+    if (window.history.length > 1) {
+      window.history.back();
+    } else {
+      router.visit(Routes.dashboard_path());
+    }
   };
 
   return (

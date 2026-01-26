@@ -284,7 +284,7 @@ class UrlRedirectPresenter
     def community_chat_url
       return unless purchase.present? && Feature.active?(:communities, purchase.seller) && product.community_chat_enabled? && product.active_community.present?
 
-      path = community_path(purchase.seller.external_id, product.active_community.external_id)
+      path = community_path(product.active_community.external_id)
 
       return signup_path(email: purchase.email, next: path) if purchase.purchaser_id.blank?
 

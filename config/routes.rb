@@ -778,7 +778,7 @@ Rails.application.routes.draw do
     post "/posts/:id/send_for_purchase/:purchase_id", to: "posts#send_for_purchase", as: :send_for_purchase
 
     # communities
-    get "/communities(/:seller_id/:community_id)", to: "communities#index", as: :community
+    resources :communities, only: [:index, :show]
 
     # emails
     resources :emails, only: [:index, :new, :create, :edit, :update, :destroy] do
