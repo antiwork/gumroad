@@ -80,7 +80,8 @@ class PostsController < ApplicationController
     authorize Installment
 
     purchase = current_seller.sales.find_by_external_id!(params[:purchase_id])
-    missed_posts = Installment.missed_for_purchase(purchase)
+    missed_posts = Installment.missed_for_purchase(purchase).to_a
+    total_count = missed_posts.size
 
     sent_count = 0
     missed_posts.each do |post|
@@ -105,7 +106,7 @@ class PostsController < ApplicationController
       sent_count += 1
     end
 
-    render json: { sent_count: sent_count, total_count: missed_posts.count }
+    render json: { sent_count: sent_count, total_count: total_count }
   end
 
   def increment_post_views
@@ -153,7 +154,7 @@ class PostsController < ApplicationController
     end
 
     def ensure_seller_is_eligible_to_send_emails
-      seller = @post.seller || @post.link.seller
+      seller = @post&.seller || @post&.link&.seller || current_seller
       unless seller&.eligible_to_send_emails?
         render json: { message: "You are not eligible to resend this email." }, status: :unauthorized
       end

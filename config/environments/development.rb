@@ -43,6 +43,8 @@ Rails.application.configure do
 
   # Don't care if the mailer can't send.
   config.action_mailer.raise_delivery_errors = false
+  # Allow disabling outbound email in dev to avoid external API errors.
+  config.action_mailer.perform_deliveries = ENV["DISABLE_EMAIL_DELIVERY"] != "1"
 
   config.action_mailer.perform_caching = false
   config.action_mailer.preview_paths << "#{Rails.root}/lib/mailer_previews"

@@ -97,6 +97,73 @@ describe PostsController do
         expect(response).to have_http_status(:no_content)
       end
     end
+
+    describe "POST send_all_for_purchase" do
+      before do
+        link = create(:product, user: seller)
+        @post1 = create(:installment, link:, published_at: 2.days.ago)
+        @post2 = create(:installment, link:, published_at: 1.day.ago)
+        @purchase = create(:purchase, seller:, link:, created_at: Time.current)
+        @purchase.create_url_redirect!
+      end
+
+      before do
+        create(:payment_completed, user: seller)
+        allow_any_instance_of(User).to receive(:sales_cents_total).and_return(Installment::MINIMUM_SALES_CENTS_VALUE)
+      end
+
+      it_behaves_like "authorize called for action", :post, :send_all_for_purchase do
+        let(:record) { Installment }
+        let(:request_params) { { purchase_id: @purchase.external_id } }
+      end
+
+      it "returns an error if seller is not eligible to send emails" do
+        allow_any_instance_of(User).to receive(:sales_cents_total).and_return(Installment::MINIMUM_SALES_CENTS_VALUE - 1)
+
+        expect(PostSendgridApi).to_not receive(:process)
+        post :send_all_for_purchase, params: { purchase_id: @purchase.external_id }
+        expect(response).to have_http_status(:unauthorized)
+        expect(response.parsed_body).to eq("message" => "You are not eligible to resend this email.")
+      end
+
+      it "returns 404 if no purchase" do
+        expect(PostSendgridApi).to_not receive(:process)
+        expect do
+          post :send_all_for_purchase, params: { purchase_id: "hello" }
+        end.to raise_error(ActiveRecord::RecordNotFound)
+      end
+
+      it "returns success and sends all missed posts" do
+        expect(PostSendgridApi).to receive(:process).twice
+
+        post :send_all_for_purchase, params: { purchase_id: @purchase.external_id }
+        expect(response).to be_successful
+        expect(response.parsed_body["sent_count"]).to eq(2)
+        expect(response.parsed_body["total_count"]).to eq(2)
+      end
+
+      it "respects cache and does not resend recently sent posts" do
+        Rails.cache.write("post_email:#{@post1.id}:#{@purchase.id}", true, expires_in: 8.hours)
+
+        expect(PostSendgridApi).to receive(:process).once
+
+        post :send_all_for_purchase, params: { purchase_id: @purchase.external_id }
+        expect(response).to be_successful
+        expect(response.parsed_body["sent_count"]).to eq(1)
+        expect(response.parsed_body["total_count"]).to eq(2)
+      end
+
+      it "returns zero counts when there are no missed posts" do
+        create(:creator_contacting_customers_email_info_delivered, installment: @post1, purchase: @purchase)
+        create(:creator_contacting_customers_email_info_delivered, installment: @post2, purchase: @purchase)
+
+        expect(PostSendgridApi).to_not receive(:process)
+        post :send_all_for_purchase, params: { purchase_id: @purchase.external_id }
+        expect(response).to be_successful
+        expect(response.parsed_body["sent_count"]).to eq(0)
+        expect(response.parsed_body["total_count"]).to eq(0)
+      end
+    end
   end
 
   context "within consumer area" do
