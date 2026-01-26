@@ -44,7 +44,6 @@ import WishlistPage from "$app/components/server-components/WishlistPage";
 import CodeSnippet from "$app/components/ui/CodeSnippet";
 import { Pill } from "$app/components/ui/Pill";
 
-
 ReactOnRails.register({
   Alert,
   SupportHeader,
