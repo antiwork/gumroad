@@ -37,6 +37,8 @@ class PostsController < ApplicationController
 
     e404 if post_presenter.e404?
 
+    view_context.render(partial: "layouts/custom_styles/style")
+
     render inertia: "Posts/Show", props: post_presenter.post_component_props
   end
 
