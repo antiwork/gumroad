@@ -267,7 +267,10 @@ export default function PaymentsPage() {
     if (form.data.bank_account.type === "TrinidadAndTobagoBankAccount" && !form.data.bank_account.branch_code) {
       markFieldInvalid("branch_code");
     }
-    if (form.data.bank_account.type === "UkBankAccount" && !form.data.bank_account.sort_code) {
+    if (
+      (form.data.bank_account.type === "UkBankAccount" || form.data.bank_account.type === "GibraltarBankAccount") &&
+      !form.data.bank_account.sort_code
+    ) {
       markFieldInvalid("sort_code");
     }
     if (form.data.bank_account.type === "IndianBankAccount" && !form.data.bank_account.ifsc) {
