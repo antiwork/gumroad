@@ -28,6 +28,6 @@ const ProfileProductShowPage = () => {
   );
 };
 
-ProfileProductShowPage.disableLayout = true;
+ProfileProductShowPage.layout = (page: React.ReactNode) => page;
 
 export default ProfileProductShowPage;

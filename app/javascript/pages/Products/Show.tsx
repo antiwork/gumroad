@@ -27,6 +27,6 @@ const ProductShowPage = () => {
   );
 };
 
-ProductShowPage.disableLayout = true;
+ProductShowPage.layout = (page: React.ReactNode) => page;
 
 export default ProductShowPage;

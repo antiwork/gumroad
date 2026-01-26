@@ -34,6 +34,6 @@ const DiscoverProductShowPage = () => {
   );
 };
 
-DiscoverProductShowPage.disableLayout = true;
+DiscoverProductShowPage.layout = (page: React.ReactNode) => page;
 
 export default DiscoverProductShowPage;

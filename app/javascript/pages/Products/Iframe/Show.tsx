@@ -52,6 +52,6 @@ const IframeProductShowPage = () => {
   );
 };
 
-IframeProductShowPage.disableLayout = true;
+IframeProductShowPage.layout = (page: React.ReactNode) => page;
 
 export default IframeProductShowPage;
