@@ -5,6 +5,8 @@ class UrlRedirectsController < ApplicationController
   include ProductsHelper
   include PageMeta::Favicon
 
+  layout "inertia", only: [:download_page]
+
   before_action :fetch_url_redirect, except: %i[
     show stream download_subtitle_file read download_archive latest_media_locations download_product_files
     audio_durations
@@ -72,12 +74,24 @@ class UrlRedirectsController < ApplicationController
 
   def download_page
     @hide_layouts = true
-
     @body_class = "download-page responsive responsive-nav"
+
     set_favicon_meta_tags(@url_redirect.seller)
     set_meta_tag(title: @url_redirect.with_product_files.name == "Untitled" ? @url_redirect.referenced_link.name : @url_redirect.with_product_files.name)
-    @react_component_props = UrlRedirectPresenter.new(url_redirect: @url_redirect, logged_in_user:).download_page_with_content_props(common_props)
+    set_meta_tag(
+      tag_name: "meta",
+      name: "apple-itunes-app",
+      content: "app-id=#{IOS_APP_ID}, app-argument=#{@url_redirect.download_page_url}",
+      head_key: "apple-itunes-app"
+    )
+
     trigger_files_lifecycle_events
+
+    props = UrlRedirectPresenter.new(url_redirect: @url_redirect, logged_in_user:)
+      .download_page_with_content_props(common_props)
+      .merge(dropbox_api_key: DROPBOX_PICKER_API_KEY)
+
+    render inertia: "UrlRedirects/DownloadPage", props:
   end
 
   def download_product_files

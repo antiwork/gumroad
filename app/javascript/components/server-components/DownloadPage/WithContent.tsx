@@ -1,5 +1,5 @@
 import * as React from "react";
-import { cast, createCast } from "ts-safe-cast";
+import { cast } from "ts-safe-cast";
 
 import { getFolderArchiveDownloadUrl, getProductFileDownloadInfos, saveLastContentPage } from "$app/data/products";
 import { RichContent, RichContentPage } from "$app/parsers/richContent";
@@ -7,7 +7,6 @@ import { assertDefined } from "$app/utils/assert";
 import FileUtils from "$app/utils/file";
 import { request } from "$app/utils/request";
 import { generatePageIcon } from "$app/utils/rich_content_page";
-import { register } from "$app/utils/serverComponentUtil";
 
 import { Button } from "$app/components/Button";
 import { DiscordButton } from "$app/components/DiscordButton";
@@ -89,11 +88,7 @@ export type License = {
   seats: number;
 };
 
-const WithContent = ({
-  content,
-  product_has_third_party_analytics,
-  ...props
-}: LayoutProps & {
+export type Props = LayoutProps & {
   content: {
     rich_content_pages: RichContentPage[] | null;
     last_content_page_id: string | null;
@@ -109,7 +104,9 @@ const WithContent = ({
     community_chat_url: string | null;
   };
   product_has_third_party_analytics: boolean | null;
-}) => {
+};
+
+const WithContent = ({ content, product_has_third_party_analytics, ...props }: Props) => {
   const url = new URL(useOriginalLocation());
   const addThirdPartyAnalytics = useAddThirdPartyAnalytics();
   const [contentFiles, setContentFiles] = React.useState(
@@ -435,4 +432,4 @@ const nodeHasLicense = (node: RichContent) =>
   node.type === LicenseKey.name ||
   ((COMMON_CONTAINER_NODE_TYPES.includes(node.type ?? "") && node.content?.some(nodeHasLicense)) ?? false);
 
-export default register({ component: WithContent, propParser: createCast() });
+export default WithContent;

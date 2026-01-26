@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require "spec_helper"
+require "inertia_rails/rspec"
 
 describe UrlRedirectsController do
   render_views
@@ -12,7 +13,7 @@ describe UrlRedirectsController do
     @url = @url_redirect.referenced_link.product_files.alive.first.url
   end
 
-  describe "GET 'download_page'" do
+  describe "GET 'download_page'", inertia: true do
     before do
       # TODO: Uncomment after removing the :custom_domain_download feature flag (curtiseinsmann)
       # @request.host = URI.parse(@product.user.subdomain_with_protocol).host
@@ -27,18 +28,19 @@ describe UrlRedirectsController do
       get :download_page, params: { id: @token }
       expect(response).to be_successful
       expect(assigns(:hide_layouts)).to eq(true)
-      expect(
-        assigns(:react_component_props)
-      ).to eq(
-        UrlRedirectPresenter.new(
-          url_redirect: @url_redirect,
-          logged_in_user: nil
-        ).download_page_with_content_props.merge(
-          is_mobile_app_web_view: false,
-          content_unavailability_reason_code: nil,
-          add_to_library_option: "signup_form"
-        )
+      expect_inertia.to render_component("UrlRedirects/DownloadPage")
+      expected_props = UrlRedirectPresenter.new(
+        url_redirect: @url_redirect,
+        logged_in_user: nil
+      ).download_page_with_content_props.merge(
+        is_mobile_app_web_view: false,
+        content_unavailability_reason_code: nil,
+        add_to_library_option: "signup_form",
+        dropbox_api_key: DROPBOX_PICKER_API_KEY
       )
+      expected_props.each do |key, value|
+        expect(inertia.props[key]).to eq(value)
+      end
     end
 
     context "with access revoked for purchase" do
@@ -74,12 +76,8 @@ describe UrlRedirectsController do
       it "renders correctly" do
         get :download_page, params: { id: @token, display: "mobile_app" }
         expect(response).to be_successful
-        expect(assigns(:react_component_props)[:is_mobile_app_web_view]).to eq(true)
-
-        assert_select "h1", { text: @product.name, count: 0 }
-        assert_select "h4", { text: "Liked it? Give it a rating:", count: 0 }
-        assert_select "h4", { text: "Display Name", count: 1 }
-        assert_select "a", { text: "Download", count: 1 }
+        expect_inertia.to render_component("UrlRedirects/DownloadPage")
+        expect(inertia.props[:is_mobile_app_web_view]).to eq(true)
       end
     end
 
@@ -101,7 +99,7 @@ describe UrlRedirectsController do
     context "posts" do
       let(:url_redirect) { create(:url_redirect, purchase:) }
       let(:token) { url_redirect.token }
-      let(:subject) { assigns(:react_component_props).dig(:content, :posts) }
+      let(:posts_props) { inertia.props.dig(:content, :posts) }
 
       context "for products" do
         let(:seller) { create(:named_seller) }
@@ -118,7 +116,8 @@ describe UrlRedirectsController do
           get :download_page, params: { id: token }
 
           expect(response).to be_successful
-          expect(response.body).to include(installment_1.displayed_name)
+          expect_inertia.to render_component("UrlRedirects/DownloadPage")
+          expect(posts_props).to include(a_hash_including(name: installment_1.displayed_name))
         end
 
         it "returns updates from those other purchases if they've bought the same product multiple times" do
@@ -134,9 +133,10 @@ describe UrlRedirectsController do
           get :download_page, params: { id: token }
 
           expect(response).to be_successful
-          expect(response.body).to include(installment_1.displayed_name)
-          expect(response.body).to include(installment_2.displayed_name)
-          expect(response.body).to include(installment_3.displayed_name)
+          expect_inertia.to render_component("UrlRedirects/DownloadPage")
+          expect(posts_props).to include(a_hash_including(name: installment_1.displayed_name))
+          expect(posts_props).to include(a_hash_including(name: installment_2.displayed_name))
+          expect(posts_props).to include(a_hash_including(name: installment_3.displayed_name))
         end
 
         it "does not break if the user has been sent a post for a product they have not purchased" do
@@ -157,7 +157,7 @@ describe UrlRedirectsController do
 
           it "does not return posts" do
             get :download_page, params: { id: token }
-            expect(subject).to match_array(a_hash_including(name: installment_1.name))
+            expect(posts_props).to match_array(a_hash_including(name: installment_1.name))
           end
         end
 
@@ -169,7 +169,7 @@ describe UrlRedirectsController do
 
           it "does return posts" do
             get :download_page, params: { id: token }
-            expect(subject).to match_array(
+            expect(posts_props).to match_array(
               [
                 a_hash_including(name: installment_1.name),
                 a_hash_including(name: installment_2.name)
@@ -247,7 +247,7 @@ describe UrlRedirectsController do
 
         it "returns posts" do
           get :download_page, params: { id: token }
-          expect(subject).to match_array(a_hash_including(name: installment.name))
+          expect(posts_props).to match_array(a_hash_including(name: installment.name))
         end
 
         context "when it is deactivated" do
@@ -258,7 +258,7 @@ describe UrlRedirectsController do
 
             it "does not return posts" do
               get :download_page, params: { id: token }
-              expect(subject).to be_empty
+              expect(posts_props).to be_empty
             end
           end
 
@@ -267,7 +267,7 @@ describe UrlRedirectsController do
 
             it "does return posts" do
               get :download_page, params: { id: token }
-              expect(subject).to match_array(a_hash_including(name: installment.name))
+              expect(posts_props).to match_array(a_hash_including(name: installment.name))
             end
           end
         end
@@ -320,7 +320,8 @@ describe UrlRedirectsController do
       describe "with purchase purchaser is nil" do
         it "renders add to library" do
           get :download_page, params: { id: @token }
-          expect(response.body).to include "Add to library"
+          expect_inertia.to render_component("UrlRedirects/DownloadPage")
+          expect(inertia.props[:add_to_library_option]).to eq("add_to_library_button")
         end
       end
 
@@ -332,7 +333,8 @@ describe UrlRedirectsController do
 
         it "does not render add to library" do
           get :download_page, params: { id: @token }
-          expect(response.body).to_not include "Add to library"
+          expect_inertia.to render_component("UrlRedirects/DownloadPage")
+          expect(inertia.props[:add_to_library_option]).to eq("none")
         end
       end
 
@@ -347,8 +349,8 @@ describe UrlRedirectsController do
     describe "when user does not exist with purchase email" do
       it "renders signup form" do
         get :download_page, params: { id: @token }
-        expect(response.body).to_not include "Access this product from anywhere, forever:"
-        expect(response.body).to include "Create an account to access all of your purchases"
+        expect_inertia.to render_component("UrlRedirects/DownloadPage")
+        expect(inertia.props[:add_to_library_option]).to eq("signup_form")
       end
     end
 
@@ -1519,12 +1521,16 @@ describe UrlRedirectsController do
         # @request.host = URI.parse(@product.user.subdomain_with_protocol).host
       end
 
-      context "when user is not signed in" do
+      context "when user is not signed in", inertia: true do
         it "sets hide_layouts to true" do
           get :download_page, params: { id: @token }
           expect(response).to be_successful
           expect(assigns(:hide_layouts)).to eq(true)
-          expect(response.body).to have_link(href: url_redirect_read_for_product_file_path(@token, @product.product_files.first.external_id))
+          expect_inertia.to render_component("UrlRedirects/DownloadPage")
+          content_items = inertia.props.dig(:content, :content_items)
+          readable_file = content_items.find { |item| item[:type] == "file" && item[:read_url].present? }
+          expect(readable_file).to be_present
+          expect(readable_file[:read_url]).to eq(url_redirect_read_for_product_file_path(@token, @product.product_files.first.external_id))
         end
       end
 
@@ -1533,11 +1539,15 @@ describe UrlRedirectsController do
           sign_in(@purchase.purchaser)
         end
 
-        it "has a a read button for a PDF product file" do
+        it "has a a read button for a PDF product file", inertia: true do
           get :download_page, params: { id: @token }
           expect(response).to be_successful
           expect(assigns(:hide_layouts)).to eq(true)
-          expect(response.body).to have_link(href: url_redirect_read_for_product_file_path(@token, @product.product_files.first.external_id))
+          expect_inertia.to render_component("UrlRedirects/DownloadPage")
+          content_items = inertia.props.dig(:content, :content_items)
+          readable_file = content_items.find { |item| item[:type] == "file" && item[:read_url].present? }
+          expect(readable_file).to be_present
+          expect(readable_file[:read_url]).to eq(url_redirect_read_for_product_file_path(@token, @product.product_files.first.external_id))
         end
 
         it "can be read with proper file download URL" do
@@ -1607,10 +1617,14 @@ describe UrlRedirectsController do
         # @request.host = URI.parse(creator.subdomain_with_protocol).host
       end
 
-      it "has a readable Product File for a PDF installment with no associated product" do
+      it "has a readable Product File for a PDF installment with no associated product", inertia: true do
         get :download_page, params: { id: @token }
         url = url_redirect_read_for_product_file_path(@token, @post.product_files.first.external_id)
-        expect(response.body).to have_link(href: url)
+        expect_inertia.to render_component("UrlRedirects/DownloadPage")
+        content_items = inertia.props.dig(:content, :content_items)
+        readable_file = content_items.find { |item| item[:type] == "file" && item[:read_url].present? }
+        expect(readable_file).to be_present
+        expect(readable_file[:read_url]).to eq(url)
       end
 
       it "can be read" do
