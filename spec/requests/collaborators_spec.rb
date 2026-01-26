@@ -406,6 +406,65 @@ describe "Collaborators", type: :system, js: true do
         button.hover
         expect(button).to have_tooltip(text: "Collaborators with Brazilian Stripe accounts are not supported.")
       end
+
+      it "does not add unpublished and ineligible products when apply to all products is checked" do
+        visit new_collaborator_path
+
+        expect(page).not_to have_content product5.name
+        check "Show unpublished and ineligible products"
+        within find(:table_row, { "Product" => product5.name }) do
+          expect(page).to have_checked_field(product5.name)
+        end
+        uncheck "Show unpublished and ineligible products"
+        expect(page).not_to have_content product5.name
+        expect(page).to have_checked_field("All products")
+
+        fill_in "email", with: collaborating_user.email
+
+        expect do
+          click_on "Add collaborator"
+
+          expect(page).to have_alert(text: "Changes saved!")
+          expect(page).to have_current_path(collaborators_path)
+
+          collaborator = seller.collaborators.last
+          expect(collaborator.products).to eq [product1, product2, product3]
+          expect(collaborator.products).not_to include(product4, product5)
+        end.to change { seller.collaborators.count }.from(1).to(2)
+           .and change { ProductAffiliate.count }.from(2).to(5)
+      end
+
+      it "does not add unpublished and ineligible products when apply to all products is unchecked" do
+        visit new_collaborator_path
+
+        expect(page).not_to have_content product5.name
+        check "Show unpublished and ineligible products"
+        uncheck "All products"
+        within find(:table_row, { "Product" => product5.name }) do
+          check "Enable"
+          expect(page).to have_checked_field(product5.name)
+        end
+        within find(:table_row, { "Product" => product2.name }) do
+          check "Enable"
+          expect(page).to have_checked_field(product2.name)
+        end
+        uncheck "Show unpublished and ineligible products"
+        expect(page).not_to have_content product5.name
+        expect(page).not_to have_checked_field("All products")
+
+        fill_in "email", with: collaborating_user.email
+
+        expect do
+          click_on "Add collaborator"
+          expect(page).to have_alert(text: "Changes saved!")
+          expect(page).to have_current_path(collaborators_path)
+
+          collaborator = seller.collaborators.last
+          expect(collaborator.products).to eq [product2]
+          expect(collaborator.products).not_to include(product1, product3, product4, product5)
+        end.to change { seller.collaborators.count }.from(1).to(2)
+           .and change { ProductAffiliate.count }.from(2).to(3)
+      end
     end
 
     it "allows deleting a collaborator" do
