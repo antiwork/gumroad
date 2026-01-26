@@ -574,10 +574,6 @@ class User < ApplicationRecord
 
   alias_method :business_profile_url, :profile_url
 
-  def subscribe_url(custom_domain_url: nil)
-    "#{custom_domain_url || subdomain_with_protocol}/subscribe"
-  end
-
   def credit_card_info(creator)
     return CreditCard.test_card_info if self == creator
     return credit_card.as_json if credit_card
