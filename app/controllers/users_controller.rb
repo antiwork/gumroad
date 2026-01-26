@@ -4,11 +4,13 @@ class UsersController < ApplicationController
   include ProductsHelper, SearchProducts, CustomDomainConfig, SocialShareUrlHelper, ActionView::Helpers::SanitizeHelper,
           AffiliateCookie
 
+  layout "inertia", only: [:subscribe_preview]
+
   before_action :authenticate_user!, except: %i[show coffee subscribe subscribe_preview email_unsubscribe add_purchase_to_library session_info current_user_data]
 
   after_action :verify_authorized, only: %i[deactivate]
 
-  before_action :hide_layouts, only: %i[show coffee subscribe subscribe_preview unsubscribe_review_reminders subscribe_review_reminders]
+  before_action :hide_layouts, only: %i[show coffee subscribe unsubscribe_review_reminders subscribe_review_reminders]
   before_action :set_as_modal, only: %i[show]
   before_action :set_frontend_performance_sensitive, only: %i[show]
   before_action :set_user_and_custom_domain_config, only: %i[show coffee subscribe subscribe_preview]
@@ -54,9 +56,10 @@ class UsersController < ApplicationController
   end
 
   def subscribe_preview
-    @subscribe_preview_props = {
+    render inertia: "SubscribePreview/Show", props: {
       avatar_url: @user.resized_avatar_url(size: 240),
       title: @user.name_or_username,
+      custom_styles: @user.seller_profile&.custom_styles.to_s,
     }
   end
 

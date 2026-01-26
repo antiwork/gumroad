@@ -2,6 +2,7 @@
 
 require "spec_helper"
 require "shared_examples/authorize_called"
+require "inertia_rails/rspec"
 
 describe UsersController do
   render_views
@@ -683,12 +684,15 @@ describe UsersController do
     end
   end
 
-  describe "GET subscribe_preview" do
-    it "assigns subscribe preview props for the react component" do
+  describe "GET subscribe_preview", inertia: true do
+    it "renders the Inertia component with the correct props" do
       get :subscribe_preview, params: { username: creator.username }
+
       expect(response).to be_successful
-      expect(assigns[:subscribe_preview_props][:title]).to eq(creator.name_or_username)
-      expect(assigns[:subscribe_preview_props][:avatar_url]).to end_with(".png")
+      expect(inertia.component).to eq("SubscribePreview/Show")
+      expect(inertia.props[:title]).to eq(creator.name_or_username)
+      expect(inertia.props[:avatar_url]).to end_with(".png")
+      expect(inertia.props[:custom_styles]).to be_a(String)
     end
   end
 

@@ -35,7 +35,6 @@ import SubscribeReviewReminders from "$app/components/server-components/ReviewRe
 import UnsubscribeReviewReminders from "$app/components/server-components/ReviewReminders/UnsubscribeReviewReminders";
 import SecureRedirectPage from "$app/components/server-components/SecureRedirectPage";
 import SubscribePage from "$app/components/server-components/SubscribePage";
-import SubscribePreview from "$app/components/server-components/SubscribePreview";
 import SubscriptionManager from "$app/components/server-components/SubscriptionManager";
 import SubscriptionManagerMagicLink from "$app/components/server-components/SubscriptionManagerMagicLink";
 import SupportHeader from "$app/components/server-components/support/Header";
@@ -79,7 +78,6 @@ ReactOnRails.register({
   ProfileWishlistPage,
   SecureRedirectPage,
   SubscribePage,
-  SubscribePreview,
   SubscribeReviewReminders,
   UnsubscribeReviewReminders,
   SubscriptionManager,
