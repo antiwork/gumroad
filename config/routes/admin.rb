@@ -87,7 +87,6 @@ namespace :admin do
       delete :unpublish
       post :is_adult
       get "/file/:product_file_id/access", to: "links#access_product_file", as: :admin_access_product_file
-      get :legacy_purchases
       get :views_count
       get :sales_stats
       get :access_product_file

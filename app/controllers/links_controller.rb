@@ -174,10 +174,10 @@ class LinksController < ApplicationController
 
   def search
     search_params = params
-    on_profile = search_params[:user_id].present?
-    if on_profile
+    in_section = search_params[:user_id].present?
+    if in_section
       user = User.find_by_external_id(search_params[:user_id])
-      section = user && user.seller_profile_products_sections.on_profile.find_by_external_id(search_params[:section_id])
+      section = user && user.seller_profile_products_sections.find_by_external_id(search_params[:section_id])
       return render json: { total: 0, filetypes_data: [], tags_data: [], products: [] } if section.nil?
       search_params[:section] = section
       search_params[:is_alive_on_profile] = true
@@ -196,7 +196,7 @@ class LinksController < ApplicationController
       search_params[:include_taxonomy_descendants] = true
     end
 
-    if on_profile
+    if in_section
       recommended_by = search_params[:recommended_by]
     else
       recommended_by = RecommendationType::GUMROAD_SEARCH_RECOMMENDATION
@@ -209,10 +209,10 @@ class LinksController < ApplicationController
         product:,
         request:,
         recommended_by:,
-        target: on_profile ? Product::Layout::PROFILE : Product::Layout::DISCOVER,
-        show_seller: !on_profile,
-        query: (search_params[:query] unless on_profile),
-        offer_code: (search_params[:offer_code] unless on_profile)
+        target: in_section ? Product::Layout::PROFILE : Product::Layout::DISCOVER,
+        show_seller: !in_section,
+        query: (search_params[:query] unless in_section),
+        offer_code: (search_params[:offer_code] unless in_section)
       )
     end
     render json: results
