@@ -14,12 +14,14 @@ export const ReviewResponseForm = ({
   onChange,
   onEditingChange,
   buttonProps = { small: false },
+  className,
 }: {
   message: string | undefined;
   purchaseId: string;
   onChange: (response: { message: string } | null) => void;
   onEditingChange?: (isEditing: boolean) => void;
   buttonProps?: React.ComponentProps<typeof Button>;
+  className?: string;
 }) => {
   const loggedInUser = useLoggedInUser();
 
@@ -61,7 +63,7 @@ export const ReviewResponseForm = ({
   if (!loggedInUser?.policies.product_review_response.update) return null;
 
   return (
-    <section>
+    <section className={className}>
       {isEditing ? (
         <form onSubmit={(event) => void respondToReview(event)} className="grid gap-3">
           <textarea

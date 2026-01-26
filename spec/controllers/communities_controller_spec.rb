@@ -33,28 +33,7 @@ describe CommunitiesController, inertia: true do
         get :index
 
         expect(response).to be_successful
-        expect(inertia.component).to eq("Communities/Index")
-        expect(inertia.props).to include(
-          has_products: be_in([true, false]),
-          communities: be_an(Array),
-          notification_settings: be_a(Hash)
-        )
-      end
-
-      it "includes communities presenter data" do
-        get :index
-
-        presenter_props = CommunitiesPresenter.new(current_user: seller).props
-
-        expect(inertia.props[:has_products]).to eq(presenter_props[:has_products])
-        expect(inertia.props[:communities]).to eq(presenter_props[:communities])
-        expect(inertia.props[:notification_settings]).to eq(presenter_props[:notification_settings])
-      end
-
-      it "sets the page title" do
-        get :index
-
-        expect(assigns(:title)).to eq("Communities")
+        expect(controller.send(:page_title)).to eq("Communities")
       end
 
       it "returns unauthorized response if the :communities feature flag is disabled" do

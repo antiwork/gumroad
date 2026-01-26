@@ -24,6 +24,11 @@ module Onetime
 
       puts "\n"
 
+      scheduled_jobs = Set.new
+      Sidekiq::ScheduledSet.new.scan("RecurringChargeReminderWorker") do |job|
+        scheduled_jobs.add(job.args.first)
+      end
+
       scheduled = 0
       errors = 0
 
@@ -35,9 +40,17 @@ module Onetime
         next if subscription.charges_completed?
 
         begin
+          renewal_time = subscription.end_time_of_subscription
+          reminder_lead_time = BasePrice::Recurrence.renewal_reminder_email_days(subscription.recurrence)
+
+          # Skip if renewal is in the past or too close or already scheduled
+          if renewal_time <= Time.current || (renewal_time - Time.current) < reminder_lead_time || scheduled_jobs.include?(subscription.id)
+            next
+          end
+
           puts "\nSubscription #{subscription.id}"
           puts "  Customer: #{subscription.email}"
-          puts "  Next renewal: #{subscription.end_time_of_subscription.strftime('%Y-%m-%d %H:%M')}"
+          puts "  Next renewal: #{renewal_time.strftime('%Y-%m-%d %H:%M')}"
           puts "  Reminder at: #{subscription.send_renewal_reminder_at.strftime('%Y-%m-%d %H:%M')}"
           puts "  Action: #{dry_run ? 'Would schedule' : 'Scheduled'} RecurringChargeReminderWorker"
 

@@ -20,8 +20,8 @@ class CommunitiesController < ApplicationController
   end
 
   private
-    def set_title
-      @title = "Communities"
+    def set_default_page_title
+      set_meta_tag(title: "Communities")
     end
 
     def set_community
