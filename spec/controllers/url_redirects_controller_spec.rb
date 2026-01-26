@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require "spec_helper"
+require "inertia_rails/rspec"
 
 describe UrlRedirectsController do
   render_views
@@ -1645,7 +1646,7 @@ describe UrlRedirectsController do
     end
   end
 
-  describe "GET membership_inactive_page" do
+  describe "GET membership_inactive_page", inertia: true do
     let(:product) { create(:membership_product) }
     let(:subscription) { create(:subscription, link: product) }
     let(:purchase) do create(:purchase, link: product, email: subscription.user.email,
@@ -1653,44 +1654,47 @@ describe UrlRedirectsController do
                                         purchaser: create(:user), subscription:, created_at: 2.days.ago) end
     let(:url_redirect) { create(:url_redirect, purchase:, link: product) }
 
-    it "renders the manage subscription link for subscriptions that can be restarted" do
+    it "renders the Inertia component with membership props for restartable subscriptions" do
       get :membership_inactive_page, params: { id: url_redirect.token }
 
       expect(response).to be_successful
-      expect(response.body).to have_title("The Works of Edgar Gumstein - Your membership is inactive")
-      expect(response.body).to have_text("Your membership is inactive")
-      expect(response.body).to have_link("Manage membership", href: manage_subscription_url(subscription.external_id))
+      expect_inertia.to render_component("UrlRedirects/MembershipInactive")
+      expect(inertia.props[:content_unavailability_reason_code]).to eq("inactive_membership")
+      expect(inertia.props.dig(:purchase, :membership, :is_alive_or_restartable)).to be(true)
+      expect(inertia.props.dig(:purchase, :membership, :subscription_id)).to eq(subscription.external_id)
     end
 
-    it "renders the product link for subscriptions that cannot be restarted" do
+    it "renders the Inertia component with product URL for non-restartable subscriptions" do
       allow_any_instance_of(Subscription).to receive(:alive_or_restartable?).and_return(false)
 
       get :membership_inactive_page, params: { id: url_redirect.token }
 
       expect(response).to be_successful
-      expect(response.body).to have_link("Resubscribe", href: product.long_url)
+      expect_inertia.to render_component("UrlRedirects/MembershipInactive")
+      expect(inertia.props.dig(:purchase, :membership, :is_alive_or_restartable)).to be(false)
+      expect(inertia.props.dig(:purchase, :product_long_url)).to eq(product.long_url)
     end
   end
 
-  describe "GET rental_expired_page" do
+  describe "GET rental_expired_page", inertia: true do
     let(:url_redirect) { create(:url_redirect) }
 
-    it "renders the page" do
+    it "renders the Inertia component" do
       get :rental_expired_page, params: { id: @url_redirect.token }
       expect(response).to be_successful
-      expect(response.body).to have_title("The Works of Edgar Gumstein - Your rental has expired")
-      expect(response.body).to have_text("Your rental has expired")
+      expect_inertia.to render_component("UrlRedirects/RentalExpired")
+      expect(inertia.props[:content_unavailability_reason_code]).to eq("rental_expired")
     end
   end
 
-  describe "GET expired" do
+  describe "GET expired", inertia: true do
     let(:url_redirect) { create(:url_redirect) }
 
-    it "renders the page" do
+    it "renders the Inertia component" do
       get :expired, params: { id: @url_redirect.token }
       expect(response).to be_successful
-      expect(response.body).to have_title("The Works of Edgar Gumstein - Access expired")
-      expect(response.body).to have_text("Access expired")
+      expect_inertia.to render_component("UrlRedirects/Expired")
+      expect(inertia.props[:content_unavailability_reason_code]).to eq("access_expired")
     end
   end
 

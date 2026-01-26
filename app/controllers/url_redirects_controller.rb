@@ -5,6 +5,8 @@ class UrlRedirectsController < ApplicationController
   include ProductsHelper
   include PageMeta::Favicon
 
+  layout "inertia", only: [:expired, :rental_expired_page, :membership_inactive_page]
+
   before_action :fetch_url_redirect, except: %i[
     show stream download_subtitle_file read download_archive latest_media_locations download_product_files
     audio_durations
@@ -167,17 +169,23 @@ class UrlRedirectsController < ApplicationController
 
   def expired
     @content_unavailability_reason_code = UrlRedirectPresenter::CONTENT_UNAVAILABILITY_REASON_CODES[:access_expired]
-    render_unavailable_page(title_suffix: "Access expired")
+    set_meta_tag(title: "#{@url_redirect.referenced_link.name} - Access expired")
+    props = UrlRedirectPresenter.new(url_redirect: @url_redirect, logged_in_user:).download_page_without_content_props(common_props)
+    render inertia: "UrlRedirects/Expired", props:
   end
 
   def rental_expired_page
     @content_unavailability_reason_code = UrlRedirectPresenter::CONTENT_UNAVAILABILITY_REASON_CODES[:rental_expired]
-    render_unavailable_page(title_suffix: "Your rental has expired")
+    set_meta_tag(title: "#{@url_redirect.referenced_link.name} - Your rental has expired")
+    props = UrlRedirectPresenter.new(url_redirect: @url_redirect, logged_in_user:).download_page_without_content_props(common_props)
+    render inertia: "UrlRedirects/RentalExpired", props:
   end
 
   def membership_inactive_page
     @content_unavailability_reason_code = UrlRedirectPresenter::CONTENT_UNAVAILABILITY_REASON_CODES[:inactive_membership]
-    render_unavailable_page(title_suffix: "Your membership is inactive")
+    set_meta_tag(title: "#{@url_redirect.referenced_link.name} - Your membership is inactive")
+    props = UrlRedirectPresenter.new(url_redirect: @url_redirect, logged_in_user:).download_page_without_content_props(common_props)
+    render inertia: "UrlRedirects/MembershipInactive", props:
   end
 
   def change_purchaser
