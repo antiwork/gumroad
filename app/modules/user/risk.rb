@@ -126,7 +126,7 @@ module User::Risk
     SuspendAccountsWithPaymentAddressWorker.perform_in(5.seconds, id)
   end
 
-  def probate_sellers_other_accounts
+  def probate_sellers_other_accounts(_transition = nil)
     ProbateAccountsWithPaymentAddressWorker.perform_in(5.seconds, id)
   end
 
