@@ -58,7 +58,7 @@ import { asyncVoid } from "$app/utils/promise";
 import { RecurrenceId, recurrenceLabels } from "$app/utils/recurringPricing";
 import { AbortError, assertResponseError } from "$app/utils/request";
 
-import { Button, NavigationButton } from "$app/components/Button";
+import { Button, NavigationButton, buttonVariants } from "$app/components/Button";
 import { useCurrentSeller } from "$app/components/CurrentSeller";
 import { DateInput } from "$app/components/DateInput";
 import { DateRangePicker } from "$app/components/DateRangePicker";
@@ -2740,7 +2740,7 @@ const CommissionSection = ({
                   ))}
                 </Rows>
               ) : null}
-              <label className="button">
+              <label className={buttonVariants()}>
                 <input
                   type="file"
                   onChange={handleFileChange}
