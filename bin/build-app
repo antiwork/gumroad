@@ -5,11 +5,88 @@ set -euo pipefail
 MKCERT_CA_MACOS="$HOME/Library/Application Support/mkcert/rootCA.pem"
 MKCERT_CA_LINUX="$HOME/.local/share/mkcert/rootCA.pem"
 
+# Function to install mkcert based on OS
+install_mkcert() {
+  local os_type=$(uname -s)
+  local distro=""
+
+  # Detect Linux distribution if applicable
+  if [ "$os_type" = "Linux" ]; then
+    if [ -f /etc/os-release ]; then
+      distro=$(grep "^ID=" /etc/os-release | cut -d'=' -f2 | tr -d '"')
+    fi
+  fi
+
+  echo "Detected OS: $os_type ($distro)"
+  echo "Installing mkcert..."
+  echo ""
+
+  case "$os_type" in
+    Darwin)
+      # macOS
+      if ! command -v brew &> /dev/null; then
+        echo "Error: Homebrew is required but not installed on macOS."
+        echo "Please install Homebrew from https://brew.sh"
+        return 1
+      fi
+      brew install mkcert
+      ;;
+    Linux)
+      case "$distro" in
+        ubuntu|debian)
+          sudo apt-get update
+          sudo apt-get install -y mkcert
+          ;;
+        fedora)
+          sudo dnf install -y mkcert
+          ;;
+        rhel|centos)
+          sudo yum install -y mkcert
+          ;;
+        arch)
+          sudo pacman -S --noconfirm mkcert
+          ;;
+        *)
+          echo "Unsupported Linux distribution: $distro"
+          echo ""
+          echo "Please install mkcert manually:"
+          echo "  Visit: https://github.com/FiloSottile/mkcert#installation"
+          return 1
+          ;;
+      esac
+      ;;
+    *)
+      echo "Unsupported OS: $os_type"
+      echo ""
+      echo "Please install mkcert manually:"
+      echo "  Visit: https://github.com/FiloSottile/mkcert#installation"
+      return 1
+      ;;
+  esac
+
+  # After installation, initialize the CA
+  echo ""
+  echo "Initializing mkcert CA..."
+  mkcert -install
+}
+
+# Check if mkcert is installed
+if ! command -v mkcert &> /dev/null; then
+  echo "mkcert is not installed."
+  echo ""
+  if install_mkcert; then
+    echo "mkcert installed successfully!"
+    echo ""
+  else
+    echo "Failed to install mkcert. Please visit https://github.com/FiloSottile/mkcert#installation for manual installation of mkcert"
+    exit 1
+  fi
+fi
+
+# Check if mkcert CA exists on host
 if [ ! -f "$MKCERT_CA_MACOS" ] && [ ! -f "$MKCERT_CA_LINUX" ]; then
-  echo "mkcert CA not found. Please install mkcert and run:"
-  echo "  brew install mkcert  # or equivalent for your OS"
-  echo "  mkcert -install"
-  exit 1
+  echo "mkcert CA not found. Initializing..."
+  mkcert -install
 fi
 
 # Get versions from project files
