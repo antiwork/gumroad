@@ -264,7 +264,7 @@ const CtaBar = ({
         boxShadow: visible
           ? "0 var(--border-width) rgb(var(--color)), 0 calc(-1 * var(--border-width)) rgb(var(--color))"
           : undefined,
-        position: "fixed",
+        position: "sticky",
         top: isDesktop ? 0 : undefined,
         bottom: isDesktop ? undefined : 0,
         left: 0,
