@@ -8,6 +8,7 @@ import { incrementPostViews } from "$app/data/view_event";
 import { CreatorProfile } from "$app/parsers/profile";
 import { register } from "$app/utils/serverComponentUtil";
 
+import { Button } from "$app/components/Button";
 import { Icon } from "$app/components/Icons";
 import { LoadingSpinner } from "$app/components/LoadingSpinner";
 import { CommentsMetadataProvider, PostCommentsSection } from "$app/components/Post/PostCommentsSection";
@@ -85,22 +86,23 @@ const PostPage = ({
           <div className="mx-auto mb-4 grid max-w-6xl px-4 lg:px-0">
             {call_to_action ? (
               <p>
-                <a
-                  className="button accent"
-                  href={call_to_action.url}
-                  target="_blank"
-                  style={{ whiteSpace: "normal" }}
-                  rel="noopener noreferrer"
-                >
-                  {call_to_action.text}
-                </a>
+                <Button asChild color="accent">
+                  <a
+                    href={call_to_action.url}
+                    target="_blank"
+                    style={{ whiteSpace: "normal" }}
+                    rel="noopener noreferrer"
+                  >
+                    {call_to_action.text}
+                  </a>
+                </Button>
               </p>
             ) : null}
             {download_url ? (
               <p>
-                <a className="button accent" href={download_url}>
-                  View content
-                </a>
+                <Button asChild color="accent">
+                  <a href={download_url}>View content</a>
+                </Button>
               </p>
             ) : null}
           </div>

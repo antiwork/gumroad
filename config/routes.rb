@@ -389,11 +389,16 @@ Rails.application.routes.draw do
         get :export
       end
     end
-    resources :collaborators, only: [:index]
-    # Routes handled by react-router. Non-catch-all routes are declared to
-    # generate URL helpers.
-    get "/collaborators/incomings", to: "collaborators#index"
-    get "/collaborators/*other", to: "collaborators#index"
+
+    resources :collaborators, only: [:index, :new, :create, :edit, :update, :destroy], path: "collaborators", controller: "collaborators/main"
+    scope path: "collaborators", module: :collaborators, as: "collaborators" do
+      resources :incomings, only: [:index, :destroy], controller: "incomings" do
+        member do
+          post :accept
+          post :decline
+        end
+      end
+    end
 
     get "/communities/*other", to: "communities#index" # route handled by react-router
 
@@ -650,33 +655,20 @@ Rails.application.routes.draw do
       resource :invalidate_active_sessions, only: :update
     end
 
-    get "/memberships/paged", to: "links#memberships_paged", as: :memberships_paged
-
     namespace :products do
       resources :affiliated, only: [:index]
-      resources :collabs, only: [:index] do
-        collection do
-          get :products_paged
-          get :memberships_paged
-        end
-      end
-      resources :archived, only: %i[index create destroy] do
-        collection do
-          get :products_paged
-          get :memberships_paged
-        end
-      end
+      resources :collabs, only: [:index]
+      resources :archived, only: %i[index create destroy]
     end
 
     resources :products, only: [:new], controller: "links" do
       scope module: :products, format: true, constraints: { format: :json } do
         resources :other_refund_policies, only: :index
         resources :remaining_call_availabilities, only: :index
+        resources :available_offer_codes, only: :index
       end
     end
 
-    # TODO: move these within resources :products block above
-    get "/products/paged", to: "links#products_paged", as: :products_paged
     get "/products/:id/edit", to: "links#edit", as: :edit_link
     get "/products/:id/edit/*other", to: "links#edit"
     get "/products/:id/card", to: "links#card", as: :product_card
@@ -749,6 +741,7 @@ Rails.application.routes.draw do
     # analytics
     get "/analytics" => redirect("/dashboard/sales")
     get "/dashboard/sales", to: "analytics#index", as: :sales_dashboard
+    get "/dashboard/churn", to: "churn#show", as: :churn_dashboard
     get "/analytics/data/by_date", to: "analytics#data_by_date", as: "analytics_data_by_date"
     get "/analytics/data/by_state", to: "analytics#data_by_state", as: "analytics_data_by_state"
     get "/analytics/data/by_referral", to: "analytics#data_by_referral", as: "analytics_data_by_referral"
@@ -835,7 +828,7 @@ Rails.application.routes.draw do
     end
     resources :wishlists, only: [:index, :create, :update, :destroy] do
       resources :products, only: [:create], controller: "wishlists/products"
-      resource :followers, only: [:destroy], controller: "wishlists/followers" do
+      resource :followers, only: [:create, :destroy], controller: "wishlists/followers" do
         get :unsubscribe
       end
     end
@@ -874,6 +867,7 @@ Rails.application.routes.draw do
     post "/confirm-redirect", to: "url_redirects#confirm"
     post "/r/:id/send_to_kindle", to: "url_redirects#send_to_kindle", as: :send_to_kindle
     post "/r/:id/change_purchaser", to: "url_redirects#change_purchaser", as: :url_redirect_change_purchaser
+    post "/r/:id/save_last_content_page", to: "url_redirects#save_last_content_page", as: :url_redirect_save_last_content_page
 
     get "crossdomain", to: "public#crossdomain"
 
@@ -884,11 +878,6 @@ Rails.application.routes.draw do
       api_routes
     end
 
-    # developers pages
-    scope "developers" do
-      get "/", to: "public#developers", as: "developers"
-    end
-
     scope "api" do
       get "/", to: "public#api"
     end
@@ -896,16 +885,6 @@ Rails.application.routes.draw do
     # React Router routes
     scope module: :api, defaults: { format: :json } do
       namespace :internal do
-        resources :collaborators, only: [:index, :new, :create, :edit, :update, :destroy] do
-          scope module: :collaborators do
-            resources :invitation_acceptances, only: [:create]
-            resources :invitation_declines, only: [:create]
-          end
-        end
-        namespace :collaborators do
-          resources :incomings, only: [:index]
-        end
-
         resources :installments, only: [] do
           member do
             resource :audience_count, only: [:show], controller: "installments/audience_counts", as: :installment_audience_count
@@ -1075,6 +1054,7 @@ Rails.application.routes.draw do
     post "/confirm-redirect", to: "url_redirects#confirm"
     post "/r/:id/send_to_kindle", to: "url_redirects#send_to_kindle", as: :custom_domain_send_to_kindle
     post "/r/:id/change_purchaser", to: "url_redirects#change_purchaser", as: :custom_domain_url_redirect_change_purchaser
+    post "/r/:id/save_last_content_page", to: "url_redirects#save_last_content_page", as: :custom_domain_url_redirect_save_last_content_page
 
     get "/library", to: "library#index"
     patch "/library/purchase/:id/archive", to: "library#archive"

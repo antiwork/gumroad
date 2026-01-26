@@ -62,6 +62,7 @@ import { Navigation } from "$app/components/ApiDocumentation/Navigation";
 import { Resources } from "$app/components/ApiDocumentation/Resources";
 import { Scopes } from "$app/components/ApiDocumentation/Scopes";
 import { Layout } from "$app/components/Developer/Layout";
+import { Card, CardContent } from "$app/components/ui/Card";
 
 export default function Api() {
   return (
@@ -76,18 +77,18 @@ export default function Api() {
               <Scopes />
               <Resources />
               <Errors />
-              <div className="stack" id="api-methods">
-                <div>
-                  <h2>API Methods</h2>
-                </div>
-                <div>
-                  <p>
+              <Card id="api-methods">
+                <CardContent>
+                  <h2 className="grow">API Methods</h2>
+                </CardContent>
+                <CardContent>
+                  <p className="grow">
                     Gumroad's OAuth 2.0 API lets you see information about your products, as well as you can add, edit,
                     and delete offer codes, variants, and custom fields. Finally, you can see a user's public
                     information and subscribe to be notified of their sales.
                   </p>
-                </div>
-              </div>
+                </CardContent>
+              </Card>
 
               <ApiResource name="Products" id="products">
                 <GetProducts />

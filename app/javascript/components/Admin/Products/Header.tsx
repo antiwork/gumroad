@@ -4,6 +4,7 @@ import React from "react";
 import DateTimeWithRelativeTooltip from "$app/components/Admin/DateTimeWithRelativeTooltip";
 import { type Product } from "$app/components/Admin/Products/Product";
 import AdminProductStats from "$app/components/Admin/Products/Stats";
+import { buttonVariants } from "$app/components/Button";
 import { Icon } from "$app/components/Icons";
 
 import coverPlaceholder from "$assets/images/cover_placeholder.png";
@@ -44,7 +45,7 @@ const AdminUsersProductsHeader = ({ product, isCurrentUrl }: Props) => (
               <DateTimeWithRelativeTooltip date={product.created_at} utc />
             </li>
             <li>
-              <Link href={Routes.admin_user_path(product.user.id)}>{product.user.name}</Link>
+              <Link href={Routes.admin_user_path(product.user.external_id)}>{product.user.name}</Link>
             </li>
             <AdminProductStats product_external_id={product.external_id} />
           </ul>
@@ -55,7 +56,7 @@ const AdminUsersProductsHeader = ({ product, isCurrentUrl }: Props) => (
     <div className="flex flex-wrap gap-2">
       <a
         href={Routes.edit_link_path(product.unique_permalink)}
-        className="button small"
+        className={buttonVariants({ size: "sm" })}
         target="_blank"
         rel="noreferrer"
       >
@@ -64,7 +65,7 @@ const AdminUsersProductsHeader = ({ product, isCurrentUrl }: Props) => (
       {product.admins_can_generate_url_redirects ? (
         <a
           href={Routes.generate_url_redirect_admin_product_path(product.external_id)}
-          className="button small"
+          className={buttonVariants({ size: "sm" })}
           target="_blank"
           rel="noreferrer noopener"
         >
@@ -75,7 +76,7 @@ const AdminUsersProductsHeader = ({ product, isCurrentUrl }: Props) => (
         <a
           key={file.external_id}
           href={Routes.admin_access_product_file_admin_product_path(product.unique_permalink, file.external_id)}
-          className="button small"
+          className={buttonVariants({ size: "sm" })}
           target="_blank"
           rel="noreferrer noopener"
         >

@@ -130,6 +130,7 @@ describe UrlRedirectPresenter do
         content: {
           license: nil,
           rich_content_pages: nil,
+          last_content_page_id: nil,
           content_items: [],
           posts: [],
           video_transcoding_info: nil,
@@ -195,6 +196,14 @@ describe UrlRedirectPresenter do
       @product.update!(custom_receipt: "Lorem ipsum <b>dolor</b> sit amet https://example.com")
       instance = described_class.new(url_redirect: @url_redirect, logged_in_user: @user)
       expect(instance.download_page_with_content_props[:content][:custom_receipt]).to be_nil
+    end
+
+    it "includes 'last_content_page_id' in props" do
+      instance = described_class.new(url_redirect: @url_redirect, logged_in_user: @user)
+      expect(instance.download_page_with_content_props[:content][:last_content_page_id]).to be_nil
+
+      @purchase.update!(last_content_page_id: "page_abc123")
+      expect(instance.download_page_with_content_props[:content][:last_content_page_id]).to eq("page_abc123")
     end
 
     it "includes 'discord' in props" do

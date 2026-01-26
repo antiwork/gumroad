@@ -16,6 +16,7 @@ import {
   useAudienceCounts,
 } from "$app/components/EmailsPage/shared";
 import { useEmailSearch } from "$app/components/EmailsPage/useEmailSearch";
+import { Card, CardContent } from "$app/components/ui/Card";
 import { Sheet, SheetHeader } from "$app/components/ui/Sheet";
 import { Table, TableBody, TableCaption, TableCell, TableHead, TableHeader, TableRow } from "$app/components/ui/Table";
 import { useUserAgentInfo } from "$app/components/UserAgent";
@@ -117,17 +118,17 @@ export default function EmailsScheduled() {
             {selectedInstallment ? (
               <Sheet open onOpenChange={() => setSelectedInstallmentId(null)}>
                 <SheetHeader>{selectedInstallment.name}</SheetHeader>
-                <div className="stack">
-                  <div>
-                    <h5>Sent to</h5>
+                <Card>
+                  <CardContent>
+                    <h5 className="grow font-bold">Sent to</h5>
                     {selectedInstallment.recipient_description}
-                  </div>
-                  <div>
-                    <h5>Audience</h5>
+                  </CardContent>
+                  <CardContent>
+                    <h5 className="grow font-bold">Audience</h5>
                     {formatAudienceCount(audienceCounts, selectedInstallment.external_id)}
-                  </div>
-                  <div>
-                    <h5>Delivery Time</h5>
+                  </CardContent>
+                  <CardContent>
+                    <h5 className="grow font-bold">Delivery Time</h5>
                     {new Date(selectedInstallment.to_be_published_at).toLocaleString(userAgentInfo.locale, {
                       month: "short",
                       day: "numeric",
@@ -136,8 +137,8 @@ export default function EmailsScheduled() {
                       minute: "numeric",
                       timeZone: currentSeller.timeZone.name,
                     })}
-                  </div>
-                </div>
+                  </CardContent>
+                </Card>
                 <EmailSheetActions
                   installment={selectedInstallment}
                   onDelete={() =>

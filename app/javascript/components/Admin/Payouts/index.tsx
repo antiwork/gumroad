@@ -9,7 +9,7 @@ type Props = {
 const AdminPayouts = ({ payouts }: Props) => (
   <>
     {payouts.map((payout) => (
-      <AdminPayout key={payout.id} payout={payout} />
+      <AdminPayout key={payout.external_id} payout={payout} />
     ))}
   </>
 );

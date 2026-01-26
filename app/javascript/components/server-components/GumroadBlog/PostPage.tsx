@@ -6,6 +6,7 @@ import { createCast } from "ts-safe-cast";
 import { incrementPostViews } from "$app/data/view_event";
 import { register } from "$app/utils/serverComponentUtil";
 
+import { Button } from "$app/components/Button";
 import { Icon } from "$app/components/Icons";
 import { LoadingSpinner } from "$app/components/LoadingSpinner";
 import { useRichTextEditor } from "$app/components/RichTextEditor";
@@ -62,15 +63,16 @@ const PostPage = ({
           {call_to_action ? (
             <div className="grid">
               <p>
-                <a
-                  className="button accent"
-                  href={call_to_action.url}
-                  target="_blank"
-                  style={{ whiteSpace: "normal" }}
-                  rel="noopener noreferrer"
-                >
-                  {call_to_action.text}
-                </a>
+                <Button asChild color="accent">
+                  <a
+                    href={call_to_action.url}
+                    target="_blank"
+                    style={{ whiteSpace: "normal" }}
+                    rel="noopener noreferrer"
+                  >
+                    {call_to_action.text}
+                  </a>
+                </Button>
               </p>
             </div>
           ) : null}

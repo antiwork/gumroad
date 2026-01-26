@@ -19,7 +19,7 @@ describe Admin::Users::Products::TosViolationFlagsController do
 
   describe "GET index" do
     it "returns a JSON payload with the tos violation flags" do
-      get :index, params: { user_id: user.id, product_external_id: product.external_id }
+      get :index, params: { user_external_id: user.external_id, product_external_id: product.external_id }
       expect(response).to be_successful
 
       payload = response.parsed_body
@@ -30,7 +30,7 @@ describe Admin::Users::Products::TosViolationFlagsController do
       let(:user_risk_state) { :compliant }
 
       it "returns an empty array" do
-        get :index, params: { user_id: user.id, product_external_id: product.external_id }
+        get :index, params: { user_external_id: user.external_id, product_external_id: product.external_id }
         expect(response).to be_successful
         expect(response.parsed_body["tos_violation_flags"]).to eq([])
       end
@@ -48,7 +48,7 @@ describe Admin::Users::Products::TosViolationFlagsController do
 
       it "flags the user for TOS violation and returns success" do
         expect do
-          post :create, params: { user_id: user.id, product_external_id: product.external_id }.merge(suspend_tos_params)
+          post :create, params: { user_external_id: user.external_id, product_external_id: product.external_id }.merge(suspend_tos_params)
         end.to change { user.reload.tos_violation_reason }.from(nil).to("Spam content")
 
         expect(response).to be_successful
@@ -57,7 +57,7 @@ describe Admin::Users::Products::TosViolationFlagsController do
 
       it "creates a comment for the TOS violation flag" do
         expect do
-          post :create, params: { user_id: user.id, product_external_id: product.external_id }.merge(suspend_tos_params)
+          post :create, params: { user_external_id: user.external_id, product_external_id: product.external_id }.merge(suspend_tos_params)
         end.to change { Comment.count }.by(2)
 
         comment = Comment.where(commentable: user).last
@@ -78,7 +78,7 @@ describe Admin::Users::Products::TosViolationFlagsController do
 
         it "unpublishes the product" do
           expect do
-            post :create, params: { user_id: user.id, product_external_id: product.external_id }.merge(suspend_tos_params)
+            post :create, params: { user_external_id: user.external_id, product_external_id: product.external_id }.merge(suspend_tos_params)
           end.to change { product.reload.published? }.from(true).to(false)
         end
       end
@@ -88,7 +88,7 @@ describe Admin::Users::Products::TosViolationFlagsController do
 
         it "deletes the product" do
           expect do
-            post :create, params: { user_id: user.id, product_external_id: product.external_id }.merge(suspend_tos_params)
+            post :create, params: { user_external_id: user.external_id, product_external_id: product.external_id }.merge(suspend_tos_params)
           end.to change { product.reload.deleted? }.from(false).to(true)
         end
       end
@@ -100,7 +100,7 @@ describe Admin::Users::Products::TosViolationFlagsController do
       end
 
       it "returns an error" do
-        post :create, params: { user_id: user.id, product_external_id: product.external_id }.merge(suspend_tos_params)
+        post :create, params: { user_external_id: user.external_id, product_external_id: product.external_id }.merge(suspend_tos_params)
 
         expect(response).to have_http_status(:bad_request)
         expect(response.parsed_body["success"]).to be false
@@ -112,7 +112,7 @@ describe Admin::Users::Products::TosViolationFlagsController do
       let(:suspend_tos_params) { { suspend_tos: { reason: "" } } }
 
       it "returns an error" do
-        post :create, params: { user_id: user.id, product_external_id: product.external_id }.merge(suspend_tos_params)
+        post :create, params: { user_external_id: user.external_id, product_external_id: product.external_id }.merge(suspend_tos_params)
 
         expect(response).to have_http_status(:bad_request)
         expect(response.parsed_body["success"]).to be false

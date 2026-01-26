@@ -16,6 +16,7 @@ import { PurchaseArchiveButton } from "$app/components/PurchaseArchiveButton";
 import { Review, ReviewForm } from "$app/components/ReviewForm";
 import { showAlert } from "$app/components/server-components/Alert";
 import { PurchaseCustomField } from "$app/components/server-components/DownloadPage/WithContent";
+import { Card, CardContent } from "$app/components/ui/Card";
 import { PageHeader } from "$app/components/ui/PageHeader";
 import { useIsAboveBreakpoint } from "$app/components/useIsAboveBreakpoint";
 
@@ -123,15 +124,16 @@ export const Layout = ({
       {content_unavailability_reason_code !== "email_confirmation_required" ? (
         <>
           {(purchase?.allows_review || disabledStatus) && purchase?.product_permalink ? (
-            <div className="stack">
+            <Card>
               <ReviewForm
                 permalink={purchase.product_permalink}
                 purchaseId={purchase.id}
                 purchaseEmailDigest={purchase.email_digest}
                 review={purchase.review}
                 disabledStatus={disabledStatus}
+                className="flex flex-wrap items-center justify-between gap-4 p-4"
               />
-            </div>
+            </Card>
           ) : null}
           {purchase?.email ? (
             <AddToLibrary
@@ -142,67 +144,79 @@ export const Layout = ({
             />
           ) : null}
           {purchase ? (
-            <div className="stack">
+            <Card>
               {content_unavailability_reason_code === null && purchase.membership ? (
                 purchase.membership.is_installment_plan ? (
-                  <details>
-                    <summary>Installment plan</summary>
-                    {purchase.membership.is_installment_plan_completed ? (
-                      "This installment plan has been paid in full."
-                    ) : (
-                      <NavigationButton href={Routes.manage_subscription_url(purchase.membership.subscription_id)}>
-                        Manage
-                      </NavigationButton>
-                    )}
-                  </details>
-                ) : (
-                  <details>
-                    <summary>Membership</summary>
-                    <div style={{ display: "grid" }}>
-                      {purchase.membership.has_active_subscription ? (
+                  <CardContent asChild details>
+                    <details>
+                      <summary className="grow grid-flow-col grid-cols-[1fr_auto] before:col-start-2">
+                        Installment plan
+                      </summary>
+                      {purchase.membership.is_installment_plan_completed ? (
+                        "This installment plan has been paid in full."
+                      ) : (
                         <NavigationButton href={Routes.manage_subscription_url(purchase.membership.subscription_id)}>
                           Manage
                         </NavigationButton>
-                      ) : purchase.membership.is_subscription_ended ? (
-                        "This subscription has ended."
-                      ) : purchase.membership.is_subscription_cancelled_or_failed ? (
-                        <NavigationButton href={Routes.manage_subscription_url(purchase.membership.subscription_id)}>
-                          Restart
-                        </NavigationButton>
-                      ) : null}
-                    </div>
-                  </details>
+                      )}
+                    </details>
+                  </CardContent>
+                ) : (
+                  <CardContent asChild details>
+                    <details>
+                      <summary className="grow grid-flow-col grid-cols-[1fr_auto] before:col-start-2">
+                        Membership
+                      </summary>
+                      <div style={{ display: "grid" }}>
+                        {purchase.membership.has_active_subscription ? (
+                          <NavigationButton href={Routes.manage_subscription_url(purchase.membership.subscription_id)}>
+                            Manage
+                          </NavigationButton>
+                        ) : purchase.membership.is_subscription_ended ? (
+                          "This subscription has ended."
+                        ) : purchase.membership.is_subscription_cancelled_or_failed ? (
+                          <NavigationButton href={Routes.manage_subscription_url(purchase.membership.subscription_id)}>
+                            Restart
+                          </NavigationButton>
+                        ) : null}
+                      </div>
+                    </details>
+                  </CardContent>
                 )
               ) : null}
               {receiptPurchaseId ? (
-                <details>
-                  <summary>Receipt</summary>
-                  <div className="flex flex-col gap-4">
-                    <NavigationButton
-                      href={
-                        purchase.email
-                          ? Routes.receipt_purchase_url(receiptPurchaseId, { email: purchase.email })
-                          : Routes.receipt_purchase_url(receiptPurchaseId)
-                      }
-                    >
-                      View receipt
-                    </NavigationButton>
-                    <Button onClick={() => handleResendReceipt(receiptPurchaseId)} disabled={isResendingReceipt}>
-                      {isResendingReceipt ? "Resending receipt..." : "Resend receipt"}
-                    </Button>
-                  </div>
-                </details>
+                <CardContent asChild details>
+                  <details>
+                    <summary className="grow grid-flow-col grid-cols-[1fr_auto] before:col-start-2">Receipt</summary>
+                    <div className="flex flex-col gap-4">
+                      <NavigationButton
+                        href={
+                          purchase.email
+                            ? Routes.receipt_purchase_url(receiptPurchaseId, { email: purchase.email })
+                            : Routes.receipt_purchase_url(receiptPurchaseId)
+                        }
+                      >
+                        View receipt
+                      </NavigationButton>
+                      <Button onClick={() => handleResendReceipt(receiptPurchaseId)} disabled={isResendingReceipt}>
+                        {isResendingReceipt ? "Resending receipt..." : "Resend receipt"}
+                      </Button>
+                    </div>
+                  </details>
+                </CardContent>
               ) : null}
               {loggedInUser !== null ? (
-                <details>
-                  <summary>Library</summary>
-                  <div className="flex flex-col gap-4">
-                    <PurchaseArchiveButton purchase_id={purchase.id} initial_is_archived={purchase.is_archived} />
-                    <PurchaseDeleteButton purchase_id={purchase.id} product_name={purchase.product_name} />
-                  </div>
-                </details>
+                <CardContent asChild details>
+                  <details>
+                    <summary className="grow grid-flow-col grid-cols-[1fr_auto] before:col-start-2">Library</summary>
+                    <div className="flex flex-col gap-4">
+                      <PurchaseArchiveButton purchase_id={purchase.id} initial_is_archived={purchase.is_archived} />
+                      <PurchaseDeleteButton purchase_id={purchase.id} product_name={purchase.product_name} />
+                    </div>
+                  </details>
+                </CardContent>
               ) : null}
-            </div>
+            </Card>
           ) : null}
         </>
       ) : null}
@@ -284,9 +298,9 @@ const CallDetails = ({ call }: { call: Call }) => {
   const formattedEndDate = formatDate(endTime);
 
   return (
-    <div className="stack">
-      <div>
-        <h5>
+    <Card>
+      <CardContent>
+        <h5 className="grow font-bold">
           {`${formatTime(startTime)} - ${formatTime(endTime)} ${
             Intl.DateTimeFormat("en-US", { timeZoneName: "short" })
               .formatToParts(new Date())
@@ -294,26 +308,26 @@ const CallDetails = ({ call }: { call: Call }) => {
           }`}
         </h5>
         {formattedStartDate === formattedEndDate ? formattedStartDate : `${formattedStartDate} - ${formattedEndDate}`}
-      </div>
+      </CardContent>
       {call.url ? (
-        <div>
-          <strong>Call link</strong>
+        <CardContent>
+          <strong className="grow">Call link</strong>
           <a href={call.url} target="_blank" rel="noopener noreferrer">
             {call.url}
           </a>
-        </div>
+        </CardContent>
       ) : null}
-    </div>
+    </Card>
   );
 };
 
 export const EntityInfo = ({ entityName, creator }: { entityName: string | null; creator: LayoutProps["creator"] }) =>
   entityName || creator ? (
-    <div className="stack">
-      {entityName ? <div>{entityName}</div> : null}
+    <Card>
+      {entityName ? <CardContent>{entityName}</CardContent> : null}
       {creator ? (
-        <div>
-          <span style={{ display: "flex", alignItems: "center", gap: "var(--spacer-2)" }}>
+        <CardContent>
+          <span style={{ display: "flex", alignItems: "center", gap: "var(--spacer-2)" }} className="grow">
             {creator.avatar_url ? <img className="user-avatar" src={creator.avatar_url} /> : null}
 
             <span>
@@ -323,9 +337,9 @@ export const EntityInfo = ({ entityName, creator }: { entityName: string | null;
               </a>
             </span>
           </span>
-        </div>
+        </CardContent>
       ) : null}
-    </div>
+    </Card>
   ) : null;
 
 const PurchaseDeleteButton = ({
@@ -424,23 +438,27 @@ const AddToLibrary = ({ add_to_library_option, terms_page_url, purchase_id, purc
   if (add_to_library_option === "none") return null;
 
   return (
-    <div className="stack">
+    <Card>
       {add_to_library_option === "add_to_library_button" ? (
         <>
-          <span>Access this product from anywhere, forever:</span>
-          <div>
-            <div style={{ display: "grid" }}>
+          <CardContent asChild>
+            <span>Access this product from anywhere, forever:</span>
+          </CardContent>
+          <CardContent>
+            <div style={{ display: "grid" }} className="grow">
               <Button color="primary" onClick={handleAddPurchaseToLibrary} disabled={isSubmitting}>
                 {isSubmitting ? "Adding..." : "Add to library"}
               </Button>
             </div>
-          </div>
+          </CardContent>
         </>
       ) : (
         <>
-          <span>Create an account to access all of your purchases in one place</span>
-          <div>
-            <form autoComplete="off" onSubmit={handleSignupAndAddPurchaseToLibrary} className="grid gap-4">
+          <CardContent asChild>
+            <span>Create an account to access all of your purchases in one place</span>
+          </CardContent>
+          <CardContent>
+            <form autoComplete="off" onSubmit={handleSignupAndAddPurchaseToLibrary} className="grid grow gap-4">
               <fieldset>
                 <input
                   type="password"
@@ -456,9 +474,9 @@ const AddToLibrary = ({ add_to_library_option, terms_page_url, purchase_id, purc
                 {isSubmitting ? "Creating..." : "Create"}
               </Button>
             </form>
-          </div>
+          </CardContent>
         </>
       )}
-    </div>
+    </Card>
   );
 };

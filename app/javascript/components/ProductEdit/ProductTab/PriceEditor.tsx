@@ -4,8 +4,11 @@ import { CurrencyCode, formatPriceCentsWithoutCurrencySymbol } from "$app/utils/
 
 import { Details } from "$app/components/Details";
 import { PriceInput } from "$app/components/PriceInput";
+import { DefaultDiscountCodeSelector } from "$app/components/ProductEdit/ProductTab/DefaultDiscountCodeSelector";
 import { InstallmentPlanEditor } from "$app/components/ProductEdit/ProductTab/InstallmentPlanEditor";
+import { ProductEditContext } from "$app/components/ProductEdit/state";
 import { Toggle } from "$app/components/Toggle";
+import { Alert } from "$app/components/ui/Alert";
 
 export const PriceEditor = ({
   priceCents,
@@ -38,6 +41,7 @@ export const PriceEditor = ({
 }) => {
   const uid = React.useId();
   const isFreeProduct = priceCents === 0;
+  const productEditContext = React.useContext(ProductEditContext);
 
   return (
     <fieldset>
@@ -49,11 +53,7 @@ export const PriceEditor = ({
         onChange={(newAmount) => setPriceCents(newAmount ?? 0)}
         currencyCodeSelector={currencyCodeSelector}
       />
-      {isFreeProduct ? (
-        <div role="alert" className="info">
-          Free products require a pay what they want price.
-        </div>
-      ) : null}
+      {isFreeProduct ? <Alert variant="info">Free products require a pay what they want price.</Alert> : null}
       <Details
         className="toggle"
         open={isPWYW}
@@ -99,6 +99,7 @@ export const PriceEditor = ({
           onNumberOfInstallmentsChange={onNumberOfInstallmentsChange}
         />
       ) : null}
+      {productEditContext ? <DefaultDiscountCodeSelector /> : null}
     </fieldset>
   );
 };
