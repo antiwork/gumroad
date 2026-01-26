@@ -22,7 +22,7 @@ describe ProbateAccountsWithPaymentAddressWorker do
       expect(comment.content).to eq("Probated (payouts suspended) automatically on #{Time.current.to_fs(:formatted_date_full_month)} because of usage of payment address tos@example.com (from suspended for TOS violation User##{@suspended_user.id})")
     end
 
-    it "does not probate users who are not compliant or not_reviewed" do
+    it "does not probate users in on_probation, flagged_for_fraud, flagged_for_tos_violation, suspended_for_fraud, or suspended_for_tos_violation states" do
       on_probation_seller = create(:user, payment_address: "tos@example.com", user_risk_state: "on_probation")
       flagged_fraud_seller = create(:user, payment_address: "tos@example.com", user_risk_state: "flagged_for_fraud")
       flagged_tos_seller = create(:user, payment_address: "tos@example.com", user_risk_state: "flagged_for_tos_violation")
