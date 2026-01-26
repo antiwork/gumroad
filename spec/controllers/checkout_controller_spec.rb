@@ -5,13 +5,21 @@ require "shared_examples/sellers_base_controller_concern"
 require "shared_examples/authorize_called"
 
 describe CheckoutController do
+  render_views
+
   describe "GET index" do
-    it "returns HTTP success and assigns correct instance variables" do
+    it "returns HTTP success and assigns correct instance variables and force enables analytics" do
       get :index
 
       expect(assigns[:hide_layouts]).to eq(true)
-      expect(assigns[:on_checkout_page]).to eq(true)
       expect(response).to be_successful
+
+      html = Nokogiri::HTML.parse(response.body)
+      expect(html.xpath("//meta[@property='gr:google_analytics:enabled']/@content").text).to eq("true")
+      expect(html.xpath("//meta[@property='gr:fb_pixel:enabled']/@content").text).to eq("true")
+      expect(html.xpath("//meta[@property='gr:logged_in_user:id']/@content").text).to eq("")
+      expect(html.xpath("//meta[@property='gr:page:type']/@content").text).to eq("")
+      expect(html.xpath("//meta[@property='gr:facebook_sdk:enabled']/@content").text).to eq("true")
     end
 
     describe "process_cart_id_param check" do
@@ -28,6 +36,8 @@ describe CheckoutController do
           get :index
 
           expect(response).to be_successful
+          html = Nokogiri::HTML.parse(response.body)
+          expect(html.xpath("//meta[@property='gr:logged_in_user:id']/@content").text).to eq(user.external_id)
         end
 
         it "redirects to the same path removing the `cart_id` query param" do
