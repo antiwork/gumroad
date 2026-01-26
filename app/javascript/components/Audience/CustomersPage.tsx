@@ -58,7 +58,7 @@ import { asyncVoid } from "$app/utils/promise";
 import { RecurrenceId, recurrenceLabels } from "$app/utils/recurringPricing";
 import { AbortError, assertResponseError } from "$app/utils/request";
 
-import { Button, NavigationButton } from "$app/components/Button";
+import { Button, NavigationButton, buttonVariants } from "$app/components/Button";
 import { useCurrentSeller } from "$app/components/CurrentSeller";
 import { DateInput } from "$app/components/DateInput";
 import { DateRangePicker } from "$app/components/DateRangePicker";
@@ -431,15 +431,13 @@ const CustomersPage = ({
                   <DateRangePicker from={from} to={to} setFrom={setFrom} setTo={setTo} />
                   <NavigationButtonInertia
                     color="primary"
-                    href={Routes.export_purchases_path()}
-                    method="post"
-                    preserveScroll
-                    data={{
+                    href={Routes.export_purchases_path({
                       start_time: lightFormat(from, "yyyy-MM-dd"),
                       end_time: lightFormat(to, "yyyy-MM-dd"),
                       product_ids: includedProductIds,
                       variant_ids: includedVariantIds,
-                    }}
+                    })}
+                    preserveScroll
                     onSuccess={() => close()}
                   >
                     Download
@@ -2388,18 +2386,20 @@ const ChargeRow = ({
   onChange,
   showRefundFeeNotice,
   canPing,
+  className,
 }: {
   purchase: Charge;
   customerEmail: string;
   onChange: (update: Partial<Charge>) => void;
   showRefundFeeNotice: boolean;
   canPing: boolean;
+  className?: string;
 }) => {
   const [isRefunding, setIsRefunding] = React.useState(false);
   const userAgentInfo = useUserAgentInfo();
 
   return (
-    <>
+    <section className={className}>
       <section key={purchase.id}>
         <section style={{ display: "flex", gap: "var(--spacer-1)", alignItems: "center" }}>
           <h5>
@@ -2460,7 +2460,7 @@ const ChargeRow = ({
           onClose={() => setIsRefunding(false)}
         />
       ) : null}
-    </>
+    </section>
   );
 };
 
@@ -2742,7 +2742,7 @@ const CommissionSection = ({
                   ))}
                 </Rows>
               ) : null}
-              <label className="button">
+              <label className={buttonVariants()}>
                 <input
                   type="file"
                   onChange={handleFileChange}
