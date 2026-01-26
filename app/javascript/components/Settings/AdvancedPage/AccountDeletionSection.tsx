@@ -53,6 +53,7 @@ const AccountDeletionSection = (props: Props) => {
       <Modal
         open={showConfirmationModal}
         title="Delete account"
+        usePortal
         onClose={() => setShowConfirmationModal(false)}
         footer={
           <>
