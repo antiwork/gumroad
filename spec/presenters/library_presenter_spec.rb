@@ -33,7 +33,7 @@ describe LibraryPresenter do
     end
 
     it "returns all necessary properties for library page" do
-      purchases, creator_counts = described_class.new(buyer).library_cards
+      purchases, creators = described_class.new(buyer).library_cards
 
       expect(purchases).to eq([
                                 product: product_details,
@@ -47,7 +47,7 @@ describe LibraryPresenter do
                                   is_bundle_purchase: false,
                                 }])
 
-      expect(creator_counts).to eq([{ count: 1, id: creator.external_id, name: creator.name }])
+      expect(creators).to eq([{ id: creator.external_id, name: creator.name }])
     end
 
     it "does not return the URL of a deleted thumbnail" do
@@ -91,7 +91,7 @@ describe LibraryPresenter do
       end
 
       it "returns results for all live subscriptions and excludes cancelled ones when access is blocked" do
-        purchases, creator_counts = described_class.new(buyer).library_cards
+        purchases, creators = described_class.new(buyer).library_cards
 
         expect(purchases).to eq([
                                   {
@@ -120,7 +120,7 @@ describe LibraryPresenter do
                                   },
                                 ])
 
-        expect(creator_counts).to eq([{ count: 1, id: creator.external_id, name: creator.name }])
+        expect(creators).to eq([{ id: creator.external_id, name: creator.name }])
       end
     end
 

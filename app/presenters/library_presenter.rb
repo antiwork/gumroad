@@ -28,10 +28,9 @@ class LibraryPresenter
       .find_each(batch_size: 3000, order: :desc) # required to avoid full table scans. See https://github.com/gumroad/web/pull/25970
       .to_a
     creators_infos = purchases.flat_map { |purchase| purchase.link.user }.uniq.group_by(&:id).transform_values(&:first)
-    creator_counts = purchases.uniq(&:link_id).filter(&:not_is_bundle_purchase).group_by(&:seller_id).map do |seller_id, item|
-      creator = creators_infos[seller_id]
-      { id: creator.external_id, name: creator.name || creator.username || creator.external_id, count: item.size }
-    end.sort_by { |creator| creator[:count] }.reverse
+    creators = creators_infos.values.map do |creator|
+      { id: creator.external_id, name: creator.name || creator.username || creator.external_id }
+    end
     bundles = purchases.filter_map do |purchase|
       { id: purchase.link.external_id, label: purchase.link.name } if purchase.is_bundle_purchase?
     end.uniq { _1[:id] }
@@ -68,6 +67,6 @@ class LibraryPresenter
         }
       }
     end.compact
-    return purchases, creator_counts, bundles
+    return purchases, creators, bundles
   end
 end
