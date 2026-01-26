@@ -252,8 +252,6 @@ describe "Sales page", type: :system, js: true do
             {
               start_time: 1.month.ago.strftime("%Y-%m-%d"),
               end_time: Date.today.strftime("%Y-%m-%d"),
-              product_ids: [],
-              variant_ids: [],
             }
           )
         )
