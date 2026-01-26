@@ -119,10 +119,10 @@ export const useCommunities = () => {
   );
 
   React.useEffect(() => {
-    setSelectedCommunityId(pageProps.selectedCommunityId ?? null);
-    setCommunities(sortByName(pageProps.communities));
-    setNotificationSettings(pageProps.notification_settings);
-  }, [pageProps]);
+    setSelectedCommunityId(initialSelectedCommunityId ?? null);
+    setCommunities(sortByName(initialCommunities));
+    setNotificationSettings(notification_settings);
+  }, [initialSelectedCommunityId, initialCommunities, notification_settings]);
 
   const selectedCommunity = React.useMemo(
     () => communities.find((community) => community.id === selectedCommunityId),
@@ -147,7 +147,6 @@ export const useCommunities = () => {
     selectedCommunityDraft,
     selectedCommunityChat,
     updateCommunity,
-    setSelectedCommunityId,
     setNotificationSettings,
     updateCommunityDraft,
     updateCommunityChat,
