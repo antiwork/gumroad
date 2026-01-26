@@ -202,11 +202,11 @@ describe LinksController, :vcr, inertia: true do
         let(:request_params) { { id: product.unique_permalink } }
       end
 
-      it "renders the Products/Edit component with correct props" do
+      it "renders the Products/Edit/Product component with correct props" do
         get :edit, params: { id: product.unique_permalink }
         expect(response).to be_successful
 
-        expect(inertia).to render_component("Products/Edit")
+        expect(inertia).to render_component("Products/Edit/Product")
         expect(inertia.props).to include(:product, :id, :unique_permalink)
       end
 
@@ -1538,7 +1538,7 @@ describe LinksController, :vcr, inertia: true do
           let(:integration_name) { "circle" }
           let(:new_integration_params) do
             {
-              "api_key" => GlobalConfig.get("CIRCLE_API_KEY"),
+              "api_key" => "test_key",
               "keep_inactive_members" => false,
               "integration_details" => { "community_id" => "0", "space_group_id" => "0" }
             }

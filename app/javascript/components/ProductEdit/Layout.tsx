@@ -1,6 +1,7 @@
+import { Link, router, usePage } from "@inertiajs/react";
 import cx from "classnames";
 import * as React from "react";
-import { Link, useMatches, useNavigate } from "react-router-dom";
+import { useMatches, useNavigate } from "react-router-dom";
 
 import { saveProduct } from "$app/data/product_edit";
 import { setProductPublished } from "$app/data/publish_product";
@@ -143,10 +144,37 @@ export const Layout = ({
   const url = useProductUrl();
   const checkoutUrl = useProductUrl({ wanted: true });
 
-  const [match] = useMatches();
-  const tab = match?.handle ?? "product";
+  let match: any;
+  try {
+    const matches = useMatches();
+    match = matches[matches.length - 1];
+  } catch {
+    // Not in a Router context
+  }
 
-  const navigate = useRefToLatest(useNavigate());
+  const inertiaUrl = usePage().url;
+  const tab = React.useMemo(() => {
+    if (match?.handle) return match.handle;
+    if (inertiaUrl.includes("/edit/content")) return "content";
+    if (inertiaUrl.includes("/edit/receipt")) return "receipt";
+    if (inertiaUrl.includes("/edit/share")) return "share";
+    return "product";
+  }, [match, inertiaUrl]);
+
+  let rrdNavigate: ReturnType<typeof useNavigate> | undefined;
+  try {
+    rrdNavigate = useNavigate();
+  } catch {
+    // Not in a Router context
+  }
+
+  const navigate = useRefToLatest((url: string) => {
+    if (rrdNavigate) {
+      rrdNavigate(url);
+    } else {
+      router.visit(url);
+    }
+  });
 
   const [isPublishing, setIsPublishing] = React.useState(false);
   const setPublished = async (published: boolean) => {
@@ -203,7 +231,7 @@ export const Layout = ({
     </WithTooltip>
   );
 
-  const onTabClick = (e: React.MouseEvent<HTMLAnchorElement>, callback?: () => void) => {
+  const onTabClick = (e: React.MouseEvent<any>, callback?: () => void) => {
     const message = isUploadingFiles
       ? "Some files are still uploading, please wait..."
       : isUploadingFilesOrImages
@@ -275,25 +303,25 @@ export const Layout = ({
         >
           <Tabs style={{ gridColumn: 1 }}>
             <Tab asChild isSelected={tab === "product"}>
-              <Link to={rootPath} onClick={onTabClick}>
+              <Link href={rootPath} onClick={onTabClick}>
                 Product
               </Link>
             </Tab>
             {!isCoffee ? (
               <Tab asChild isSelected={tab === "content"}>
-                <Link to={`${rootPath}/content`} onClick={onTabClick}>
+                <Link href={`${rootPath}/content`} onClick={onTabClick}>
                   Content
                 </Link>
               </Tab>
             ) : null}
             <Tab asChild isSelected={tab === "receipt"}>
-              <Link to={`${rootPath}/receipt`} onClick={onTabClick}>
+              <Link href={`${rootPath}/receipt`} onClick={onTabClick}>
                 Receipt
               </Link>
             </Tab>
             <Tab asChild isSelected={tab === "share"}>
               <Link
-                to={`${rootPath}/share`}
+                href={`${rootPath}/share`}
                 onClick={(evt) => {
                   onTabClick(evt, () => {
                     if (!product.is_published) {

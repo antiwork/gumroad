@@ -284,7 +284,10 @@ class LinksController < ApplicationController
     ai_generated = params[:ai_generated] == "true"
     presenter = ProductPresenter.new(product: @product, pundit_user:, ai_generated:)
 
-    render inertia: "Products/Edit", props: presenter.edit_props
+    tab = params[:tab] || "product"
+    component = "Products/Edit/#{tab.capitalize}"
+
+    render inertia: component, props: presenter.edit_props
   end
 
   def update
@@ -388,7 +391,12 @@ class LinksController < ApplicationController
       else
         error_message = @product.errors.full_messages.first || e.message
       end
-      return render json: { error_message: }, status: :unprocessable_entity
+
+      if request.inertia?
+        return redirect_back fallback_location: edit_link_path(@product.unique_permalink), inertia: { errors: { base: error_message } }
+      else
+        return render json: { error_message: }, status: :unprocessable_entity
+      end
     end
     invalid_currency_offer_codes = @product.product_and_universal_offer_codes.reject do |offer_code|
       offer_code.is_currency_valid?(@product)
@@ -410,12 +418,22 @@ class LinksController < ApplicationController
         issue_description = "#{all_invalid_offer_codes.count > 1 ? "discount" : "discounts"} this product below #{@product.min_price_formatted}, but not to #{MoneyFormatter.format(0, @product.price_currency_type.to_sym, no_cents_if_whole: true, symbol: true)}"
       end
 
-      return render json: {
-        warning_message: "The following offer #{"code".pluralize(all_invalid_offer_codes.count)} #{issue_description}: #{all_invalid_offer_codes.join(", ")}. Please update #{all_invalid_offer_codes.length > 1 ? "them or they" : "it or it"} will not work at checkout."
-      }
+      warning_message = "The following offer #{"code".pluralize(all_invalid_offer_codes.count)} #{issue_description}: #{all_invalid_offer_codes.join(", ")}. Please update #{all_invalid_offer_codes.length > 1 ? "them or they" : "it or it"} will not work at checkout."
+
+      if request.inertia?
+        flash[:warning] = warning_message
+        return redirect_back fallback_location: edit_link_path(@product.unique_permalink)
+      else
+        return render json: { warning_message: }
+      end
     end
 
-    head :no_content
+    if request.inertia?
+      flash[:success] = "Changes saved!"
+      redirect_back fallback_location: edit_link_path(@product.unique_permalink)
+    else
+      head :no_content
+    end
   end
 
   def unpublish

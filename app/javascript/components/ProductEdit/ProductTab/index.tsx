@@ -8,8 +8,7 @@ import { CopyToClipboard } from "$app/components/CopyToClipboard";
 import { useCurrentSeller } from "$app/components/CurrentSeller";
 import CustomDomain from "$app/components/CustomDomain";
 import { Icon } from "$app/components/Icons";
-import { Layout, useProductUrl } from "$app/components/ProductEdit/Layout";
-import { ProductPreview } from "$app/components/ProductEdit/ProductPreview";
+import { useProductUrl } from "$app/components/ProductEdit/Layout";
 import { AttributesEditor } from "$app/components/ProductEdit/ProductTab/AttributesEditor";
 import { AvailabilityEditor } from "$app/components/ProductEdit/ProductTab/AvailabilityEditor";
 import { BundleConversionNotice } from "$app/components/ProductEdit/ProductTab/BundleConversionNotice";
@@ -65,9 +64,9 @@ export const ProductTab = () => {
   const [thumbnail, setThumbnail] = React.useState(initialThumbnail);
   const [showAiNotification, setShowAiNotification] = React.useState(aiGenerated);
 
-  const { isUploading, setImagesUploading } = useImageUpload();
+  const { setImagesUploading } = useImageUpload();
 
-  const [showRefundPolicyPreview, setShowRefundPolicyPreview] = React.useState(false);
+  const [, setShowRefundPolicyPreview] = React.useState(false);
 
   const isCoffee = product.native_type === "coffee";
 
@@ -76,8 +75,7 @@ export const ProductTab = () => {
   if (!currentSeller) return null;
 
   return (
-    <Layout preview={<ProductPreview showRefundPolicyModal={showRefundPolicyPreview} />} isLoading={isUploading}>
-      <div className="squished">
+    <div className="squished">
         <form>
           <section className="p-4! md:p-8!">
             {showAiNotification ? (
@@ -483,6 +481,5 @@ export const ProductTab = () => {
           )}
         </form>
       </div>
-    </Layout>
   );
 };

@@ -23,7 +23,6 @@ import Nav from "$app/components/server-components/Nav";
 import PdfReaderPage from "$app/components/server-components/PdfReaderPage";
 import ProductPage from "$app/components/server-components/Product";
 import ProductIframePage from "$app/components/server-components/Product/IframePage";
-import ProductEditPage from "$app/components/server-components/ProductEditPage";
 import Profile from "$app/components/server-components/Profile";
 import ProfileCoffeePage from "$app/components/server-components/Profile/CoffeePage";
 import ProfilePostPage from "$app/components/server-components/Profile/PostPage";
@@ -68,7 +67,6 @@ ReactOnRails.register({
   Nav,
   PdfReaderPage,
   Pill,
-  ProductEditPage,
   ProductIframePage,
   PurchaseProductPage,
   ProductPage,

@@ -11,9 +11,13 @@ export default function (source) {
     const configFile = ts.readConfigFile(configPath, ts.sys.readFile);
     const tsConfigFile = ts.parseJsonConfigFileContent(configFile.config, ts.sys, path.dirname(configPath));
     service = ts.createLanguageService({
-      getScriptFileNames: () => tsConfigFile.fileNames,
+      getScriptFileNames: () => tsConfigFile.fileNames.filter((f) => ts.sys.fileExists(f)),
       getScriptVersion: (fileName) => (versions.get(fileName)?.safeTime ?? 1).toString(),
-      getScriptSnapshot: (fileName) => ts.ScriptSnapshot.fromString(ts.sys.readFile(fileName)),
+      getScriptSnapshot: (fileName) => {
+        const content = ts.sys.readFile(fileName);
+        if (content === undefined) return ts.ScriptSnapshot.fromString("");
+        return ts.ScriptSnapshot.fromString(content);
+      },
       getCompilationSettings: () => tsConfigFile.options,
       // There is also a `ts.getDefaultLibFileName` function, but this wants `getDefaultLibFilePath`.
       getDefaultLibFileName: ts.getDefaultLibFilePath,

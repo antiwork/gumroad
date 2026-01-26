@@ -29,7 +29,6 @@ import { LoadingSpinner } from "$app/components/LoadingSpinner";
 import { Modal } from "$app/components/Modal";
 import { Popover } from "$app/components/Popover";
 import { FileEmbedGroup } from "$app/components/ProductEdit/ContentTab/FileEmbedGroup";
-import { Layout } from "$app/components/ProductEdit/Layout";
 import { ExistingFileEntry, FileEntry, useProductEditContext, Variant } from "$app/components/ProductEdit/state";
 import { ReviewForm } from "$app/components/ReviewForm";
 import {
@@ -977,9 +976,10 @@ const ContentTabContent = ({ selectedVariantId }: { selectedVariantId: string | 
 };
 
 //TODO inline this once all the crazy providers are gone
-export const ContentTab = () => {
+export const ContentTab = ({ selectedVariantId: parentSelectedVariantId }: { selectedVariantId?: string | null }) => {
   const { id, awsKey, s3Url, seller, product, updateProduct, uniquePermalink } = useProductEditContext();
-  const [selectedVariantId, setSelectedVariantId] = React.useState(product.variants[0]?.id ?? null);
+  const [internalSelectedVariantId] = React.useState(product.variants[0]?.id ?? null);
+  const selectedVariantId = parentSelectedVariantId !== undefined ? parentSelectedVariantId : internalSelectedVariantId;
   const [confirmingDiscardVariantContent, setConfirmingDiscardVariantContent] = React.useState(false);
   const selectedVariant = product.variants.find((variant) => variant.id === selectedVariantId);
 
@@ -1062,83 +1062,7 @@ export const ContentTab = () => {
       <LicenseProvider value={licenseInfo}>
         <EvaporateUploaderProvider value={evaporateUploader}>
           <S3UploadConfigProvider value={s3UploadConfig}>
-            <Layout
-              headerActions={
-                product.variants.length > 0 ? (
-                  <>
-                    <hr className="relative left-1/2 my-2 w-screen max-w-none -translate-x-1/2 border-border lg:hidden" />
-                    <ComboBox<Variant>
-                      // TODO: Currently needed to get the icon on the selected option even though this is not multiple select. We should fix this in the design system
-                      multiple
-                      input={(props) => (
-                        <div {...props} className="input h-full min-h-auto" aria-label="Select a version">
-                          <span className="fake-input text-singleline">
-                            {selectedVariant && !product.has_same_rich_content_for_all_variants
-                              ? `Editing: ${selectedVariant.name || "Untitled"}`
-                              : "Editing: All versions"}
-                          </span>
-                          <Icon name="outline-cheveron-down" />
-                        </div>
-                      )}
-                      options={product.variants}
-                      option={(item, props, index) => (
-                        <>
-                          <div
-                            {...props}
-                            onClick={(e) => {
-                              props.onClick?.(e);
-                              setSelectedVariantId(item.id);
-                            }}
-                            aria-selected={item.id === selectedVariantId}
-                            inert={product.has_same_rich_content_for_all_variants}
-                          >
-                            <div>
-                              <h4>{item.name || "Untitled"}</h4>
-                              {item.id === selectedVariant?.id ? (
-                                <small>Editing</small>
-                              ) : product.has_same_rich_content_for_all_variants || item.rich_content.length ? (
-                                <small>
-                                  Last edited on{" "}
-                                  {formatDate(
-                                    (product.has_same_rich_content_for_all_variants
-                                      ? product.rich_content
-                                      : item.rich_content
-                                    ).reduce<Date | null>((acc, item) => {
-                                      const date = parseISO(item.updated_at);
-                                      return acc && acc > date ? acc : date;
-                                    }, null) ?? new Date(),
-                                  )}
-                                </small>
-                              ) : (
-                                <small className="text-muted">No content yet</small>
-                              )}
-                            </div>
-                          </div>
-                          {index === product.variants.length - 1 ? (
-                            <div className="option">
-                              <label style={{ alignItems: "center" }}>
-                                <input
-                                  type="checkbox"
-                                  checked={product.has_same_rich_content_for_all_variants}
-                                  onChange={() => {
-                                    if (!product.has_same_rich_content_for_all_variants && product.variants.length > 1)
-                                      return setConfirmingDiscardVariantContent(true);
-                                    setHasSameRichContent(!product.has_same_rich_content_for_all_variants);
-                                  }}
-                                />
-                                <small>Use the same content for all versions</small>
-                              </label>
-                            </div>
-                          ) : null}
-                        </>
-                      )}
-                    />
-                  </>
-                ) : null
-              }
-            >
-              <ContentTabContent selectedVariantId={selectedVariantId} />
-            </Layout>
+            <ContentTabContent selectedVariantId={selectedVariantId} />
             <Modal
               open={confirmingDiscardVariantContent}
               onClose={() => setConfirmingDiscardVariantContent(false)}
@@ -1166,5 +1090,116 @@ export const ContentTab = () => {
         </EvaporateUploaderProvider>
       </LicenseProvider>
     </PostsProvider>
+  );
+};
+
+export const ContentTabHeaderActions = ({
+  selectedVariantId,
+  setSelectedVariantId,
+}: {
+  selectedVariantId: string | null;
+  setSelectedVariantId: (id: string | null) => void;
+}) => {
+  const { product, updateProduct } = useProductEditContext();
+  const [confirmingDiscardVariantContent, setConfirmingDiscardVariantContent] = React.useState(false);
+
+  const selectedVariant = product.variants.find((v) => v.id === selectedVariantId);
+
+  const setHasSameRichContent = (value: boolean) => {
+    updateProduct({ has_same_rich_content_for_all_variants: value });
+  };
+
+  return (
+    <>
+      <hr className="relative left-1/2 my-2 w-screen max-w-none -translate-x-1/2 border-border lg:hidden" />
+      <ComboBox<Variant>
+        multiple
+        input={(props) => (
+          <div {...props} className="input h-full min-h-auto" aria-label="Select a version">
+            <span className="fake-input text-singleline">
+              {selectedVariant && !product.has_same_rich_content_for_all_variants
+                ? `Editing: ${selectedVariant.name || "Untitled"}`
+                : "Editing: All versions"}
+            </span>
+            <Icon name="outline-cheveron-down" />
+          </div>
+        )}
+        options={product.variants}
+        option={(item, props, index) => (
+          <>
+            <div
+              {...props}
+              onClick={(e) => {
+                props.onClick?.(e);
+                setSelectedVariantId(item.id);
+              }}
+              aria-selected={item.id === selectedVariantId}
+              inert={product.has_same_rich_content_for_all_variants}
+            >
+              <div>
+                <h4>{item.name || "Untitled"}</h4>
+                {item.id === selectedVariant?.id ? (
+                  <small>Editing</small>
+                ) : product.has_same_rich_content_for_all_variants || item.rich_content.length ? (
+                  <small>
+                    Last edited on{" "}
+                    {formatDate(
+                      (product.has_same_rich_content_for_all_variants
+                        ? product.rich_content
+                        : item.rich_content
+                      ).reduce<Date | null>((acc, item) => {
+                        const date = parseISO(item.updated_at);
+                        return acc && acc > date ? acc : date;
+                      }, null) ?? new Date(),
+                    )}
+                  </small>
+                ) : (
+                  <small className="text-muted">No content yet</small>
+                )}
+              </div>
+            </div>
+            {index === product.variants.length - 1 ? (
+              <div className="option">
+                <label style={{ alignItems: "center" }}>
+                  <input
+                    type="checkbox"
+                    checked={product.has_same_rich_content_for_all_variants}
+                    onChange={() => {
+                      if (!product.has_same_rich_content_for_all_variants && product.variants.length > 1)
+                        return setConfirmingDiscardVariantContent(true);
+                      setHasSameRichContent(!product.has_same_rich_content_for_all_variants);
+                    }}
+                  />
+                  <small>Use the same content for all versions</small>
+                </label>
+              </div>
+            ) : null}
+            <Modal
+              open={confirmingDiscardVariantContent}
+              onClose={() => setConfirmingDiscardVariantContent(false)}
+              title="Discard content from other versions?"
+              footer={
+                <>
+                  <Button onClick={() => setConfirmingDiscardVariantContent(false)}>No, cancel</Button>
+                  <Button
+                    color="danger"
+                    onClick={() => {
+                      setHasSameRichContent(true);
+                      setConfirmingDiscardVariantContent(false);
+                    }}
+                  >
+                    Yes, proceed
+                  </Button>
+                </>
+              }
+            >
+              If you proceed, the content from all other versions of this product will be removed and replaced with the
+              content of "{titleWithFallback(selectedVariant?.name)}".
+              <strong>This action is irreversible.</strong>
+            </Modal>
+          </>
+        )}
+      />
+    </>
   );
 };
