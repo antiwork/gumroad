@@ -315,6 +315,33 @@ describe("Payments Settings Scenario", type: :system, js: true) do
       expect(find_button("Disconnect Stripe account", disabled: true)[:disabled]).to eq "true"
     end
 
+    it "renders Stripe Connect section correctly for connected users without phone number" do
+      # Clear phone from @user's compliance info to simulate the reported bug scenario
+      # where Stripe Connect users don't have phone numbers stored in Gumroad
+      @user.alive_user_compliance_info.dup_and_save! do |new_compliance_info|
+        new_compliance_info.phone = nil
+      end
+
+      create(:merchant_account_stripe_connect, user: @user)
+      @user.check_merchant_account_is_linked = true
+      @user.save!
+
+      expect(@user.has_stripe_account_connected?).to be true
+      expect(@user.reload.alive_user_compliance_info.phone).to be_blank
+
+      visit settings_payments_path
+
+      # Verify Stripe Connect section is shown (not the compliance form with phone field)
+      expect(page).to have_button("Disconnect Stripe account")
+      expect(page).not_to have_field("Phone number")
+
+      # Verify payout settings are available
+      expect(page).to have_select("Schedule", selected: "Weekly")
+
+      # The Update settings button should be enabled for Stripe Connect users
+      expect(find_button("Update settings")).not_to be_disabled
+    end
+
     it "does not allow saving placeholder state values" do
       visit settings_payments_path
 

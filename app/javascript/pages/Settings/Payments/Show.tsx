@@ -630,7 +630,9 @@ export default function PaymentsPage() {
       markFieldInvalid("paypal_email_address");
     }
 
-    validateComplianceInfoFields();
+    if (selectedPayoutMethod !== "stripe") {
+      validateComplianceInfoFields();
+    }
 
     return errorFieldNames.size === 0;
   };
