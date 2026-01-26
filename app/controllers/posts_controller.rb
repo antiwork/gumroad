@@ -29,25 +29,25 @@ class PostsController < ApplicationController
       user: logged_in_user,
       seller: (logged_in_user && policy(@post).preview?) ? current_seller : logged_in_user
     )
-    @post_presenter = PostPresenter.new(
+    post_presenter = PostPresenter.new(
       pundit_user: seller_context,
       post: @post,
       purchase_id_param: params[:purchase_id]
     )
 
     set_meta_tag(title: "#{@post.name} - #{@post.user.name_or_username}")
-    set_post_page_meta(@post, @post_presenter)
+    set_post_page_meta(@post, post_presenter)
     set_favicon_meta_tags(@user)
 
-    purchase = @post_presenter.purchase
+    purchase = post_presenter.purchase
 
     if purchase
       @subscription = purchase.subscription
     end
 
-    e404 if @post_presenter.e404?
+    e404 if post_presenter.e404?
 
-    render inertia: "Posts/Show", props: @post_presenter.post_component_props
+    render inertia: "Posts/Show", props: post_presenter.post_component_props
   end
 
   def redirect_from_purchase_id
