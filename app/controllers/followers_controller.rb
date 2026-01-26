@@ -46,14 +46,24 @@ class FollowersController < ApplicationController
 
   def create
     follower = create_follower(params)
-    return render json: { success: false, message: "Sorry, something went wrong." } if follower.nil?
-    return render json: { success: false, message: follower.errors.full_messages.to_sentence } if follower.errors.present?
+    
+    if follower.nil?
+      flash[:alert] = "Sorry, something went wrong."
+      return redirect_back_or_to_default
+    end
+    
+    if follower.errors.present?
+      flash[:alert] = follower.errors.full_messages.to_sentence
+      return redirect_back_or_to_default
+    end
 
     if follower.confirmed?
-      render json: { success: true, message: "You are now following #{follower.user.name_or_username}!" }
+      flash[:notice] = "You are now following #{follower.user.name_or_username}!"
     else
-      render json: { success: true, message: "Check your inbox to confirm your follow request." }
+      flash[:notice] = "Check your inbox to confirm your follow request."
     end
+    
+    redirect_back_or_to_default
   end
 
   def new
@@ -105,6 +115,17 @@ class FollowersController < ApplicationController
   end
 
   private
+    def redirect_back_or_to_default
+      followed_user = User.find_by_external_id(params[:seller_id])
+      default_location = if request.referer&.include?("/subscribe")
+                           followed_user&.subscribe_url || root_path
+                         else
+                           followed_user&.profile_url || root_path
+                         end
+      
+      redirect_back(fallback_location: default_location, allow_other_host: true)
+    end
+
     def create_follower(params, source: nil)
       followed_user = User.find_by_external_id(params[:seller_id])
 
