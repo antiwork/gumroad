@@ -35,7 +35,7 @@ import { WithPreviewSidebar } from "$app/components/PreviewSidebar";
 import { applySelection } from "$app/components/Product/ConfigurationSelector";
 import { Select } from "$app/components/Select";
 import { showAlert } from "$app/components/server-components/Alert";
-import { CrossSellModal, UpsellModal } from "$app/components/server-components/CheckoutPage";
+import { CrossSellModal, UpsellModal } from "$app/components/Checkout/CheckoutPageContent";
 import { Skeleton } from "$app/components/Skeleton";
 import { Card, CardContent } from "$app/components/ui/Card";
 import { PageHeader } from "$app/components/ui/PageHeader";
