@@ -14,6 +14,8 @@ describe SuspendAccountsWithPaymentAddressWorker do
       expect(@user_2.reload.suspended?).to be(true)
       expect(@user_2.comments.first.content).to eq("Flagged for fraud automatically on #{Time.current.to_fs(:formatted_date_full_month)} because of usage of payment address #{@suspended_user.payment_address} (from User##{@suspended_user.id})")
       expect(@user_2.comments.last.content).to eq("Suspended for fraud automatically on #{Time.current.to_fs(:formatted_date_full_month)} because of usage of payment address #{@suspended_user.payment_address} (from User##{@suspended_user.id})")
+      expect(@user_2.comments.first.author_name).to eq(SuspendAccountsWithPaymentAddressWorker::SUSPEND_ACCOUNTS_WITH_PAYMENT_ADDRESS_AUTHOR_NAME)
+      expect(@user_2.comments.last.author_name).to eq(SuspendAccountsWithPaymentAddressWorker::SUSPEND_ACCOUNTS_WITH_PAYMENT_ADDRESS_AUTHOR_NAME)
     end
 
     it "does not suspend already suspended users or verified users" do
@@ -27,9 +29,9 @@ describe SuspendAccountsWithPaymentAddressWorker do
       expect(suspended_tos_seller.reload.suspended_for_tos_violation?).to be(true)
       expect(verified_seller.reload.compliant?).to be(true)
 
-      expect(suspended_fraud_seller.comments.where(author_name: "suspend_sellers_other_accounts").count).to eq(0)
-      expect(suspended_tos_seller.comments.where(author_name: "suspend_sellers_other_accounts").count).to eq(0)
-      expect(verified_seller.comments.where(author_name: "suspend_sellers_other_accounts").count).to eq(0)
+      expect(suspended_fraud_seller.comments.count).to eq(0)
+      expect(suspended_tos_seller.comments.count).to eq(0)
+      expect(verified_seller.comments.count).to eq(0)
     end
 
     it "does nothing if payment_address is blank" do

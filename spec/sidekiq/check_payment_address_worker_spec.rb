@@ -22,8 +22,9 @@ describe CheckPaymentAddressWorker do
       CheckPaymentAddressWorker.new.perform(user.id)
 
       expect(user.reload.flagged?).to be(true)
-      comment = user.comments.where(author_name: CheckPaymentAddressWorker::CHECK_PAYMENT_ADDRESS_AUTHOR_NAME).last
+      comment = user.comments.last
       suspended_for_fraud_uids = [suspended_user_2.external_id, @previously_banned_user.external_id]
+      expect(comment.author_name).to eq(CheckPaymentAddressWorker::CHECK_PAYMENT_ADDRESS_AUTHOR_NAME)
       expect(comment.content).to eq("Flagged for fraud automatically on #{CheckPaymentAddressWorker.formatted_date} because of usage of payment address tuhins@gmail.com (from suspended for fraud Users #{CheckPaymentAddressWorker.format_uids(suspended_for_fraud_uids)})")
     end
 
@@ -33,7 +34,8 @@ describe CheckPaymentAddressWorker do
       CheckPaymentAddressWorker.new.perform(@user.id)
 
       expect(@user.reload.flagged?).to be(true)
-      comment = @user.comments.where(author_name: CheckPaymentAddressWorker::CHECK_PAYMENT_ADDRESS_AUTHOR_NAME).last
+      comment = @user.comments.last
+      expect(comment.author_name).to eq(CheckPaymentAddressWorker::CHECK_PAYMENT_ADDRESS_AUTHOR_NAME)
       expect(comment.content).to eq("Flagged for fraud automatically on #{CheckPaymentAddressWorker.formatted_date} because of usage of payment address fraudulent_email@zombo.com (from a fraudulent purchase)")
     end
 
@@ -45,7 +47,8 @@ describe CheckPaymentAddressWorker do
 
       expect(user.reload.flagged?).to be(true)
       expect(user.on_probation?).to be(false)
-      comment = user.comments.where(author_name: CheckPaymentAddressWorker::CHECK_PAYMENT_ADDRESS_AUTHOR_NAME).last
+      comment = user.comments.last
+      expect(comment.author_name).to eq(CheckPaymentAddressWorker::CHECK_PAYMENT_ADDRESS_AUTHOR_NAME)
       expect(comment.content).to eq("Flagged for fraud automatically on #{CheckPaymentAddressWorker.formatted_date} because of usage of payment address tuhins@gmail.com (from suspended for fraud User #{CheckPaymentAddressWorker.format_uids([@previously_banned_user.external_id])})")
     end
 
@@ -65,7 +68,8 @@ describe CheckPaymentAddressWorker do
       CheckPaymentAddressWorker.new.perform(user.id)
 
       expect(user.reload.on_probation?).to be(true)
-      comment = user.comments.where(author_name: CheckPaymentAddressWorker::CHECK_PAYMENT_ADDRESS_AUTHOR_NAME).last
+      comment = user.comments.last
+      expect(comment.author_name).to eq(CheckPaymentAddressWorker::CHECK_PAYMENT_ADDRESS_AUTHOR_NAME)
       expect(comment.content).to eq("Probated (payouts suspended) automatically on #{CheckPaymentAddressWorker.formatted_date} because of usage of payment address tos@example.com (from suspended for TOS violation User #{CheckPaymentAddressWorker.format_uids([suspended_tos_user.external_id])})")
     end
 
@@ -77,7 +81,8 @@ describe CheckPaymentAddressWorker do
       CheckPaymentAddressWorker.new.perform(user.id)
 
       expect(user.reload.on_probation?).to be(true)
-      comment = user.comments.where(author_name: CheckPaymentAddressWorker::CHECK_PAYMENT_ADDRESS_AUTHOR_NAME).last
+      comment = user.comments.last
+      expect(comment.author_name).to eq(CheckPaymentAddressWorker::CHECK_PAYMENT_ADDRESS_AUTHOR_NAME)
       suspended_for_tos_violation_uids = [suspended_tos_user_2.external_id, suspended_tos_user_1.external_id]
       expect(comment.content).to eq("Probated (payouts suspended) automatically on #{CheckPaymentAddressWorker.formatted_date} because of usage of payment address tos@example.com (from suspended for TOS violation Users #{CheckPaymentAddressWorker.format_uids(suspended_for_tos_violation_uids)})")
     end

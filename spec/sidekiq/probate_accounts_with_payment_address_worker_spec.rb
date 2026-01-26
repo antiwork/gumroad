@@ -18,6 +18,7 @@ describe ProbateAccountsWithPaymentAddressWorker do
       expect(verified_seller.reload.on_probation?).to be(true)
 
       comment = compliant_seller.comments.last
+      expect(comment.author_name).to eq(ProbateAccountsWithPaymentAddressWorker::PROBATE_ACCOUNTS_WITH_PAYMENT_ADDRESS_AUTHOR_NAME)
       expect(comment.content).to eq("Probated (payouts suspended) automatically on #{Time.current.to_fs(:formatted_date_full_month)} because of usage of payment address tos@example.com (from suspended for TOS violation User##{@suspended_user.id})")
     end
 
