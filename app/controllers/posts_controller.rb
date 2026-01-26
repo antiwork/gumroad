@@ -19,10 +19,6 @@ class PostsController < ApplicationController
     # Skip fetching post again if it's already fetched in check_if_needs_redirect
     @post || fetch_post(false)
 
-    @title = "#{@post.name} - #{@post.user.name_or_username}"
-    @show_user_favicon = true
-    @on_posts_page = true
-
     # Set @user instance variable to apply third-party analytics config in layouts/_head partial.
     @user = @post.seller
     seller_context = SellerContext.new(
@@ -38,12 +34,6 @@ class PostsController < ApplicationController
     set_meta_tag(title: "#{@post.name} - #{@post.user.name_or_username}")
     set_post_page_meta(@post, post_presenter)
     set_favicon_meta_tags(@user)
-
-    purchase = post_presenter.purchase
-
-    if purchase
-      @subscription = purchase.subscription
-    end
 
     e404 if post_presenter.e404?
 
