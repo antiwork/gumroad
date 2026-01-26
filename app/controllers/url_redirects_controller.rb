@@ -169,21 +169,18 @@ class UrlRedirectsController < ApplicationController
 
   def expired
     @content_unavailability_reason_code = UrlRedirectPresenter::CONTENT_UNAVAILABILITY_REASON_CODES[:access_expired]
-    set_meta_tag(title: "#{@url_redirect.referenced_link.name} - Access expired")
     props = UrlRedirectPresenter.new(url_redirect: @url_redirect, logged_in_user:).download_page_without_content_props(common_props)
     render inertia: "UrlRedirects/Expired", props:
   end
 
   def rental_expired_page
     @content_unavailability_reason_code = UrlRedirectPresenter::CONTENT_UNAVAILABILITY_REASON_CODES[:rental_expired]
-    set_meta_tag(title: "#{@url_redirect.referenced_link.name} - Your rental has expired")
     props = UrlRedirectPresenter.new(url_redirect: @url_redirect, logged_in_user:).download_page_without_content_props(common_props)
     render inertia: "UrlRedirects/RentalExpired", props:
   end
 
   def membership_inactive_page
     @content_unavailability_reason_code = UrlRedirectPresenter::CONTENT_UNAVAILABILITY_REASON_CODES[:inactive_membership]
-    set_meta_tag(title: "#{@url_redirect.referenced_link.name} - Your membership is inactive")
     props = UrlRedirectPresenter.new(url_redirect: @url_redirect, logged_in_user:).download_page_without_content_props(common_props)
     render inertia: "UrlRedirects/MembershipInactive", props:
   end
