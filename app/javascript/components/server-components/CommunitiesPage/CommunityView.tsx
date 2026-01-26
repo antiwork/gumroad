@@ -488,7 +488,7 @@ export const CommunityView = () => {
   const switchSeller = (sellerId: string) => {
     const community = communities.find((community) => community.seller.id === sellerId);
     if (community) {
-      router.get(`/communities/${community.seller.id}/${community.id}`);
+      router.get(`/communities/${community.seller.id}/${community.id}`, {}, { replace: true });
       setSwitcherOpen(false);
     }
   };
@@ -513,7 +513,8 @@ export const CommunityView = () => {
 
     const community = communities.find((community) => community.id === communityId);
     if (!community) return;
-    router.get(`/communities/${community.seller.id}/${community.id}`);
+    // Use replace option to avoid creating a history entry - prevents back button loop
+    router.get(`/communities/${community.seller.id}/${community.id}`, {}, { replace: true });
   });
 
   const sellers = React.useMemo(() => {
@@ -834,11 +835,8 @@ const CommunityChatHeader = ({
 const GoBackHeader = () => {
   const handleGoBack = (e: React.MouseEvent) => {
     e.preventDefault();
-    const referrerUrl = new URL(document.referrer.trim() !== "" ? document.referrer : Routes.dashboard_url());
-    const targetUrl = referrerUrl.pathname.startsWith("/communities")
-      ? Routes.dashboard_path()
-      : referrerUrl.toString();
-    router.visit(targetUrl);
+    // Use browser's native back button - Inertia preserves the history stack
+    window.history.back();
   };
 
   return (

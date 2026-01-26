@@ -25,6 +25,7 @@ export const CommunityList = ({
         <Link
           key={community.id}
           href={`/communities/${community.seller.id}/${community.id}`}
+          replace
           aria-selected={isCommunitySelected}
           onClick={(e) => {
             if (isCommunitySelected) {
