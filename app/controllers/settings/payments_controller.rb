@@ -6,8 +6,6 @@ class Settings::PaymentsController < Settings::BaseController
   before_action :authorize
 
   def show
-    @title = "Settings"
-
     render inertia: "Settings/Payments/Show", props: settings_presenter.payments_props(remote_ip: request.remote_ip)
   end
 

@@ -6,6 +6,9 @@ class PostsController < ApplicationController
 
   layout "inertia", only: [:show]
 
+  include PageMeta::Favicon
+  include PageMeta::Post
+
   before_action :authenticate_user!, only: %i[send_for_purchase]
   after_action :verify_authorized, only: %i[send_for_purchase]
   before_action :fetch_post, only: %i[send_for_purchase]
@@ -32,6 +35,11 @@ class PostsController < ApplicationController
       post: @post,
       purchase_id_param: params[:purchase_id]
     )
+
+    set_meta_tag(title: "#{@post.name} - #{@post.user.name_or_username}")
+    set_post_page_meta(@post, @post_presenter)
+    set_favicon_meta_tags(@user)
+
     purchase = @post_presenter.purchase
 
     if purchase

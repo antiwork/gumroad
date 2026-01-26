@@ -121,10 +121,19 @@ describe PostsController do
         expect(inertia.props[:subject]).to eq(installment.subject)
       end
 
-      it "sets @on_posts_page instance variable to make nav item active" do
+      it "sets the post page meta tags" do
         installment = create(:published_installment, link: @product, installment_type: "product", shown_on_profile: false)
         get :show, params: { username: @user.username, slug: installment.slug, purchase_id: @purchase.external_id }
-        expect(assigns(:on_posts_page)).to eq(true)
+        html = Nokogiri::HTML.parse(response.body)
+        post_presenter = PostPresenter.new(pundit_user: SellerContext.new(user: @user, seller:), post: installment, purchase_id_param: nil)
+        expect(html.xpath("//meta[@name='description']/@content").text).to eq(post_presenter.snippet)
+        expect(html.xpath("//meta[@property='og:title']/@value").text).to eq(installment.name)
+        expect(html.xpath("//meta[@property='og:description']/@value").text).to eq(post_presenter.snippet)
+        expect(html.xpath("//meta[@property='og:image']/@value").text).to include("opengraph_image.png")
+        expect(html.xpath("//meta[@property='twitter:title']/@value").text).to eq(installment.name)
+        expect(html.xpath("//meta[@property='twitter:description']/@value").text).to eq(post_presenter.snippet)
+        expect(html.xpath("//meta[@property='twitter:domain']/@value").text).to eq("Gumroad")
+        expect(html.xpath("//meta[@property='twitter:card']/@value").text).to eq("summary")
       end
 
       it "sets @user instance variable to load third-party analytics config" do

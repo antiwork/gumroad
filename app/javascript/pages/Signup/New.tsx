@@ -122,5 +122,5 @@ function SignupPage() {
   );
 }
 
-SignupPage.disableLayout = true;
+SignupPage.authenticationLayout = true;
 export default SignupPage;
