@@ -106,6 +106,8 @@ describe PostsController do
     end
 
     describe "GET 'show'", inertia: true do
+      render_views
+
       before do
         @user = create(:named_user)
         @product = create(:product, user: @user)
