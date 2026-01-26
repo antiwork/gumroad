@@ -120,6 +120,21 @@ describe PostsController do
         get :show, params: { username: @user.username, slug: installment.slug, purchase_id: @purchase.external_id }
         expect(response).to be_successful
         expect(inertia.component).to eq("Posts/Show")
+        expect(inertia.props).to include(
+          :creator_profile,
+          :subject,
+          :slug,
+          :external_id,
+          :purchase_id,
+          :published_at,
+          :message,
+          :call_to_action,
+          :download_url,
+          :has_posts_on_profile,
+          :recent_posts,
+          :paginated_comments,
+          :comments_max_allowed_depth
+        )
         expect(inertia.props[:subject]).to eq(installment.subject)
       end
 
@@ -162,6 +177,21 @@ describe PostsController do
         get :show, params: { username: @user.username, slug: installment.slug }
         expect(response).to be_successful
         expect(inertia.component).to eq("Posts/Show")
+        expect(inertia.props).to include(
+          :creator_profile,
+          :subject,
+          :slug,
+          :external_id,
+          :purchase_id,
+          :published_at,
+          :message,
+          :call_to_action,
+          :download_url,
+          :has_posts_on_profile,
+          :recent_posts,
+          :paginated_comments,
+          :comments_max_allowed_depth
+        )
         expect(inertia.props[:subject]).to eq(installment.subject)
       end
 
@@ -212,6 +242,21 @@ describe PostsController do
           expect(assigns[:post]).to eq @post
           expect(response).to be_successful
           expect(inertia.component).to eq("Posts/Show")
+          expect(inertia.props).to include(
+            :creator_profile,
+            :subject,
+            :slug,
+            :external_id,
+            :purchase_id,
+            :published_at,
+            :message,
+            :call_to_action,
+            :download_url,
+            :has_posts_on_profile,
+            :recent_posts,
+            :paginated_comments,
+            :comments_max_allowed_depth
+          )
           expect(inertia.props[:subject]).to eq(@post.subject)
         end
       end
