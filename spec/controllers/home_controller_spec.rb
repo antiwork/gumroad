@@ -10,7 +10,7 @@ describe HomeController do
       get :small_bets
 
       expect(response).to be_successful
-      expect(assigns(:title)).to eq("Small Bets by Gumroad")
+      expect(controller.send(:page_title)).to eq("Small Bets by Gumroad")
       expect(assigns(:hide_layouts)).to be(true)
     end
   end

@@ -2,6 +2,7 @@
 
 class WishlistsController < ApplicationController
   include CustomDomainConfig, DiscoverCuratedProducts
+  include PageMeta::Favicon
 
   before_action :authenticate_user!, except: :show
   after_action :verify_authorized, except: :show
@@ -13,7 +14,7 @@ class WishlistsController < ApplicationController
 
     respond_to do |format|
       format.html do
-        @title = Feature.active?(:follow_wishlists, current_seller) ? "Saved" : "Wishlists"
+        set_meta_tag(title: Feature.active?(:follow_wishlists, current_seller) ? "Saved" : "Wishlists")
         wishlists_props = WishlistPresenter.library_props(wishlists: current_seller.wishlists.alive)
 
         render inertia: "Wishlists/Index", props: {
@@ -50,8 +51,8 @@ class WishlistsController < ApplicationController
     e404 if wishlist.blank?
 
     @user = wishlist.user
-    @title = wishlist.name
-    @show_user_favicon = true
+    set_meta_tag(title: wishlist.name)
+    set_favicon_meta_tags(@user)
 
     layout = params[:layout]
     props = WishlistPresenter.new(wishlist:).public_props(
