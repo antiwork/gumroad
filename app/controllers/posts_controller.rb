@@ -2,7 +2,6 @@
 
 class PostsController < ApplicationController
   include CustomDomainConfig
-  include InertiaRendering
 
   layout "inertia", only: [:show]
 
