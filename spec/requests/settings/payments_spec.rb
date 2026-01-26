@@ -315,31 +315,35 @@ describe("Payments Settings Scenario", type: :system, js: true) do
       expect(find_button("Disconnect Stripe account", disabled: true)[:disabled]).to eq "true"
     end
 
-    it "renders Stripe Connect section correctly for connected users without phone number" do
-      # Clear phone from @user's compliance info to simulate the reported bug scenario
-      # where Stripe Connect users don't have phone numbers stored in Gumroad
-      @user.alive_user_compliance_info.dup_and_save! do |new_compliance_info|
-        new_compliance_info.phone = nil
-      end
+    it "allows Stripe Connect users to update payout schedule without compliance validation" do
+      # Create a fresh user with Stripe Connect but no phone number to simulate the reported bug
+      # where Stripe Connect users manage compliance info through Stripe, not Gumroad
+      creator = create(:user, payment_address: nil)
+      create(:user_compliance_info, user: creator, phone: nil)
+      create(:merchant_account_stripe_connect, user: creator)
+      creator.check_merchant_account_is_linked = true
+      creator.save!
 
-      create(:merchant_account_stripe_connect, user: @user)
-      @user.check_merchant_account_is_linked = true
-      @user.save!
+      expect(creator.has_stripe_account_connected?).to be true
+      expect(creator.alive_user_compliance_info.phone).to be_blank
+      expect(creator.payout_frequency).to eq(User::PayoutSchedule::WEEKLY)
 
-      expect(@user.has_stripe_account_connected?).to be true
-      expect(@user.reload.alive_user_compliance_info.phone).to be_blank
-
+      login_as creator
       visit settings_payments_path
 
       # Verify Stripe Connect section is shown (not the compliance form with phone field)
       expect(page).to have_button("Disconnect Stripe account")
       expect(page).not_to have_field("Phone number")
 
-      # Verify payout settings are available
+      # Change payout schedule and submit - the fix should skip compliance validation for Stripe Connect
       expect(page).to have_select("Schedule", selected: "Weekly")
+      select "Monthly", from: "Schedule"
 
-      # The Update settings button should be enabled for Stripe Connect users
-      expect(find_button("Update settings")).not_to be_disabled
+      click_on "Update settings"
+      wait_for_ajax
+
+      expect(page).to have_alert(text: "Thanks! You're all set.")
+      expect(creator.reload.payout_frequency).to eq(User::PayoutSchedule::MONTHLY)
     end
 
     it "does not allow saving placeholder state values" do
