@@ -2,7 +2,7 @@ import * as React from "react";
 
 import { Button } from "$app/components/Button";
 import { Icon } from "$app/components/Icons";
-import { PopoverRoot as Popover, PopoverContent, PopoverTrigger } from "$app/components/Popover";
+import { PopoverRoot as Popover, PopoverAnchor, PopoverContent, PopoverTrigger } from "$app/components/Popover";
 
 type SearchProps = {
   onSearch: (query: string) => void;
@@ -16,11 +16,13 @@ export const Search = ({ onSearch, value: initialValue, placeholder = "Search" }
 
   return (
     <Popover>
-      <PopoverTrigger aria-label="Toggle Search" asChild>
-        <Button>
-          <Icon name="solid-search" />
-        </Button>
-      </PopoverTrigger>
+      <PopoverAnchor>
+        <PopoverTrigger aria-label="Toggle Search" asChild>
+          <Button>
+            <Icon name="solid-search" />
+          </Button>
+        </PopoverTrigger>
+      </PopoverAnchor>
       <PopoverContent sideOffset={4} onOpenAutoFocus={() => searchInputRef.current?.focus()}>
         <div className="input input-wrapper">
           <Icon name="solid-search" />

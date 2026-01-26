@@ -3,7 +3,7 @@ import * as React from "react";
 
 import { Button } from "$app/components/Button";
 import { Icon } from "$app/components/Icons";
-import { PopoverRoot as Popover, PopoverContent, PopoverTrigger } from "$app/components/Popover";
+import { PopoverRoot as Popover, PopoverAnchor, PopoverContent, PopoverTrigger } from "$app/components/Popover";
 import { Pill } from "$app/components/ui/Pill";
 import { useOriginalLocation } from "$app/components/useOriginalLocation";
 
@@ -87,11 +87,13 @@ const SearchPopover = () => {
 
   return (
     <Popover open={open} onOpenChange={setOpen}>
-      <PopoverTrigger aria-label="Toggle Search" asChild>
-        <Button>
-          <Icon name="solid-search" />
-        </Button>
-      </PopoverTrigger>
+      <PopoverAnchor>
+        <PopoverTrigger aria-label="Toggle Search" asChild>
+          <Button>
+            <Icon name="solid-search" />
+          </Button>
+        </PopoverTrigger>
+      </PopoverAnchor>
       <PopoverContent sideOffset={4}>
         <div className="grid w-96 max-w-full gap-3">
           <form onSubmit={(e) => submitForm(e, Routes.admin_search_users_path(), "user_query")} className="flex gap-2">

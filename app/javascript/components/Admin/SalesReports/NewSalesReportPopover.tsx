@@ -1,8 +1,9 @@
 import { usePage } from "@inertiajs/react";
+import { PopoverAnchor } from "@radix-ui/react-popover";
 import * as React from "react";
 
 import AdminSalesReportsForm from "$app/components/Admin/SalesReports/Form";
-import { buttonVariants } from "$app/components/Button";
+import { Button } from "$app/components/Button";
 import { PopoverRoot as Popover, PopoverContent, PopoverTrigger } from "$app/components/Popover";
 
 type PageProps = {
@@ -17,15 +18,13 @@ const NewSalesReportPopover = () => {
 
   return (
     <Popover open={open} onOpenChange={setOpen}>
-      <PopoverTrigger aria-label="New Sales Report" asChild>
-        <button
-          type="button"
-          className={buttonVariants({ size: "default", color: "primary" })}
-          title="Generate a new sales report"
-        >
-          New report
-        </button>
-      </PopoverTrigger>
+      <PopoverAnchor>
+        <PopoverTrigger aria-label="New Sales Report" asChild>
+          <Button color="primary" title="Generate a new sales report">
+            New report
+          </Button>
+        </PopoverTrigger>
+      </PopoverAnchor>
       <PopoverContent>
         <div className="grid w-96 max-w-full gap-3">
           <AdminSalesReportsForm

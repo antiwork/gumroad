@@ -279,12 +279,10 @@ const MenubarItem = ({
       onMouseLeave={closeAfterDelay}
     >
       <Popover open={menuOpen}>
-        <PopoverTrigger asChild>{menuItemAnchor}</PopoverTrigger>
-        <PopoverContent
-          className="border-0 p-0 shadow-none"
-          arrowClassName="dark:fill-black/35"
-          onInteractOutside={(e: Event) => e.preventDefault()}
-        >
+        <PopoverTrigger asChild>
+          <span className="inline-flex">{menuItemAnchor}</span>
+        </PopoverTrigger>
+        <PopoverContent className="border-0 p-0 shadow-none" onInteractOutside={(e) => e.preventDefault()}>
           <ItemsList
             key={`${uid}-${menuOpen}`}
             menuId={uid}

@@ -112,7 +112,7 @@ export const Card = ({
             <PopoverTrigger aria-label="Open product action menu">
               <Icon name="three-dots" />
             </PopoverTrigger>
-            <PopoverContent className="border-0 p-0 shadow-none">
+            <PopoverContent className="border-0 p-0 shadow-none" usePortal>
               <div role="menu">
                 <div role="menuitem" onClick={toggleArchived}>
                   <Icon name="archive" />

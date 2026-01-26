@@ -28,7 +28,7 @@ import {
 import { GiftForm } from "$app/components/Checkout/GiftForm";
 import { PaymentForm } from "$app/components/Checkout/PaymentForm";
 import { Icon } from "$app/components/Icons";
-import { PopoverRoot as Popover, PopoverContent, PopoverTrigger } from "$app/components/Popover";
+import { PopoverRoot as Popover, PopoverAnchor, PopoverContent, PopoverTrigger } from "$app/components/Popover";
 import { PriceInput } from "$app/components/PriceInput";
 import { Card } from "$app/components/Product/Card";
 import {
@@ -636,9 +636,11 @@ const CartItemComponent = ({
             item.product.installment_plan ||
             isPWYW ? (
               <Popover open={editPopoverOpen} onOpenChange={setEditPopoverOpen}>
-                <PopoverTrigger asChild>
-                  <Button className="h-8 w-15 !p-0 !text-xs">Edit</Button>
-                </PopoverTrigger>
+                <PopoverAnchor>
+                  <PopoverTrigger asChild>
+                    <Button className="h-8 w-15 !p-0 !text-xs">Edit</Button>
+                  </PopoverTrigger>
+                </PopoverAnchor>
                 <PopoverContent className="max-h-[var(--radix-popover-content-available-height,80vh)] overflow-auto">
                   <div className="flex w-96 flex-col gap-4">
                     <ConfigurationSelector
