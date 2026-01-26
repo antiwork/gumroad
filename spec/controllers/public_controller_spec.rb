@@ -13,7 +13,7 @@ describe PublicController, type: :controller, inertia: true do
     it "succeeds and renders with Inertia" do
       get :api
       expect(response).to be_successful
-      expect(assigns(:title)).to eq("API")
+      expect(controller.send(:page_title)).to eq("API")
       expect(inertia).to render_component("Public/Api")
     end
   end
@@ -22,7 +22,7 @@ describe PublicController, type: :controller, inertia: true do
     it "succeeds and renders with Inertia" do
       get :ping
       expect(response).to be_successful
-      expect(assigns(:title)).to eq("Ping")
+      expect(controller.send(:page_title)).to eq("Ping")
       expect(inertia).to render_component("Public/Ping")
     end
   end
@@ -31,7 +31,7 @@ describe PublicController, type: :controller, inertia: true do
     it "succeeds and renders with Inertia" do
       get :charge
       expect(response).to be_successful
-      expect(assigns(:title)).to eq("Why is there a charge on my account?")
+      expect(controller.send(:page_title)).to eq("Why is there a charge on my account?")
       expect(inertia).to render_component("Public/Charge")
     end
   end
@@ -40,7 +40,7 @@ describe PublicController, type: :controller, inertia: true do
     it "succeeds and renders with Inertia" do
       get :license_key_lookup
       expect(response).to be_successful
-      expect(assigns(:title)).to eq("What is my license key?")
+      expect(controller.send(:page_title)).to eq("What is my license key?")
       expect(inertia).to render_component("Public/LicenseKeyLookup")
     end
   end
@@ -78,7 +78,7 @@ describe PublicController, type: :controller, inertia: true do
 
         expect(response).to be_successful
         expect(inertia).to render_component("Public/Widgets")
-        expect(assigns(:title)).to eq("Widgets")
+        expect(controller.send(:page_title)).to eq("Widgets")
       end
     end
   end

@@ -4,7 +4,6 @@ class Settings::ProfileController < Settings::BaseController
   before_action :authorize
 
   def show
-    @title = "Settings"
     profile_presenter = ProfilePresenter.new(pundit_user:, seller: current_seller)
 
     render inertia: "Settings/Profile/Show", props: settings_presenter.profile_props.merge(

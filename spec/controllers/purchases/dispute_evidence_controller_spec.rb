@@ -51,7 +51,7 @@ describe Purchases::DisputeEvidenceController do
         get :show, params: { purchase_id: purchase.external_id }
 
         expect(response).to be_successful
-        expect(assigns[:title]).to eq("Submit additional information")
+        expect(controller.send(:page_title)).to eq("Submit additional information")
         expect(assigns[:hide_layouts]).to be(true)
 
         expect(assigns[:dispute_evidence]).to eq(dispute_evidence)

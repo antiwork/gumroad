@@ -20,16 +20,35 @@ class HelpCenter::ArticlesController < HelpCenter::BaseController
       end
     }
 
-    @title = "Gumroad Help Center"
-    @canonical_url = help_center_root_url
-    @description = "Common questions and support documentation"
+    title = "Gumroad Help Center"
+    description = "Common questions and support documentation"
+    canonical_url = help_center_root_url
+
+    set_meta_tag(title: title)
+    set_meta_tag(tag_name: "link", rel: "canonical", href: canonical_url, head_key: "canonical")
+    set_meta_tag(name: "description", content: description)
+
+    set_meta_tag(property: "og:title", value: title)
+    set_meta_tag(property: "og:description", value: description)
+    set_meta_tag(property: "og:url", content: canonical_url)
+
+    set_meta_tag(name: "twitter:title", content: title)
+    set_meta_tag(name: "twitter:description", content: description)
   end
 
   def show
     @article = HelpCenter::Article.find_by!(slug: params[:slug])
 
-    @title = "#{@article.title} - Gumroad Help Center"
-    @canonical_url = help_center_article_url(@article)
+    title = "#{@article.title} - Gumroad Help Center"
+    canonical_url = help_center_article_url(@article)
+
+    set_meta_tag(title: title)
+    set_meta_tag(tag_name: "link", rel: "canonical", href: canonical_url, head_key: "canonical")
+
+    set_meta_tag(property: "og:title", value: title)
+    set_meta_tag(property: "og:url", content: canonical_url)
+
+    set_meta_tag(name: "twitter:title", content: title)
   end
 
   private

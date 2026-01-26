@@ -65,7 +65,7 @@ class Admin::PurchasesController < Admin::BaseController
   def show
     e404 if @purchase.nil?
     @product = @purchase.link
-    @title = "Purchase #{@purchase.external_id}"
+    set_meta_tag(title: "Purchase #{@purchase.external_id}")
     purchase = Admin::PurchasePresenter.new(@purchase).props
     render(
       inertia: "Admin/Purchases/Show",

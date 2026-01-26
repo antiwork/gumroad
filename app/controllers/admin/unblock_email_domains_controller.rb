@@ -4,7 +4,7 @@ class Admin::UnblockEmailDomainsController < Admin::BaseController
   include MassUnblocker
 
   def show
-    @title = "Mass-unblock email domains"
+    set_meta_tag(title: "Mass-unblock email domains")
     render inertia: "Admin/UnblockEmailDomains/Show"
   end
 

@@ -5,7 +5,7 @@ class Purchases::DisputeEvidenceController < ApplicationController
 
   def show
     @dispute_evidence_page_presenter = DisputeEvidencePagePresenter.new(@dispute_evidence)
-    @title = "Submit additional information"
+    set_meta_tag(title: "Submit additional information")
 
     @hide_layouts = true
     set_noindex_header
