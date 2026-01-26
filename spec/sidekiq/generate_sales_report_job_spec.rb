@@ -91,6 +91,23 @@ describe GenerateSalesReportJob do
       expect(SlackMessageWorker).to have_enqueued_sidekiq_job("payments", "GST Reporting", anything, "green")
     end
 
+    it "includes Customer Tax ID column in CSV", vcr: { cassette_name: "GenerateSalesReportJob/happy_case/creates_a_CSV_file_for_sales_into_the_United_Kingdom" } do
+      @purchase1.create_purchase_sales_tax_info!(business_vat_id: "GB123456789")
+
+      csv_content = nil
+      expect(ExpiringS3FileService).to receive(:new) do |args|
+        csv_content = args[:file].read
+        args[:file].rewind
+        @mock_service
+      end
+
+      described_class.new.perform(country_code, start_date, end_date, GenerateSalesReportJob::ALL_SALES)
+
+      csv = CSV.parse(csv_content, headers: true)
+      expect(csv.headers).to include("Customer Tax ID")
+      expect(csv.map { |row| row["Customer Tax ID"] }).to include("GB123456789")
+    end
+
     it "creates a CSV file for sales into the United Kingdom and does not send slack notification when send_notification is false",
        vcr: { cassette_name: "GenerateSalesReportJob/happy_case/creates_a_CSV_file_for_sales_into_the_United_Kingdom" } do
       expect(ExpiringS3FileService).to receive(:new).and_return(@mock_service)
