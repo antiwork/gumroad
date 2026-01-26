@@ -43,12 +43,10 @@ import VideoStreamPlayer from "$app/components/server-components/VideoStreamPlay
 import WishlistPage from "$app/components/server-components/WishlistPage";
 import CodeSnippet from "$app/components/ui/CodeSnippet";
 import { Pill } from "$app/components/ui/Pill";
-import AdminAddCreditForm from "$app/components/Admin/Users/AddCredit";
 
 
 ReactOnRails.register({
   Alert,
-  AdminAddCreditForm,
   SupportHeader,
   BundleEditPage,
   CheckoutPage,
