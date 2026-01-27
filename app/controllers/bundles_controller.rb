@@ -10,7 +10,7 @@ class BundlesController < Sellers::BaseController
 
     authorize bundle
 
-    @title = bundle.name
+    set_meta_tag(title: bundle.name)
 
     @props = BundlePresenter.new(bundle:).bundle_props
   end

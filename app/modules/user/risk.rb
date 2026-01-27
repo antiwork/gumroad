@@ -16,6 +16,8 @@ module User::Risk
   MAX_REFUND_QUEUE_SIZE = 100000
   MAX_CHARGEBACK_RATE_ALLOWED_FOR_PAYOUTS = 3.0
   ENABLE_SELLER_ACCOUNTS_AUTHOR_NAME = "enable_sellers_other_accounts"
+  SUSPEND_SELLERS_OTHER_ACCOUNTS_AUTHOR_NAME = "suspend_sellers_other_accounts"
+  PROBATE_SELLERS_OTHER_ACCOUNTS_AUTHOR_NAME = "probate_sellers_other_accounts"
 
   def self.contact_iffy_risk_analysis(iffy_request_parameters)
     return nil unless Rails.env.production?
@@ -124,12 +126,13 @@ module User::Risk
   def suspend_sellers_other_accounts(transition)
     return if transition.args.first&.dig(:skip_transition_callback) == __method__
 
-    case current_payout_processor
-    when PayoutProcessorType::PAYPAL
-      SuspendAccountsWithPaymentAddressWorker.perform_in(5.seconds, id)
-    when PayoutProcessorType::STRIPE
-      SuspendAccountsWithStripeFingerprintWorker.perform_in(5.seconds, id)
-    end
+    SuspendAccountsWithPaymentAddressWorker.perform_in(5.seconds, id)
+    SuspendAccountsWithStripeFingerprintWorker.perform_in(5.seconds, id)
+  end
+
+  def probate_sellers_other_accounts(_transition)
+    ProbateAccountsWithPaymentAddressWorker.perform_in(5.seconds, id)
+    ProbateAccountsWithStripeFingerprintWorker.perform_in(5.seconds, id)
   end
 
   def block_seller_ip!
@@ -139,13 +142,12 @@ module User::Risk
   def enable_sellers_other_accounts(transition)
     return if transition.args.first&.dig(:skip_transition_callback) == __method__
 
-    case current_payout_processor
-    when PayoutProcessorType::PAYPAL
+    MarkAccountsCompliantWithStripeFingerprintWorker.perform_in(5.seconds, id)
+
+    if payment_address.present?
       User.where(payment_address:).where.not(id:).each do |user|
         user.mark_compliant!(author_name: ENABLE_SELLER_ACCOUNTS_AUTHOR_NAME, content: "Marked compliant automatically on #{Time.current.to_fs(:formatted_date_full_month)} as payment address #{payment_address} is now unblocked (from User##{id})", skip_transition_callback: :enable_sellers_other_accounts)
       end
-    when PayoutProcessorType::STRIPE
-      MarkAccountsCompliantWithStripeFingerprintWorker.perform_async(id)
     end
   end
 

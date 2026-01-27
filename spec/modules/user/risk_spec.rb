@@ -46,28 +46,39 @@ describe User::Risk do
   describe "#suspend_sellers_other_accounts" do
     let(:transition) { double("transition", args: []) }
 
+    it "enqueues both SuspendAccountsWithPaymentAddressWorker and SuspendAccountsWithStripeFingerprintWorker" do
+      user = create(:user, user_risk_state: "suspended_for_fraud")
+      create(:ach_account, user:, stripe_fingerprint: SecureRandom.hex(16))
+
+      expect do
+        user.suspend_sellers_other_accounts(transition)
+      end.to change(SuspendAccountsWithPaymentAddressWorker.jobs, :size).from(0).to(1)
+        .and change { SuspendAccountsWithPaymentAddressWorker.jobs.last&.dig("args") }.to([user.id])
+        .and change(SuspendAccountsWithStripeFingerprintWorker.jobs, :size).from(0).to(1)
+        .and change { SuspendAccountsWithStripeFingerprintWorker.jobs.last&.dig("args") }.to([user.id])
+    end
+
     context "when user has PayPal as payout processor" do
       it "calls SuspendAccountsWithPaymentAddressWorker only once for all related accounts" do
-        user = create(:user, payment_address: "test@example.com")
+        user = create(:user, payment_address: "test@example.com", user_risk_state: "suspended_for_fraud")
         create(:user, payment_address: "test@example.com")
-        
+
         expect do
           user.suspend_sellers_other_accounts(transition)
         end.to change(SuspendAccountsWithPaymentAddressWorker.jobs, :size).from(0).to(1)
         .and change { SuspendAccountsWithPaymentAddressWorker.jobs.last&.dig("args") }.to([user.id])
-        .and not_change { SuspendAccountsWithStripeFingerprintWorker.jobs.size }
-       
+
         expect do
           SuspendAccountsWithPaymentAddressWorker.perform_one
         end.to change(SuspendAccountsWithPaymentAddressWorker.jobs, :size).from(1).to(0)
-        .and not_change { SuspendAccountsWithStripeFingerprintWorker.jobs.size }      
+        .and not_change { SuspendAccountsWithStripeFingerprintWorker.jobs.size }
       end
     end
 
     context "when user has Stripe as payout processor" do
       it "calls SuspendAccountsWithStripeFingerprintWorker only once for all related accounts" do
         stripe_fingerprint = SecureRandom.hex(16)
-        user = create(:user, payment_address: nil)
+        user = create(:user, payment_address: nil, user_risk_state: "suspended_for_fraud")
         user2 = create(:user, payment_address: nil)
         [user, user2].each do |user|
           create(:user_compliance_info, user:)
@@ -77,8 +88,7 @@ describe User::Risk do
         expect do
           user.suspend_sellers_other_accounts(transition)
         end.to change(SuspendAccountsWithStripeFingerprintWorker.jobs, :size).from(0).to(1)
-        .and change { SuspendAccountsWithStripeFingerprintWorker.jobs.last&.dig('args') }.to([user.id])
-        .and not_change { SuspendAccountsWithPaymentAddressWorker.jobs.size }
+        .and change { SuspendAccountsWithStripeFingerprintWorker.jobs.last&.dig("args") }.to([user.id])
 
         expect do
           SuspendAccountsWithStripeFingerprintWorker.perform_one
@@ -91,25 +101,39 @@ describe User::Risk do
   describe "#enable_sellers_other_accounts" do
     let(:transition) { double("transition", args: []) }
 
-    context "when user has Stripe as payout processor" do
-      it "calls MarkAccountsCompliantWithStripeFingerprintWorker only once for all related accounts" do
-        stripe_fingerprint = SecureRandom.hex(16)
-        user = create(:user, payment_address: nil)
-        user2 = create(:user, payment_address: nil)
-        [user, user2].each do |user|
-          create(:user_compliance_info, user:)
-          create(:ach_account, user:, stripe_fingerprint:)
-        end
-
-        expect do
-          user.enable_sellers_other_accounts(transition)
-        end.to change(MarkAccountsCompliantWithStripeFingerprintWorker.jobs, :size).from(0).to(1)
-        .and change { MarkAccountsCompliantWithStripeFingerprintWorker.jobs.last&.dig('args') }.to([user.id])
-
-        expect do
-          MarkAccountsCompliantWithStripeFingerprintWorker.perform_one
-        end.to change(MarkAccountsCompliantWithStripeFingerprintWorker.jobs, :size).from(1).to(0)
+    it "calls MarkAccountsCompliantWithStripeFingerprintWorker only once for all related accounts" do
+      stripe_fingerprint = SecureRandom.hex(16)
+      user = create(:user, payment_address: nil)
+      user2 = create(:user, payment_address: nil)
+      [user, user2].each do |user|
+        create(:user_compliance_info, user:)
+        create(:ach_account, user:, stripe_fingerprint:)
       end
+
+      expect do
+        user.enable_sellers_other_accounts(transition)
+      end.to change(MarkAccountsCompliantWithStripeFingerprintWorker.jobs, :size).from(0).to(1)
+      .and change { MarkAccountsCompliantWithStripeFingerprintWorker.jobs.last&.dig("args") }.to([user.id])
+
+      expect do
+        MarkAccountsCompliantWithStripeFingerprintWorker.perform_one
+      end.to change(MarkAccountsCompliantWithStripeFingerprintWorker.jobs, :size).from(1).to(0)
+    end
+  end
+
+  describe "#probate_sellers_other_accounts" do
+    let(:transition) { double("transition", args: []) }
+
+    it "enqueues both ProbateAccountsWithPaymentAddressWorker and ProbateAccountsWithStripeFingerprintWorker" do
+      user = create(:user, user_risk_state: "suspended_for_tos_violation", payment_address: "tos@example.com")
+      create(:ach_account, user:, stripe_fingerprint: SecureRandom.hex(16))
+
+      expect do
+        user.probate_sellers_other_accounts(transition)
+      end.to change(ProbateAccountsWithPaymentAddressWorker.jobs, :size).from(0).to(1)
+        .and change { ProbateAccountsWithPaymentAddressWorker.jobs.last&.dig("args") }.to([user.id])
+        .and change(ProbateAccountsWithStripeFingerprintWorker.jobs, :size).from(0).to(1)
+        .and change { ProbateAccountsWithStripeFingerprintWorker.jobs.last&.dig("args") }.to([user.id])
     end
   end
 end

@@ -325,6 +325,7 @@ class User < ApplicationRecord
     after_transition any => [:flagged_for_tos_violation], :do => :add_product_comment
 
     after_transition any => :suspended_for_fraud, :do => :suspend_sellers_other_accounts
+    after_transition any => :suspended_for_tos_violation, :do => :probate_sellers_other_accounts
     after_transition any => %i[suspended_for_fraud suspended_for_tos_violation], :do => :block_seller_ip!
     after_transition any => %i[suspended_for_fraud suspended_for_tos_violation], :do => :delete_custom_domain!
     after_transition any => %i[suspended_for_fraud suspended_for_tos_violation], :do => :log_suspension_time_to_mongo
