@@ -5,15 +5,8 @@ class BundlesController < Sellers::BaseController
 
   PER_PAGE = 10
 
-  def show
-    bundle = Link.can_be_bundle.find_by_external_id!(params[:id])
-
-    authorize bundle
-
-    set_meta_tag(title: bundle.name)
-
-    @props = BundlePresenter.new(bundle:).bundle_props
-  end
+  # Removed: show action migrated to Inertia
+  # Now handled by Bundles::ProductController, Bundles::ContentController, and Bundles::ShareController
 
   def create_from_email
     authorize Link, :create?

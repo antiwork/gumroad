@@ -3,20 +3,22 @@ import * as React from "react";
 import { updatePurchasesContent } from "$app/data/bundle";
 import { assertResponseError } from "$app/utils/request";
 
-import { useBundleEditContext } from "$app/components/BundleEdit/state";
 import { Button } from "$app/components/Button";
 import { showAlert } from "$app/components/server-components/Alert";
 import { Alert } from "$app/components/ui/Alert";
 
-export const BundleContentUpdatedStatus = () => {
-  const { id } = useBundleEditContext();
+type BundleContentUpdatedStatusProps = {
+  bundleId: string;
+};
+
+export const BundleContentUpdatedStatus = ({ bundleId }: BundleContentUpdatedStatusProps) => {
   const [isHidden, setIsHidden] = React.useState(false);
   const [isLoading, setIsLoading] = React.useState(false);
 
   const handleSubmit = async () => {
     setIsLoading(true);
     try {
-      await updatePurchasesContent(id);
+      await updatePurchasesContent(bundleId);
       showAlert("Queued an update to the content of all outdated purchases.", "success");
       setIsHidden(true);
     } catch (e) {

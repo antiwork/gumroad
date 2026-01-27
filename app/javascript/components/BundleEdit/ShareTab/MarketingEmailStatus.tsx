@@ -1,29 +1,22 @@
 import * as React from "react";
 
-import { formatPriceCentsWithCurrencySymbol } from "$app/utils/currency";
-
-import { computeStandalonePrice, useBundleEditContext } from "$app/components/BundleEdit/state";
 import { NavigationButton } from "$app/components/Button";
 import { Alert } from "$app/components/ui/Alert";
 
-export const MarketingEmailStatus = () => {
-  const { bundle, uniquePermalink, currencyType } = useBundleEditContext();
+type MarketingEmailStatusProps = {
+  bundleId: string;
+  bundleName: string;
+};
 
+export const MarketingEmailStatus = ({ bundleId, bundleName }: MarketingEmailStatusProps) => {
   const [sendToAllCustomers, setSendToAllCustomers] = React.useState(false);
+  
+  // TODO: Get bundle data from page props or server
+  // For now, we'll construct the URL with minimal params
   const queryParams = {
     template: "bundle_marketing",
-    bundle_product_permalinks: sendToAllCustomers ? undefined : bundle.products.map(({ permalink }) => permalink),
-    bundle_product_names: bundle.products.map(({ name }) => name),
-    bundle_permalink: uniquePermalink,
-    bundle_name: bundle.name,
-    bundle_price: formatPriceCentsWithCurrencySymbol(currencyType, bundle.price_cents, {
-      symbolFormat: "short",
-    }),
-    standalone_price: formatPriceCentsWithCurrencySymbol(
-      currencyType,
-      bundle.products.reduce((total, bundleProduct) => total + computeStandalonePrice(bundleProduct), 0),
-      { symbolFormat: "short" },
-    ),
+    bundle_permalink: bundleId,
+    bundle_name: bundleName,
   };
 
   return (

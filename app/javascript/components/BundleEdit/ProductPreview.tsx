@@ -1,24 +1,42 @@
 import * as React from "react";
 
-import { useProductUrl } from "$app/components/BundleEdit/Layout";
-import { computeStandalonePrice, useBundleEditContext } from "$app/components/BundleEdit/state";
+import { Bundle, computeStandalonePrice } from "$app/components/BundleEdit/state";
 import { useCurrentSeller } from "$app/components/CurrentSeller";
+import { useDomains } from "$app/components/DomainSettings";
 import { Product } from "$app/components/Product";
-import { RefundPolicyModalPreview } from "$app/components/ProductEdit/RefundPolicy";
+import { RefundPolicyModalPreview, RefundPolicy } from "$app/components/ProductEdit/RefundPolicy";
+import { CurrencyCode } from "$app/utils/currency";
+import { RatingsWithPercentages } from "$app/parsers/product";
 
-export const ProductPreview = ({ showRefundPolicyModal }: { showRefundPolicyModal?: boolean }) => {
+type ProductPreviewProps = {
+  bundle: Bundle;
+  showRefundPolicyModal?: boolean;
+  id?: string;
+  uniquePermalink?: string;
+  currencyType?: CurrencyCode;
+  salesCountForInventory?: number;
+  ratings?: RatingsWithPercentages;
+  sellerRefundPolicyEnabled?: boolean;
+  sellerRefundPolicy?: Pick<RefundPolicy, "title" | "fine_print">;
+};
+
+export const ProductPreview = ({
+  bundle,
+  showRefundPolicyModal,
+  id,
+  uniquePermalink,
+  currencyType = "usd",
+  salesCountForInventory = 0,
+  ratings = { count: 0, average: 0, percentages: [0, 0, 0, 0, 0] },
+  sellerRefundPolicyEnabled = false,
+  sellerRefundPolicy = { title: "", fine_print: "" },
+}: ProductPreviewProps) => {
   const currentSeller = useCurrentSeller();
-  const {
-    bundle,
-    id,
-    uniquePermalink,
-    currencyType,
-    salesCountForInventory,
-    ratings,
-    seller_refund_policy_enabled,
-    seller_refund_policy,
-  } = useBundleEditContext();
-  const url = useProductUrl();
+  const { appDomain } = useDomains();
+  
+  const url = Routes.short_link_url(bundle.custom_permalink ?? uniquePermalink ?? "", {
+    host: currentSeller?.subdomain ?? appDomain,
+  });
 
   if (!currentSeller) return null;
 
@@ -27,7 +45,7 @@ export const ProductPreview = ({ showRefundPolicyModal }: { showRefundPolicyModa
       <RefundPolicyModalPreview open={showRefundPolicyModal ?? false} refundPolicy={bundle.refund_policy} />
       <Product
         product={{
-          id,
+          id: id ?? "",
           name: bundle.name,
           seller: {
             id: currentSeller.id,
@@ -52,7 +70,7 @@ export const ProductPreview = ({ showRefundPolicyModal }: { showRefundPolicyModa
           is_tiered_membership: false,
           is_physical: false,
           custom_view_content_button_text: null,
-          permalink: uniquePermalink,
+          permalink: uniquePermalink ?? "",
           preorder: null,
           description_html: bundle.description,
           is_compliance_blocked: false,
@@ -79,10 +97,10 @@ export const ProductPreview = ({ showRefundPolicyModal }: { showRefundPolicyModa
           has_third_party_analytics: false,
           ppp_details: null,
           can_edit: false,
-          refund_policy: seller_refund_policy_enabled
+          refund_policy: sellerRefundPolicyEnabled
             ? {
-                title: seller_refund_policy.title,
-                fine_print: seller_refund_policy.fine_print ?? "",
+                title: sellerRefundPolicy.title,
+                fine_print: sellerRefundPolicy.fine_print ?? "",
                 updated_at: "",
               }
             : {

@@ -1,13 +1,14 @@
+import { router, useForm, usePage } from "@inertiajs/react";
 import * as React from "react";
+import { cast } from "ts-safe-cast";
 
-import { searchProducts } from "$app/data/bundle";
 import { AbortError, assertResponseError } from "$app/utils/request";
 
 import { BundleContentUpdatedStatus } from "$app/components/BundleEdit/ContentTab/BundleContentUpdatedStatus";
 import { BundleProductItem } from "$app/components/BundleEdit/ContentTab/BundleProductItem";
 import { BundleProductSelector } from "$app/components/BundleEdit/ContentTab/BundleProductSelector";
-import { Layout } from "$app/components/BundleEdit/Layout";
-import { BundleProduct, useBundleEditContext } from "$app/components/BundleEdit/state";
+import { BundleEditLayout } from "$app/components/BundleEdit/InertiaLayout";
+import { BundleProduct, Bundle } from "$app/components/BundleEdit/state";
 import { Button } from "$app/components/Button";
 import { CartItemList } from "$app/components/CartItemList";
 import { Icon } from "$app/components/Icons";
@@ -21,55 +22,106 @@ import { useOnChange } from "$app/components/useOnChange";
 import { useOnScrollToBottom } from "$app/components/useOnScrollToBottom";
 import { useRunOnce } from "$app/components/useRunOnce";
 
+type Props = {
+  bundle: Bundle;
+  id: string;
+  unique_permalink: string;
+  products_count: number;
+  has_outdated_purchases: boolean;
+  available_products?: BundleProduct[];
+};
+
 const RESULTS_PER_PAGE = 10;
-export const ContentTab = () => {
-  const { bundle, updateBundle, id, productsCount, hasOutdatedPurchases } = useBundleEditContext();
+
+export default function BundleContentEdit() {
+  const props = cast<Props>(usePage().props);
+  const { bundle: initialBundle, id, unique_permalink, products_count, has_outdated_purchases } = props;
+
+  const form = useForm({
+    products: initialBundle.products,
+  });
+
   const [results, setResults] = React.useState<BundleProduct[]>([]);
   const [isLoading, setIsLoading] = React.useState(true);
   const [hasMoreResults, setHasMoreResults] = React.useState(true);
   const [query, setQuery] = React.useState("");
 
-  const activeRequest = React.useRef<{ cancel: () => void } | null>();
   const loadSearchResults = async ({ query = "", loadMore = false, all = false } = {}) => {
     if (!hasMoreResults && loadMore) return results;
     setIsLoading(true);
     let newResults = results;
+    
     try {
-      activeRequest.current?.cancel();
-      const request = searchProducts({ product_id: id, query, from: loadMore ? results.length + 1 : 0, all });
-      activeRequest.current = request;
-      newResults = loadMore ? [...results, ...(await request.response)] : await request.response;
-      setResults(newResults);
-      setHasMoreResults(!(all || newResults.length < RESULTS_PER_PAGE));
-      activeRequest.current = null;
+      // Use partial reload to fetch products
+      router.reload({
+        only: ["available_products"],
+        data: {
+          query,
+          from: loadMore ? results.length : 0,
+          all,
+          load_products: true,
+        },
+        preserveUrl: true,
+        onSuccess: (page) => {
+          const availableProducts = (page.props as any).available_products || [];
+          newResults = loadMore ? [...results, ...availableProducts] : availableProducts;
+          setResults(newResults);
+          setHasMoreResults(!(all || newResults.length < RESULTS_PER_PAGE));
+        },
+        onError: (errors) => {
+          showAlert(errors.base || "Failed to load products", "error");
+        },
+        onFinish: () => setIsLoading(false),
+      });
     } catch (e) {
       if (e instanceof AbortError) return newResults;
       assertResponseError(e);
       showAlert(e.message, "error");
+      setIsLoading(false);
     }
-    setIsLoading(false);
+    
     return newResults;
   };
 
   useRunOnce(() => void loadSearchResults());
+  
   useOnChange(
     useDebouncedCallback(() => void loadSearchResults({ query }), 300),
-    [query],
+    [query]
   );
 
   const formRef = React.useRef<HTMLFormElement>(null);
   useOnScrollToBottom(
     formRef,
     () => {
-      if (!activeRequest.current) void loadSearchResults({ query, loadMore: true });
+      if (!isLoading) void loadSearchResults({ query, loadMore: true });
     },
-    30,
+    30
   );
 
-  const [isSelecting, setIsSelecting] = React.useState(bundle.products.length > 0);
+  const [isSelecting, setIsSelecting] = React.useState(form.data.products.length > 0);
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    
+    // Validate that at least one product is selected
+    if (form.data.products.length === 0) {
+      showAlert("Bundles must have at least one product.", "error");
+      return;
+    }
+
+    form.put(Routes.bundles_content_path(id), {
+      preserveScroll: true,
+    });
+  };
 
   return (
-    <Layout
+    <BundleEditLayout
+      bundleId={id}
+      bundleName={initialBundle.name}
+      uniquePermalink={unique_permalink}
+      isPublished={initialBundle.is_published}
+      currentTab="content"
       preview={
         <div>
           <header>
@@ -77,7 +129,7 @@ export const ContentTab = () => {
           </header>
           <section>
             <ProductCardGrid>
-              {bundle.products.map((bundleProduct) => (
+              {form.data.products.map((bundleProduct) => (
                 <Card key={bundleProduct.id} product={bundleProduct} />
               ))}
             </ProductCardGrid>
@@ -85,9 +137,9 @@ export const ContentTab = () => {
         </div>
       }
     >
-      <form onSubmit={(evt) => evt.preventDefault()} ref={formRef}>
+      <form onSubmit={handleSubmit} ref={formRef}>
         <section className="p-4! md:p-8!">
-          {hasOutdatedPurchases ? <BundleContentUpdatedStatus /> : null}
+          {has_outdated_purchases ? <BundleContentUpdatedStatus bundleId={id} /> : null}
           {isSelecting ? (
             <>
               <header
@@ -101,36 +153,34 @@ export const ContentTab = () => {
                 <label>
                   <input
                     type="checkbox"
-                    checked={bundle.products.length === productsCount}
+                    checked={form.data.products.length === products_count}
                     disabled={isLoading}
                     onChange={(evt) =>
                       evt.target.checked
                         ? void loadSearchResults({ query, loadMore: true, all: true }).then((results) =>
-                            updateBundle({ products: results }),
+                            form.setData("products", results)
                           )
-                        : updateBundle({ products: [] })
+                        : form.setData("products", [])
                     }
                   />
                   All products
                 </label>
               </header>
-              {bundle.products.length > 0 ? (
+              {form.data.products.length > 0 ? (
                 <CartItemList aria-label="Bundle products">
-                  {bundle.products.map((bundleProduct, idx) => (
+                  {form.data.products.map((bundleProduct, idx) => (
                     <BundleProductItem
                       key={bundleProduct.id}
                       bundleProduct={bundleProduct}
                       updateBundleProduct={(update) =>
-                        updateBundle({
-                          products: [
-                            ...bundle.products.slice(0, idx),
-                            { ...bundleProduct, ...update },
-                            ...bundle.products.slice(idx + 1),
-                          ],
-                        })
+                        form.setData("products", [
+                          ...form.data.products.slice(0, idx),
+                          { ...bundleProduct, ...update },
+                          ...form.data.products.slice(idx + 1),
+                        ])
                       }
                       removeBundleProduct={() =>
-                        updateBundle({ products: bundle.products.filter(({ id }) => id !== bundleProduct.id) })
+                        form.setData("products", form.data.products.filter(({ id }) => id !== bundleProduct.id))
                       }
                     />
                   ))}
@@ -156,18 +206,19 @@ export const ContentTab = () => {
                 ) : results.length > 0 ? (
                   <CartItemList>
                     {results.map((bundleProduct) => {
-                      const selected = bundle.products.some(({ id }) => id === bundleProduct.id);
+                      const selected = form.data.products.some(({ id }) => id === bundleProduct.id);
                       return (
                         <BundleProductSelector
                           key={bundleProduct.id}
                           bundleProduct={bundleProduct}
                           selected={selected}
                           onToggle={() =>
-                            updateBundle({
-                              products: selected
-                                ? bundle.products.filter(({ id }) => id !== bundleProduct.id)
-                                : [...bundle.products, bundleProduct],
-                            })
+                            form.setData(
+                              "products",
+                              selected
+                                ? form.data.products.filter(({ id }) => id !== bundleProduct.id)
+                                : [...form.data.products, bundleProduct]
+                            )
                           }
                         />
                       );
@@ -190,6 +241,6 @@ export const ContentTab = () => {
           )}
         </section>
       </form>
-    </Layout>
+    </BundleEditLayout>
   );
-};
+}

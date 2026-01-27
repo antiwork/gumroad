@@ -600,10 +600,20 @@ Rails.application.routes.draw do
       get :compute_discount
     end
 
-    resources :bundles, only: [:show, :update] do
+    # Bundle Edit - Inertia pages (each tab has its own route)
+    namespace :bundles do
+      scope ":bundle_id" do
+        resource :product, only: [:edit, :update], controller: "product"
+        resource :content, only: [:edit, :update], controller: "content"
+        resource :share, only: [:edit, :update], controller: "share"
+      end
+    end
+
+    resources :bundles, only: [:update] do
       member do
-        get "*other", to: "bundles#show"
         post :update_purchases_content
+        # Redirect old bundle edit route to new Inertia Product tab
+        get '/', to: redirect { |params, _request| "/bundles/#{params[:id]}/product/edit" }
       end
 
       collection do
