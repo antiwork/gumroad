@@ -2,7 +2,7 @@
 
 class Admin::SalesReportsController < Admin::BaseController
   def index
-    @title = "Sales reports"
+    set_meta_tag(title: "Sales reports")
 
     render inertia: "Admin/SalesReports/Index", props: {
       countries: Compliance::Countries.for_select.map { |alpha2, name| [name, alpha2] },
