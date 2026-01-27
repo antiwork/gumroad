@@ -11,6 +11,14 @@ module Bundles
       set_meta_tag(title: bundle.name)
 
       props = BundlePresenter.new(bundle:).bundle_props
+      
+      # Only expose props needed for Product tab
+      props = props.slice(
+        :bundle, :id, :unique_permalink, :currency_type, :thumbnail,
+        :sales_count_for_inventory, :ratings, :taxonomies, :profile_sections,
+        :refund_policies, :products_count, :is_bundle, :has_outdated_purchases,
+        :seller_refund_policy_enabled, :seller_refund_policy
+      )
 
       render inertia: "Bundles/Product/Edit", props:
     end

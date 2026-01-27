@@ -15,6 +15,9 @@ module Bundles
 
       props = BundlePresenter.new(bundle:).bundle_props
 
+      # Only expose props needed for Content tab
+      props = props.slice(:bundle, :id, :unique_permalink, :products_count, :has_outdated_purchases)
+
       # Load products for search if needed
       if params[:query].present? || params[:load_products]
         props[:available_products] = load_available_products(bundle)
@@ -33,11 +36,11 @@ module Bundles
 
         # Update bundle products
         update_bundle_products(bundle, content_permitted_params[:products]) if content_permitted_params[:products]
-        
+
         bundle.save!
       rescue ActiveRecord::RecordNotSaved, ActiveRecord::RecordInvalid, Link::LinkInvalid => e
         error_message = bundle.errors.full_messages.first || e.message
-        return redirect_back fallback_location: edit_bundles_content_path(params[:bundle_id]), 
+        return redirect_back fallback_location: edit_bundles_content_path(params[:bundle_id]),
                              inertia: { errors: { base: error_message } }
       end
 
@@ -76,9 +79,9 @@ module Bundles
         new_bundle_product = new_bundle_products.find { _1[:product_id] == bundle_product.product.external_id }
         if new_bundle_product.present?
           bundle_product.update(
-            variant: BaseVariant.find_by_external_id(new_bundle_product[:variant_id]), 
-            quantity: new_bundle_product[:quantity], 
-            deleted_at: nil, 
+            variant: BaseVariant.find_by_external_id(new_bundle_product[:variant_id]),
+            quantity: new_bundle_product[:quantity],
+            deleted_at: nil,
             position: new_bundle_product[:position]
           )
           new_bundle_products.delete(new_bundle_product)
@@ -95,9 +98,9 @@ module Bundles
         variant = BaseVariant.find_by_external_id(new_bundle_product[:variant_id])
 
         bundle.bundle_products.create!(
-          product:, 
-          variant:, 
-          quantity: new_bundle_product[:quantity], 
+          product:,
+          variant:,
+          quantity: new_bundle_product[:quantity],
           position: new_bundle_product[:position]
         )
       end

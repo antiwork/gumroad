@@ -11,6 +11,13 @@ module Bundles
       set_meta_tag(title: bundle.name)
 
       props = BundlePresenter.new(bundle:).bundle_props
+      
+      # Only expose props needed for Share tab
+      props = props.slice(
+        :bundle, :id, :unique_permalink, :currency_type,
+        :sales_count_for_inventory, :ratings, :taxonomies,
+        :profile_sections, :seller_refund_policy_enabled, :seller_refund_policy
+      )
 
       render inertia: "Bundles/Share/Edit", props:
     end

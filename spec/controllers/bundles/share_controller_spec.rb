@@ -17,6 +17,40 @@ describe Bundles::ShareController do
       expect(response).to render_template(layout: "inertia")
     end
 
+    it "exposes the correct props for Share edit page" do
+      request.headers["X-Inertia"] = "true"
+      request.headers["X-Inertia-Version"] = "1"
+      get :edit, params: { bundle_id: bundle.external_id }, xhr: true
+
+      json_response = JSON.parse(response.body)
+      props = json_response["props"]
+
+      expect(props.keys).to include("bundle", "id", "unique_permalink", "currency_type",
+                                    "sales_count_for_inventory", "ratings", "taxonomies",
+                                    "profile_sections", "seller_refund_policy_enabled",
+                                    "seller_refund_policy")
+
+      expect(props["id"]).to eq(bundle.external_id)
+      expect(props["unique_permalink"]).to eq(bundle.unique_permalink)
+      expect(props["currency_type"]).to eq(bundle.price_currency_type)
+      expect(props["bundle"]).to be_a(Hash)
+      expect(props["bundle"]["name"]).to eq(bundle.name)
+      expect(props["bundle"]["taxonomy_id"]).to eq(bundle.taxonomy_id)
+      expect(props["bundle"]["tags"]).to be_an(Array)
+      expect(props["bundle"]["display_product_reviews"]).to be_in([true, false])
+      expect(props["bundle"]["is_adult"]).to be_in([true, false])
+      expect(props["taxonomies"]).to be_an(Array)
+      expect(props["profile_sections"]).to be_an(Array)
+      expect(props["ratings"]).to be_a(Hash)
+      expect(props["sales_count_for_inventory"]).to eq(bundle.successful_sales_count)
+      expect(props["seller_refund_policy_enabled"]).to be_in([true, false])
+      expect(props["seller_refund_policy"]).to be_a(Hash)
+
+      expect(props.keys).not_to include("products_count", "has_outdated_purchases", "available_products")
+
+      expect(props.keys).not_to include("thumbnail")
+    end
+
     it_behaves_like "authorize called for action", :get, :edit do
       let(:policy_klass) { LinkPolicy }
       let(:record) { bundle }

@@ -17,6 +17,38 @@ describe Bundles::ProductController do
       expect(response).to render_template(layout: "inertia")
     end
 
+    it "exposes the correct props for Product edit page" do
+      request.headers["X-Inertia"] = "true"
+      request.headers["X-Inertia-Version"] = "1"
+      get :edit, params: { bundle_id: bundle.external_id }, xhr: true
+
+      json_response = JSON.parse(response.body)
+      props = json_response["props"]
+
+      expect(props.keys).to include("bundle", "id", "unique_permalink", "currency_type",
+                                    "thumbnail", "sales_count_for_inventory", "ratings",
+                                    "taxonomies", "profile_sections")
+
+      expect(props["id"]).to eq(bundle.external_id)
+      expect(props["unique_permalink"]).to eq(bundle.unique_permalink)
+      expect(props["currency_type"]).to eq(bundle.price_currency_type)
+      expect(props["bundle"]).to be_a(Hash)
+      expect(props["bundle"]["name"]).to eq(bundle.name)
+      expect(props["bundle"]["description"]).to eq(bundle.description)
+      expect(props["bundle"]["price_cents"]).to eq(bundle.price_cents)
+      expect(props["bundle"]["is_published"]).to eq(bundle.published?)
+      expect(props["taxonomies"]).to be_an(Array)
+      expect(props["profile_sections"]).to be_an(Array)
+      expect(props["ratings"]).to be_a(Hash)
+      expect(props["sales_count_for_inventory"]).to eq(bundle.successful_sales_count)
+      expect(props["products_count"]).to be_a(Integer)
+      expect(props["has_outdated_purchases"]).to be_in([true, false])
+      expect(props["is_bundle"]).to be_in([true, false])
+      expect(props["refund_policies"]).to be_an(Array)
+
+      expect(props.keys).not_to include("available_products")
+    end
+
     it_behaves_like "authorize called for action", :get, :edit do
       let(:policy_klass) { LinkPolicy }
       let(:record) { bundle }
