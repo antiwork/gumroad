@@ -149,7 +149,7 @@ export const CommunityView = () => {
       if (searchParams.has("notifications")) {
         searchParams.delete("notifications");
         const newSearch = searchParams.toString() ? `?${searchParams.toString()}` : "";
-        router.visit(`${window.location.pathname}${newSearch}${window.location.hash}`, { replace: true, preserveState: true, preserveScroll: true });
+        router.get(`${window.location.pathname}${newSearch}${window.location.hash}`, { replace: true, preserveState: true, preserveScroll: true });
         setShowNotificationsSettings(true);
       }
     }
@@ -488,7 +488,7 @@ export const CommunityView = () => {
   const switchSeller = (sellerId: string) => {
     const community = communities.find((community) => community.seller.id === sellerId);
     if (community) {
-      router.visit(Routes.community_path(community.id), { replace: true });
+      router.get(Routes.community_path(community.id), { replace: true });
       setSwitcherOpen(false);
     }
   };
@@ -513,7 +513,7 @@ export const CommunityView = () => {
 
     const community = communities.find((community) => community.id === communityId);
     if (!community) return;
-    router.visit(Routes.community_path(community.id), { replace: true });
+    router.get(Routes.community_path(community.id), { replace: true });
   });
 
   const sellers = React.useMemo(() => {
@@ -837,7 +837,7 @@ const GoBackHeader = () => {
     if (window.history.length > 1) {
       window.history.back();
     } else {
-      router.visit(Routes.dashboard_path());
+      router.get(Routes.dashboard_path());
     }
   };
 
