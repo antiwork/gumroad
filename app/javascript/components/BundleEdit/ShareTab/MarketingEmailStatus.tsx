@@ -1,20 +1,37 @@
 import * as React from "react";
 
+import { formatPriceCentsWithCurrencySymbol } from "$app/utils/currency";
+import { CurrencyCode } from "$app/utils/currency";
+
+import { computeStandalonePrice } from "$app/components/BundleEdit/state";
 import { NavigationButton } from "$app/components/Button";
 import { Alert } from "$app/components/ui/Alert";
+import { Bundle } from "$app/components/BundleEdit/state";
 
 type MarketingEmailStatusProps = {
   bundleId: string;
   bundleName: string;
+  bundle: Bundle;
+  currencyType: CurrencyCode;
 };
 
-export const MarketingEmailStatus = ({ bundleId, bundleName }: MarketingEmailStatusProps) => {
+export const MarketingEmailStatus = ({ bundleId, bundleName, bundle, currencyType }: MarketingEmailStatusProps) => {
   const [sendToAllCustomers, setSendToAllCustomers] = React.useState(false);
 
   const queryParams = {
     template: "bundle_marketing",
+    bundle_product_permalinks: sendToAllCustomers ? undefined : bundle.products.map(({ permalink }) => permalink),
+    bundle_product_names: bundle.products.map(({ name }) => name),
     bundle_permalink: bundleId,
     bundle_name: bundleName,
+    bundle_price: formatPriceCentsWithCurrencySymbol(currencyType, bundle.price_cents, {
+      symbolFormat: "short",
+    }),
+    standalone_price: formatPriceCentsWithCurrencySymbol(
+      currencyType,
+      bundle.products.reduce((total, bundleProduct) => total + computeStandalonePrice(bundleProduct), 0),
+      { symbolFormat: "short" },
+    ),
   };
 
   return (

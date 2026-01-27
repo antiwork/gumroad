@@ -111,7 +111,12 @@ export default function BundleShareEdit() {
             </CopyToClipboard>
           </div>
           <section>
-            <MarketingEmailStatus bundleId={id} bundleName={initialBundle.name} />
+            <MarketingEmailStatus 
+              bundleId={id} 
+              bundleName={initialBundle.name}
+              bundle={initialBundle}
+              currencyType={props.currency_type}
+            />
           </section>
         </section>
         <ProfileSectionsEditor
