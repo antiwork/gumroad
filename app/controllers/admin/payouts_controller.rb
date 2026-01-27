@@ -4,7 +4,7 @@ class Admin::PayoutsController < Admin::BaseController
   before_action :fetch_payment, only: %i[show retry cancel fail sync]
 
   def show
-    @title = "Payout"
+    set_meta_tag(title: "Payout")
 
     render inertia: "Admin/Payouts/Show",
            props: { payout: Admin::PaymentPresenter.new(payment: @payment).props }
@@ -67,6 +67,10 @@ class Admin::PayoutsController < Admin::BaseController
 
   private
     def fetch_payment
-      @payment = Payment.find_by(id: params[:id]) || e404
+      if !Payment.external_id?(params[:external_id]) && payment = Payment.find_by(id: params[:external_id])
+        return redirect_to admin_payout_path(payment.external_id)
+      end
+
+      @payment = Payment.find_by_external_id(params[:external_id]) || e404
     end
 end

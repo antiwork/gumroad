@@ -4,13 +4,14 @@ class UsersController < ApplicationController
   include ProductsHelper, SearchProducts, CustomDomainConfig, SocialShareUrlHelper, ActionView::Helpers::SanitizeHelper,
           AffiliateCookie
 
+  include PageMeta::Favicon, PageMeta::User
+
   before_action :authenticate_user!, except: %i[show coffee subscribe subscribe_preview email_unsubscribe add_purchase_to_library session_info current_user_data]
 
   after_action :verify_authorized, only: %i[deactivate]
 
   before_action :hide_layouts, only: %i[show coffee subscribe subscribe_preview unsubscribe_review_reminders subscribe_review_reminders]
   before_action :set_as_modal, only: %i[show]
-  before_action :set_frontend_performance_sensitive, only: %i[show]
   before_action :set_user_and_custom_domain_config, only: %i[show coffee subscribe subscribe_preview]
   before_action :set_page_attributes, only: %i[show]
   before_action :set_user_for_action, only: %i[email_unsubscribe]
@@ -20,11 +21,10 @@ class UsersController < ApplicationController
   def show
     format_search_params!
 
-
     respond_to do |format|
       format.html do
-        @show_user_favicon = true
-        @is_on_user_profile_page = true
+        set_user_page_meta(@user)
+        set_favicon_meta_tags(@user)
         @profile_props = ProfilePresenter.new(pundit_user:, seller: @user).profile_props(seller_custom_domain_url:, request:)
         @card_data_handling_mode = CardDataHandlingMode.get_card_data_handling_mode(@user)
         @paypal_merchant_currency = @user.native_paypal_payment_enabled? ?
@@ -37,16 +37,16 @@ class UsersController < ApplicationController
   end
 
   def coffee
-    @show_user_favicon = true
+    set_favicon_meta_tags(@user)
     @product = @user.products.visible_and_not_archived.find_by(native_type: Link::NATIVE_TYPE_COFFEE)
     e404 if @product.nil?
 
-    @title = @product.name
+    set_meta_tag(title: @product.name)
     @product_props = ProductPresenter.new(pundit_user:, product: @product, request:).product_props(seller_custom_domain_url:, recommended_by: params[:recommended_by])
   end
 
   def subscribe
-    @title = "Subscribe to #{@user.name.presence || @user.username}"
+    set_meta_tag(title: "Subscribe to #{@user.name.presence || @user.username}")
     @profile_presenter = ProfilePresenter.new(
       pundit_user:,
       seller: @user
@@ -150,7 +150,7 @@ class UsersController < ApplicationController
     end
 
     def set_page_attributes
-      @title ||= @user.name_or_username
+      set_meta_tag(title: @user.name_or_username)
       @body_id = "user_page"
     end
 

@@ -16,7 +16,7 @@ describe Admin::Users::MerchantAccountsController do
   describe "GET 'index'" do
     context "when user has no merchant accounts" do
       it "returns empty merchant accounts and false for stripe account" do
-        get :index, params: { user_id: user.id }, format: :json
+        get :index, params: { user_external_id: user.external_id }, format: :json
 
         expect(response).to have_http_status(:success)
         expect(response.parsed_body["merchant_accounts"]).to eq([])
@@ -29,7 +29,7 @@ describe Admin::Users::MerchantAccountsController do
       let!(:stripe_account) { create(:merchant_account, user: user) }
 
       it "returns merchant accounts with expected fields" do
-        get :index, params: { user_id: user.id }, format: :json
+        get :index, params: { user_external_id: user.external_id }, format: :json
 
         expect(response).to have_http_status(:success)
         expect(response.parsed_body["merchant_accounts"].length).to eq(2)
@@ -39,7 +39,7 @@ describe Admin::Users::MerchantAccountsController do
       end
 
       it "returns true for has_stripe_account" do
-        get :index, params: { user_id: user.id }, format: :json
+        get :index, params: { user_external_id: user.external_id }, format: :json
 
         expect(response).to have_http_status(:success)
         expect(response.parsed_body["has_stripe_account"]).to eq(true)
@@ -59,7 +59,7 @@ describe Admin::Users::MerchantAccountsController do
       end
 
       it "returns false for has_stripe_account" do
-        get :index, params: { user_id: user.id }, format: :json
+        get :index, params: { user_external_id: user.external_id }, format: :json
 
         expect(response).to have_http_status(:success)
         expect(response.parsed_body["has_stripe_account"]).to eq(false)
@@ -70,7 +70,7 @@ describe Admin::Users::MerchantAccountsController do
       let!(:paypal_account) { create(:merchant_account_paypal, user: user) }
 
       it "returns false for has_stripe_account" do
-        get :index, params: { user_id: user.id }, format: :json
+        get :index, params: { user_external_id: user.external_id }, format: :json
 
         expect(response).to have_http_status(:success)
         expect(response.parsed_body["has_stripe_account"]).to eq(false)

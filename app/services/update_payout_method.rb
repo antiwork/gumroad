@@ -148,7 +148,7 @@ class UpdatePayoutMethod
 
         return { error: :account_number_does_not_match } if bank_account_account_number != bank_account_account_number_confirmation
 
-        old_bank_account.try(:mark_deleted!)
+        old_bank_account.try(:mark_deleted, validate: false)
 
         bank_account = BANK_ACCOUNT_TYPES[params[:bank_account][:type]][:class].new(bank_account_params_for_bank_account_type)
         bank_account.user = user

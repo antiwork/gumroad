@@ -9,7 +9,7 @@ class Admin::Users::PayoutsController < Admin::BaseController
   private_constant :RECORDS_PER_PAGE
 
   def index
-    @title = "Payouts"
+    set_meta_tag(title: "Payouts")
 
     pagination, @payouts = pagy(
       @user.payments.order(id: :desc),
@@ -51,6 +51,6 @@ class Admin::Users::PayoutsController < Admin::BaseController
 
   private
     def fetch_user
-      @user = User.find_by(id: params[:user_id]) || e404
+      @user = User.find_by_external_id(params[:user_external_id]) || e404
     end
 end

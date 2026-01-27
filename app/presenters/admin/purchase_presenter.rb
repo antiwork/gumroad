@@ -68,7 +68,7 @@ class Admin::PurchasePresenter
                        quantity: purchase.quantity,
                        refunds: purchase.refunds.map do |refund|
                          {
-                           user: refund.user ? { id: refund.user.id, name: refund.user.name } : nil,
+                           user: refund.user ? { external_id: refund.user.external_id, name: refund.user.name } : nil,
                            status: refund.status.capitalize,
                            created_at: refund.created_at,
                          }
