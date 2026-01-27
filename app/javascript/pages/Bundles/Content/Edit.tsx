@@ -101,8 +101,8 @@ export default function BundleContentEdit() {
 
   const [isSelecting, setIsSelecting] = React.useState(form.data.products.length > 0);
 
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
+  const handleSubmit = (e?: React.FormEvent) => {
+    e?.preventDefault();
     
     // Validate that at least one product is selected
     if (form.data.products.length === 0) {
@@ -110,6 +110,15 @@ export default function BundleContentEdit() {
       return;
     }
 
+    // Transform products to match backend expectations
+    const productsForBackend = form.data.products.map((product, index) => ({
+      product_id: product.id,
+      variant_id: product.variants?.selected_id || null,
+      quantity: product.quantity,
+      position: index,
+    }));
+
+    form.transform(() => ({ products: productsForBackend }));
     form.put(Routes.bundles_content_path(id), {
       preserveScroll: true,
     });
@@ -122,6 +131,11 @@ export default function BundleContentEdit() {
       uniquePermalink={unique_permalink}
       isPublished={initialBundle.is_published}
       currentTab="content"
+      additionalActions={
+        <Button color="primary" onClick={() => handleSubmit()} disabled={form.processing}>
+          {form.processing ? "Saving..." : "Save changes"}
+        </Button>
+      }
       preview={
         <div>
           <header>
@@ -137,7 +151,7 @@ export default function BundleContentEdit() {
         </div>
       }
     >
-      <form onSubmit={handleSubmit} ref={formRef}>
+      <form id="content-form" onSubmit={handleSubmit} ref={formRef}>
         <section className="p-4! md:p-8!">
           {has_outdated_purchases ? <BundleContentUpdatedStatus bundleId={id} /> : null}
           {isSelecting ? (

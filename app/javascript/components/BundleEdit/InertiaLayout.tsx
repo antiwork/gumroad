@@ -25,6 +25,7 @@ type BundleEditLayoutProps = {
   isPublished: boolean;
   currentTab: "product" | "content" | "share";
   isLoading?: boolean;
+  additionalActions?: React.ReactNode;
 };
 
 export const BundleEditLayout = ({
@@ -36,6 +37,7 @@ export const BundleEditLayout = ({
   isPublished,
   currentTab,
   isLoading = false,
+  additionalActions,
 }: BundleEditLayoutProps) => {
   const currentSeller = useCurrentSeller();
   const { appDomain } = useDomains();
@@ -87,6 +89,7 @@ export const BundleEditLayout = ({
         actions={
           isPublished ? (
             <>
+              {additionalActions}
               <Button disabled={isBusy} onClick={() => void setPublished(false)}>
                 {isPublishing ? "Unpublishing..." : "Unpublish"}
               </Button>
@@ -110,6 +113,7 @@ export const BundleEditLayout = ({
             </Button>
           ) : (
             <>
+              {additionalActions}
               <WithTooltip tip={isBusy ? "Please wait..." : undefined}>
                 <Button color="accent" disabled={isBusy} onClick={() => void setPublished(true)}>
                   {isPublishing ? "Publishing..." : "Publish and continue"}

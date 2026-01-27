@@ -57,8 +57,8 @@ export default function BundleShareEdit() {
     section_ids: initialBundle.section_ids,
   });
 
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
+  const handleSubmit = (e?: React.FormEvent) => {
+    e?.preventDefault();
     form.put(Routes.bundles_share_path(id), {
       preserveScroll: true,
     });
@@ -79,6 +79,11 @@ export default function BundleShareEdit() {
       uniquePermalink={unique_permalink}
       isPublished={initialBundle.is_published}
       currentTab="share"
+      additionalActions={
+        <Button color="primary" onClick={() => handleSubmit()} disabled={form.processing}>
+          {form.processing ? "Saving..." : "Save changes"}
+        </Button>
+      }
       preview={<ProductPreview 
         bundle={bundleForPreview}
         id={id}

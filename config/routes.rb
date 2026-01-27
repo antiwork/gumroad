@@ -612,8 +612,11 @@ Rails.application.routes.draw do
     resources :bundles, only: [:update] do
       member do
         post :update_purchases_content
-        # Redirect old bundle edit route to new Inertia Product tab
+        # Backward compatibility redirects for old bundle edit URLs
         get '/', to: redirect { |params, _request| "/bundles/#{params[:id]}/product/edit" }
+        get 'edit', to: redirect { |params, _request| "/bundles/#{params[:id]}/product/edit" }
+        get 'edit/content', to: redirect { |params, _request| "/bundles/#{params[:id]}/content/edit" }
+        get 'edit/share', to: redirect { |params, _request| "/bundles/#{params[:id]}/share/edit" }
       end
 
       collection do
