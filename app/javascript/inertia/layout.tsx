@@ -1,6 +1,7 @@
-import { Head, usePage } from "@inertiajs/react";
+import { usePage } from "@inertiajs/react";
 import React from "react";
 
+import MetaTags, { type MetaTag } from "$app/layouts/components/MetaTags";
 import { classNames } from "$app/utils/classNames";
 
 import { Nav } from "$app/components/client-components/Nav";
@@ -12,8 +13,8 @@ import { useFlashMessage } from "$app/components/useFlashMessage";
 import useRouteLoading from "$app/components/useRouteLoading";
 
 type PageProps = {
-  title: string;
-  flash?: AlertPayload;
+  _inertia_meta?: MetaTag[];
+  flash?: AlertPayload | null;
   logged_in_user: LoggedInUser | null;
   current_seller: {
     id: number;
@@ -31,7 +32,7 @@ type PageProps = {
 };
 
 export default function Layout({ children }: { children: React.ReactNode }) {
-  const { title, flash, logged_in_user, current_seller } = usePage<PageProps>().props;
+  const { flash, logged_in_user, current_seller } = usePage<PageProps>().props;
   const isRouteLoading = useRouteLoading();
 
   useFlashMessage(flash);
@@ -39,7 +40,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
   return (
     <LoggedInUserProvider value={parseLoggedInUser(logged_in_user)}>
       <CurrentSellerProvider value={parseCurrentSeller(current_seller)}>
-        <Head title={title} />
+        <MetaTags />
         <Alert initial={null} />
         <div id="inertia-shell" className="flex h-screen flex-col lg:flex-row">
           {logged_in_user ? <Nav title="Dashboard" /> : null}
@@ -51,15 +52,25 @@ export default function Layout({ children }: { children: React.ReactNode }) {
   );
 }
 
+export function AuthenticationLayout({ children }: { children: React.ReactNode }) {
+  return (
+    <div>
+      <MetaTags />
+      <Alert initial={null} />
+      {children}
+    </div>
+  );
+}
+
 export function LoggedInUserLayout({ children }: { children: React.ReactNode }) {
-  const { title, flash, logged_in_user, current_seller } = usePage<PageProps>().props;
+  const { flash, logged_in_user, current_seller } = usePage<PageProps>().props;
 
   useFlashMessage(flash);
 
   return (
     <LoggedInUserProvider value={parseLoggedInUser(logged_in_user)}>
       <CurrentSellerProvider value={parseCurrentSeller(current_seller)}>
-        <Head title={title} />
+        <MetaTags />
         <Alert initial={null} />
         {children}
       </CurrentSellerProvider>

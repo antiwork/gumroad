@@ -54,7 +54,7 @@ class AudienceController < Sellers::BaseController
       @end_date = end_date
     end
 
-    def set_title
-      @title = "Analytics"
+    def set_default_page_title
+      set_meta_tag(title: "Analytics")
     end
 end

@@ -6,7 +6,7 @@ class Products::AffiliatedController < Sellers::BaseController
   layout "inertia", only: [:index]
 
   def index
-    @title = "Products"
+    set_meta_tag(title: "Products")
     props = AffiliatedProductsPresenter.new(current_seller,
                                             query: affiliated_products_params[:query],
                                             page: affiliated_products_params[:page],

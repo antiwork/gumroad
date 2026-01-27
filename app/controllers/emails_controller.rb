@@ -107,8 +107,8 @@ class EmailsController < Sellers::BaseController
   end
 
   private
-    def set_title
-      @title = "Emails"
+    def set_default_page_title
+      set_meta_tag(title: "Emails")
     end
 
     def set_installment
