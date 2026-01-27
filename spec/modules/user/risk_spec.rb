@@ -48,7 +48,7 @@ describe User::Risk do
 
     context "when user has PayPal as payout processor" do
       it "calls SuspendAccountsWithPaymentAddressWorker only once for all related accounts" do
-        user = create(:user, payment_address: "test@example.com")
+        user = create(:user, payment_address: "test@example.com", user_risk_state: "suspended_for_fraud")
         create(:user, payment_address: "test@example.com")
 
         expect do
