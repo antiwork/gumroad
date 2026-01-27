@@ -1,4 +1,4 @@
-import { useForm, usePage } from "@inertiajs/react";
+import { router, useForm, usePage } from "@inertiajs/react";
 import * as React from "react";
 import { cast } from "ts-safe-cast";
 
@@ -9,6 +9,7 @@ import { Taxonomy } from "$app/utils/discover";
 import { Bundle } from "$app/components/BundleEdit/state";
 import { BundleEditLayout } from "$app/components/BundleEdit/InertiaLayout";
 import { ProductPreview } from "$app/components/BundleEdit/ProductPreview";
+import { Button } from "$app/components/Button";
 import { useCurrentSeller } from "$app/components/CurrentSeller";
 import { AttributesEditor } from "$app/components/ProductEdit/ProductTab/AttributesEditor";
 import { CoverEditor } from "$app/components/ProductEdit/ProductTab/CoverEditor";
@@ -95,10 +96,30 @@ export default function BundleProductEdit() {
     }
   }, [is_bundle]);
 
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
+  const handleSubmit = (e?: React.FormEvent) => {
+    e?.preventDefault();
+
+    form.transform((data) => {
+      const { public_files, ...rest } = data;
+      return rest;
+    });
+
     form.put(Routes.bundles_product_path(id), {
       preserveScroll: true,
+    });
+  };
+
+  const handleSaveAndContinue = () => {
+    form.transform((data) => {
+      const { public_files, ...rest } = data;
+      return rest;
+    });
+
+    form.put(Routes.bundles_product_path(id), {
+      preserveScroll: true,
+      onSuccess: () => {
+        router.visit(Routes.edit_bundles_content_path(id));
+      },
     });
   };
 
@@ -117,8 +138,13 @@ export default function BundleProductEdit() {
       uniquePermalink={unique_permalink}
       isPublished={initialBundle.is_published}
       currentTab="product"
-      preview={<ProductPreview 
-        bundle={bundleForPreview} 
+      additionalActions={
+        <Button color="primary" onClick={handleSaveAndContinue} disabled={form.processing || isUploading}>
+          {form.processing ? "Saving..." : "Save and continue"}
+        </Button>
+      }
+      preview={<ProductPreview
+        bundle={bundleForPreview}
         showRefundPolicyModal={showRefundPolicyPreview}
         id={id}
         uniquePermalink={unique_permalink}

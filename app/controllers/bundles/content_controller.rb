@@ -16,7 +16,7 @@ module Bundles
       props = BundlePresenter.new(bundle:).bundle_props
 
       # Only expose props needed for Content tab
-      props = props.slice(:bundle, :id, :unique_permalink, :products_count, :has_outdated_purchases)
+      props = props.slice(:bundle, :id, :unique_permalink, :currency_type, :products_count, :has_outdated_purchases)
 
       # Load products for search if needed
       if params[:query].present? || params[:load_products]

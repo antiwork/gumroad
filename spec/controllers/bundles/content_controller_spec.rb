@@ -27,7 +27,7 @@ describe Bundles::ContentController do
       props = json_response["props"]
 
       # Verify required props are present
-      expect(props.keys).to include("bundle", "id", "unique_permalink", "products_count", "has_outdated_purchases")
+      expect(props.keys).to include("bundle", "id", "unique_permalink", "currency_type", "products_count", "has_outdated_purchases")
 
       # Verify prop values
       expect(props["id"]).to eq(bundle.external_id)

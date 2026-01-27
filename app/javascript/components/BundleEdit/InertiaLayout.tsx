@@ -104,13 +104,15 @@ export const BundleEditLayout = ({
               </CopyToClipboard>
             </>
           ) : currentTab === "product" ? (
-            <Button
-              color="primary"
-              disabled={isBusy}
-              onClick={() => router.visit(Routes.edit_bundles_content_path(bundleId))}
-            >
-              Save and continue
-            </Button>
+            additionalActions ?? (
+              <Button
+                color="primary"
+                disabled={isBusy}
+                onClick={() => router.visit(Routes.edit_bundles_content_path(bundleId))}
+              >
+                Save and continue
+              </Button>
+            )
           ) : (
             <>
               {additionalActions}

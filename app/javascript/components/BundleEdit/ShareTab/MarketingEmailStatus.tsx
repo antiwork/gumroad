@@ -10,9 +10,7 @@ type MarketingEmailStatusProps = {
 
 export const MarketingEmailStatus = ({ bundleId, bundleName }: MarketingEmailStatusProps) => {
   const [sendToAllCustomers, setSendToAllCustomers] = React.useState(false);
-  
-  // TODO: Get bundle data from page props or server
-  // For now, we'll construct the URL with minimal params
+
   const queryParams = {
     template: "bundle_marketing",
     bundle_permalink: bundleId,

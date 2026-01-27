@@ -5,8 +5,6 @@ class BundlesController < Sellers::BaseController
 
   PER_PAGE = 10
 
-  # Removed: show action migrated to Inertia
-  # Now handled by Bundles::ProductController, Bundles::ContentController, and Bundles::ShareController
 
   def create_from_email
     authorize Link, :create?

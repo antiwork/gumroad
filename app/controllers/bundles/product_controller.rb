@@ -33,7 +33,8 @@ module Bundles
         
         # Update basic attributes
         bundle.assign_attributes(product_permitted_params.except(
-          :custom_button_text_option, :custom_summary, :custom_attributes, :covers, :collaborating_user
+          :custom_button_text_option, :custom_summary, :custom_attributes, :covers, :refund_policy, 
+          :product_refund_policy_enabled, :installment_plan, :collaborating_user
         ))
         
         # Update special fields
@@ -41,6 +42,17 @@ module Bundles
         bundle.save_custom_summary(product_permitted_params[:custom_summary]) unless product_permitted_params[:custom_summary].nil?
         bundle.save_custom_attributes(product_permitted_params[:custom_attributes]) unless product_permitted_params[:custom_attributes].nil?
         bundle.reorder_previews(product_permitted_params[:covers].map.with_index.to_h) if product_permitted_params[:covers].present?
+        
+        # Handle refund policy
+        if !current_seller.account_level_refund_policy_enabled?
+          bundle.product_refund_policy_enabled = product_permitted_params[:product_refund_policy_enabled]
+          if product_permitted_params[:refund_policy].present? && product_permitted_params[:product_refund_policy_enabled]
+            bundle.find_or_initialize_product_refund_policy.update!(product_permitted_params[:refund_policy])
+          end
+        end
+        
+        # Handle installment plan
+        update_installment_plan(bundle, product_permitted_params)
         
         bundle.save!
       rescue ActiveRecord::RecordNotSaved, ActiveRecord::RecordInvalid, Link::LinkInvalid => e
@@ -56,6 +68,22 @@ module Bundles
 
     def product_permitted_params
       params.permit(policy(Link.find_by_external_id!(params[:bundle_id])).bundle_permitted_attributes)
+    end
+    
+    def update_installment_plan(bundle, permitted_params)
+      return unless bundle.eligible_for_installment_plans?
+
+      if bundle.installment_plan && permitted_params[:installment_plan].present?
+        bundle.installment_plan.assign_attributes(permitted_params[:installment_plan])
+        return unless bundle.installment_plan.changed?
+      end
+
+      bundle.installment_plan&.destroy_if_no_payment_options!
+      bundle.reset_installment_plan
+
+      if permitted_params[:installment_plan].present?
+        bundle.create_installment_plan!(permitted_params[:installment_plan])
+      end
     end
   end
 end
