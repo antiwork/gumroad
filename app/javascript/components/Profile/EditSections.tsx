@@ -6,12 +6,12 @@ import { ReactSortable as Sortable } from "react-sortablejs";
 import { cast } from "ts-safe-cast";
 
 import {
+  Section as BaseSection,
   FeaturedProductSection,
   getProduct,
   PostsSection,
-  ProductsSection as SavedProductsSection,
   RichTextSection,
-  Section as BaseSection,
+  ProductsSection as SavedProductsSection,
   SubscribeSection,
   WishlistsSection,
 } from "$app/data/profile_settings";
@@ -23,7 +23,7 @@ import { ALLOWED_EXTENSIONS } from "$app/utils/file";
 import { assertResponseError, request, ResponseError } from "$app/utils/request";
 
 import { Icon } from "$app/components/Icons";
-import { PopoverRoot as Popover, PopoverClose, PopoverContent, PopoverTrigger } from "$app/components/Popover";
+import { Popover, PopoverClose, PopoverContent, PopoverTrigger } from "$app/components/Popover";
 import { Props as ProductProps } from "$app/components/Product";
 import { CardGrid, SORT_BY_LABELS, useSearchReducer } from "$app/components/Product/CardGrid";
 import { WishlistsSectionView } from "$app/components/Profile/EditSections/WishlistsSectionView";
@@ -35,7 +35,9 @@ import { Row, RowActions, RowContent, RowDragHandle, Rows } from "$app/component
 import { useOnChange } from "$app/components/useOnChange";
 import { useRefToLatest } from "$app/components/useRefToLatest";
 
-import { FeaturedProductView, Post, PostsView, PageProps as BasePageProps, SubscribeView } from "./Sections";
+import { CardContent } from "../ui/Card";
+
+import { PageProps as BasePageProps, FeaturedProductView, Post, PostsView, SubscribeView } from "./Sections";
 
 type ProductsSection = SavedProductsSection & { search_results: SearchResults };
 type EditProduct = { id: string; name: string };
@@ -161,16 +163,11 @@ export const EditorMenu = ({
       }}
     >
       <PopoverTrigger aria-label={label} asChild>
-        <button
-          className={classNames(
-            "box-border cursor-pointer font-[inherit] text-[inherit] all-unset",
-            sectionButtonClasses,
-          )}
-        >
+        <button className={sectionButtonClasses}>
           <Icon name="three-dots" />
         </button>
       </PopoverTrigger>
-      <PopoverContent arrowClassName="fill-black dark:fill-black">
+      <PopoverContent arrowClassName="dark:border-[rgb(var(--parent-color)/var(--border-alpha))]">
         {isSubmenu(activeSubmenu) ? (
           <div className="flex w-75 flex-col gap-4">
             <h4 className="grid grid-cols-[1em_1fr_1em]">
@@ -182,19 +179,17 @@ export const EditorMenu = ({
             {activeSubmenu}
           </div>
         ) : (
-          <div className="stack -m-4! w-75 max-w-none border-0! shadow-none!">
+          <div className="grid w-75 !divide-y !divide-solid !divide-border rounded border border-none border-border bg-background shadow-none">
             {items.map((item, key) =>
               isSubmenu(item) ? (
-                <button
-                  onClick={() => setMenuState(key)}
-                  key={key}
-                  className="box-border flex w-full cursor-pointer items-center justify-between p-4 all-unset"
-                >
-                  <h5 className="m-0">{item.props.heading}</h5>
-                  <div className="flex items-center gap-2">
-                    {item.props.text} <Icon name="outline-cheveron-right" />
-                  </div>
-                </button>
+                <CardContent asChild key={key}>
+                  <button className="cursor-pointer all-unset" onClick={() => setMenuState(key)}>
+                    <h5 className="grow font-bold">{item.props.heading}</h5>
+                    <div>
+                      {item.props.text} <Icon name="outline-cheveron-right" />
+                    </div>
+                  </button>
+                </CardContent>
               ) : (
                 item
               ),
@@ -685,7 +680,7 @@ export const AddSectionButton = ({ side = "bottom", index }: { index: number; si
           <Icon name="plus" />
         </button>
       </PopoverTrigger>
-      <PopoverContent side={side} className="border-0 p-0 shadow-none" arrowClassName="dark:fill-black">
+      <PopoverContent side={side} className="border-0 p-0 shadow-none">
         <PopoverClose asChild>
           <div role="menu">
             <div role="menuitem" onClick={() => addSection("SellerProfileProductsSection")}>

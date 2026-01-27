@@ -8,7 +8,7 @@ import { CartItem, CartItemMain, CartItemMedia, CartItemTitle, CartItemList } fr
 import { useDiscoverUrl } from "$app/components/DomainSettings";
 import { Icon } from "$app/components/Icons";
 import { Layout } from "$app/components/Library/Layout";
-import { PopoverRoot as Popover, PopoverContent, PopoverTrigger } from "$app/components/Popover";
+import { Popover, PopoverContent, PopoverTrigger } from "$app/components/Popover";
 import { Thumbnail } from "$app/components/Product/Thumbnail";
 import { ProductIconCell } from "$app/components/ProductsPage/ProductIconCell";
 import { RatingStars } from "$app/components/RatingStars";

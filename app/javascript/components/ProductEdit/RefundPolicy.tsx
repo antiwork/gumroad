@@ -7,7 +7,7 @@ import { Button } from "$app/components/Button";
 import { Details } from "$app/components/Details";
 import { Dropdown } from "$app/components/Dropdown";
 import { Modal } from "$app/components/Modal";
-import { PopoverRoot as Popover, PopoverClose, PopoverContent, PopoverTrigger } from "$app/components/Popover";
+import { Popover, PopoverClose, PopoverContent, PopoverTrigger } from "$app/components/Popover";
 import { Select } from "$app/components/Select";
 import { Toggle } from "$app/components/Toggle";
 import { useUserAgentInfo } from "$app/components/UserAgent";
@@ -54,7 +54,7 @@ export const RefundPolicySelector = ({
     >
       <Dropdown className="flex flex-col gap-4">
         <fieldset>
-          <legend>
+          <legend className="flex justify-between">
             <label htmlFor={`${uid}-max-refund-period-in-days`}>Refund period</label>
             {refundPolicies.length > 0 ? (
               <Popover>

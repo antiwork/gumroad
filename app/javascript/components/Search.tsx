@@ -2,7 +2,7 @@ import * as React from "react";
 
 import { Button } from "$app/components/Button";
 import { Icon } from "$app/components/Icons";
-import { PopoverRoot as Popover, PopoverAnchor, PopoverContent, PopoverTrigger } from "$app/components/Popover";
+import { Popover, PopoverAnchor, PopoverContent, PopoverTrigger } from "$app/components/Popover";
 
 type SearchProps = {
   onSearch: (query: string) => void;

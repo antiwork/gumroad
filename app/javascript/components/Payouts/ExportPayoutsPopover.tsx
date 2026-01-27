@@ -7,7 +7,13 @@ import { assertResponseError } from "$app/utils/request";
 import { Button } from "$app/components/Button";
 import { Icon } from "$app/components/Icons";
 import { LoadingSpinner } from "$app/components/LoadingSpinner";
-import { PopoverRoot as Popover, PopoverClose, PopoverContent, PopoverTrigger } from "$app/components/Popover";
+import {
+  Popover,
+  PopoverAnchor,
+  PopoverClose,
+  PopoverContent,
+  PopoverTrigger,
+} from "$app/components/Popover";
 import { showAlert } from "$app/components/server-components/Alert";
 import { useRunOnce } from "$app/components/useRunOnce";
 
@@ -149,11 +155,13 @@ const ExportPayoutsPopoverContent = () => {
 
 export const ExportPayoutsPopover = () => (
   <Popover>
-    <PopoverTrigger aria-label="Bulk export" asChild>
-      <Button>
-        <Icon name="download" />
-      </Button>
-    </PopoverTrigger>
+    <PopoverAnchor>
+      <PopoverTrigger aria-label="Bulk export" asChild>
+        <Button>
+          <Icon name="download" />
+        </Button>
+      </PopoverTrigger>
+    </PopoverAnchor>
     <PopoverContent sideOffset={4}>
       <ExportPayoutsPopoverContent />
     </PopoverContent>

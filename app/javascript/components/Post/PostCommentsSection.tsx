@@ -3,11 +3,11 @@ import * as React from "react";
 
 import {
   addComment as addCommentRequest,
+  Comment,
   deleteComment as deleteCommentRequest,
   fetchPaginatedComments,
-  updateComment,
-  Comment,
   PaginatedComments,
+  updateComment,
 } from "$app/data/comments";
 import { classNames } from "$app/utils/classNames";
 import { formatDate } from "$app/utils/date";
@@ -18,7 +18,7 @@ import { useAppDomain } from "$app/components/DomainSettings";
 import { Icon } from "$app/components/Icons";
 import { useLoggedInUser } from "$app/components/LoggedInUser";
 import { Modal } from "$app/components/Modal";
-import { PopoverRoot as Popover, PopoverClose, PopoverContent, PopoverTrigger } from "$app/components/Popover";
+import { Popover, PopoverClose, PopoverContent, PopoverTrigger } from "$app/components/Popover";
 import { showAlert } from "$app/components/server-components/Alert";
 import { UserAvatar } from "$app/components/server-components/CommunitiesPage/UserAvatar";
 import { Pill } from "$app/components/ui/Pill";
@@ -260,7 +260,7 @@ const CommentContainer = ({ comment, upsertComment, confirmCommentDeletion }: Co
                 <PopoverTrigger aria-label="Open comment action menu">
                   <Icon name="three-dots" />
                 </PopoverTrigger>
-                <PopoverContent arrowClassName="dark:fill-black">
+                <PopoverContent>
                   <div className="grid gap-3">
                     {comment.is_editable ? (
                       <PopoverClose asChild>

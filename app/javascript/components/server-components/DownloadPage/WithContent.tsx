@@ -23,7 +23,7 @@ import {
 } from "$app/components/Download/RichContent";
 import { TranscodingNoticeModal } from "$app/components/Download/TranscodingNoticeModal";
 import { Icon } from "$app/components/Icons";
-import { PopoverRoot as Popover, PopoverClose, PopoverContent, PopoverTrigger } from "$app/components/Popover";
+import { Popover, PopoverClose, PopoverContent, PopoverTrigger } from "$app/components/Popover";
 import { FileEmbed } from "$app/components/ProductEdit/ContentTab/FileEmbed";
 import { showAlert } from "$app/components/server-components/Alert";
 import { LicenseKey } from "$app/components/TiptapExtensions/LicenseKey";

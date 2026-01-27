@@ -16,7 +16,7 @@ import { classNames } from "$app/utils/classNames";
 
 import { DateInput } from "$app/components/DateInput";
 import { Icon } from "$app/components/Icons";
-import { PopoverRoot as Popover, PopoverContent, PopoverTrigger } from "$app/components/Popover";
+import { Popover, PopoverContent, PopoverTrigger } from "$app/components/Popover";
 import { useUserAgentInfo } from "$app/components/UserAgent";
 
 export const DateRangePicker = ({

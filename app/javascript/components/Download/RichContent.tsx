@@ -15,7 +15,7 @@ import { Button, NavigationButton, buttonVariants } from "$app/components/Button
 import { FileRow, shouldShowSubtitlesForFile } from "$app/components/Download/FileList";
 import { Icon } from "$app/components/Icons";
 import { LoadingSpinner } from "$app/components/LoadingSpinner";
-import { PopoverRoot as Popover, PopoverContent, PopoverTrigger } from "$app/components/Popover";
+import { Popover, PopoverAnchor, PopoverContent, PopoverTrigger } from "$app/components/Popover";
 import { titleWithFallback } from "$app/components/ProductEdit/ContentTab/FileEmbedGroup";
 import { useRichTextEditor } from "$app/components/RichTextEditor";
 import { showAlert } from "$app/components/server-components/Alert";
@@ -370,12 +370,14 @@ const FileGroupDownloadAllButton = ({ folderId, files }: { folderId: string; fil
 
   return (
     <Popover>
-      <PopoverTrigger disabled={isDownloading} contentEditable={false} asChild>
-        <Button>
-          Download all
-          <Icon name="outline-cheveron-down" />
-        </Button>
-      </PopoverTrigger>
+      <PopoverAnchor>
+        <PopoverTrigger disabled={isDownloading} contentEditable={false} asChild>
+          <Button>
+            Download all
+            <Icon name="outline-cheveron-down" />
+          </Button>
+        </PopoverTrigger>
+      </PopoverAnchor>
       <PopoverContent sideOffset={4}>
         <div className="grid gap-2">
           {isArchiving ? (

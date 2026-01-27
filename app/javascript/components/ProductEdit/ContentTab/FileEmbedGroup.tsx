@@ -15,7 +15,7 @@ import { assertResponseError } from "$app/utils/request";
 import { Button, NavigationButton } from "$app/components/Button";
 import { Icon } from "$app/components/Icons";
 import { LoadingSpinner } from "$app/components/LoadingSpinner";
-import { PopoverRoot as Popover, PopoverTrigger, PopoverContent } from "$app/components/Popover";
+import { Popover, PopoverTrigger, PopoverContent, PopoverAnchor } from "$app/components/Popover";
 import { showAlert } from "$app/components/server-components/Alert";
 import { NodeActionsMenu } from "$app/components/TiptapExtensions/NodeActionsMenu";
 import { Row, RowActions, RowContent, RowDetails, Rows } from "$app/components/ui/Rows";
@@ -176,12 +176,14 @@ const FileEmbedGroupNodeView = ({
             <RowActions>
               {showDownloadButton ? (
                 <Popover>
-                  <PopoverTrigger asChild>
-                    <Button>
-                      Download all
-                      <Icon name="outline-cheveron-down" />
-                    </Button>
-                  </PopoverTrigger>
+                  <PopoverAnchor>
+                    <PopoverTrigger asChild>
+                      <Button>
+                        Download all
+                        <Icon name="outline-cheveron-down" />
+                      </Button>
+                    </PopoverTrigger>
+                  </PopoverAnchor>
                   <PopoverContent sideOffset={4}>
                     <div className="grid gap-2">
                       {downloading ? (

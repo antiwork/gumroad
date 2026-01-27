@@ -1,11 +1,11 @@
-import { Editor, Content, createDocument, isList } from "@tiptap/core";
+import { Content, createDocument, Editor, isList } from "@tiptap/core";
 import Placeholder from "@tiptap/extension-placeholder";
 import Underline from "@tiptap/extension-underline";
 import { redoDepth, undoDepth } from "@tiptap/pm/history";
 import { DOMSerializer } from "@tiptap/pm/model";
 import { EditorState, Selection } from "@tiptap/pm/state";
 import { EditorView } from "@tiptap/pm/view";
-import { EditorContent, useEditor, Extensions } from "@tiptap/react";
+import { EditorContent, Extensions, useEditor } from "@tiptap/react";
 import StarterKit from "@tiptap/starter-kit";
 import cx from "classnames";
 import { partition } from "lodash-es";
@@ -15,7 +15,7 @@ import { assertDefined } from "$app/utils/assert";
 
 import { InputtedDiscount } from "$app/components/CheckoutDashboard/DiscountInput";
 import { Icon } from "$app/components/Icons";
-import { PopoverRoot as Popover, PopoverClose, PopoverContent, PopoverTrigger } from "$app/components/Popover";
+import { Popover, PopoverClose, PopoverContent, PopoverTrigger } from "$app/components/Popover";
 import { Separator } from "$app/components/Separator";
 import { TestimonialSelectModal } from "$app/components/TestimonialSelectModal";
 import { CodeBlock } from "$app/components/TiptapExtensions/CodeBlock";
@@ -117,7 +117,9 @@ export const PopoverMenuItem = ({
         </div>
       </MenuItemTooltip>
     </PopoverTrigger>
-    <PopoverContent className="border-0 p-0 shadow-none">{children}</PopoverContent>
+    <PopoverContent sideOffset={4} className="border-0 p-0 shadow-none">
+      {children}
+    </PopoverContent>
   </Popover>
 );
 
@@ -392,7 +394,7 @@ export const RichTextEditorToolbar = ({
           <PopoverTrigger aria-label="Text formats" className="toolbar-item all-unset">
             {activeFormatOption?.name ?? "Text"} <Icon name="outline-cheveron-down" />
           </PopoverTrigger>
-          <PopoverContent className="border-0 p-0 shadow-none" arrowClassName="fill-white dark:fill-black/35">
+          <PopoverContent className="border-0 p-0 shadow-none">
             <ul role="menu" className="flex flex-col">
               {textFormatOptions.map((option) => (
                 <PopoverClose key={option.name}>
@@ -470,7 +472,7 @@ export const RichTextEditorToolbar = ({
                   <PopoverTrigger className="toolbar-item all-unset">
                     Insert <Icon name="outline-cheveron-down" />
                   </PopoverTrigger>
-                  <PopoverContent className="border-0 p-0 shadow-none" arrowClassName="fill-white dark:fill-black/35">
+                  <PopoverContent sideOffset={4} className="border-0 p-0 shadow-none">
                     <div role="menu">
                       {insertMenuItems.map((item, i) => (
                         <React.Fragment key={i}>

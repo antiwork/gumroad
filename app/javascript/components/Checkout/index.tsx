@@ -28,7 +28,7 @@ import {
 import { GiftForm } from "$app/components/Checkout/GiftForm";
 import { PaymentForm } from "$app/components/Checkout/PaymentForm";
 import { Icon } from "$app/components/Icons";
-import { PopoverRoot as Popover, PopoverAnchor, PopoverContent, PopoverTrigger } from "$app/components/Popover";
+import { Popover, PopoverAnchor, PopoverContent, PopoverTrigger } from "$app/components/Popover";
 import { PriceInput } from "$app/components/PriceInput";
 import { Card } from "$app/components/Product/Card";
 import {

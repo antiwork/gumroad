@@ -30,7 +30,7 @@ import {
 import { EvaporateUploaderProvider } from "$app/components/EvaporateUploader";
 import { Icon } from "$app/components/Icons";
 import { LoadingSpinner } from "$app/components/LoadingSpinner";
-import { PopoverRoot as Popover, PopoverContent, PopoverTrigger } from "$app/components/Popover";
+import { Popover, PopoverAnchor, PopoverContent, PopoverTrigger } from "$app/components/Popover";
 import { PriceInput } from "$app/components/PriceInput";
 import { ImageUploadSettingsContext, RichTextEditor } from "$app/components/RichTextEditor";
 import { S3UploadConfigProvider } from "$app/components/S3UploadConfig";
@@ -685,13 +685,15 @@ export const EmailForm = ({ context, installment }: EmailFormProps) => {
           <>
             {channel.email && channel.profile ? (
               <Popover>
-                <PopoverTrigger disabled={isBusy} asChild>
-                  <Button>
-                    <Icon name="eye-fill" />
-                    Preview
-                    <Icon name="outline-cheveron-down" />
-                  </Button>
-                </PopoverTrigger>
+                <PopoverAnchor>
+                  <PopoverTrigger disabled={isBusy} asChild>
+                    <Button>
+                      <Icon name="eye-fill" />
+                      Preview
+                      <Icon name="outline-cheveron-down" />
+                    </Button>
+                  </PopoverTrigger>
+                </PopoverAnchor>
                 <PopoverContent sideOffset={4}>
                   <div className="grid gap-3">
                     <Button disabled={isBusy} onClick={() => save("save_and_preview_post")}>
@@ -714,17 +716,21 @@ export const EmailForm = ({ context, installment }: EmailFormProps) => {
                 Preview
               </Button>
             )}
-            <Link href={getCancelPath()} className="button" inert={isBusy ? true : undefined}>
-              <Icon name="x-square" />
-              Cancel
-            </Link>
+            <Button asChild>
+              <Link href={getCancelPath()} inert={isBusy ? true : undefined}>
+                <Icon name="x-square" />
+                Cancel
+              </Link>
+            </Button>
             <Popover>
-              <PopoverTrigger disabled={isBusy} asChild>
-                <Button>
-                  {channel.profile ? "Publish" : "Send"}
-                  <Icon name="outline-cheveron-down" />
-                </Button>
-              </PopoverTrigger>
+              <PopoverAnchor>
+                <PopoverTrigger disabled={isBusy} asChild>
+                  <Button>
+                    {channel.profile ? "Publish" : "Send"}
+                    <Icon name="outline-cheveron-down" />
+                  </Button>
+                </PopoverTrigger>
+              </PopoverAnchor>
               <PopoverContent>
                 <div className="grid gap-3">
                   <div style={{ display: "grid", gridTemplateColumns: "1fr max-content" }}>

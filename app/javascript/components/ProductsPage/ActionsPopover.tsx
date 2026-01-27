@@ -1,13 +1,13 @@
 import * as React from "react";
 
-import { deleteProduct, archiveProduct, unarchiveProduct, duplicateProduct } from "$app/data/product_dashboard";
+import { archiveProduct, deleteProduct, duplicateProduct, unarchiveProduct } from "$app/data/product_dashboard";
 import { Membership, Product } from "$app/data/products";
 import { assertResponseError } from "$app/utils/request";
 
 import { Button } from "$app/components/Button";
 import { Icon } from "$app/components/Icons";
 import { Modal } from "$app/components/Modal";
-import { PopoverRoot as Popover, PopoverContent, PopoverTrigger } from "$app/components/Popover";
+import { Popover, PopoverContent, PopoverTrigger } from "$app/components/Popover";
 import { showAlert } from "$app/components/server-components/Alert";
 
 const ActionsPopover = ({
@@ -94,7 +94,7 @@ const ActionsPopover = ({
         <PopoverTrigger aria-label="Open product action menu" className="cursor-pointer all-unset">
           <Icon name="three-dots" />
         </PopoverTrigger>
-        <PopoverContent className="border-0 p-0 shadow-none" arrowClassName="dark:fill-black">
+        <PopoverContent className="border-0 p-0 shadow-none">
           <div role="menu">
             <div role="menuitem" inert={!product.can_duplicate || isDuplicating} onClick={() => void handleDuplicate()}>
               <Icon name="outline-duplicate" />

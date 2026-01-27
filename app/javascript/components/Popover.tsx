@@ -3,7 +3,7 @@ import * as React from "react";
 
 import { classNames } from "$app/utils/classNames";
 
-export const PopoverRoot = PopoverPrimitive.Root;
+export const Popover = PopoverPrimitive.Root;
 export const PopoverClose = PopoverPrimitive.Close;
 export const PopoverAnchor = PopoverPrimitive.Anchor;
 

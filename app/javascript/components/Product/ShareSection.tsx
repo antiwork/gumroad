@@ -10,7 +10,7 @@ import { useAppDomain } from "$app/components/DomainSettings";
 import { FacebookShareButton } from "$app/components/FacebookShareButton";
 import { Icon } from "$app/components/Icons";
 import { useLoggedInUser } from "$app/components/LoggedInUser";
-import { PopoverRoot as Popover, PopoverContent, PopoverTrigger } from "$app/components/Popover";
+import { Popover, PopoverAnchor, PopoverContent, PopoverTrigger } from "$app/components/Popover";
 import { Product, WishlistForProduct } from "$app/components/Product";
 import { PriceSelection } from "$app/components/Product/ConfigurationSelector";
 import { showAlert } from "$app/components/server-components/Alert";
@@ -175,11 +175,13 @@ export const ShareSection = ({
         />
 
         <Popover>
-          <PopoverTrigger aria-label="Share" asChild>
-            <Button>
-              <Icon name="share" />
-            </Button>
-          </PopoverTrigger>
+          <PopoverAnchor>
+            <PopoverTrigger aria-label="Share" asChild>
+              <Button>
+                <Icon name="share" />
+              </Button>
+            </PopoverTrigger>
+          </PopoverAnchor>
           <PopoverContent sideOffset={4}>
             <div className="grid grid-cols-1 gap-4">
               <TwitterShareButton url={product.long_url} text={`Buy ${product.name} on @Gumroad`} />

@@ -13,7 +13,7 @@ import { assertResponseError } from "$app/utils/request";
 import { Button } from "$app/components/Button";
 import { Icon } from "$app/components/Icons";
 import { LoadingSpinner } from "$app/components/LoadingSpinner";
-import { PopoverRoot as Popover, PopoverContent, PopoverTrigger } from "$app/components/Popover";
+import { Popover, PopoverAnchor, PopoverContent, PopoverTrigger } from "$app/components/Popover";
 import { Covers } from "$app/components/Product/Covers";
 import { RemoveButton } from "$app/components/RemoveButton";
 import { showAlert } from "$app/components/server-components/Alert";
@@ -92,13 +92,15 @@ export const CoverEditor = ({
                 if (canAddPreview && !isUploading) setIsUploaderOpen(open);
               }}
             >
-              <WithTooltip tip={canAddPreview ? null : "Maximum number of previews uploaded"}>
-                <PopoverTrigger disabled={!canAddPreview || isUploading} asChild>
-                  <Button aria-label="Add cover">
-                    <Icon name="plus" />
-                  </Button>
-                </PopoverTrigger>
-              </WithTooltip>
+              <PopoverAnchor>
+                <WithTooltip tip={canAddPreview ? null : "Maximum number of previews uploaded"}>
+                  <PopoverTrigger disabled={!canAddPreview || isUploading} asChild>
+                    <Button aria-label="Add cover">
+                      <Icon name="plus" />
+                    </Button>
+                  </PopoverTrigger>
+                </WithTooltip>
+              </PopoverAnchor>
               <PopoverContent sideOffset={4}>
                 <div className="flex flex-col gap-4">
                   <CoverUploader

@@ -21,13 +21,13 @@ import { generatePageIcon } from "$app/utils/rich_content_page";
 import { Button } from "$app/components/Button";
 import { InputtedDiscount } from "$app/components/CheckoutDashboard/DiscountInput";
 import { ComboBox } from "$app/components/ComboBox";
-import { PageList, PageListLayout, PageListItem } from "$app/components/Download/PageListLayout";
+import { PageList, PageListItem, PageListLayout } from "$app/components/Download/PageListLayout";
 import { EvaporateUploaderProvider, useEvaporateUploader } from "$app/components/EvaporateUploader";
 import { FileKindIcon } from "$app/components/FileRowContent";
 import { Icon } from "$app/components/Icons";
 import { LoadingSpinner } from "$app/components/LoadingSpinner";
 import { Modal } from "$app/components/Modal";
-import { PopoverRoot as Popover, PopoverContent, PopoverTrigger } from "$app/components/Popover";
+import { Popover, PopoverContent, PopoverTrigger } from "$app/components/Popover";
 import { FileEmbedGroup } from "$app/components/ProductEdit/ContentTab/FileEmbedGroup";
 import { Layout } from "$app/components/ProductEdit/Layout";
 import { ExistingFileEntry, FileEntry, useProductEditContext, Variant } from "$app/components/ProductEdit/state";
@@ -51,7 +51,7 @@ import { uploadImages } from "$app/components/TiptapExtensions/Image";
 import { LicenseKey, LicenseProvider } from "$app/components/TiptapExtensions/LicenseKey";
 import { LinkMenuItem } from "$app/components/TiptapExtensions/Link";
 import { LongAnswer } from "$app/components/TiptapExtensions/LongAnswer";
-import { EmbedMediaForm, insertMediaEmbed, ExternalMediaFileEmbed } from "$app/components/TiptapExtensions/MediaEmbed";
+import { EmbedMediaForm, ExternalMediaFileEmbed, insertMediaEmbed } from "$app/components/TiptapExtensions/MediaEmbed";
 import { MoreLikeThis } from "$app/components/TiptapExtensions/MoreLikeThis";
 import { MoveNode } from "$app/components/TiptapExtensions/MoveNode";
 import { Posts, PostsProvider } from "$app/components/TiptapExtensions/Posts";
@@ -59,8 +59,8 @@ import { ShortAnswer } from "$app/components/TiptapExtensions/ShortAnswer";
 import { UpsellCard } from "$app/components/TiptapExtensions/UpsellCard";
 import { Card, CardContent } from "$app/components/ui/Card";
 import { Row, RowContent, Rows } from "$app/components/ui/Rows";
-import { Tabs, Tab } from "$app/components/ui/Tabs";
-import { UpsellSelectModal, Product, ProductOption } from "$app/components/UpsellSelectModal";
+import { Tab, Tabs } from "$app/components/ui/Tabs";
+import { Product, ProductOption, UpsellSelectModal } from "$app/components/UpsellSelectModal";
 import { useConfigureEvaporate } from "$app/components/useConfigureEvaporate";
 import { useIsAboveBreakpoint } from "$app/components/useIsAboveBreakpoint";
 import { useRefToLatest } from "$app/components/useRefToLatest";
@@ -646,7 +646,7 @@ const ContentTabContent = ({ selectedVariantId }: { selectedVariantId: string | 
                   <PopoverTrigger className="toolbar-item all-unset">
                     Insert <Icon name="outline-cheveron-down" />
                   </PopoverTrigger>
-                  <PopoverContent className="border-0 p-0 shadow-none">
+                  <PopoverContent sideOffset={4} className="border-0 p-0 shadow-none">
                     <div role="menu" onClick={() => setInsertMenuState(null)}>
                       {insertMenuState === "inputs" ? (
                         <>
@@ -737,7 +737,7 @@ const ContentTabContent = ({ selectedVariantId }: { selectedVariantId: string | 
                   </PopoverContent>
                 </Popover>
                 <Separator aria-orientation="vertical" />
-                <button className="toolbar-item all-unset" onClick={handleCreatePageClick}>
+                <button className="toolbar-item cursor-pointer all-unset" onClick={handleCreatePageClick}>
                   <Icon name="plus" /> Page
                 </button>
               </>
@@ -760,7 +760,7 @@ const ContentTabContent = ({ selectedVariantId }: { selectedVariantId: string | 
                     <>
                       {isDesktop ? null : (
                         <PageListItem asChild className="tailwind-override text-left">
-                          <button onClick={() => setPagesExpanded(!pagesExpanded)}>
+                          <button className="cursor-pointer all-unset" onClick={() => setPagesExpanded(!pagesExpanded)}>
                             <span className="flex-1">
                               <strong>Table of contents:</strong> {titleWithFallback(selectedPage?.title)}
                             </span>

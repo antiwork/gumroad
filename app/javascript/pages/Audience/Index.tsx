@@ -14,7 +14,7 @@ import { DateRangePicker } from "$app/components/DateRangePicker";
 import { ExportSubscribersPopover } from "$app/components/Followers/ExportSubscribersPopover";
 import { Icon } from "$app/components/Icons";
 import { LoadingSpinner } from "$app/components/LoadingSpinner";
-import { PopoverRoot as Popover, PopoverContent, PopoverTrigger } from "$app/components/Popover";
+import { Popover, PopoverContent, PopoverTrigger } from "$app/components/Popover";
 import { Placeholder, PlaceholderImage } from "$app/components/ui/Placeholder";
 import { useOnChange } from "$app/components/useOnChange";
 import { WithTooltip } from "$app/components/WithTooltip";

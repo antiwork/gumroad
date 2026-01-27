@@ -8,7 +8,7 @@ import { classNames } from "$app/utils/classNames";
 import { Button } from "$app/components/Button";
 import { useCurrentSeller } from "$app/components/CurrentSeller";
 import { Icon } from "$app/components/Icons";
-import { PopoverRoot as Popover, PopoverContent, PopoverTrigger } from "$app/components/Popover";
+import { Popover, PopoverContent, PopoverTrigger } from "$app/components/Popover";
 import { Sheet } from "$app/components/ui/Sheet";
 import { useIsOnTouchDevice } from "$app/components/useIsOnTouchDevice";
 import { useOnOutsideClick } from "$app/components/useOnOutsideClick";
