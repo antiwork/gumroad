@@ -46,7 +46,7 @@ class Oauth::ApplicationsController < Doorkeeper::ApplicationsController
   end
 
   def edit
-    @title = "Update application"
+    set_meta_tag(title: "Update application")
     authorize([:settings, :authorized_applications, @application])
 
     settings_presenter = SettingsPresenter.new(pundit_user:)

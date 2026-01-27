@@ -1,11 +1,17 @@
 # frozen_string_literal: true
 
 class User::PasswordsController < Devise::PasswordsController
-  include InertiaRendering
+  include InertiaRendering, PageMeta::Base
+
+  before_action :set_default_page_title
+  before_action :set_csrf_meta_tags
+  before_action :set_default_meta_tags
+  helper_method :erb_meta_tags
+
   layout "inertia", only: [:new, :edit]
 
   def new
-    @title = "Forgot password"
+    set_meta_tag(title: "Forgot password")
     auth_presenter = AuthPresenter.new(params:, application: @application)
     render inertia: "User/Passwords/New", props: auth_presenter.login_props
   end
@@ -29,7 +35,7 @@ class User::PasswordsController < Devise::PasswordsController
       return redirect_to root_path, warning: "That reset password token doesn't look valid (or may have expired)."
     end
 
-    @title = "Reset your password"
+    set_meta_tag(title: "Reset your password")
     render inertia: "User/Passwords/Edit", props: {
       reset_password_token: reset_password_token
     }

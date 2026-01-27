@@ -36,7 +36,7 @@ describe Products::ArchivedController, inertia: true do
       get :index
 
       expect(response).to have_http_status(:ok)
-      expect(assigns[:title]).to eq("Archived products")
+      expect(controller.send(:page_title)).to eq("Archived products")
       expect(inertia).to render_component("Products/Archived/Index")
       expect(inertia.props).to include(
         :can_create_product,

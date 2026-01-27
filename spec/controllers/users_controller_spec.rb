@@ -675,7 +675,7 @@ describe UsersController do
         @request.host = "#{creator.username}.test.gumroad.com"
         get :subscribe
 
-        expect(assigns[:title]).to eq("Subscribe to creator")
+        expect(controller.send(:page_title)).to eq("Subscribe to creator")
         profile_presenter = assigns[:profile_presenter]
         expect(profile_presenter.seller).to eq(creator)
         expect(profile_presenter.pundit_user).to eq(controller.pundit_user)

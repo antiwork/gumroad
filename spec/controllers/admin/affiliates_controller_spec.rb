@@ -73,7 +73,7 @@ describe Admin::AffiliatesController, inertia: true do
 
         expect(response).to be_successful
         expect(response.body).to have_text(affiliate_user.name)
-        expect(assigns[:title]).to eq "Sam affiliate on Gumroad"
+        expect(controller.send(:page_title)).to eq "Sam affiliate on Gumroad"
       end
     end
 
