@@ -1,11 +1,10 @@
 import { DirectUpload } from "@rails/activestorage";
+import { useForm, usePage } from "@inertiajs/react";
 import * as React from "react";
-import { cast, createCast } from "ts-safe-cast";
+import { cast } from "ts-safe-cast";
 
 import {
   CancellationRebuttalOption,
-  SellerDisputeEvidence,
-  submitForm,
   DisputeReason,
   disputeReasons,
   ReasonForWinningOption,
@@ -13,9 +12,7 @@ import {
   cancellationRebuttalOptions,
 } from "$app/data/purchase/dispute_evidence_data";
 import FileUtils from "$app/utils/file";
-import { asyncVoid } from "$app/utils/promise";
-import { assertResponseError } from "$app/utils/request";
-import { register } from "$app/utils/serverComponentUtil";
+import { useUserAgentInfo } from "$app/components/UserAgent";
 
 import { Button, NavigationButton } from "$app/components/Button";
 import { Icon } from "$app/components/Icons";
@@ -24,9 +21,22 @@ import { showAlert } from "$app/components/server-components/Alert";
 import { Alert } from "$app/components/ui/Alert";
 import { Card, CardContent } from "$app/components/ui/Card";
 import { Row, RowActions, RowContent, Rows } from "$app/components/ui/Rows";
-import { useUserAgentInfo } from "$app/components/UserAgent";
 
 const ALLOWED_EXTENSIONS = ["jpeg", "jpg", "png", "pdf"];
+
+type Blob = {
+  byte_size: number;
+  filename: string;
+  key: string;
+  signed_id: string | null;
+  title: string;
+};
+
+type Blobs = {
+  receipt_image: Blob | null;
+  policy_image: Blob | null;
+  customer_communication_file: Blob | null;
+};
 
 type Props = {
   dispute_evidence: {
@@ -46,23 +56,21 @@ type Props = {
     url: string;
     name: string;
   }[];
+  submitted?: boolean;
 };
 
-type Blobs = {
-  receipt_image: Blob | null;
-  policy_image: Blob | null;
-  customer_communication_file: Blob | null;
+type FormData = {
+  dispute_evidence: {
+    reason_for_winning: string | null;
+    cancellation_rebuttal: string | null;
+    refund_refusal_explanation: string;
+    customer_communication_file_signed_blob_id: string | null;
+  };
 };
 
-type Blob = {
-  byte_size: number;
-  filename: string;
-  key: string;
-  signed_id: string | null;
-  title: string;
-};
+export default function DisputeEvidenceShow() {
+  const { dispute_evidence, disputable, products, submitted } = cast<Props>(usePage().props);
 
-const DisputeEvidencePage = ({ dispute_evidence, disputable, products }: Props) => {
   const reasonForWinningUID = React.useId();
   const cancellationRebuttalUID = React.useId();
   const refundRefusalExplanationUID = React.useId();
@@ -72,47 +80,68 @@ const DisputeEvidencePage = ({ dispute_evidence, disputable, products }: Props) 
     dateStyle: "medium",
   });
 
-  const [sellerDisputeEvidence, setSellerDisputeEvidence] = React.useState<SellerDisputeEvidence>({
-    reasonForWinning: "",
-    reasonForWinningOption: null,
-    cancellationRebuttal: "",
-    cancellationRebuttalOption: null,
-    refundRefusalExplanation: "",
-    customerCommunicationFileSignedBlobId: null,
+  const [reasonForWinningOption, setReasonForWinningOption] = React.useState<ReasonForWinningOption | null>(null);
+  const [reasonForWinningText, setReasonForWinningText] = React.useState("");
+  const [cancellationRebuttalOption, setCancellationRebuttalOption] =
+    React.useState<CancellationRebuttalOption | null>(null);
+  const [cancellationRebuttalText, setCancellationRebuttalText] = React.useState("");
+  const [refundRefusalExplanation, setRefundRefusalExplanation] = React.useState("");
+  const [customerCommunicationFileSignedBlobId, setCustomerCommunicationFileSignedBlobId] = React.useState<
+    string | null
+  >(null);
+  const [blobs, setBlobs] = React.useState<Blobs>(dispute_evidence.blobs);
+
+  const form = useForm<FormData>({
+    dispute_evidence: {
+      reason_for_winning: null,
+      cancellation_rebuttal: null,
+      refund_refusal_explanation: "",
+      customer_communication_file_signed_blob_id: null,
+    },
   });
 
   const isReasonForWinningProvided =
-    sellerDisputeEvidence.reasonForWinningOption === "other" && sellerDisputeEvidence.reasonForWinning === ""
+    reasonForWinningOption === "other" && reasonForWinningText === ""
       ? false
-      : sellerDisputeEvidence.reasonForWinningOption != null;
+      : reasonForWinningOption !== null;
 
   const isCancellationRebuttalProvided =
-    sellerDisputeEvidence.cancellationRebuttalOption === "other" && sellerDisputeEvidence.cancellationRebuttal === ""
+    cancellationRebuttalOption === "other" && cancellationRebuttalText === ""
       ? false
-      : sellerDisputeEvidence.cancellationRebuttalOption != null;
+      : cancellationRebuttalOption !== null;
 
   const isInfoProvided =
     isReasonForWinningProvided ||
     isCancellationRebuttalProvided ||
-    sellerDisputeEvidence.customerCommunicationFileSignedBlobId !== null ||
-    sellerDisputeEvidence.refundRefusalExplanation !== "";
+    customerCommunicationFileSignedBlobId !== null ||
+    refundRefusalExplanation !== "";
 
-  const updateSellerDisputeEvidence = (update: Partial<SellerDisputeEvidence>) =>
-    setSellerDisputeEvidence((prevSellerDisputeEvidence) => ({ ...prevSellerDisputeEvidence, ...update }));
+  const handleSubmit = () => {
+    const reasonForWinning =
+      reasonForWinningOption === "other"
+        ? reasonForWinningText
+        : reasonForWinningOption !== null
+          ? reasonForWinningOptions[reasonForWinningOption]
+          : null;
 
-  const [isSubmitting, setIsSubmitting] = React.useState(false);
-  const [formSubmitted, setFormSubmitted] = React.useState(false);
-  const handleSubmit = asyncVoid(async () => {
-    try {
-      setIsSubmitting(true);
-      await submitForm(disputable.purchase_for_dispute_evidence_id, sellerDisputeEvidence);
-      setFormSubmitted(true);
-    } catch (e) {
-      assertResponseError(e);
-      showAlert(e.message, "error");
-    }
-    setIsSubmitting(false);
-  });
+    const cancellationRebuttal =
+      cancellationRebuttalOption === "other"
+        ? cancellationRebuttalText
+        : cancellationRebuttalOption !== null
+          ? cancellationRebuttalOptions[cancellationRebuttalOption]
+          : null;
+
+    form.transform(() => ({
+      dispute_evidence: {
+        reason_for_winning: reasonForWinning,
+        cancellation_rebuttal: cancellationRebuttal,
+        refund_refusal_explanation: refundRefusalExplanation,
+        customer_communication_file_signed_blob_id: customerCommunicationFileSignedBlobId,
+      },
+    }));
+
+    form.put(Routes.purchase_dispute_evidence_path(disputable.purchase_for_dispute_evidence_id));
+  };
 
   const [isUploading, setIsUploading] = React.useState(false);
   const handleFileUpload = () => {
@@ -130,18 +159,26 @@ const DisputeEvidencePage = ({ dispute_evidence, disputable, products }: Props) 
       if (error) {
         showAlert(error.message, "error");
       } else {
-        updateSellerDisputeEvidence({ customerCommunicationFileSignedBlobId: blob.signed_id });
-        dispute_evidence.blobs.customer_communication_file = {
-          byte_size: blob.byte_size,
-          filename: blob.filename,
-          key: blob.key,
-          signed_id: blob.signed_id,
-          title: "Customer communication",
-        };
+        setCustomerCommunicationFileSignedBlobId(blob.signed_id);
+        setBlobs((prev) => ({
+          ...prev,
+          customer_communication_file: {
+            byte_size: blob.byte_size,
+            filename: blob.filename,
+            key: blob.key,
+            signed_id: blob.signed_id,
+            title: "Customer communication",
+          },
+        }));
       }
       setIsUploading(false);
       if (fileInputRef.current) fileInputRef.current.value = "";
     });
+  };
+
+  const handleFileRemove = () => {
+    setCustomerCommunicationFileSignedBlobId(null);
+    setBlobs((prev) => ({ ...prev, customer_communication_file: null }));
   };
 
   const TEXTAREA_MAX_LENGTH = 3000;
@@ -156,7 +193,7 @@ const DisputeEvidencePage = ({ dispute_evidence, disputable, products }: Props) 
           <h2 className="grow">Submit additional information</h2>
         </header>
       </CardContent>
-      {formSubmitted ? (
+      {submitted ? (
         <CardContent>Thank you!</CardContent>
       ) : (
         <>
@@ -214,22 +251,18 @@ const DisputeEvidencePage = ({ dispute_evidence, disputable, products }: Props) 
                     type="radio"
                     name="reasonForWinning"
                     value={option}
-                    onChange={(evt) =>
-                      updateSellerDisputeEvidence({
-                        reasonForWinningOption: cast<ReasonForWinningOption>(evt.target.value),
-                      })
-                    }
+                    onChange={(evt) => setReasonForWinningOption(cast<ReasonForWinningOption>(evt.target.value))}
                   />
                   {reasonForWinningOptions[option]}
                 </label>
               ))}
-              {sellerDisputeEvidence.reasonForWinningOption === "other" ? (
+              {reasonForWinningOption === "other" ? (
                 <textarea
                   id={reasonForWinningUID}
                   maxLength={TEXTAREA_MAX_LENGTH}
                   rows={TEXTAREA_ROWS}
-                  value={sellerDisputeEvidence.reasonForWinning}
-                  onChange={(evt) => updateSellerDisputeEvidence({ reasonForWinning: evt.target.value })}
+                  value={reasonForWinningText}
+                  onChange={(evt) => setReasonForWinningText(evt.target.value)}
                 />
               ) : null}
             </fieldset>
@@ -247,22 +280,19 @@ const DisputeEvidencePage = ({ dispute_evidence, disputable, products }: Props) 
                       name="cancellationRebuttal"
                       value={option}
                       onChange={(evt) =>
-                        updateSellerDisputeEvidence({
-                          cancellationRebuttalOption: cast<CancellationRebuttalOption>(evt.target.value),
-                        })
+                        setCancellationRebuttalOption(cast<CancellationRebuttalOption>(evt.target.value))
                       }
                     />
-
                     {message}
                   </label>
                 ))}
-                {sellerDisputeEvidence.cancellationRebuttalOption === "other" ? (
+                {cancellationRebuttalOption === "other" ? (
                   <textarea
                     id={cancellationRebuttalUID}
                     maxLength={TEXTAREA_MAX_LENGTH}
                     rows={TEXTAREA_ROWS}
-                    value={sellerDisputeEvidence.cancellationRebuttal}
-                    onChange={(evt) => updateSellerDisputeEvidence({ cancellationRebuttal: evt.target.value })}
+                    value={cancellationRebuttalText}
+                    onChange={(evt) => setCancellationRebuttalText(evt.target.value)}
                   />
                 ) : null}
               </fieldset>
@@ -278,8 +308,8 @@ const DisputeEvidencePage = ({ dispute_evidence, disputable, products }: Props) 
                   id={refundRefusalExplanationUID}
                   maxLength={TEXTAREA_MAX_LENGTH}
                   rows={TEXTAREA_ROWS}
-                  value={sellerDisputeEvidence.refundRefusalExplanation}
-                  onChange={(evt) => updateSellerDisputeEvidence({ refundRefusalExplanation: evt.target.value })}
+                  value={refundRefusalExplanation}
+                  onChange={(evt) => setRefundRefusalExplanation(evt.target.value)}
                 />
               </fieldset>
             </CardContent>
@@ -290,13 +320,9 @@ const DisputeEvidencePage = ({ dispute_evidence, disputable, products }: Props) 
                 <label>Do you have additional evidence you'd like to provide?</label>
               </legend>
 
-              <Files
-                blobs={dispute_evidence.blobs}
-                updateSellerDisputeEvidence={updateSellerDisputeEvidence}
-                isSubmitting={isSubmitting}
-              />
+              <Files blobs={blobs} onRemove={handleFileRemove} isSubmitting={form.processing} />
 
-              {dispute_evidence.blobs.customer_communication_file === null ? (
+              {blobs.customer_communication_file === null ? (
                 <>
                   <input
                     ref={fileInputRef}
@@ -305,7 +331,7 @@ const DisputeEvidencePage = ({ dispute_evidence, disputable, products }: Props) 
                     tabIndex={-1}
                     onChange={handleFileUpload}
                   />
-                  <Button outline disabled={isUploading || isSubmitting} onClick={() => fileInputRef.current?.click()}>
+                  <Button outline disabled={isUploading || form.processing} onClick={() => fileInputRef.current?.click()}>
                     {isUploading ? (
                       <>
                         <LoadingSpinner /> Uploading...
@@ -330,11 +356,11 @@ const DisputeEvidencePage = ({ dispute_evidence, disputable, products }: Props) 
           <CardContent>
             <Button
               color="primary"
-              disabled={!isInfoProvided || isSubmitting}
+              disabled={!isInfoProvided || form.processing}
               onClick={handleSubmit}
               className="grow basis-0"
             >
-              {isSubmitting ? (
+              {form.processing ? (
                 <>
                   <LoadingSpinner /> Submitting...
                 </>
@@ -347,29 +373,24 @@ const DisputeEvidencePage = ({ dispute_evidence, disputable, products }: Props) 
       )}
     </Card>
   );
-};
+}
 
 const Files = ({
   blobs,
-  updateSellerDisputeEvidence,
+  onRemove,
   isSubmitting,
 }: {
   blobs: Blobs;
-  updateSellerDisputeEvidence: ({
-    customerCommunicationFileSignedBlobId,
-  }: {
-    customerCommunicationFileSignedBlobId: null;
-  }) => void;
+  onRemove: () => void;
   isSubmitting: boolean;
 }) => {
-  const eligibleBlobs = Object.values(blobs).filter((b) => b !== null);
-  if (eligibleBlobs.length < 1) return;
+  const eligibleBlobs = Object.values(blobs).filter((b): b is Blob => b !== null);
+  if (eligibleBlobs.length < 1) return null;
 
   const [isRemovingFile, setIsRemovingFile] = React.useState(false);
   const handleFileRemove = () => {
     setIsRemovingFile(true);
-    updateSellerDisputeEvidence({ customerCommunicationFileSignedBlobId: null });
-    blobs.customer_communication_file = null;
+    onRemove();
     setIsRemovingFile(false);
   };
 
@@ -408,5 +429,3 @@ const Files = ({
     </Rows>
   );
 };
-
-export default register({ component: DisputeEvidencePage, propParser: createCast() });

@@ -29,7 +29,6 @@ import ProfileCoffeePage from "$app/components/server-components/Profile/CoffeeP
 import ProfilePostPage from "$app/components/server-components/Profile/PostPage";
 import ProfileProductPage from "$app/components/server-components/Profile/ProductPage";
 import ProfileWishlistPage from "$app/components/server-components/Profile/WishlistPage";
-import DisputeEvidencePage from "$app/components/server-components/Purchase/DisputeEvidencePage";
 import PurchaseProductPage from "$app/components/server-components/Purchase/ProductPage";
 import SubscribeReviewReminders from "$app/components/server-components/ReviewReminders/SubscribeReviewReminders";
 import UnsubscribeReviewReminders from "$app/components/server-components/ReviewReminders/UnsubscribeReviewReminders";
@@ -58,7 +57,6 @@ ReactOnRails.register({
   Discover,
   DiscoverProductPage,
   DiscoverWishlistPage,
-  DisputeEvidencePage,
   DownloadPageWithContent,
   DownloadPageWithoutContent,
   GenerateInvoiceConfirmationPage,

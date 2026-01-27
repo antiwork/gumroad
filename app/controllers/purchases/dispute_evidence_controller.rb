@@ -1,14 +1,17 @@
 # frozen_string_literal: true
 
 class Purchases::DisputeEvidenceController < ApplicationController
+  layout "inertia"
+
   before_action :set_purchase, :set_dispute_evidence, :check_if_needs_redirect
 
   def show
-    @dispute_evidence_page_presenter = DisputeEvidencePagePresenter.new(@dispute_evidence)
     set_meta_tag(title: "Submit additional information")
-
-    @hide_layouts = true
     set_noindex_header
+    @hide_layouts = true
+
+    @dispute_evidence_page_presenter = DisputeEvidencePagePresenter.new(@dispute_evidence)
+    render inertia: "Purchases/DisputeEvidence/Show", props: @dispute_evidence_page_presenter.props
   end
 
   def update
@@ -24,9 +27,9 @@ class Purchases::DisputeEvidenceController < ApplicationController
     @dispute_evidence.update_as_seller_submitted!
 
     FightDisputeJob.perform_async(@dispute_evidence.dispute.id)
-    render json: { success: true }
+    redirect_to purchase_dispute_evidence_path(@purchase.external_id), inertia: { submitted: true }
   rescue ActiveRecord::RecordInvalid
-    render json: { success: false, error: @dispute_evidence.errors.full_messages.to_sentence }
+    redirect_to purchase_dispute_evidence_path(@purchase.external_id), alert: @dispute_evidence.errors.full_messages.to_sentence
   end
 
   private
