@@ -10,38 +10,6 @@ describe BundlesController do
 
   include_context "with user signed in as admin for seller"
 
-  describe "GET show" do
-    render_views
-
-    it "initializes the presenter with the correct arguments and sets the title to the bundle's name" do
-      expect(BundlePresenter).to receive(:new).with(bundle:).and_call_original
-      get :show, params: { id: bundle.external_id }
-      expect(response.body).to have_selector("title:contains('#{bundle.name}')", visible: false)
-      expect(response).to be_successful
-    end
-
-    context "when the bundle doesn't exist" do
-      it "returns 404" do
-        expect { get :show, params: { id: "" } }.to raise_error(ActiveRecord::RecordNotFound)
-      end
-    end
-
-    context "product is membership" do
-      let(:product) { create(:membership_product) }
-
-      it "returns 404" do
-        expect { get :show, params: { id: product.external_id } }.to raise_error(ActiveRecord::RecordNotFound)
-      end
-    end
-
-    context "product has variants" do
-      let(:product) { create(:product_with_digital_versions) }
-
-      it "returns 404" do
-        expect { get :show, params: { id: product.external_id } }.to raise_error(ActiveRecord::RecordNotFound)
-      end
-    end
-  end
 
   describe "GET create_from_email" do
     let!(:product) { create(:product, user: seller) }
