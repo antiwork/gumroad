@@ -19,7 +19,7 @@ module PageMeta::Product
 
       set_twitter_meta(product, product_description:)
 
-      product.display_asset_previews.select { |asset| asset.file.image? }.each do |asset|
+      product.display_asset_previews.select { |asset| asset.file.image? }.first(2).each do |asset|
         set_meta_tag(tag_name: "link", rel: "preload", as: "image", href: asset.url)
       end
 

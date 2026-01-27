@@ -22,8 +22,70 @@ import { Tab, TabIcon, Tabs } from "$app/components/ui/Tabs";
 import { useIsAboveBreakpoint } from "$app/components/useIsAboveBreakpoint";
 import { WithTooltip } from "$app/components/WithTooltip";
 const MAX_PREVIEW_COUNT = 8;
+const MAX_COVER_IMAGE_SIZE_IN_BYTES = 10 * 1024 * 1024;
+const MAX_COVER_GIF_SIZE_IN_BYTES = 20 * 1024 * 1024;
 
 const ALLOWED_EXTENSIONS = ["jpeg", "jpg", "png", "gif", "mov", "m4v", "mpeg", "mpg", "mp4", "wmv"];
+
+const compressImage = async (file: File, maxSizeBytes: number): Promise<File> => {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.readAsDataURL(file);
+    reader.onload = (event) => {
+      const img = new Image();
+      img.src = event.target?.result as string;
+      img.onload = () => {
+        const canvas = document.createElement("canvas");
+        const ctx = canvas.getContext("2d");
+        if (!ctx) {
+          reject(new Error("Could not get canvas context"));
+          return;
+        }
+
+        let { width, height } = img;
+        const maxWidth = 1200;
+        if (width > maxWidth) {
+          height = (height * maxWidth) / width;
+          width = maxWidth;
+        }
+
+        canvas.width = width;
+        canvas.height = height;
+        ctx.drawImage(img, 0, 0, width, height);
+
+        let quality = 0.85;
+        const tryCompress = () => {
+          canvas.toBlob(
+            (blob) => {
+              if (!blob) {
+                reject(new Error("Compression failed"));
+                return;
+              }
+
+              if (blob.size > maxSizeBytes && quality > 0.3) {
+                quality -= 0.1;
+                tryCompress();
+                return;
+              }
+
+              const compressedFile = new File([blob], file.name, {
+                type: file.type,
+                lastModified: Date.now(),
+              });
+              resolve(compressedFile);
+            },
+            file.type,
+            quality,
+          );
+        };
+
+        tryCompress();
+      };
+      img.onerror = () => reject(new Error("Failed to load image"));
+    };
+    reader.onerror = () => reject(new Error("Failed to read file"));
+  });
+};
 
 export const CoverEditor = ({
   covers,
@@ -172,11 +234,59 @@ const CoverUploader = ({
                       showAlert("Invalid file type.", "error");
                       continue;
                     }
+
+                    let fileToUpload = file;
+
+                    if (file.type.startsWith("image/")) {
+                      if (file.type === "image/gif") {
+                        if (file.size > MAX_COVER_GIF_SIZE_IN_BYTES) {
+                          showAlert(
+                            `GIF is too large (${FileUtils.getReadableFileSize(file.size)}). Maximum size for GIFs is ${
+                              FileUtils.getReadableFileSize(MAX_COVER_GIF_SIZE_IN_BYTES)
+                            }. Please use ezgif.com to optimize your GIF.`,
+                            "error",
+                          );
+                          continue;
+                        }
+                      } else {
+                        if (file.size > 500 * 1024) {
+                          try {
+                            const originalSize = file.size;
+                            fileToUpload = await compressImage(file, MAX_COVER_IMAGE_SIZE_IN_BYTES);
+                            console.log(
+                              `[Cover Compression] Original: ${FileUtils.getReadableFileSize(originalSize)}, Compressed: ${FileUtils.getReadableFileSize(fileToUpload.size)}, Savings: ${(((originalSize - fileToUpload.size) / originalSize) * 100).toFixed(1)}%`,
+                            );
+                            if (fileToUpload.size < file.size) {
+                              showAlert(
+                                `Cover image compressed from ${FileUtils.getReadableFileSize(
+                                  originalSize,
+                                )} to ${FileUtils.getReadableFileSize(fileToUpload.size)} for better performance.`,
+                                "success",
+                              );
+                            }
+                          } catch (error) {
+                            console.error("Cover image compression failed:", error);
+                          }
+                        }
+
+                        if (fileToUpload.size > MAX_COVER_IMAGE_SIZE_IN_BYTES) {
+                          showAlert(
+                            `Image is too large (${FileUtils.getReadableFileSize(fileToUpload.size)}). Maximum size is ${
+                              FileUtils.getReadableFileSize(MAX_COVER_IMAGE_SIZE_IN_BYTES)
+                            }. Please compress using TinyPNG or Squoosh.`,
+                            "error",
+                          );
+                          continue;
+                        }
+                      }
+                    }
+
                     // TODO change the relevant endpoint(s) to allow uploading multiple files at once
                     await new Promise<void>((resolve) => {
-                      new DirectUpload(file, "/rails/active_storage/direct_uploads").create((error, blob) => {
+                      new DirectUpload(fileToUpload, "/rails/active_storage/direct_uploads").create((error, blob) => {
                         if (error) {
                           showAlert(error.message, "error");
+                          resolve();
                         } else {
                           void saveCover({ type: "file", signedBlobId: blob.signed_id }).finally(resolve);
                         }

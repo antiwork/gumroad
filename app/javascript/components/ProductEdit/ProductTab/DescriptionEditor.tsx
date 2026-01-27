@@ -21,8 +21,71 @@ import { MoveNode } from "$app/components/TiptapExtensions/MoveNode";
 import { PublicFileEmbed } from "$app/components/TiptapExtensions/PublicFileEmbed";
 import { useRunOnce } from "$app/components/useRunOnce";
 
-const MAX_ALLOWED_PUBLIC_FILE_SIZE_IN_BYTES = 5 * 1024 * 1024; // 5MB
+const MAX_ALLOWED_PUBLIC_FILE_SIZE_IN_BYTES = 5 * 1024 * 1024;
 const MAX_ALLOWED_PUBLIC_FILES_COUNT = 5;
+const MAX_ALLOWED_IMAGE_SIZE_IN_BYTES = 10 * 1024 * 1024;
+const MAX_ALLOWED_GIF_SIZE_IN_BYTES = 20 * 1024 * 1024;
+
+
+const compressImage = async (file: File, maxSizeBytes: number): Promise<File> => {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.readAsDataURL(file);
+    reader.onload = (event) => {
+      const img = new Image();
+      img.src = event.target?.result as string;
+      img.onload = () => {
+        const canvas = document.createElement("canvas");
+        const ctx = canvas.getContext("2d");
+        if (!ctx) {
+          reject(new Error("Could not get canvas context"));
+          return;
+        }
+
+        let { width, height } = img;
+        const maxWidth = 1200;
+        if (width > maxWidth) {
+          height = (height * maxWidth) / width;
+          width = maxWidth;
+        }
+
+        canvas.width = width;
+        canvas.height = height;
+        ctx.drawImage(img, 0, 0, width, height);
+
+        let quality = 0.85;
+        const tryCompress = () => {
+          canvas.toBlob(
+            (blob) => {
+              if (!blob) {
+                reject(new Error("Compression failed"));
+                return;
+              }
+
+              if (blob.size > maxSizeBytes && quality > 0.3) {
+                quality -= 0.1;
+                tryCompress();
+                return;
+              }
+
+              const compressedFile = new File([blob], file.name, {
+                type: file.type,
+                lastModified: Date.now(),
+              });
+              resolve(compressedFile);
+            },
+            file.type,
+            quality,
+          );
+        };
+
+        tryCompress();
+      };
+      img.onerror = () => reject(new Error("Failed to load image"));
+    };
+    reader.onerror = () => reject(new Error("Failed to read file"));
+  });
+};
 
 export const useImageUpload = () => {
   const [imagesUploading, setImagesUploading] = React.useState<Set<File>>(new Set());
@@ -304,14 +367,81 @@ export const DescriptionEditor = ({
 
   const imageSettings = React.useMemo(
     () => ({
-      onUpload: (file: File) => {
-        setImagesUploading((prev) => new Set(prev).add(file));
+      onUpload: async (file: File) => {
+        let fileToUpload = file;
+
+        if (file.type === "image/gif") {
+          if (file.size > MAX_ALLOWED_GIF_SIZE_IN_BYTES) {
+            showAlert(
+              `GIF is too large (${FileUtils.getReadableFileSize(file.size)}). Maximum size for GIFs is ${
+                FileUtils.getReadableFileSize(MAX_ALLOWED_GIF_SIZE_IN_BYTES)
+              }. Please use a tool like ezgif.com to optimize your GIF.`,
+              "error",
+            );
+            return Promise.reject(new Error("GIF size exceeds maximum limit"));
+          }
+          setImagesUploading((prev) => new Set(prev).add(file));
+          return new Promise<string>((resolve, reject) => {
+            const upload = new DirectUpload(file, Routes.rails_direct_uploads_path());
+            upload.create((error, blob) => {
+              setImagesUploading((prev) => {
+                const updated = new Set(prev);
+                updated.delete(file);
+                return updated;
+              });
+
+              if (error) reject(error);
+              else
+                request({
+                  method: "GET",
+                  accept: "json",
+                  url: Routes.s3_utility_cdn_url_for_blob_path({ key: blob.key }),
+                })
+                  .then((response) => response.json())
+                  .then((data) => resolve(cast<{ url: string }>(data).url))
+                  .catch((e: unknown) => {
+                    assertResponseError(e);
+                    reject(e);
+                  });
+            });
+          });
+        }
+
+        if (file.size > 500 * 1024 && file.type.startsWith("image/")) {
+          try {
+            const originalSize = file.size;
+            fileToUpload = await compressImage(file, MAX_ALLOWED_IMAGE_SIZE_IN_BYTES);
+            console.log(`[Image Compression] Original: ${FileUtils.getReadableFileSize(originalSize)}, Compressed: ${FileUtils.getReadableFileSize(fileToUpload.size)}, Savings: ${(((originalSize - fileToUpload.size) / originalSize) * 100).toFixed(1)}%`);
+            if (fileToUpload.size < file.size) {
+              showAlert(
+                `Image automatically compressed from ${FileUtils.getReadableFileSize(
+                  originalSize,
+                )} to ${FileUtils.getReadableFileSize(fileToUpload.size)} for better performance.`,
+                "success",
+              );
+            }
+          } catch (error) {
+            console.error("Image compression failed:", error);
+          }
+        }
+
+        if (fileToUpload.size > MAX_ALLOWED_IMAGE_SIZE_IN_BYTES) {
+          showAlert(
+            `Image is too large (${FileUtils.getReadableFileSize(fileToUpload.size)}). Maximum size is ${
+              FileUtils.getReadableFileSize(MAX_ALLOWED_IMAGE_SIZE_IN_BYTES)
+            }. Please compress your image using tools like TinyPNG (tinypng.com) or Squoosh (squoosh.app).`,
+            "error",
+          );
+          return Promise.reject(new Error("File size exceeds maximum limit"));
+        }
+
+        setImagesUploading((prev) => new Set(prev).add(fileToUpload));
         return new Promise<string>((resolve, reject) => {
-          const upload = new DirectUpload(file, Routes.rails_direct_uploads_path());
+          const upload = new DirectUpload(fileToUpload, Routes.rails_direct_uploads_path());
           upload.create((error, blob) => {
             setImagesUploading((prev) => {
               const updated = new Set(prev);
-              updated.delete(file);
+              updated.delete(fileToUpload);
               return updated;
             });
 
