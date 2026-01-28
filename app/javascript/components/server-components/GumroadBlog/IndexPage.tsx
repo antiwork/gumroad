@@ -3,9 +3,9 @@ import * as React from "react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createCast } from "ts-safe-cast";
 
+import { formatPostDate } from "$app/utils/date";
 import { register } from "$app/utils/serverComponentUtil";
 
-import { formatPostDate } from "$app/components/server-components/Profile/PostPage";
 import { Tabs, Tab } from "$app/components/ui/Tabs";
 
 import placeholderFeatureImage from "../../../../assets/images/blog/post-placeholder.jpg";

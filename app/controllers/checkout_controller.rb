@@ -1,11 +1,10 @@
 # frozen_string_literal: true
 
 class CheckoutController < ApplicationController
-  before_action :process_cart_id_param, only: %i[index]
+  before_action :process_cart_id_param
 
   def index
     @hide_layouts = true
-    @on_checkout_page = true
     @checkout_presenter = CheckoutPresenter.new(logged_in_user:, ip: request.remote_ip)
   end
 
@@ -35,5 +34,9 @@ class CheckoutController < ApplicationController
       end
 
       redirect_to(request_path_except_cart_id_param)
+    end
+
+    def analytics_enabled?
+      true
     end
 end

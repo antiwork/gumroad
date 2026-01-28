@@ -100,7 +100,7 @@ const Period = ({ payoutPeriodData }: { payoutPeriodData: PayoutPeriodData }) =>
         {"type" in payoutPeriodData && payoutPeriodData.type === "instant" ? <Pill size="small">Instant</Pill> : null}
         <span style={{ marginLeft: "auto" }}>{payoutPeriodData.displayable_payout_period_range}</span>
         {payoutPeriodData.status === "completed" && payoutPeriodData.payment_external_id ? (
-          <WithTooltip position="top" tip="Export">
+          <WithTooltip position="top" tip="Export" className="shrink-0">
             <Button
               color="primary"
               disabled={isCSVDownloadInProgress}

@@ -10,7 +10,7 @@ class TwoFactorAuthenticationController < ApplicationController
   layout "inertia", only: [:show]
 
   def show
-    @title = "Two-Factor Authentication"
+    set_meta_tag(title: "Two-Factor Authentication")
     render inertia: "TwoFactorAuthentication/Show", props: {
       user_id: @user.encrypted_external_id,
       email: @user.email,

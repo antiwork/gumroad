@@ -4,7 +4,7 @@ class Admin::PayoutsController < Admin::BaseController
   before_action :fetch_payment, only: %i[show retry cancel fail sync]
 
   def show
-    @title = "Payout"
+    set_meta_tag(title: "Payout")
 
     render inertia: "Admin/Payouts/Show",
            props: { payout: Admin::PaymentPresenter.new(payment: @payment).props }

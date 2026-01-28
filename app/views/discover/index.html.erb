@@ -1,9 +1,3 @@
-<% if @canonical_url %>
-<% content_for :meta do %>
-<link href="<%= @canonical_url %>" rel="canonical">
-<% end %>
-<% end %>
-
 <%= load_pack("discover") %>
 <div>
   <%= react_component "Discover", props: @react_discover_props, prerender: true %>

@@ -29,7 +29,7 @@ describe CommunitiesController do
       it "renders the page" do
         get :index
         expect(response).to be_successful
-        expect(assigns(:title)).to eq("Communities")
+        expect(controller.send(:page_title)).to eq("Communities")
       end
 
       it "returns unauthorized response if the :communities feature flag is disabled" do

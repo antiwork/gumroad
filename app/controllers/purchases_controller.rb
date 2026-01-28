@@ -264,6 +264,8 @@ class PurchasesController < ApplicationController
   def generate_invoice
     chargeable = Charge::Chargeable.find_by_purchase_or_charge!(purchase: @purchase)
     invoice_presenter = InvoicePresenter.new(chargeable)
+    set_meta_tag(title: "Generate invoice")
+
     render inertia: "Purchases/GenerateInvoice/Show",
            props: invoice_presenter.invoice_generation_props
   end
@@ -390,7 +392,7 @@ class PurchasesController < ApplicationController
   end
 
   def confirm_receipt_email
-    @title = "Confirm Email"
+    set_meta_tag(title: "Confirm Email")
     @hide_layouts = true
   end
 
