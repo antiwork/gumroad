@@ -13,6 +13,7 @@ import { Modal } from "$app/components/Modal";
 import { NavigationButtonInertia } from "$app/components/NavigationButton";
 import { Pagination, PaginationProps } from "$app/components/Pagination";
 import { Popover, PopoverContent, PopoverTrigger } from "$app/components/Popover";
+import { Search } from "$app/components/Search";
 import { showAlert } from "$app/components/server-components/Alert";
 import { Skeleton } from "$app/components/Skeleton";
 import { Card, CardContent } from "$app/components/ui/Card";
@@ -160,7 +161,7 @@ export default function UtmLinksIndex() {
       selectedTab="utm_links"
       actions={
         <>
-          <SearchBoxPopover initialQuery={query} onSearch={onSearch} />
+          <Search value={query} onSearch={onSearch} />
           <NavigationButtonInertia href={Routes.new_dashboard_utm_link_path()} color="accent">
             Create link
           </NavigationButtonInertia>
@@ -362,44 +363,6 @@ const UtmLinkActions = ({ link, onDelete }: { link: SavedUtmLink; onDelete: () =
   );
 };
 
-const SearchBoxPopover = ({ initialQuery, onSearch }: { initialQuery: string; onSearch: (query: string) => void }) => {
-  const [isOpen, setIsOpen] = React.useState(false);
-  const searchInputRef = React.useRef<HTMLInputElement>(null);
-  const [query, setQuery] = React.useState(initialQuery);
-
-  React.useEffect(() => {
-    if (isOpen) searchInputRef.current?.focus();
-  }, [isOpen]);
-
-  return (
-    <Popover open={isOpen} onOpenChange={setIsOpen}>
-      <WithTooltip tip="Search" position="bottom">
-        <PopoverTrigger aria-label="Toggle Search" asChild>
-          <button className="button">
-            <Icon name="solid-search" />
-          </button>
-        </PopoverTrigger>
-      </WithTooltip>
-      <PopoverContent>
-        <div className="input">
-          <Icon name="solid-search" />
-          <input
-            ref={searchInputRef}
-            type="text"
-            placeholder="Search"
-            value={query}
-            onChange={(evt) => {
-              const newQuery = evt.target.value;
-              setQuery(newQuery);
-              onSearch(newQuery);
-            }}
-          />
-        </div>
-      </PopoverContent>
-    </Popover>
-  );
-};
-
 const UtmLinkDetails = ({
   utmLink,
   onClose,
@@ -530,9 +493,9 @@ const UtmLinkDetails = ({
         </section>
       </Card>
       <div style={{ display: "grid", gridAutoFlow: "column", gap: "var(--spacer-4)" }}>
-        <Link href={Routes.new_dashboard_utm_link_path({ copy_from: utmLink.id })} className="button">
-          Duplicate
-        </Link>
+        <Button asChild>
+          <Link href={Routes.new_dashboard_utm_link_path({ copy_from: utmLink.id })}>Duplicate</Link>
+        </Button>
         <NavigationButtonInertia href={Routes.edit_dashboard_utm_link_path(utmLink.id)} disabled={isNavigating}>
           Edit
         </NavigationButtonInertia>

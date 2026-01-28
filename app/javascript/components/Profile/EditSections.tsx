@@ -23,7 +23,7 @@ import { ALLOWED_EXTENSIONS } from "$app/utils/file";
 import { assertResponseError, request, ResponseError } from "$app/utils/request";
 
 import { Icon } from "$app/components/Icons";
-import { Popover, PopoverClose, PopoverContent, PopoverTrigger } from "$app/components/Popover";
+import { Popover, PopoverContent, PopoverTrigger } from "$app/components/Popover";
 import { Props as ProductProps } from "$app/components/Product";
 import { CardGrid, SORT_BY_LABELS, useSearchReducer } from "$app/components/Product/CardGrid";
 import { WishlistsSectionView } from "$app/components/Profile/EditSections/WishlistsSectionView";
@@ -31,11 +31,10 @@ import { RichTextEditorToolbar, useImageUploadSettings, useRichTextEditor } from
 import { Select } from "$app/components/Select";
 import { showAlert } from "$app/components/server-components/Alert";
 import { TypeSafeOptionSelect } from "$app/components/TypeSafeOptionSelect";
+import { CardContent } from "$app/components/ui/Card";
 import { Row, RowActions, RowContent, RowDragHandle, Rows } from "$app/components/ui/Rows";
 import { useOnChange } from "$app/components/useOnChange";
 import { useRefToLatest } from "$app/components/useRefToLatest";
-
-import { CardContent } from "../ui/Card";
 
 import { PageProps as BasePageProps, FeaturedProductView, Post, PostsView, SubscribeView } from "./Sections";
 
@@ -136,7 +135,8 @@ export const useSectionImageUploadSettings = () => {
   return imageUploadSettings;
 };
 
-const sectionButtonClasses = "w-[calc(1lh+--spacing(2))] py-1 text-center hover:bg-gray-300/50";
+const sectionButtonClasses =
+  "cursor-pointer w-[calc(1lh+--spacing(2))] py-1 text-center hover:bg-gray-300/50 all-unset";
 
 type SubmenuProps = { heading: string; children: React.ReactNode; text: React.ReactNode };
 export const EditorSubmenu = ({ children }: SubmenuProps) => children;
@@ -162,16 +162,14 @@ export const EditorMenu = ({
         setMenuState("menu");
       }}
     >
-      <PopoverTrigger aria-label={label} asChild>
-        <button className={sectionButtonClasses}>
-          <Icon name="three-dots" />
-        </button>
+      <PopoverTrigger aria-label={label} className={sectionButtonClasses}>
+        <Icon name="three-dots" />
       </PopoverTrigger>
-      <PopoverContent arrowClassName="dark:border-[rgb(var(--parent-color)/var(--border-alpha))]">
+      <PopoverContent className="p-0!" arrowClassName="dark:fill-[rgb(var(--parent-color)/var(--border-alpha))]">
         {isSubmenu(activeSubmenu) ? (
-          <div className="flex w-75 flex-col gap-4">
+          <div className="flex w-75 flex-col gap-4 p-4">
             <h4 className="grid grid-cols-[1em_1fr_1em]">
-              <button onClick={() => setMenuState("menu")} aria-label="Go back" className="cursor-pointer all-unset">
+              <button className="cursor-pointer all-unset" onClick={() => setMenuState("menu")} aria-label="Go back">
                 <Icon name="outline-cheveron-left" />
               </button>
               <div className="text-center">{activeSubmenu.props.heading}</div>
@@ -179,11 +177,14 @@ export const EditorMenu = ({
             {activeSubmenu}
           </div>
         ) : (
-          <div className="grid w-75 !divide-y !divide-solid !divide-border rounded border border-none border-border bg-background shadow-none">
+          <div className="grid w-75 divide-y divide-solid divide-border">
             {items.map((item, key) =>
               isSubmenu(item) ? (
-                <CardContent asChild key={key}>
-                  <button className="cursor-pointer all-unset" onClick={() => setMenuState(key)}>
+                <CardContent className="p-0" key={key}>
+                  <button
+                    className="flex w-full cursor-pointer items-center justify-between p-4 all-unset"
+                    onClick={() => setMenuState(key)}
+                  >
                     <h5 className="grow font-bold">{item.props.heading}</h5>
                     <div>
                       {item.props.text} <Icon name="outline-cheveron-right" />
@@ -191,7 +192,9 @@ export const EditorMenu = ({
                   </button>
                 </CardContent>
               ) : (
-                item
+                <div className="grid" key={key}>
+                  {item}
+                </div>
               ),
             )}
           </div>
@@ -281,14 +284,22 @@ export const SectionLayout = ({
             </label>
           </EditorSubmenu>
           {menuItems}
-          <button onClick={copyLink}>
-            <h5>{linkCopied ? "Copied!" : "Copy link"}</h5>
-            <Icon name="link" />
-          </button>
-          <button onClick={() => void remove()} style={{ color: "rgb(var(--danger))" }}>
-            <h5>Remove</h5>
-            <Icon name="trash2" />
-          </button>
+          <CardContent asChild>
+            <button className="cursor-pointer all-unset" onClick={copyLink}>
+              <h5 className="grow font-bold">{linkCopied ? "Copied!" : "Copy link"}</h5>
+              <Icon name="link" />
+            </button>
+          </CardContent>
+          <CardContent asChild>
+            <button
+              className="cursor-pointer all-unset"
+              onClick={() => void remove()}
+              style={{ color: "rgb(var(--danger))" }}
+            >
+              <h5 className="grow font-bold">Remove</h5>
+              <Icon name="trash2" />
+            </button>
+          </CardContent>
         </EditorMenu>
         <button
           aria-label="Move section up"
@@ -611,7 +622,7 @@ const FeaturedProductSectionView = ({ section }: { section: FeaturedProductSecti
   );
 };
 
-export const AddSectionButton = ({ side = "bottom", index }: { index: number; side?: "top" | "bottom" }) => {
+export const AddSectionButton = ({ side, index }: { index: number; side?: "top" | "bottom" }) => {
   const [open, setOpen] = React.useState(false);
   const [state, dispatch] = useReducer();
 
@@ -669,7 +680,7 @@ export const AddSectionButton = ({ side = "bottom", index }: { index: number; si
   return (
     <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger aria-label="Add section" asChild>
-        <button
+        <div
           className={classNames(
             "absolute -top-px box-border aspect-square cursor-pointer place-self-center font-[inherit] text-[inherit] all-unset",
             { "top-full": side === "top" },
@@ -678,37 +689,39 @@ export const AddSectionButton = ({ side = "bottom", index }: { index: number; si
           )}
         >
           <Icon name="plus" />
-        </button>
+        </div>
       </PopoverTrigger>
-      <PopoverContent side={side} className="border-0 p-0 shadow-none">
-        <PopoverClose asChild>
-          <div role="menu">
-            <div role="menuitem" onClick={() => addSection("SellerProfileProductsSection")}>
-              <Icon name="grid" />
-              &ensp; Products
-            </div>
-            <div role="menuitem" onClick={() => addSection("SellerProfilePostsSection")}>
-              <Icon name="envelope-fill" />
-              &ensp; Posts
-            </div>
-            <div role="menuitem" onClick={() => addSection("SellerProfileFeaturedProductSection")}>
-              <Icon name="box" />
-              &ensp; Featured Product
-            </div>
-            <div role="menuitem" onClick={() => addSection("SellerProfileRichTextSection")}>
-              <Icon name="file-earmark-text" />
-              &ensp; Rich text
-            </div>
-            <div role="menuitem" onClick={() => addSection("SellerProfileSubscribeSection")}>
-              <Icon name="solid-bell" />
-              &ensp; Subscribe
-            </div>
-            <div role="menuitem" onClick={() => addSection("SellerProfileWishlistsSection")}>
-              <Icon name="file-text-fill" />
-              &ensp; Wishlists
-            </div>
+      <PopoverContent
+        side={side === "top" ? "top" : "bottom"}
+        className="border-0 p-0 shadow-none"
+        arrowClassName="dark:fill-[rgb(var(--parent-color)/var(--border-alpha))]"
+      >
+        <div role="menu" onClick={() => setOpen(false)}>
+          <div role="menuitem" onClick={() => addSection("SellerProfileProductsSection")}>
+            <Icon name="grid" />
+            &ensp; Products
           </div>
-        </PopoverClose>
+          <div role="menuitem" onClick={() => addSection("SellerProfilePostsSection")}>
+            <Icon name="envelope-fill" />
+            &ensp; Posts
+          </div>
+          <div role="menuitem" onClick={() => addSection("SellerProfileFeaturedProductSection")}>
+            <Icon name="box" />
+            &ensp; Featured Product
+          </div>
+          <div role="menuitem" onClick={() => addSection("SellerProfileRichTextSection")}>
+            <Icon name="file-earmark-text" />
+            &ensp; Rich text
+          </div>
+          <div role="menuitem" onClick={() => addSection("SellerProfileSubscribeSection")}>
+            <Icon name="solid-bell" />
+            &ensp; Subscribe
+          </div>
+          <div role="menuitem" onClick={() => addSection("SellerProfileWishlistsSection")}>
+            <Icon name="file-text-fill" />
+            &ensp; Wishlists
+          </div>
+        </div>
       </PopoverContent>
     </Popover>
   );

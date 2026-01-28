@@ -5,7 +5,7 @@ import { assertDefined } from "$app/utils/assert";
 
 import { Button } from "$app/components/Button";
 import { Icon } from "$app/components/Icons";
-import { Popover, PopoverContent, PopoverTrigger } from "$app/components/Popover";
+import { Popover, PopoverAnchor, PopoverContent, PopoverTrigger } from "$app/components/Popover";
 
 export const NodeActionsMenu = ({
   editor,
@@ -20,11 +20,13 @@ export const NodeActionsMenu = ({
   return (
     <Popover open={open} onOpenChange={setOpen}>
       <div className="actions-menu">
-        <PopoverTrigger aria-label="Actions" data-drag-handle draggable asChild>
-          <Button small color="filled">
-            <Icon name="outline-drag" />
-          </Button>
-        </PopoverTrigger>
+        <PopoverAnchor>
+          <PopoverTrigger aria-label="Actions" data-drag-handle draggable asChild>
+            <Button small color="filled">
+              <Icon name="outline-drag" />
+            </Button>
+          </PopoverTrigger>
+        </PopoverAnchor>
         <PopoverContent
           sideOffset={4}
           className="border-0 p-0 shadow-none"

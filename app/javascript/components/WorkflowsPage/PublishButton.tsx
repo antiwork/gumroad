@@ -4,7 +4,7 @@ import { type SaveActionName } from "$app/types/workflow";
 
 import { Button } from "$app/components/Button";
 import { Icon } from "$app/components/Icons";
-import { Popover, PopoverContent, PopoverTrigger } from "$app/components/Popover";
+import { Popover, PopoverAnchor, PopoverContent, PopoverTrigger } from "$app/components/Popover";
 import { Toggle } from "$app/components/Toggle";
 
 type PublishButtonProps = {
@@ -36,12 +36,14 @@ export const PublishButton = ({
     </Button>
   ) : (
     <Popover>
-      <PopoverTrigger disabled={isDisabled} asChild>
-        <Button color="accent">
-          Publish
-          <Icon name="outline-cheveron-down" />
-        </Button>
-      </PopoverTrigger>
+      <PopoverAnchor>
+        <PopoverTrigger disabled={isDisabled} asChild>
+          <Button color="accent">
+            Publish
+            <Icon name="outline-cheveron-down" />
+          </Button>
+        </PopoverTrigger>
+      </PopoverAnchor>
       <PopoverContent sideOffset={4}>
         <fieldset>
           <Button color="accent" onClick={() => onClick("save_and_publish")} disabled={isDisabled}>

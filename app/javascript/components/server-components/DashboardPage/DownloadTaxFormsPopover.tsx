@@ -2,7 +2,7 @@ import * as React from "react";
 
 import { Button } from "$app/components/Button";
 import { Icon } from "$app/components/Icons";
-import { Popover, PopoverContent, PopoverTrigger } from "$app/components/Popover";
+import { Popover, PopoverAnchor, PopoverContent, PopoverTrigger } from "$app/components/Popover";
 import { showAlert } from "$app/components/server-components/Alert";
 
 type Props = {
@@ -41,12 +41,14 @@ export const DownloadTaxFormsPopover = ({ taxForms }: Props) => {
         if (open) setSelectedYears(new Set());
       }}
     >
-      <PopoverTrigger aria-label="Tax forms" asChild>
-        <Button>
-          Tax forms
-          <Icon name="download" />
-        </Button>
-      </PopoverTrigger>
+      <PopoverAnchor>
+        <PopoverTrigger aria-label="Tax forms" asChild>
+          <Button>
+            Tax forms
+            <Icon name="download" />
+          </Button>
+        </PopoverTrigger>
+      </PopoverAnchor>
       <PopoverContent sideOffset={4}>
         <div className="max-w-[300px] space-y-4 sm:max-w-full">
           {Object.keys(taxForms).length === 0 ? (

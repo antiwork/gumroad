@@ -12,7 +12,7 @@ import { register } from "$app/utils/serverComponentUtil";
 import { Button } from "$app/components/Button";
 import { DiscordButton } from "$app/components/DiscordButton";
 import { DownloadAllButton } from "$app/components/Download/DownloadAllButton";
-import { FileItem, FileList as DownloadFileList, FolderItem } from "$app/components/Download/FileList";
+import { FileList as DownloadFileList, FileItem, FolderItem } from "$app/components/Download/FileList";
 import { OpenInAppButton } from "$app/components/Download/OpenInAppButton";
 import { PageList, PageListItem } from "$app/components/Download/PageListLayout";
 import { DownloadPagePostList, Post } from "$app/components/Download/PostList";
@@ -23,7 +23,7 @@ import {
 } from "$app/components/Download/RichContent";
 import { TranscodingNoticeModal } from "$app/components/Download/TranscodingNoticeModal";
 import { Icon } from "$app/components/Icons";
-import { Popover, PopoverClose, PopoverContent, PopoverTrigger } from "$app/components/Popover";
+import { Popover, PopoverAnchor, PopoverClose, PopoverContent, PopoverTrigger } from "$app/components/Popover";
 import { FileEmbed } from "$app/components/ProductEdit/ContentTab/FileEmbed";
 import { showAlert } from "$app/components/server-components/Alert";
 import { LicenseKey } from "$app/components/TiptapExtensions/LicenseKey";
@@ -355,11 +355,13 @@ const WithContent = ({
         <div role="navigation" className="mt-auto flex gap-4 border-t border-border pt-4 lg:justify-end lg:pb-4">
           {isDesktop ? null : (
             <Popover>
-              <PopoverTrigger aria-label="Table of Contents" asChild>
-                <Button>
-                  <Icon name="unordered-list" />
-                </Button>
-              </PopoverTrigger>
+              <PopoverAnchor>
+                <PopoverTrigger aria-label="Table of Contents" asChild>
+                  <Button>
+                    <Icon name="unordered-list" />
+                  </Button>
+                </PopoverTrigger>
+              </PopoverAnchor>
               <PopoverContent sideOffset={4} className="border-0 p-0 shadow-none">
                 <div role="menu">
                   {pages.map((page, index) => (
