@@ -18,10 +18,17 @@ class ApplicationController < ActionController::Base
   include UtmLinkTracking
   include RackMiniProfilerAuthorization
   include InertiaRendering
+  include PageMeta::Base, PageMeta::Analytics
+
+  before_action :set_default_page_title
+  before_action :set_csrf_meta_tags
+  before_action :set_default_meta_tags
+  helper_method :erb_meta_tags, :page_title
+  before_action :set_analytics_meta_tags
+  helper_method :analytics_enabled?
 
   before_action :debug_headers
   before_action :set_is_mobile
-  before_action :set_title
   before_action :invalidate_session_if_necessary
   before_action :redirect_to_custom_subdomain
 
@@ -286,12 +293,6 @@ class ApplicationController < ActionController::Base
       end
     end
 
-    def set_title
-      @title = "Gumroad"
-      @title = "Staging Gumroad" if Rails.env.staging?
-      @title = "Local Gumroad" if Rails.env.development?
-    end
-
     def set_signup_referrer
       return if session[:signup_referrer].present?
       return if params[:_sref].nil? && request.referrer.nil?
@@ -310,10 +311,6 @@ class ApplicationController < ActionController::Base
 
     def set_as_modal
       @as_modal = params[:as_modal] == "true"
-    end
-
-    def set_frontend_performance_sensitive
-      @is_css_performance_sensitive = true
     end
 
     def set_gumroad_guid

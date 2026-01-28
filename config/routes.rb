@@ -345,8 +345,10 @@ Rails.application.routes.draw do
       scope "/users" do
         get "/check_twitter_link", to: "users/oauth#check_twitter_link"
         get "/unsubscribe/:id", to: "users#email_unsubscribe", as: :user_unsubscribe
-        get "/unsubscribe_review_reminders", to: "users#unsubscribe_review_reminders", as: :user_unsubscribe_review_reminders
-        get "/subscribe_review_reminders", to: "users#subscribe_review_reminders", as: :user_subscribe_review_reminders
+        scope module: :users do
+          get "subscribe_review_reminders", to: "review_reminders#subscribe", as: :user_subscribe_review_reminders
+          get "unsubscribe_review_reminders", to: "review_reminders#unsubscribe", as: :user_unsubscribe_review_reminders
+        end
       end
     end
 
