@@ -1,4 +1,4 @@
-import { DirectUpload, Blob } from "@rails/activestorage";
+import { Blob, DirectUpload } from "@rails/activestorage";
 import cx from "classnames";
 import { lightFormat, subMonths } from "date-fns";
 import { format } from "date-fns-tz";
@@ -6,44 +6,44 @@ import * as React from "react";
 
 import {
   Address,
+  Call,
+  Charge,
+  Commission,
   Customer,
   CustomerEmail,
   Discount,
+  File,
   License,
   MissedPost,
+  Option,
   Query,
-  Charge,
+  Review,
+  ReviewVideo,
   SortKey,
   Tracking,
+  approveReviewVideo,
   cancelSubscription,
   changeCanContact,
+  completeCommission,
+  getCharges,
   getCustomerEmails,
   getMissedPosts,
+  getOptions,
   getPagedCustomers,
   getProductPurchases,
   markShipped,
-  resendPing,
   refund,
+  rejectReviewVideo,
+  resendPing,
   resendPost,
   resendReceipt,
-  updateLicense,
-  updatePurchase,
   revokeAccess,
   undoRevokeAccess,
-  Option,
-  getOptions,
-  updateOption,
-  Review,
-  Call,
   updateCallUrl,
-  Commission,
   updateCommission,
-  completeCommission,
-  getCharges,
-  File,
-  ReviewVideo,
-  approveReviewVideo,
-  rejectReviewVideo,
+  updateLicense,
+  updateOption,
+  updatePurchase,
 } from "$app/data/customers";
 import { classNames } from "$app/utils/classNames";
 import {
@@ -415,7 +415,7 @@ const CustomersPage = ({
                       end_time: lightFormat(to, "yyyy-MM-dd"),
                       product_ids: includedProductIds,
                       variant_ids: includedVariantIds,
-                    }}
+                    })}
                     onSuccess={() => setExportPopoverOpen(false)}
                   >
                     Download
