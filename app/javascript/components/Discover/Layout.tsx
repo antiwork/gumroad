@@ -10,7 +10,6 @@ import { Nav } from "$app/components/Discover/Nav";
 import { Search } from "$app/components/Discover/Search";
 import { useDomains } from "$app/components/DomainSettings";
 import { Icon } from "$app/components/Icons";
-import Footer from "$app/components/Shared/Footer";
 import { useIsAboveBreakpoint } from "$app/components/useIsAboveBreakpoint";
 
 const UserActionButtons: React.FC = () => {
@@ -208,7 +207,6 @@ export const Layout: React.FC<{
         ) : null}
       </header>
       {children}
-      <Footer />
     </div>
   );
 };
