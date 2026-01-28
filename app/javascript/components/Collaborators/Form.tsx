@@ -356,13 +356,11 @@ const CollaboratorForm = ({
               onChange={(evt) => {
                 const enabled = evt.target.checked;
                 setShowUnpublishedOrIneligibleProducts(enabled);
-                if (form.data.apply_to_all_products) {
-                  form.data.products.forEach((item, index) => {
-                    if (!item.has_another_collaborator && enabled && !item.published) {
-                      form.setData(`products.${index}.enabled`, enabled);
-                    }
-                  });
-                }
+                form.data.products.forEach((item, index) => {
+                  if (!item.has_another_collaborator && !item.published) {
+                    form.setData(`products.${index}.enabled`, enabled && form.data.apply_to_all_products);
+                  }
+                });
               }}
             />
             Show unpublished and ineligible products

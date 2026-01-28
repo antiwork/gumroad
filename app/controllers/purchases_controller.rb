@@ -274,7 +274,7 @@ class PurchasesController < ApplicationController
   end
 
   def confirm_receipt_email
-    @title = "Confirm Email"
+    set_meta_tag(title: "Confirm Email")
     @hide_layouts = true
   end
 

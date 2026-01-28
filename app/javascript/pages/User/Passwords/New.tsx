@@ -66,5 +66,5 @@ function ForgotPasswordPage() {
   );
 }
 
-ForgotPasswordPage.disableLayout = true;
+ForgotPasswordPage.authenticationLayout = true;
 export default ForgotPasswordPage;

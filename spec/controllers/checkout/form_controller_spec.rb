@@ -21,7 +21,7 @@ describe Checkout::FormController do
       get :show
 
       expect(response).to be_successful
-      expect(assigns[:title]).to eq("Checkout form")
+      expect(controller.send(:page_title)).to eq("Checkout form")
 
       expect(response.body).to include("data-page=")
 

@@ -13,7 +13,7 @@ class AffiliateRequestsController < ApplicationController
   before_action :set_affiliate_request, only: %i[approve ignore]
 
   def new
-    @title = "Become an affiliate for #{@user.display_name}"
+    set_meta_tag(title: "Become an affiliate for #{@user.display_name}")
     profile_presenter = ProfilePresenter.new(pundit_user:, seller: @user)
     render inertia: "AffiliateRequests/New", props: {
       creator_profile: profile_presenter.creator_profile,

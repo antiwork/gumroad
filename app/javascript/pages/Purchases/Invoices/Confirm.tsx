@@ -27,35 +27,33 @@ export default function Confirm({ invoice_url }: Props) {
 
   return (
     <>
-      <div>
-        <Card asChild>
-          <main className="single-page-form horizontal-form mx-auto my-4 h-min max-w-md [&>*]:flex-col [&>*]:items-stretch">
-            <CardContent asChild>
-              <header className="text-center">
-                <h2 className="grow">Generate invoice</h2>
-              </header>
-            </CardContent>
-            <CardContent asChild>
-              <form onSubmit={handleSubmit} className="flex flex-col gap-4">
-                {flash?.message ? (
-                  <Alert variant={flash.status === "success" ? "success" : "danger"}>{flash.message}</Alert>
-                ) : null}
-                <input
-                  type="text"
-                  name="email"
-                  placeholder="Email address"
-                  className="grow"
-                  value={form.data.email}
-                  onChange={(e) => form.setData("email", e.target.value)}
-                />
-                <Button type="submit" color="accent" disabled={form.processing}>
-                  Confirm email
-                </Button>
-              </form>
-            </CardContent>
-          </main>
-        </Card>
-      </div>
+      <Card asChild>
+        <main className="single-page-form horizontal-form mx-auto my-4 h-min max-w-md [&>*]:flex-col [&>*]:items-stretch">
+          <CardContent asChild>
+            <header className="text-center">
+              <h2 className="grow">Generate invoice</h2>
+            </header>
+          </CardContent>
+          <CardContent asChild>
+            <form onSubmit={handleSubmit} className="flex flex-col gap-4">
+              {flash?.message ? (
+                <Alert variant={flash.status === "success" ? "success" : "danger"}>{flash.message}</Alert>
+              ) : null}
+              <input
+                type="text"
+                name="email"
+                placeholder="Email address"
+                className="grow"
+                value={form.data.email}
+                onChange={(e) => form.setData("email", e.target.value)}
+              />
+              <Button type="submit" color="accent" disabled={form.processing}>
+                Confirm email
+              </Button>
+            </form>
+          </CardContent>
+        </main>
+      </Card>
       <PoweredByFooter />
     </>
   );
