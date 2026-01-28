@@ -5,24 +5,25 @@ class SecureRedirectController < ApplicationController
 
   before_action :validate_params, only: [:new, :create]
   before_action :set_encrypted_params, only: [:new, :create]
-  before_action :set_react_component_props, only: [:new]
 
   def new
-    render inertia: "SecureRedirect/New", props: @react_component_props
+    render inertia: "SecureRedirect/New", props: secure_redirect_props
   end
 
   def create
     confirmation_text = params[:confirmation_text]
 
     if confirmation_text.blank?
-      return validation_error(confirmation_text: "Please enter the confirmation text")
+      flash.now[:alert] = "Please enter the confirmation text"
+      return render inertia: "SecureRedirect/New", props: secure_redirect_props, status: :unprocessable_entity
     end
 
     # Decrypt and parse the bundled payload
     begin
       payload_json = SecureEncryptService.decrypt(@encrypted_payload)
       if payload_json.nil?
-        return global_error("Invalid request")
+        flash.now[:alert] = "Invalid request"
+        return render inertia: "SecureRedirect/New", props: secure_redirect_props, status: :unprocessable_entity
       end
 
       payload = JSON.parse(payload_json)
@@ -32,11 +33,13 @@ class SecureRedirectController < ApplicationController
 
       # Verify the payload is recent (within 24 hours)
       if payload["created_at"] && Time.current.to_i - payload["created_at"] > 24.hours
-        return global_error("This link has expired")
+        flash.now[:alert] = "This link has expired"
+        return render inertia: "SecureRedirect/New", props: secure_redirect_props, status: :unprocessable_entity
       end
 
     rescue JSON::ParserError, NoMethodError
-      return global_error("Invalid request")
+      flash.now[:alert] = "Invalid request"
+      return render inertia: "SecureRedirect/New", props: secure_redirect_props, status: :unprocessable_entity
     end
 
     # Check if confirmation text matches any of the allowed texts
@@ -54,12 +57,14 @@ class SecureRedirectController < ApplicationController
       end
 
       if destination.present?
-        inertia_location destination
+        redirect_to destination, allow_other_host: true, status: :see_other
       else
-        global_error("Invalid destination")
+        flash.now[:alert] = "Invalid destination"
+        render inertia: "SecureRedirect/New", props: secure_redirect_props, status: :unprocessable_entity
       end
     else
-      validation_error(confirmation_text: @error_message)
+      flash.now[:alert] = @error_message
+      render inertia: "SecureRedirect/New", props: secure_redirect_props, status: :unprocessable_entity
     end
   end
 
@@ -77,27 +82,13 @@ class SecureRedirectController < ApplicationController
       @error_message = params[:error_message].presence || "Confirmation text does not match"
     end
 
-    def set_react_component_props
-      props = {
+    def secure_redirect_props
+      {
         message: @message,
         field_name: @field_name,
         error_message: @error_message,
         encrypted_payload: @encrypted_payload,
-        form_action: secure_url_redirect_path,
         authenticity_token: form_authenticity_token
       }
-
-      props[:flash_error] = flash[:error] if flash[:error].present?
-
-      @react_component_props = props
-    end
-
-    def validation_error(errors)
-      redirect_back fallback_location: secure_url_redirect_path(encrypted_payload: @encrypted_payload), inertia: { errors: errors }
-    end
-
-    def global_error(message)
-      flash[:alert] = message
-      redirect_back fallback_location: secure_url_redirect_path(encrypted_payload: @encrypted_payload)
     end
 end

@@ -17,7 +17,7 @@ export const Layout = ({
   const { rootDomain, scheme } = useDomains();
 
   return (
-    <div className="flex min-h-screen flex-1">
+    <div className="flex flex-1">
       <div className="squished flex-1">
         <PageHeader
           title={<a href={`${scheme}://${rootDomain}`} className="logo-full" aria-label="Gumroad" />}

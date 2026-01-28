@@ -1,8 +1,9 @@
 import { useForm, usePage } from "@inertiajs/react";
 import * as React from "react";
+import { cast } from "ts-safe-cast";
 
 import { Button } from "$app/components/Button";
-import { showAlert } from "$app/components/server-components/Alert";
+import { PoweredByFooter } from "$app/components/PoweredByFooter";
 import { Card, CardContent } from "$app/components/ui/Card";
 
 type PageProps = {
@@ -16,34 +17,20 @@ type PageProps = {
 type FormData = {
   confirmation_text: string;
   encrypted_payload: string;
-  authenticity_token: string;
-  message: string;
-  field_name: string;
-  error_message: string;
 };
 
 function SecureRedirectNew() {
-  const { message, field_name, error_message, encrypted_payload, authenticity_token } = usePage<PageProps>().props;
+  const { message, field_name, encrypted_payload } = cast<PageProps>(usePage().props);
   const uid = React.useId();
 
   const form = useForm<FormData>({
     confirmation_text: "",
     encrypted_payload,
-    authenticity_token,
-    message,
-    field_name,
-    error_message,
   });
-
-  React.useEffect(() => {
-    if (form.errors.confirmation_text) {
-      showAlert(form.errors.confirmation_text, "error");
-    }
-  }, [form.errors.confirmation_text]);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    form.post(Routes.secure_url_redirect_path(), { preserveScroll: true });
+    form.post(`${Routes.secure_url_redirect_path()}${window.location.search}`, { preserveScroll: true });
   };
 
   return (
@@ -77,12 +64,7 @@ function SecureRedirectNew() {
           </form>
         </CardContent>
       </Card>
-      <footer className="text-subdued mt-auto pb-4 text-center">
-        Powered by{" "}
-        <span className="logo-full" aria-label="Gumroad">
-          Gumroad
-        </span>
-      </footer>
+      <PoweredByFooter className="text-subdued mt-auto pb-4 text-center" />
     </div>
   );
 }
