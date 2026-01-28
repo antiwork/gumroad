@@ -26,11 +26,7 @@ describe Purchases::ProductController, inertia: true do
 
       expect(response).to be_successful
       seller = purchase.link.user
-      expect(inertia.props[:custom_styles]).to eq({
-        background_color: seller.seller_profile.background_color,
-        highlight_color: seller.seller_profile.highlight_color,
-        font: seller.seller_profile.font
-      })
+      expect(inertia.props[:custom_styles]).to eq(seller.seller_profile.custom_styles)
     end
 
     it "404s for an invalid purchase id" do
