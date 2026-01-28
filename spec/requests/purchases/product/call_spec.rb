@@ -54,7 +54,7 @@ describe "Call", type: :system, js: true do
 
       scroll_to first("footer")
       click_on "I want this!"
-      expect(page).to have_current_path("/checkout", ignore_query: true)
+      expect(page).to have_current_path("/checkout")
 
       within_cart_item "Call me!" do
         expect(page).to have_text("Duration: 30 minutes")
@@ -93,7 +93,7 @@ describe "Call", type: :system, js: true do
 
       scroll_to first("footer")
       click_on "I want this!"
-      expect(page).to have_current_path("/checkout", ignore_query: true)
+      expect(page).to have_current_path("/checkout")
 
       within_cart_item "Call me!" do
         expect(page).to have_text("Duration: 30 minutes")

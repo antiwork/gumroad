@@ -8,7 +8,7 @@ import { useCurrentSeller } from "$app/components/CurrentSeller";
 import { ExportSubscribersPopover } from "$app/components/Followers/ExportSubscribersPopover";
 import { Icon } from "$app/components/Icons";
 import { useLoggedInUser } from "$app/components/LoggedInUser";
-import { Popover, PopoverContent, PopoverTrigger } from "$app/components/Popover";
+import { Popover, PopoverAnchor, PopoverContent, PopoverTrigger } from "$app/components/Popover";
 import { Search } from "$app/components/Search";
 import { showAlert } from "$app/components/server-components/Alert";
 import { Card, CardContent } from "$app/components/ui/Card";
@@ -16,7 +16,7 @@ import { PageHeader } from "$app/components/ui/PageHeader";
 import { Placeholder, PlaceholderImage } from "$app/components/ui/Placeholder";
 import { Sheet, SheetHeader } from "$app/components/ui/Sheet";
 import { Table, TableBody, TableCaption, TableCell, TableHead, TableHeader, TableRow } from "$app/components/ui/Table";
-import { Tabs, Tab } from "$app/components/ui/Tabs";
+import { Tab, Tabs } from "$app/components/ui/Tabs";
 import { useDebouncedCallback } from "$app/components/useDebouncedCallback";
 import { useUserAgentInfo } from "$app/components/UserAgent";
 import { WithTooltip } from "$app/components/WithTooltip";
@@ -132,13 +132,15 @@ export default function FollowersPage() {
             <Search onSearch={setSearchQuery} value={searchQuery} placeholder="Search followers" />
           )}
           <Popover>
-            <WithTooltip tip="Export" position="bottom">
-              <PopoverTrigger aria-label="Export" asChild>
-                <Button>
-                  <Icon aria-label="Download" name="download" />
-                </Button>
-              </PopoverTrigger>
-            </WithTooltip>
+            <PopoverAnchor>
+              <WithTooltip tip="Export" position="bottom">
+                <PopoverTrigger aria-label="Export" asChild>
+                  <Button>
+                    <Icon aria-label="Download" name="download" />
+                  </Button>
+                </PopoverTrigger>
+              </WithTooltip>
+            </PopoverAnchor>
             <PopoverContent sideOffset={4}>
               <ExportSubscribersPopover />
             </PopoverContent>

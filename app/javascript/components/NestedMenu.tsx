@@ -272,17 +272,12 @@ const MenubarItem = ({
   );
 
   return hasChildren ? (
-    <div
-      className={classNames({ expanded: menuOpen })}
-      ref={ref}
-      onMouseEnter={() => handleToggleMenu(true)}
-      onMouseLeave={closeAfterDelay}
-    >
+    <div ref={ref} onMouseEnter={() => handleToggleMenu(true)} onMouseLeave={closeAfterDelay}>
       <Popover open={menuOpen}>
         <PopoverTrigger asChild>
           <span className="inline-flex">{menuItemAnchor}</span>
         </PopoverTrigger>
-        <PopoverContent className="border-0 p-0 shadow-none" onInteractOutside={(e) => e.preventDefault()}>
+        <PopoverContent className="border-0 p-0" onInteractOutside={(e) => e.preventDefault()}>
           <ItemsList
             key={`${uid}-${menuOpen}`}
             menuId={uid}

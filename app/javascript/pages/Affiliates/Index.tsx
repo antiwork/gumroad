@@ -14,7 +14,7 @@ import { LoadingSpinner } from "$app/components/LoadingSpinner";
 import { useLoggedInUser } from "$app/components/LoggedInUser";
 import { NavigationButtonInertia } from "$app/components/NavigationButton";
 import { Pagination, PaginationProps } from "$app/components/Pagination";
-import { Popover, PopoverContent, PopoverTrigger } from "$app/components/Popover";
+import { Popover, PopoverAnchor, PopoverContent, PopoverTrigger } from "$app/components/Popover";
 import { showAlert } from "$app/components/server-components/Alert";
 import { Skeleton } from "$app/components/Skeleton";
 import { Card, CardContent } from "$app/components/ui/Card";
@@ -22,7 +22,7 @@ import { PageHeader } from "$app/components/ui/PageHeader";
 import { Placeholder, PlaceholderImage } from "$app/components/ui/Placeholder";
 import { Sheet, SheetHeader } from "$app/components/ui/Sheet";
 import { Table, TableBody, TableCaption, TableCell, TableHead, TableHeader, TableRow } from "$app/components/ui/Table";
-import { Tabs, Tab } from "$app/components/ui/Tabs";
+import { Tab, Tabs } from "$app/components/ui/Tabs";
 import { useDebouncedCallback } from "$app/components/useDebouncedCallback";
 import { useLocalPagination } from "$app/components/useLocalPagination";
 import { useUserAgentInfo } from "$app/components/UserAgent";
@@ -81,11 +81,13 @@ const SearchBoxPopover = ({ initialQuery, onSearch }: { initialQuery: string; on
 
   return (
     <Popover open={searchBoxOpen} onOpenChange={setSearchBoxOpen}>
-      <PopoverTrigger aria-label="Toggle Search" asChild>
-        <Button>
-          <Icon name="solid-search" />
-        </Button>
-      </PopoverTrigger>
+      <PopoverAnchor>
+        <PopoverTrigger aria-label="Toggle Search" asChild>
+          <Button>
+            <Icon name="solid-search" />
+          </Button>
+        </PopoverTrigger>
+      </PopoverAnchor>
       <PopoverContent>
         <div className="input input-wrapper">
           <Icon name="solid-search" />

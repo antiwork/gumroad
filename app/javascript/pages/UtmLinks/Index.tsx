@@ -12,7 +12,7 @@ import { LoadingSpinner } from "$app/components/LoadingSpinner";
 import { Modal } from "$app/components/Modal";
 import { NavigationButtonInertia } from "$app/components/NavigationButton";
 import { Pagination, PaginationProps } from "$app/components/Pagination";
-import { Popover, PopoverContent, PopoverTrigger } from "$app/components/Popover";
+import { Popover, PopoverAnchor, PopoverContent, PopoverTrigger } from "$app/components/Popover";
 import { Search } from "$app/components/Search";
 import { showAlert } from "$app/components/server-components/Alert";
 import { Skeleton } from "$app/components/Skeleton";
@@ -325,37 +325,31 @@ const UtmLinkActions = ({ link, onDelete }: { link: SavedUtmLink; onDelete: () =
         </Button>
       </CopyToClipboard>
       <Popover open={open} onOpenChange={setOpen}>
-        <PopoverTrigger aria-label="Open action menu" asChild>
-          <Button>
-            <Icon name="three-dots" />
-          </Button>
-        </PopoverTrigger>
-        <PopoverContent className="w-48 p-2">
+        <PopoverAnchor>
+          <PopoverTrigger aria-label="Open action menu" asChild>
+            <Button>
+              <Icon name="three-dots" />
+            </Button>
+          </PopoverTrigger>
+        </PopoverAnchor>
+        <PopoverContent className="w-48 border-none p-0 shadow-none">
           <div role="menu" className="grid gap-1">
-            <Link
-              href={Routes.edit_dashboard_utm_link_path(link.id)}
-              role="menuitem"
-              className="flex items-center rounded p-2 no-underline hover:bg-black/5"
-            >
+            <Link href={Routes.edit_dashboard_utm_link_path(link.id)} role="menuitem" className="no-underline">
               <Icon name="pencil" />
               &ensp;Edit
             </Link>
             <Link
               href={Routes.new_dashboard_utm_link_path({ copy_from: link.id })}
               role="menuitem"
-              className="flex items-center rounded p-2 no-underline hover:bg-black/5"
+              className="no-underline"
             >
               <Icon name="outline-duplicate" />
               &ensp;Duplicate
             </Link>
-            <button
-              className="danger flex w-full items-center rounded p-2 text-left hover:bg-danger/10"
-              role="menuitem"
-              onClick={onDelete}
-            >
+            <div className="danger" role="menuitem" onClick={onDelete}>
               <Icon name="trash2" />
               &ensp;Delete
-            </button>
+            </div>
           </div>
         </PopoverContent>
       </Popover>

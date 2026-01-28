@@ -101,7 +101,7 @@ describe "Products Page Scenario", type: :system, js: true do
     end
 
     it "disables the delete menuitem if the user isn't authorized" do
-      allow_any_instance_of(LinkPolicy).to receive(:destroy?).and_return(false)
+      expect_any_instance_of(LinkPolicy).to receive(:destroy?).and_return(false)
       product = create(:product, user: seller)
 
       visit products_path
@@ -308,7 +308,7 @@ describe "Products Page Scenario", type: :system, js: true do
     end
 
     it "disables the duplicate menuitem if the user isn't authorized" do
-      allow_any_instance_of(ProductDuplicates::LinkPolicy).to receive(:create?).and_return(false)
+      expect_any_instance_of(ProductDuplicates::LinkPolicy).to receive(:create?).and_return(false)
       product = create(:product, user: seller)
 
       visit products_path
@@ -323,8 +323,8 @@ describe "Products Page Scenario", type: :system, js: true do
 
   describe "actions popover" do
     it "is hidden if the use isn't authorized to delete or duplicate" do
-      allow_any_instance_of(LinkPolicy).to receive(:destroy?).and_return(false)
-      allow_any_instance_of(ProductDuplicates::LinkPolicy).to receive(:create?).and_return(false)
+      expect_any_instance_of(LinkPolicy).to receive(:destroy?).and_return(false)
+      expect_any_instance_of(ProductDuplicates::LinkPolicy).to receive(:create?).and_return(false)
       product = create(:product, user: seller)
 
       visit products_path
@@ -490,6 +490,7 @@ describe "Products Page Scenario", type: :system, js: true do
       product = create(:product, user: seller, name: "Chicken", unique_permalink: "chicken")
       visit(products_path)
 
+      expect(page).to have_field("Search products", visible: false)
       table = find(:table, "Products").find("tbody")
       expect(table).to have_selector(:table_row, count: 2)
       expect(page).to have_selector("[aria-label='Pagination']")

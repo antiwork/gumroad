@@ -14,7 +14,7 @@ import { DateRangePicker } from "$app/components/DateRangePicker";
 import { ExportSubscribersPopover } from "$app/components/Followers/ExportSubscribersPopover";
 import { Icon } from "$app/components/Icons";
 import { LoadingSpinner } from "$app/components/LoadingSpinner";
-import { Popover, PopoverContent, PopoverTrigger } from "$app/components/Popover";
+import { Popover, PopoverAnchor, PopoverContent, PopoverTrigger } from "$app/components/Popover";
 import { Placeholder, PlaceholderImage } from "$app/components/ui/Placeholder";
 import { useOnChange } from "$app/components/useOnChange";
 import { WithTooltip } from "$app/components/WithTooltip";
@@ -46,13 +46,15 @@ function Audience() {
         hasContent ? (
           <>
             <Popover>
-              <WithTooltip tip="Export" position="bottom">
-                <PopoverTrigger aria-label="Export" asChild>
-                  <Button>
-                    <Icon aria-label="Download" name="download" />
-                  </Button>
-                </PopoverTrigger>
-              </WithTooltip>
+              <PopoverAnchor>
+                <WithTooltip tip="Export" position="bottom">
+                  <PopoverTrigger aria-label="Export" asChild>
+                    <Button>
+                      <Icon aria-label="Download" name="download" />
+                    </Button>
+                  </PopoverTrigger>
+                </WithTooltip>
+              </PopoverAnchor>
               <PopoverContent sideOffset={4}>
                 <ExportSubscribersPopover />
               </PopoverContent>

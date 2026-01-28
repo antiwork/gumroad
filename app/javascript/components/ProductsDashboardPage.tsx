@@ -55,8 +55,8 @@ export const ProductsDashboardPage = ({
         {memberships.length === 0 && products.length === 0 ? (
           <Placeholder>
             <PlaceholderImage src={placeholder} />
-            <h2>We've never met an idea we didn't like.</h2>
-            <p>Your first product doesn't need to be perfect. Just put it out there, and see if it sticks.</p>
+            <h2>We’ve never met an idea we didn’t like.</h2>
+            <p>Your first product doesn’t need to be perfect. Just put it out there, and see if it sticks.</p>
             <div>
               <NavigationButtonInertia href={Routes.new_product_path()} disabled={!canCreateProduct} color="accent">
                 New product

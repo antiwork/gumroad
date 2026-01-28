@@ -50,7 +50,7 @@ import { Dropdown } from "$app/components/Dropdown";
 import { Icon } from "$app/components/Icons";
 import { LoadingSpinner } from "$app/components/LoadingSpinner";
 import { useLoggedInUser } from "$app/components/LoggedInUser";
-import { Popover, PopoverContent, PopoverTrigger } from "$app/components/Popover";
+import { Popover, PopoverAnchor, PopoverContent } from "$app/components/Popover";
 import { showAlert } from "$app/components/server-components/Alert";
 import { Alert } from "$app/components/ui/Alert";
 import { Card, CardContent } from "$app/components/ui/Card";
@@ -225,7 +225,7 @@ const EmailAddress = ({ card }: { card: boolean }) => {
           </legend>
           <div className="relative inline-block w-full">
             <Popover open={!!state.emailTypoSuggestion}>
-              <PopoverTrigger>
+              <PopoverAnchor>
                 <input
                   id={`${uid}email`}
                   type="email"
@@ -236,10 +236,10 @@ const EmailAddress = ({ card }: { card: boolean }) => {
                   disabled={(loggedInUser && loggedInUser.email !== null) || isProcessing(state)}
                   onBlur={checkForEmailTypos}
                 />
-              </PopoverTrigger>
+              </PopoverAnchor>
               <PopoverContent className="grid gap-2" matchTriggerWidth>
                 <div>Did you mean {state.emailTypoSuggestion}?</div>
-                <div className="button-group">
+                <div className="flex gap-2">
                   <Button onClick={rejectEmailTypoSuggestion}>No</Button>
                   <Button onClick={acceptEmailTypoSuggestion}>Yes</Button>
                 </div>

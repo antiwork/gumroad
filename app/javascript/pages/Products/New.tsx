@@ -11,15 +11,15 @@ import { CurrencyCode, currencyCodeList, findCurrencyByCode } from "$app/utils/c
 import {
   RecurrenceId,
   durationInMonthsToRecurrenceId,
-  recurrenceLabels,
   recurrenceIds,
+  recurrenceLabels,
 } from "$app/utils/recurringPricing";
 import { assertResponseError, request } from "$app/utils/request";
 
 import { Button } from "$app/components/Button";
 import Errors from "$app/components/Form/Errors";
 import { Icon } from "$app/components/Icons";
-import { Popover, PopoverContent, PopoverTrigger } from "$app/components/Popover";
+import { Popover, PopoverAnchor, PopoverContent, PopoverTrigger } from "$app/components/Popover";
 import { showAlert } from "$app/components/server-components/Alert";
 import { TypeSafeOptionSelect } from "$app/components/TypeSafeOptionSelect";
 import { Alert } from "$app/components/ui/Alert";
@@ -258,11 +258,13 @@ const NewProductPage = () => {
             </Button>
             {ai_generation_enabled ? (
               <Popover open={aiPopoverOpen} onOpenChange={setAiPopoverOpen}>
-                <PopoverTrigger aria-label="Create a product with AI" asChild>
-                  <Button color="primary" outline>
-                    <Icon name="sparkle" />
-                  </Button>
-                </PopoverTrigger>
+                <PopoverAnchor>
+                  <PopoverTrigger aria-label="Create a product with AI" asChild>
+                    <Button color="primary" outline>
+                      <Icon name="sparkle" />
+                    </Button>
+                  </PopoverTrigger>
+                </PopoverAnchor>
                 <PopoverContent>
                   <div className="w-96 max-w-full">
                     <fieldset>
