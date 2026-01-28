@@ -7,25 +7,6 @@ class SendYearInReviewEmailJob
 
   MAX_SHOWCASE_RANK = 1_000
 
-  def self.ai_prompt(formatted_total:, sales_count:, countries_count:, top_product_names:)
-    <<~PROMPT.strip
-      Create an authentic lifestyle photograph of a cozy wooden tabletop still-life. The scene should show 5-7 real, tangible items that a creator could buy with their earnings of #{formatted_total}.
-      The composition should feel warm and celebratory, shot with soft natural morning light coming from a window (like a rustic cabin or home studio).
-      The photo should have a high-end photography aesthetic, possibly with a subtle 35mm film grain and a shallow depth of field.
-
-      Context: the creator made #{formatted_total} from #{sales_count} sales in #{countries_count} countries on a digital marketplace. Top products: #{top_product_names.presence || "N/A"}.
-
-      Requirements:
-      - This must be a REAL photograph, not an illustration, 3d render, or digital art.
-      - Focus on realistic materials: worn leather, textured paper, polished metal, and natural wood.
-      - Do NOT use brand names, logos, or trademarks. No faces or people.
-      - Items should be neatly but naturally arranged on the table.
-      - Price tags should be small, readable, and realistic handwritten tags (e.g., "$50", "$120") attached to or placed next to items.
-      - Composition must fit nicely in an email (centered, safe margins).
-      - Ensure the total value of items feels proportionate to #{formatted_total}.
-    PROMPT
-  end
-
   def perform(seller_id, year, recipient = nil)
     analytics_data = {}
     seller = User.find(seller_id)
