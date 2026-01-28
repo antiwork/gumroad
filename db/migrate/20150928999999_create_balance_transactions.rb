@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-class CreateBalanceTransactions < ActiveRecord::Migration
+class CreateBalanceTransactions < ActiveRecord::Migration[4.2]
   def change
     create_table :balance_transactions, options: "DEFAULT CHARACTER SET=utf8 COLLATE=utf8_unicode_ci" do |t|
       t.timestamps

@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-class CreateAuditTasks < ActiveRecord::Migration
+class CreateAuditTasks < ActiveRecord::Migration[4.2]
   def change
     create_table :audit_tasks do |t|
       t.string :name

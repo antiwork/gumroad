@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-class UpdateCreditCardsStripeFingerprintIndex < ActiveRecord::Migration
+class UpdateCreditCardsStripeFingerprintIndex < ActiveRecord::Migration[4.2]
   def up
     remove_index :credit_cards, name: "index_credit_cards_on_stripe_fingerprint"
     add_index :credit_cards, [:stripe_fingerprint], unique: true, name: "index_credit_cards_on_stripe_fingerprint_unique"

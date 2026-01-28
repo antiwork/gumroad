@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-class RemoveLegacyProfileSectionFields < ActiveRecord::Migration[7.0]
+class RemoveLegacyProfileSectionFields < ActiveRecord::Migration[4.2]
   def up
     remove_columns :seller_profile_sections, :shown_products, :show_filters, :default_product_sort
   end

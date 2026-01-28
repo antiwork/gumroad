@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-class CreateUtmLinkDrivenSales < ActiveRecord::Migration[7.1]
+class CreateUtmLinkDrivenSales < ActiveRecord::Migration[4.2]
   def change
     create_table :utm_link_driven_sales do |t|
       t.references :utm_link, null: false

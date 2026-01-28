@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-class RemoveFacebookAndTwitterPicturesFromUsers < ActiveRecord::Migration
+class RemoveFacebookAndTwitterPicturesFromUsers < ActiveRecord::Migration[4.2]
   def up
     remove_column :users, :facebook_pic_large
     remove_column :users, :facebook_pic_square

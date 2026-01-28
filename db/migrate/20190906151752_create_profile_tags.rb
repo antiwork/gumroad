@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-class CreateProfileTags < ActiveRecord::Migration
+class CreateProfileTags < ActiveRecord::Migration[4.2]
   def change
     create_table :profile_tags do |t|
       t.references :user, null: false, foreign_key: { on_delete: :cascade }

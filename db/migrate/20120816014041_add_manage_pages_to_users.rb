@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-class AddManagePagesToUsers < ActiveRecord::Migration
+class AddManagePagesToUsers < ActiveRecord::Migration[4.2]
   def change
     add_column :users, :manage_pages, :boolean, default: false
   end

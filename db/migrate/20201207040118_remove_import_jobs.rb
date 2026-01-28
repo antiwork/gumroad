@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-class RemoveImportJobs < ActiveRecord::Migration[6.0]
+class RemoveImportJobs < ActiveRecord::Migration[4.2]
   def up
     drop_table :import_jobs
   end

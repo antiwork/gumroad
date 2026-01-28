@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-class AbsorbUser < ActiveRecord::Migration
+class AbsorbUser < ActiveRecord::Migration[4.2]
   def up
     add_column :users, :absorbed_to_user_id, :integer
     add_column :users, :deleted_at, :datetime

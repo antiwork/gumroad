@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-class CreateCartProducts < ActiveRecord::Migration[7.0]
+class CreateCartProducts < ActiveRecord::Migration[4.2]
   def change
     create_table :cart_products do |t|
       t.references :cart, null: false

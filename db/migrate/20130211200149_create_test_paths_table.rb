@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-class CreateTestPathsTable < ActiveRecord::Migration
+class CreateTestPathsTable < ActiveRecord::Migration[4.2]
   def change
     create_table :test_paths do |t|
       t.string :alternative_name

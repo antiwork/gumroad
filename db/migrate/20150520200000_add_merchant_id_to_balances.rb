@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-class AddMerchantIdToBalances < ActiveRecord::Migration
+class AddMerchantIdToBalances < ActiveRecord::Migration[4.2]
   def up
     add_column :balances, :merchant_account_id, :integer, default: MerchantAccount.gumroad(StripeChargeProcessor.charge_processor_id).id
     add_index :balances, [:user_id, :merchant_account_id, :date], unique: true

@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-class ChangeTwitterIdsToStrings < ActiveRecord::Migration
+class ChangeTwitterIdsToStrings < ActiveRecord::Migration[4.2]
   def up
     change_column :twitter_merchants, :twitter_assigned_merchant_id, :string
   end

@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-class DropBlockedIp < ActiveRecord::Migration[6.1]
+class DropBlockedIp < ActiveRecord::Migration[4.2]
   def up
     drop_table :blocked_ips
   end

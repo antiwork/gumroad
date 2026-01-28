@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-class RemoveLinkIdFromAffiliates < ActiveRecord::Migration[7.0]
+class RemoveLinkIdFromAffiliates < ActiveRecord::Migration[4.2]
   def up
     remove_column :affiliates, :link_id
   end

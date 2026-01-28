@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-class CreatePurchaseOfferCodeDiscounts < ActiveRecord::Migration[6.1]
+class CreatePurchaseOfferCodeDiscounts < ActiveRecord::Migration[4.2]
   def change
     create_table :purchase_offer_code_discounts do |t|
       t.references :purchase, index: { unique: true }, null: false

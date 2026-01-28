@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-class AddProductAndSellerNamesToPurchaseMapping < ActiveRecord::Migration[6.1]
+class AddProductAndSellerNamesToPurchaseMapping < ActiveRecord::Migration[4.2]
   def up
     EsClient.indices.close(index: Purchase.index_name)
     EsClient.indices.put_settings(

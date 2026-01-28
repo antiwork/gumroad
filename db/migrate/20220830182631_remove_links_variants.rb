@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-class RemoveLinksVariants < ActiveRecord::Migration[6.1]
+class RemoveLinksVariants < ActiveRecord::Migration[4.2]
   def up
     remove_column :links, :variants
   end

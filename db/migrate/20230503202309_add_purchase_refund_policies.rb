@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-class AddPurchaseRefundPolicies < ActiveRecord::Migration[7.0]
+class AddPurchaseRefundPolicies < ActiveRecord::Migration[4.2]
   def change
     create_table :purchase_refund_policies do |t|
       t.references :purchase, index: true, null: false

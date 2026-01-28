@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-class DropProductEmbeddings < ActiveRecord::Migration[7.0]
+class DropProductEmbeddings < ActiveRecord::Migration[4.2]
   def up
     drop_table :product_embeddings
   end

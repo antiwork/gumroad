@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-class AddCanadaTaxRatesToPurchaseTaxjarInfos < ActiveRecord::Migration[7.0]
+class AddCanadaTaxRatesToPurchaseTaxjarInfos < ActiveRecord::Migration[4.2]
   def change
     change_table :purchase_taxjar_infos, bulk: true do |t|
       t.decimal :gst_tax_rate, precision: 8, scale: 7

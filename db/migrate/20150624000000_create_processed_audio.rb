@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-class CreateProcessedAudio < ActiveRecord::Migration
+class CreateProcessedAudio < ActiveRecord::Migration[4.2]
   def change
     create_table :processed_audios do |t|
       t.references :product_file

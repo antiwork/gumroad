@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-class RemoveStripeDisputedFromPurchases < ActiveRecord::Migration
+class RemoveStripeDisputedFromPurchases < ActiveRecord::Migration[4.2]
   def up
     remove_column :purchases, :stripe_disputed
   end

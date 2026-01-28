@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-class AddChargeIdToPurchaseEarlyFraudWarnings < ActiveRecord::Migration[7.1]
+class AddChargeIdToPurchaseEarlyFraudWarnings < ActiveRecord::Migration[4.2]
   def up
     change_table :purchase_early_fraud_warnings, bulk: true do |t|
       t.bigint :charge_id, index: { unique: true }

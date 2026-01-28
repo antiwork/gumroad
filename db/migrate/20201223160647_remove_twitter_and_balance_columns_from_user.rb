@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-class RemoveTwitterAndBalanceColumnsFromUser < ActiveRecord::Migration[6.0]
+class RemoveTwitterAndBalanceColumnsFromUser < ActiveRecord::Migration[4.2]
   def up
     change_table :users do |t|
       t.remove :twitter_verified, :twitter_location, :balance_cents

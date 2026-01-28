@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-class RemoveSubmittedAtOnDisputeEvidences < ActiveRecord::Migration[7.0]
+class RemoveSubmittedAtOnDisputeEvidences < ActiveRecord::Migration[4.2]
   def up
     remove_column :dispute_evidences, :submitted_at
   end

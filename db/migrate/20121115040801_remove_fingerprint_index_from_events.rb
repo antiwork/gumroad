@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-class RemoveFingerprintIndexFromEvents < ActiveRecord::Migration
+class RemoveFingerprintIndexFromEvents < ActiveRecord::Migration[4.2]
   def up
     remove_index "events", "fingerprint"
   end

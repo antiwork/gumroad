@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-class RemoveOauthFields < ActiveRecord::Migration[6.1]
+class RemoveOauthFields < ActiveRecord::Migration[4.2]
   def up
     change_table :oauth_applications do |t|
       t.remove :icon_file_name

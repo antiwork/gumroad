@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-class CreateConfirmedFollowerEventsIndex < ActiveRecord::Migration[6.1]
+class CreateConfirmedFollowerEventsIndex < ActiveRecord::Migration[4.2]
   def up
     if Rails.env.production? || Rails.env.staging?
       ConfirmedFollowerEvent.__elasticsearch__.create_index!(index: "confirmed_follower_events_v1")

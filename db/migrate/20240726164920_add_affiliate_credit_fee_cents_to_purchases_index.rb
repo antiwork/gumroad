@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-class AddAffiliateCreditFeeCentsToPurchasesIndex < ActiveRecord::Migration[7.1]
+class AddAffiliateCreditFeeCentsToPurchasesIndex < ActiveRecord::Migration[4.2]
   def up
     EsClient.indices.put_mapping(
       index: Purchase.index_name,

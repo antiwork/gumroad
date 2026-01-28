@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-class ChangeYenToJpy < ActiveRecord::Migration
+class ChangeYenToJpy < ActiveRecord::Migration[4.2]
   def up
     User.find_each do |user|
       if user.currency_type == "yen"

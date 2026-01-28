@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-class RemoveLinkViewEvents < ActiveRecord::Migration[7.0]
+class RemoveLinkViewEvents < ActiveRecord::Migration[4.2]
   def up
     drop_table :link_view_events
   end

@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-class FixInstallmentEventsIndexes < ActiveRecord::Migration
+class FixInstallmentEventsIndexes < ActiveRecord::Migration[4.2]
   def up
     change_table :installment_events do |t|
       t.remove_references :event, foreign_key: { on_delete: :cascade }

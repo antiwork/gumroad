@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-class CreateUrlRedirects < ActiveRecord::Migration
+class CreateUrlRedirects < ActiveRecord::Migration[4.2]
   def change
     create_table :url_redirects do |t|
       t.integer :uses

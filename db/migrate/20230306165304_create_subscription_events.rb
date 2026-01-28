@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-class CreateSubscriptionEvents < ActiveRecord::Migration[7.0]
+class CreateSubscriptionEvents < ActiveRecord::Migration[4.2]
   def change
     create_table :subscription_events do |t|
       t.references :subscription, null: false

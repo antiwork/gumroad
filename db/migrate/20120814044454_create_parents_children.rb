@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-class CreateParentsChildren < ActiveRecord::Migration
+class CreateParentsChildren < ActiveRecord::Migration[4.2]
   def up
     create_table :parents_children, id: false do |t|
       t.references :parent

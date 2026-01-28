@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-class CreateSellerProfile < ActiveRecord::Migration[7.0]
+class CreateSellerProfile < ActiveRecord::Migration[4.2]
   def change
     create_table :seller_profiles do |t|
       t.references :seller, index: true, null: false

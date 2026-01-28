@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-class CreateAffiliateCredits < ActiveRecord::Migration
+class CreateAffiliateCredits < ActiveRecord::Migration[4.2]
   def change
     create_table :affiliate_credits do |t|
       t.references :oauth_application

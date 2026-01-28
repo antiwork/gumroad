@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-class SyncDevTablesCollationsWithProd < ActiveRecord::Migration[6.0]
+class SyncDevTablesCollationsWithProd < ActiveRecord::Migration[4.2]
   def up
     execute %(ALTER TABLE affiliate_credits CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci)
     execute %(ALTER TABLE affiliate_partial_refunds CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci)

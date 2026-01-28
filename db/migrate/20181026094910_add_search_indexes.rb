@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-class AddSearchIndexes < ActiveRecord::Migration
+class AddSearchIndexes < ActiveRecord::Migration[4.2]
   def change
     add_index :users, :name
     add_index :gifts, :giftee_email

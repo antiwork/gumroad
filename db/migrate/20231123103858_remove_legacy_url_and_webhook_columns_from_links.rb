@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-class RemoveLegacyUrlAndWebhookColumnsFromLinks < ActiveRecord::Migration[7.0]
+class RemoveLegacyUrlAndWebhookColumnsFromLinks < ActiveRecord::Migration[4.2]
   def up
     change_table :links, bulk: true do |t|
       t.remove :url

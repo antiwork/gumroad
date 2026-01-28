@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-class CreateAustraliaBacktaxEmailInfos < ActiveRecord::Migration[7.0]
+class CreateAustraliaBacktaxEmailInfos < ActiveRecord::Migration[4.2]
   def change
     create_table :australia_backtax_email_infos do |t|
       t.bigint :user_id

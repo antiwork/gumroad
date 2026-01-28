@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-class RemoveRichContentVersionFromLinks < ActiveRecord::Migration[7.1]
+class RemoveRichContentVersionFromLinks < ActiveRecord::Migration[4.2]
   def up
     remove_column :links, :rich_content_version
   end

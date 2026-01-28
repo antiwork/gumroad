@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-class RemoveAppliedAtFromSubscriptionPlanChanges < ActiveRecord::Migration[6.0]
+class RemoveAppliedAtFromSubscriptionPlanChanges < ActiveRecord::Migration[4.2]
   def up
     safety_assured { remove_column :subscription_plan_changes, :applied_at }
   end

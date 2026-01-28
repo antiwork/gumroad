@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-class AddTwitterColumnsToUser < ActiveRecord::Migration
+class AddTwitterColumnsToUser < ActiveRecord::Migration[4.2]
   def up
     add_column :users, :bio, :string
     add_column :users, :twitter_handle, :string

@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-class IndexReviewsWithMessages < ActiveRecord::Migration[7.1]
+class IndexReviewsWithMessages < ActiveRecord::Migration[4.2]
   def up
     change_table :product_reviews, bulk: true do |t|
       t.change :id, :bigint, auto_increment: true, null: false

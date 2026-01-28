@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-class RemoveUsersRecommendationTypeDefault < ActiveRecord::Migration[7.0]
+class RemoveUsersRecommendationTypeDefault < ActiveRecord::Migration[4.2]
   def up
     Alterity.disable do
       change_column_default :users, :recommendation_type, nil

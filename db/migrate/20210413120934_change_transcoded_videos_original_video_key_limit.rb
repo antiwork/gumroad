@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-class ChangeTranscodedVideosOriginalVideoKeyLimit < ActiveRecord::Migration[6.1]
+class ChangeTranscodedVideosOriginalVideoKeyLimit < ActiveRecord::Migration[4.2]
   def up
     change_column :transcoded_videos, :original_video_key, :string, limit: 1024
   end

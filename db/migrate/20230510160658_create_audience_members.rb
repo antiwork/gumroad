@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-class CreateAudienceMembers < ActiveRecord::Migration[7.0]
+class CreateAudienceMembers < ActiveRecord::Migration[4.2]
   def change
     create_table :audience_members do |t|
       t.bigint :seller_id, null: false

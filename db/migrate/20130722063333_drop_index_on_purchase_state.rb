@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-class DropIndexOnPurchaseState < ActiveRecord::Migration
+class DropIndexOnPurchaseState < ActiveRecord::Migration[4.2]
   def change
     remove_index :purchases, name: "index_purchases_on_purchase_state"
   end

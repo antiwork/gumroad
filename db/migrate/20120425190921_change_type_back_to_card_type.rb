@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-class ChangeTypeBackToCardType < ActiveRecord::Migration
+class ChangeTypeBackToCardType < ActiveRecord::Migration[4.2]
   def up
     rename_column :credit_cards, :type, :card_type
   end

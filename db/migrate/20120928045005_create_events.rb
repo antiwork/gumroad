@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-class CreateEvents < ActiveRecord::Migration
+class CreateEvents < ActiveRecord::Migration[4.2]
   def change
     create_table "events", force: true do |t|
       t.integer  "visit_id"

@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-class CreateFollowJoinTable < ActiveRecord::Migration
+class CreateFollowJoinTable < ActiveRecord::Migration[4.2]
   def change
     create_table :follows, id: false do |t|
       t.references :follower, null: false

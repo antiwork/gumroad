@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-class RemoveUnusedColumnsFromPayments < ActiveRecord::Migration[6.1]
+class RemoveUnusedColumnsFromPayments < ActiveRecord::Migration[4.2]
   def up
     change_table :payments, bulk: true do |t|
       t.remove :status_data

@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-class AddAdditionalFieldsToDisputeEvidences < ActiveRecord::Migration[7.0]
+class AddAdditionalFieldsToDisputeEvidences < ActiveRecord::Migration[4.2]
   def change
     change_table :dispute_evidences, bulk: true do |t|
       t.text :cancellation_rebuttal

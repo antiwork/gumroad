@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-class CreateAchAccount < ActiveRecord::Migration
+class CreateAchAccount < ActiveRecord::Migration[4.2]
   def change
     create_table :ach_accounts do |t|
       t.references :user

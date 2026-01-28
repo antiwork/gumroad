@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-class CreateProductTags < ActiveRecord::Migration
+class CreateProductTags < ActiveRecord::Migration[4.2]
   def change
     create_table :product_tags, options: "DEFAULT CHARACTER SET=utf8 COLLATE=utf8_unicode_ci" do |t|
       t.references :link

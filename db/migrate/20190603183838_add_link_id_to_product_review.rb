@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-class AddLinkIdToProductReview < ActiveRecord::Migration
+class AddLinkIdToProductReview < ActiveRecord::Migration[4.2]
   def up
     add_column :product_reviews, :link_id, :integer
   end

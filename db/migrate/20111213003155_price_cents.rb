@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-class PriceCents < ActiveRecord::Migration
+class PriceCents < ActiveRecord::Migration[4.2]
   def up
     add_column :links, :price_cents, :integer
     add_column :purchases, :price_cents, :integer

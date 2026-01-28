@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-class CreateBaseVariantIntegration < ActiveRecord::Migration[6.1]
+class CreateBaseVariantIntegration < ActiveRecord::Migration[4.2]
   def change
     create_table :base_variant_integrations do |t|
       t.bigint :base_variant_id, null: false

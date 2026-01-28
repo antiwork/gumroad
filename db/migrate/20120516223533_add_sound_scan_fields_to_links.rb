@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-class AddSoundScanFieldsToLinks < ActiveRecord::Migration
+class AddSoundScanFieldsToLinks < ActiveRecord::Migration[4.2]
   def change
     add_column :links, :soundscan, :boolean
     add_column :links, :upc_code, :string

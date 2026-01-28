@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-class Default < ActiveRecord::Migration
+class Default < ActiveRecord::Migration[4.2]
   def up
     change_column_default(:links, :price, 1.00)
     change_column_default(:links, :length_of_exclusivity, 0)

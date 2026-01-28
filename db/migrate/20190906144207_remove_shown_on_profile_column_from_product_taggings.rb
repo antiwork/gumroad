@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-class RemoveShownOnProfileColumnFromProductTaggings < ActiveRecord::Migration
+class RemoveShownOnProfileColumnFromProductTaggings < ActiveRecord::Migration[4.2]
   def up
     remove_column :product_taggings, :shown_on_profile
   end

@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-class CreateDynamicProductPageSwitches < ActiveRecord::Migration
+class CreateDynamicProductPageSwitches < ActiveRecord::Migration[4.2]
   def change
     create_table :dynamic_product_page_switches do |t|
       t.string :name

@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-class RemoveLinkColumns < ActiveRecord::Migration[6.1]
+class RemoveLinkColumns < ActiveRecord::Migration[4.2]
   def up
     change_table :links do |t|
       t.remove :territory_restriction

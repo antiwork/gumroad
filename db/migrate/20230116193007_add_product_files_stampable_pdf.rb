@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-class AddProductFilesStampablePdf < ActiveRecord::Migration[7.0]
+class AddProductFilesStampablePdf < ActiveRecord::Migration[4.2]
   def change
     add_column :product_files, :stampable_pdf, :boolean
   end

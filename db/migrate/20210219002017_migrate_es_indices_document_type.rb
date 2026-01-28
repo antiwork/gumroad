@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-class MigrateEsIndicesDocumentType < ActiveRecord::Migration[6.1]
+class MigrateEsIndicesDocumentType < ActiveRecord::Migration[4.2]
   # Original migration: https://github.com/antiwork/gumroad/blob/main/db/migrate/20210219002017_migrate_es_indices_document_type.rb
 
   def up

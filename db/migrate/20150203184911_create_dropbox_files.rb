@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-class CreateDropboxFiles < ActiveRecord::Migration
+class CreateDropboxFiles < ActiveRecord::Migration[4.2]
   def change
     create_table :dropbox_files do |t|
       t.string :state

@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-class PrepareBaseVariant < ActiveRecord::Migration
+class PrepareBaseVariant < ActiveRecord::Migration[4.2]
   def change
     rename_table :variants, :base_variants
     rename_table :purchases_variants, :base_variants_purchases

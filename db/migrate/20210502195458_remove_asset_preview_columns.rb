@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-class RemoveAssetPreviewColumns < ActiveRecord::Migration[6.1]
+class RemoveAssetPreviewColumns < ActiveRecord::Migration[4.2]
   def up
     change_table :asset_previews do |t|
       t.remove "attachment_file_name"

@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-class AddLast4AndNameToAchAccount < ActiveRecord::Migration
+class AddLast4AndNameToAchAccount < ActiveRecord::Migration[4.2]
   def change
     add_column :ach_accounts, :account_number_last_four, :string
     add_column :ach_accounts, :account_holder_full_name, :string

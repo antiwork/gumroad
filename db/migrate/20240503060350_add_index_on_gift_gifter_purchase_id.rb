@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-class AddIndexOnGiftGifterPurchaseId < ActiveRecord::Migration[7.1]
+class AddIndexOnGiftGifterPurchaseId < ActiveRecord::Migration[4.2]
   def up
     change_table :gifts, bulk: true do |t|
       t.index :gifter_purchase_id

@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-class AddAudienceMembersPurchasedVariantIds < ActiveRecord::Migration[7.0]
+class AddAudienceMembersPurchasedVariantIds < ActiveRecord::Migration[4.2]
   def up
     change_table :audience_members, bulk: true do |t|
       t.remove_index name: :idx_audience_on_seller_and_purchases_variants_ids

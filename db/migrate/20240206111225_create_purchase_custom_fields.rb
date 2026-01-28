@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-class CreatePurchaseCustomFields < ActiveRecord::Migration[7.0]
+class CreatePurchaseCustomFields < ActiveRecord::Migration[4.2]
   def change
     create_table :purchase_custom_fields do |t|
       t.belongs_to :purchase, null: false

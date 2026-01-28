@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-class AddPurchaseIdIndexToPurchaseSalesTaxInfos < ActiveRecord::Migration
+class AddPurchaseIdIndexToPurchaseSalesTaxInfos < ActiveRecord::Migration[4.2]
   def change
     add_index :purchase_sales_tax_infos, :purchase_id
   end

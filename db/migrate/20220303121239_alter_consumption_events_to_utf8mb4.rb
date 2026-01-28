@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-class AlterConsumptionEventsToUtf8mb4 < ActiveRecord::Migration[6.1]
+class AlterConsumptionEventsToUtf8mb4 < ActiveRecord::Migration[4.2]
   def up
     execute alter_query(charset: "utf8mb4", int_type: "bigint")
   end

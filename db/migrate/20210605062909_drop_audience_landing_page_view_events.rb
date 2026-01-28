@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-class DropAudienceLandingPageViewEvents < ActiveRecord::Migration[6.1]
+class DropAudienceLandingPageViewEvents < ActiveRecord::Migration[4.2]
   def up
     drop_table :audience_landing_page_view_events
   end

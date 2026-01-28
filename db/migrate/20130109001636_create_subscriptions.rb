@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-class CreateSubscriptions < ActiveRecord::Migration
+class CreateSubscriptions < ActiveRecord::Migration[4.2]
   def change
     create_table :subscriptions do |t|
       t.integer     :link_id

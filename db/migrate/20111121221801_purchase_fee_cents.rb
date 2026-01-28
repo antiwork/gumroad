@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-class PurchaseFeeCents < ActiveRecord::Migration
+class PurchaseFeeCents < ActiveRecord::Migration[4.2]
   def up
     add_column :purchases, :fee_cents, :integer
     Purchase.update_all({ fee_cents: 0 })

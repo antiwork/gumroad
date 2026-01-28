@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-class AddNullFalseToTaxonomiesSlug < ActiveRecord::Migration[6.1]
+class AddNullFalseToTaxonomiesSlug < ActiveRecord::Migration[4.2]
   def up
     if Rails.env.development? && Taxonomy.where(slug: nil).exists?
       raise <<~ERROR

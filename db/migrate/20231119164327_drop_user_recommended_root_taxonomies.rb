@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-class DropUserRecommendedRootTaxonomies < ActiveRecord::Migration[7.0]
+class DropUserRecommendedRootTaxonomies < ActiveRecord::Migration[4.2]
   def up
     drop_table :user_recommended_root_taxonomies
   end

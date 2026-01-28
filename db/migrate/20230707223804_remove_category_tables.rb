@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-class RemoveCategoryTables < ActiveRecord::Migration[7.0]
+class RemoveCategoryTables < ActiveRecord::Migration[4.2]
   def up
     drop_table :categories
     drop_table :product_categorizations

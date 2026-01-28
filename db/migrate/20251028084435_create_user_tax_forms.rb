@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-class CreateUserTaxForms < ActiveRecord::Migration[7.1]
+class CreateUserTaxForms < ActiveRecord::Migration[4.2]
   def change
     create_table :user_tax_forms do |t|
       t.references :user, null: false, index: true

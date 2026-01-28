@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-class CreateConsumptionEvents < ActiveRecord::Migration
+class CreateConsumptionEvents < ActiveRecord::Migration[4.2]
   def change
     create_table :consumption_events, options: "DEFAULT CHARACTER SET=utf8 COLLATE=utf8_unicode_ci" do |t|
       t.integer :product_file_id

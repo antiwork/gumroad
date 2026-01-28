@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-class IndexReceipts < ActiveRecord::Migration
+class IndexReceipts < ActiveRecord::Migration[4.2]
   def up
     add_index :receipts, :purchase_id
   end

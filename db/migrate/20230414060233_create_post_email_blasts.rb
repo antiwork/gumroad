@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-class CreatePostEmailBlasts < ActiveRecord::Migration[7.0]
+class CreatePostEmailBlasts < ActiveRecord::Migration[4.2]
   def change
     create_table :post_email_blasts do |t|
       t.references :post, null: false, index: false

@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-class DropDelayedEmails < ActiveRecord::Migration[7.0]
+class DropDelayedEmails < ActiveRecord::Migration[4.2]
   def up
     drop_table :delayed_emails
   end

@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-class CreateGifts < ActiveRecord::Migration
+class CreateGifts < ActiveRecord::Migration[4.2]
   def change
     create_table :gifts do |t|
       t.integer :giftee_purchase_id

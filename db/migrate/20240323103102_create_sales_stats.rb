@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-class CreateSalesStats < ActiveRecord::Migration[7.0]
+class CreateSalesStats < ActiveRecord::Migration[4.2]
   def set_up_common_columns(t)
     t.bigint :sales_cents, default: 0, null: false
     t.bigint :refunds_cents, default: 0, null: false

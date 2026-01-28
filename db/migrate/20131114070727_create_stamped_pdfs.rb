@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-class CreateStampedPdfs < ActiveRecord::Migration
+class CreateStampedPdfs < ActiveRecord::Migration[4.2]
   def change
     create_table :stamped_pdfs do |t|
       t.integer :url_redirect_id

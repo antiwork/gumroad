@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-class AddAncestryToComments < ActiveRecord::Migration[6.1]
+class AddAncestryToComments < ActiveRecord::Migration[4.2]
   def change
     change_table :comments, bulk: true do |t|
       t.string :ancestry

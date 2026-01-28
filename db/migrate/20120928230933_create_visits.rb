@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-class CreateVisits < ActiveRecord::Migration
+class CreateVisits < ActiveRecord::Migration[4.2]
   def change
     create_table "visits", force: true do |t|
       t.string   "ip_address"

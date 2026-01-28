@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-class AddAssetPreviews < ActiveRecord::Migration
+class AddAssetPreviews < ActiveRecord::Migration[4.2]
   def change
     create_table :asset_previews, options: "DEFAULT CHARACTER SET=utf8 COLLATE=utf8_unicode_ci" do |t|
       t.belongs_to :link

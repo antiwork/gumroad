@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-class CreateTranscodedVideos < ActiveRecord::Migration
+class CreateTranscodedVideos < ActiveRecord::Migration[4.2]
   def change
     create_table :transcoded_videos do |t|
       t.references  :link

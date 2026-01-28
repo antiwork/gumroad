@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-class SyncDevColumnsLengthsAndPositions < ActiveRecord::Migration
+class SyncDevColumnsLengthsAndPositions < ActiveRecord::Migration[4.2]
   def up
     VARCHARS_CHANGES_FROM_191_TO_255.each do |table_name, columns_names|
       columns_names.each do |column_name|

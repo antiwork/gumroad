@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-class AddDeletedFromCdnIndexIndexes < ActiveRecord::Migration
+class AddDeletedFromCdnIndexIndexes < ActiveRecord::Migration[4.2]
   def change
     add_index :product_files, :deleted_from_cdn_at
     add_index :product_files_archives, :deleted_from_cdn_at

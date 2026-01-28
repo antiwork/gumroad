@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-class AddedCardBrandToBins < ActiveRecord::Migration
+class AddedCardBrandToBins < ActiveRecord::Migration[4.2]
   def up
     add_column :bins, :card_brand, :string
   end

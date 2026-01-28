@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-class MakeChargeProcessorAndMerchantAccountIdNullable < ActiveRecord::Migration[7.1]
+class MakeChargeProcessorAndMerchantAccountIdNullable < ActiveRecord::Migration[4.2]
   def up
     change_table :charges, bulk: true do |t|
       t.change :processor, :string, null: true

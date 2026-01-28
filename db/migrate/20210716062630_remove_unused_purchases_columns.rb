@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-class RemoveUnusedPurchasesColumns < ActiveRecord::Migration[6.1]
+class RemoveUnusedPurchasesColumns < ActiveRecord::Migration[4.2]
   def up
     change_table :purchases, bulk: true do |t|
       # Added

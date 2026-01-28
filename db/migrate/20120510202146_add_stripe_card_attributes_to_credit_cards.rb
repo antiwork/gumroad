@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-class AddStripeCardAttributesToCreditCards < ActiveRecord::Migration
+class AddStripeCardAttributesToCreditCards < ActiveRecord::Migration[4.2]
   def change
     add_column :credit_cards, :cvc_check, :boolean
     add_column :credit_cards, :card_country, :string

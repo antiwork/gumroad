@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-class AddShownOnProfileToProductTaggings < ActiveRecord::Migration
+class AddShownOnProfileToProductTaggings < ActiveRecord::Migration[4.2]
   def up
     add_column :product_taggings, :shown_on_profile, :boolean
     change_column_default :product_taggings, :shown_on_profile, true

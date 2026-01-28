@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-class CreateDisputes < ActiveRecord::Migration
+class CreateDisputes < ActiveRecord::Migration[4.2]
   def change
     create_table :disputes, options: "DEFAULT CHARACTER SET=utf8 COLLATE=utf8_unicode_ci" do |t|
       t.references :purchase

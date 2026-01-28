@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-class CreateDocuments < ActiveRecord::Migration
+class CreateDocuments < ActiveRecord::Migration[4.2]
   def change
     create_table :documents do |t|
       t.belongs_to  :product_file

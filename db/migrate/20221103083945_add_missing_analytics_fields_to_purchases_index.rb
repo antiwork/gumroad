@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-class AddMissingAnalyticsFieldsToPurchasesIndex < ActiveRecord::Migration[7.0]
+class AddMissingAnalyticsFieldsToPurchasesIndex < ActiveRecord::Migration[4.2]
   def up
     EsClient.indices.put_mapping(
       index: Purchase.index_name,

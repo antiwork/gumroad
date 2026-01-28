@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-class AddBaseTierPriceToPrices < ActiveRecord::Migration[5.1]
+class AddBaseTierPriceToPrices < ActiveRecord::Migration[4.2]
   # TODO(helen): remove this column when confident that tiered pricing data
   # migration was successful (see https://github.com/gumroad/web/pull/13830)
   def up

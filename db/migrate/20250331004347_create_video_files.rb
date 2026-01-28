@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-class CreateVideoFiles < ActiveRecord::Migration[7.1]
+class CreateVideoFiles < ActiveRecord::Migration[4.2]
   def change
     create_table :video_files do |t|
       t.references :record, polymorphic: true, null: false

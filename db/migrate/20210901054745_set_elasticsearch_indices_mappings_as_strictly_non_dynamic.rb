@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-class SetElasticsearchIndicesMappingsAsStrictlyNonDynamic < ActiveRecord::Migration[6.1]
+class SetElasticsearchIndicesMappingsAsStrictlyNonDynamic < ActiveRecord::Migration[4.2]
   def up
     [Link, Balance, Purchase, Installment, ConfirmedFollowerEvent].each do |model|
       EsClient.indices.put_mapping(index: model.index_name, body: { dynamic: :strict })

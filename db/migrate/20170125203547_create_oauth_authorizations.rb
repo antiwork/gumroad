@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-class CreateOauthAuthorizations < ActiveRecord::Migration
+class CreateOauthAuthorizations < ActiveRecord::Migration[4.2]
   def change
     create_table :oauth_authorizations do |t|
       t.integer :user_id, index: true

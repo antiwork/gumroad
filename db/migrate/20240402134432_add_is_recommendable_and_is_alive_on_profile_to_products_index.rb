@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-class AddIsRecommendableAndIsAliveOnProfileToProductsIndex < ActiveRecord::Migration[7.1]
+class AddIsRecommendableAndIsAliveOnProfileToProductsIndex < ActiveRecord::Migration[4.2]
   def up
     EsClient.indices.put_mapping(
       index: Link.index_name,

@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-class MakeSubtitleFilesCdnDeletable < ActiveRecord::Migration[7.1]
+class MakeSubtitleFilesCdnDeletable < ActiveRecord::Migration[4.2]
   def up
     change_table :subtitle_files, bulk: true do |t|
       t.datetime :deleted_from_cdn_at

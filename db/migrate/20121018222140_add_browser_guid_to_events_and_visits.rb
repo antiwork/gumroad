@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-class AddBrowserGuidToEventsAndVisits < ActiveRecord::Migration
+class AddBrowserGuidToEventsAndVisits < ActiveRecord::Migration[4.2]
   def up
     add_column :events, :browser_guid, :string
     add_column :visits, :browser_guid, :string

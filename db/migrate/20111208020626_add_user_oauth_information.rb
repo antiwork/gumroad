@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-class AddUserOauthInformation < ActiveRecord::Migration
+class AddUserOauthInformation < ActiveRecord::Migration[4.2]
   def up
     add_column :users, :provider, :string
     add_column :users, :twitter_user_id, :integer

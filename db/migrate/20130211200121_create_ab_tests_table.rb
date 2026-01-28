@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-class CreateAbTestsTable < ActiveRecord::Migration
+class CreateAbTestsTable < ActiveRecord::Migration[4.2]
   def change
     create_table :ab_tests do |t|
       t.string :name

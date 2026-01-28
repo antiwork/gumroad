@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-class RemoveMessages < ActiveRecord::Migration[7.0]
+class RemoveMessages < ActiveRecord::Migration[4.2]
   def up
     drop_table :messages
   end

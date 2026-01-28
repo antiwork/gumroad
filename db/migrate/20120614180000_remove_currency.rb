@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-class RemoveCurrency < ActiveRecord::Migration
+class RemoveCurrency < ActiveRecord::Migration[4.2]
   def up
     drop_table :currencies
   end

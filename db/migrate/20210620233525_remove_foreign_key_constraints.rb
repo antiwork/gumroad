@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-class RemoveForeignKeyConstraints < ActiveRecord::Migration[6.1]
+class RemoveForeignKeyConstraints < ActiveRecord::Migration[4.2]
   def up
     remove_foreign_key :devices, :users
     remove_foreign_key :featured_posts, :installments, column: :post_id

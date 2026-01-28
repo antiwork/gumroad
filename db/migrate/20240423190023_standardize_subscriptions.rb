@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-class StandardizeSubscriptions < ActiveRecord::Migration[7.1]
+class StandardizeSubscriptions < ActiveRecord::Migration[4.2]
   def up
     change_table :subscriptions, bulk: true do |t|
       t.change :id, :bigint, null: false, auto_increment: true

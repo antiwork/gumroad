@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-class CreateCallLimitationInfos < ActiveRecord::Migration[7.1]
+class CreateCallLimitationInfos < ActiveRecord::Migration[4.2]
   def change
     create_table :call_limitation_infos do |t|
       t.references :call, null: false

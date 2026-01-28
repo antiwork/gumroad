@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-class RemoveInstallmentEventsFkToEvents < ActiveRecord::Migration[6.1]
+class RemoveInstallmentEventsFkToEvents < ActiveRecord::Migration[4.2]
   def up
     remove_foreign_key :installment_events, :events
   end

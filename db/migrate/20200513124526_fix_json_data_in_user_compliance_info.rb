@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-class FixJsonDataInUserComplianceInfo < ActiveRecord::Migration
+class FixJsonDataInUserComplianceInfo < ActiveRecord::Migration[4.2]
   def up
     UserComplianceInfo.where(json_data: nil).find_in_batches(batch_size: 5000) do |relation|
       print "."

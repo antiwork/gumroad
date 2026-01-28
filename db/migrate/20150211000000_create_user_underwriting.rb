@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-class CreateUserUnderwriting < ActiveRecord::Migration
+class CreateUserUnderwriting < ActiveRecord::Migration[4.2]
   def change
     create_table :user_underwriting, options: "DEFAULT CHARACTER SET=utf8 COLLATE=utf8_unicode_ci" do |t|
       t.references :user

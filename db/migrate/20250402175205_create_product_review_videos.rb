@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-class CreateProductReviewVideos < ActiveRecord::Migration[7.1]
+class CreateProductReviewVideos < ActiveRecord::Migration[4.2]
   def change
     create_table :product_review_videos do |t|
       t.references :product_review, null: false, foreign_key: false

@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-class CreateCalls < ActiveRecord::Migration[7.1]
+class CreateCalls < ActiveRecord::Migration[4.2]
   def change
     create_table :calls do |t|
       t.references :purchase

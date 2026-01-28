@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-class CreateTaxonomies < ActiveRecord::Migration[6.1]
+class CreateTaxonomies < ActiveRecord::Migration[4.2]
   def change
     create_table :taxonomies do |t|
       t.string :name, null: false

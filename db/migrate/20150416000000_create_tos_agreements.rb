@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-class CreateTosAgreements < ActiveRecord::Migration
+class CreateTosAgreements < ActiveRecord::Migration[4.2]
   def change
     create_table :tos_agreements, options: "DEFAULT CHARACTER SET=utf8 COLLATE=utf8_unicode_ci" do |t|
       t.references :user

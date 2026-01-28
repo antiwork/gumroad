@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-class ChangeTerritoryRestrictionToText < ActiveRecord::Migration
+class ChangeTerritoryRestrictionToText < ActiveRecord::Migration[4.2]
   def up
     change_column :links, :territory_restriction, :text
   end

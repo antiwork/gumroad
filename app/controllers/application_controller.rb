@@ -17,7 +17,18 @@ class ApplicationController < ActionController::Base
   include HelperWidget
   include UtmLinkTracking
   include RackMiniProfilerAuthorization
+
   include InertiaRendering
+  # Ee kindha unna code ni ikkade paste cheyandi
+  inertia_share do
+    {
+      flash: {
+        alert: flash[:alert],
+        notice: flash[:notice],
+        warning: flash[:warning]
+      }
+    }
+  end
   include PageMeta::Base, PageMeta::Analytics
 
   before_action :set_default_page_title

@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-class CreateSubscriptionPlanChanges < ActiveRecord::Migration[5.2]
+class CreateSubscriptionPlanChanges < ActiveRecord::Migration[4.2]
   def change
     create_table :subscription_plan_changes do |t|
       t.references :subscription, null: false, index: true

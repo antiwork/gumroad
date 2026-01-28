@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-class CreateProductFolders < ActiveRecord::Migration[6.1]
+class CreateProductFolders < ActiveRecord::Migration[4.2]
   def change
     create_table :product_folders do |t|
       t.bigint :product_id, index: true

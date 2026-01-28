@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-class DropJsonDataFromProductFilesArchive < ActiveRecord::Migration[7.0]
+class DropJsonDataFromProductFilesArchive < ActiveRecord::Migration[4.2]
   def change
     remove_column :product_files_archives, :json_data, :text, size: :medium
   end

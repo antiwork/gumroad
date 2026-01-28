@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-class CreateDiscoverSearchSuggestions < ActiveRecord::Migration[7.1]
+class CreateDiscoverSearchSuggestions < ActiveRecord::Migration[4.2]
   def change
     create_table :discover_search_suggestions do |t|
       t.belongs_to :discover_search

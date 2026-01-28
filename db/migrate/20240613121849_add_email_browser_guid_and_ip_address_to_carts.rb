@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-class AddEmailBrowserGuidAndIpAddressToCarts < ActiveRecord::Migration[7.1]
+class AddEmailBrowserGuidAndIpAddressToCarts < ActiveRecord::Migration[4.2]
   def change
     change_table :carts, bulk: true do |t|
       t.string :email, index: true

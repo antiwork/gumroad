@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-class CreateLegacyPermalinks < ActiveRecord::Migration[6.1]
+class CreateLegacyPermalinks < ActiveRecord::Migration[4.2]
   def change
     create_table :legacy_permalinks do |t|
       t.string :permalink, null: false, index: { unique: true }

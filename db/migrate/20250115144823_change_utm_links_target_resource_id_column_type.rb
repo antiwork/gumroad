@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-class ChangeUtmLinksTargetResourceIdColumnType < ActiveRecord::Migration[7.1]
+class ChangeUtmLinksTargetResourceIdColumnType < ActiveRecord::Migration[4.2]
   def up
     change_column :utm_links, :target_resource_id, :bigint
   end

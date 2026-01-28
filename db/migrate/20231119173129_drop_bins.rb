@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-class DropBins < ActiveRecord::Migration[7.0]
+class DropBins < ActiveRecord::Migration[4.2]
   def up
     drop_table :bins
   end

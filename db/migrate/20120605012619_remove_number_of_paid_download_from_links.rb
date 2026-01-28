@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-class RemoveNumberOfPaidDownloadFromLinks < ActiveRecord::Migration
+class RemoveNumberOfPaidDownloadFromLinks < ActiveRecord::Migration[4.2]
   def up
     remove_column :links, :number_of_paid_downloads
   end

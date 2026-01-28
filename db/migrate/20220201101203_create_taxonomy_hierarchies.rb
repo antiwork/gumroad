@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-class CreateTaxonomyHierarchies < ActiveRecord::Migration[6.1]
+class CreateTaxonomyHierarchies < ActiveRecord::Migration[4.2]
   def change
     create_table :taxonomy_hierarchies, id: false do |t|
       t.bigint :ancestor_id, null: false

@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-class CreateZipTaxRates < ActiveRecord::Migration
+class CreateZipTaxRates < ActiveRecord::Migration[4.2]
   def change
     create_table :zip_tax_rates do |t|
       t.decimal :combined_rate, precision: 8, scale: 7

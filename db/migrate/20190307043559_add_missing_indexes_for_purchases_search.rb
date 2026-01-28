@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-class AddMissingIndexesForPurchasesSearch < ActiveRecord::Migration
+class AddMissingIndexesForPurchasesSearch < ActiveRecord::Migration[4.2]
   def up
     add_index :purchases, :email, length: 191, name: "index_purchases_on_email_long"
     remove_index :purchases, name: "index_purchases_on_email"

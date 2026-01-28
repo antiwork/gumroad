@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-class ReindexDevEsRecords < ActiveRecord::Migration[6.1]
+class ReindexDevEsRecords < ActiveRecord::Migration[4.2]
   # For developer convenience, we reindex everything since we're now using a new ES server, with no data.
 
   def up

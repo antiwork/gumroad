@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-class RemoveUnusedParentsChidren < ActiveRecord::Migration[6.0]
+class RemoveUnusedParentsChidren < ActiveRecord::Migration[4.2]
   def up
     drop_table :parents_children
   end

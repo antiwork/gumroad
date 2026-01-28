@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-class AddColumnConfirmedAtToFollowers < ActiveRecord::Migration
+class AddColumnConfirmedAtToFollowers < ActiveRecord::Migration[4.2]
   def change
     add_column :followers, :confirmed_at, :datetime
 

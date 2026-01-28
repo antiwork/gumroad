@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-class RemoveUnusedColumnsFromMerchantAccounts < ActiveRecord::Migration[6.1]
+class RemoveUnusedColumnsFromMerchantAccounts < ActiveRecord::Migration[4.2]
   def up
     change_table :merchant_accounts, bulk: true do |t|
       t.remove :relationship

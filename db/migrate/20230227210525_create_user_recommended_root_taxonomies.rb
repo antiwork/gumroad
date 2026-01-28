@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-class CreateUserRecommendedRootTaxonomies < ActiveRecord::Migration[7.0]
+class CreateUserRecommendedRootTaxonomies < ActiveRecord::Migration[4.2]
   def change
     create_table :user_recommended_root_taxonomies do |t|
       t.references :user, null: false, index: false

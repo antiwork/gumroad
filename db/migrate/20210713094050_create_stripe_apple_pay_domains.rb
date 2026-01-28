@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-class CreateStripeApplePayDomains < ActiveRecord::Migration[6.1]
+class CreateStripeApplePayDomains < ActiveRecord::Migration[4.2]
   def change
     create_table :stripe_apple_pay_domains do |t|
       t.references :user, null: false, index: true

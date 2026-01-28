@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-class AddProfilePictureUrlToUsers < ActiveRecord::Migration
+class AddProfilePictureUrlToUsers < ActiveRecord::Migration[4.2]
   def up
     unless column_exists? :users, :profile_picture_url
       add_column :users, :profile_picture_url, :string

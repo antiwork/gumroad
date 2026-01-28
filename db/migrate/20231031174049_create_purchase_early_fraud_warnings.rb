@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-class CreatePurchaseEarlyFraudWarnings < ActiveRecord::Migration[7.0]
+class CreatePurchaseEarlyFraudWarnings < ActiveRecord::Migration[4.2]
   def change
     create_table :purchase_early_fraud_warnings do |t|
       t.bigint :purchase_id, null: false

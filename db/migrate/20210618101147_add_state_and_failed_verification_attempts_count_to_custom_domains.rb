@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-class AddStateAndFailedVerificationAttemptsCountToCustomDomains < ActiveRecord::Migration[6.1]
+class AddStateAndFailedVerificationAttemptsCountToCustomDomains < ActiveRecord::Migration[4.2]
   def change
     change_table :custom_domains, bulk: true do |t|
       t.string :state, null: false, default: "unverified"

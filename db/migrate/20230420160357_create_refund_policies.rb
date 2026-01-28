@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-class CreateRefundPolicies < ActiveRecord::Migration[7.0]
+class CreateRefundPolicies < ActiveRecord::Migration[4.2]
   def change
     create_table :refund_policies do |t|
       t.references :seller, index: true, null: false

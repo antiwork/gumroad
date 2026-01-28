@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-class CreateSentEmailInfos < ActiveRecord::Migration
+class CreateSentEmailInfos < ActiveRecord::Migration[4.2]
   def change
     create_table :sent_email_infos do |t|
       t.string :key, limit: 40, null: false, index: { unique: true }

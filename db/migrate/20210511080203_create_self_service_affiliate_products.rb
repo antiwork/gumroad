@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-class CreateSelfServiceAffiliateProducts < ActiveRecord::Migration[6.1]
+class CreateSelfServiceAffiliateProducts < ActiveRecord::Migration[4.2]
   def change
     create_table :self_service_affiliate_products do |t|
       t.references :seller, type: :bigint, null: false, index: true

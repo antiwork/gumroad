@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-class ChangeBalance < ActiveRecord::Migration
+class ChangeBalance < ActiveRecord::Migration[4.2]
   def up
     add_column :links, :balance_cents, :integer
     Link.find_each do |link|

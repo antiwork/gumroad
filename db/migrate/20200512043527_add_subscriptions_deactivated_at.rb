@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-class AddSubscriptionsDeactivatedAt < ActiveRecord::Migration
+class AddSubscriptionsDeactivatedAt < ActiveRecord::Migration[4.2]
   def up
     add_column :subscriptions, :deactivated_at, :datetime
     add_index :subscriptions, :deactivated_at

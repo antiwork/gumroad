@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-class PurchaseAttr < ActiveRecord::Migration
+class PurchaseAttr < ActiveRecord::Migration[4.2]
   def up
     add_column :users, :name, :string
     add_column :users, :payment_address, :string

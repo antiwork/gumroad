@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-class CreateBlockedCustomerObjects < ActiveRecord::Migration[7.0]
+class CreateBlockedCustomerObjects < ActiveRecord::Migration[4.2]
   def change
     create_table :blocked_customer_objects do |t|
       t.references :seller, index: true, null: false

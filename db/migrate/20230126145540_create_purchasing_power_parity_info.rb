@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-class CreatePurchasingPowerParityInfo < ActiveRecord::Migration[7.0]
+class CreatePurchasingPowerParityInfo < ActiveRecord::Migration[4.2]
   def change
     create_table :purchasing_power_parity_infos do |t|
       t.references :purchase, null: false

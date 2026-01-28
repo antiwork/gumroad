@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-class AddGoogleUidToUsers < ActiveRecord::Migration[7.0]
+class AddGoogleUidToUsers < ActiveRecord::Migration[4.2]
   def up
     change_table :users, bulk: true do |t|
       t.string :google_uid, index: true

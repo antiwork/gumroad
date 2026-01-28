@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-class RemoveUnusedColumnsFromUrlRedirects < ActiveRecord::Migration[6.1]
+class RemoveUnusedColumnsFromUrlRedirects < ActiveRecord::Migration[4.2]
   def up
     execute <<~SQL
       ALTER TABLE `url_redirects`

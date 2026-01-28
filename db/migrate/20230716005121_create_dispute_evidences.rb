@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-class CreateDisputeEvidences < ActiveRecord::Migration[7.0]
+class CreateDisputeEvidences < ActiveRecord::Migration[4.2]
   def change
     create_table :dispute_evidences do |t|
       t.references :dispute, null: false, index: { unique: true }

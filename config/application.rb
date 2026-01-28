@@ -13,7 +13,7 @@ require_relative "../lib/catch_bad_request_errors"
 Bundler.require(*Rails.groups)
 
 if Rails.env.development? || Rails.env.test?
-  Dotenv::Railtie.load
+  # Dotenv::Railtie.load
 end
 
 require_relative "domain"

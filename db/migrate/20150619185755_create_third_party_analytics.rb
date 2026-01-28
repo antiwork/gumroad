@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-class CreateThirdPartyAnalytics < ActiveRecord::Migration
+class CreateThirdPartyAnalytics < ActiveRecord::Migration[4.2]
   def change
     create_table :third_party_analytics, options: "DEFAULT CHARACTER SET=utf8 COLLATE=utf8_unicode_ci" do |t|
       t.integer :user_id

@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-class CreateChargePurchases < ActiveRecord::Migration[7.0]
+class CreateChargePurchases < ActiveRecord::Migration[4.2]
   def change
     create_table :charge_purchases do |t|
       t.references :charge, null: false

@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-class AddPurchaserIdAndCreditCardIdToPurchases < ActiveRecord::Migration
+class AddPurchaserIdAndCreditCardIdToPurchases < ActiveRecord::Migration[4.2]
   def change
     change_table :purchases do |t|
       t.references :credit_card

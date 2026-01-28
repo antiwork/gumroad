@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-class RenameMediaLocationLinkToProduct < ActiveRecord::Migration[6.1]
+class RenameMediaLocationLinkToProduct < ActiveRecord::Migration[4.2]
   def up
     Alterity.disable do
       rename_column :media_locations, :link_id, :product_id

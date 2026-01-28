@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-class CreateCorrelatedTaxonomies < ActiveRecord::Migration[7.0]
+class CreateCorrelatedTaxonomies < ActiveRecord::Migration[4.2]
   def change
     create_table :correlated_taxonomies do |t|
       t.references :taxonomy, index: { unique: true }, null: false

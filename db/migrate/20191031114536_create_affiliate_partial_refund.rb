@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-class CreateAffiliatePartialRefund < ActiveRecord::Migration
+class CreateAffiliatePartialRefund < ActiveRecord::Migration[4.2]
   def change
     create_table :affiliate_partial_refunds do |t|
       t.integer :amount_cents, default: 0

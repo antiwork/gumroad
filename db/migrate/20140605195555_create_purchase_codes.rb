@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-class CreatePurchaseCodes < ActiveRecord::Migration
+class CreatePurchaseCodes < ActiveRecord::Migration[4.2]
   def change
     create_table :purchase_codes, options: "DEFAULT CHARACTER SET=utf8 COLLATE=utf8_general_ci" do |t|
       t.string :token

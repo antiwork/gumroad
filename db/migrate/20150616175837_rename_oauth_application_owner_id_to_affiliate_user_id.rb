@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-class RenameOauthApplicationOwnerIdToAffiliateUserId < ActiveRecord::Migration
+class RenameOauthApplicationOwnerIdToAffiliateUserId < ActiveRecord::Migration[4.2]
   def up
     remove_index :affiliate_credits, name: "index_affiliate_credits_on_oauth_application_owner_id"
     rename_column :affiliate_credits, :oauth_application_owner_id, :affiliate_user_id

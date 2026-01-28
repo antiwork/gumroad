@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-class AddUserCategories < ActiveRecord::Migration
+class AddUserCategories < ActiveRecord::Migration[4.2]
   def change
     create_table(:user_categorizations) do |t|
       t.belongs_to(:category)

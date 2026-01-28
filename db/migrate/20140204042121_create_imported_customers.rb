@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-class CreateImportedCustomers < ActiveRecord::Migration
+class CreateImportedCustomers < ActiveRecord::Migration[4.2]
   def change
     create_table :imported_customers do |t|
       t.string :email

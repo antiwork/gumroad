@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-class AddBackAdminActionCallInfos < ActiveRecord::Migration[7.1]
+class AddBackAdminActionCallInfos < ActiveRecord::Migration[4.2]
   def change
     create_table :admin_action_call_infos, charset: "utf8mb4", collation: "utf8mb4_unicode_ci" do |t|
       t.string :controller_name, null: false

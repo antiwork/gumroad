@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-class CreateIntegration < ActiveRecord::Migration[6.1]
+class CreateIntegration < ActiveRecord::Migration[4.2]
   def change
     create_table :integrations do |t|
       t.string :api_key, null: false

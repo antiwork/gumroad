@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-class AddChargeProcessorIdToCreditCard < ActiveRecord::Migration
+class AddChargeProcessorIdToCreditCard < ActiveRecord::Migration[4.2]
   def up
     add_column :credit_cards, :charge_processor_id, :string
     CreditCard.update_all({ charge_processor_id: "stripe" })

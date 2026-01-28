@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-class CreateSalesExports < ActiveRecord::Migration[6.1]
+class CreateSalesExports < ActiveRecord::Migration[4.2]
   def change
     create_table :sales_exports do |t|
       t.bigint :recipient_id, null: false, index: true

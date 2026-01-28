@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-class RemoveFloats < ActiveRecord::Migration
+class RemoveFloats < ActiveRecord::Migration[4.2]
   def up
     remove_column :links, :balance
     remove_column :links, :price

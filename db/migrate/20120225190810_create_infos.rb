@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-class CreateInfos < ActiveRecord::Migration
+class CreateInfos < ActiveRecord::Migration[4.2]
   def change
     create_table :infos do |t|
       t.string :type

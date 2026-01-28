@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-class RemoveSalesStatsTables < ActiveRecord::Migration[7.1]
+class RemoveSalesStatsTables < ActiveRecord::Migration[4.2]
   def up
     drop_table :product_daily_sales_stats, if_exists: true
     drop_table :product_sales_stats, if_exists: true

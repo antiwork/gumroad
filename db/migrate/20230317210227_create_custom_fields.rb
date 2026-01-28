@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-class CreateCustomFields < ActiveRecord::Migration[7.0]
+class CreateCustomFields < ActiveRecord::Migration[4.2]
   def change
     create_table :custom_fields do |t|
       t.string :field_type

@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-class CreateCallAvailabilities < ActiveRecord::Migration[7.1]
+class CreateCallAvailabilities < ActiveRecord::Migration[4.2]
   def change
     create_table :call_availabilities do |t|
       t.references :call, null: false

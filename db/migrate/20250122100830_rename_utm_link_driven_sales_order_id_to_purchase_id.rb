@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-class RenameUtmLinkDrivenSalesOrderIdToPurchaseId < ActiveRecord::Migration[7.1]
+class RenameUtmLinkDrivenSalesOrderIdToPurchaseId < ActiveRecord::Migration[4.2]
   def change
     change_table :utm_link_driven_sales, bulk: true do |t|
       t.remove_index [:utm_link_visit_id, :order_id], unique: true

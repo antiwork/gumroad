@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-class RemoveUnusedTables < ActiveRecord::Migration
+class RemoveUnusedTables < ActiveRecord::Migration[4.2]
   def up
     drop_table :ab_tests
     drop_table :api_sessions

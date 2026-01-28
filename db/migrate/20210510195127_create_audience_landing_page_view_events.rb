@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-class CreateAudienceLandingPageViewEvents < ActiveRecord::Migration[6.1]
+class CreateAudienceLandingPageViewEvents < ActiveRecord::Migration[4.2]
   def change
     # https://dev.mysql.com/doc/refman/5.6/en/integer-types.html
     starting_id = 2147483648 # INT maximum value signed + 1

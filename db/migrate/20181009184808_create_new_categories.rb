@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-class CreateNewCategories < ActiveRecord::Migration
+class CreateNewCategories < ActiveRecord::Migration[4.2]
   CATEGORY_NAMES = %w(comics drawing animation audio games photography comedy crafts food design dance sports)
 
   def up

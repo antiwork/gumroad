@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-class CreateRichContents < ActiveRecord::Migration[6.1]
+class CreateRichContents < ActiveRecord::Migration[4.2]
   def change
     create_table :rich_contents do |t|
       t.bigint :entity_id, null: false

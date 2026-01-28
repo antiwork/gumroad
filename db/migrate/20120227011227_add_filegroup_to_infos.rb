@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-class AddFilegroupToInfos < ActiveRecord::Migration
+class AddFilegroupToInfos < ActiveRecord::Migration[4.2]
   def up
     add_column :infos, :filegroup, :string
   end

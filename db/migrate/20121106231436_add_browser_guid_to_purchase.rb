@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-class AddBrowserGuidToPurchase < ActiveRecord::Migration
+class AddBrowserGuidToPurchase < ActiveRecord::Migration[4.2]
   def up
     add_column :purchases, :browser_guid, :string
     add_index :purchases, :browser_guid

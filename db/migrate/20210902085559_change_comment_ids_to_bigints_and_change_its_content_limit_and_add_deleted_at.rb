@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-class ChangeCommentIdsToBigintsAndChangeItsContentLimitAndAddDeletedAt < ActiveRecord::Migration[6.1]
+class ChangeCommentIdsToBigintsAndChangeItsContentLimitAndAddDeletedAt < ActiveRecord::Migration[4.2]
   def up
     change_table :comments, bulk: true do |t|
       # Added

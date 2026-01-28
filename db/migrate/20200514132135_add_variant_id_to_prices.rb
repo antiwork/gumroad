@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-class AddVariantIdToPrices < ActiveRecord::Migration[5.1]
+class AddVariantIdToPrices < ActiveRecord::Migration[4.2]
   def up
     add_reference :prices, :variant, index: true, type: :integer
   end

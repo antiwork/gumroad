@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-class FixIndexOnDevices < ActiveRecord::Migration
+class FixIndexOnDevices < ActiveRecord::Migration[4.2]
   def up
     remove_index :devices, column: :token
     add_index :devices, [:token, :device_type], unique: true

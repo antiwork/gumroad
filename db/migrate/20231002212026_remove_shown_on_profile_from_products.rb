@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-class RemoveShownOnProfileFromProducts < ActiveRecord::Migration[7.0]
+class RemoveShownOnProfileFromProducts < ActiveRecord::Migration[4.2]
   def up
     remove_column :links, :shown_on_profile
   end

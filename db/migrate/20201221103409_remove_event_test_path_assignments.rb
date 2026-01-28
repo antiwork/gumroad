@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-class RemoveEventTestPathAssignments < ActiveRecord::Migration[6.0]
+class RemoveEventTestPathAssignments < ActiveRecord::Migration[4.2]
   def up
     drop_table :event_test_path_assignments
   end

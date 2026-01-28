@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-class RemoveUnusedColumnsFromPreorderLinks < ActiveRecord::Migration[6.1]
+class RemoveUnusedColumnsFromPreorderLinks < ActiveRecord::Migration[4.2]
   def up
     change_table :preorder_links, bulk: true do |t|
       t.remove :attachment_guid

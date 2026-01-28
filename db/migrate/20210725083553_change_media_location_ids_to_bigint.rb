@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-class ChangeMediaLocationIdsToBigint < ActiveRecord::Migration[6.1]
+class ChangeMediaLocationIdsToBigint < ActiveRecord::Migration[4.2]
   def up
     change_table :media_locations, bulk: true do |t|
       t.change :id, :bigint, null: false, unique: true, auto_increment: true

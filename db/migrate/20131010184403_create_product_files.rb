@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-class CreateProductFiles < ActiveRecord::Migration
+class CreateProductFiles < ActiveRecord::Migration[4.2]
   def change
     create_table :product_files do |t|
       t.integer :link_id

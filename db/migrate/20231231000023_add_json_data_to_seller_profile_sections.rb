@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-class AddJsonDataToSellerProfileSections < ActiveRecord::Migration[7.0]
+class AddJsonDataToSellerProfileSections < ActiveRecord::Migration[4.2]
   def change
     change_table :seller_profile_sections, bulk: true do |t|
       t.column :json_data, :json

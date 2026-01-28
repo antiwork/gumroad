@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-class CreateProductPageViewIndex < ActiveRecord::Migration[6.1]
+class CreateProductPageViewIndex < ActiveRecord::Migration[4.2]
   def up
     if Rails.env.production? || Rails.env.staging?
       ProductPageView.__elasticsearch__.create_index!(index: "product_page_views_v1")

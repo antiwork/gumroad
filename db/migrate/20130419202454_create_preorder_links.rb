@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-class CreatePreorderLinks < ActiveRecord::Migration
+class CreatePreorderLinks < ActiveRecord::Migration[4.2]
   def change
     create_table :preorder_links do |t|
       t.references :link

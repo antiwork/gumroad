@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-class AddChargeProcessorIdToPurchase < ActiveRecord::Migration
+class AddChargeProcessorIdToPurchase < ActiveRecord::Migration[4.2]
   def up
     add_column :purchases, :charge_processor_id, :string
     Purchase.update_all({ charge_processor_id: "stripe" }, "stripe_transaction_id IS NOT NULL")

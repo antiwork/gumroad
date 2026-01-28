@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-class RemoveUnusedColumnsFromTranscodedVideos < ActiveRecord::Migration[6.1]
+class RemoveUnusedColumnsFromTranscodedVideos < ActiveRecord::Migration[4.2]
   def up
     change_table :transcoded_videos, bulk: true do |t|
       t.remove :transcoder_preset_key

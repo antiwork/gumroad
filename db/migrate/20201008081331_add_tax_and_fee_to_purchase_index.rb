@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-class AddTaxAndFeeToPurchaseIndex < ActiveRecord::Migration[6.0]
+class AddTaxAndFeeToPurchaseIndex < ActiveRecord::Migration[4.2]
   def up
     Elasticsearch::Model.client.indices.put_mapping(
       index: "purchases_v2",

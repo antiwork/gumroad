@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-class BackfillMegaphoneStatesDatetimes < ActiveRecord::Migration
+class BackfillMegaphoneStatesDatetimes < ActiveRecord::Migration[4.2]
   def up
     MegaphoneState.find_in_batches do |records|
       now = Time.current

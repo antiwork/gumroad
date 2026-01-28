@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-class CreateTeamMemberships < ActiveRecord::Migration[6.1]
+class CreateTeamMemberships < ActiveRecord::Migration[4.2]
   def change
     create_table :team_memberships do |t|
       t.bigint :seller_id, null: false

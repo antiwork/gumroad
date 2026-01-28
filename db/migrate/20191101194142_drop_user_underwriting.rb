@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-class DropUserUnderwriting < ActiveRecord::Migration
+class DropUserUnderwriting < ActiveRecord::Migration[4.2]
   def up
     drop_table :user_underwriting
   end

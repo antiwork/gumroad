@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-class AddEmailRequiredOnLink < ActiveRecord::Migration
+class AddEmailRequiredOnLink < ActiveRecord::Migration[4.2]
   def up
     add_column :links, :email_required, :boolean, default: 0
     add_column :purchases, :email, :text

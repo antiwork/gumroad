@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-class CreateBundleProductPurchases < ActiveRecord::Migration[7.0]
+class CreateBundleProductPurchases < ActiveRecord::Migration[4.2]
   def change
     create_table :bundle_product_purchases do |t|
       t.references :bundle_purchase, null: false

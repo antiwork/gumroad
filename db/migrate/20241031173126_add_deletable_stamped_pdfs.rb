@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-class AddDeletableStampedPdfs < ActiveRecord::Migration[7.1]
+class AddDeletableStampedPdfs < ActiveRecord::Migration[4.2]
   def up
     change_table :stamped_pdfs, bulk: true do |t|
       # new columns / indexes

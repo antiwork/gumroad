@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-class CreatePurchaseTaxjarInfos < ActiveRecord::Migration[7.0]
+class CreatePurchaseTaxjarInfos < ActiveRecord::Migration[4.2]
   def change
     create_table :purchase_taxjar_infos do |t|
       t.references :purchase, null: false

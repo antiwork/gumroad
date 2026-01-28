@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-class AddMissingIndexesToUser < ActiveRecord::Migration[6.0]
+class AddMissingIndexesToUser < ActiveRecord::Migration[4.2]
   def change
     change_table :users do |t|
       t.index :current_sign_in_ip

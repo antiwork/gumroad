@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-class CreateGumroadDailyAnalytics < ActiveRecord::Migration[7.0]
+class CreateGumroadDailyAnalytics < ActiveRecord::Migration[4.2]
   def change
     create_table :gumroad_daily_analytics do |t|
       t.datetime :period_ended_at, null: false

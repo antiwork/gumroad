@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-class RemoveIntegrationTypeFromIntegration < ActiveRecord::Migration[7.0]
+class RemoveIntegrationTypeFromIntegration < ActiveRecord::Migration[4.2]
   def up
     remove_column :integrations, :integration_type
   end

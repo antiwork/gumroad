@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-class AddAttachmentProfileToUser < ActiveRecord::Migration
+class AddAttachmentProfileToUser < ActiveRecord::Migration[4.2]
   def self.up
     add_column :users, :profile_file_name, :string
     add_column :users, :profile_content_type, :string

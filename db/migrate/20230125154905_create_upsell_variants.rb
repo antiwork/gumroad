@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-class CreateUpsellVariants < ActiveRecord::Migration[7.0]
+class CreateUpsellVariants < ActiveRecord::Migration[4.2]
   def change
     create_table :upsell_variants do |t|
       t.references :upsell, null: false

@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-class IncreaseUtmLinkParamCharLimits < ActiveRecord::Migration[7.1]
+class IncreaseUtmLinkParamCharLimits < ActiveRecord::Migration[4.2]
   def up
     change_table :utm_links, bulk: true do |t|
       t.remove_index name: "index_utm_links_on_utm_fields_and_target_resource"

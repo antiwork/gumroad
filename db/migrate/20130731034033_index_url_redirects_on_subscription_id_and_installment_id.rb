@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-class IndexUrlRedirectsOnSubscriptionIdAndInstallmentId < ActiveRecord::Migration
+class IndexUrlRedirectsOnSubscriptionIdAndInstallmentId < ActiveRecord::Migration[4.2]
   def change
     add_index :url_redirects, :installment_id
     add_index :url_redirects, :subscription_id

@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-class CreateWishlistProducts < ActiveRecord::Migration[7.0]
+class CreateWishlistProducts < ActiveRecord::Migration[4.2]
   def change
     create_table :wishlist_products do |t|
       t.references :wishlist, null: false

@@ -2,7 +2,6 @@
 
 source "https://rubygems.org"
 
-ruby file: ".ruby-version"
 
 gem "rails", "7.1.6"
 gem "rake", "13.2.1"
@@ -18,7 +17,7 @@ group :development, :test do
   gem "dotenv-rails", "~> 2.8"
   gem "knapsack_pro", "~> 7.0"
   gem "pry-byebug", "~> 3.10"
-  gem "pry-rails", "~> 0.3", require: "pry-rails/console"
+  # gem "pry-rails", "~> 0.3", require: "pry-rails/console"
   gem "rubocop", "~> 1.79", require: false
   gem "rubocop-rails", "~> 2.32", require: false
   gem "rubocop-performance", "~> 1.25", require: false
@@ -35,7 +34,6 @@ group :test do
   gem "factory_bot_rails", "~> 6.4"
   gem "faker", "~> 3.1"
   gem "rspec", "~> 3.12"
-  gem "rspec-github", "~> 2.4.0", require: false
   gem "rspec-rails", "~> 6.0"
   gem "rspec-retry", "~> 0.6"
   gem "rspec_junit_formatter", "~> 0.6"
@@ -122,7 +120,7 @@ gem "lograge", "~> 0.12"
 gem "makara", "0.6.0.pre"
 gem "maxmind-geoip2", "~> 1.1"
 gem "mime-types", "~> 3.4"
-gem "mini_racer", "0.16.0"
+# gem "mini_racer", "0.16.0"
 gem "money", "~> 6.16"
 gem "mongoid", "~> 9.0"
 gem "mysql2", ">= 0.5.6"

@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-class AddStripeChargeAttributesToPurchases < ActiveRecord::Migration
+class AddStripeChargeAttributesToPurchases < ActiveRecord::Migration[4.2]
   def change
     # Additional flags to keep track if something has been refunded, disputed etc.
     add_column :purchases, :amount_refunded_cents, :integer

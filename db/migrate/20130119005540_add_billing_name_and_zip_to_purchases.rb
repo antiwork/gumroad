@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-class AddBillingNameAndZipToPurchases < ActiveRecord::Migration
+class AddBillingNameAndZipToPurchases < ActiveRecord::Migration[4.2]
   def change
     add_column :purchases, :billing_name, :string
     add_column :purchases, :billing_zip_code, :string

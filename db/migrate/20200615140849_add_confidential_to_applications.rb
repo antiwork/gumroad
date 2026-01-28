@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-class AddConfidentialToApplications < ActiveRecord::Migration
+class AddConfidentialToApplications < ActiveRecord::Migration[4.2]
   def up
     # Default generated is true. We set this to false for backwards compat
     # https://github.com/doorkeeper-gem/doorkeeper/wiki/Migration-from-old-versions#database-changes-1

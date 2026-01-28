@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-class AddAssetPreviewsIndexToDeletedAt < ActiveRecord::Migration[6.1]
+class AddAssetPreviewsIndexToDeletedAt < ActiveRecord::Migration[4.2]
   def up
     change_table :asset_previews, bulk: true do |t|
       t.change :id, :bigint, null: false, unique: true, auto_increment: true

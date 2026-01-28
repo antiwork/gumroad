@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-class RemoveFeaturedPosts < ActiveRecord::Migration[6.1]
+class RemoveFeaturedPosts < ActiveRecord::Migration[4.2]
   def up
     drop_table :featured_posts
   end

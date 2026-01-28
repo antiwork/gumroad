@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-class ChangeVersionsIdType < ActiveRecord::Migration[5.2]
+class ChangeVersionsIdType < ActiveRecord::Migration[4.2]
   def up
     safety_assured do
       change_column :versions, :id, :bigint, null: false, unique: true, auto_increment: true

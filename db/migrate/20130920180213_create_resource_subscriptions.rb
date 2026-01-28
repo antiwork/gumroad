@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-class CreateResourceSubscriptions < ActiveRecord::Migration
+class CreateResourceSubscriptions < ActiveRecord::Migration[4.2]
   def change
     create_table :resource_subscriptions do |t|
       t.references :oauth_application, null: false

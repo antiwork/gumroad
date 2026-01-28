@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-class RemoveOtherCategory < ActiveRecord::Migration
+class RemoveOtherCategory < ActiveRecord::Migration[4.2]
   def up
     Category.where(name: "other").destroy_all
   end

@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-class AddAttachmentToLinks < ActiveRecord::Migration
+class AddAttachmentToLinks < ActiveRecord::Migration[4.2]
   def self.up
     add_column :links, :attachment_file_name, :string
     add_column :links, :attachment_content_type, :string

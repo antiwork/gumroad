@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-class CreateWishlistFollowers < ActiveRecord::Migration[7.1]
+class CreateWishlistFollowers < ActiveRecord::Migration[4.2]
   def change
     create_table :wishlist_followers do |t|
       t.belongs_to :wishlist, null: false

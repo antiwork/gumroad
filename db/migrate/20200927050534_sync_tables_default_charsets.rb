@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-class SyncTablesDefaultCharsets < ActiveRecord::Migration[6.0]
+class SyncTablesDefaultCharsets < ActiveRecord::Migration[4.2]
   def up
     table_changes = {
       "affiliate_credits" => "CHARACTER SET latin1",

@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-class AddSellerIdToRefunds < ActiveRecord::Migration[7.0]
+class AddSellerIdToRefunds < ActiveRecord::Migration[4.2]
   def up
     change_table :refunds, bulk: true do |t|
       t.change :id, :bigint, null: false, unique: true, auto_increment: true

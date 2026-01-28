@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-class CreateTopSellers < ActiveRecord::Migration[6.1]
+class CreateTopSellers < ActiveRecord::Migration[4.2]
   def change
     create_table :top_sellers do |t|
       t.bigint :user_id, null: false, index: { unique: true }

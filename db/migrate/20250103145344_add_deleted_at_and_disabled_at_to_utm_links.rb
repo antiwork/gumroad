@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-class AddDeletedAtAndDisabledAtToUtmLinks < ActiveRecord::Migration[7.1]
+class AddDeletedAtAndDisabledAtToUtmLinks < ActiveRecord::Migration[4.2]
   def change
     change_table :utm_links, bulk: true do |t|
       t.datetime :deleted_at, precision: nil, index: true

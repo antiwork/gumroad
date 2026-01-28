@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-class CreatePublicFiles < ActiveRecord::Migration[7.1]
+class CreatePublicFiles < ActiveRecord::Migration[4.2]
   def change
     create_table :public_files do |t|
       t.references :seller

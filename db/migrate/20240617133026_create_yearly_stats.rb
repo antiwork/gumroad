@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-class CreateYearlyStats < ActiveRecord::Migration[7.1]
+class CreateYearlyStats < ActiveRecord::Migration[4.2]
   def change
     create_table :yearly_stats do |t|
       t.bigint :user_id, null: false, index: { unique: true }

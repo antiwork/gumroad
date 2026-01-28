@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-class AddStaffPickedAtToProductsIndex < ActiveRecord::Migration[7.0]
+class AddStaffPickedAtToProductsIndex < ActiveRecord::Migration[4.2]
   def up
     EsClient.indices.put_mapping(
       index: Link.index_name,

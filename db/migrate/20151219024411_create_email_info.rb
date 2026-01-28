@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-class CreateEmailInfo < ActiveRecord::Migration
+class CreateEmailInfo < ActiveRecord::Migration[4.2]
   def change
     create_table :email_infos, options: "DEFAULT CHARACTER SET=utf8 COLLATE=utf8_general_ci" do |t|
       t.references  :user

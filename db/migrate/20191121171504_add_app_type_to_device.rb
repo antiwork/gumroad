@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-class AddAppTypeToDevice < ActiveRecord::Migration
+class AddAppTypeToDevice < ActiveRecord::Migration[4.2]
   def up
     add_column :devices, :app_type, :string, null: false, limit: 255
     change_column_default :devices, :app_type, "consumer"

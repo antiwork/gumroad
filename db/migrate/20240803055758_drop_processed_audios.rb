@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-class DropProcessedAudios < ActiveRecord::Migration[7.1]
+class DropProcessedAudios < ActiveRecord::Migration[4.2]
   def up
     drop_table :processed_audios
   end

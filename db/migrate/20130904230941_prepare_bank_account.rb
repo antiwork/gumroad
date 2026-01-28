@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-class PrepareBankAccount < ActiveRecord::Migration
+class PrepareBankAccount < ActiveRecord::Migration[4.2]
   def up
     rename_table :ach_accounts, :bank_accounts
     add_column :bank_accounts, :type, :string, default: "AchAccount"

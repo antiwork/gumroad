@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-class CreateLicenses < ActiveRecord::Migration
+class CreateLicenses < ActiveRecord::Migration[4.2]
   def change
     create_table :licenses, options: "DEFAULT CHARACTER SET=utf8 COLLATE=utf8_general_ci" do |t|
       t.integer :link_id

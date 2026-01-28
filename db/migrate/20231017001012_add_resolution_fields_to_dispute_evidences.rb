@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-class AddResolutionFieldsToDisputeEvidences < ActiveRecord::Migration[7.0]
+class AddResolutionFieldsToDisputeEvidences < ActiveRecord::Migration[4.2]
   def change
     change_table :dispute_evidences, bulk: true do |t|
       t.datetime :resolved_at

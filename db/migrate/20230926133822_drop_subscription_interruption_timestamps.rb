@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-class DropSubscriptionInterruptionTimestamps < ActiveRecord::Migration[7.0]
+class DropSubscriptionInterruptionTimestamps < ActiveRecord::Migration[4.2]
   def up
     change_table :subscriptions, bulk: true do |t|
       t.remove :last_resubscribed_at

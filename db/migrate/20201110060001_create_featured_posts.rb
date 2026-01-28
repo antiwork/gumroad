@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-class CreateFeaturedPosts < ActiveRecord::Migration[6.0]
+class CreateFeaturedPosts < ActiveRecord::Migration[4.2]
   def change
     create_table :featured_posts do |t|
       t.integer :post_id, null: false

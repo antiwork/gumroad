@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-class CreateDynamicProductPageSwitchAssignments < ActiveRecord::Migration
+class CreateDynamicProductPageSwitchAssignments < ActiveRecord::Migration[4.2]
   def change
     create_table :dynamic_product_page_switch_assignments do |t|
       t.references :link

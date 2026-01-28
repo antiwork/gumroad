@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-class CreateBacktaxCollections < ActiveRecord::Migration[7.0]
+class CreateBacktaxCollections < ActiveRecord::Migration[4.2]
   def change
     create_table :backtax_collections do |t|
       t.references :user, index: true, null: false

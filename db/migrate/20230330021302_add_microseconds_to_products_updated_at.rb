@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-class AddMicrosecondsToProductsUpdatedAt < ActiveRecord::Migration[7.0]
+class AddMicrosecondsToProductsUpdatedAt < ActiveRecord::Migration[4.2]
   def up
     change_column :links, :updated_at, :datetime, precision: 6
   end

@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-class AddProductCategories < ActiveRecord::Migration
+class AddProductCategories < ActiveRecord::Migration[4.2]
   def change
     create_table(:categories) do |t|
       t.string(:name, limit: 100)

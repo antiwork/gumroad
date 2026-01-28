@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-class AddDeletedAtIndexToProductFilesArchives < ActiveRecord::Migration[7.1]
+class AddDeletedAtIndexToProductFilesArchives < ActiveRecord::Migration[4.2]
   def up
     change_table :product_files_archives, bulk: true do |t|
       t.index :deleted_at

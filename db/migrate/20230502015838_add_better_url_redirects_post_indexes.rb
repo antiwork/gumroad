@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-class AddBetterUrlRedirectsPostIndexes < ActiveRecord::Migration[7.0]
+class AddBetterUrlRedirectsPostIndexes < ActiveRecord::Migration[4.2]
   def change
     change_table :url_redirects, bulk: true do |t|
       t.index [:installment_id, :purchase_id]

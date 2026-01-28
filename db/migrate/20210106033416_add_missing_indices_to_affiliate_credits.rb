@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-class AddMissingIndicesToAffiliateCredits < ActiveRecord::Migration[6.0]
+class AddMissingIndicesToAffiliateCredits < ActiveRecord::Migration[4.2]
   def change
     change_table :affiliate_credits do |t|
       t.index :affiliate_credit_refund_balance_id

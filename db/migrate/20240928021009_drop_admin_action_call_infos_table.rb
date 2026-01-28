@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-class DropAdminActionCallInfosTable < ActiveRecord::Migration[7.1]
+class DropAdminActionCallInfosTable < ActiveRecord::Migration[4.2]
   def up
     drop_table :admin_action_call_infos
   end

@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-class RemoveFollowersCancelledAt < ActiveRecord::Migration[6.1]
+class RemoveFollowersCancelledAt < ActiveRecord::Migration[4.2]
   def up
     remove_column :followers, :cancelled_at
   end

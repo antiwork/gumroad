@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-class CreateProductCachedValues < ActiveRecord::Migration[6.1]
+class CreateProductCachedValues < ActiveRecord::Migration[4.2]
   def change
     create_table :product_cached_values do |t|
       t.bigint :product_id, null: false, index: true

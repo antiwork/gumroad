@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-class RemoveSomeFbColumnsFromUser < ActiveRecord::Migration[6.0]
+class RemoveSomeFbColumnsFromUser < ActiveRecord::Migration[4.2]
   def up
     change_table :users do |t|
       t.remove :facebook_gender, :facebook_verified

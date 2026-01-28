@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-class MigrateDeletedPurchases < ActiveRecord::Migration[7.0]
+class MigrateDeletedPurchases < ActiveRecord::Migration[4.2]
   def up
     return unless Rails.env.development?
 

@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-class CreateBlockedBrowserGuids < ActiveRecord::Migration
+class CreateBlockedBrowserGuids < ActiveRecord::Migration[4.2]
   def change
     create_table :blocked_browser_guids do |t|
       t.string :browser_guid

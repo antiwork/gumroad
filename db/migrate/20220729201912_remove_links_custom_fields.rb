@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-class RemoveLinksCustomFields < ActiveRecord::Migration[6.1]
+class RemoveLinksCustomFields < ActiveRecord::Migration[4.2]
   def up
     remove_column :links, :custom_fields
   end

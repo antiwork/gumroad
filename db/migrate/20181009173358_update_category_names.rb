@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-class UpdateCategoryNames < ActiveRecord::Migration
+class UpdateCategoryNames < ActiveRecord::Migration[4.2]
   def up
     Category.where(name: "publishing").update_all(name: "writing")
     Category.where(name: "physical").update_all(name: "merchandise")

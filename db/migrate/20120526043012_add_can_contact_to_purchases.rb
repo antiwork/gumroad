@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-class AddCanContactToPurchases < ActiveRecord::Migration
+class AddCanContactToPurchases < ActiveRecord::Migration[4.2]
   def up
     change_table :purchases do |t|
       t.boolean :can_contact, default: true

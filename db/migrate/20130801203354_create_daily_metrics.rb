@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-class CreateDailyMetrics < ActiveRecord::Migration
+class CreateDailyMetrics < ActiveRecord::Migration[4.2]
   def change
     create_table :daily_metrics do |t|
       t.string :event_name

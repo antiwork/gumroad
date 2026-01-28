@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-class CreateTwitterMerchants < ActiveRecord::Migration
+class CreateTwitterMerchants < ActiveRecord::Migration[4.2]
   def change
     create_table :twitter_merchants do |t|
       t.references  :user

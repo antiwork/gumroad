@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-class RemoveFbTimezoneAndLocaleFromUsers < ActiveRecord::Migration
+class RemoveFbTimezoneAndLocaleFromUsers < ActiveRecord::Migration[4.2]
   def up
     remove_column :users, :facebook_timezone
     remove_column :users, :facebook_locale

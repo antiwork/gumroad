@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-class RemoveMembershipPriceMigrationAttributes < ActiveRecord::Migration[7.0]
+class RemoveMembershipPriceMigrationAttributes < ActiveRecord::Migration[4.2]
   def up
     change_table :prices, bulk: true do |t|
       t.remove :archived_at

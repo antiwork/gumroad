@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-class ChangeColumnConfirm < ActiveRecord::Migration
+class ChangeColumnConfirm < ActiveRecord::Migration[4.2]
   def up
     rename_column :users, :email_verified_at, :confirmed_at
     add_column :users, :confirmation_token, :string

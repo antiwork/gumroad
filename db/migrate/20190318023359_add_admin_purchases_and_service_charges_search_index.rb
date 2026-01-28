@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-class AddAdminPurchasesAndServiceChargesSearchIndex < ActiveRecord::Migration
+class AddAdminPurchasesAndServiceChargesSearchIndex < ActiveRecord::Migration[4.2]
   def change
     add_index :purchases, [:card_type, :card_visual, :stripe_fingerprint], name: "index_purchases_on_card_type_visual_fingerprint"
     add_index :purchases, [:card_type, :card_visual, :created_at, :stripe_fingerprint], name: "index_purchases_on_card_type_visual_date_fingerprint"

@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-class CreateAssignments < ActiveRecord::Migration
+class CreateAssignments < ActiveRecord::Migration[4.2]
   def change
     create_table :assignments do |t|
       t.integer :ab_test_id

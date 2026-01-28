@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-class RemoveAssets < ActiveRecord::Migration
+class RemoveAssets < ActiveRecord::Migration[4.2]
   def up
     drop_table :assets
   end

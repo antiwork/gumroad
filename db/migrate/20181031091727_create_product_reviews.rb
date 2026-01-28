@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-class CreateProductReviews < ActiveRecord::Migration
+class CreateProductReviews < ActiveRecord::Migration[4.2]
   def change
     create_table :product_reviews do |t|
       t.references :purchase, index: true, unique: true, foreign_key: { on_delete: :cascade }

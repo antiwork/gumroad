@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-class BackfillInstallmentsEventsCacheCount < ActiveRecord::Migration
+class BackfillInstallmentsEventsCacheCount < ActiveRecord::Migration[4.2]
   def up
     Installment.find_in_batches do |installments|
       # installment_events_count can be zero here instead of precalculated because we know

@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-class AddCallToActionToUpdates < ActiveRecord::Migration
+class AddCallToActionToUpdates < ActiveRecord::Migration[4.2]
   def change
     add_column(:installments, :call_to_action_text, :string, limit: 2083)
     add_column(:installments, :call_to_action_url,  :string, limit: 2083)

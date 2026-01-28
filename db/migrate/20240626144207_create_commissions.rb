@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-class CreateCommissions < ActiveRecord::Migration[7.1]
+class CreateCommissions < ActiveRecord::Migration[4.2]
   def change
     create_table :commissions do |t|
       t.string :status

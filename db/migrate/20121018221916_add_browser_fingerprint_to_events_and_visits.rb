@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-class AddBrowserFingerprintToEventsAndVisits < ActiveRecord::Migration
+class AddBrowserFingerprintToEventsAndVisits < ActiveRecord::Migration[4.2]
   def up
     add_column :events, :browser_fingerprint, :string
     add_column :visits, :browser_fingerprint, :string

@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-class CreateStaffPickedProducts < ActiveRecord::Migration[7.0]
+class CreateStaffPickedProducts < ActiveRecord::Migration[4.2]
   def change
     create_table :staff_picked_products do |t|
       t.references :product, index: { unique: true }, null: false

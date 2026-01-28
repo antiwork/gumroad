@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-class CreatePurchaseSalesTaxInfo < ActiveRecord::Migration
+class CreatePurchaseSalesTaxInfo < ActiveRecord::Migration[4.2]
   def change
     create_table :purchase_sales_tax_infos, options: "DEFAULT CHARACTER SET=utf8 COLLATE=utf8_unicode_ci" do |t|
       t.references :purchase

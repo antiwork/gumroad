@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-class AddJsonDataToProductFilesArchives < ActiveRecord::Migration[6.1]
+class AddJsonDataToProductFilesArchives < ActiveRecord::Migration[4.2]
   def change
     add_column :product_files_archives, :json_data, :text
   end

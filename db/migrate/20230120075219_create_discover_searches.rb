@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-class CreateDiscoverSearches < ActiveRecord::Migration[7.0]
+class CreateDiscoverSearches < ActiveRecord::Migration[4.2]
   def change
     create_table :discover_searches do |t|
       t.string :query, index: true # searched text

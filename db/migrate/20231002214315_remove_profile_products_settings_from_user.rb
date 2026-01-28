@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-class RemoveProfileProductsSettingsFromUser < ActiveRecord::Migration[7.0]
+class RemoveProfileProductsSettingsFromUser < ActiveRecord::Migration[4.2]
   def up
     change_table :users, bulk: true do |t|
       t.remove :custom_css

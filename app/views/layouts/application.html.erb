@@ -9,7 +9,7 @@
   <body id="<%= @body_id %>" class="<%= bclass.join(" ") %>" style="<%= params[:as_embed] && "background: transparent" %>">
     <div id="design-settings" data-settings="<%= custom_context[:design_settings].to_json %>" style="display: none;"></div>
     <div id="user-agent-info" data-settings="<%= custom_context[:user_agent_info].to_json %>" style="display: none;"></div>
-    <%= render("layouts/shared/flash") %>
+
     <div class="flex flex-col lg:flex-row h-screen">
       <% if show_nav %>
         <div class="shrink-0 lg:flex bg-black">

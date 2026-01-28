@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-class SyncIndexesWithProduction < ActiveRecord::Migration
+class SyncIndexesWithProduction < ActiveRecord::Migration[4.2]
   def up
     # ==========
     # Following indexes exist in dev, not in production

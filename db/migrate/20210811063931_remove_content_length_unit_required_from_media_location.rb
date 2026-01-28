@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-class RemoveContentLengthUnitRequiredFromMediaLocation < ActiveRecord::Migration[6.1]
+class RemoveContentLengthUnitRequiredFromMediaLocation < ActiveRecord::Migration[4.2]
   def up
     change_table :media_locations, bulk: true do |t|
       t.change :content_length, :integer, null: true

@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-class AddIndexToBrowserFingerprint < ActiveRecord::Migration
+class AddIndexToBrowserFingerprint < ActiveRecord::Migration[4.2]
   def change
     add_index :events, :browser_guid
     add_index :visits, :browser_guid

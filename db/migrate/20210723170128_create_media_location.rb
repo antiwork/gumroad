@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-class CreateMediaLocation < ActiveRecord::Migration[6.1]
+class CreateMediaLocation < ActiveRecord::Migration[4.2]
   def change
     create_table :media_locations do |t|
       t.integer :product_file_id, null: false

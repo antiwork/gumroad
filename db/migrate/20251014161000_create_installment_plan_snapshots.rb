@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-class CreateInstallmentPlanSnapshots < ActiveRecord::Migration[7.1]
+class CreateInstallmentPlanSnapshots < ActiveRecord::Migration[4.2]
   def change
     create_table :installment_plan_snapshots do |t|
       t.integer :payment_option_id, null: false

@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-class RemoveCodeColumnsFromLinks < ActiveRecord::Migration[6.1]
+class RemoveCodeColumnsFromLinks < ActiveRecord::Migration[4.2]
   def up
     change_table :links, bulk: true do |t|
       t.change :id, :bigint, null: false, unique: true, auto_increment: true

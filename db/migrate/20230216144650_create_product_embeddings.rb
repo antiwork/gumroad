@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-class CreateProductEmbeddings < ActiveRecord::Migration[7.0]
+class CreateProductEmbeddings < ActiveRecord::Migration[4.2]
   def change
     create_table :product_embeddings do |t|
       t.references :product, null: false, index: { unique: true }

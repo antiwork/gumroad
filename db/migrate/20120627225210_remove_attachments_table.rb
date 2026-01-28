@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-class RemoveAttachmentsTable < ActiveRecord::Migration
+class RemoveAttachmentsTable < ActiveRecord::Migration[4.2]
   def up
     drop_table :attachments
   end

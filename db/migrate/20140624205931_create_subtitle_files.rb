@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-class CreateSubtitleFiles < ActiveRecord::Migration
+class CreateSubtitleFiles < ActiveRecord::Migration[4.2]
   def change
     create_table :subtitle_files do |t|
       t.string :url

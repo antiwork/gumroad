@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-class CreateUtmLinks < ActiveRecord::Migration[7.1]
+class CreateUtmLinks < ActiveRecord::Migration[4.2]
   def change
     create_table :utm_links do |t|
       t.references :seller, null: false

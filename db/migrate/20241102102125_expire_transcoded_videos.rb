@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-class ExpireTranscodedVideos < ActiveRecord::Migration[7.1]
+class ExpireTranscodedVideos < ActiveRecord::Migration[4.2]
   def up
     change_table :transcoded_videos, bulk: true do |t|
       t.datetime :deleted_at, index: true

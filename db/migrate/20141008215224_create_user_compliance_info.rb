@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-class CreateUserComplianceInfo < ActiveRecord::Migration
+class CreateUserComplianceInfo < ActiveRecord::Migration[4.2]
   def change
     create_table :user_compliance_info, options: "DEFAULT CHARACTER SET=utf8 COLLATE=utf8_general_ci" do |t|
       t.references :user

@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-class CreateCredits < ActiveRecord::Migration
+class CreateCredits < ActiveRecord::Migration[4.2]
   def change
     create_table :credits do |t|
       t.integer :user_id

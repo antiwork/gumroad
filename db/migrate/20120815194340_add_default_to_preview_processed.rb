@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-class AddDefaultToPreviewProcessed < ActiveRecord::Migration
+class AddDefaultToPreviewProcessed < ActiveRecord::Migration[4.2]
   def up
     change_column :links, :preview_processed, :boolean, default: true
   end

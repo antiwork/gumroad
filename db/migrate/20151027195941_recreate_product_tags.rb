@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-class RecreateProductTags < ActiveRecord::Migration
+class RecreateProductTags < ActiveRecord::Migration[4.2]
   def change
     create_table(:tags) do |t|
       t.string(:name, limit: 100)

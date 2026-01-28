@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-class AddDisputesSellerId < ActiveRecord::Migration[7.0]
+class AddDisputesSellerId < ActiveRecord::Migration[4.2]
   def change
     change_table :disputes, bulk: true do |t|
       t.bigint :seller_id

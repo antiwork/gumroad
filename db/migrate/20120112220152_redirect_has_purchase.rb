@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-class RedirectHasPurchase < ActiveRecord::Migration
+class RedirectHasPurchase < ActiveRecord::Migration[4.2]
   def up
     add_column :url_redirects, :purchase_id, :integer
     remove_column :url_redirects, :link_id

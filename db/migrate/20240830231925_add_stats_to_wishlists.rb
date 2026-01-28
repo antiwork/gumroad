@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-class AddStatsToWishlists < ActiveRecord::Migration[7.1]
+class AddStatsToWishlists < ActiveRecord::Migration[4.2]
   def change
     change_table :wishlists, bulk: true do |t|
       t.integer :flags, default: 0, null: false

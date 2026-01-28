@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-class CreateCommunities < ActiveRecord::Migration[7.1]
+class CreateCommunities < ActiveRecord::Migration[4.2]
   def change
     create_table :communities do |t|
       t.references :resource, polymorphic: true, null: false

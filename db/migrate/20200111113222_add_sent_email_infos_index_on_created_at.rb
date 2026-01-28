@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-class AddSentEmailInfosIndexOnCreatedAt < ActiveRecord::Migration
+class AddSentEmailInfosIndexOnCreatedAt < ActiveRecord::Migration[4.2]
   def up
     add_index :sent_email_infos, :created_at
   end

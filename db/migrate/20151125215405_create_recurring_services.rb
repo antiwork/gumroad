@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-class CreateRecurringServices < ActiveRecord::Migration
+class CreateRecurringServices < ActiveRecord::Migration[4.2]
   def change
     create_table :recurring_services, options: "DEFAULT CHARACTER SET=utf8 COLLATE=utf8_unicode_ci" do |t|
       t.timestamps

@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-class AddMissingIndicesToPurchases < ActiveRecord::Migration[6.0]
+class AddMissingIndicesToPurchases < ActiveRecord::Migration[4.2]
   def up
     execute <<~SQL
       ALTER TABLE purchases CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci,

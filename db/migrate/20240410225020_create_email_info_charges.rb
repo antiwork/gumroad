@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-class CreateEmailInfoCharges < ActiveRecord::Migration[7.0]
+class CreateEmailInfoCharges < ActiveRecord::Migration[4.2]
   def change
     create_table :email_info_charges do |t|
       t.references :email_info, index: true, null: false

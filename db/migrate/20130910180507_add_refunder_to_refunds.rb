@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-class AddRefunderToRefunds < ActiveRecord::Migration
+class AddRefunderToRefunds < ActiveRecord::Migration[4.2]
   def up
     add_column :refunds, :refunding_user_id, :integer
   end

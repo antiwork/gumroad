@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-class AddDefaultForFiletype < ActiveRecord::Migration
+class AddDefaultForFiletype < ActiveRecord::Migration[4.2]
   def up
     change_column :links, :filetype, :string, default: "link"
     change_column :links, :filegroup, :string, default: "url"

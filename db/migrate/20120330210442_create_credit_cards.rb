@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-class CreateCreditCards < ActiveRecord::Migration
+class CreateCreditCards < ActiveRecord::Migration[4.2]
   def change
     create_table :credit_cards do |t|
       t.string :card_type

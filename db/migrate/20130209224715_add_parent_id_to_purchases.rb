@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-class AddParentIdToPurchases < ActiveRecord::Migration
+class AddParentIdToPurchases < ActiveRecord::Migration[4.2]
   def change
     add_column :purchases, :parent_id, :integer
     add_column :purchases, :flags, :integer, default: 0, null: false

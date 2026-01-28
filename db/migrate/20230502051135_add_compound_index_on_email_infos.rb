@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-class AddCompoundIndexOnEmailInfos < ActiveRecord::Migration[7.0]
+class AddCompoundIndexOnEmailInfos < ActiveRecord::Migration[4.2]
   def change
     change_table :email_infos, bulk: true do |t|
       t.index [:installment_id, :purchase_id]

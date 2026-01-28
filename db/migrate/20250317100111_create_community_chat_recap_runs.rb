@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-class CreateCommunityChatRecapRuns < ActiveRecord::Migration[7.1]
+class CreateCommunityChatRecapRuns < ActiveRecord::Migration[4.2]
   def change
     create_table :community_chat_recap_runs do |t|
       t.string :recap_frequency, null: false, index: true

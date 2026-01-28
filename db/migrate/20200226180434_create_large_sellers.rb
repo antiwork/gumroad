@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-class CreateLargeSellers < ActiveRecord::Migration
+class CreateLargeSellers < ActiveRecord::Migration[4.2]
   def change
     create_table :large_sellers do |t|
       t.references :user, null: false, foreign_key: { on_delete: :cascade }, index: { unique: true }

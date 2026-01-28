@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-class DropPreviewColumns < ActiveRecord::Migration[6.1]
+class DropPreviewColumns < ActiveRecord::Migration[4.2]
   def up
     change_table :links do |t|
       t.remove "preview_file_name"

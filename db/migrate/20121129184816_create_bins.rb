@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-class CreateBins < ActiveRecord::Migration
+class CreateBins < ActiveRecord::Migration[4.2]
   def change
     create_table :bins do |t|
       t.string :card_bin

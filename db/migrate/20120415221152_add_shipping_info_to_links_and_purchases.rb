@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-class AddShippingInfoToLinksAndPurchases < ActiveRecord::Migration
+class AddShippingInfoToLinksAndPurchases < ActiveRecord::Migration[4.2]
   def change
     add_column :purchases, :street_address, :string
     add_column :purchases, :city, :string

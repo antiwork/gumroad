@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-class AddDefaultValueToWebhookFailCount < ActiveRecord::Migration
+class AddDefaultValueToWebhookFailCount < ActiveRecord::Migration[4.2]
   def up
     change_column :links, :webhook_fail_count, :integer, default: 0
   end

@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-class CreateAffiliateRequests < ActiveRecord::Migration[6.1]
+class CreateAffiliateRequests < ActiveRecord::Migration[4.2]
   def change
     create_table :affiliate_requests do |t|
       t.references :seller, type: :bigint, null: false, index: true

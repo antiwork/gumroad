@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-class RemoveUnusedUsersColumns202011 < ActiveRecord::Migration[6.0]
+class RemoveUnusedUsersColumns202011 < ActiveRecord::Migration[4.2]
   def up
     change_table :users do |t|
       t.remove :background_video_url

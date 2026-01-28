@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-class CreateMerchantAccount < ActiveRecord::Migration
+class CreateMerchantAccount < ActiveRecord::Migration[4.2]
   def up
     create_table :merchant_accounts, options: "DEFAULT CHARACTER SET=utf8 COLLATE=utf8_unicode_ci" do |t|
       t.references :user

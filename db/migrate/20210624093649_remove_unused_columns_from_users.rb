@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-class RemoveUnusedColumnsFromUsers < ActiveRecord::Migration[6.1]
+class RemoveUnusedColumnsFromUsers < ActiveRecord::Migration[4.2]
   def up
     change_table :users, bulk: true do |t|
       t.remove :reset_hash

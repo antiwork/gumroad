@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-class DropMegaphoneStates < ActiveRecord::Migration[7.0]
+class DropMegaphoneStates < ActiveRecord::Migration[4.2]
   def up
     drop_table :megaphone_states
   end

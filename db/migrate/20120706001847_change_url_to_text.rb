@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-class ChangeUrlToText < ActiveRecord::Migration
+class ChangeUrlToText < ActiveRecord::Migration[4.2]
   def up
     change_column :links, :url, :text
   end

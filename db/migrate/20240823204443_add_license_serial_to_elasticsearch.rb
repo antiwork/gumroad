@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-class AddLicenseSerialToElasticsearch < ActiveRecord::Migration[7.1]
+class AddLicenseSerialToElasticsearch < ActiveRecord::Migration[4.2]
   def up
     EsClient.indices.put_mapping(
       index: Purchase.index_name,

@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-class UtmLinkUpdateUniqueIndexOnUtmParams < ActiveRecord::Migration[7.1]
+class UtmLinkUpdateUniqueIndexOnUtmParams < ActiveRecord::Migration[4.2]
   def change
     change_table :utm_links, bulk: true do |t|
       t.remove_index [:seller_id, :utm_source, :utm_medium, :utm_campaign, :utm_term, :utm_content], where: "deleted_at IS NULL", name: "index_utm_links_on_utm_fields", unique: true

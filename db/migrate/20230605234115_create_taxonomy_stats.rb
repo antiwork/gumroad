@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-class CreateTaxonomyStats < ActiveRecord::Migration[7.0]
+class CreateTaxonomyStats < ActiveRecord::Migration[4.2]
   def change
     create_table :taxonomy_stats do |t|
       t.references :taxonomy, null: false

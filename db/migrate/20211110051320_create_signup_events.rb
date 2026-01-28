@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-class CreateSignupEvents < ActiveRecord::Migration[6.1]
+class CreateSignupEvents < ActiveRecord::Migration[4.2]
   def change
     create_table :signup_events, options: "ENGINE=InnoDB DEFAULT CHARSET=latin1" do |t|
       t.integer "visit_id"

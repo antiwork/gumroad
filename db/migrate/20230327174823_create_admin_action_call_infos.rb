@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-class CreateAdminActionCallInfos < ActiveRecord::Migration[7.0]
+class CreateAdminActionCallInfos < ActiveRecord::Migration[4.2]
   def change
     create_table :admin_action_call_infos do |t|
       t.string :controller_name, null: false

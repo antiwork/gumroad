@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-class RemoveColumns < ActiveRecord::Migration
+class RemoveColumns < ActiveRecord::Migration[4.2]
   def up
     remove_column :users, :create_date
     remove_column :purchases, :create_date

@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-class CreateEventTestPathsAssignmentsTable < ActiveRecord::Migration
+class CreateEventTestPathsAssignmentsTable < ActiveRecord::Migration[4.2]
   def change
     create_table :event_test_path_assignments do |t|
       t.integer :event_id

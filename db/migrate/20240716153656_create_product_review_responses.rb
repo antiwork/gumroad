@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-class CreateProductReviewResponses < ActiveRecord::Migration[7.1]
+class CreateProductReviewResponses < ActiveRecord::Migration[4.2]
   def change
     create_table :product_review_responses do |t|
       t.belongs_to :user, null: false

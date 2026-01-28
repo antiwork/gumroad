@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-class AddEmailDomainToPurchasesIndex < ActiveRecord::Migration[7.0]
+class AddEmailDomainToPurchasesIndex < ActiveRecord::Migration[4.2]
   def up
     EsClient.indices.put_mapping(
       index: Purchase.index_name,

@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-class CreateOfferCodes < ActiveRecord::Migration
+class CreateOfferCodes < ActiveRecord::Migration[4.2]
   def change
     create_table :offer_codes do |t|
       t.references :link

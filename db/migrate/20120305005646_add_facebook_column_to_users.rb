@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-class AddFacebookColumnToUsers < ActiveRecord::Migration
+class AddFacebookColumnToUsers < ActiveRecord::Migration[4.2]
   def up
     add_column :users, :facebook_profile, :string
     add_column :users, :facebook_gender, :string

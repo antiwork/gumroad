@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-class CreateProductFilesArchives < ActiveRecord::Migration
+class CreateProductFilesArchives < ActiveRecord::Migration[4.2]
   def change
     create_table :product_files_archives do |t|
       t.timestamp :deleted_at

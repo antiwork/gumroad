@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-class AddErrorCodeToPurchases < ActiveRecord::Migration
+class AddErrorCodeToPurchases < ActiveRecord::Migration[4.2]
   def up
     add_column :purchases, :error_code, :string
     add_index :purchases, :error_code

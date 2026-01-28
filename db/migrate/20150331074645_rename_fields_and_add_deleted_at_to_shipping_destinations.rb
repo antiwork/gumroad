@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-class RenameFieldsAndAddDeletedAtToShippingDestinations < ActiveRecord::Migration
+class RenameFieldsAndAddDeletedAtToShippingDestinations < ActiveRecord::Migration[4.2]
   def change
     add_column :shipping_destinations, :deleted_at, :datetime
     rename_column :shipping_destinations, :country_code2, :country_code

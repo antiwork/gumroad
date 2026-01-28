@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-class CreatePurchasesVariants < ActiveRecord::Migration
+class CreatePurchasesVariants < ActiveRecord::Migration[4.2]
   def change
     create_table :purchases_variants do |t|
       t.integer :purchase_id

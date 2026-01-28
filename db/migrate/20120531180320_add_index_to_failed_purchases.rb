@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-class AddIndexToFailedPurchases < ActiveRecord::Migration
+class AddIndexToFailedPurchases < ActiveRecord::Migration[4.2]
   def change
     # Composite Key to enforce uniqueness and speed up searches.
     add_index :failed_purchases, [:link_id, :stripe_fingerprint], unique: true, name: "by_link_and_stripe_fingerprint"

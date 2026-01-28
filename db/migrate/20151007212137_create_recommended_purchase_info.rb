@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-class CreateRecommendedPurchaseInfo < ActiveRecord::Migration
+class CreateRecommendedPurchaseInfo < ActiveRecord::Migration[4.2]
   def change
     create_table :recommended_purchase_infos, options: "DEFAULT CHARACTER SET=utf8 COLLATE=utf8_unicode_ci" do |t|
       t.timestamps

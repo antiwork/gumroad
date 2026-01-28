@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-class AddLastActiveSessionsInvalidatedAtToUsers < ActiveRecord::Migration[6.1]
+class AddLastActiveSessionsInvalidatedAtToUsers < ActiveRecord::Migration[4.2]
   def up
     # Using raw SQL due to a bug in departure gem: https://github.com/gumroad/web/pull/17299#issuecomment-786054996
     execute <<~SQL

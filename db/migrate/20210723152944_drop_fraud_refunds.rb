@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-class DropFraudRefunds < ActiveRecord::Migration[6.1]
+class DropFraudRefunds < ActiveRecord::Migration[4.2]
   def up
     drop_table :fraud_refunds
   end

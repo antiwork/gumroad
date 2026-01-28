@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-class CreateUserComplianceInfoRequest < ActiveRecord::Migration
+class CreateUserComplianceInfoRequest < ActiveRecord::Migration[4.2]
   def change
     create_table :user_compliance_info_requests, options: "DEFAULT CHARACTER SET=utf8 COLLATE=utf8_unicode_ci" do |t|
       t.timestamps

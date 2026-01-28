@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-class AddTopSellerRequestsIndex < ActiveRecord::Migration[6.1]
+class AddTopSellerRequestsIndex < ActiveRecord::Migration[4.2]
   def up
     if Rails.env.production? || Rails.env.staging?
       TopSellerRequest.__elasticsearch__.create_index!(index: "top_seller_requests_v1")

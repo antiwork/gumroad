@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-class AddUniqueIndexOnUtmColumnsOfUtmLinks < ActiveRecord::Migration[7.1]
+class AddUniqueIndexOnUtmColumnsOfUtmLinks < ActiveRecord::Migration[4.2]
   def up
     change_table :utm_links, bulk: true do |t|
       t.change :utm_source, :string, limit: 64, null: false

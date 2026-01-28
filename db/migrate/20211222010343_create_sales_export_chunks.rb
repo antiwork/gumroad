@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-class CreateSalesExportChunks < ActiveRecord::Migration[6.1]
+class CreateSalesExportChunks < ActiveRecord::Migration[4.2]
   def change
     create_table :sales_export_chunks do |t|
       t.bigint :export_id, null: false, index: true

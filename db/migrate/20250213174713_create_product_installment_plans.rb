@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-class CreateProductInstallmentPlans < ActiveRecord::Migration[7.1]
+class CreateProductInstallmentPlans < ActiveRecord::Migration[4.2]
   def change
     create_table :product_installment_plans do |t|
       t.references :link, null: false

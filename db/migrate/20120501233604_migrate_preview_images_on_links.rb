@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-class MigratePreviewImagesOnLinks < ActiveRecord::Migration
+class MigratePreviewImagesOnLinks < ActiveRecord::Migration[4.2]
   def up
     migrate_preview_images
   end

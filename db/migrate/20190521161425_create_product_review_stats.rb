@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-class CreateProductReviewStats < ActiveRecord::Migration
+class CreateProductReviewStats < ActiveRecord::Migration[4.2]
   def up
     create_table :product_review_stats do |t|
       t.references :link, index: { unique: true }

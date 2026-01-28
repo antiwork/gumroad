@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-class CreateAffiliatesLinks < ActiveRecord::Migration
+class CreateAffiliatesLinks < ActiveRecord::Migration[4.2]
   def change
     create_table :affiliates_links do |t|
       t.references :affiliate

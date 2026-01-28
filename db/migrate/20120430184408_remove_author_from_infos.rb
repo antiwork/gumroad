@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-class RemoveAuthorFromInfos < ActiveRecord::Migration
+class RemoveAuthorFromInfos < ActiveRecord::Migration[4.2]
   def up
     remove_column :infos, :author
   end

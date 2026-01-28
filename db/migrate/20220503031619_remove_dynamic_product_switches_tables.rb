@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-class RemoveDynamicProductSwitchesTables < ActiveRecord::Migration[6.1]
+class RemoveDynamicProductSwitchesTables < ActiveRecord::Migration[4.2]
   def up
     drop_table :dynamic_product_page_switches
     drop_table :dynamic_product_page_switch_assignments

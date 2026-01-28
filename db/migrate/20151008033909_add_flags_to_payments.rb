@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-class AddFlagsToPayments < ActiveRecord::Migration
+class AddFlagsToPayments < ActiveRecord::Migration[4.2]
   def change
     add_column :payments, :flags, :integer, default: 0, null: false
   end

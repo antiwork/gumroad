@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-class AddUrlToProductFilesArchive < ActiveRecord::Migration
+class AddUrlToProductFilesArchive < ActiveRecord::Migration[4.2]
   def change
     add_column :product_files_archives, :url, :string
     remove_column :product_files_archives, :zip_archive_file_file_name

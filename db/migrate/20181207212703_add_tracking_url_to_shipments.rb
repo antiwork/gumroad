@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-class AddTrackingUrlToShipments < ActiveRecord::Migration
+class AddTrackingUrlToShipments < ActiveRecord::Migration[4.2]
   def change
     add_column :shipments, :tracking_url, :string, limit: 2083
   end

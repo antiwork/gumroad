@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-class CreateCommunityChatMessages < ActiveRecord::Migration[7.1]
+class CreateCommunityChatMessages < ActiveRecord::Migration[4.2]
   def change
     create_table :community_chat_messages do |t|
       t.references :community, null: false

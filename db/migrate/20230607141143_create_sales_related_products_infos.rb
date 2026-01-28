@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-class CreateSalesRelatedProductsInfos < ActiveRecord::Migration[7.0]
+class CreateSalesRelatedProductsInfos < ActiveRecord::Migration[4.2]
   def change
     create_table :sales_related_products_infos do |t|
       t.bigint :smaller_product_id, null: false

@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-class CreateCommunityNotificationSettings < ActiveRecord::Migration[7.1]
+class CreateCommunityNotificationSettings < ActiveRecord::Migration[4.2]
   def change
     create_table :community_notification_settings do |t|
       t.references :user, null: false

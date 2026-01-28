@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-class CreateCurrency < ActiveRecord::Migration
+class CreateCurrency < ActiveRecord::Migration[4.2]
   def up
     create_table :currencies do |t|
       t.float  :currency_rate

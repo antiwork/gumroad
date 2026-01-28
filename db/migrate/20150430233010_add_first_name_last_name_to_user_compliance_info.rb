@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-class AddFirstNameLastNameToUserComplianceInfo < ActiveRecord::Migration
+class AddFirstNameLastNameToUserComplianceInfo < ActiveRecord::Migration[4.2]
   def change
     add_column :user_compliance_info, :first_name, :string
     add_column :user_compliance_info, :last_name, :string

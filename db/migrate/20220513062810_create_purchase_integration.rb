@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-class CreatePurchaseIntegration < ActiveRecord::Migration[6.1]
+class CreatePurchaseIntegration < ActiveRecord::Migration[4.2]
   def change
     create_table :purchase_integrations do |t|
       t.bigint :purchase_id, null: false

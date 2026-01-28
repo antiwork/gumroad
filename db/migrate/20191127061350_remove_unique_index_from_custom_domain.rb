@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-class RemoveUniqueIndexFromCustomDomain < ActiveRecord::Migration
+class RemoveUniqueIndexFromCustomDomain < ActiveRecord::Migration[4.2]
   def up
     remove_index :custom_domains, :domain
     add_index :custom_domains, :domain

@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-class RemoveNameFromTaxonomies < ActiveRecord::Migration[6.1]
+class RemoveNameFromTaxonomies < ActiveRecord::Migration[4.2]
   def up
     change_table(:taxonomies, bulk: true) do |t|
       t.remove :name

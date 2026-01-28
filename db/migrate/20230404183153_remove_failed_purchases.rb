@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-class RemoveFailedPurchases < ActiveRecord::Migration[7.0]
+class RemoveFailedPurchases < ActiveRecord::Migration[4.2]
   def up
     drop_table :failed_purchases
   end
