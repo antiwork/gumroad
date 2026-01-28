@@ -22,13 +22,7 @@ import { FileRowContent } from "$app/components/FileRowContent";
 import { Icon } from "$app/components/Icons";
 import { LoadingSpinner } from "$app/components/LoadingSpinner";
 import { PlayVideoIcon } from "$app/components/PlayVideoIcon";
-import {
-  Popover,
-  PopoverAnchor,
-  PopoverClose,
-  PopoverContent,
-  PopoverTrigger,
-} from "$app/components/Popover";
+import { Popover, PopoverAnchor, PopoverClose, PopoverContent, PopoverTrigger } from "$app/components/Popover";
 import {
   FileEmbedGroup,
   titleWithFallback,
