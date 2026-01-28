@@ -64,7 +64,7 @@ export const ShareTab = () => {
             onChange={(sectionIds) => updateProduct({ section_ids: sectionIds })}
             profileSections={profileSections}
           />
-          <section className="p-8!">
+          <section className="p-4 md:p-8">
             <header style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
               <h2>Gumroad Discover</h2>
               <a href="/help/article/79-gumroad-discover" target="_blank" rel="noreferrer">

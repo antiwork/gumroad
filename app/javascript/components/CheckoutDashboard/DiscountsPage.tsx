@@ -892,8 +892,8 @@ const Form = ({
           </>
         }
       />
-      <form>
-        <section className="p-8!">
+      <form className="space-y-4 p-4 md:p-8">
+        <section>
           <header>
             <div className="flex flex-col gap-4">
               <div>Create a discount code so your audience can buy your products at a reduced price.</div>
