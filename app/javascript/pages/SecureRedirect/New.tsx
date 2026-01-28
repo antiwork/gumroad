@@ -64,7 +64,7 @@ function SecureRedirectNew() {
           </form>
         </CardContent>
       </Card>
-      <PoweredByFooter className="text-subdued mt-auto pb-4 text-center" />
+      <PoweredByFooter className="mt-auto lg:py-4" />
     </div>
   );
 }
