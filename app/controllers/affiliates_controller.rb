@@ -9,7 +9,7 @@ class AffiliatesController < Sellers::BaseController
 
   before_action :set_direct_affiliate, only: PUBLIC_ACTIONS
   before_action :set_affiliate, only: %i[edit update destroy statistics]
-  before_action :set_title
+  before_action :set_default_page_title
   before_action :hide_layouts, only: PUBLIC_ACTIONS
 
   layout "inertia", only: [:index, :onboarding, :new, :edit, :create, :update]
@@ -129,8 +129,8 @@ class AffiliatesController < Sellers::BaseController
   end
 
   private
-    def set_title
-      @title = "Affiliates"
+    def set_default_page_title
+      set_meta_tag(title: "Affiliates")
     end
 
     def affiliate_params

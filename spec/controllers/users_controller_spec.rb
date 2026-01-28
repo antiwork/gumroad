@@ -675,7 +675,7 @@ describe UsersController do
         @request.host = "#{creator.username}.test.gumroad.com"
         get :subscribe
 
-        expect(assigns[:title]).to eq("Subscribe to creator")
+        expect(controller.send(:page_title)).to eq("Subscribe to creator")
         profile_presenter = assigns[:profile_presenter]
         expect(profile_presenter.seller).to eq(creator)
         expect(profile_presenter.pundit_user).to eq(controller.pundit_user)
@@ -689,54 +689,6 @@ describe UsersController do
       expect(response).to be_successful
       expect(assigns[:subscribe_preview_props][:title]).to eq(creator.name_or_username)
       expect(assigns[:subscribe_preview_props][:avatar_url]).to end_with(".png")
-    end
-  end
-
-  describe "GET unsubscribe_review_reminders" do
-    before do
-      @user = create(:user)
-    end
-
-    context "when user is logged in" do
-      it "sets opted_out_of_review_reminders flag successfully" do
-        sign_in(@user)
-        expect do
-          get :unsubscribe_review_reminders
-        end.to change { @user.reload.opted_out_of_review_reminders? }.from(false).to(true)
-        expect(response).to be_successful
-      end
-    end
-
-    context "when user is not logged in" do
-      it "redirects to login page" do
-        sign_out(@user)
-        get :unsubscribe_review_reminders
-        expect(response).to redirect_to(login_url(next: user_unsubscribe_review_reminders_path))
-      end
-    end
-  end
-
-  describe "GET subscribe_review_reminders" do
-    before do
-      @user = create(:user, opted_out_of_review_reminders: true)
-    end
-
-    context "when user is logged in" do
-      it "sets opted_out_of_review_reminders flag successfully" do
-        sign_in(@user)
-        expect do
-          get :subscribe_review_reminders
-        end.to change { @user.reload.opted_out_of_review_reminders? }.from(true).to(false)
-        expect(response).to be_successful
-      end
-    end
-
-    context "when user is not logged in" do
-      it "redirects to login page" do
-        sign_out(@user)
-        get :subscribe_review_reminders
-        expect(response).to redirect_to(login_url(next: user_subscribe_review_reminders_path))
-      end
     end
   end
 end

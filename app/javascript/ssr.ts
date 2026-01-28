@@ -18,7 +18,6 @@ import GenerateInvoiceConfirmationPage from "$app/components/server-components/G
 import GenerateInvoicePage from "$app/components/server-components/GenerateInvoicePage";
 import GumroadBlogIndexPage from "$app/components/server-components/GumroadBlog/IndexPage";
 import GumroadBlogPostPage from "$app/components/server-components/GumroadBlog/PostPage";
-import HelpCenterArticlesIndexPage from "$app/components/server-components/HelpCenter/ArticlesIndexPage";
 import Nav from "$app/components/server-components/Nav";
 import PdfReaderPage from "$app/components/server-components/PdfReaderPage";
 import ProductPage from "$app/components/server-components/Product";
@@ -26,7 +25,6 @@ import ProductIframePage from "$app/components/server-components/Product/IframeP
 import ProductEditPage from "$app/components/server-components/ProductEditPage";
 import Profile from "$app/components/server-components/Profile";
 import ProfileCoffeePage from "$app/components/server-components/Profile/CoffeePage";
-import ProfilePostPage from "$app/components/server-components/Profile/PostPage";
 import ProfileProductPage from "$app/components/server-components/Profile/ProductPage";
 import ProfileWishlistPage from "$app/components/server-components/Profile/WishlistPage";
 import DisputeEvidencePage from "$app/components/server-components/Purchase/DisputeEvidencePage";
@@ -46,7 +44,6 @@ import { Pill } from "$app/components/ui/Pill";
 
 ReactOnRails.register({
   Alert,
-  HelpCenterArticlesIndexPage,
   SupportHeader,
   BundleEditPage,
   CheckoutPage,
@@ -72,14 +69,11 @@ ReactOnRails.register({
   ProductPage,
   Profile,
   ProfileCoffeePage,
-  ProfilePostPage,
   ProfileProductPage,
   ProfileWishlistPage,
   SecureRedirectPage,
   SubscribePage,
   SubscribePreview,
-  SubscribeReviewReminders,
-  UnsubscribeReviewReminders,
   SubscriptionManager,
   SubscriptionManagerMagicLink,
   TaxesCollectionModal,

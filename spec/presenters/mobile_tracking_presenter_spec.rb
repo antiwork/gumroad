@@ -11,7 +11,6 @@ describe MobileTrackingPresenter do
   describe "#product_props" do
     it "returns the correct props" do
       expect(subject.product_props(product:)).to eq(
-        enabled: false,
         seller_id: seller.external_id,
         analytics: {
           google_analytics_id: nil,
@@ -24,30 +23,6 @@ describe MobileTrackingPresenter do
         permalink: product.unique_permalink,
         name: product.name,
       )
-    end
-
-    context "when the seller has analytics enabled in production" do
-      before do
-        allow(Rails.env).to receive(:production?).and_return(true)
-        seller.update!(google_analytics_id: "G-123", facebook_pixel_id: "fbid")
-      end
-
-      it "returns the correct props" do
-        expect(subject.product_props(product:)).to eq(
-          enabled: true,
-          seller_id: seller.external_id,
-          analytics: {
-            google_analytics_id: "G-123",
-            facebook_pixel_id: "fbid",
-            free_sales: true,
-          },
-          has_product_third_party_analytics: false,
-          has_receipt_third_party_analytics: false,
-          third_party_analytics_domain: THIRD_PARTY_ANALYTICS_DOMAIN,
-          permalink: product.unique_permalink,
-          name: product.name,
-        )
-      end
     end
 
     context "when the seller has third party analytics on the product page" do

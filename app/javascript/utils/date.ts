@@ -1,7 +1,13 @@
+import { parseISO } from "date-fns";
+
 export const formatDate = (
   date: Date,
   options: Intl.DateTimeFormatOptions = { dateStyle: "long", timeStyle: "short" },
 ) => date.toLocaleString([], options);
+
+const postDateFormatOptions: Intl.DateTimeFormatOptions = { month: "long", day: "numeric", year: "numeric" };
+export const formatPostDate = (date: string | null, locale: string): string =>
+  (date ? parseISO(date) : new Date()).toLocaleDateString(locale, postDateFormatOptions);
 
 export const formatCallDate = (
   date: Date,

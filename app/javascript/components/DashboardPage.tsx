@@ -175,7 +175,7 @@ const GettingStartedItem = ({
   const content = minimized ? (
     <div className="flex w-full items-center gap-2">
       <IconComponent isChecked={completed} width={36} height={36} className="flex-none" />
-      <span className="mb-1 flex-1 leading-tight font-semibold">{name}</span>
+      <span className="mb-1 flex-1 text-left leading-tight font-semibold">{name}</span>
       <Icon name={iconName} className={cx("flex-none", iconClasses)} />
     </div>
   ) : (

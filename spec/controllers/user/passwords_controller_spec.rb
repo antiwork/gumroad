@@ -25,7 +25,7 @@ describe User::PasswordsController, type: :controller, inertia: true do
     it "sets the page title" do
       get :new
 
-      expect(assigns[:title]).to eq("Forgot password")
+      expect(controller.send(:page_title)).to eq("Forgot password")
     end
   end
 

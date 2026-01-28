@@ -1,6 +1,13 @@
 # frozen_string_literal: true
 
 class User::OmniauthCallbacksController < Devise::OmniauthCallbacksController
+  include PageMeta::Base
+
+  before_action :set_default_page_title
+  before_action :set_csrf_meta_tags
+  before_action :set_default_meta_tags
+  helper_method :erb_meta_tags
+
   REQ_PARAM_STATE = "state"
 
   # Log in user through FB OAuth

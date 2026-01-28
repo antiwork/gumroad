@@ -5,7 +5,11 @@ class LinksController < ApplicationController
           ActionView::Helpers::AssetUrlHelper, CustomDomainConfig, AffiliateCookie,
           CreateDiscoverSearch, DiscoverCuratedProducts, FetchProductByUniquePermalink
 
+  include PageMeta::Favicon, PageMeta::Product
+
   DEFAULT_PRICE = 500
+
+  prepend_before_action :disable_third_party_analytics!, only: :cart_items_count
 
   skip_before_action :check_suspended, only: %i[index show edit destroy increment_views track_user_action]
 
@@ -25,7 +29,6 @@ class LinksController < ApplicationController
   before_action :ensure_seller_is_not_deleted, only: [:show]
   before_action :check_if_needs_redirect, only: [:show]
   before_action :prepare_product_page, only: %i[show]
-  before_action :set_frontend_performance_sensitive, only: %i[show]
   before_action :ensure_domain_belongs_to_seller, only: [:show]
   before_action :fetch_product_and_enforce_ownership, only: %i[destroy]
   before_action :fetch_product_and_enforce_access, only: %i[update publish unpublish release_preorder update_sections]
@@ -35,7 +38,7 @@ class LinksController < ApplicationController
   def index
     authorize Link
 
-    @title = "Products"
+    set_meta_tag(title: "Products")
 
     render inertia: "Products/Index", props: {
       archived_products_count: -> { products_page_presenter.page_props[:archived_products_count] },
@@ -60,10 +63,8 @@ class LinksController < ApplicationController
   def new
     authorize Link
 
-    props = ProductPresenter.new_page_props(current_seller:)
-    @title = "What are you creating?"
-
-    render inertia: "Products/New", props:
+    set_meta_tag(title: "What are you creating?")
+    render inertia: "Products/New", props: ProductPresenter.new_page_props(current_seller:)
   end
 
   def create
@@ -115,7 +116,7 @@ class LinksController < ApplicationController
     ActiveRecord::Base.connection.stick_to_primary!
     # Force a preload of all association data used in rendering
     preload_product
-    @show_user_favicon = true
+    set_favicon_meta_tags(@product.user)
 
     if params[:wanted] == "true"
       params[:option] ||= params[:variant] && @product.options.find { |o| o[:name] == params[:variant] }&.[](:id)
@@ -169,7 +170,6 @@ class LinksController < ApplicationController
 
   def cart_items_count
     @hide_layouts = true
-    @disable_third_party_analytics = true
   end
 
   def search
@@ -279,7 +279,7 @@ class LinksController < ApplicationController
 
     redirect_to bundle_path(@product.external_id) if @product.is_bundle?
 
-    @title = @product.name
+    set_meta_tag(title: @product.name)
 
     ai_generated = params[:ai_generated] == "true"
     @presenter = ProductPresenter.new(product: @product, pundit_user:, ai_generated:)
@@ -501,6 +501,18 @@ class LinksController < ApplicationController
       @product = product_by_custom_domain
     end
 
+    def product_by_custom_domain
+      @_product_by_custom_domain ||= begin
+        product = CustomDomain.find_by_host(request.host)&.product
+        general_permalink = product&.general_permalink
+        if general_permalink.blank?
+          nil
+        else
+          Link.fetch_leniently(general_permalink, user: product.user)
+        end
+      end
+    end
+
     # *** DO NOT USE THIS METHOD for actions that respond to non-subdomain URLs ***
     #
     # Used for actions where a product's general (custom or unique) permalink is used to identify the product.
@@ -547,7 +559,8 @@ class LinksController < ApplicationController
 
     def prepare_product_page
       @user                  = @product.user
-      @title                 = @product.name
+      set_meta_tag(title: @product.name)
+      set_product_page_meta(@product)
       @body_id               = "product_page"
       @is_on_product_page    = true
       @debug                 = params[:debug] && !Rails.env.production?
