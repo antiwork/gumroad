@@ -680,7 +680,7 @@ export const AddSectionButton = ({ side, index }: { index: number; side?: "top" 
   return (
     <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger aria-label="Add section" asChild>
-        <div
+        <button
           className={classNames(
             "absolute -top-px box-border aspect-square cursor-pointer place-self-center font-[inherit] text-[inherit] all-unset",
             { "top-full": side === "top" },
@@ -689,7 +689,7 @@ export const AddSectionButton = ({ side, index }: { index: number; side?: "top" 
           )}
         >
           <Icon name="plus" />
-        </div>
+        </button>
       </PopoverTrigger>
       <PopoverContent
         side={side === "top" ? "top" : "bottom"}
