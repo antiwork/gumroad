@@ -161,4 +161,35 @@ describe "Profile settings on product pages", type: :system, js: true do
       expect(page).to have_image(src: image_url)
     end
   end
+
+  it "paginates product sections with more than 9 products", :elasticsearch_wait_for_refresh do
+    products = 12.times.map { |i| create(:product, user: seller, name: "Product #{i + 1}") }
+    Link.import(refresh: true, force: true)
+
+    section = create(
+      :seller_profile_products_section,
+      seller: seller,
+      product: product,
+      header: "More Products",
+      shown_products: products.map(&:id)
+    )
+
+    product.update!(sections: [section.id], main_section_index: 0)
+
+    visit short_link_path(product)
+
+    within_section "More Products", section_element: :section do
+      expect(page).to have_product_card(count: 9)
+      expect(page).to have_product_card(products[0])
+      expect(page).to_not have_product_card(products[9])
+    end
+
+    find("main").scroll_to :bottom
+    wait_for_ajax
+
+    within_section "More Products", section_element: :section do
+      expect(page).to have_product_card(products[9])
+      expect(page).to have_product_card(count: 12)
+    end
+  end
 end

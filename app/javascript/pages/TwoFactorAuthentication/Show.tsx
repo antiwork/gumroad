@@ -80,5 +80,5 @@ function TwoFactorAuthentication() {
   );
 }
 
-TwoFactorAuthentication.disableLayout = true;
+TwoFactorAuthentication.authenticationLayout = true;
 export default TwoFactorAuthentication;

@@ -14,14 +14,14 @@ class PublicController < ApplicationController
   end
 
   def widgets
-    @title = "Widgets"
+    set_meta_tag(title: "Widgets")
     widget_presenter = WidgetPresenter.new(seller: current_seller)
 
     render inertia: "Public/Widgets", props: widget_presenter.widget_props
   end
 
   def charge
-    @title = "Why is there a charge on my account?"
+    set_meta_tag(title: "Why is there a charge on my account?")
     render inertia: "Public/Charge"
   end
 
@@ -49,20 +49,19 @@ class PublicController < ApplicationController
   end
 
   def license_key_lookup
-    @title = "What is my license key?"
+    set_meta_tag(title: "What is my license key?")
     render inertia: "Public/LicenseKeyLookup"
   end
 
   # api methods
 
   def api
-    @title = "API"
+    set_meta_tag(title: "API")
     render inertia: "Public/Api"
   end
 
   def ping
-    @title = "Ping"
-
+    set_meta_tag(title: "Ping")
     render inertia: "Public/Ping"
   end
 

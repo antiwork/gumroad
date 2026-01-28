@@ -2741,7 +2741,7 @@ describe LinksController, :vcr, inertia: true do
         get :new
 
         expect(response).to be_successful
-        expect(assigns[:title]).to eq("What are you creating?")
+        expect(controller.send(:page_title)).to eq("What are you creating?")
 
         expect(inertia).to render_component("Products/New")
 
@@ -2758,7 +2758,7 @@ describe LinksController, :vcr, inertia: true do
         get :new
 
         expect(response).to be_successful
-        expect(assigns[:title]).to eq("What are you creating?")
+        expect(controller.send(:page_title)).to eq("What are you creating?")
 
         expect(inertia).to render_component("Products/New")
 
@@ -2775,7 +2775,7 @@ describe LinksController, :vcr, inertia: true do
         get :new
 
         expect(response).to be_successful
-        expect(assigns[:title]).to eq("What are you creating?")
+        expect(controller.send(:page_title)).to eq("What are you creating?")
 
         expect(inertia).to render_component("Products/New")
 
