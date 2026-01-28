@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require "spec_helper"
+require "inertia_rails/rspec"
 
 describe SecureRedirectController, type: :controller do
   let(:destination_url) { user_unsubscribe_url(id: "sample-id", email_type: "notify") }
@@ -17,9 +18,9 @@ describe SecureRedirectController, type: :controller do
   let(:field_name) { "Email address" }
   let(:error_message) { "Email address does not match" }
 
-  describe "GET #new" do
+  describe "GET #new", inertia: true do
     context "with valid params" do
-      it "renders the new template" do
+      it "renders the Inertia component" do
         get :new, params: {
           encrypted_payload: encrypted_payload,
           message: message,
@@ -28,10 +29,10 @@ describe SecureRedirectController, type: :controller do
         }
 
         expect(response).to have_http_status(:success)
-        expect(response).to render_template(:new)
+        expect(inertia.component).to eq("SecureRedirect/NewPage")
       end
 
-      it "sets react component props" do
+      it "passes props to Inertia component" do
         get :new, params: {
           encrypted_payload: encrypted_payload,
           message: message,
@@ -39,14 +40,12 @@ describe SecureRedirectController, type: :controller do
           error_message: error_message
         }
 
-        expect(assigns(:react_component_props)).to include(
+        expect(inertia.props).to include(
           message: message,
           field_name: field_name,
           error_message: error_message,
-          encrypted_payload: encrypted_payload,
-          form_action: secure_url_redirect_path
+          encrypted_payload: encrypted_payload
         )
-        expect(assigns(:react_component_props)[:authenticity_token]).to be_present
       end
 
       it "uses default values when optional params are missing" do
@@ -54,31 +53,11 @@ describe SecureRedirectController, type: :controller do
           encrypted_payload: encrypted_payload
         }
 
-        expect(assigns(:react_component_props)).to include(
+        expect(inertia.props).to include(
           message: "Please enter the confirmation text to continue to your destination.",
           field_name: "Confirmation text",
           error_message: "Confirmation text does not match"
         )
-      end
-
-      it "includes flash error in props when present" do
-        # Simulate a previous request that set flash error
-        request.session["flash"] = ActionDispatch::Flash::FlashHash.new
-        request.session["flash"]["error"] = "Test error message"
-
-        get :new, params: {
-          encrypted_payload: encrypted_payload
-        }
-
-        expect(assigns(:react_component_props)[:flash_error]).to eq("Test error message")
-      end
-
-      it "does not include flash_error in props when not present" do
-        get :new, params: {
-          encrypted_payload: encrypted_payload
-        }
-
-        expect(assigns(:react_component_props)).not_to have_key(:flash_error)
       end
     end
 
@@ -91,7 +70,7 @@ describe SecureRedirectController, type: :controller do
     end
   end
 
-  describe "POST #create" do
+  describe "POST #create", inertia: true do
     let(:valid_params) do
       {
         encrypted_payload: encrypted_payload,
@@ -185,8 +164,9 @@ describe SecureRedirectController, type: :controller do
           confirmation_text: "nomatch@example.com"
         )
 
-        expect(response).to have_http_status(:unprocessable_entity)
-        expect(JSON.parse(response.body)).to eq({ "error" => error_message })
+        expect(response).to have_http_status(:unprocessable_content)
+        expect(inertia.component).to eq("SecureRedirect/NewPage")
+        expect(flash[:alert]).to eq(error_message)
       end
 
       it "works with single confirmation text (backward compatibility)" do
@@ -222,22 +202,25 @@ describe SecureRedirectController, type: :controller do
       it "returns unprocessable entity with error message" do
         post :create, params: valid_params.merge(confirmation_text: "")
 
-        expect(response).to have_http_status(:unprocessable_entity)
-        expect(JSON.parse(response.body)).to eq({ "error" => "Please enter the confirmation text" })
+        expect(response).to have_http_status(:unprocessable_content)
+        expect(inertia.component).to eq("SecureRedirect/NewPage")
+        expect(flash[:alert]).to eq("Please enter the confirmation text")
       end
 
       it "returns unprocessable entity when confirmation text is nil" do
         post :create, params: valid_params.except(:confirmation_text)
 
-        expect(response).to have_http_status(:unprocessable_entity)
-        expect(JSON.parse(response.body)).to eq({ "error" => "Please enter the confirmation text" })
+        expect(response).to have_http_status(:unprocessable_content)
+        expect(inertia.component).to eq("SecureRedirect/NewPage")
+        expect(flash[:alert]).to eq("Please enter the confirmation text")
       end
 
       it "returns unprocessable entity when confirmation text is whitespace only" do
         post :create, params: valid_params.merge(confirmation_text: "   ")
 
-        expect(response).to have_http_status(:unprocessable_entity)
-        expect(JSON.parse(response.body)).to eq({ "error" => "Please enter the confirmation text" })
+        expect(response).to have_http_status(:unprocessable_content)
+        expect(inertia.component).to eq("SecureRedirect/NewPage")
+        expect(flash[:alert]).to eq("Please enter the confirmation text")
       end
     end
 
@@ -245,16 +228,18 @@ describe SecureRedirectController, type: :controller do
       it "returns unprocessable entity with custom error message" do
         post :create, params: valid_params.merge(confirmation_text: "wrong@example.com")
 
-        expect(response).to have_http_status(:unprocessable_entity)
-        expect(JSON.parse(response.body)).to eq({ "error" => error_message })
+        expect(response).to have_http_status(:unprocessable_content)
+        expect(inertia.component).to eq("SecureRedirect/NewPage")
+        expect(flash[:alert]).to eq(error_message)
       end
 
       it "uses default error message when not provided" do
         params_without_error_message = valid_params.except(:error_message).merge(confirmation_text: "wrong@example.com")
         post :create, params: params_without_error_message
 
-        expect(response).to have_http_status(:unprocessable_entity)
-        expect(JSON.parse(response.body)).to eq({ "error" => "Confirmation text does not match" })
+        expect(response).to have_http_status(:unprocessable_content)
+        expect(inertia.component).to eq("SecureRedirect/NewPage")
+        expect(flash[:alert]).to eq("Confirmation text does not match")
       end
     end
 
@@ -263,16 +248,18 @@ describe SecureRedirectController, type: :controller do
         tampered_encrypted = encrypted_payload + "tamper"
         post :create, params: valid_params.merge(encrypted_payload: tampered_encrypted)
 
-        expect(response).to have_http_status(:unprocessable_entity)
-        expect(JSON.parse(response.body)).to eq({ "error" => "Invalid request" })
+        expect(response).to have_http_status(:unprocessable_content)
+        expect(inertia.component).to eq("SecureRedirect/NewPage")
+        expect(flash[:alert]).to eq("Invalid request")
       end
 
       it "returns unprocessable entity when encrypted_payload is invalid JSON" do
         invalid_payload = SecureEncryptService.encrypt("invalid json")
         post :create, params: valid_params.merge(encrypted_payload: invalid_payload)
 
-        expect(response).to have_http_status(:unprocessable_entity)
-        expect(JSON.parse(response.body)).to eq({ "error" => "Invalid request" })
+        expect(response).to have_http_status(:unprocessable_content)
+        expect(inertia.component).to eq("SecureRedirect/NewPage")
+        expect(flash[:alert]).to eq("Invalid request")
       end
     end
 
@@ -289,8 +276,9 @@ describe SecureRedirectController, type: :controller do
       it "returns unprocessable entity when payload is expired" do
         post :create, params: valid_params.merge(encrypted_payload: expired_encrypted_payload)
 
-        expect(response).to have_http_status(:unprocessable_entity)
-        expect(JSON.parse(response.body)).to eq({ "error" => "This link has expired" })
+        expect(response).to have_http_status(:unprocessable_content)
+        expect(inertia.component).to eq("SecureRedirect/NewPage")
+        expect(flash[:alert]).to eq("This link has expired")
       end
     end
 
@@ -315,8 +303,9 @@ describe SecureRedirectController, type: :controller do
       it "returns unprocessable entity with invalid destination error" do
         post :create, params: valid_params.merge(encrypted_payload: empty_destination_encrypted_payload)
 
-        expect(response).to have_http_status(:unprocessable_entity)
-        expect(JSON.parse(response.body)).to eq({ "error" => "Invalid destination" })
+        expect(response).to have_http_status(:unprocessable_content)
+        expect(inertia.component).to eq("SecureRedirect/NewPage")
+        expect(flash[:alert]).to eq("Invalid destination")
       end
     end
   end

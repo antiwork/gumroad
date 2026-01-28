@@ -88,7 +88,7 @@ describe("Secure Redirect", js: true, type: :system) do
         click_button "Continue"
         wait_for_ajax
 
-        expect(page).to have_content("Please enter your email address to unsubscribe")
+        expect(page).to have_content("Please enter the confirmation text")
         expect(page).to have_current_path(secure_url_redirect_path, ignore_query: true)
       end
     end

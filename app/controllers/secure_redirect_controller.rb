@@ -1,25 +1,27 @@
 # frozen_string_literal: true
 
 class SecureRedirectController < ApplicationController
-  before_action :validate_params, only: [:new, :create]
-  before_action :set_encrypted_params, only: [:new, :create]
-  before_action :set_react_component_props, only: [:new, :create]
+  layout "inertia"
+
+  before_action :validate_params
+  before_action :set_encrypted_params
 
   def new
+    render inertia: "SecureRedirect/NewPage", props: secure_redirect_props
   end
 
   def create
     confirmation_text = params[:confirmation_text]
 
     if confirmation_text.blank?
-      return render json: { error: "Please enter the confirmation text" }, status: :unprocessable_entity
+      return render_error("Please enter the confirmation text")
     end
 
     # Decrypt and parse the bundled payload
     begin
       payload_json = SecureEncryptService.decrypt(@encrypted_payload)
       if payload_json.nil?
-        return render json: { error: "Invalid request" }, status: :unprocessable_entity
+        return render_error("Invalid request")
       end
 
       payload = JSON.parse(payload_json)
@@ -29,11 +31,11 @@ class SecureRedirectController < ApplicationController
 
       # Verify the payload is recent (within 24 hours)
       if payload["created_at"] && Time.current.to_i - payload["created_at"] > 24.hours
-        return render json: { error: "This link has expired" }, status: :unprocessable_entity
+        return render_error("This link has expired")
       end
 
     rescue JSON::ParserError, NoMethodError
-      return render json: { error: "Invalid request" }, status: :unprocessable_entity
+      return render_error("Invalid request")
     end
 
     # Check if confirmation text matches any of the allowed texts
@@ -50,13 +52,13 @@ class SecureRedirectController < ApplicationController
         end
       end
 
-      if destination.present?
-        redirect_to destination
-      else
-        render json: { error: "Invalid destination" }, status: :unprocessable_entity
+      if destination.blank?
+        return render_error("Invalid destination")
       end
+
+      redirect_to destination, allow_other_host: true, status: :see_other
     else
-      render json: { error: @error_message }, status: :unprocessable_entity
+      render_error(@error_message)
     end
   end
 
@@ -74,18 +76,17 @@ class SecureRedirectController < ApplicationController
       @error_message = params[:error_message].presence || "Confirmation text does not match"
     end
 
-    def set_react_component_props
-      props = {
+    def secure_redirect_props
+      {
         message: @message,
         field_name: @field_name,
         error_message: @error_message,
-        encrypted_payload: @encrypted_payload,
-        form_action: secure_url_redirect_path,
-        authenticity_token: form_authenticity_token
+        encrypted_payload: @encrypted_payload
       }
+    end
 
-      props[:flash_error] = flash[:error] if flash[:error].present?
-
-      @react_component_props = props
+    def render_error(message)
+      flash.now[:alert] = message
+      render inertia: "SecureRedirect/NewPage", props: secure_redirect_props, status: :unprocessable_entity
     end
 end
