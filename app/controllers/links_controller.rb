@@ -494,16 +494,16 @@ class LinksController < ApplicationController
   end
 
   private
+    def no_scroll
+      @no_scroll = true
+    end
+
     def fetch_product_for_show
       fetch_product_by_custom_domain || fetch_product_by_general_permalink
     end
 
     def fetch_product_by_custom_domain
       @product = product_by_custom_domain
-    end
-
-    def no_scroll
-      @no_scroll = true
     end
 
     def product_by_custom_domain
@@ -516,8 +516,8 @@ class LinksController < ApplicationController
           Link.fetch_leniently(general_permalink, user: product.user)
         end
       end
+    end
 
-      
     # *** DO NOT USE THIS METHOD for actions that respond to non-subdomain URLs ***
     #
     # Used for actions where a product's general (custom or unique) permalink is used to identify the product.
