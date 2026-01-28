@@ -1,8 +1,10 @@
+$font-unicode-range: U+0000-00FF, U+0100-017F, U+0180-024F, U+1E00-1EFF, U+2020-2022, U+2026, U+20AC, U+2212, U+2215;
+
 @font-face {
   font-family: "ABC Favorit";
   src: url("~fonts/ABCFavorit-Regular.woff2") format("woff2");
   font-display: swap;
-  unicode-range: U+0000-00FF, U+0100-017F, U+0180-024F, U+1E00-1EFF, U+2020-2022, U+2026, U+20AC, U+2212, U+2215;
+  unicode-range: $font-unicode-range;
 }
 
 @font-face {
@@ -10,7 +12,7 @@
   src: url("~fonts/ABCFavorit-RegularItalic.woff2") format("woff2");
   font-style: italic;
   font-display: swap;
-  unicode-range: U+0000-00FF, U+0100-017F, U+0180-024F, U+1E00-1EFF, U+2020-2022, U+2026, U+20AC, U+2212, U+2215;
+  unicode-range: $font-unicode-range;
 }
 
 @font-face {
@@ -18,7 +20,7 @@
   src: url("~fonts/ABCFavorit-Bold.woff2") format("woff2");
   font-weight: 700;
   font-display: swap;
-  unicode-range: U+0000-00FF, U+0100-017F, U+0180-024F, U+1E00-1EFF, U+2020-2022, U+2026, U+20AC, U+2212, U+2215;
+  unicode-range: $font-unicode-range;
 }
 
 @font-face {
@@ -27,5 +29,5 @@
   font-weight: 700;
   font-style: italic;
   font-display: swap;
-  unicode-range: U+0000-00FF, U+0100-017F, U+0180-024F, U+1E00-1EFF, U+2020-2022, U+2026, U+20AC, U+2212, U+2215;
+  unicode-range: $font-unicode-range;
 }

@@ -16,24 +16,21 @@ describe "Product Umlaut Character Rendering", type: :system, js: true do
   end
 
   it "displays Umlaut characters correctly in product title" do
-    expect(page).to have_css("h1[itemprop='name']", text: /Testing Umlaut/)
-    expect(page).to have_css("h1[itemprop='name']", text: /ö/)
-    expect(page).to have_css("h1[itemprop='name']", text: /ü/)
-    expect(page).to have_css("h1[itemprop='name']", text: /ù/)
+    within("h1[itemprop='name']") do
+      title_text = page.text
+      expect(title_text).to include("Testing Umlaut")
+      expect(title_text).to match(/ö/)
+      expect(title_text).to match(/ü/)
+      expect(title_text).to match(/ù/)
+      expect(title_text).not_to include("�")
+      expect(title_text).not_to match(/Ã¶/)
+      expect(title_text).not_to match(/Ã¼/)
+    end
   end
 
   it "displays Umlaut characters correctly in product description" do
     expect(page).to have_content("Hello i am testing the umlaut appearance")
     expect(page).to have_content(/Ä/)
     expect(page).to have_content(/ú/)
-  end
-
-  it "renders characters without mojibake or boxes" do
-    within("h1[itemprop='name']") do
-      title_text = page.text
-      expect(title_text).not_to include("�")
-      expect(title_text).to match(/ö/)
-      expect(title_text).to match(/ü/)
-    end
   end
 end
