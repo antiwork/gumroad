@@ -2542,6 +2542,23 @@ describe User, :vcr do
     end
   end
 
+  describe "#update_alive_cart_email" do
+    it "syncs the cart email to the user's new email when user email is updated" do
+      user = create(:user, email: "old@example.com")
+      cart = create(:cart, user:, email: "old@example.com")
+
+      expect(cart.reload.email).to eq("old@example.com")
+
+      user.update!(email: "new@example.com")
+
+      expect(user).to receive(:update_alive_cart_email).and_call_original
+
+      user.confirm
+
+      expect(cart.reload.email).to eq("new@example.com")
+    end
+  end
+
   describe "#make_affiliate_of_the_matching_approved_affiliate_requests" do
     let(:requester_email) { "requester@example.com" }
     let!(:approved_affiliate_request_one) { create(:affiliate_request, email: requester_email, state: :approved) }
