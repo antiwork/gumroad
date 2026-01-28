@@ -51,7 +51,7 @@ describe SuspendAccountsWithStripeFingerprintWorker do
       expect(user_2.reload.suspended?).to be(false)
     end
 
-    it "ignores deleted bank accounts when suspending other accounts" do
+    it "suspends accounts even when their bank account is deleted" do
       user_1 = create(:user)
       create(:ach_account, user: user_1, stripe_fingerprint: stripe_fingerprint)
 
@@ -61,7 +61,20 @@ describe SuspendAccountsWithStripeFingerprintWorker do
 
       described_class.new.perform(user_1.id)
 
-      expect(user_2.reload.suspended?).to be(false)
+      expect(user_2.reload.suspended?).to be(true)
+    end
+
+    it "checks fingerprints from deleted bank accounts of suspended user" do
+      user_1 = create(:user)
+      deleted_bank = create(:ach_account, user: user_1, stripe_fingerprint: "deleted_fp")
+      deleted_bank.mark_deleted!
+
+      user_2 = create(:user)
+      create(:ach_account, user: user_2, stripe_fingerprint: "deleted_fp")
+
+      described_class.new.perform(user_1.id)
+
+      expect(user_2.reload.suspended?).to be(true)
     end
 
     it "suspends multiple accounts with the same fingerprint" do

@@ -6,7 +6,7 @@ describe CheckStripeFingerprintWorker do
   before do
     @previously_banned_user = create(:user, user_risk_state: "suspended_for_fraud")
     create(:ach_account, user: @previously_banned_user, stripe_fingerprint: stripe_fingerprint)
-    @blocked_fingerprint_object = BlockedObject.block!(BLOCKED_OBJECT_TYPES[:stripe_bank_account_fingerprint], "blocked_fingerprint_456", nil)
+    @blocked_fingerprint_object = BlockedObject.block!(BLOCKED_OBJECT_TYPES[:charge_processor_fingerprint], "blocked_fingerprint_456", nil)
   end
 
   it "does not flag the user for fraud if there are no other banned users with the same fingerprint" do
@@ -75,7 +75,7 @@ describe CheckStripeFingerprintWorker do
     expect(user.reload.user_risk_state).to eq("suspended_for_fraud")
   end
 
-  it "ignores deleted bank accounts when checking for suspended users" do
+  it "flags user when suspended user has deleted bank account with same fingerprint" do
     @previously_banned_user.active_bank_account.mark_deleted!
 
     user = create(:user)
@@ -83,6 +83,6 @@ describe CheckStripeFingerprintWorker do
 
     described_class.new.perform(user.id, stripe_fingerprint)
 
-    expect(user.reload.flagged?).to be(false)
+    expect(user.reload.flagged?).to be(true)
   end
 end

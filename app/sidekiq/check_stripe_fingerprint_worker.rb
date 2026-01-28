@@ -5,6 +5,11 @@ class CheckStripeFingerprintWorker
   sidekiq_options retry: 0, queue: :default, lock: :until_executed
 
   def perform(user_id, stripe_fingerprint)
+    if stripe_fingerprint.blank?
+      Rails.logger.info("CheckStripeFingerprintWorker: Stripe fingerprint blank for user #{user_id}, skipping")
+      return
+    end
+
     user = User.find_by(id: user_id)
 
     if user.blank?
@@ -17,12 +22,7 @@ class CheckStripeFingerprintWorker
       return
     end
 
-    if stripe_fingerprint.blank?
-      Rails.logger.info("CheckStripeFingerprintWorker: Stripe fingerprint blank for user #{user_id}, skipping")
-      return
-    end
-
-    suspended_users_with_same_fingerprint = BankAccount.alive
+    suspended_users_with_same_fingerprint = BankAccount
       .joins(:user)
       .where(stripe_fingerprint: stripe_fingerprint)
       .where(users: { user_risk_state: %w[suspended_for_tos_violation suspended_for_fraud] })

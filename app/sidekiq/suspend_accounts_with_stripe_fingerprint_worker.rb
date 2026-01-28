@@ -6,16 +6,15 @@ class SuspendAccountsWithStripeFingerprintWorker
 
   def perform(user_id)
     suspended_user = User.find(user_id)
-    stripe_fingerprint = suspended_user.active_bank_account&.stripe_fingerprint
+    fingerprints = suspended_user.bank_accounts.pluck(:stripe_fingerprint).compact.uniq
 
-    if stripe_fingerprint.blank?
-      Rails.logger.info("SuspendAccountsWithStripeFingerprintWorker: User #{user_id} has no active bank account or fingerprint, skipping")
+    if fingerprints.empty?
+      Rails.logger.info("SuspendAccountsWithStripeFingerprintWorker: User #{user_id} has no bank accounts with fingerprints, skipping")
       return
     end
 
     User.joins(:bank_accounts)
-        .merge(BankAccount.alive)
-        .where(bank_accounts: { stripe_fingerprint: stripe_fingerprint })
+        .where(bank_accounts: { stripe_fingerprint: fingerprints })
         .where.not(id: suspended_user.id)
         .distinct
         .find_each do |user|
