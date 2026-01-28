@@ -61,5 +61,73 @@ describe User::Risk do
         end.to change(SuspendAccountsWithPaymentAddressWorker.jobs, :size).from(1).to(0)
       end
     end
+
+    context "when user has ACH bank account with stripe fingerprint" do
+      it "calls SuspendAccountsWithStripeFingerprintWorker" do
+        user = create(:user)
+        create(:ach_account, user: user, stripe_fingerprint: "fp_123")
+
+        expect do
+          user.suspend_sellers_other_accounts(transition)
+        end.to change(SuspendAccountsWithStripeFingerprintWorker.jobs, :size).from(0).to(1)
+        .and change { SuspendAccountsWithStripeFingerprintWorker.jobs.last&.dig("args") }.to([user.id])
+      end
+    end
+  end
+
+  describe "#enable_sellers_other_accounts" do
+    let(:transition) { double("transition", args: [{}]) }
+
+    context "when related users share the same stripe fingerprint" do
+      it "marks related users as compliant" do
+        user = create(:user, user_risk_state: "suspended_for_fraud")
+        create(:ach_account, user: user, stripe_fingerprint: "fp_shared")
+
+        related_user = create(:user, user_risk_state: "suspended_for_fraud")
+        create(:ach_account, user: related_user, stripe_fingerprint: "fp_shared")
+
+        user.enable_sellers_other_accounts(transition)
+
+        expect(related_user.reload.compliant?).to be(true)
+      end
+
+      it "does not mark the original user as compliant" do
+        user = create(:user, user_risk_state: "suspended_for_fraud")
+        create(:ach_account, user: user, stripe_fingerprint: "fp_shared")
+
+        user.enable_sellers_other_accounts(transition)
+
+        expect(user.reload.suspended_for_fraud?).to be(true)
+      end
+
+      it "handles multiple related users" do
+        user = create(:user, user_risk_state: "suspended_for_fraud")
+        create(:ach_account, user: user, stripe_fingerprint: "fp_shared")
+
+        related_user_1 = create(:user, user_risk_state: "suspended_for_fraud")
+        create(:ach_account, user: related_user_1, stripe_fingerprint: "fp_shared")
+
+        related_user_2 = create(:user, user_risk_state: "suspended_for_fraud")
+        create(:ach_account, user: related_user_2, stripe_fingerprint: "fp_shared")
+
+        user.enable_sellers_other_accounts(transition)
+
+        expect(related_user_1.reload.compliant?).to be(true)
+        expect(related_user_2.reload.compliant?).to be(true)
+      end
+
+      it "checks all bank accounts including deleted ones" do
+        user = create(:user, user_risk_state: "suspended_for_fraud")
+        deleted_bank = create(:ach_account, user: user, stripe_fingerprint: "fp_deleted")
+        deleted_bank.mark_deleted!
+
+        related_user = create(:user, user_risk_state: "suspended_for_fraud")
+        create(:ach_account, user: related_user, stripe_fingerprint: "fp_deleted")
+
+        user.enable_sellers_other_accounts(transition)
+
+        expect(related_user.reload.compliant?).to be(true)
+      end
+    end
   end
 end
