@@ -142,15 +142,19 @@ const TiptapButton = TiptapNode.create<{ saleInfo: SaleInfo | null }>({
   addAttributes: () => ({ href: { default: null } }),
   renderHTML({ HTMLAttributes }) {
     return [
-      "a",
-      {
-        ...HTMLAttributes,
-        class: buttonVariants({ size: "default", color: "primary" }),
-        target: "_blank",
-        rel: "noopener noreferrer nofollow",
-        href: addSaleInfoQueryParams(cast<string>(HTMLAttributes.href), this.options.saleInfo),
-      },
-      0,
+      "div",
+      {},
+      [
+        "a",
+        {
+          ...HTMLAttributes,
+          class: buttonVariants({ size: "default", color: "primary" }),
+          target: "_blank",
+          rel: "noopener noreferrer nofollow",
+          href: addSaleInfoQueryParams(cast<string>(HTMLAttributes.href), this.options.saleInfo),
+        },
+        0,
+      ],
     ];
   },
 });
