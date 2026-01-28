@@ -18,6 +18,7 @@ AWS_CLI_DOCKER_IMAGE ?= garland/aws-cli-docker
 PUSH_ASSETS ?= false
 LOCAL_DETACHED ?= false
 LOCAL_DOCKER_COMPOSE_CONFIG = docker-compose-local.yml
+ALL_IN_ONE_DOCKER_COMPOSE = docker-compose-all-in-one.yml
 
 build_base:
 	: $${BUNDLE_GEMS__CONTRIBSYS__COM?"Need to set BUNDLE_GEMS__CONTRIBSYS__COM for sidekiq-pro"}
@@ -199,6 +200,10 @@ pull:
 local:
 	COMPOSE_PROJECT_NAME=$(COMPOSE_PROJECT_NAME) \
 		$(DOCKER_COMPOSE_CMD) -f docker/$(LOCAL_DOCKER_COMPOSE_CONFIG) up $(if $(filter true,$(LOCAL_DETACHED)),-d)
+
+dev:
+	COMPOSE_PROJECT_NAME=$(COMPOSE_PROJECT_NAME) \
+		$(DOCKER_COMPOSE_CMD) -f docker/${ALL_IN_ONE_DOCKER_COMPOSE} up $(if $(filter true,$(LOCAL_DETACHED)),-d)
 
 stop_local:
 	COMPOSE_PROJECT_NAME=$(COMPOSE_PROJECT_NAME) \
