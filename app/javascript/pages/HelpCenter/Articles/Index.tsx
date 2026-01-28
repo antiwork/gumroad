@@ -1,21 +1,17 @@
-// import cx from "classnames";
+import { usePage } from "@inertiajs/react";
 import * as React from "react";
-import { createCast } from "ts-safe-cast";
+import { cast } from "ts-safe-cast";
 
-import { register } from "$app/utils/serverComponentUtil";
+import { ArticleLink } from "$app/components/HelpCenterPage/types";
+import { NavigationButtonInertia } from "$app/components/NavigationButton";
 
-import { NavigationButton } from "$app/components/Button";
-
-interface Article {
-  title: string;
-  url: string;
-}
+import { HelpCenterLayout } from "../Layout";
 
 interface Category {
   url: string;
   title: string;
   audience: string;
-  articles: Article[];
+  articles: ArticleLink[];
 }
 
 interface ArticlesIndexPageProps {
@@ -50,21 +46,22 @@ const CategoryArticles = ({ category, searchTerm }: { category: Category; search
         style={{ display: "grid", gridAutoRows: "160px" }}
       >
         {category.articles.map((article) => (
-          <NavigationButton
+          <NavigationButtonInertia
             key={article.url}
             href={article.url}
             color="filled"
             className="box-border! flex! h-full! w-full! items-center! justify-center! p-12! text-center text-xl!"
           >
             {renderHighlightedText(article.title, searchTerm)}
-          </NavigationButton>
+          </NavigationButtonInertia>
         ))}
       </div>
     </div>
   );
 };
 
-const ArticlesIndexPage = ({ categories }: ArticlesIndexPageProps) => {
+export default function HelpCenterIndex() {
+  const { categories } = cast<ArticlesIndexPageProps>(usePage().props);
   const [searchTerm, setSearchTerm] = React.useState("");
 
   const filteredCategories = searchTerm
@@ -75,7 +72,7 @@ const ArticlesIndexPage = ({ categories }: ArticlesIndexPageProps) => {
     : categories;
 
   return (
-    <>
+    <HelpCenterLayout>
       <input
         type="text"
         autoFocus
@@ -89,8 +86,6 @@ const ArticlesIndexPage = ({ categories }: ArticlesIndexPageProps) => {
           <CategoryArticles key={category.url} category={category} searchTerm={searchTerm} />
         ))}
       </div>
-    </>
+    </HelpCenterLayout>
   );
-};
-
-export default register({ component: ArticlesIndexPage, propParser: createCast() });
+}

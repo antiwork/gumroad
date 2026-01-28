@@ -128,7 +128,7 @@ describe PostsController do
         expect(html.xpath("//meta[@name='description']/@content").text).to eq(post_presenter.snippet)
         expect(html.xpath("//meta[@property='og:title']/@value").text).to eq(installment.name)
         expect(html.xpath("//meta[@property='og:description']/@value").text).to eq(post_presenter.snippet)
-        expect(html.xpath("//meta[@property='og:image']/@value").text).to include("opengraph_image.png")
+        expect(html.xpath("//meta[@property='og:image']/@value").text).to eq ActionController::Base.helpers.image_path("opengraph_image.png")
         expect(html.xpath("//meta[@property='twitter:title']/@value").text).to eq(installment.name)
         expect(html.xpath("//meta[@property='twitter:description']/@value").text).to eq(post_presenter.snippet)
         expect(html.xpath("//meta[@property='twitter:domain']/@value").text).to eq("Gumroad")
