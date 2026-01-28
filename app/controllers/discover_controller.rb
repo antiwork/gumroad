@@ -7,13 +7,13 @@ class DiscoverController < ApplicationController
   include ActionView::Helpers::NumberHelper, RecommendationType, CreateDiscoverSearch,
           DiscoverCuratedProducts, SearchProducts, AffiliateCookie
 
+  layout "inertia", only: [:index]
+
   before_action :set_affiliate_cookie, only: [:index]
 
   def index
     format_search_params!
 
-    @hide_layouts = true
-    @card_data_handling_mode = CardDataHandlingMode.get_card_data_handling_mode(logged_in_user)
 
     if params[:sort].blank? && curated_products.present?
       params[:sort] = ProductSortKey::CURATED
@@ -32,8 +32,8 @@ class DiscoverController < ApplicationController
     params[:include_rated_as_adult] = logged_in_user&.show_nsfw_products?
     params[:size] = INITIAL_PRODUCTS_COUNT
 
-    @search_results = search_products(params)
-    @search_results[:products] = @search_results[:products].includes(ProductPresenter::ASSOCIATIONS_FOR_CARD).map do |product|
+    search_results = search_products(params)
+    search_results[:products] = search_results[:products].includes(ProductPresenter::ASSOCIATIONS_FOR_CARD).map do |product|
       ProductPresenter.card_for_web(
         product:,
         request:,
@@ -49,8 +49,8 @@ class DiscoverController < ApplicationController
 
     prepare_discover_page
 
-    @react_discover_props = {
-      search_results: @search_results,
+    render inertia: "Discover/Index", props: {
+      search_results:,
       currency_code: logged_in_user&.currency_type || "usd",
       taxonomies_for_nav:,
       recommended_products: recommendations,

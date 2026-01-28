@@ -1,6 +1,7 @@
+import { usePage } from "@inertiajs/react";
 import { range } from "lodash-es";
 import * as React from "react";
-import { createCast, is } from "ts-safe-cast";
+import { cast, is } from "ts-safe-cast";
 
 import { getRecommendedProducts } from "$app/data/discover";
 import { SearchResults, SearchRequest } from "$app/data/search";
@@ -12,7 +13,6 @@ import { CurrencyCode, formatPriceCentsWithCurrencySymbol } from "$app/utils/cur
 import { discoverTitleGenerator, Taxonomy } from "$app/utils/discover";
 import { asyncVoid } from "$app/utils/promise";
 import { assertResponseError } from "$app/utils/request";
-import { register } from "$app/utils/serverComponentUtil";
 
 import { Layout } from "$app/components/Discover/Layout";
 import { RecommendedWishlists } from "$app/components/Discover/RecommendedWishlists";
@@ -199,7 +199,8 @@ const BlackFridayButton = ({
   );
 };
 
-const Discover = (props: Props) => {
+export default function Discover() {
+  const props = cast<Props>(usePage().props);
   const location = useOriginalLocation();
 
   const defaultSortOrder = props.curated_product_ids.length > 0 ? "curated" : undefined;
@@ -502,6 +503,6 @@ const Discover = (props: Props) => {
       </div>
     </Layout>
   );
-};
+}
 
-export default register({ component: Discover, propParser: createCast() });
+Discover.loggedInUserLayout = true;
