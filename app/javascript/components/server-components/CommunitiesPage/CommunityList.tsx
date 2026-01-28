@@ -23,21 +23,21 @@ export const CommunityList = ({
 
       return (
         <Link
-          key={community.id}
-          href={Routes.community_path(community.id)}
-          replace
-          aria-selected={isCommunitySelected}
-          onClick={(e) => {
-            if (isCommunitySelected) {
-              e.preventDefault();
-              scrollTo({ target: community.unread_count > 0 ? "unread-separator" : "bottom" });
-            }
+          key={`${community.id}-${isCommunitySelected}`}
+          href={Routes.community_path(community.seller.id, community.id)}
+          preserveScroll
+          preserveState={false}
+          onClick={() => {
             if (!isAboveBreakpoint) setSidebarOpen(false);
+            if (isCommunitySelected) {
+              scrollTo({ target: "bottom" });
+            }
           }}
           className={cx("flex items-center gap-2 p-2 no-underline", {
             "bg-black text-white": isCommunitySelected,
             "hover:bg-black/5 hover:text-black dark:hover:bg-white/5 dark:hover:text-white": !isCommunitySelected,
           })}
+          aria-selected={isCommunitySelected}
         >
           <figure className="shrink-0">
             <img

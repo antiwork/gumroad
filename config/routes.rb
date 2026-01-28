@@ -778,7 +778,8 @@ Rails.application.routes.draw do
     post "/posts/:id/send_for_purchase/:purchase_id", to: "posts#send_for_purchase", as: :send_for_purchase
 
     # communities
-    resources :communities, only: [:index, :show]
+    get "/communities", to: "communities#index", as: :communities
+    get "/communities/:seller_id/:community_id", to: "communities#index", as: :community
 
     # emails
     resources :emails, only: [:index, :new, :create, :edit, :update, :destroy] do
@@ -900,7 +901,7 @@ Rails.application.routes.draw do
           resource :receipt_preview, only: [:show]
         end
         resources :product_public_files, only: [:create]
-        resources :communities, only: [] do
+        resources :communities, only: [:index] do
           resources :chat_messages, only: [:index, :create, :update, :destroy], controller: "communities/chat_messages", as: "chat_messages"
           resource :last_read_chat_message, only: [:create], controller: "communities/last_read_chat_messages"
           resource :notification_setting, only: [:update], controller: "communities/notification_settings", as: "notification_setting"

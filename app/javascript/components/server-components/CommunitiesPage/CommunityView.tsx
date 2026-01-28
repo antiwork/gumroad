@@ -125,6 +125,7 @@ export const CommunityView = () => {
     updateCommunity,
     updateCommunityDraft,
     updateCommunityChat,
+    setSelectedCommunityId,
   } = useCommunities();
   const [switcherOpen, setSwitcherOpen] = React.useState(false);
   const [sidebarOpen, setSidebarOpen] = React.useState(true);
@@ -147,9 +148,9 @@ export const CommunityView = () => {
     if (selectedCommunity) {
       const searchParams = new URLSearchParams(window.location.search);
       if (searchParams.has("notifications")) {
-        searchParams.delete("notifications");
-        const newSearch = searchParams.toString() ? `?${searchParams.toString()}` : "";
-        router.get(`${window.location.pathname}${newSearch}${window.location.hash}`, { replace: true, preserveState: true, preserveScroll: true });
+        const url = new URL(window.location.href);
+        url.searchParams.delete("notifications");
+        window.history.replaceState({}, "", url.toString());
         setShowNotificationsSettings(true);
       }
     }
@@ -488,7 +489,13 @@ export const CommunityView = () => {
   const switchSeller = (sellerId: string) => {
     const community = communities.find((community) => community.seller.id === sellerId);
     if (community) {
-      router.get(Routes.community_path(community.id), { replace: true });
+      router.get(
+        Routes.community_path(
+          community.seller.id,
+          community.id
+        ),
+        { preserveScroll: true }
+      );
       setSwitcherOpen(false);
     }
   };
@@ -511,9 +518,15 @@ export const CommunityView = () => {
       communityId = firstCommunity.id;
     }
 
-    const community = communities.find((community) => community.id === communityId);
-    if (!community) return;
-    router.get(Routes.community_path(community.id), { replace: true });
+  const community = communities.find((community) => community.id === communityId);
+  if (!community) return;
+
+  router.get(
+    Routes.community_path(
+      community.seller.id,
+      community.id
+    )
+  );
   });
 
   const sellers = React.useMemo(() => {
@@ -834,11 +847,14 @@ const CommunityChatHeader = ({
 const GoBackHeader = () => {
   const handleGoBack = (e: React.MouseEvent) => {
     e.preventDefault();
-    if (window.history.length > 1) {
-      window.history.back();
-    } else {
-      router.get(Routes.dashboard_path());
+    const storedReferrer = sessionStorage.getItem("communities:referrer");
+    if (storedReferrer) {
+      sessionStorage.removeItem("communities:referrer");
+      const url = new URL(storedReferrer, window.location.origin);
+      router.get(url.pathname + url.search + url.hash);
+      return;
     }
+    router.get(Routes.dashboard_path());
   };
 
   return (

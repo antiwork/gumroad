@@ -532,7 +532,7 @@ describe UrlRedirectPresenter do
 
           it "returns community path when product has an active community" do
             community = create(:community, seller: product.user, resource: product)
-            expect(presenter.download_page_with_content_props[:content][:community_chat_url]).to eq(community_path(community.external_id))
+            expect(presenter.download_page_with_content_props[:content][:community_chat_url]).to eq(community_path(product.user.external_id, community.external_id))
           end
 
           context "when user is not logged in" do
@@ -540,7 +540,7 @@ describe UrlRedirectPresenter do
 
             it "returns login path with next parameter when user is not logged in" do
               community = create(:community, seller: product.user, resource: product)
-              expected_path = login_path(email: purchase.email, next: community_path(community.external_id))
+              expected_path = login_path(email: purchase.email, next: community_path(product.user.external_id, community.external_id))
               expect(presenter.download_page_with_content_props[:content][:community_chat_url]).to eq(expected_path)
             end
           end
@@ -552,7 +552,7 @@ describe UrlRedirectPresenter do
 
             it "returns signup path with next parameter" do
               community = create(:community, seller: product.user, resource: product)
-              expected_path = signup_path(email: purchase.email, next: community_path(community.external_id))
+              expected_path = signup_path(email: purchase.email, next: community_path(product.user.external_id, community.external_id))
               expect(presenter.download_page_with_content_props[:content][:community_chat_url]).to eq(expected_path)
             end
           end

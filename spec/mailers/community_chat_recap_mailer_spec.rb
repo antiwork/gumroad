@@ -24,9 +24,9 @@ describe CommunityChatRecapMailer do
         expect(mail.body.encoded).to include("<li>Creator provided detailed instructions on how to use the feature.</li>")
         expect(mail.body.encoded).to include("<li>Two customers expressed their gratitude for the information and help.</li>")
         expect(mail.body.encoded).to include("10 messages summarised")
-        expect(mail.body.encoded).to have_link("Join the conversation", href: community_url(community.external_id))
+        expect(mail.body.encoded).to have_link("Join the conversation", href: community_url(seller.external_id, community.external_id))
         expect(mail.body).to have_text("You are receiving this email because you're part of the John Doe community. To stop receiving daily recap emails, please update your notification settings.")
-        expect(mail.body.encoded).to have_link("update your notification settings", href: community_url(community.external_id, notifications: "true"))
+        expect(mail.body.encoded).to have_link("update your notification settings", href: community_url(seller.external_id, community.external_id, notifications: "true"))
       end
     end
 
@@ -51,9 +51,9 @@ describe CommunityChatRecapMailer do
         expect(mail.body.encoded).to include("<li>Creator welcomed everyone to the community.</li>")
         expect(mail.body.encoded).to include("<li>People discussed various <strong>product issues</strong>.</li>")
         expect(mail.body.encoded).to include("24 messages summarised")
-        expect(mail.body.encoded).to have_link("Join the conversation", href: community_url(community.external_id))
+        expect(mail.body.encoded).to have_link("Join the conversation", href: community_url(seller.external_id, community.external_id))
         expect(mail.body).to have_text("You are receiving this email because you're part of the John Doe community. To stop receiving weekly recap emails, please update your notification settings.")
-        expect(mail.body.encoded).to have_link("update your notification settings", href: community_url(community.external_id, notifications: "true"))
+        expect(mail.body.encoded).to have_link("update your notification settings", href: community_url(seller.external_id, community.external_id, notifications: "true"))
       end
 
       context "when recap spans multiple months" do
