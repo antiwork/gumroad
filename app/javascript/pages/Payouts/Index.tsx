@@ -508,10 +508,10 @@ export default function PayoutsIndex() {
         title="Payouts"
         actions={
           settingsAction || bulkExportAction ? (
-            <div className="flex gap-2">
+            <>
               {settingsAction}
               {bulkExportAction}
-            </div>
+            </>
           ) : undefined
         }
       >
