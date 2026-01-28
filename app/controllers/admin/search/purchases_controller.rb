@@ -5,7 +5,7 @@ class Admin::Search::PurchasesController < Admin::BaseController
   RECORDS_PER_PAGE = 25
 
   def index
-    @title = "Purchase results"
+    set_meta_tag(title: "Purchase results")
 
     search_params = params.permit(:transaction_date, :last_4, :card_type, :price, :expiry_date, :purchase_status).to_hash.symbolize_keys
 

@@ -21,7 +21,7 @@ function NavbarFooter() {
         <NavLink text="Start selling" icon="shop-window-fill" href={Routes.dashboard_url(routeParams)} />
       ) : null}
       <ClientNavLink text="Settings" icon="gear-fill" href={Routes.settings_main_url(routeParams)} />
-      <NavLink text="Help" icon="book" href={Routes.help_center_root_url(routeParams)} />
+      <ClientNavLink text="Help" icon="book" href={Routes.help_center_root_url(routeParams)} />
       <DashboardNavProfilePopover user={currentSeller}>
         <div role="menu">
           {teamMemberships != null && teamMemberships.length > 0 ? (

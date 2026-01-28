@@ -166,9 +166,9 @@ describe ApplicationController do
     end
   end
 
-  describe "#set_title" do
+  describe "#set_default_page_title" do
     controller(ApplicationController) do
-      before_action :set_title
+      before_action :set_default_page_title
 
       def index
         head :ok
@@ -178,19 +178,19 @@ describe ApplicationController do
     it "is Local Gumroad for development" do
       allow(Rails).to receive(:env).and_return(ActiveSupport::StringInquirer.new("development"))
       get :index
-      expect(assigns("title".to_sym)).to eq("Local Gumroad")
+      expect(controller.send(:page_title)).to eq("Local Gumroad")
     end
 
     it "is Staging Gumroad for staging" do
       allow(Rails).to receive(:env).and_return(ActiveSupport::StringInquirer.new("staging"))
       get :index
-      expect(assigns("title".to_sym)).to eq("Staging Gumroad")
+      expect(controller.send(:page_title)).to eq("Staging Gumroad")
     end
 
     it "is Gumroad for production" do
       allow(Rails).to receive(:env).and_return(ActiveSupport::StringInquirer.new("production"))
       get :index
-      expect(assigns("title".to_sym)).to eq("Gumroad")
+      expect(controller.send(:page_title)).to eq("Gumroad")
     end
   end
 

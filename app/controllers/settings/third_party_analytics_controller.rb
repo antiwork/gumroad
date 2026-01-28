@@ -4,8 +4,6 @@ class Settings::ThirdPartyAnalyticsController < Settings::BaseController
   before_action :authorize
 
   def show
-    @title = "Settings"
-
     render inertia: "Settings/ThirdPartyAnalytics/Show", props: {
       third_party_analytics: settings_presenter.third_party_analytics_props,
       products: current_seller.links.alive.map { |product| { permalink: product.unique_permalink, name: product.name } }
