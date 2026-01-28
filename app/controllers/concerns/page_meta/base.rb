@@ -2,9 +2,10 @@
 
 module PageMeta::Base
   extend ActiveSupport::Concern
-  include ActionView::Helpers::AssetUrlHelper
   include ActionView::Helpers::OutputSafetyHelper
   include ActionView::Helpers::TagHelper
+
+  delegate :image_path, to: "ActionController::Base.helpers"
 
   private
     def set_default_page_title
@@ -42,7 +43,7 @@ module PageMeta::Base
       set_meta_tag(property: "fb:app_id", value: FACEBOOK_APP_ID)
       set_meta_tag(property: "fb:page_id", value: "http://www.facebook.com/gumroad")
       set_meta_tag(property: "gr:environment", value: Rails.env)
-      set_meta_tag(property: "og:image", value: asset_url("opengraph_image.png"))
+      set_meta_tag(property: "og:image", value: image_path("opengraph_image.png"))
       set_meta_tag(property: "og:image:alt", value: "Gumroad")
       set_meta_tag(property: "og:title", value: "Gumroad")
       set_meta_tag(property: "og:site_name", value: "Gumroad")
@@ -51,8 +52,8 @@ module PageMeta::Base
       set_meta_tag(property: "stripe:api_version", value: Stripe.api_version)
       set_meta_tag(property: "twitter:site", value: "@gumroad")
       set_meta_tag(tag_name: "link", rel: "search", href: "/opensearch.xml", type: "application/opensearchdescription+xml", title: "Gumroad")
-      set_meta_tag(tag_name: "link", rel: "shortcut icon", href: asset_url("pink-icon.png"))
-      set_meta_tag(tag_name: "link", rel: "apple-touch-icon", href: asset_url("pink-icon.png"), head_key: "apple-touch-icon")
+      set_meta_tag(tag_name: "link", rel: "shortcut icon", href: image_path("pink-icon.png"))
+      set_meta_tag(tag_name: "link", rel: "apple-touch-icon", href: image_path("pink-icon.png"), head_key: "apple-touch-icon")
     end
 
     def set_meta_tag(**options)

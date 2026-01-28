@@ -92,7 +92,7 @@ module ProductFileListHelpers
       {
         bytes: 1024,
         icon: "",
-        link: "https://fake-dropbox-link.test/#{SecureRandom.hex(8)}/#{filename}",
+        link: "https://dl.dropboxusercontent.com/test/#{SecureRandom.hex(8)}/#{filename}",
         name: filename,
         id: "id:#{SecureRandom.hex(16)}"
       }
