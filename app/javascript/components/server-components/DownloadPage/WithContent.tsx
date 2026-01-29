@@ -12,7 +12,7 @@ import { register } from "$app/utils/serverComponentUtil";
 import { Button } from "$app/components/Button";
 import { DiscordButton } from "$app/components/DiscordButton";
 import { DownloadAllButton } from "$app/components/Download/DownloadAllButton";
-import { FileItem, FileList as DownloadFileList, FolderItem } from "$app/components/Download/FileList";
+import { FileList as DownloadFileList, FileItem, FolderItem } from "$app/components/Download/FileList";
 import { OpenInAppButton } from "$app/components/Download/OpenInAppButton";
 import { PageList, PageListItem } from "$app/components/Download/PageListLayout";
 import { DownloadPagePostList, Post } from "$app/components/Download/PostList";
@@ -23,7 +23,7 @@ import {
 } from "$app/components/Download/RichContent";
 import { TranscodingNoticeModal } from "$app/components/Download/TranscodingNoticeModal";
 import { Icon } from "$app/components/Icons";
-import { Popover } from "$app/components/Popover";
+import { Popover, PopoverAnchor, PopoverClose, PopoverContent, PopoverTrigger } from "$app/components/Popover";
 import { FileEmbed } from "$app/components/ProductEdit/ContentTab/FileEmbed";
 import { showAlert } from "$app/components/server-components/Alert";
 import { LicenseKey } from "$app/components/TiptapExtensions/LicenseKey";
@@ -282,10 +282,8 @@ const WithContent = ({
             <DiscordButton purchaseId={props.purchase.id} connected={content.discord.connected} />
           ) : null}
           {content.community_chat_url ? (
-            <Button asChild>
-              <a className="accent" href={content.community_chat_url}>
-                Community
-              </a>
+            <Button asChild color="accent">
+              <a href={content.community_chat_url}>Community</a>
             </Button>
           ) : null}
           <OpenInAppButton iosAppUrl={content.ios_app_url} androidAppUrl={content.android_app_url} />
@@ -352,42 +350,40 @@ const WithContent = ({
           </IsMobileAppViewProvider>
         </MediaUrlsProvider>
       </PurchaseInfoProvider>
+
       {showPageList ? (
         <div role="navigation" className="mt-auto flex gap-4 border-t border-border pt-4 lg:justify-end lg:pb-4">
           {isDesktop ? null : (
-            <Popover
-              aria-label="Table of Contents"
-              position="bottom"
-              trigger={
-                <Button asChild>
-                  <div>
+            <Popover>
+              <PopoverAnchor>
+                <PopoverTrigger aria-label="Table of Contents" asChild>
+                  <Button>
                     <Icon name="unordered-list" />
-                  </div>
-                </Button>
-              }
-            >
-              {(close) => (
+                  </Button>
+                </PopoverTrigger>
+              </PopoverAnchor>
+              <PopoverContent sideOffset={4} className="border-0 p-0 shadow-none">
                 <div role="menu">
                   {pages.map((page, index) => (
-                    <div
-                      key={page.page_id}
-                      role="menuitemradio"
-                      aria-checked={index === activePageIndex}
-                      onClick={() => {
-                        handlePageChange(index);
-                        close();
-                      }}
-                    >
-                      <Icon
-                        name={pageIcons[index] ?? "file-text"}
-                        aria-label={pageIcons[index] ? PAGE_ICON_LABEL[pageIcons[index]] : "file-text"}
-                      />
-                      &ensp;
-                      {page.title ?? "Untitled"}
-                    </div>
+                    <PopoverClose key={page.page_id} asChild>
+                      <div
+                        role="menuitemradio"
+                        aria-checked={index === activePageIndex}
+                        onClick={() => {
+                          handlePageChange(index);
+                        }}
+                      >
+                        <Icon
+                          name={pageIcons[index] ?? "file-text"}
+                          aria-label={pageIcons[index] ? PAGE_ICON_LABEL[pageIcons[index]] : "file-text"}
+                        />
+                        &ensp;
+                        {page.title ?? "Untitled"}
+                      </div>
+                    </PopoverClose>
                   ))}
                 </div>
-              )}
+              </PopoverContent>
             </Popover>
           )}
           <WithTooltip position="top" tip={hasPreviousPage ? null : "No more pages"}>
@@ -412,9 +408,11 @@ const WithContent = ({
           </WithTooltip>
         </div>
       ) : null}
+
       {content.video_transcoding_info ? (
         <TranscodingNoticeModal transcodeOnFirstSale={content.video_transcoding_info.transcode_on_first_sale} />
       ) : null}
+
       {content.rich_content_pages === null && content.posts.length > 0 ? (
         <div className="flex flex-col gap-4">
           <DownloadPagePostList posts={content.posts} />

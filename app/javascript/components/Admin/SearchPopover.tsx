@@ -1,12 +1,11 @@
 import { useForm, usePage } from "@inertiajs/react";
 import * as React from "react";
 
-import { Button, buttonVariants } from "$app/components/Button";
+import { Button } from "$app/components/Button";
 import { Icon } from "$app/components/Icons";
-import { Popover } from "$app/components/Popover";
+import { Popover, PopoverAnchor, PopoverContent, PopoverTrigger } from "$app/components/Popover";
 import { Pill } from "$app/components/ui/Pill";
 import { useOriginalLocation } from "$app/components/useOriginalLocation";
-import { WithTooltip } from "$app/components/WithTooltip";
 
 type CardType = {
   id: string;
@@ -87,133 +86,134 @@ const SearchPopover = () => {
   };
 
   return (
-    <Popover
-      open={open}
-      onToggle={setOpen}
-      aria-label="Toggle Search"
-      trigger={
-        <WithTooltip tip="Search" position="bottom">
-          <div className={buttonVariants({ size: "default" })}>
-            <Icon name="solid-search" />
-          </div>
-        </WithTooltip>
-      }
-    >
-      <div className="grid w-96 max-w-full gap-3">
-        <form onSubmit={(e) => submitForm(e, Routes.admin_search_users_path(), "user_query")} className="flex gap-2">
-          <div className="input">
-            <Icon name="person" />
-            <input
-              autoFocus
-              name="query"
-              placeholder="Search users (email, name, ID)"
-              type="text"
-              value={data.user_query}
-              onChange={(e) => setData("user_query", e.target.value)}
-            />
-          </div>
-          <Button color="primary" type="submit">
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverAnchor>
+        <PopoverTrigger aria-label="Toggle Search" asChild>
+          <Button>
             <Icon name="solid-search" />
           </Button>
-        </form>
+        </PopoverTrigger>
+      </PopoverAnchor>
+      <PopoverContent sideOffset={4}>
+        <div className="grid w-96 max-w-full gap-3">
+          <form onSubmit={(e) => submitForm(e, Routes.admin_search_users_path(), "user_query")} className="flex gap-2">
+            <div className="input">
+              <Icon name="person" />
+              <input
+                autoFocus
+                name="query"
+                placeholder="Search users (email, name, ID)"
+                type="text"
+                value={data.user_query}
+                onChange={(e) => setData("user_query", e.target.value)}
+              />
+            </div>
+            <Button color="primary" type="submit">
+              <Icon name="solid-search" />
+            </Button>
+          </form>
 
-        <form
-          onSubmit={(e) => submitForm(e, Routes.admin_search_purchases_path(), "purchase_query")}
-          className="flex gap-2"
-        >
-          <div className="input">
-            <Icon name="solid-currency-dollar" />
-            <input
-              name="query"
-              placeholder="Search purchases (email, IP, card, external ID)"
-              type="text"
-              value={data.purchase_query}
-              onChange={(e) => setData("purchase_query", e.target.value)}
-            />
-          </div>
-          <Button color="primary" type="submit">
-            <Icon name="solid-search" />
-          </Button>
-        </form>
+          <form
+            onSubmit={(e) => submitForm(e, Routes.admin_search_purchases_path(), "purchase_query")}
+            className="flex gap-2"
+          >
+            <div className="input">
+              <Icon name="solid-currency-dollar" />
+              <input
+                name="query"
+                placeholder="Search purchases (email, IP, card, external ID)"
+                type="text"
+                value={data.purchase_query}
+                onChange={(e) => setData("purchase_query", e.target.value)}
+              />
+            </div>
+            <Button color="primary" type="submit">
+              <Icon name="solid-search" />
+            </Button>
+          </form>
 
-        <form onSubmit={(e) => submitForm(e, Routes.admin_affiliates_path(), "affiliate_query")} className="flex gap-2">
-          <div className="input">
-            <Icon name="people-fill" />
-            <input
-              name="query"
-              placeholder="Search affiliates (email, name, ID)"
-              type="text"
-              value={data.affiliate_query}
-              onChange={(e) => setData("affiliate_query", e.target.value)}
-            />
-          </div>
-          <Button color="primary" type="submit">
-            <Icon name="solid-search" />
-          </Button>
-        </form>
+          <form
+            onSubmit={(e) => submitForm(e, Routes.admin_affiliates_path(), "affiliate_query")}
+            className="flex gap-2"
+          >
+            <div className="input">
+              <Icon name="people-fill" />
+              <input
+                name="query"
+                placeholder="Search affiliates (email, name, ID)"
+                type="text"
+                value={data.affiliate_query}
+                onChange={(e) => setData("affiliate_query", e.target.value)}
+              />
+            </div>
+            <Button color="primary" type="submit">
+              <Icon name="solid-search" />
+            </Button>
+          </form>
 
-        <div role="separator">or search by card</div>
+          <div role="separator">or search by card</div>
 
-        <form
-          onSubmit={(e) => submitForm(e, Routes.admin_search_purchases_path(), null)}
-          style={{ display: "contents" }}
-        >
-          <select name="card_type" value={data.card_type} onChange={(e) => setData("card_type", e.target.value)}>
-            <option value="">Choose card type</option>
-            {card_types.map((cardType) => (
-              <option key={cardType.id} value={cardType.id}>
-                {cardType.name}
-              </option>
-            ))}
-          </select>
-          <div className="input">
-            <Icon name="calendar-all" />
-            <input
-              name="transaction_date"
-              placeholder="Date (02/22/2022)"
-              type="text"
-              value={data.transaction_date}
-              onChange={(e) => setData("transaction_date", e.target.value)}
-            />
-          </div>
-          <div className="input">
-            <Icon name="lock-fill" />
-            <input
-              name="last_4"
-              placeholder="Last 4 (7890)"
-              type="number"
-              value={data.last_4}
-              minLength={4}
-              maxLength={4}
-              onChange={(e) => setData("last_4", e.target.value)}
-            />
-          </div>
-          <div className="input">
-            <Icon name="outline-credit-card" />
-            <input
-              name="expiry_date"
-              placeholder="Expiry (02/22)"
-              type="text"
-              value={data.expiry_date}
-              onChange={(e) => setData("expiry_date", e.target.value)}
-            />
-          </div>
-          <div className="input">
-            <Pill className="-ml-2 shrink-0">$</Pill>
-            <input
-              name="price"
-              placeholder="Price (9.99)"
-              type="number"
-              step="0.01"
-              value={data.price}
-              onChange={(e) => setData("price", e.target.value)}
-            />
-          </div>
-          <Button color="primary" type="submit">
-            Search
-          </Button>
-        </form>
-      </div>
+          <form
+            onSubmit={(e) => submitForm(e, Routes.admin_search_purchases_path(), null)}
+            style={{ display: "contents" }}
+          >
+            <select name="card_type" value={data.card_type} onChange={(e) => setData("card_type", e.target.value)}>
+              <option value="">Choose card type</option>
+              {card_types.map((cardType) => (
+                <option key={cardType.id} value={cardType.id}>
+                  {cardType.name}
+                </option>
+              ))}
+            </select>
+            <div className="input">
+              <Icon name="calendar-all" />
+              <input
+                name="transaction_date"
+                placeholder="Date (02/22/2022)"
+                type="text"
+                value={data.transaction_date}
+                onChange={(e) => setData("transaction_date", e.target.value)}
+              />
+            </div>
+            <div className="input">
+              <Icon name="lock-fill" />
+              <input
+                name="last_4"
+                placeholder="Last 4 (7890)"
+                type="number"
+                value={data.last_4}
+                minLength={4}
+                maxLength={4}
+                onChange={(e) => setData("last_4", e.target.value)}
+              />
+            </div>
+            <div className="input">
+              <Icon name="outline-credit-card" />
+              <input
+                name="expiry_date"
+                placeholder="Expiry (02/22)"
+                type="text"
+                value={data.expiry_date}
+                onChange={(e) => setData("expiry_date", e.target.value)}
+              />
+            </div>
+            <div className="input">
+              <Pill className="-ml-2 shrink-0">$</Pill>
+              <input
+                name="price"
+                placeholder="Price (9.99)"
+                type="number"
+                step="0.01"
+                value={data.price}
+                onChange={(e) => setData("price", e.target.value)}
+              />
+            </div>
+            <Button color="primary" type="submit">
+              Search
+            </Button>
+          </form>
+        </div>
+      </PopoverContent>
     </Popover>
   );
 };

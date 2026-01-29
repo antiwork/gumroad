@@ -10,10 +10,10 @@ import { between } from "$app/utils/math";
 import { asyncVoid } from "$app/utils/promise";
 import { assertResponseError } from "$app/utils/request";
 
-import { Button, buttonVariants } from "$app/components/Button";
+import { Button } from "$app/components/Button";
 import { Icon } from "$app/components/Icons";
 import { LoadingSpinner } from "$app/components/LoadingSpinner";
-import { Popover } from "$app/components/Popover";
+import { Popover, PopoverAnchor, PopoverContent, PopoverTrigger } from "$app/components/Popover";
 import { Covers } from "$app/components/Product/Covers";
 import { RemoveButton } from "$app/components/RemoveButton";
 import { showAlert } from "$app/components/server-components/Alert";
@@ -86,20 +86,22 @@ export const CoverEditor = ({
               ))}
             </Sortable>
 
-            <WithTooltip tip={canAddPreview ? null : "Maximum number of previews uploaded"}>
-              <Popover
-                disabled={!canAddPreview || isUploading}
-                aria-label="Add cover"
-                trigger={
-                  <div className={buttonVariants({ size: "default" })}>
-                    <Icon name="plus" />
-                  </div>
-                }
-                open={isUploaderOpen}
-                onToggle={(value) => {
-                  if (canAddPreview && !isUploading) setIsUploaderOpen(value);
-                }}
-              >
+            <Popover
+              open={isUploaderOpen}
+              onOpenChange={(open) => {
+                if (canAddPreview && !isUploading) setIsUploaderOpen(open);
+              }}
+            >
+              <PopoverAnchor>
+                <WithTooltip tip={canAddPreview ? null : "Maximum number of previews uploaded"}>
+                  <PopoverTrigger disabled={!canAddPreview || isUploading} asChild>
+                    <Button aria-label="Add cover">
+                      <Icon name="plus" />
+                    </Button>
+                  </PopoverTrigger>
+                </WithTooltip>
+              </PopoverAnchor>
+              <PopoverContent sideOffset={4}>
                 <div className="flex flex-col gap-4">
                   <CoverUploader
                     permalink={permalink}
@@ -111,8 +113,8 @@ export const CoverEditor = ({
                     setIsUploading={setIsUploading}
                   />
                 </div>
-              </Popover>
-            </WithTooltip>
+              </PopoverContent>
+            </Popover>
           </div>
           <Covers covers={covers} activeCoverId={activeCoverId} setActiveCoverId={setActiveCoverId} />
         </div>

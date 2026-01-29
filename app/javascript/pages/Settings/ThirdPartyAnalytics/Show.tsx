@@ -7,6 +7,7 @@ import { SettingPage } from "$app/parsers/settings";
 
 import { Button } from "$app/components/Button";
 import { Details } from "$app/components/Details";
+import { Dropdown } from "$app/components/Dropdown";
 import { Icon } from "$app/components/Icons";
 import { useLoggedInUser } from "$app/components/LoggedInUser";
 import { Layout as SettingsLayout } from "$app/components/Settings/Layout";
@@ -104,7 +105,7 @@ export default function ThirdPartyAnalyticsPage() {
               </label>
             }
           >
-            <div className="dropdown flex flex-col gap-4">
+            <Dropdown className="flex flex-col gap-4">
               <fieldset>
                 <legend>
                   <label htmlFor={`${uid}googleAnalyticsId`}>Google Analytics Property ID</label>
@@ -143,7 +144,7 @@ export default function ThirdPartyAnalyticsPage() {
                 />
                 Send 'Purchase' events for free ($0) sales
               </label>
-            </div>
+            </Dropdown>
           </Details>
         </section>
         <section className="p-4! md:p-8!">
@@ -167,7 +168,7 @@ export default function ThirdPartyAnalyticsPage() {
               </label>
             }
           >
-            <div className="dropdown flex flex-col gap-4">
+            <Dropdown className="flex flex-col gap-4">
               <fieldset>
                 <legend>
                   <label htmlFor={`${uid}facebookMetaTag`}>Facebook Business</label>
@@ -183,7 +184,7 @@ export default function ThirdPartyAnalyticsPage() {
                 />
                 <small>Enter meta tag containing the Facebook domain verification code.</small>
               </fieldset>
-            </div>
+            </Dropdown>
           </Details>
         </section>
         <section className="p-4! md:p-8!">
