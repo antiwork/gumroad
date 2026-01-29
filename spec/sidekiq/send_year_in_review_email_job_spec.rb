@@ -148,7 +148,8 @@ describe SendYearInReviewEmailJob do
             expect(mail.body.sanitized).to include("You sold products in 1 country")
             expect(mail.body.sanitized).to_not include("United States")
             expect(mail.body.sanitized).to include("Elsewhere 24 12 $1.2K")
-            expect(mail.body.sanitized).to include("You'll be receiving a 1099 from us in the next few weeks.")
+            expect(mail.body.sanitized).to include("Your 1099 form is available for download on your")
+            expect(mail.body.sanitized).to have_link("Gumroad Tax Center page", href: tax_center_url)
             expect(mail.body.sanitized).to include(seller.financial_annual_report_url_for(year: date.year))
           end
 
