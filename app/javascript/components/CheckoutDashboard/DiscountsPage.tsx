@@ -57,6 +57,7 @@ type Product = {
   currency_type: CurrencyCode;
   url: string;
   is_tiered_membership: boolean;
+  is_recurring_billing: boolean;
   archived: boolean;
 };
 
@@ -790,7 +791,7 @@ const Form = ({
   );
 
   const canSetDuration = (universal ? products : selectedProducts).some(
-    ({ is_tiered_membership }) => is_tiered_membership,
+    ({ is_recurring_billing }) => is_recurring_billing,
   );
   const [durationInBillingCycles, setDurationInMonths] = React.useState(offerCode?.duration_in_billing_cycles ?? null);
 

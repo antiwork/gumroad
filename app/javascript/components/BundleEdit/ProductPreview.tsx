@@ -50,6 +50,7 @@ export const ProductPreview = ({ showRefundPolicyModal }: { showRefundPolicyModa
           ratings: bundle.display_product_reviews ? ratings : null,
           is_legacy_subscription: false,
           is_tiered_membership: false,
+          is_recurring_billing: false,
           is_physical: false,
           custom_view_content_button_text: null,
           permalink: uniquePermalink,
