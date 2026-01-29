@@ -341,7 +341,7 @@ export const UtmLinkForm = (pageProps: UtmLinkFormProps | UtmLinkEditProps) => {
                   </Button>
                 </CopyToClipboard>
                 {!isEditing && (
-                  <WithTooltip tip="Generate new short link">
+                  <WithTooltip tip="Generate new short link" position="left">
                     <Button
                       onClick={generateNewPermalink}
                       disabled={isLoadingNewPermalink}
