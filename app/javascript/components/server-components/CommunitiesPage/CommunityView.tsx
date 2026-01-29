@@ -488,14 +488,7 @@ export const CommunityView = () => {
   const switchSeller = (sellerId: string) => {
     const community = communities.find((community) => community.seller.id === sellerId);
     if (community) {
-      router.get(
-        Routes.community_path(
-          community.seller.id,
-          community.id
-        ),
-        {},
-        { preserveScroll: true }
-      );
+      router.get( Routes.community_path(community.seller.id, community.id), {}, { preserveScroll: true });
       setSwitcherOpen(false);
     }
   };
@@ -521,15 +514,7 @@ export const CommunityView = () => {
   const community = communities.find((community) => community.id === communityId);
   if (!community) return;
 
-  router.get(
-    Routes.community_path(
-      community.seller.id,
-      community.id
-    ),
-    {},
-    { replace: true }
-  );
-  });
+  router.get(Routes.community_path(community.seller.id, community.id), {}, { replace: true });});
 
   const sellers = React.useMemo(() => {
     const obj = communities.reduce<Record<string, Seller>>((acc, community) => {

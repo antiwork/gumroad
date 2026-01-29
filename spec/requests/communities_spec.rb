@@ -75,7 +75,7 @@ describe "Communities", :js, type: :system do
 
             click_button "Edit message"
             fill_in "Edit message", with: "This is wonderful!"
-            sleep 0.5
+            sleep 0.5 # wait for the state to update
             click_on "Save"
             wait_for_ajax
           end
