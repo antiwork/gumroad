@@ -86,7 +86,7 @@ module User::SocialGoogle
       user.google_uid ||= data["uid"]
 
       if user.name.blank? && data["info"]["name"].present?
-        sanitized_name = data["info"]["name"].gsub(":", "")
+        sanitized_name = data["info"]["name"].delete(":")
         user.name = sanitized_name
       end
 
