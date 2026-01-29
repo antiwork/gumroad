@@ -8,7 +8,7 @@ import { classNames } from "$app/utils/classNames";
 import { Button } from "$app/components/Button";
 import { useCurrentSeller } from "$app/components/CurrentSeller";
 import { Icon } from "$app/components/Icons";
-import { useDropdownPosition } from "$app/components/Popover";
+import { Popover, PopoverContent, PopoverTrigger } from "$app/components/Popover";
 import { Sheet } from "$app/components/ui/Sheet";
 import { useIsOnTouchDevice } from "$app/components/useIsOnTouchDevice";
 import { useOnOutsideClick } from "$app/components/useOnOutsideClick";
@@ -136,7 +136,7 @@ const Menubar = ({ moreLabel, ...extraAriaAttrs }: { moreLabel?: string | undefi
         <MenubarItem
           key={menuItem.key}
           menuItem={menuItem}
-          isHighlighted={highlightedMenubarItem === menuItem}
+          isHighlighted={highlightedMenubarItem?.key === menuItem.key}
           onHighlightIn={() => setHighlightedMenubarItem(menuItem)}
           onHighlightOut={resetHighlightedMenubarItem}
           showAllItem
@@ -147,7 +147,8 @@ const Menubar = ({ moreLabel, ...extraAriaAttrs }: { moreLabel?: string | undefi
           menuItem={moreMenuItem}
           isHighlighted={
             highlightedMenubarItem?.key === moreMenuItem.key ||
-            (highlightedMenubarItem !== null && !!itemsUnderMore?.includes(highlightedMenubarItem))
+            (highlightedMenubarItem !== null &&
+              !!itemsUnderMore?.some((item) => item.key === highlightedMenubarItem.key))
           }
           onHighlightIn={() => setHighlightedMenubarItem(moreMenuItem)}
           onHighlightOut={resetHighlightedMenubarItem}
@@ -217,7 +218,6 @@ const MenubarItem = ({
   }, [isHighlighted]);
   const ref = React.useRef<HTMLDivElement>(null);
   const uid = React.useId();
-  const dropdownPosition = useDropdownPosition(ref);
 
   const handleToggleMenu = (open: boolean) => {
     if (closeTimeoutRef.current) clearTimeout(closeTimeoutRef.current);
@@ -271,29 +271,30 @@ const MenubarItem = ({
     </Button>
   );
 
-  return (
-    <div
-      ref={hasChildren ? ref : undefined}
-      className={hasChildren ? classNames("popover", { expanded: menuOpen }) : undefined}
-      onMouseEnter={() => handleToggleMenu(true)}
-      onMouseLeave={hasChildren ? closeAfterDelay : () => handleToggleMenu(false)}
-    >
-      {menuItemAnchor}
-      {hasChildren ? (
-        <div className="dropdown" hidden={!menuOpen} style={dropdownPosition}>
+  return hasChildren ? (
+    <div ref={ref} onMouseEnter={() => handleToggleMenu(true)} onMouseLeave={closeAfterDelay}>
+      <Popover open={menuOpen}>
+        <PopoverTrigger asChild>
+          <span className="inline-flex">{menuItemAnchor}</span>
+        </PopoverTrigger>
+        <PopoverContent className="border-0 p-0" onInteractOutside={(e) => e.preventDefault()}>
           <ItemsList
+            key={`${uid}-${menuOpen}`}
             menuId={uid}
             menuItem={menuItem}
             showAllItemOnInitialList={showAllItem ?? false}
-            open={menuOpen}
             onSelectItem={(newSelectedItem, e) => {
               if (newSelectedItem === selectedItem) handleToggleMenu(false);
               onSelectItem?.(newSelectedItem, e);
             }}
             className="flex h-full w-48 flex-col bg-white dark:bg-dark-gray"
           />
-        </div>
-      ) : null}
+        </PopoverContent>
+      </Popover>
+    </div>
+  ) : (
+    <div onMouseEnter={() => handleToggleMenu(true)} onMouseLeave={() => handleToggleMenu(false)}>
+      {menuItemAnchor}
     </div>
   );
 };
@@ -308,9 +309,8 @@ const OverlayMenu = ({
   footer?: React.ReactNode;
   menuTop?: string | undefined;
 } & React.AriaAttributes) => {
-  const { onSelectItem, selectedItem, topLevelMenuItems } = useMenuContext();
+  const { onSelectItem, topLevelMenuItems } = useMenuContext();
   const [menuOpen, setMenuOpen] = React.useState(false);
-  React.useEffect(() => setMenuOpen(false), [selectedItem]);
   const overlayMenuUID = React.useId();
 
   return (
@@ -333,6 +333,7 @@ const OverlayMenu = ({
         className="right-auto w-80 max-w-80 border-l-0 p-0 md:left-0 md:border-r"
       >
         <ItemsList
+          key={`${overlayMenuUID}-${menuOpen}`}
           menuId={overlayMenuUID}
           menuItem={{
             key: "items#key",
@@ -341,7 +342,6 @@ const OverlayMenu = ({
             parent: null,
           }}
           footer={footer}
-          open={menuOpen}
           onSelectItem={(newSelectedItem, e) => {
             setMenuOpen(false);
             onSelectItem?.(newSelectedItem, e);
@@ -357,7 +357,6 @@ const ItemsList = ({
   menuId,
   menuItem: initialMenuItem,
   showAllItemOnInitialList,
-  open,
   onSelectItem,
   footer,
   className,
@@ -365,13 +364,11 @@ const ItemsList = ({
   menuId?: string;
   menuItem: MenuItemWithChildren;
   showAllItemOnInitialList?: boolean;
-  open: boolean;
   onSelectItem?: SelectItemHandler;
   footer?: React.ReactNode;
   className?: string;
 }) => {
   const [displayedItem, setDisplayedItem] = React.useState(initialMenuItem);
-  React.useEffect(() => setDisplayedItem(initialMenuItem), [open]);
   return (
     <div
       id={menuId}

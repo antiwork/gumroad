@@ -2,8 +2,9 @@
 
 require "spec_helper"
 require "shared_examples/authorize_called"
+require "inertia_rails/rspec"
 
-describe PostsController do
+describe PostsController, type: :controller, inertia: true do
   let(:seller) { create(:named_seller) }
 
   context "within seller area" do
@@ -118,6 +119,20 @@ describe PostsController do
         installment = create(:published_installment, link: @product, installment_type: "product", shown_on_profile: false)
         get :show, params: { username: @user.username, slug: installment.slug, purchase_id: @purchase.external_id }
         expect(response).to be_successful
+        expect(inertia).to render_component("Posts/Show")
+        expect(inertia.props[:subject]).to eq(installment.subject)
+        expect(inertia.props[:external_id]).to eq(installment.external_id)
+        expect(inertia.props[:purchase_id]).to eq(@purchase.external_id)
+        expect(inertia.props[:published_at]).to eq(installment.published_at)
+        expect(inertia.props[:message]).to be_present
+        expect(inertia.props[:call_to_action]).to be_nil
+        expect(inertia.props[:download_url]).to be_nil
+        expect(inertia.props[:has_posts_on_profile]).to eq(false)
+        expect(inertia.props[:recent_posts]).to eq([])
+        expect(inertia.props[:paginated_comments]).to be_present
+        expect(inertia.props[:comments_max_allowed_depth]).to eq(Comment::MAX_ALLOWED_DEPTH)
+        expect(inertia.props[:creator_profile]).to be_present
+        expect(inertia.props[:custom_styles]).to eq(@user.seller_profile.custom_styles)
       end
 
       it "sets the post page meta tags" do
@@ -128,7 +143,7 @@ describe PostsController do
         expect(html.xpath("//meta[@name='description']/@content").text).to eq(post_presenter.snippet)
         expect(html.xpath("//meta[@property='og:title']/@value").text).to eq(installment.name)
         expect(html.xpath("//meta[@property='og:description']/@value").text).to eq(post_presenter.snippet)
-        expect(html.xpath("//meta[@property='og:image']/@value").text).to include("opengraph_image.png")
+        expect(html.xpath("//meta[@property='og:image']/@value").text).to eq ActionController::Base.helpers.image_path("opengraph_image.png")
         expect(html.xpath("//meta[@property='twitter:title']/@value").text).to eq(installment.name)
         expect(html.xpath("//meta[@property='twitter:description']/@value").text).to eq(post_presenter.snippet)
         expect(html.xpath("//meta[@property='twitter:domain']/@value").text).to eq("Gumroad")
@@ -158,6 +173,7 @@ describe PostsController do
         installment = create(:published_installment, installment_type: Installment::AUDIENCE_TYPE, seller: @user, shown_on_profile: true)
         get :show, params: { username: @user.username, slug: installment.slug }
         expect(response).to be_successful
+        expect(inertia).to render_component("Posts/Show")
       end
 
       it "does not render a non-public installment if it doesn't have a valid purchase_id" do
@@ -206,6 +222,8 @@ describe PostsController do
 
           expect(assigns[:post]).to eq @post
           expect(response).to be_successful
+          expect(inertia).to render_component("Posts/Show")
+          expect(inertia.props[:subject]).to eq(@post.subject)
         end
       end
 

@@ -263,6 +263,7 @@ ActiveRecord::Schema[7.1].define(version: 2026_11_19_011937) do
     t.string "stripe_connect_account_id"
     t.string "country", limit: 191
     t.integer "credit_card_id"
+    t.index ["stripe_fingerprint"], name: "index_bank_accounts_on_stripe_fingerprint"
     t.index ["user_id"], name: "index_ach_accounts_on_user_id"
   end
 

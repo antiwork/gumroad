@@ -170,6 +170,31 @@ describe Payouts do
       end
     end
 
+    describe "instant payouts with settling funds" do
+      let(:settling_seller) { create(:compliant_user) }
+
+      before do
+        allow(settling_seller).to receive(:instant_payouts_supported?).and_return(true)
+        allow(settling_seller).to receive(:instantly_payable_unpaid_balance_cents_up_to_date).and_return(0)
+        allow(settling_seller).to receive(:unpaid_balance_cents_up_to_date).and_return(200_00)
+      end
+
+      it "returns false and adds a settling funds note when add_comment is true" do
+        expect(described_class.is_user_payable(settling_seller, payout_date, payout_type: Payouts::PAYOUT_TYPE_INSTANT, add_comment: true)).to be(false)
+
+        date = Time.current.to_fs(:formatted_date_full_month)
+        expect(settling_seller.comments.with_type_payout_note.last.content).to eq(
+          "Instant Payout on #{date} was skipped because funds are still settling. This should resolve within 1-2 days."
+        )
+      end
+
+      it "returns false without adding a note when add_comment is false" do
+        expect do
+          described_class.is_user_payable(settling_seller, payout_date, payout_type: Payouts::PAYOUT_TYPE_INSTANT, add_comment: false)
+        end.not_to change { settling_seller.comments.with_type_payout_note.count }
+      end
+    end
+
     describe "payout processor logic" do
       let(:u1) { create(:compliant_user) }
 
