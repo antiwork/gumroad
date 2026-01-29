@@ -10,6 +10,7 @@ class GumroadBlog::PostsController < GumroadBlog::BaseController
 
   def index
     authorize [:gumroad_blog, :posts]
+    set_meta_tag(title: "Blog - Gumroad")
 
     posts = @blog_owner.installments
       .visible_on_profile
@@ -31,6 +32,7 @@ class GumroadBlog::PostsController < GumroadBlog::BaseController
 
   def show
     authorize @post, policy_class: GumroadBlog::PostsPolicy
+    set_meta_tag(title: "#{@post.subject} - Gumroad Blog")
 
     render inertia: "GumroadBlog/Posts/Show", props: PostPresenter.new(pundit_user: pundit_user, post: @post, purchase_id_param: nil).post_component_props
   end
