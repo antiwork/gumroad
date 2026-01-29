@@ -1,6 +1,13 @@
 # frozen_string_literal: true
 
 class ApplicationController < ActionController::Base
+  inertia_share flash: -> {
+    {
+      success: flash.notice,
+      alert: flash.alert,
+      error: flash[:error]
+    }
+  }
   protect_from_forgery
 
   include LoggedInUser
