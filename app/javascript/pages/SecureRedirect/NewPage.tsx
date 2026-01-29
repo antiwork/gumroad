@@ -68,6 +68,4 @@ function NewPage() {
   );
 }
 
-NewPage.authenticationLayout = true;
-
 export default NewPage;
