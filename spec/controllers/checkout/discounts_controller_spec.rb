@@ -26,7 +26,7 @@ describe Checkout::DiscountsController do
     it "returns HTTP success and renders correct inertia props" do
       get :index
       expect(response).to be_successful
-      expect(assigns[:title]).to eq("Discounts")
+      expect(controller.send(:page_title)).to eq("Discounts")
 
       expect(response.body).to include("data-page=")
 

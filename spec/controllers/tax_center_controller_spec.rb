@@ -28,7 +28,7 @@ describe TaxCenterController, type: :controller, inertia: true do
         expect(response).to be_successful
         expect(inertia.component).to eq("TaxCenter/Index")
         expect(inertia.props).to include(TaxCenterPresenter.new(seller:, year: 2024).props)
-        expect(assigns(:title)).to eq("Payouts")
+        expect(controller.send(:page_title)).to eq("Payouts")
       end
     end
 

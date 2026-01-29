@@ -38,7 +38,7 @@
   def toggle_button
     content_tag :div, class: "flex items-center lg:hidden" do
       content_tag :button,
-        class: "relative flex h-8 w-8 flex-col items-center justify-center focus:outline-hidden",
+        class: "relative flex h-8 w-8 flex-col all-unset items-center justify-center focus:outline-hidden",
         data: { toggle: "mobile-menu" } do
           content_tag(:div, "",
             class: "mb-1 h-0.5 w-8 origin-center bg-black transition-transform duration-200 dark:bg-white",

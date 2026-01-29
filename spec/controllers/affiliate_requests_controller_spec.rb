@@ -54,7 +54,7 @@ describe AffiliateRequestsController, inertia: true do
           get :new, params: { username: creator.username }
 
           expect(response).to have_http_status(:ok)
-          expect(assigns[:title]).to eq("Become an affiliate for #{creator.display_name}")
+          expect(controller.send(:page_title)).to eq("Become an affiliate for #{creator.display_name}")
           expect(inertia.component).to eq("AffiliateRequests/New")
           expect(inertia.props[:creator_profile]).to be_present
           expect(inertia.props[:success]).to eq(false)
@@ -74,7 +74,7 @@ describe AffiliateRequestsController, inertia: true do
           get :new, params: { username: creator.username }
 
           expect(response).to have_http_status(:ok)
-          expect(assigns[:title]).to eq("Become an affiliate for #{creator.display_name}")
+          expect(controller.send(:page_title)).to eq("Become an affiliate for #{creator.display_name}")
           expect(inertia.component).to eq("AffiliateRequests/New")
           expect(inertia.props[:creator_profile]).to be_present
           expect(inertia.props[:success]).to eq(false)
@@ -92,7 +92,7 @@ describe AffiliateRequestsController, inertia: true do
           get :new, params: { username: creator.username }
 
           expect(response).to be_successful
-          expect(assigns[:title]).to eq("Become an affiliate for #{creator.display_name}")
+          expect(controller.send(:page_title)).to eq("Become an affiliate for #{creator.display_name}")
           expect(inertia.component).to eq("AffiliateRequests/New")
           expect(inertia.props[:creator_profile]).to be_present
           expect(inertia.props[:success]).to eq(false)
