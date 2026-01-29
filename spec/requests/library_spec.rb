@@ -159,8 +159,8 @@ describe("Library Scenario", type: :system, js: true) do
     find_product_card(purchase.link).hover
     within find_product_card(purchase.link) do
       find_and_click('[aria-label="Open product action menu"]')
-      click_on "Archive"
     end
+    click_on "Archive"
 
     expect(page).to_not have_product_card(purchase.link)
   end
@@ -176,8 +176,8 @@ describe("Library Scenario", type: :system, js: true) do
     find_product_card(purchase.link).hover
     within find_product_card(purchase.link) do
       find_and_click('[aria-label="Open product action menu"]')
-      click_on "Unarchive"
     end
+    click_on "Unarchive"
 
     expect(page).to have_current_path("/library?sort=recently_updated")
 
@@ -205,8 +205,8 @@ describe("Library Scenario", type: :system, js: true) do
 
     within find_product_card(purchase1.link) do
       find_and_click('[aria-label="Open product action menu"]')
-      click_on "Archive"
     end
+    click_on "Archive"
 
     expect(page).to have_status(text: "You have 2 archived purchases. Click here to view")
 
@@ -221,8 +221,8 @@ describe("Library Scenario", type: :system, js: true) do
 
     within find_product_card(purchase1.link) do
       find_and_click('[aria-label="Open product action menu"]')
-      click_on "Unarchive"
     end
+    click_on "Unarchive"
 
     expect(page).to have_current_path("/library?show_archived_only=true&sort=recently_updated")
     expect(page).to have_product_card(purchase3.link)
@@ -236,14 +236,14 @@ describe("Library Scenario", type: :system, js: true) do
     find_product_card(purchase2.link).hover
     within find_product_card(purchase2.link) do
       find_and_click('[aria-label="Open product action menu"]')
-      click_on "Archive"
     end
+    click_on "Archive"
 
     find_product_card(purchase1.link).hover
     within find_product_card(purchase1.link) do
       find_and_click('[aria-label="Open product action menu"]')
-      click_on "Archive"
     end
+    click_on "Archive"
 
     expect(page).to_not have_status(text: "You have 3 archived purchases. Click here to view")
 
@@ -252,8 +252,8 @@ describe("Library Scenario", type: :system, js: true) do
     find_product_card(purchase3.link).hover
     within find_product_card(purchase3.link) do
       find_and_click('[aria-label="Open product action menu"]')
-      click_on "Unarchive"
     end
+    click_on "Unarchive"
     wait_for_ajax
 
     expect(page).to have_current_path("/library?show_archived_only=true&sort=recently_updated")
@@ -485,8 +485,8 @@ describe("Library Scenario", type: :system, js: true) do
 
     within find_product_card(purchase.link).hover do
       find_and_click "[aria-label='Open product action menu']"
-      click_on "Delete"
     end
+    click_on "Delete permanently"
     expect(page).to have_text("Are you sure you want to delete #{purchase.link_name}?")
     click_on "Confirm"
 

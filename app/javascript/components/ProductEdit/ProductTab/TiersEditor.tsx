@@ -17,6 +17,7 @@ import { assertResponseError } from "$app/utils/request";
 import { Button } from "$app/components/Button";
 import { DateInput } from "$app/components/DateInput";
 import { Details } from "$app/components/Details";
+import { Dropdown } from "$app/components/Dropdown";
 import { Icon } from "$app/components/Icons";
 import { Modal } from "$app/components/Modal";
 import { NumberInput } from "$app/components/NumberInput";
@@ -304,7 +305,7 @@ const TierEditor = ({
               className="toggle"
               open={tier.customizable_price}
             >
-              <div className="dropdown">
+              <Dropdown>
                 <div
                   style={{
                     display: "grid",
@@ -346,7 +347,7 @@ const TierEditor = ({
                     ),
                   )}
                 </div>
-              </div>
+              </Dropdown>
             </Details>
             <PriceChangeSettings tier={tier} updateTier={updateTier} />
             {integrations.length > 0 ? (
@@ -447,7 +448,7 @@ You can modify or cancel your membership at any time.`;
       className="toggle"
       open={tier.apply_price_changes_to_existing_memberships}
     >
-      <div className="dropdown">
+      <Dropdown>
         <div className="grid gap-6">
           {initialEffectiveDate ? (
             <Alert variant="warning">
@@ -515,7 +516,7 @@ You can modify or cancel your membership at any time.`;
             ) : null}
           </fieldset>
         </div>
-      </div>
+      </Dropdown>
     </Details>
   );
 };

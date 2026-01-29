@@ -1,4 +1,4 @@
-import { DirectUpload, Blob } from "@rails/activestorage";
+import { Blob, DirectUpload } from "@rails/activestorage";
 import cx from "classnames";
 import { lightFormat, subMonths } from "date-fns";
 import { format } from "date-fns-tz";
@@ -6,44 +6,44 @@ import * as React from "react";
 
 import {
   Address,
+  Call,
+  Charge,
+  Commission,
   Customer,
   CustomerEmail,
   Discount,
+  File,
   License,
   MissedPost,
+  Option,
   Query,
-  Charge,
+  Review,
+  ReviewVideo,
   SortKey,
   Tracking,
+  approveReviewVideo,
   cancelSubscription,
   changeCanContact,
+  completeCommission,
+  getCharges,
   getCustomerEmails,
   getMissedPosts,
+  getOptions,
   getPagedCustomers,
   getProductPurchases,
   markShipped,
-  resendPing,
   refund,
+  rejectReviewVideo,
+  resendPing,
   resendPost,
   resendReceipt,
-  updateLicense,
-  updatePurchase,
   revokeAccess,
   undoRevokeAccess,
-  Option,
-  getOptions,
-  updateOption,
-  Review,
-  Call,
   updateCallUrl,
-  Commission,
   updateCommission,
-  completeCommission,
-  getCharges,
-  File,
-  ReviewVideo,
-  approveReviewVideo,
-  rejectReviewVideo,
+  updateLicense,
+  updateOption,
+  updatePurchase,
 } from "$app/data/customers";
 import { classNames } from "$app/utils/classNames";
 import {
@@ -69,11 +69,12 @@ import { Modal } from "$app/components/Modal";
 import { NavigationButtonInertia } from "$app/components/NavigationButton";
 import { NumberInput } from "$app/components/NumberInput";
 import { Pagination, PaginationProps } from "$app/components/Pagination";
-import { Popover } from "$app/components/Popover";
+import { Popover, PopoverAnchor, PopoverContent, PopoverTrigger } from "$app/components/Popover";
 import { PriceInput } from "$app/components/PriceInput";
 import { RatingStars } from "$app/components/RatingStars";
 import { ReviewResponseForm } from "$app/components/ReviewResponseForm";
 import { ReviewVideoPlayer } from "$app/components/ReviewVideoPlayer";
+import { Search } from "$app/components/Search";
 import { Select } from "$app/components/Select";
 import { showAlert } from "$app/components/server-components/Alert";
 import { Toggle } from "$app/components/Toggle";
@@ -219,8 +220,6 @@ const CustomersPage = ({
 
   const reloadCustomers = async () => loadCustomers(1);
 
-  const searchInputRef = React.useRef<HTMLInputElement>(null);
-
   const debouncedReloadCustomers = useDebouncedCallback(asyncVoid(reloadCustomers), 300);
   React.useEffect(() => {
     if (searchQuery !== null) debouncedReloadCustomers();
@@ -232,6 +231,7 @@ const CustomersPage = ({
 
   const [from, setFrom] = React.useState(subMonths(new Date(), 1));
   const [to, setTo] = React.useState(new Date());
+  const [exportPopoverOpen, setExportPopoverOpen] = React.useState(false);
 
   const exportNames = React.useMemo(
     () =>
@@ -260,167 +260,146 @@ const CustomersPage = ({
         title="Sales"
         actions={
           <>
-            <Popover
-              aria-label="Search"
-              onToggle={() => searchInputRef.current?.focus()}
-              trigger={
-                <WithTooltip tip="Search">
-                  <Button>
-                    <Icon name="solid-search" />
-                  </Button>
-                </WithTooltip>
-              }
-            >
-              <div className="input">
-                <Icon name="solid-search" />
-                <input
-                  ref={searchInputRef}
-                  type="text"
-                  placeholder="Search sales"
-                  value={searchQuery ?? ""}
-                  onChange={(evt) => updateQuery({ query: evt.target.value })}
-                  autoFocus
-                />
-              </div>
-            </Popover>
-            <Popover
-              aria-label="Filter"
-              dropdownClassName="p-0!"
-              trigger={
+            <Search value={searchQuery ?? ""} onSearch={(query) => updateQuery({ query })} placeholder="Search sales" />
+            <Popover>
+              <PopoverAnchor>
                 <WithTooltip tip="Filter">
-                  <Button>
-                    <Icon name="filter" />
-                  </Button>
+                  <PopoverTrigger aria-label="Filter" asChild>
+                    <Button>
+                      <Icon name="filter" />
+                    </Button>
+                  </PopoverTrigger>
                 </WithTooltip>
-              }
-            >
-              <Card className="w-140 border-none shadow-none">
-                <CardContent>
-                  <ProductSelect
-                    products={products.filter(
-                      (product) => !excludedItems.find((excludedItem) => product.id === excludedItem.id),
-                    )}
-                    label="Customers who bought"
-                    items={includedItems}
-                    setItems={setIncludedItems}
-                    className="grow basis-0"
-                  />
-                </CardContent>
-                <CardContent>
-                  <ProductSelect
-                    products={products.filter(
-                      (product) => !includedItems.find((includedItem) => product.id === includedItem.id),
-                    )}
-                    label="Customers who have not bought"
-                    items={excludedItems}
-                    setItems={setExcludedItems}
-                    className="grow basis-0"
-                  />
-                </CardContent>
-                <CardContent>
-                  <div
-                    style={{
-                      display: "grid",
-                      gap: "var(--spacer-4)",
-                      gridTemplateColumns: "repeat(auto-fit, minmax(var(--dynamic-grid), 1fr))",
-                    }}
-                    className="grow"
-                  >
-                    <fieldset>
-                      <label htmlFor={`${uid}-minimum-amount`}>Paid more than</label>
-                      <PriceInput
-                        id={`${uid}-minimum-amount`}
-                        currencyCode={currency_type}
-                        cents={minimumAmount}
-                        onChange={(minimumAmount) => updateQuery({ minimumAmount })}
-                        placeholder="0"
-                      />
-                    </fieldset>
-                    <fieldset>
-                      <label htmlFor={`${uid}-maximum-amount`}>Paid less than</label>
-                      <PriceInput
-                        id={`${uid}-maximum-amount`}
-                        currencyCode={currency_type}
-                        cents={maximumAmount}
-                        onChange={(maximumAmount) => updateQuery({ maximumAmount })}
-                        placeholder="0"
-                      />
-                    </fieldset>
-                  </div>
-                </CardContent>
-                <CardContent>
-                  <div
-                    style={{
-                      display: "grid",
-                      gap: "var(--spacer-4)",
-                      gridTemplateColumns: "repeat(auto-fit, minmax(var(--dynamic-grid), 1fr))",
-                    }}
-                    className="grow"
-                  >
-                    <fieldset>
-                      <label htmlFor={`${uid}-after-date`}>After</label>
-                      <DateInput
-                        id={`${uid}-after-date`}
-                        value={createdAfter}
-                        onChange={(createdAfter) => updateQuery({ createdAfter })}
-                        max={createdBefore || undefined}
-                      />
-                      <small suppressHydrationWarning>{`00:00  ${timeZoneAbbreviation}`}</small>
-                    </fieldset>
-                    <fieldset>
-                      <label htmlFor={`${uid}-before-date`}>Before</label>
-                      <DateInput
-                        id={`${uid}-before-date`}
-                        value={createdBefore}
-                        onChange={(createdBefore) => updateQuery({ createdBefore })}
-                        min={createdAfter || undefined}
-                      />
-                      <small suppressHydrationWarning>{`11:59 ${timeZoneAbbreviation}`}</small>
-                    </fieldset>
-                  </div>
-                </CardContent>
-                <CardContent>
-                  <fieldset className="grow basis-0">
-                    <label htmlFor={`${uid}-country`}>From</label>
-                    <select
-                      id={`${uid}-country`}
-                      value={country ?? "Anywhere"}
-                      onChange={(evt) =>
-                        updateQuery({ country: evt.target.value === "Anywhere" ? null : evt.target.value })
-                      }
+              </PopoverAnchor>
+              <PopoverContent className="p-0">
+                <Card className="w-140 border-none shadow-none">
+                  <CardContent>
+                    <ProductSelect
+                      products={products.filter(
+                        (product) => !excludedItems.find((excludedItem) => product.id === excludedItem.id),
+                      )}
+                      label="Customers who bought"
+                      items={includedItems}
+                      setItems={setIncludedItems}
+                      className="grow basis-0"
+                    />
+                  </CardContent>
+                  <CardContent>
+                    <ProductSelect
+                      products={products.filter(
+                        (product) => !includedItems.find((includedItem) => product.id === includedItem.id),
+                      )}
+                      label="Customers who have not bought"
+                      items={excludedItems}
+                      setItems={setExcludedItems}
+                      className="grow basis-0"
+                    />
+                  </CardContent>
+                  <CardContent>
+                    <div
+                      style={{
+                        display: "grid",
+                        gap: "var(--spacer-4)",
+                        gridTemplateColumns: "repeat(auto-fit, minmax(var(--dynamic-grid), 1fr))",
+                      }}
+                      className="grow"
                     >
-                      <option>Anywhere</option>
-                      {countries.map((country) => (
-                        <option value={country} key={country}>
-                          {country}
-                        </option>
-                      ))}
-                    </select>
-                  </fieldset>
-                </CardContent>
-                <CardContent>
-                  <h4 className="font-bold">
-                    <label htmlFor={`${uid}-active-customers-only`}>Show active customers only</label>
-                  </h4>
-                  <Toggle
-                    id={`${uid}-active-customers-only`}
-                    value={activeCustomersOnly}
-                    onChange={(activeCustomersOnly) => updateQuery({ activeCustomersOnly })}
-                  />
-                </CardContent>
-              </Card>
+                      <fieldset>
+                        <label htmlFor={`${uid}-minimum-amount`}>Paid more than</label>
+                        <PriceInput
+                          id={`${uid}-minimum-amount`}
+                          currencyCode={currency_type}
+                          cents={minimumAmount}
+                          onChange={(minimumAmount) => updateQuery({ minimumAmount })}
+                          placeholder="0"
+                        />
+                      </fieldset>
+                      <fieldset>
+                        <label htmlFor={`${uid}-maximum-amount`}>Paid less than</label>
+                        <PriceInput
+                          id={`${uid}-maximum-amount`}
+                          currencyCode={currency_type}
+                          cents={maximumAmount}
+                          onChange={(maximumAmount) => updateQuery({ maximumAmount })}
+                          placeholder="0"
+                        />
+                      </fieldset>
+                    </div>
+                  </CardContent>
+                  <CardContent>
+                    <div
+                      style={{
+                        display: "grid",
+                        gap: "var(--spacer-4)",
+                        gridTemplateColumns: "repeat(auto-fit, minmax(var(--dynamic-grid), 1fr))",
+                      }}
+                      className="grow"
+                    >
+                      <fieldset>
+                        <label htmlFor={`${uid}-after-date`}>After</label>
+                        <DateInput
+                          id={`${uid}-after-date`}
+                          value={createdAfter}
+                          onChange={(createdAfter) => updateQuery({ createdAfter })}
+                          max={createdBefore || undefined}
+                        />
+                        <small suppressHydrationWarning>{`00:00  ${timeZoneAbbreviation}`}</small>
+                      </fieldset>
+                      <fieldset>
+                        <label htmlFor={`${uid}-before-date`}>Before</label>
+                        <DateInput
+                          id={`${uid}-before-date`}
+                          value={createdBefore}
+                          onChange={(createdBefore) => updateQuery({ createdBefore })}
+                          min={createdAfter || undefined}
+                        />
+                        <small suppressHydrationWarning>{`11:59 ${timeZoneAbbreviation}`}</small>
+                      </fieldset>
+                    </div>
+                  </CardContent>
+                  <CardContent>
+                    <fieldset className="grow basis-0">
+                      <label htmlFor={`${uid}-country`}>From</label>
+                      <select
+                        id={`${uid}-country`}
+                        value={country ?? "Anywhere"}
+                        onChange={(evt) =>
+                          updateQuery({ country: evt.target.value === "Anywhere" ? null : evt.target.value })
+                        }
+                      >
+                        <option>Anywhere</option>
+                        {countries.map((country) => (
+                          <option value={country} key={country}>
+                            {country}
+                          </option>
+                        ))}
+                      </select>
+                    </fieldset>
+                  </CardContent>
+                  <CardContent>
+                    <h4 className="font-bold">
+                      <label htmlFor={`${uid}-active-customers-only`}>Show active customers only</label>
+                    </h4>
+                    <Toggle
+                      id={`${uid}-active-customers-only`}
+                      value={activeCustomersOnly}
+                      onChange={(activeCustomersOnly) => updateQuery({ activeCustomersOnly })}
+                    />
+                  </CardContent>
+                </Card>
+              </PopoverContent>
             </Popover>
-            <Popover
-              aria-label="Export"
-              trigger={
+            <Popover open={exportPopoverOpen} onOpenChange={setExportPopoverOpen}>
+              <PopoverAnchor>
                 <WithTooltip tip="Export">
-                  <Button>
-                    <Icon name="download" />
-                  </Button>
+                  <PopoverTrigger aria-label="Export" asChild>
+                    <Button>
+                      <Icon name="download" />
+                    </Button>
+                  </PopoverTrigger>
                 </WithTooltip>
-              }
-            >
-              {(close) => (
+              </PopoverAnchor>
+              <PopoverContent>
                 <div className="flex flex-col gap-4">
                   <h3>Download sales as CSV</h3>
                   <div>
@@ -437,8 +416,7 @@ const CustomersPage = ({
                       product_ids: includedProductIds,
                       variant_ids: includedVariantIds,
                     })}
-                    preserveScroll
-                    onSuccess={() => close()}
+                    onSuccess={() => setExportPopoverOpen(false)}
                   >
                     Download
                   </NavigationButtonInertia>
@@ -448,7 +426,7 @@ const CustomersPage = ({
                     </div>
                   )}
                 </div>
-              )}
+              </PopoverContent>
             </Popover>
           </>
         }

@@ -85,7 +85,7 @@ export const Nav = (props: Props) => {
             }
           />
           <DashboardNavProfilePopover user={currentSeller}>
-            <div role="menu">
+            <div role="menu" className="border-0! shadow-none! dark:border!">
               {teamMemberships != null && teamMemberships.length > 0 ? (
                 <>
                   {teamMemberships.map((teamMembership) => (

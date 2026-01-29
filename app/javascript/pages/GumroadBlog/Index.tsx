@@ -8,7 +8,7 @@ import { LoggedInUserLayout } from "$app/inertia/layout";
 
 import { HomeFooter } from "$app/components/HomeFooter";
 import { HomeNav } from "$app/components/HomeNav";
-import { formatPostDate } from "$app/components/server-components/Profile/PostPage";
+import { formatPostDate } from "$app/utils/date";
 import { Tabs, Tab } from "$app/components/ui/Tabs";
 
 import placeholderFeatureImage from "$assets/images/blog/post-placeholder.jpg";

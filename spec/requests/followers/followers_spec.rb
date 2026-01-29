@@ -56,7 +56,7 @@ describe("Followers", js: true, type: :system) do
 
     it "supports search functionality" do
       expect(page).to_not have_selector(:table_row, text: "test@example.com")
-      select_disclosure "Search" do
+      select_disclosure "Toggle Search" do
         fill_in("Search followers", with: "FALSE_EMAIL@gumroad")
       end
       expect(page).to_not have_table("All followers")

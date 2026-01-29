@@ -74,7 +74,7 @@ describe "User profile page", type: :system, js: true do
         create(:seller_profile_products_section, seller:)
         visit user_with_role_for_seller.subdomain_with_protocol
         expect(page).not_to have_link("Edit profile")
-        expect(page).not_to have_disclosure("Edit section")
+        expect(page).not_to have_disclosure_button("Edit section")
         expect(page).not_to have_button("Page settings")
       end
     end
@@ -84,7 +84,7 @@ describe "User profile page", type: :system, js: true do
         create(:seller_profile_products_section, seller:)
         visit seller.subdomain_with_protocol
         expect(page).not_to have_link("Edit profile")
-        expect(page).not_to have_disclosure("Edit section")
+        expect(page).not_to have_disclosure_button("Edit section")
         expect(page).not_to have_button("Page settings")
       end
     end
@@ -169,11 +169,11 @@ describe "User profile page", type: :system, js: true do
       end
 
       def add_section(type)
-        all(:disclosure, "Add section").last.select_disclosure do
+        all(:disclosure_button, "Add section").last.select_disclosure do
           click_on type
         end
         sleep 1
-        all(:disclosure, "Edit section").last.select_disclosure do
+        all(:disclosure_button, "Edit section").last.select_disclosure do
           click_on "Name"
           fill_in "Name", with: "New section"
         end
@@ -227,7 +227,7 @@ describe "User profile page", type: :system, js: true do
         expect(section.reload.hide_header?).to eq false
 
         add_section "Products"
-        expect(page).to have_disclosure("Edit section", count: 2)
+        expect(page).to have_disclosure_button("Edit section", count: 2)
         within_section "New name", section_element: :section do
           select_disclosure "Edit section" do
             click_on "Remove"
@@ -235,7 +235,7 @@ describe "User profile page", type: :system, js: true do
         end
         sleep 1
         wait_for_ajax
-        expect(page).to have_disclosure("Edit section", count: 1)
+        expect(page).to have_disclosure_button("Edit section", count: 1)
         expect(page).to_not have_section "New name"
         expect(seller.seller_profile_sections.reload.sole).to_not eq section
       end
@@ -293,7 +293,7 @@ describe "User profile page", type: :system, js: true do
         select_disclosure "Add section", match: :first do
           click_on "Posts"
         end
-        expect(page).to have_disclosure("Edit section", count: 3)
+        expect(page).to have_disclosure_button("Edit section", count: 3)
 
         all(:disclosure_button, "Edit section")[1].click
         click_on "Remove"
@@ -399,7 +399,7 @@ describe "User profile page", type: :system, js: true do
         add_section "Posts"
         save_changes
 
-        within_section "New section" do
+        within_section "New section", section_element: :section do
           expect(page).to have_link(count: 2)
           posts.each { expect(page).to have_link(_1.name, href: "/p/#{_1.slug}") }
         end
@@ -407,7 +407,7 @@ describe "User profile page", type: :system, js: true do
         expect(seller.seller_profile_posts_sections.reload.sole).to have_attributes(header: "New section", shown_posts: posts.pluck(:id))
 
         refresh
-        within_section "New section" do
+        within_section "New section", section_element: :section do
           expect(page).to have_link(count: 2)
           posts.each { expect(page).to have_link(_1.name, href: "/p/#{_1.slug}") }
         end
@@ -419,7 +419,7 @@ describe "User profile page", type: :system, js: true do
         add_section "Rich text"
         save_changes
 
-        within_section "New section" do
+        within_section "New section", section_element: :section do
           editor = find("[contenteditable=true]")
           editor.click
           select_disclosure "Text formats" do
@@ -449,7 +449,7 @@ describe "User profile page", type: :system, js: true do
         expect(section).to have_attributes(header: "New section", text: expected_rich_text)
 
         refresh
-        within_section "New section" do
+        within_section "New section", section_element: :section do
           expect(page).to have_selector("h2", text: "Heading")
           expect(page).to have_text("Some more text")
           expect(page).to have_image(src: image_url)
@@ -459,7 +459,7 @@ describe "User profile page", type: :system, js: true do
       it "allows creating subscribe sections" do
         visit seller.subdomain_with_protocol
 
-        all(:disclosure, "Add section").last.select_disclosure do
+        all(:disclosure_button, "Add section").last.select_disclosure do
           click_on "Subscribe"
         end
 
