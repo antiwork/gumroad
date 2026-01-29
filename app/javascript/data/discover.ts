@@ -1,6 +1,5 @@
 import { cast } from "ts-safe-cast";
 
-import { CardProduct } from "$app/parsers/product";
 import { request, ResponseError } from "$app/utils/request";
 
 export type AutocompleteSearchResults = {
@@ -32,14 +31,4 @@ export async function deleteAutocompleteSearch(data: { query: string }) {
     url: Routes.discover_search_autocomplete_path(data),
   });
   if (!response.ok) throw new ResponseError();
-}
-
-export async function getRecommendedProducts(data: { taxonomy: string | undefined }) {
-  const response = await request({
-    method: "GET",
-    accept: "json",
-    url: Routes.discover_recommended_products_path(data),
-  });
-  if (!response.ok) throw new ResponseError();
-  return cast<CardProduct[]>(await response.json());
 }

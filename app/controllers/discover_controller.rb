@@ -14,7 +14,6 @@ class DiscoverController < ApplicationController
   def index
     format_search_params!
 
-
     if params[:sort].blank? && curated_products.present?
       params[:sort] = ProductSortKey::CURATED
       params[:curated_product_ids] = (curated_products[RECOMMENDED_PRODUCTS_COUNT..] || []).map { _1.product.id }
@@ -33,6 +32,7 @@ class DiscoverController < ApplicationController
     params[:size] = INITIAL_PRODUCTS_COUNT
 
     search_results = search_products(params)
+    @search_results = search_results
     search_results[:products] = search_results[:products].includes(ProductPresenter::ASSOCIATIONS_FOR_CARD).map do |product|
       ProductPresenter.card_for_web(
         product:,
@@ -49,11 +49,14 @@ class DiscoverController < ApplicationController
 
     prepare_discover_page
 
+    recommended_products = recommendations
+
     render inertia: "Discover/Index", props: {
       search_results:,
       currency_code: logged_in_user&.currency_type || "usd",
       taxonomies_for_nav:,
-      recommended_products: recommendations,
+      recommended_products:,
+      recommended_wishlists: recommended_products.any? && params[:query].blank? ? recommended_wishlists : [],
       curated_product_ids: curated_products.map { _1.product.external_id },
       search_offset: params[:from] || 0,
       show_black_friday_hero: black_friday_feature_active?,
@@ -61,10 +64,6 @@ class DiscoverController < ApplicationController
       black_friday_offer_code: SearchProducts::BLACK_FRIDAY_CODE,
       black_friday_stats: black_friday_feature_active? ? BlackFridayStatsService.fetch_stats : nil,
     }
-  end
-
-  def recommended_products
-    render json: recommendations
   end
 
   private
@@ -124,6 +123,34 @@ class DiscoverController < ApplicationController
 
     def taxonomy
       @taxonomy ||= Taxonomy.find_by_path(params[:taxonomy].split("/")) if params[:taxonomy].present?
+    end
+
+    def recommended_wishlists
+      return [] if params[:offer_code].present?
+
+      wishlists = RecommendedWishlistsService.fetch(
+        limit: 4,
+        current_seller:,
+        curated_product_ids: discover_curated_product_ids,
+        taxonomy_id: taxonomy&.id
+      )
+
+      WishlistPresenter.cards_props(
+        wishlists:,
+        pundit_user:,
+        layout: Product::Layout::DISCOVER,
+        recommended_by: RecommendationType::GUMROAD_DISCOVER_WISHLIST_RECOMMENDATION,
+      )
+    end
+
+    def discover_curated_product_ids
+      Array(params[:curated_product_ids]).filter_map do |id|
+        Integer(id)
+      rescue ArgumentError, TypeError
+        ObfuscateIds.decrypt(id)
+      rescue StandardError
+        nil
+      end
     end
 
     def prepare_discover_page

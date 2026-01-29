@@ -1,9 +1,8 @@
-import { usePage } from "@inertiajs/react";
+import { router, usePage } from "@inertiajs/react";
 import { range } from "lodash-es";
 import * as React from "react";
 import { cast, is } from "ts-safe-cast";
 
-import { getRecommendedProducts } from "$app/data/discover";
 import { SearchResults, SearchRequest } from "$app/data/search";
 import { useScrollToElement } from "$app/hooks/useScrollToElement";
 import { CardProduct } from "$app/parsers/product";
@@ -11,8 +10,6 @@ import { last } from "$app/utils/array";
 import { classNames } from "$app/utils/classNames";
 import { CurrencyCode, formatPriceCentsWithCurrencySymbol } from "$app/utils/currency";
 import { discoverTitleGenerator, Taxonomy } from "$app/utils/discover";
-import { asyncVoid } from "$app/utils/promise";
-import { assertResponseError } from "$app/utils/request";
 
 import { Layout } from "$app/components/Discover/Layout";
 import { RecommendedWishlists } from "$app/components/Discover/RecommendedWishlists";
@@ -23,9 +20,9 @@ import { RatingStars } from "$app/components/RatingStars";
 import Footer from "$app/components/Shared/Footer";
 import { CardContent } from "$app/components/ui/Card";
 import { Tabs, Tab } from "$app/components/ui/Tabs";
-import { useOnChange } from "$app/components/useOnChange";
 import { useOriginalLocation } from "$app/components/useOriginalLocation";
 import { useScrollableCarousel } from "$app/components/useScrollableCarousel";
+import { type CardWishlist } from "$app/components/Wishlist/Card";
 
 import blackFridayImage from "$assets/images/illustrations/black_friday.svg";
 import saleImage from "$assets/images/illustrations/sale.svg";
@@ -35,6 +32,7 @@ type Props = {
   search_results: SearchResults;
   taxonomies_for_nav: Taxonomy[];
   recommended_products: CardProduct[];
+  recommended_wishlists: CardWishlist[];
   curated_product_ids: string[];
   show_black_friday_hero: boolean;
   is_black_friday_page: boolean;
@@ -271,6 +269,17 @@ export default function Discover() {
         type: "set-params",
         params: addInitialOffset(newParams),
       });
+
+      // Keep server-provided recommended sections in sync with browser history navigation.
+      // (We use pushState for the URL, so we need an Inertia visit to refresh props.)
+      if (!newParams.query && !newParams.offer_code) {
+        router.visit(window.location.href, {
+          only: ["recommended_products", "recommended_wishlists"],
+          preserveState: true,
+          preserveScroll: true,
+          replace: true,
+        });
+      }
     };
     window.addEventListener("popstate", parseUrl);
     return () => window.removeEventListener("popstate", parseUrl);
@@ -281,28 +290,32 @@ export default function Discover() {
   const updateParams = (newParams: Partial<SearchRequest>) =>
     dispatch({ type: "set-params", params: { ...state.params, from: undefined, ...newParams } });
 
-  const [recommendedProducts, setRecommendedProducts] = React.useState<CardProduct[]>(props.recommended_products);
-
   const hasOfferCode = !!state.params.offer_code;
 
-  useOnChange(
-    asyncVoid(async () => {
-      if (state.params.query || hasOfferCode) return;
-      setRecommendedProducts([]);
-      try {
-        setRecommendedProducts(await getRecommendedProducts({ taxonomy: state.params.taxonomy }));
-      } catch (e) {
-        assertResponseError(e);
-      }
-    }),
-    [state.params.taxonomy, hasOfferCode],
-  );
+  // Previously, recommendations were refetched when offer_code toggled off.
+  // Without this, if an offer code is removed after a taxonomy change (where recommendations are empty),
+  // the recommended sections would stay empty until a hard refresh.
+  const prevOfferCodeRef = React.useRef(state.params.offer_code);
+  React.useEffect(() => {
+    const prevOfferCode = prevOfferCodeRef.current;
+    prevOfferCodeRef.current = state.params.offer_code;
+
+    if (!prevOfferCode || state.params.offer_code) return;
+    if (state.params.query) return;
+
+    router.visit(window.location.href, {
+      only: ["recommended_products", "recommended_wishlists"],
+      preserveState: true,
+      preserveScroll: true,
+      replace: true,
+    });
+  }, [state.params.offer_code, state.params.query]);
 
   const isCuratedProducts =
-    recommendedProducts[0] &&
-    new URL(recommendedProducts[0].url).searchParams.get("recommended_by") === "products_for_you";
+    props.recommended_products[0] &&
+    new URL(props.recommended_products[0].url).searchParams.get("recommended_by") === "products_for_you";
 
-  const showRecommendedSections = recommendedProducts.length && !state.params.query && !hasOfferCode;
+  const showRecommendedSections = props.recommended_products.length && !state.params.query && !hasOfferCode;
 
   return (
     <Layout
@@ -320,6 +333,19 @@ export default function Discover() {
             sort: defaultSortOrder,
             offer_code: newTaxonomyPath ? currentOfferCode : undefined,
           }),
+        });
+
+        const url =
+          newTaxonomyPath && currentOfferCode
+            ? Routes.discover_taxonomy_url(newTaxonomyPath, { offer_code: currentOfferCode })
+            : newTaxonomyPath
+              ? Routes.discover_taxonomy_url(newTaxonomyPath)
+              : Routes.discover_url();
+
+        router.visit(url, {
+          only: ["recommended_products", "recommended_wishlists"],
+          preserveState: true,
+          preserveScroll: true,
         });
       }}
       query={state.params.query}
@@ -378,7 +404,7 @@ export default function Discover() {
       <div className="grid gap-16! px-4 py-16 lg:ps-16 lg:pe-16">
         {showRecommendedSections ? (
           <ProductsCarousel
-            products={recommendedProducts}
+            products={props.recommended_products}
             title={isCuratedProducts ? "Recommended" : "Featured products"}
           />
         ) : null}
@@ -492,8 +518,7 @@ export default function Discover() {
         </section>
         {showRecommendedSections ? (
           <RecommendedWishlists
-            taxonomy={taxonomyPath ?? null}
-            curatedProductIds={props.curated_product_ids}
+            wishlists={props.recommended_wishlists}
             title={
               taxonomyPath
                 ? `Wishlists for ${props.taxonomies_for_nav.find((t) => t.slug === last(taxonomyPath.split("/")))?.label}`

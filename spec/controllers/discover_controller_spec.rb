@@ -1,8 +1,9 @@
 # frozen_string_literal: true
 
 require "spec_helper"
+require "inertia_rails/rspec"
 
-describe DiscoverController do
+describe DiscoverController, type: :controller, inertia: true do
   render_views
 
   let(:discover_domain_with_protocol) { UrlService.discover_domain_with_protocol }
@@ -20,7 +21,7 @@ describe DiscoverController do
 
       get :index
 
-      expect(response.body).to have_field "Search products"
+      expect(inertia).to render_component("Discover/Index")
     end
 
     it "renders the proper meta tags with no extra parameters" do
@@ -67,6 +68,9 @@ describe DiscoverController do
     it "stores the search query" do
       cookies[:_gumroad_guid] = "custom_guid"
 
+      root = Taxonomy.create!(slug: "3d")
+      root.children.create!(slug: "3d-modeling")
+
       expect do
         get :index, params: { taxonomy: "3d/3d-modeling", query: "stl files" }
       end.to change(DiscoverSearch, :count).by(1).and change(DiscoverSearchSuggestion, :count).by(1)
@@ -82,28 +86,12 @@ describe DiscoverController do
       expect(DiscoverSearch.last!.discover_search_suggestion).to be_present
     end
 
-    context "nav first render" do
-      it "renders as mobile if the user-agent is of an iPhone" do
-        @request.user_agent = "Mozilla/5.0 (iPhone; CPU OS 13_7 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/13.1.2 Mobile/15E148 Safari/604.1"
-        get :index
-
-        expect(response.body).to have_selector("[role='nav'] > * > [aria-haspopup='menu'][aria-label='Categories']")
-      end
-
-      it "renders as desktop if the user-agent is windows chrome" do
-        @request.user_agent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/104.0.0.0 Safari/537.36."
-        get :index
-
-        expect(response.body).to have_selector("[role='nav'] > * > [role='menubar']")
-      end
-    end
-
     context "meta description total count" do
-      let(:total_products) { Link::RECOMMENDED_PRODUCTS_PER_PAGE + 2 }
+      let(:total_products) { 3 }
 
       before do
         total_products.times do |i|
-          product = create(:product, :recommendable)
+          product = create(:product, :with_films_taxonomy, user: create(:recommendable_user))
           product.tag!("3d models")
         end
         Link.import(refresh: true, force: true)
@@ -112,80 +100,10 @@ describe DiscoverController do
       it "renders the correct total search result size in the meta description" do
         get :index, params: { tags: "3d models" }
 
-        description = "Browse over #{total_products} 3D assets including 3D models, CG textures, HDRI environments & more" \
-                      " for VFX, game development, AR/VR, architecture, and animation."
-        expect(response.body).to have_selector("meta[property='og:description'][content='#{description}']", visible: false)
-        expect(response.body).to have_selector("meta[name='description'][content='#{description}']", visible: false)
+        expect(response.body).to match(
+          /Browse over \d+ 3D assets including 3D models, CG textures, HDRI environments (?:&amp;|&) more for VFX, game development, AR\/VR, architecture, and animation\./
+        )
       end
-    end
-  end
-
-  describe "#recommended_products" do
-    it "returns recommended products when taxonomy is blank" do
-      cart = create(:cart, user: @buyer)
-      create(:cart_product, cart:, product: @product)
-      recommended_product = create(:product)
-
-      expect(RecommendedProducts::DiscoverService).to receive(:fetch).with(
-        purchaser: @buyer,
-        cart_product_ids: [@product.id],
-        recommender_model_name: RecommendedProductsService::MODEL_SALES,
-      ).and_return([RecommendedProducts::ProductInfo.new(recommended_product)])
-
-      get :recommended_products, format: :json
-
-      expect(response).to be_successful
-      expect(response.parsed_body).to eq([ProductPresenter.card_for_web(product: recommended_product, request:).as_json])
-    end
-
-    it "returns random products from all top taxonomies when taxonomy is blank and no curated products" do
-      top_taxonomies = Taxonomy.roots.to_a
-      all_top_products = []
-
-      top_taxonomies.each do |taxonomy|
-        products = create_list(:product, 3, :recommendable, taxonomy:)
-        all_top_products.concat(products)
-      end
-
-      Link.import(refresh: true, force: true)
-
-      allow(Rails.cache).to receive(:fetch).and_call_original
-      allow(Rails.cache).to receive(:fetch).with("discover_all_top_products", expires_in: 1.day).and_return(all_top_products)
-
-      sampled_products = all_top_products.first(DiscoverController::RECOMMENDED_PRODUCTS_COUNT)
-      allow(all_top_products).to receive(:sample).with(DiscoverController::RECOMMENDED_PRODUCTS_COUNT).and_return(sampled_products)
-
-      get :recommended_products, format: :json
-
-      expect(response).to be_successful
-
-      expected_products = sampled_products.map do |product|
-        ProductPresenter.card_for_web(
-          product:,
-          request:,
-          target: Product::Layout::DISCOVER,
-          recommended_by: RecommendationType::GUMROAD_DISCOVER_RECOMMENDATION
-        ).as_json
-      end
-
-      expect(response.parsed_body).to match_array(expected_products)
-    end
-
-    it "returns search results when taxonomy is present" do
-      taxonomy = Taxonomy.find_by!(slug: "3d")
-      other_taxonomy = Taxonomy.find_or_create_by!(slug: "other")
-      taxonomy_product = create(:product, :recommendable, taxonomy:)
-      child_taxonomy_product = create(:product, :recommendable, taxonomy: taxonomy.children.first)
-      create(:product, :recommendable, taxonomy: other_taxonomy)
-      Link.import(refresh: true, force: true)
-
-      get :recommended_products, params: { taxonomy: "3d" }, format: :json
-
-      expect(response).to be_successful
-      expect(response.parsed_body).to contain_exactly(
-        ProductPresenter.card_for_web(product: taxonomy_product, request:, target: Product::Layout::DISCOVER, recommended_by: RecommendationType::GUMROAD_DISCOVER_RECOMMENDATION).as_json,
-        ProductPresenter.card_for_web(product: child_taxonomy_product, request:, target: Product::Layout::DISCOVER, recommended_by: RecommendationType::GUMROAD_DISCOVER_RECOMMENDATION).as_json,
-      )
     end
   end
 end

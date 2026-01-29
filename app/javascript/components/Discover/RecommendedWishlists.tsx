@@ -1,35 +1,9 @@
 import * as React from "react";
 
-import { fetchRecommendedWishlists } from "$app/data/wishlists";
-import { assertResponseError } from "$app/utils/request";
-
-import { showAlert } from "$app/components/server-components/Alert";
-import { useRunOnce } from "$app/components/useRunOnce";
 import { CardWishlist, CardGrid, Card, DummyCardGrid } from "$app/components/Wishlist/Card";
 
-export const RecommendedWishlists = ({
-  title,
-  ...props
-}: {
-  title: string;
-  curatedProductIds?: string[];
-  taxonomy?: string | null;
-}) => {
-  const [wishlists, setWishlists] = React.useState<CardWishlist[] | null>(null);
-
-  useRunOnce(() => {
-    const loadWishlists = async () => {
-      try {
-        setWishlists(await fetchRecommendedWishlists(props));
-      } catch (e) {
-        assertResponseError(e);
-        showAlert(e.message, "error");
-      }
-    };
-    void loadWishlists();
-  });
-
-  return wishlists === null || wishlists.length > 0 ? (
+export const RecommendedWishlists = ({ title, wishlists }: { title: string; wishlists?: CardWishlist[] }) =>
+  wishlists === undefined || wishlists.length > 0 ? (
     <section className="flex flex-col gap-4">
       <header>
         <h2>{title}</h2>
@@ -46,4 +20,3 @@ export const RecommendedWishlists = ({
       )}
     </section>
   ) : null;
-};

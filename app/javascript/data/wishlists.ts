@@ -161,19 +161,3 @@ export const fetchWishlists = async (ids: string[]) => {
   if (!response.ok) throw new ResponseError();
   return cast<CardWishlist[]>(await response.json());
 };
-
-export const fetchRecommendedWishlists = async ({
-  curatedProductIds,
-  taxonomy,
-}: {
-  curatedProductIds?: string[];
-  taxonomy?: string | null;
-}) => {
-  const response = await request({
-    method: "GET",
-    url: Routes.discover_recommended_wishlists_path({ curated_product_ids: curatedProductIds, taxonomy }),
-    accept: "json",
-  });
-  if (!response.ok) throw new ResponseError();
-  return cast<CardWishlist[]>(await response.json());
-};
