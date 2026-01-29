@@ -1,6 +1,7 @@
 import * as React from "react";
 
 import { Details } from "$app/components/Details";
+import { Dropdown } from "$app/components/Dropdown";
 import { NumberInput } from "$app/components/NumberInput";
 import { Toggle } from "$app/components/Toggle";
 import { WithTooltip } from "$app/components/WithTooltip";
@@ -29,7 +30,7 @@ export const MaxPurchaseCountToggle = ({
         </Toggle>
       }
     >
-      <div className="dropdown">
+      <Dropdown>
         <fieldset>
           <label htmlFor={`${uid}-max-purchase-count`}>Maximum number of purchases</label>
           <WithTooltip tip="Total sales">
@@ -38,7 +39,7 @@ export const MaxPurchaseCountToggle = ({
             </NumberInput>
           </WithTooltip>
         </fieldset>
-      </div>
+      </Dropdown>
     </Details>
   );
 };

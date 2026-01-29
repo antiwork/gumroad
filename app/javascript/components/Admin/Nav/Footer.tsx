@@ -50,7 +50,7 @@ const AdminNavFooter = () => {
 
   return (
     <DashboardNavProfilePopover user={loggedInUser}>
-      <div role="menu">
+      <div role="menu" className="flex flex-col border-0! shadow-none! dark:border!">
         {current_user.impersonated_user ? (
           <>
             <a role="menuitem" href={Routes.root_url()}>
@@ -60,7 +60,7 @@ const AdminNavFooter = () => {
             <hr className="my-2" />
           </>
         ) : null}
-        <Link role="menuitem" href={Routes.logout_url()} method="delete" className="w-full">
+        <Link role="menuitem" href={Routes.logout_url()} method="delete" className="all-unset">
           <Icon name="box-arrow-in-right-fill" className="mr-3 ml-1" />
           Logout
         </Link>
