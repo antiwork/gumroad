@@ -5,7 +5,7 @@ class LibraryController < Sellers::BaseController
 
   skip_before_action :check_suspended
 
-  before_action :check_user_confirmed, only: [:index]
+  before_action :check_user_confirmed
   before_action :set_purchase, only: [:archive, :unarchive, :delete]
 
   RESEND_CONFIRMATION_EMAIL_TIME_LIMIT = 24.hours
@@ -52,7 +52,10 @@ class LibraryController < Sellers::BaseController
 
   private
     def set_purchase
-      @purchase = logged_in_user.purchases.find_by_external_id!(params[:id])
+      gift_receiver_flag = Purchase.flag_mapping["flags"][:is_gift_receiver_purchase]
+      @purchase = Purchase.where(purchaser_id: logged_in_user.id)
+        .or(Purchase.where(purchaser_id: nil).where("flags & ? != 0", gift_receiver_flag).where(email: logged_in_user.email))
+        .find_by_external_id!(params[:id])
     end
 
     def check_user_confirmed

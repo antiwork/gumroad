@@ -10,7 +10,9 @@ class LibraryPresenter
   end
 
   def library_cards
-    purchases = logged_in_user.purchases
+    gift_receiver_flag = Purchase.flag_mapping["flags"][:is_gift_receiver_purchase]
+    purchases = Purchase.where(purchaser_id: logged_in_user.id)
+      .or(Purchase.where(purchaser_id: nil).where("flags & ? != 0", gift_receiver_flag).where(email: logged_in_user.email))
       .for_library
       .not_rental_expired
       .not_is_deleted_by_buyer

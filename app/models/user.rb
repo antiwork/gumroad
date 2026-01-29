@@ -1073,9 +1073,14 @@ class User < ApplicationRecord
     end
 
     def move_purchases_to_new_email
-      if unconfirmed_email.blank? && purchases.exists?
-        UpdatePurchaseEmailToMatchAccountWorker.perform_in(10.seconds, id)
-      end
+      old_email = previous_changes[:email]&.first
+      return if unconfirmed_email.present? || old_email.blank?
+
+      gift_receiver_flag = Purchase.flag_mapping["flags"][:is_gift_receiver_purchase]
+      has_purchases = purchases.exists? ||
+        Purchase.where(purchaser_id: nil, email: old_email).where("flags & ? != 0", gift_receiver_flag).exists?
+
+      UpdatePurchaseEmailToMatchAccountWorker.perform_in(10.seconds, id, old_email) if has_purchases
     end
 
     def update_alive_cart_email

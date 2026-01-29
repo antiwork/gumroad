@@ -183,6 +183,20 @@ describe LibraryPresenter do
       end
     end
 
+    describe "gift purchase with null purchaser_id" do
+      let(:gift_product) { create(:product, name: "Gift Product", user: creator) }
+
+      it "includes gift purchases where email matches but purchaser_id is null" do
+        gift_purchase = create(:purchase, link: gift_product, is_gift_receiver_purchase: true, purchaser: nil, email: buyer.email)
+        gift_purchase.update_columns(purchaser_id: nil)
+        gift_purchase.create_url_redirect!
+
+        purchases, _ = described_class.new(buyer).library_cards
+
+        expect(purchases.map { |p| p[:purchase][:id] }).to include(gift_purchase.external_id)
+      end
+    end
+
     describe "bundle purchase" do
       let(:purchase1) { create(:purchase, purchaser: buyer, link: create(:product, :bundle)) }
       let(:purchase2) { create(:purchase, purchaser: buyer, link: create(:product, :bundle)) }

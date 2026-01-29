@@ -60,6 +60,17 @@ describe LibraryController, :vcr, type: :controller, inertia: true do
         product_names = inertia.props[:results].map { |r| r.dig(:product, :name) }
         expect(product_names).to_not include(link.name)
       end
+
+      it "shows gift receiver purchases with null purchaser_id when email matches" do
+        link = create(:product, name: "Gift Product")
+        gift_purchase = create(:purchase, link:, is_gift_receiver_purchase: true, purchaser: nil, email: user.email)
+        gift_purchase.update_columns(purchaser_id: nil)
+
+        get :index
+        expect(response).to be_successful
+        product_names = inertia.props[:results].map { |r| r.dig(:product, :name) }
+        expect(product_names).to include("Gift Product")
+      end
     end
 
     describe "failed webhooks" do
@@ -168,6 +179,13 @@ describe LibraryController, :vcr, type: :controller, inertia: true do
         expect(flash[:notice]).to eq("Product archived!")
       end.to change { purchase.reload.is_archived }.from(false).to(true)
     end
+
+    it "requires email confirmation" do
+      user.update_attribute(:confirmed_at, nil)
+      patch :archive, params: { id: purchase.external_id }
+      expect(response).to redirect_to(settings_main_path)
+      expect(purchase.reload.is_archived).to be false
+    end
   end
 
   describe "PATCH unarchive" do
@@ -186,6 +204,24 @@ describe LibraryController, :vcr, type: :controller, inertia: true do
         expect(flash[:notice]).to eq("Product unarchived!")
       end.to change { purchase.reload.is_archived }.from(true).to(false)
     end
+
+    it "unarchives gift purchases with null purchaser_id when email matches" do
+      gift_purchase = create(:purchase, is_gift_receiver_purchase: true, purchaser: nil, email: user.email, is_archived: true)
+      gift_purchase.update_columns(purchaser_id: nil)
+
+      expect do
+        patch :unarchive, params: { id: gift_purchase.external_id }
+        expect(response).to redirect_to(library_path)
+        expect(flash[:notice]).to eq("Product unarchived!")
+      end.to change { gift_purchase.reload.is_archived }.from(true).to(false)
+    end
+
+    it "requires email confirmation" do
+      user.update_attribute(:confirmed_at, nil)
+      patch :unarchive, params: { id: purchase.external_id }
+      expect(response).to redirect_to(settings_main_path)
+      expect(purchase.reload.is_archived).to be true
+    end
   end
 
   describe "PATCH delete" do
@@ -203,6 +239,13 @@ describe LibraryController, :vcr, type: :controller, inertia: true do
         expect(response).to redirect_to(library_path)
         expect(flash[:notice]).to eq("Product deleted!")
       end.to change { purchase.reload.is_deleted_by_buyer }.from(false).to(true)
+    end
+
+    it "requires email confirmation" do
+      user.update_attribute(:confirmed_at, nil)
+      patch :delete, params: { id: purchase.external_id }
+      expect(response).to redirect_to(settings_main_path)
+      expect(purchase.reload.is_deleted_by_buyer).to be false
     end
   end
 end
