@@ -1,9 +1,8 @@
 # frozen_string_literal: true
 
 class GumroadBlog::PostsController < GumroadBlog::BaseController
-  layout "gumroad_blog"
+  layout "inertia"
 
-  before_action :hide_layouts
   before_action :set_blog_owner!
   before_action :set_post, only: [:show]
 
@@ -16,7 +15,7 @@ class GumroadBlog::PostsController < GumroadBlog::BaseController
       .visible_on_profile
       .order(published_at: :desc)
 
-    @props = {
+    render inertia: "GumroadBlog/Posts/Index", props: {
       posts: posts.map do |post|
         {
           url: gumroad_blog_post_path(post.slug),
@@ -33,7 +32,7 @@ class GumroadBlog::PostsController < GumroadBlog::BaseController
   def show
     authorize @post, policy_class: GumroadBlog::PostsPolicy
 
-    @props = PostPresenter.new(pundit_user: pundit_user, post: @post, purchase_id_param: nil).post_component_props
+    render inertia: "GumroadBlog/Posts/Show", props: PostPresenter.new(pundit_user: pundit_user, post: @post, purchase_id_param: nil).post_component_props
   end
 
   private

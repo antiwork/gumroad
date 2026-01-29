@@ -2,8 +2,9 @@
 
 require "spec_helper"
 require "shared_examples/authorize_called"
+require "inertia_rails/rspec"
 
-describe GumroadBlog::PostsController do
+describe GumroadBlog::PostsController, inertia: true do
   let(:blog_owner) { create(:user, username: "gumroad") }
 
   describe "GET index" do
@@ -53,11 +54,12 @@ describe GumroadBlog::PostsController do
       let(:policy_klass) { GumroadBlog::PostsPolicy }
     end
 
-    it "only includes posts that are visible on profile, order by published_at descending" do
+    it "renders the Inertia component with posts visible on profile, ordered by published_at descending" do
       get :index
 
       expect(response).to have_http_status(:ok)
-      expect(assigns[:props][:posts]).to eq(
+      expect(inertia.component).to eq("GumroadBlog/Posts/Index")
+      expect(inertia.props[:posts]).to eq(
         [
           {
             url: gumroad_blog_post_path(published_post_2.slug),
@@ -98,10 +100,16 @@ describe GumroadBlog::PostsController do
       let(:request_params) { { slug: post.slug } }
     end
 
-    it "sets @props correctly" do
+    it "renders the Inertia component with post props" do
       get :show, params: { slug: post.slug }
 
-      expect(assigns[:props]).to eq(PostPresenter.new(pundit_user: controller.pundit_user, post: post, purchase_id_param: nil).post_component_props)
+      expect(response).to have_http_status(:ok)
+      expect(inertia.component).to eq("GumroadBlog/Posts/Show")
+
+      expected_props = PostPresenter.new(pundit_user: controller.pundit_user, post: post, purchase_id_param: nil).post_component_props
+      expected_props.each do |key, value|
+        expect(inertia.props[key]).to eq(value)
+      end
     end
 
     context "when post is not found" do
