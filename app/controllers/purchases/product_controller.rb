@@ -10,13 +10,11 @@ class Purchases::ProductController < ApplicationController
     # Ensure that the React component receives the same props as the product page, in case ProductPresenter.product_props
     # changes
     product_props = ProductPresenter.new(product: @purchase.link, request:, pundit_user:).product_props(seller_custom_domain_url:).deep_merge(purchase_product_presenter.product_props)
-    user = purchase_product_presenter.product.user
 
     set_noindex_header
 
-    render inertia: "Purchases/ProductPage", props: {
-      **product_props,
-      custom_styles: user.seller_profile.custom_styles
-    }
+    render inertia: "Purchases/Product/Show", props: product_props.merge(
+      custom_styles: purchase_product_presenter.product.user.seller_profile.custom_styles
+    )
   end
 end

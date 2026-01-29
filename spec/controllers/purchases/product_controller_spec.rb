@@ -11,7 +11,7 @@ describe Purchases::ProductController, inertia: true do
       get :show, params: { purchase_id: purchase.external_id }
 
       expect(response).to be_successful
-      expect(inertia.component).to eq("Purchases/ProductPage")
+      expect(inertia.component).to eq("Purchases/Product/Show")
 
       purchase_product_presenter = PurchaseProductPresenter.new(purchase)
       expected_props = ProductPresenter.new(product: purchase.link, request:).product_props(seller_custom_domain_url: nil).deep_merge(purchase_product_presenter.product_props)
@@ -19,14 +19,7 @@ describe Purchases::ProductController, inertia: true do
       expect(inertia.props[:purchase]).to eq(expected_props[:purchase])
       expect(inertia.props[:discount_code]).to eq(expected_props[:discount_code])
       expect(inertia.props[:wishlists]).to eq(expected_props[:wishlists])
-    end
-
-    it "includes custom styles props" do
-      get :show, params: { purchase_id: purchase.external_id }
-
-      expect(response).to be_successful
-      seller = purchase.link.user
-      expect(inertia.props[:custom_styles]).to eq(seller.seller_profile.custom_styles)
+      expect(inertia.props[:custom_styles]).to eq(purchase.link.user.seller_profile.custom_styles)
     end
 
     it "404s for an invalid purchase id" do
