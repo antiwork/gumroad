@@ -601,7 +601,7 @@ const DiscountsPage = ({
                           {uses != null ? `${uses} ${uses === 1 ? "use" : "uses"}` : null}
                         </div>
                         <CopyToClipboard
-                          tooltipPosition="bottom"
+                          tooltipPosition="left"
                           copyTooltip="Copy link with discount"
                           text={`${product.url}/${selectedOfferCode.code}`}
                         >
