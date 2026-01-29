@@ -500,7 +500,7 @@ const UtmLinkDetails = ({
         <section>
           <CardContent>
             <h3 className="grow">Short link</h3>
-            <CopyToClipboard text={utmLink.short_url} copyTooltip="Copy short link">
+            <CopyToClipboard text={utmLink.short_url} copyTooltip="Copy short link" tooltipPosition="left">
               <Button aria-label="Copy short link">
                 <Icon name="link" />
               </Button>

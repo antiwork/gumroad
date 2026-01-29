@@ -120,7 +120,7 @@ const WishlistItemCard = ({
         <>
           {canEdit ? (
             <div style={{ padding: 0, display: "grid" }}>
-              <WithTooltip position="top" tip="Remove this product">
+              <WithTooltip position="left" tip="Remove this product">
                 <button
                   disabled={isDeleting}
                   aria-label="Remove this product"

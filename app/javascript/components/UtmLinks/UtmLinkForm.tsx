@@ -335,6 +335,7 @@ export const UtmLinkForm = (pageProps: UtmLinkFormProps | UtmLinkEditProps) => {
                 <CopyToClipboard
                   copyTooltip="Copy short link"
                   text={`${shortUrlProtocol}//${shortUrlPrefix}${isEditing ? permalink : data.utm_link.permalink}`}
+                  tooltipPosition="left"
                 >
                   <Button type="button" aria-label="Copy short link">
                     <Icon name="link" />
