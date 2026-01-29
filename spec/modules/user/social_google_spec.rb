@@ -53,6 +53,7 @@ describe User::SocialGoogle do
       user = User.find_or_create_for_google_oauth2(@data_with_colon)
 
       expect(user).to be_persisted
+      expect(user).to be_valid
       expect(user.name).to eq("Test User")
     end
   end

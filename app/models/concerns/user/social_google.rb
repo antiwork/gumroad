@@ -86,7 +86,7 @@ module User::SocialGoogle
       user.google_uid ||= data["uid"]
 
       if user.name.blank? && data["info"]["name"].present?
-        sanitized_name = data["info"]["name"].delete(":")
+        sanitized_name = data["info"]["name"].gsub(User::INVALID_NAME_FOR_EMAIL_DELIVERY_REGEX, "")
         user.name = sanitized_name
       end
 
