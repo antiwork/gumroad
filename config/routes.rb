@@ -781,7 +781,7 @@ Rails.application.routes.draw do
 
     # communities
     get "/communities", to: "communities#index", as: :communities
-    get "/communities/:seller_id/:community_id", to: "communities#index", as: :community
+    get "/communities/:seller_id/:community_id", to: "communities#show", as: :community
 
     # emails
     resources :emails, only: [:index, :new, :create, :edit, :update, :destroy] do

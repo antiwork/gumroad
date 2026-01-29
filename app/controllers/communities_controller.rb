@@ -11,7 +11,20 @@ class CommunitiesController < ApplicationController
     authorize Community
 
     props = CommunitiesPresenter.new(current_user: current_seller).props
-    props[:selectedCommunityId] = params[:community_id] if params[:community_id].present?
+
+    render inertia: "Communities/Index", props: props
+  end
+
+  def show
+    seller = User.find_by_external_id!(params[:seller_id])
+    community = Community.alive.find_by_external_id!(params[:community_id])
+
+    raise ActiveRecord::RecordNotFound unless community.seller_id == seller.id
+
+    authorize community
+
+    props = CommunitiesPresenter.new(current_user: current_seller).props
+    props[:selectedCommunityId] = community.external_id
 
     render inertia: "Communities/Index", props: props
   end

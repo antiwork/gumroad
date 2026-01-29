@@ -34,6 +34,22 @@ describe CommunitiesController, inertia: true do
 
         expect(response).to be_successful
         expect(controller.send(:page_title)).to eq("Communities")
+        expect_inertia.to render_component("Communities/Index")
+        expect_inertia.to include_props(has_products: true)
+      end
+
+      it "includes communities in props" do
+        get :index
+
+        expect(inertia.props[:communities]).to be_an(Array)
+        expect(inertia.props[:communities].length).to eq(1)
+        expect(inertia.props[:communities].first[:id]).to eq(community.external_id)
+      end
+
+      it "does not include selectedCommunityId in props for index action" do
+        get :index
+
+        expect(inertia.props).not_to have_key(:selectedCommunityId)
       end
 
       it "returns unauthorized response if the :communities feature flag is disabled" do
@@ -43,6 +59,109 @@ describe CommunitiesController, inertia: true do
 
         expect(response).to redirect_to dashboard_path
         expect(flash[:alert]).to eq("You are not allowed to perform this action.")
+      end
+    end
+  end
+
+  describe "GET show" do
+    it_behaves_like "authorize called for action", :get, :show do
+      let(:request_params) { { seller_id: seller.external_id, community_id: community.external_id } }
+      let(:record) { community }
+    end
+
+    context "when seller is logged in" do
+      before do
+        sign_in seller
+      end
+
+      it "renders the Inertia component with correct props" do
+        get :show, params: { seller_id: seller.external_id, community_id: community.external_id }
+
+        expect(response).to be_successful
+        expect(controller.send(:page_title)).to eq("Communities")
+        expect_inertia.to render_component("Communities/Index")
+        expect_inertia.to include_props(has_products: true)
+        expect_inertia.to include_props(selectedCommunityId: community.external_id)
+      end
+
+      it "includes selectedCommunityId in props" do
+        get :show, params: { seller_id: seller.external_id, community_id: community.external_id }
+
+        expect(inertia.props[:selectedCommunityId]).to eq(community.external_id)
+      end
+
+      it "raises error when community does not exist" do
+        expect {
+          get :show, params: { seller_id: seller.external_id, community_id: "non-existent" }
+        }.to raise_error(ActiveRecord::RecordNotFound)
+      end
+
+      it "raises error when seller does not exist" do
+        expect {
+          get :show, params: { seller_id: "non-existent", community_id: community.external_id }
+        }.to raise_error(ActiveRecord::RecordNotFound)
+      end
+
+      it "raises error when community does not belong to seller" do
+        other_seller = create(:user)
+        other_product = create(:product, user: other_seller, community_chat_enabled: true)
+        other_community = create(:community, seller: other_seller, resource: other_product)
+
+        expect {
+          get :show, params: { seller_id: seller.external_id, community_id: other_community.external_id }
+        }.to raise_error(ActiveRecord::RecordNotFound)
+      end
+
+      it "returns unauthorized response if the :communities feature flag is disabled" do
+        Feature.deactivate_user(:communities, seller)
+
+        get :show, params: { seller_id: seller.external_id, community_id: community.external_id }
+
+        expect(response).to redirect_to dashboard_path
+        expect(flash[:alert]).to eq("You are not allowed to perform this action.")
+      end
+    end
+
+    context "when buyer is logged in" do
+      let(:buyer) { create(:user) }
+      let!(:purchase) { create(:purchase, seller:, purchaser: buyer, link: product, price_cents: 0) }
+
+      before do
+        Feature.activate_user(:communities, buyer)
+        sign_in buyer
+      end
+
+      it "renders the Inertia component for communities they have access to" do
+        get :show, params: { seller_id: seller.external_id, community_id: community.external_id }
+
+        expect(response).to be_successful
+        expect_inertia.to render_component("Communities/Index")
+        expect_inertia.to include_props(selectedCommunityId: community.external_id)
+      end
+
+      it "returns unauthorized response for communities they don't have access to" do
+        other_seller = create(:user)
+        Feature.activate_user(:communities, other_seller)
+        other_product = create(:product, user: other_seller, community_chat_enabled: true)
+        other_community = create(:community, seller: other_seller, resource: other_product)
+
+        get :show, params: { seller_id: other_seller.external_id, community_id: other_community.external_id }
+
+        expect(response).to redirect_to(dashboard_path)
+        expect(flash[:alert]).to eq("You are not allowed to perform this action.")
+      end
+    end
+
+    context "when community is deleted" do
+      before do
+        sign_in seller
+        community.mark_deleted!
+      end
+
+      it "raises error when trying to access deleted community" do
+        expect {
+          get :show, params: { seller_id: seller.external_id, community_id: community.external_id }
+        }.to raise_error(ActiveRecord::RecordNotFound)
       end
     end
   end

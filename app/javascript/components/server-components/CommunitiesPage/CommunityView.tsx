@@ -125,7 +125,6 @@ export const CommunityView = () => {
     updateCommunity,
     updateCommunityDraft,
     updateCommunityChat,
-    setSelectedCommunityId,
   } = useCommunities();
   const [switcherOpen, setSwitcherOpen] = React.useState(false);
   const [sidebarOpen, setSidebarOpen] = React.useState(true);
@@ -494,6 +493,7 @@ export const CommunityView = () => {
           community.seller.id,
           community.id
         ),
+        {},
         { preserveScroll: true }
       );
       setSwitcherOpen(false);
@@ -525,7 +525,9 @@ export const CommunityView = () => {
     Routes.community_path(
       community.seller.id,
       community.id
-    )
+    ),
+    {},
+    { replace: true }
   );
   });
 

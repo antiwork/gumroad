@@ -68,28 +68,33 @@ describe "Communities", :js, type: :system do
           message_element.hover
 
           within message_element do
-            expect(page).to have_button("Edit message")
-            expect(page).to have_button("Delete message")
-          end
+            expect(page).to have_text(seller.display_name)
+            expect(page).to have_text("CREATOR")
+            expect(page).to have_button("Edit message", wait: 2)
+            expect(page).to have_button("Delete message", wait: 2)
 
-          within message_element do
             click_button "Edit message"
             fill_in "Edit message", with: "This is wonderful!"
+            sleep 0.5
             click_on "Save"
+            wait_for_ajax
           end
 
           expect(page).to have_message("This is wonderful!")
           expect(page).not_to have_message("Hello, world!")
 
+          expect(message.reload.content).to eq("This is wonderful!")
+
           within message_element do
-            expect(page).to have_text(seller.display_name)
-            expect(page).to have_text("CREATOR")
             click_button "Delete message"
+            within_modal "Delete message" do
+              expect(page).to have_text("Are you sure you want to delete this message? This cannot be undone.")
+              click_on "Delete"
+            end
+            wait_for_ajax
           end
-          within_modal "Delete message" do
-            click_on "Delete"
-          end
-          wait_for_ajax
+
+          expect(page).not_to have_message("This is wonderful!")
           expect(message.reload).to be_deleted
           expect(community.community_chat_messages.alive).to be_empty
         end
@@ -108,7 +113,7 @@ describe "Communities", :js, type: :system do
         expect(page).to have_text("John Customer")
         expect(page).not_to have_text("CREATOR")
         expect(page).not_to have_button("Edit message")
-        expect(page).to have_button("Delete message")
+        expect(page).to have_button("Delete message", wait: 2)
 
         click_button "Delete message"
         within_modal "Delete message" do
@@ -245,8 +250,8 @@ describe "Communities", :js, type: :system do
           within message_element do
             expect(page).to have_text("Bob")
             expect(page).to have_text("CREATOR")
-            expect(page).to have_button("Edit message")
-            expect(page).to have_button("Delete message")
+            expect(page).to have_button("Edit message", wait: 2)
+            expect(page).to have_button("Delete message", wait: 2)
           end
         end
       end
@@ -327,8 +332,8 @@ describe "Communities", :js, type: :system do
           within message_element do
             expect(page).to have_text("John Buyer")
             expect(page).not_to have_text("CREATOR")
-            expect(page).to have_button("Edit message")
-            expect(page).to have_button("Delete message")
+            expect(page).to have_button("Edit message", wait: 2)
+            expect(page).to have_button("Delete message", wait: 2)
 
             click_button "Edit message"
             fill_in "Edit message", with: "This is wonderful!"
@@ -521,8 +526,8 @@ describe "Communities", :js, type: :system do
           within message_element do
             expect(page).to have_text("John Buyer")
             expect(page).not_to have_text("CREATOR")
-            expect(page).to have_button("Edit message")
-            expect(page).to have_button("Delete message")
+            expect(page).to have_button("Edit message", wait: 2)
+            expect(page).to have_button("Delete message", wait: 2)
           end
         end
       end
@@ -637,8 +642,8 @@ describe "Communities", :js, type: :system do
           within message_element do
             expect(page).to have_text("John Buyer")
             expect(page).not_to have_text("CREATOR")
-            expect(page).to have_button("Edit message")
-            expect(page).to have_button("Delete message")
+            expect(page).to have_button("Edit message", wait: 5)
+            expect(page).to have_button("Delete message", wait: 5)
           end
         end
       end

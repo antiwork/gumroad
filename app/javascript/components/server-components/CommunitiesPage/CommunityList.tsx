@@ -23,14 +23,14 @@ export const CommunityList = ({
 
       return (
         <Link
-          key={`${community.id}-${isCommunitySelected}`}
+          key={community.id}
           href={Routes.community_path(community.seller.id, community.id)}
           preserveScroll
-          preserveState={false}
-          onClick={() => {
+          onClick={(e) => {
             if (!isAboveBreakpoint) setSidebarOpen(false);
             if (isCommunitySelected) {
-              scrollTo({ target: "bottom" });
+              e.preventDefault();
+              scrollTo({ target: community.unread_count > 0 ? "unread-separator" : "bottom" });
             }
           }}
           className={cx("flex items-center gap-2 p-2 no-underline", {
