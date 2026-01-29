@@ -7,6 +7,7 @@ import { assertDefined } from "$app/utils/assert";
 import { buttonVariants } from "$app/components/Button";
 import { Icon } from "$app/components/Icons";
 import { Popover } from "$app/components/Popover";
+import { classNames } from "$app/utils/classNames";
 
 export const NodeActionsMenu = ({
   editor,
@@ -27,7 +28,7 @@ export const NodeActionsMenu = ({
     <Popover
       open={open}
       onToggle={setOpen}
-      className="actions-menu"
+      className={classNames("actions-menu", { "z-0!": !open })}
       aria-label="Actions"
       trigger={
         <div className={buttonVariants({ size: "sm", color: "filled" })} data-drag-handle draggable>
