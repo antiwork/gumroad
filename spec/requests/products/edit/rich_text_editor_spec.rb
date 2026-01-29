@@ -482,10 +482,10 @@ describe("Product Edit Rich Text Editor", type: :system, js: true) do
       select_disclosure "Insert" do
         click_on "Twitter post"
       end
-      expect(page).to have_content("Insert Twitter post")
-      fill_in "URL", with: tweet_url
-      click_on "Insert"
-      expect(page).to_not have_text("URL")
+      within_modal do
+        fill_in "URL", with: tweet_url
+        click_on "Insert"
+      end
       sleep 0.5 # wait for the editor to update the content
       escaped_url = CGI.escape(tweet_url)
       iframely_base = "https://cdn.iframe.ly/api/iframe"
@@ -544,9 +544,9 @@ describe("Product Edit Rich Text Editor", type: :system, js: true) do
 
         # Allow playing the file
         click_on "Play"
-        expect(page).to have_selector("[aria-label='Progress']", text: "00:00")
-        expect(page).to have_selector("[aria-label='Progress']", text: "00:01")
         expect(page).to have_selector("[aria-label='Pause']")
+        expect(page).to have_selector("[aria-label='Progress']", text: "00:01")
+        expect(page).to have_selector("[aria-label='Progress']", text: "00:02")
         click_on "Pause"
         expect(page).to have_selector("[aria-label='Rewind15']")
         click_on "Close"
@@ -620,9 +620,9 @@ describe("Product Edit Rich Text Editor", type: :system, js: true) do
       expect(page).to have_embed(name: "sample")
       within find_embed(name: "test") do
         click_on "Play"
-        expect(page).to have_selector("[aria-label='Progress']", text: "00:00")
-        expect(page).to have_selector("[aria-label='Progress']", text: "00:01")
         expect(page).to have_selector("[aria-label='Pause']")
+        expect(page).to have_selector("[aria-label='Progress']", text: "00:01")
+        expect(page).to have_selector("[aria-label='Progress']", text: "00:02")
         click_on "Pause"
         expect(page).to have_selector("[aria-label='Rewind15']")
         click_on "Close"

@@ -27,7 +27,6 @@ import { createBillingAgreement, createBillingAgreementToken } from "$app/data/p
 import { PurchasePaymentMethod } from "$app/data/purchase";
 import { VerificationResult, verifyShippingAddress } from "$app/data/shipping";
 import { assert, assertDefined } from "$app/utils/assert";
-import { formatPriceCentsWithoutCurrencySymbol } from "$app/utils/currency";
 import { checkEmailForTypos as checkEmailForTyposUtil } from "$app/utils/email";
 import { asyncVoid } from "$app/utils/promise";
 
@@ -46,13 +45,12 @@ import {
   usePayLabel,
   requiresReusablePaymentMethod,
   isSubmitDisabled,
-  isTippingEnabled,
-  getTotalPriceFromProducts,
 } from "$app/components/Checkout/payment";
+import { Dropdown } from "$app/components/Dropdown";
 import { Icon } from "$app/components/Icons";
 import { LoadingSpinner } from "$app/components/LoadingSpinner";
 import { useLoggedInUser } from "$app/components/LoggedInUser";
-import { PriceInput } from "$app/components/PriceInput";
+import { Popover, PopoverAnchor, PopoverContent } from "$app/components/Popover";
 import { showAlert } from "$app/components/server-components/Alert";
 import { Alert } from "$app/components/ui/Alert";
 import { Card, CardContent } from "$app/components/ui/Card";
@@ -225,28 +223,28 @@ const EmailAddress = ({ card }: { card: boolean }) => {
               <h4>Email address</h4>
             </label>
           </legend>
-          <div className={cx("popover", { expanded: !!state.emailTypoSuggestion })} style={{ width: "100%" }}>
-            <input
-              id={`${uid}email`}
-              type="email"
-              aria-invalid={errors.has("email")}
-              value={state.email}
-              onChange={(evt) => dispatch({ type: "set-value", email: evt.target.value.toLowerCase() })}
-              placeholder="Your email address"
-              disabled={(loggedInUser && loggedInUser.email !== null) || isProcessing(state)}
-              onBlur={checkForEmailTypos}
-            />
-
-            {state.emailTypoSuggestion ? (
-              <div className="dropdown grid gap-2">
+          <div className="relative inline-block w-full">
+            <Popover open={!!state.emailTypoSuggestion}>
+              <PopoverAnchor>
+                <input
+                  id={`${uid}email`}
+                  type="email"
+                  aria-invalid={errors.has("email")}
+                  value={state.email}
+                  onChange={(evt) => dispatch({ type: "set-value", email: evt.target.value.toLowerCase() })}
+                  placeholder="Your email address"
+                  disabled={(loggedInUser && loggedInUser.email !== null) || isProcessing(state)}
+                  onBlur={checkForEmailTypos}
+                />
+              </PopoverAnchor>
+              <PopoverContent className="grid gap-2" matchTriggerWidth>
                 <div>Did you mean {state.emailTypoSuggestion}?</div>
-
-                <div className="flex flex-wrap gap-2">
+                <div className="flex gap-2">
                   <Button onClick={rejectEmailTypoSuggestion}>No</Button>
                   <Button onClick={acceptEmailTypoSuggestion}>Yes</Button>
                 </div>
-              </div>
-            ) : null}
+              </PopoverContent>
+            </Popover>
           </div>
         </fieldset>
       </div>
@@ -559,7 +557,7 @@ const CustomerDetails = ({ showCustomFields, className }: { showCustomFields: bo
             <CountryInput />
           </div>
           {addressVerification && addressVerification.type !== "done" ? (
-            <div className="dropdown flex flex-col gap-4">
+            <Dropdown className="flex flex-col gap-4">
               {addressVerification.type === "verification-required" ? (
                 <>
                   <div>
@@ -593,7 +591,7 @@ const CustomerDetails = ({ showCustomFields, className }: { showCustomFields: bo
                   <Button onClick={verifyAddress}>Yes, it is</Button>
                 </>
               )}
-            </div>
+            </Dropdown>
           ) : null}
         </div>
       ) : null}
@@ -604,7 +602,6 @@ const CustomerDetails = ({ showCustomFields, className }: { showCustomFields: bo
           </Alert>
         </div>
       ) : null}
-      {isTippingEnabled(state) ? <TipSelector className={className} /> : null}
       {state.paymentMethod !== "paypal" && state.paymentMethod !== "stripePaymentRequest" ? (
         <div className={className}>
           <Button
@@ -693,10 +690,7 @@ const CreditCard = ({ card }: { card?: boolean }) => {
   if (state.paymentMethod !== "card") return null;
 
   return (
-    <div
-      style={{ borderTop: "none", paddingTop: "0" }}
-      className={card ? "flex flex-wrap items-center justify-between gap-4 p-4" : ""}
-    >
+    <div className={card ? "flex flex-wrap items-center justify-between gap-4 p-4 pt-0!" : ""}>
       <div className={`flex flex-col gap-4 ${card ? "grow" : ""}`}>
         {!useSavedCard ? (
           <fieldset>
@@ -733,87 +727,6 @@ const CreditCard = ({ card }: { card?: boolean }) => {
           setUseSavedCard={setUseSavedCard}
           onChange={(evt) => setCardError(!!evt.error)}
         />
-      </div>
-    </div>
-  );
-};
-
-const TipSelector = ({ className }: { className?: string | undefined }) => {
-  const [state, dispatch] = useState();
-  const errors = getErrors(state);
-  const showPercentageOptions = getTotalPriceFromProducts(state) > 0;
-
-  React.useEffect(() => {
-    if (!showPercentageOptions && state.tip.type === "percentage")
-      dispatch({ type: "set-value", tip: { type: "fixed", amount: 0 } });
-  }, [showPercentageOptions]);
-
-  const defaultOther = state.surcharges.type === "loaded" ? state.surcharges.result.subtotal * 0.3 : 5;
-
-  return (
-    <div className={className}>
-      <div className="flex grow flex-col gap-4">
-        <h4 className="font-bold">Add a tip</h4>
-        {showPercentageOptions ? (
-          <div
-            role="radiogroup"
-            className="radio-buttons"
-            style={{ gridTemplateColumns: "repeat(auto-fit, minmax(min(5rem, 100%), 1fr))" }}
-          >
-            {state.tipOptions.map((tip) => (
-              <Button
-                key={tip}
-                role="radio"
-                aria-checked={state.tip.type === "percentage" && tip === state.tip.percentage}
-                onClick={() => {
-                  dispatch({
-                    type: "set-value",
-                    tip: {
-                      type: "percentage",
-                      percentage: tip,
-                    },
-                  });
-                }}
-                disabled={isProcessing(state)}
-                style={{ justifyContent: "center" }}
-              >
-                {tip}%
-              </Button>
-            ))}
-            <Button
-              role="radio"
-              aria-checked={state.tip.type === "fixed"}
-              onClick={() => {
-                dispatch({
-                  type: "set-value",
-                  tip: {
-                    type: "fixed",
-                    amount: state.tip.type === "fixed" ? state.tip.amount : defaultOther,
-                  },
-                });
-              }}
-              disabled={isProcessing(state)}
-              style={{ justifyContent: "center" }}
-            >
-              Other
-            </Button>
-          </div>
-        ) : null}
-        {state.tip.type === "fixed" ? (
-          <fieldset className={cx({ danger: errors.has("tip") })}>
-            <PriceInput
-              hasError={errors.has("tip")}
-              ariaLabel="Tip"
-              currencyCode="usd"
-              cents={state.tip.amount}
-              onChange={(newAmount) => {
-                dispatch({ type: "set-value", tip: { type: "fixed", amount: newAmount } });
-              }}
-              placeholder={formatPriceCentsWithoutCurrencySymbol("usd", defaultOther)}
-              disabled={isProcessing(state)}
-            />
-          </fieldset>
-        ) : null}
       </div>
     </div>
   );
@@ -878,7 +791,8 @@ const BraintreePayPal = ({ token }: { token: string }) => {
   }, [state.status.type]);
 
   return (
-    <Button className="button-paypal" onClick={() => dispatch({ type: "offer" })} disabled={isSubmitDisabled(state)}>
+    <Button color="paypal" onClick={() => dispatch({ type: "offer" })} disabled={isSubmitDisabled(state)}>
+      <span className="brand-icon brand-icon-paypal" />
       {payLabel}
     </Button>
   );
@@ -1239,7 +1153,7 @@ export const PaymentForm = ({
       <EmailAddress card />
       {!isFreePurchase ? (
         <>
-          <CardContent>
+          <CardContent className={state.paymentMethod === "card" ? "border-b-0" : ""}>
             <div className="flex grow flex-col gap-4">
               <h4 className="font-bold">Pay with</h4>
               {state.availablePaymentMethods.length > 1 ? (

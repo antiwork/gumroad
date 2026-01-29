@@ -199,6 +199,31 @@ input[type="checkbox"]:not([role="switch"]) {
   }
 }
 
+%select-button {
+  text-align: initial;
+  align-items: flex-start;
+  justify-content: initial;
+  gap: spacer(3);
+
+  h4 {
+    font-weight: bold;
+  }
+
+  & > :first-child {
+    flex-shrink: 0;
+  }
+
+  &.vertical {
+    flex-flow: column;
+  }
+}
+
+%select-button-active {
+  background-color: var(--active-bg);
+  transform: translate(-$button-hover-transform-length, -$button-hover-transform-length);
+  box-shadow: box-shadow(1);
+}
+
 .radio-buttons[role="radiogroup"] {
   display: grid;
   gap: spacer(4);

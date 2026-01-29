@@ -63,13 +63,13 @@ const MembershipInactive = ({
     <p>You cannot access the content of {product_name} because your membership is no longer active.</p>
     {membership ? (
       membership.is_alive_or_restartable ? (
-        <a className="button primary" href={Routes.manage_subscription_url(membership.subscription_id)}>
-          Manage membership
-        </a>
+        <Button asChild color="primary">
+          <a href={Routes.manage_subscription_url(membership.subscription_id)}>Manage membership</a>
+        </Button>
       ) : product_long_url ? (
-        <a className="button primary" href={product_long_url}>
-          Resubscribe
-        </a>
+        <Button asChild color="primary">
+          <a href={product_long_url}>Resubscribe</a>
+        </Button>
       ) : null
     ) : null}
   </Placeholder>
@@ -91,9 +91,9 @@ const InstallmentPlanFailedOrCancelled = ({
     {installment_plan.is_alive_or_restartable ? (
       <>
         <p>Please update your payment method to continue accessing the content of {product_name}.</p>
-        <a className="button primary" href={Routes.manage_subscription_url(installment_plan.subscription_id)}>
-          Update payment method
-        </a>
+        <Button asChild color="primary">
+          <a href={Routes.manage_subscription_url(installment_plan.subscription_id)}>Update payment method</a>
+        </Button>
       </>
     ) : (
       <p>You cannot access the content of {product_name} because your installment plan is no longer active.</p>

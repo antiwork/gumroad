@@ -4190,6 +4190,58 @@ describe Purchase, :vcr do
     end
   end
 
+  describe "#toggle_off_can_contact_if_buyer_has_unsubscribed" do
+    let(:seller) { create(:user) }
+    let(:buyer_email) { "buyer@example.com" }
+    let(:product_1) { create(:product, user: seller) }
+    let(:product_2) { create(:product, user: seller) }
+    let(:first_purchase) { create(:purchase, link: product_1, email: buyer_email, seller:) }
+
+    context "when customer has previously unsubscribed" do
+      before do
+        expect(first_purchase.can_contact).to be(true)
+        first_purchase.unsubscribe_buyer
+        expect(first_purchase.reload.can_contact).to be(false)
+      end
+
+      it "sets can_contact to false on new purchases automatically" do
+        new_purchase = create(:purchase, link: product_2, email: buyer_email, seller:)
+
+        expect(new_purchase.can_contact).to be(false)
+      end
+
+      it "does not add the customer to AudienceMember for the new purchase" do
+        expect(AudienceMember.find_by(email: buyer_email, seller:)).to be_nil
+
+        create(:purchase, link: product_2, email: buyer_email, seller:)
+
+        expect(AudienceMember.find_by(email: buyer_email, seller:)).to be_nil
+      end
+
+      it "prevents the customer from appearing in email blast audience" do
+        installment = create(:installment, seller:, installment_type: "audience")
+        create(:purchase, link: product_2, email: buyer_email, seller:)
+
+        expect(AudienceMember.filter(seller_id: seller.id, params: installment.audience_members_filter_params).where(email: buyer_email)).to be_empty
+      end
+    end
+
+    context "when customer has not previously unsubscribed" do
+      it "allows new purchases to have can_contact: true" do
+        new_purchase = create(:purchase, link: product_2, email: buyer_email, seller:)
+        expect(new_purchase.can_contact).to be(true)
+        expect(AudienceMember.find_by(email: buyer_email, seller:)).to be_present
+      end
+
+      it "allows the customer to appear in email blast audience" do
+        installment = create(:installment, seller:, installment_type: "audience")
+        create(:purchase, link: product_2, email: buyer_email, seller:)
+
+        expect(AudienceMember.filter(seller_id: seller.id, params: installment.audience_members_filter_params).where(email: buyer_email)).to be_present
+      end
+    end
+  end
+
   describe "#attach_credit_card_to_purchaser" do
     it "the method is not called when the purchaser_id is not updated" do
       user = create(:user)

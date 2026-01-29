@@ -7,10 +7,12 @@ import * as React from "react";
 import { createPortal } from "react-dom";
 import { cast } from "ts-safe-cast";
 
-import { Button } from "$app/components/Button";
+import { classNames } from "$app/utils/classNames";
+
+import { Button, buttonVariants } from "$app/components/Button";
 import { Icon } from "$app/components/Icons";
 import { Modal } from "$app/components/Modal";
-import { Popover } from "$app/components/Popover";
+import { Popover, PopoverContent, PopoverTrigger } from "$app/components/Popover";
 import { MenuItem, validateUrl } from "$app/components/RichTextEditor";
 import { showAlert } from "$app/components/server-components/Alert";
 
@@ -220,52 +222,55 @@ const LinkNodeView = ({ node, editor, getPos, deleteNode }: NodeViewProps) => {
     <NodeViewWrapper as="span" style={{ display: "inline-block" }}>
       {editor.isEditable && (isPopoverShown || isButton) ? (
         <Popover
-          trigger={
+          open={isPopoverShown}
+          onOpenChange={(open) => {
+            setLink({ label: node.textContent, url: cast(node.attrs.href) });
+            setIsPopoverShown(open);
+          }}
+        >
+          <PopoverTrigger className={classNames("invisible all-unset", { visible: isButton || isPopoverVisible })}>
             <NodeViewContent
               as="a"
               href={cast<string>(node.attrs.href)}
-              className={cx({ "button primary": isButton })}
+              className={cx({ [buttonVariants({ size: "default", color: "primary" })]: isButton })}
               target="_blank"
               rel="noopener noreferrer nofollow"
             />
-          }
-          open={isPopoverShown}
-          onToggle={() => {
-            setLink({ label: node.textContent, url: cast(node.attrs.href) });
-            setIsPopoverShown(!isPopoverShown);
-          }}
-          style={{ visibility: isButton || isPopoverVisible ? "visible" : "hidden" }}
-        >
-          <fieldset>
-            <input
-              placeholder="Enter text"
-              value={link.label}
-              onChange={(evt) => setLink({ ...link, label: evt.target.value })}
-              onKeyDown={handleKeyPress}
-            />
-            <input
-              placeholder="Enter URL"
-              value={link.url}
-              ref={linkInputRef}
-              onChange={(evt) => setLink({ ...link, url: evt.target.value })}
-              onKeyDown={handleKeyPress}
-            />
-            <div className="flex items-end gap-2">
-              {!isButton && (
-                <Button contentEditable={false} color="danger" onClick={removeLink}>
-                  Remove link
+          </PopoverTrigger>
+          <PopoverContent usePortal>
+            <fieldset>
+              <input
+                placeholder="Enter text"
+                value={link.label}
+                onChange={(evt) => setLink({ ...link, label: evt.target.value })}
+                onKeyDown={handleKeyPress}
+              />
+              <input
+                placeholder="Enter URL"
+                value={link.url}
+                ref={linkInputRef}
+                onChange={(evt) => setLink({ ...link, url: evt.target.value })}
+                onKeyDown={handleKeyPress}
+              />
+              <div className="flex items-end gap-2">
+                {!isButton && (
+                  <Button contentEditable={false} color="danger" onClick={removeLink}>
+                    Remove link
+                  </Button>
+                )}
+                <Button
+                  contentEditable={false}
+                  color="primary"
+                  onClick={handleSave}
+                  disabled={
+                    (link.url === node.attrs.href && link.label === node.textContent) || link.label.trim() === ""
+                  }
+                >
+                  Save
                 </Button>
-              )}
-              <Button
-                contentEditable={false}
-                color="primary"
-                onClick={handleSave}
-                disabled={(link.url === node.attrs.href && link.label === node.textContent) || link.label.trim() === ""}
-              >
-                Save
-              </Button>
-            </div>
-          </fieldset>
+              </div>
+            </fieldset>
+          </PopoverContent>
         </Popover>
       ) : (
         <NodeViewContent
@@ -273,7 +278,7 @@ const LinkNodeView = ({ node, editor, getPos, deleteNode }: NodeViewProps) => {
           as="a"
           href={cast<string>(node.attrs.href)}
           contentEditable={editor.isEditable}
-          className={cx({ "button primary": isButton })}
+          className={cx({ [buttonVariants({ size: "default", color: "primary" })]: isButton })}
           target="_blank"
           rel="noopener noreferrer nofollow"
           onClick={(event: React.MouseEvent) => {

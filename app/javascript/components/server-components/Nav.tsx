@@ -85,7 +85,7 @@ export const Nav = (props: Props) => {
             }
           />
           <DashboardNavProfilePopover user={currentSeller}>
-            <div role="menu">
+            <div role="menu" className="border-0! shadow-none! dark:border!">
               {teamMemberships != null && teamMemberships.length > 0 ? (
                 <>
                   {teamMemberships.map((teamMembership) => (
@@ -114,7 +114,7 @@ export const Nav = (props: Props) => {
           text="Products"
           icon="archive-fill"
           href={Routes.products_url(routeParams)}
-          additionalPatterns={[Routes.bundle_path(".", routeParams).slice(0, -1)]}
+          additionalPatterns={["/bundles/"]}
         />
         {loggedInUser?.policies.collaborator.create ? (
           <NavLink text="Collaborators" icon="deal-fill" href={Routes.collaborators_url(routeParams)} />
@@ -137,7 +137,11 @@ export const Nav = (props: Props) => {
           text="Analytics"
           icon="bar-chart-fill"
           href={Routes.sales_dashboard_url(routeParams)}
-          additionalPatterns={[Routes.audience_dashboard_url(routeParams), Routes.dashboard_utm_links_url(routeParams)]}
+          additionalPatterns={[
+            Routes.audience_dashboard_url(routeParams),
+            Routes.dashboard_utm_links_url(routeParams),
+            Routes.churn_dashboard_url(routeParams),
+          ]}
         />
         {loggedInUser?.policies.balance.index ? (
           <NavLink text="Payouts" icon="bank" href={Routes.balance_url(routeParams)} />

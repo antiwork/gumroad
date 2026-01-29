@@ -14,7 +14,7 @@ class LibraryController < Sellers::BaseController
   def index
     authorize Purchase
 
-    @title = "Library"
+    set_meta_tag(title: "Library")
     purchase_results, creator_counts, bundles = LibraryPresenter.new(logged_in_user).library_cards
 
     render inertia: "Library/Index", props: {

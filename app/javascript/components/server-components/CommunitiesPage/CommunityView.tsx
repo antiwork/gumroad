@@ -26,7 +26,7 @@ import { Button, NavigationButton } from "$app/components/Button";
 import { useCurrentSeller } from "$app/components/CurrentSeller";
 import { Icon } from "$app/components/Icons";
 import { Modal } from "$app/components/Modal";
-import { Popover } from "$app/components/Popover";
+import { Popover, PopoverContent, PopoverTrigger } from "$app/components/Popover";
 import { showAlert } from "$app/components/server-components/Alert";
 import { ToggleSettingRow } from "$app/components/SettingRow";
 import { Placeholder, PlaceholderImage } from "$app/components/ui/Placeholder";
@@ -617,45 +617,45 @@ export const CommunityView = () => {
                         : selectedCommunity.seller.name}
                     </span>
 
-                    <Popover
-                      className="shrink-0"
-                      open={switcherOpen}
-                      onToggle={setSwitcherOpen}
-                      aria-label="Switch creator"
-                      trigger={
-                        <div className="flex h-8 w-8 justify-center">
-                          <Icon name="outline-cheveron-down" />
-                        </div>
-                      }
-                    >
-                      <div role="menu">
-                        {sellersExceptSelected.map((seller) => (
-                          <div
-                            key={seller.id}
-                            role="menuitem"
-                            className="max-w-xs"
-                            onClick={() => switchSeller(seller.id)}
-                          >
-                            <div className="flex items-center gap-1">
-                              <UserAvatar src={seller.avatar_url} alt={seller.name} className="shrink-0" size="small" />
-                              <span className="truncate">
-                                {seller.name} {currentSeller?.id === seller.id ? <em>(your community)</em> : null}
-                              </span>
+                    <Popover open={switcherOpen} onOpenChange={setSwitcherOpen}>
+                      <PopoverTrigger aria-label="Switch creator" className="flex h-8 w-8 justify-center">
+                        <Icon name="outline-cheveron-down" />
+                      </PopoverTrigger>
+                      <PopoverContent className="shrink-0 border-0 p-0 shadow-none">
+                        <div role="menu">
+                          {sellersExceptSelected.map((seller) => (
+                            <div
+                              key={seller.id}
+                              role="menuitem"
+                              className="max-w-xs"
+                              onClick={() => switchSeller(seller.id)}
+                            >
+                              <div className="flex items-center gap-1">
+                                <UserAvatar
+                                  src={seller.avatar_url}
+                                  alt={seller.name}
+                                  className="shrink-0"
+                                  size="small"
+                                />
+                                <span className="truncate">
+                                  {seller.name} {currentSeller?.id === seller.id ? <em>(your community)</em> : null}
+                                </span>
+                              </div>
                             </div>
+                          ))}
+                          {sellersExceptSelected.length > 0 ? <hr className="my-1" /> : null}
+                          <div role="menuitem" onClick={() => setShowNotificationsSettings(true)}>
+                            <Icon name="outline-bell" /> Notifications
                           </div>
-                        ))}
-                        {sellersExceptSelected.length > 0 ? <hr className="my-1" /> : null}
-                        <div role="menuitem" onClick={() => setShowNotificationsSettings(true)}>
-                          <Icon name="outline-bell" /> Notifications
                         </div>
-                      </div>
+                      </PopoverContent>
                     </Popover>
                   </div>
                 </div>
 
                 <button
                   onClick={() => setSidebarOpen(false)}
-                  className={cx("flex h-8 w-8 justify-center", {
+                  className={cx("flex h-8 w-8 cursor-pointer justify-center all-unset", {
                     hidden: isAboveBreakpoint,
                   })}
                   aria-label="Close sidebar"
@@ -825,7 +825,7 @@ const CommunityChatHeader = ({
     aria-label="Community chat header"
   >
     <button
-      className={cx("shrink-0", { hidden: isAboveBreakpoint })}
+      className={cx("shrink-0 cursor-pointer all-unset", { hidden: isAboveBreakpoint })}
       aria-label="Open sidebar"
       onClick={() => setSidebarOpen(true)}
     >
@@ -849,7 +849,7 @@ const GoBackHeader = () => {
       <div className="flex items-center">
         <button
           onClick={handleGoBack}
-          className="flex cursor-pointer items-center border-none bg-transparent p-0 text-sm no-underline"
+          className="flex cursor-pointer items-center border-none bg-transparent p-0 text-sm no-underline all-unset"
         >
           <Icon name="arrow-left" className="mr-1" /> Go back
         </button>
