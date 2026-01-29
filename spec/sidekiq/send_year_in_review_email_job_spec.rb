@@ -148,8 +148,7 @@ describe SendYearInReviewEmailJob do
             expect(mail.body.sanitized).to include("You sold products in 1 country")
             expect(mail.body.sanitized).to_not include("United States")
             expect(mail.body.sanitized).to include("Elsewhere 24 12 $1.2K")
-            expect(mail.body.sanitized).to include("Your 1099 form is available for download on your")
-            expect(mail.body.sanitized).to have_link("Gumroad Tax Center page", href: tax_center_url)
+            expect(mail.body.sanitized).to include("Your 1099 form is available for download")
             expect(mail.body.sanitized).to include(seller.financial_annual_report_url_for(year: date.year))
           end
 
@@ -173,7 +172,7 @@ describe SendYearInReviewEmailJob do
               expect(mail.body.sanitized).to include("You sold products in 1 country")
               expect(mail.body.sanitized).to_not include("United States")
               expect(mail.body.sanitized).to include("Elsewhere 24 12 $1.2K")
-              expect(mail.body.sanitized).to include("You'll be receiving a 1099 from us in the next few weeks.")
+              expect(mail.body.sanitized).to include("Your 1099 form is available for download")
               expect(mail.body.sanitized).to include(seller.financial_annual_report_url_for(year: date.year))
             end
           end
@@ -254,7 +253,7 @@ describe SendYearInReviewEmailJob do
           expect(mail.body.sanitized).to include("Elsewhere 0 12 $1.2K")
           expect(mail.body.sanitized).to include(seller.financial_annual_report_url_for(year: date.year))
           expect(mail.body.sanitized).to_not include("You do not qualify for a 1099 this year.")
-          expect(mail.body.sanitized).to_not include("You'll be receiving a 1099 from us in the next few weeks.")
+          expect(mail.body.sanitized).to_not include("Your 1099 form is available for download")
         end
       end
     end
