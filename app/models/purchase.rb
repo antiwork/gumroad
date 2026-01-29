@@ -1678,7 +1678,7 @@ class Purchase < ApplicationRecord
     if offer_code.present? && !has_cached_offer_code?
       self.build_purchase_offer_code_discount(offer_code:, offer_code_amount: offer_code.amount, offer_code_is_percent: offer_code.is_percent?,
                                               pre_discount_minimum_price_cents: minimum_paid_price_cents_per_unit_before_discount,
-                                              duration_in_months: link.is_tiered_membership? ? offer_code.duration_in_months : nil)
+                                              duration_in_months: link.is_recurring_billing? ? offer_code.duration_in_months : nil)
     end
 
     self.build_purchasing_power_parity_info(factor: purchasing_power_parity_factor) if is_purchasing_power_parity_discounted? && purchasing_power_parity_factor < 1

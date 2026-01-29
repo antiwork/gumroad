@@ -4,7 +4,6 @@ import "whatwg-fetch";
 import ReactOnRails from "react-on-rails";
 
 import Alert from "$app/components/server-components/Alert";
-import BundleEditPage from "$app/components/server-components/BundleEditPage";
 import CheckoutPage from "$app/components/server-components/CheckoutPage";
 import CommunitiesPage from "$app/components/server-components/CommunitiesPage";
 import CustomersDownloadPopover from "$app/components/server-components/CustomersPage/DownloadPopover";
@@ -43,7 +42,6 @@ import { Pill } from "$app/components/ui/Pill";
 ReactOnRails.register({
   Alert,
   SupportHeader,
-  BundleEditPage,
   CheckoutPage,
   CodeSnippet,
   CommunitiesPage,
