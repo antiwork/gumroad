@@ -105,5 +105,192 @@ describe DiscoverController, type: :controller, inertia: true do
         )
       end
     end
+
+    context "inertia props" do
+      it "passes required props to the Inertia component" do
+        get :index
+
+        expect(inertia).to render_component("Discover/Index")
+        expect(inertia.props).to include(
+          :search_results,
+          :currency_code,
+          :taxonomies_for_nav,
+          :recommended_products,
+          :recommended_wishlists,
+          :curated_product_ids,
+          :search_offset
+        )
+      end
+
+      it "uses the user's currency code when logged in" do
+        @buyer.update!(currency_type: "eur")
+
+        get :index
+
+        expect(inertia.props[:currency_code]).to eq("eur")
+      end
+
+      it "falls back to usd currency code when not logged in" do
+        sign_out @buyer
+
+        get :index
+
+        expect(inertia.props[:currency_code]).to eq("usd")
+      end
+
+      it "includes search_offset from params" do
+        get :index, params: { from: 10 }
+
+        expect(inertia.props[:search_offset]).to eq("10")
+      end
+    end
+
+    context "recommended_products" do
+      it "returns empty array when offer_code is present" do
+        get :index, params: { offer_code: "SALE10" }
+
+        expect(inertia.props[:recommended_products]).to eq([])
+      end
+
+      it "returns recommended products when taxonomy is present" do
+        taxonomy = Taxonomy.create!(slug: "test-3d")
+        taxonomy_product = create(:product, taxonomy:)
+        child_taxonomy_product = create(:product, taxonomy:)
+
+        # Stub search_products to return our test products when taxonomy is present
+        allow_any_instance_of(DiscoverController).to receive(:search_products).and_wrap_original do |method, params|
+          if params[:taxonomy_id] == taxonomy.id && params[:size] == DiscoverController::RECOMMENDED_PRODUCTS_COUNT
+            # For recommendations call
+            { products: Link.where(id: [taxonomy_product.id, child_taxonomy_product.id]), total: 2 }
+          else
+            # For main search results
+            { products: Link.none, total: 0 }
+          end
+        end
+
+        get :index, params: { taxonomy: "test-3d" }
+
+        recommended_product_ids = inertia.props[:recommended_products].pluck(:id)
+        expect(recommended_product_ids).to include(taxonomy_product.external_id, child_taxonomy_product.external_id)
+      end
+
+      it "returns curated products when available" do
+        cart = create(:cart, user: @buyer)
+        create(:cart_product, cart:, product: @product)
+        recommended_product = create(:product)
+
+        expect(RecommendedProducts::DiscoverService).to receive(:fetch).with(
+          purchaser: @buyer,
+          cart_product_ids: [@product.id],
+          recommender_model_name: RecommendedProductsService::MODEL_SALES,
+        ).and_return([RecommendedProducts::ProductInfo.new(recommended_product)])
+
+        get :index
+
+        expect(inertia.props[:recommended_products]).to be_present
+        expect(inertia.props[:recommended_products].first[:id]).to eq(recommended_product.external_id)
+      end
+    end
+
+    context "recommended_wishlists" do
+      let(:wishlists) { Wishlist.where(id: create_list(:wishlist, 4).map(&:id)) }
+
+      it "fetches recommended wishlists with correct parameters" do
+        cart = create(:cart, user: @buyer)
+        create(:cart_product, cart:, product: @product)
+        recommended_product = create(:product)
+
+        allow(RecommendedProducts::DiscoverService).to receive(:fetch).and_return(
+          [RecommendedProducts::ProductInfo.new(recommended_product)]
+        )
+
+        expect(RecommendedWishlistsService).to receive(:fetch).with(
+          limit: 4,
+          current_seller: @buyer,
+          curated_product_ids: [],
+          taxonomy_id: nil
+        ).and_return(wishlists)
+
+        get :index
+
+        expect(inertia.props[:recommended_wishlists]).to be_present
+      end
+
+      it "fetches wishlists with taxonomy_id when taxonomy is present" do
+        taxonomy = Taxonomy.create!(slug: "test-taxonomy")
+        taxonomy_product = create(:product, taxonomy:)
+
+        # Stub search_products to return products for taxonomy-based recommendations
+        allow_any_instance_of(DiscoverController).to receive(:search_products).and_wrap_original do |method, params|
+          if params[:taxonomy_id] == taxonomy.id && params[:size] == DiscoverController::RECOMMENDED_PRODUCTS_COUNT
+            { products: Link.where(id: taxonomy_product.id), total: 1 }
+          else
+            { products: Link.none, total: 0 }
+          end
+        end
+
+        expect(RecommendedWishlistsService).to receive(:fetch).with(
+          limit: 4,
+          current_seller: @buyer,
+          curated_product_ids: [],
+          taxonomy_id: taxonomy.id
+        ).and_return(wishlists)
+
+        get :index, params: { taxonomy: "test-taxonomy" }
+
+        expect(inertia.props[:recommended_wishlists]).to be_present
+      end
+
+      it "passes curated_product_ids from excess curated products to wishlist service" do
+        cart = create(:cart, user: @buyer)
+        create(:cart_product, cart:, product: @product)
+
+        # Create 10 recommended products (more than RECOMMENDED_PRODUCTS_COUNT = 8)
+        recommended_products = create_list(:product, 10)
+        product_infos = recommended_products.map { |p| RecommendedProducts::ProductInfo.new(p) }
+
+        allow(RecommendedProducts::DiscoverService).to receive(:fetch).and_return(product_infos)
+
+        # The excess product IDs (products 9 and 10) should be passed to wishlist service
+        excess_product_ids = recommended_products[8..].map(&:id)
+
+        expect(RecommendedWishlistsService).to receive(:fetch).with(
+          limit: 4,
+          current_seller: @buyer,
+          curated_product_ids: excess_product_ids,
+          taxonomy_id: nil
+        ).and_return(wishlists)
+
+        get :index
+      end
+
+      it "returns empty array when offer_code is present" do
+        get :index, params: { offer_code: "SALE10" }
+
+        expect(inertia.props[:recommended_wishlists]).to eq([])
+      end
+
+      it "returns empty array when query is present" do
+        cart = create(:cart, user: @buyer)
+        create(:cart_product, cart:, product: @product)
+        recommended_product = create(:product)
+
+        allow(RecommendedProducts::DiscoverService).to receive(:fetch).and_return(
+          [RecommendedProducts::ProductInfo.new(recommended_product)]
+        )
+
+        get :index, params: { query: "test" }
+
+        expect(inertia.props[:recommended_wishlists]).to eq([])
+      end
+
+      it "returns empty array when there are no recommended products" do
+        allow(RecommendedProducts::DiscoverService).to receive(:fetch).and_return([])
+
+        get :index
+
+        expect(inertia.props[:recommended_wishlists]).to eq([])
+      end
+    end
   end
 end
