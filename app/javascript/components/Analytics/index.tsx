@@ -153,7 +153,6 @@ const Analytics = ({ products: initialProducts, country_codes, state_names }: An
             <select
               aria-label="Aggregate by"
               onChange={(e) => setAggregateBy(e.target.value === "daily" ? "daily" : "monthly")}
-              className="w-auto"
             >
               <option value="daily">Daily</option>
               <option value="monthly">Monthly</option>

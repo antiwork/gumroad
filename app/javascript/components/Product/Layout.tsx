@@ -126,7 +126,7 @@ const SectionEditor = ({
             ) : (
               <div className="mx-auto w-full max-w-6xl">{children}</div>
             )}
-            {i === sections.length - 1 ? <AddSectionButton index={i + 1} position="top" /> : null}
+            {i === sections.length - 1 ? <AddSectionButton index={i + 1} side="top" /> : null}
           </SectionLayout>
         ))}
       </ImageUploadSettingsContext.Provider>

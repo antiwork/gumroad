@@ -482,10 +482,10 @@ describe("Product Edit Rich Text Editor", type: :system, js: true) do
       select_disclosure "Insert" do
         click_on "Twitter post"
       end
-      expect(page).to have_content("Insert Twitter post")
-      fill_in "URL", with: tweet_url
-      click_on "Insert"
-      expect(page).to_not have_text("URL")
+      within_modal do
+        fill_in "URL", with: tweet_url
+        click_on "Insert"
+      end
       sleep 0.5 # wait for the editor to update the content
       escaped_url = CGI.escape(tweet_url)
       iframely_base = "https://cdn.iframe.ly/api/iframe"
