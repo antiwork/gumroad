@@ -936,7 +936,7 @@ describe("Product Edit Scenario", type: :system, js: true) do
         end
         expect(page).to have_text("Conversion is not reversible once completed.")
 
-        expect(page).to have_link("Yes, let's select the products", href: "#{bundle_path(product.external_id)}/content")
+        expect(page).to have_link("Yes, let's select the products", href: edit_bundle_content_path(product.external_id))
         click_on "No, cancel"
       end
 
