@@ -1,5 +1,7 @@
 import React from "react";
 
+import logo from "$assets/images/logo-g.svg";
+
 export default function Footer() {
   return (
     <div className="flex flex-col justify-between gap-16 bg-black px-8 py-16 leading-relaxed text-white lg:flex-row lg:px-[4vw] lg:py-24">
@@ -13,34 +15,61 @@ export default function Footer() {
             <div className="lg:flex-1">
               <input name="email" placeholder="Your email address" type="email" />
             </div>
-            {/* <%= render "home/shared/button", text: "→", url: "#", type: "submit", variant: "pink", size: "small" %> */}
+            <div className="group relative inline-block">
+              <div className="absolute inset-0 z-[2] rounded-sm border border-black bg-yellow transition-transform duration-150" />
+              <div className="absolute inset-0 z-[1] rounded-sm border border-black bg-red transition-transform duration-150 group-hover:translate-x-2 group-hover:translate-y-2" />
+              <button
+                type="submit"
+                className="relative z-[3] inline-flex h-12 w-full items-center justify-center rounded-sm border border-black bg-pink px-3 text-base text-black no-underline transition-all duration-150 group-hover:-translate-x-2 group-hover:-translate-y-2 lg:h-12 lg:w-auto lg:px-6 lg:text-base"
+              >
+                →
+              </button>
+            </div>
           </form>
         </div>
         <div className="flex items-center gap-2">
-          {/* <%= image_tag "logo-g.svg", alt: "Gumroad icon", className: "w-6 h-6" %> */}
+          <img src={logo} alt="Gumroad icon" className="h-6 w-6" />
           <div>Ⓒ Gumroad, Inc.</div>
         </div>
       </div>
       <div className="flex w-full max-w-3xl flex-col gap-16">
         <div className="flex flex-1 gap-16">
           <div className="flex flex-1 flex-col gap-3">
-            {/* <%= link_to "Discover", discover_path, className: "no-underline hover:text-pink" %>
-                    <%= link_to "Blog", gumroad_blog_root_path, className: "no-underline hover:text-pink" %>
-                    <%= link_to "Pricing", pricing_path, className: "no-underline hover:text-pink" %>
-                    <%= link_to "Features", features_path, className: "no-underline hover:text-pink" %>
-                    <%= link_to "About", about_path, className: "no-underline hover:text-pink" %>
-                    <%= link_to "Small Bets", small_bets_path, className: "no-underline hover:text-pink" %> */}
+            <a href={Routes.discover_path()} className="no-underline hover:text-pink">
+              Discover
+            </a>
+            <a href={Routes.gumroad_blog_root_path()} className="no-underline hover:text-pink">
+              Blog
+            </a>
+            <a href={Routes.pricing_path()} className="no-underline hover:text-pink">
+              Pricing
+            </a>
+            <a href={Routes.features_path()} className="no-underline hover:text-pink">
+              Features
+            </a>
+            <a href={Routes.about_path()} className="no-underline hover:text-pink">
+              About
+            </a>
+            <a href={Routes.small_bets_path()} className="no-underline hover:text-pink">
+              Small Bets
+            </a>
           </div>
           <div className="flex flex-1 flex-col gap-3">
-            {/* <%= link_to "Help", help_center_root_path, className: "no-underline hover:text-pink" %> */}
+            <a href={Routes.help_center_root_path()} className="no-underline hover:text-pink">
+              Help
+            </a>
             <a
               href="https://www.youtube.com/playlist?list=PL_DfN-mKCGNuswqERc6sIA8urYAKARc6s"
               className="no-underline hover:text-pink"
             >
               Board meetings
             </a>
-            {/* <%= link_to "Terms of Service", terms_path, className: "no-underline hover:text-pink" %> */}
-            {/* <%= link_to "Privacy Policy", privacy_path, className: "no-underline hover:text-pink" %> */}
+            <a href={Routes.terms_path()} className="no-underline hover:text-pink">
+              Terms of Service
+            </a>
+            <a href={Routes.privacy_path()} className="no-underline hover:text-pink">
+              Privacy Policy
+            </a>
           </div>
         </div>
         <div className="flex justify-between">
