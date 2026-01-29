@@ -12,7 +12,7 @@ import { HomeNav } from "$app/components/HomeNav";
 import { Icon } from "$app/components/Icons";
 import { LoadingSpinner } from "$app/components/LoadingSpinner";
 import { useRichTextEditor } from "$app/components/RichTextEditor";
-import { formatPostDate } from "$app/components/server-components/Profile/PostPage";
+import { formatPostDate } from "$app/utils/date";
 import { useUserAgentInfo } from "$app/components/UserAgent";
 import { useRunOnce } from "$app/components/useRunOnce";
 

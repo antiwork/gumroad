@@ -5,8 +5,6 @@ require "inertia_rails/rspec"
 require "shared_examples/authorize_called"
 
 describe GumroadBlog::PostsController, inertia: true do
-  render_views
-
   let(:blog_owner) { create(:user, username: "gumroad") }
 
   describe "GET index" do
