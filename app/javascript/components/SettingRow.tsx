@@ -1,6 +1,7 @@
 import * as React from "react";
 
 import { Details } from "$app/components/Details";
+import { Dropdown } from "$app/components/Dropdown";
 import { Toggle } from "$app/components/Toggle";
 
 type ToggleProps = {
@@ -27,7 +28,7 @@ export const ToggleSettingRow = ({ label, value, help, onChange, dropdown, disab
   );
   return dropdown ? (
     <Details summary={toggle} className="toggle" open={value}>
-      <div className="dropdown">{dropdown}</div>
+      <Dropdown>{dropdown}</Dropdown>
     </Details>
   ) : (
     toggle
