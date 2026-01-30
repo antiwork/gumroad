@@ -879,7 +879,7 @@ class Subscription < ApplicationRecord
       .first
   end
 
-  def self.active_for_user_and_product(user_or_email:, product:)
+  def self.active_for_user_and_product(user_or_email:, product:, with_lock: false)
     return nil unless product.is_recurring_billing
 
     query = where(link_id: product.id)
@@ -893,6 +893,8 @@ class Subscription < ApplicationRecord
       query = query.joins(:original_purchase)
                    .where(purchases: { email: user_or_email.to_s.downcase.strip })
     end
+
+    query = query.lock if with_lock
 
     query.first
   end

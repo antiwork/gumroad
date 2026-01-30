@@ -3,6 +3,16 @@
 class Subscription::RestartAtCheckoutService
   include CurrencyHelper
 
+  # Custom exception for charge failures that should trigger transaction rollback
+  class ChargeFailed < StandardError
+    attr_reader :purchase
+
+    def initialize(message, purchase: nil)
+      super(message)
+      @purchase = purchase
+    end
+  end
+
   attr_reader :subscription, :product, :params, :buyer
   attr_accessor :new_purchase
 
@@ -25,13 +35,18 @@ class Subscription::RestartAtCheckoutService
 
       if should_charge?
         charge_result = charge_subscription
-        return charge_result unless charge_result[:success]
         self.new_purchase = charge_result[:purchase]
       end
 
       subscription.send_restart_notifications!
       success_result
     end
+  rescue ChargeFailed => e
+    # Charge failed after transaction rolled back - now mark subscription as failed
+    # This happens outside the transaction to avoid committing partial state changes
+    subscription.reload # Reload to get the pre-transaction state
+    subscription.unsubscribe_and_fail!
+    error_result(e.message)
   rescue ActiveRecord::RecordInvalid, Subscription::UpdateFailed => e
     error_result(e.message)
   rescue StandardError => e
@@ -143,9 +158,10 @@ class Subscription::RestartAtCheckoutService
             purchase.merchant_account.charge_processor_merchant_id : nil
         }
       else
-        error_message = purchase.errors.full_messages.first || purchase.error_code
-        subscription.unsubscribe_and_fail!
-        error_result(error_message || "Payment failed. Please try again.")
+        # Raise exception to trigger transaction rollback before marking subscription as failed
+        # This ensures tier changes, payment method updates, and resubscribe! are all rolled back
+        error_message = purchase.errors.full_messages.first || purchase.error_code || "Payment failed. Please try again."
+        raise ChargeFailed.new(error_message, purchase: purchase)
       end
     end
 

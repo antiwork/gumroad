@@ -393,6 +393,35 @@ class Purchase::CreateService < Purchase::BaseService
       user_or_email = buyer || purchase_params[:email]
       return nil unless user_or_email.present?
 
+      # First check for active subscriptions - block purchase if one exists
+      # This check is also in Order::CreateService but we need it here for direct API calls
+      active_subscription = Subscription.active_for_user_and_product(
+        user_or_email: user_or_email,
+        product: product,
+        with_lock: true
+      )
+
+      if active_subscription.present?
+        CustomerLowPriorityMailer.already_subscribed_checkout_attempt(active_subscription.id).deliver_later(queue: "low")
+
+        error_message = if buyer.present?
+          "You already have an active subscription to this membership. Visit your Library to manage it."
+        else
+          Bugsnag.notify(StandardError.new("Existing subscription checkout attempt")) do |report|
+            report.severity = "info"
+            report.add_metadata(:subscription, {
+                                  subscription_id: active_subscription.id,
+                                  product_id: product.id,
+                                  email: purchase_params[:email]
+                                })
+          end
+          "Sorry, something went wrong. Please try again."
+        end
+
+        return nil, error_message
+      end
+
+      # Then check for restartable subscriptions
       restartable_subscription = Subscription.restartable_for_user_and_product(
         user_or_email: user_or_email,
         product: product

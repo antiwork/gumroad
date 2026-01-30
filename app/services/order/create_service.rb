@@ -182,9 +182,13 @@ class Order::CreateService
       user_or_email = buyer || email
       return nil unless user_or_email.present?
 
+      # Use pessimistic locking to prevent race conditions where multiple concurrent
+      # checkout attempts could all pass the active subscription check before any
+      # creates a new subscription. Lock the subscription record during the check.
       active_subscription = Subscription.active_for_user_and_product(
         user_or_email: user_or_email,
-        product: product
+        product: product,
+        with_lock: true
       )
 
       return nil unless active_subscription.present?
