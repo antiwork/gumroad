@@ -99,6 +99,7 @@ describe ProductPresenter do
             description_html: "This is a collection of works spanning 1984 — 1994, while I spent time in a shack in the Andes.",
             pwyw: nil,
             is_sales_limited: false,
+            is_recurring_billing: false,
             is_tiered_membership: false,
             is_legacy_subscription: false,
             long_url: short_link_url(product.unique_permalink, host: product.user.subdomain_with_protocol),

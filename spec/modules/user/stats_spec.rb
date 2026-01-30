@@ -7,6 +7,38 @@ describe User::Stats, :vcr do
     @user = create(:user, timezone: "London")
   end
 
+  describe "#rank" do
+    let(:year) { 2024 }
+    let(:response) { OpenStruct.new(aggregations: OpenStruct.new(sellers: OpenStruct.new(buckets: buckets))) }
+    let(:buckets) do
+      [
+        { "key" => 999, "total_sales" => { "value" => 2_000_00 } },
+        { "key" => @user.id, "total_sales" => { "value" => 1_000_00 } },
+      ]
+    end
+
+    it "returns the 1-based rank when the seller is present" do
+      allow(PurchaseSearchService).to receive(:search).and_return(response)
+
+      expect(@user.rank(year:)).to eq(2)
+    end
+
+    it "returns nil when the seller is not in the top buckets" do
+      allow(PurchaseSearchService).to receive(:search).and_return(
+        OpenStruct.new(aggregations: OpenStruct.new(sellers: OpenStruct.new(buckets: [{ "key" => 999 }])))
+      )
+
+      expect(@user.rank(year:)).to be_nil
+    end
+
+    it "returns nil and logs when search fails" do
+      allow(PurchaseSearchService).to receive(:search).and_raise(StandardError, "boom")
+      expect(Rails.logger).to receive(:error).with(/Failed to compute creator rank/)
+
+      expect(@user.rank(year:)).to be_nil
+    end
+  end
+
   describe "scopes" do
     describe ".by_sales_revenue" do
       it "excludes not_charged purchases from revenue total" do
