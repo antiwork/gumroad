@@ -5,10 +5,11 @@ class RefundFundingChargeService
 
   MINIMUM_CHARGE_CENTS = 50 # Stripe minimum
 
-  def initialize(user:, amount_cents:)
+  def initialize(user:, amount_cents:, purchase: nil)
     @user = user
     @amount_cents = [amount_cents, MINIMUM_CHARGE_CENTS].max
     @credit_card = user.refund_funding_credit_card
+    @purchase = purchase
   end
 
   def perform
@@ -34,7 +35,13 @@ class RefundFundingChargeService
       )
 
       if payment_intent.status == "succeeded"
-        create_credit_for_user(payment_intent)
+        credit = Credit.create_for_refund_funding!(
+          user: @user,
+          amount_cents: @amount_cents,
+          refund_funding_purchase: @purchase,
+          credit_card: @credit_card
+        )
+        credit.update!(json_data: { refund_funding_stripe_charge_id: payment_intent.latest_charge })
         send_confirmation_email
         { success: true, payment_intent_id: payment_intent.id }
       else
@@ -53,43 +60,6 @@ class RefundFundingChargeService
   end
 
   private
-
-  def create_credit_for_user(payment_intent)
-    # Use existing credit pattern with GUMROAD_ADMIN_ID as crediting_user
-    # Store stripe charge id in json_data for audit trail
-    credit = Credit.new
-    credit.user = @user
-    credit.merchant_account = MerchantAccount.gumroad(StripeChargeProcessor.charge_processor_id)
-    credit.amount_cents = @amount_cents
-    credit.crediting_user = User.find(GUMROAD_ADMIN_ID)
-    credit.json_data = { refund_funding_stripe_charge_id: payment_intent.latest_charge }
-    credit.save!
-
-    balance_transaction_amount = BalanceTransaction::Amount.new(
-      currency: Currency::USD,
-      gross_cents: @amount_cents,
-      net_cents: @amount_cents
-    )
-    balance_transaction = BalanceTransaction.create!(
-      user: @user,
-      merchant_account: credit.merchant_account,
-      credit:,
-      issued_amount: balance_transaction_amount,
-      holding_amount: balance_transaction_amount
-    )
-
-    credit.balance = balance_transaction.balance
-    credit.save!
-
-    # Add comment for audit trail
-    @user.comments.create(
-      author_name: "Refund Funding Top-up",
-      content: "Balance topped up by #{formatted_dollar_amount(@amount_cents)} to cover refund shortfall.",
-      comment_type: :credit
-    )
-
-    credit
-  end
 
   def send_confirmation_email
     CreatorMailer.refund_funding_charge_confirmation(

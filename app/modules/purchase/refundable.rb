@@ -49,7 +49,8 @@ class Purchase
             shortfall_cents = amount_cents_to_refund - seller.unpaid_balance_cents
             charge_result = RefundFundingChargeService.new(
               user: seller,
-              amount_cents: shortfall_cents
+              amount_cents: shortfall_cents,
+              purchase: self
             ).perform
 
             unless charge_result[:success]

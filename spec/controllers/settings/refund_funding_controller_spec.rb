@@ -51,10 +51,8 @@ describe Settings::RefundFundingController do
 
     context "when refund funding card is configured" do
       before do
-        seller.update!(
-          refund_funding_credit_card: credit_card,
-          refund_funding_card_name: "John Doe"
-        )
+        credit_card.update!(card_holder_name: "John Doe")
+        seller.update!(refund_funding_credit_card: credit_card)
       end
 
       it "returns the card details" do
@@ -86,10 +84,8 @@ describe Settings::RefundFundingController do
   describe "DELETE #destroy" do
     context "when refund funding card is configured" do
       before do
-        seller.update!(
-          refund_funding_credit_card: credit_card,
-          refund_funding_card_name: "John Doe"
-        )
+        credit_card.update!(card_holder_name: "John Doe")
+        seller.update!(refund_funding_credit_card: credit_card)
       end
 
       it "removes the refund funding card" do
@@ -100,12 +96,6 @@ describe Settings::RefundFundingController do
         expect(json["success"]).to be true
         expect(json["enabled"]).to be false
         expect(seller.reload.refund_funding_credit_card).to be_nil
-      end
-
-      it "removes the name on card" do
-        delete :destroy, format: :json
-
-        expect(seller.reload.refund_funding_card_name).to be_nil
       end
     end
   end

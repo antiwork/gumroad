@@ -14,6 +14,8 @@ class Credit < ApplicationRecord
   belongs_to :financing_paydown_purchase, class_name: "Purchase", optional: true
   belongs_to :fee_retention_refund, class_name: "Refund", optional: true
   belongs_to :backtax_agreement, optional: true
+  belongs_to :refund_funding_purchase, class_name: "Purchase", optional: true
+  belongs_to :credit_card, optional: true
 
   has_one :balance_transaction
 
@@ -413,6 +415,33 @@ class Credit < ApplicationRecord
     credit
   end
 
+  def self.create_for_refund_funding!(user:, amount_cents:, refund_funding_purchase:, credit_card:)
+    credit = new
+    credit.user = user
+    credit.merchant_account = MerchantAccount.gumroad(StripeChargeProcessor.charge_processor_id)
+    credit.amount_cents = amount_cents
+    credit.refund_funding_purchase = refund_funding_purchase
+    credit.credit_card = credit_card
+    credit.save!
+
+    balance_transaction_amount = BalanceTransaction::Amount.new(
+      currency: Currency::USD,
+      gross_cents: credit.amount_cents,
+      net_cents: credit.amount_cents
+    )
+    balance_transaction = BalanceTransaction.create!(
+      user: credit.user,
+      merchant_account: credit.merchant_account,
+      credit:,
+      issued_amount: balance_transaction_amount,
+      holding_amount: balance_transaction_amount
+    )
+
+    credit.balance = balance_transaction.balance
+    credit.save!
+    credit
+  end
+
   def notify_user
     ContactingCreatorMailer.credit_notification(user.id, amount_cents).deliver_later(queue: "critical")
   end
@@ -433,14 +462,17 @@ class Credit < ApplicationRecord
       comment_attrs[:content] = "issued adjustment due to currency conversion differences when payment #{returned_payment.id} returned."
     elsif refund
       comment_attrs[:author_name] = "AutoCredit PayPal Connect VAT refund (#{refund.purchase.id})"
+    elsif refund_funding_purchase
+      comment_attrs[:author_name] = "Refund Funding Top-up"
+      comment_attrs[:content] = "Balance topped up by #{formatted_dollar_amount(amount_cents)} to cover refund shortfall."
     end
     user.comments.create(comment_attrs)
   end
 
   private
     def validate_associated_entity
-      return if crediting_user || chargebacked_purchase || returned_payment || refund || financing_paydown_purchase || fee_retention_refund || backtax_agreement
+      return if crediting_user || chargebacked_purchase || returned_payment || refund || financing_paydown_purchase || fee_retention_refund || backtax_agreement || refund_funding_purchase
 
-      errors.add(:base, "A crediting user, chargebacked purchase, returned payment, refund, financing_paydown_purchase, fee_retention_refund or backtax_agreement must be provided.")
+      errors.add(:base, "A crediting user, chargebacked purchase, returned payment, refund, financing_paydown_purchase, fee_retention_refund, backtax_agreement or refund_funding_purchase must be provided.")
     end
 end

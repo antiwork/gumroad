@@ -24,10 +24,8 @@ class Settings::RefundFundingController < Settings::BaseController
     credit_card = CreditCard.create(chargeable, card_data_handling_mode, current_seller)
 
     if credit_card.persisted?
-      current_seller.update!(
-        refund_funding_credit_card: credit_card,
-        refund_funding_card_name: params[:name_on_card]
-      )
+      credit_card.update!(card_holder_name: params[:name_on_card])
+      current_seller.update!(refund_funding_credit_card: credit_card)
       render json: { success: true, **refund_funding_data }
     else
       render json: { success: false, error: credit_card.errors.full_messages.first }, status: :unprocessable_entity
@@ -35,10 +33,7 @@ class Settings::RefundFundingController < Settings::BaseController
   end
 
   def destroy
-    current_seller.update!(
-      refund_funding_credit_card: nil,
-      refund_funding_card_name: nil
-    )
+    current_seller.update!(refund_funding_credit_card: nil)
     render json: { success: true, **refund_funding_data }
   end
 
@@ -53,7 +48,7 @@ class Settings::RefundFundingController < Settings::BaseController
     card = current_seller.refund_funding_credit_card
     {
       enabled: card.present?,
-      name_on_card: current_seller.refund_funding_card_name,
+      name_on_card: card&.card_holder_name,
       credit_card: card.present? ? {
         visual: card.visual,
         card_type: card.card_type,

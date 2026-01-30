@@ -4,6 +4,8 @@ require "spec_helper"
 
 describe RefundFundingChargeService do
   let(:user) { create(:user) }
+  let(:product) { create(:product, user: user) }
+  let(:purchase) { create(:purchase, link: product) }
   let(:credit_card) do
     CreditCard.new(
       stripe_customer_id: "cus_test123",
@@ -19,7 +21,6 @@ describe RefundFundingChargeService do
 
   before do
     user.update!(refund_funding_credit_card: credit_card)
-    stub_const("GUMROAD_ADMIN_ID", create(:admin_user).id)
     # Create Gumroad's merchant account (user: nil)
     MerchantAccount.find_or_create_by!(
       user_id: nil,
@@ -34,7 +35,7 @@ describe RefundFundingChargeService do
       end
 
       it "returns an error" do
-        result = described_class.new(user: user, amount_cents: 1000).perform
+        result = described_class.new(user: user, amount_cents: 1000, purchase: purchase).perform
 
         expect(result[:success]).to be false
         expect(result[:error]).to eq("No backup payment method configured.")
@@ -54,34 +55,36 @@ describe RefundFundingChargeService do
 
       it "creates a credit for the user" do
         expect {
-          described_class.new(user: user, amount_cents: 1000).perform
+          described_class.new(user: user, amount_cents: 1000, purchase: purchase).perform
         }.to change(Credit, :count).by(1)
       end
 
       it "returns success" do
-        result = described_class.new(user: user, amount_cents: 1000).perform
+        result = described_class.new(user: user, amount_cents: 1000, purchase: purchase).perform
 
         expect(result[:success]).to be true
         expect(result[:payment_intent_id]).to eq("pi_test123")
       end
 
-      it "creates a credit with the correct amount" do
-        described_class.new(user: user, amount_cents: 1500).perform
+      it "creates a credit with the correct amount and associations" do
+        described_class.new(user: user, amount_cents: 1500, purchase: purchase).perform
 
         credit = Credit.last
         expect(credit.amount_cents).to eq(1500)
         expect(credit.user).to eq(user)
+        expect(credit.refund_funding_purchase).to eq(purchase)
+        expect(credit.credit_card).to eq(credit_card)
       end
 
       it "creates a balance transaction" do
         expect {
-          described_class.new(user: user, amount_cents: 1000).perform
+          described_class.new(user: user, amount_cents: 1000, purchase: purchase).perform
         }.to change(BalanceTransaction, :count).by(1)
       end
 
       it "adds a comment to the user" do
         expect {
-          described_class.new(user: user, amount_cents: 1000).perform
+          described_class.new(user: user, amount_cents: 1000, purchase: purchase).perform
         }.to change { user.comments.count }.by_at_least(1)
 
         expect(user.comments.any? { |c| c.content.include?("Balance topped up") }).to be true
@@ -96,7 +99,7 @@ describe RefundFundingChargeService do
       end
 
       it "returns an error" do
-        result = described_class.new(user: user, amount_cents: 1000).perform
+        result = described_class.new(user: user, amount_cents: 1000, purchase: purchase).perform
 
         expect(result[:success]).to be false
         expect(result[:error]).to eq("Your card was declined")
@@ -104,7 +107,7 @@ describe RefundFundingChargeService do
 
       it "does not create a credit" do
         expect {
-          described_class.new(user: user, amount_cents: 1000).perform
+          described_class.new(user: user, amount_cents: 1000, purchase: purchase).perform
         }.not_to change(Credit, :count)
       end
     end
@@ -120,7 +123,7 @@ describe RefundFundingChargeService do
       end
 
       it "returns an error" do
-        result = described_class.new(user: user, amount_cents: 1000).perform
+        result = described_class.new(user: user, amount_cents: 1000, purchase: purchase).perform
 
         expect(result[:success]).to be false
         expect(result[:error]).to include("Payment was not successful")
@@ -139,7 +142,7 @@ describe RefundFundingChargeService do
       end
 
       it "charges at least the minimum amount" do
-        described_class.new(user: user, amount_cents: 10).perform
+        described_class.new(user: user, amount_cents: 10, purchase: purchase).perform
 
         expect(Stripe::PaymentIntent).to have_received(:create).with(
           hash_including(amount: RefundFundingChargeService::MINIMUM_CHARGE_CENTS),
@@ -156,7 +159,7 @@ describe RefundFundingChargeService do
       end
 
       it "returns a generic error" do
-        result = described_class.new(user: user, amount_cents: 1000).perform
+        result = described_class.new(user: user, amount_cents: 1000, purchase: purchase).perform
 
         expect(result[:success]).to be false
         expect(result[:error]).to include("Payment processor error")

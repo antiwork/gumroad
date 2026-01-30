@@ -228,7 +228,7 @@ class SettingsPresenter
         expiry_month: refund_card.expiry_month,
         expiry_year: refund_card.expiry_year
       } : nil,
-      refund_funding_card_name: seller.refund_funding_card_name,
+      refund_funding_card_name: refund_card&.card_holder_name,
     }
   end
 
