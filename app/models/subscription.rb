@@ -871,9 +871,7 @@ class Subscription < ApplicationRecord
                    .where(purchases: { email: user_or_email.to_s.downcase.strip })
     end
 
-    query.where.not(cancelled_at: nil)
-      .or(query.where.not(failed_at: nil))
-      .or(query.where.not(deactivated_at: nil))
+    query.where.not(deactivated_at: nil)
       .not_cancelled_by_admin
       .order(created_at: :desc)
       .first
