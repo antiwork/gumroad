@@ -9,15 +9,16 @@ export type ProductPageMeta = {
 
 type ProductPageHeadProps = {
   meta: ProductPageMeta;
-  title?: string | null;
 };
 
-export const ProductPageHead = ({ meta, title }: ProductPageHeadProps) => {
+export const ProductPageHead = ({ meta }: ProductPageHeadProps) => {
   const customStyles = meta.custom_styles ?? "";
 
+  if (customStyles.trim().length === 0) return null;
+
   return (
-    <Head {...(title ? { title } : {})}>
-      {customStyles.trim().length > 0 ? <style dangerouslySetInnerHTML={{ __html: customStyles }} /> : null}
+    <Head>
+      <style dangerouslySetInnerHTML={{ __html: customStyles }} />
     </Head>
   );
 };

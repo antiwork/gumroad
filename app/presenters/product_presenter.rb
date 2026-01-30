@@ -65,6 +65,21 @@ class ProductPresenter
     }
   end
 
+  def inertia_page_props(layout:, is_embed: false, discover_props: nil, seller_custom_domain_url:, **kwargs)
+    base_props = is_embed ? product_props(seller_custom_domain_url:, **kwargs) : product_page_props(seller_custom_domain_url:, **kwargs)
+
+    case layout
+    when Product::Layout::PROFILE
+      base_props.merge(
+        creator_profile: ProfilePresenter.new(pundit_user:, seller: product.user).creator_profile
+      )
+    when Product::Layout::DISCOVER
+      base_props.merge(discover_props || {})
+    else
+      base_props
+    end
+  end
+
   def covers
     {
       covers: product.display_asset_previews.as_json,

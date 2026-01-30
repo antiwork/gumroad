@@ -2,21 +2,25 @@ import { usePage } from "@inertiajs/react";
 import * as React from "react";
 import { cast } from "ts-safe-cast";
 
+import {
+  ProductPageAlert,
+  ProductPageHead,
+  ProductPageMeta,
+  ProductPageNoScript,
+} from "$app/pages/Products/ProductPageHead";
+
 import { PoweredByFooter } from "$app/components/PoweredByFooter";
 import { Product, useSelectionFromUrl, Props as ProductProps } from "$app/components/Product";
 import { useElementDimensions } from "$app/components/useElementDimensions";
 import { useRunOnce } from "$app/components/useRunOnce";
 
-import { ProductPageAlert, ProductPageHead, ProductPageMeta, ProductPageNoScript } from "$app/pages/Products/ProductPageHead";
-
 type IframeProductShowPageProps = {
   product: ProductProps;
   meta: ProductPageMeta;
-  title: string;
 };
 
 const IframeProductShowPage = () => {
-  const { product, meta, title } = cast<IframeProductShowPageProps>(usePage().props);
+  const { product, meta } = cast<IframeProductShowPageProps>(usePage().props);
 
   useRunOnce(() => window.parent.postMessage({ type: "loaded" }, "*"));
   useRunOnce(() => window.parent.postMessage({ type: "translations", translations: { close: "Close" } }, "*"));
@@ -31,7 +35,7 @@ const IframeProductShowPage = () => {
 
   return (
     <>
-      <ProductPageHead meta={meta} title={title} />
+      <ProductPageHead meta={meta} />
       <ProductPageNoScript />
       <ProductPageAlert />
       <div>
@@ -52,6 +56,6 @@ const IframeProductShowPage = () => {
   );
 };
 
-IframeProductShowPage.layout = (page: React.ReactNode) => page;
+IframeProductShowPage.loggedInUserLayout = true;
 
 export default IframeProductShowPage;

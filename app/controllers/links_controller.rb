@@ -142,9 +142,8 @@ class LinksController < ApplicationController
                                   @product.user.merchant_account_currency(PaypalChargeProcessor.charge_processor_id) :
                                   ChargeProcessor::DEFAULT_CURRENCY_CODE
     @pay_with_card_enabled = @product.user.pay_with_card_enabled?
-    presenter = ProductPresenter.new(pundit_user:, product: @product, request:)
-    presenter_props = { recommended_by: params[:recommended_by], discount_code: params[:offer_code] || params[:code], quantity: (params[:quantity] || 1).to_i, layout: params[:layout], seller_custom_domain_url: }
-    @product_props = params[:embed] || params[:overlay] ? presenter.product_props(**presenter_props) : presenter.product_page_props(**presenter_props)
+    @presenter = ProductPresenter.new(pundit_user:, product: @product, request:)
+    @presenter_props = { recommended_by: params[:recommended_by], discount_code: params[:offer_code] || params[:code], quantity: (params[:quantity] || 1).to_i, layout: params[:layout], seller_custom_domain_url: }
     @body_class = "iframe" if params[:overlay] || params[:embed]
 
     if ["search", "discover"].include?(params[:recommended_by])
@@ -581,25 +580,13 @@ class LinksController < ApplicationController
     end
 
     def product_inertia_props
+      is_embed = params[:embed] || params[:overlay]
       {
-        product: product_inertia_page_props,
+        product: @presenter.inertia_page_props(layout: params[:layout], is_embed:, discover_props: @discover_props, **@presenter_props),
         meta: {
           custom_styles: @user&.seller_profile&.custom_styles.to_s
-        },
-        title: @title
+        }
       }
-    end
-
-    def product_inertia_page_props
-      if params[:layout] == Product::Layout::PROFILE
-        @product_props.merge(
-          creator_profile: ProfilePresenter.new(pundit_user:, seller: @product.user).creator_profile
-        )
-      elsif params[:layout] == Product::Layout::DISCOVER
-        @product_props.merge(@discover_props)
-      else
-        @product_props
-      end
     end
 
     def link_params
