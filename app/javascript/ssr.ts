@@ -30,7 +30,6 @@ import DisputeEvidencePage from "$app/components/server-components/Purchase/Disp
 import PurchaseProductPage from "$app/components/server-components/Purchase/ProductPage";
 import SecureRedirectPage from "$app/components/server-components/SecureRedirectPage";
 import SubscribePage from "$app/components/server-components/SubscribePage";
-import SubscribePreview from "$app/components/server-components/SubscribePreview";
 import SubscriptionManager from "$app/components/server-components/SubscriptionManager";
 import SubscriptionManagerMagicLink from "$app/components/server-components/SubscriptionManagerMagicLink";
 import SupportHeader from "$app/components/server-components/support/Header";
@@ -71,7 +70,6 @@ ReactOnRails.register({
   ProfileWishlistPage,
   SecureRedirectPage,
   SubscribePage,
-  SubscribePreview,
   SubscriptionManager,
   SubscriptionManagerMagicLink,
   TaxesCollectionModal,
