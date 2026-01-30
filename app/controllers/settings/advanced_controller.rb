@@ -4,8 +4,6 @@ class Settings::AdvancedController < Settings::BaseController
   before_action :authorize
 
   def show
-    @title = "Settings"
-
     render inertia: "Settings/Advanced/Show", props: settings_presenter.advanced_props
   end
 

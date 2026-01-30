@@ -258,7 +258,7 @@ describe "UTM links", :js, type: :system do
         expect(page).to have_current_path("#{dashboard_utm_links_path}?key=link&direction=desc&page=2")
 
         # Search by title
-        select_disclosure "Search" do
+        select_disclosure "Toggle Search" do
           fill_in "Search", with: " Sale     "
         end
         wait_for_ajax
@@ -269,7 +269,7 @@ describe "UTM links", :js, type: :system do
         expect(page).to have_current_path("#{dashboard_utm_links_path}?key=link&direction=desc&query=%20Sale%20%20%20%20%20")
 
         # Search by source
-        select_disclosure "Search" do
+        select_disclosure "Toggle Search" do
           fill_in "Search", with: "TwiTTer"
         end
         wait_for_ajax
@@ -285,7 +285,7 @@ describe "UTM links", :js, type: :system do
         expect(page).to_not have_button("Next")
 
         # Search by medium
-        select_disclosure "Search" do
+        select_disclosure "Toggle Search" do
           fill_in "Search", with: "Social"
         end
         wait_for_ajax
@@ -296,7 +296,7 @@ describe "UTM links", :js, type: :system do
         expect(page).to_not have_table_row({ "Link" => utm_link1.title })
 
         # Search by campaign
-        select_disclosure "Search" do
+        select_disclosure "Toggle Search" do
           fill_in "Search", with: "winter_"
         end
         wait_for_ajax
@@ -305,7 +305,7 @@ describe "UTM links", :js, type: :system do
         expect(page).to_not have_button("Next")
 
         # Search with no matches
-        select_disclosure "Search" do
+        select_disclosure "Toggle Search" do
           fill_in "Search", with: "nonexistent"
         end
         wait_for_ajax
@@ -315,7 +315,7 @@ describe "UTM links", :js, type: :system do
         expect(page).to_not have_button("Next")
 
         # Clear search
-        select_disclosure "Search" do
+        select_disclosure "Toggle Search" do
           fill_in "Search", with: ""
         end
         wait_for_ajax

@@ -3,7 +3,7 @@ import * as React from "react";
 
 import { classNames } from "$app/utils/classNames";
 
-import { buttonVariants, NavigationButtonProps, useValidateClassName } from "$app/components/Button";
+import { buttonVariants, NavigationButtonProps } from "$app/components/Button";
 
 /*
     This component is for inertia specific navigation button,
@@ -27,8 +27,6 @@ type NavigationButtonInertiaProps = NavigationButtonProps & {
 
 export const NavigationButtonInertia = React.forwardRef<HTMLAnchorElement, NavigationButtonInertiaProps>(
   ({ className, color, outline, small, disabled, children, onClick, style, inert, ...props }, ref) => {
-    useValidateClassName(className);
-
     const variant = outline ? "outline" : color === "danger" ? "destructive" : "default";
     const size = small ? "sm" : "default";
 

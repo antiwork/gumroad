@@ -267,7 +267,10 @@ export default function PaymentsPage() {
     if (form.data.bank_account.type === "TrinidadAndTobagoBankAccount" && !form.data.bank_account.branch_code) {
       markFieldInvalid("branch_code");
     }
-    if (form.data.bank_account.type === "UkBankAccount" && !form.data.bank_account.sort_code) {
+    if (
+      (form.data.bank_account.type === "UkBankAccount" || form.data.bank_account.type === "GibraltarBankAccount") &&
+      !form.data.bank_account.sort_code
+    ) {
       markFieldInvalid("sort_code");
     }
     if (form.data.bank_account.type === "IndianBankAccount" && !form.data.bank_account.ifsc) {
@@ -630,7 +633,9 @@ export default function PaymentsPage() {
       markFieldInvalid("paypal_email_address");
     }
 
-    validateComplianceInfoFields();
+    if (selectedPayoutMethod !== "stripe") {
+      validateComplianceInfoFields();
+    }
 
     return errorFieldNames.size === 0;
   };
@@ -799,7 +804,7 @@ export default function PaymentsPage() {
           ) : (
             <div className="flex flex-col">
               <Alert role="status" variant="success">
-                Your account details have been verified!
+                Your identity has been verified!
               </Alert>
               <div className="mt-4 flex items-center">
                 <img src={logo} alt="Gum Coin" className="mr-2 h-5 w-5" />
@@ -831,7 +836,7 @@ export default function PaymentsPage() {
 
         {(errors?.base && errors.base.length > 0) || clientErrorMessage ? (
           <div className="mb-12 px-8">
-            <Alert role="status" className="danger">
+            <Alert variant="danger" role="status">
               {errors?.base && errors.base.length > 0 ? (
                 errors.error_code?.[0] === "stripe_error" ? (
                   <div>Your account could not be updated due to an error with Stripe.</div>
@@ -868,7 +873,7 @@ export default function PaymentsPage() {
               </small>
             </fieldset>
             {form.data.payout_frequency === "daily" && props.payout_frequency_daily_supported ? (
-              <Alert role="status" className="info">
+              <Alert variant="info" role="status">
                 <div>
                   Every day, your balance from the previous day will be sent to you via instant payouts, subject to a{" "}
                   <b>3% fee</b>.
@@ -876,7 +881,7 @@ export default function PaymentsPage() {
               </Alert>
             ) : null}
             {form.data.payout_frequency === "daily" && !props.payout_frequency_daily_supported && (
-              <Alert role="status" className="danger">
+              <Alert variant="danger" role="status">
                 <div>Your account is no longer eligible for daily payouts. Please update your schedule.</div>
               </Alert>
             )}

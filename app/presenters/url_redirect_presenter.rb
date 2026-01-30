@@ -128,6 +128,7 @@ class UrlRedirectPresenter
         license:,
         content_items: download_attributes[:content_items],
         rich_content_pages:,
+        last_content_page_id: purchase&.last_content_page_id,
         posts: posts(rich_content_pages),
         video_transcoding_info:,
         custom_receipt: nil,

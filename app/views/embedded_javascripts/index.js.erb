@@ -4,7 +4,7 @@
   script.charset = "utf-8";
   document.head.appendChild(script);
   <% if @stylesheet.present? %>
-    document.head.innerHTML += '<%= stylesheet_pack_tag(@stylesheet, host: DOMAIN) %>';
+    document.head.insertAdjacentHTML('beforeend', '<%= stylesheet_pack_tag(@stylesheet, host: DOMAIN) %>');
   <% end %>
 
   <% if @global_stylesheet_path.present? %>

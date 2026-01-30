@@ -5,8 +5,6 @@ class Settings::PasswordController < Settings::BaseController
   before_action :authorize
 
   def show
-    @title = "Settings"
-
     render inertia: "Settings/Password/Show", props: settings_presenter.password_props
   end
 

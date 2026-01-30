@@ -80,25 +80,25 @@ describe "Profile settings on product pages", type: :system, js: true do
       select_combo_box_option search: product2.name, from: "Featured Product"
     end
 
-    all(:disclosure, "Add section").last.select_disclosure do
+    all(:disclosure_button, "Add section").last.select_disclosure do
       click_on "Posts"
     end
     sleep 1
-    all(:disclosure, "Edit section").last.select_disclosure do
+    all(:disclosure_button, "Edit section").last.select_disclosure do
       click_on "Name"
       fill_in "Name", with: "Posts!"
     end
 
-    all(:disclosure, "Add section").last.select_disclosure do
+    all(:disclosure_button, "Add section").last.select_disclosure do
       click_on "Subscribe"
     end
     sleep 1
 
-    all(:disclosure, "Add section")[2].select_disclosure do
+    all(:disclosure_button, "Add section")[2].select_disclosure do
       click_on "Rich text"
     end
     sleep 1
-    edit_rich_text_disclosure = all(:disclosure, "Edit section")[1]
+    edit_rich_text_disclosure = all(:disclosure_button, "Edit section")[1]
     edit_rich_text_disclosure.select_disclosure do
       click_on "Name"
       fill_in "Name", with: "Rich text!"
@@ -159,6 +159,37 @@ describe "Profile settings on product pages", type: :system, js: true do
     within_section "Rich text!" do
       expect(page).to have_text("Text!")
       expect(page).to have_image(src: image_url)
+    end
+  end
+
+  it "paginates product sections with more than 9 products", :elasticsearch_wait_for_refresh do
+    products = 12.times.map { |i| create(:product, user: seller, name: "Product #{i + 1}") }
+    Link.import(refresh: true, force: true)
+
+    section = create(
+      :seller_profile_products_section,
+      seller: seller,
+      product: product,
+      header: "More Products",
+      shown_products: products.map(&:id)
+    )
+
+    product.update!(sections: [section.id], main_section_index: 0)
+
+    visit short_link_path(product)
+
+    within_section "More Products", section_element: :section do
+      expect(page).to have_product_card(count: 9)
+      expect(page).to have_product_card(products[0])
+      expect(page).to_not have_product_card(products[9])
+    end
+
+    find("main").scroll_to :bottom
+    wait_for_ajax
+
+    within_section "More Products", section_element: :section do
+      expect(page).to have_product_card(products[9])
+      expect(page).to have_product_card(count: 12)
     end
   end
 end

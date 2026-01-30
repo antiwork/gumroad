@@ -9,7 +9,7 @@ module InertiaRendering
       RenderingExtension.custom_context(view_context).merge(
         authenticity_token: form_authenticity_token,
         flash: inertia_flash_props,
-        title: @title
+        title: page_title
       )
     end
 
@@ -23,5 +23,11 @@ module InertiaRendering
       return if (flash_message = flash[:alert] || flash[:warning] || flash[:notice]).blank?
 
       { message: flash_message, status: flash[:alert] ? "danger" : flash[:warning] ? "warning" : "success" }
+    end
+
+    def inertia_errors(model)
+      { errors: model.errors.to_hash.each_with_object({}) do |(key, messages), hash|
+        hash["#{model.model_name.element}.#{key}"] = messages.to_sentence
+      end }
     end
 end

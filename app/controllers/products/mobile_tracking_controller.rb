@@ -6,5 +6,6 @@ class Products::MobileTrackingController < ApplicationController
   def show
     product = Link.fetch(params[:link_id])
     @tracking_props = MobileTrackingPresenter.new(seller: product.user).product_props(product:)
+    @tracking_props[:enabled] = analytics_enabled?(seller: product.user)
   end
 end

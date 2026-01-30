@@ -24,7 +24,7 @@ describe Admin::PaydaysController do
     it "pays the seller for balances up to and including the date passed in params" do
       WebMock.stub_request(:post, PAYPAL_ENDPOINT).to_return(body: "CORRELATIONID=c51c5e0cecbce&ACK=Success")
 
-      post :pay_user, params: { id: @user.id, payday: { payout_processor: PayoutProcessorType::PAYPAL, payout_period_end_date: next_scheduled_payout_end_date } }
+      post :pay_user, params: { id: @user.external_id, payday: { payout_processor: PayoutProcessorType::PAYPAL, payout_period_end_date: next_scheduled_payout_end_date } }
 
       expect(response).to be_redirect
       expect(flash[:notice]).to eq("Payment was sent.")
@@ -38,7 +38,7 @@ describe Admin::PaydaysController do
     it "does not pay the user if there are pending payments" do
       create(:payment, user: @user)
 
-      post :pay_user, params: { id: @user.id, payday: { payout_processor: PayoutProcessorType::PAYPAL, payout_period_end_date: next_scheduled_payout_end_date } }
+      post :pay_user, params: { id: @user.external_id, payday: { payout_processor: PayoutProcessorType::PAYPAL, payout_period_end_date: next_scheduled_payout_end_date } }
 
       expect(response).to be_redirect
       expect(flash[:notice]).to eq("Payment was not sent.")
@@ -50,7 +50,7 @@ describe Admin::PaydaysController do
                                                                                           PayoutProcessorType::STRIPE, [@user], from_admin: true
                                                                                           ).and_return([Payment.last])
 
-      post :pay_user, params: { id: @user.id, payday: { payout_processor: PayoutProcessorType::STRIPE, payout_period_end_date: next_scheduled_payout_end_date } }
+      post :pay_user, params: { id: @user.external_id, payday: { payout_processor: PayoutProcessorType::STRIPE, payout_period_end_date: next_scheduled_payout_end_date } }
 
       expect(response).to be_redirect
       expect(flash[:notice]).to eq("Payment was not sent.")
