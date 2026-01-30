@@ -1113,7 +1113,7 @@ const useStripePaymentRequest = () => {
     });
   }, [canPay]);
 
-  return { canPay, isGooglePay, isApplePay };
+  return { canPay: !!canPay, isGooglePay, isApplePay };
 };
 
 const StripePaymentRequestContent = () => {
@@ -1129,9 +1129,7 @@ const StripePaymentRequestContent = () => {
   );
 };
 
-const StripePaymentRequestRadioOption = () => {
-  const { canPay, isGooglePay } = useStripePaymentRequest();
-
+const StripePaymentRequestRadioOption = ({ canPay, isGooglePay }: { canPay: boolean; isGooglePay: boolean }) => {
   if (!canPay) return null;
 
   const label = isGooglePay ? "Google Pay" : "Apple Pay";
@@ -1148,9 +1146,8 @@ const StripePaymentRequestRadioOption = () => {
   );
 };
 
-const StripePaymentRequestPayButton = () => {
+const StripePaymentRequestPayButton = ({ canPay }: { canPay: boolean }) => {
   const [state] = useState();
-  const { canPay } = useStripePaymentRequest();
 
   if (!canPay || state.paymentMethod !== "stripePaymentRequest") return null;
 
@@ -1165,9 +1162,9 @@ const PaymentMethodsSection = ({
   isTestPurchase: boolean;
 }) => {
   const [state] = useState();
-  const { canPay: isStripePaymentRequestAvailable } = useStripePaymentRequest();
+  const { canPay, isGooglePay } = useStripePaymentRequest();
 
-  const hasMultiplePaymentMethods = isPayPalAvailable || isStripePaymentRequestAvailable;
+  const hasMultiplePaymentMethods = isPayPalAvailable || canPay;
 
   return (
     <>
@@ -1194,11 +1191,11 @@ const PaymentMethodsSection = ({
             />
           </div>
         ) : null}
-        <StripePaymentRequestRadioOption />
+        <StripePaymentRequestRadioOption canPay={canPay} isGooglePay={isGooglePay} />
       </div>
       {state.paymentMethod === "paypal" ? <PayPalContent /> : null}
       {state.paymentMethod === "card" ? <CreditCardPayButtonContent isTestPurchase={isTestPurchase} /> : null}
-      <StripePaymentRequestPayButton />
+      <StripePaymentRequestPayButton canPay={canPay} />
     </>
   );
 };
