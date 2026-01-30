@@ -5,7 +5,18 @@ import { classNames } from "$app/utils/classNames";
 
 export const Popover = PopoverPrimitive.Root;
 export const PopoverClose = PopoverPrimitive.Close;
-export const PopoverAnchor = PopoverPrimitive.Anchor;
+
+export const PopoverAnchor = React.forwardRef<
+  React.ElementRef<typeof PopoverPrimitive.Anchor>,
+  React.ComponentPropsWithoutRef<typeof PopoverPrimitive.Anchor>
+>(({ className, ...props }, ref) => (
+  <PopoverPrimitive.Anchor
+    ref={ref}
+    className={classNames("grid", className)}
+    {...props}
+  />
+));
+PopoverAnchor.displayName = PopoverPrimitive.Anchor.displayName;
 
 export const PopoverTrigger = React.forwardRef<
   React.ElementRef<typeof PopoverPrimitive.Trigger>,
