@@ -191,7 +191,7 @@ module CheckoutHelpers
   end
 end
 
-def fill_in_credit_card(number: "4242424242424242", expiry: StripePaymentMethodHelper::EXPIRY_MMYY, cvc: "123", zip_code: nil)
+def fill_in_credit_card(number: "4242424242424242", expiry: StripePaymentMethodHelper::EXPIRY_MMYY, cvc: "123", zip_code: nil, full_name: "Gumhead Moneybags")
   within_fieldset "Card information" do
     within_frame do
       fill_in "Card number", with: number, visible: false if number.present?
@@ -200,7 +200,7 @@ def fill_in_credit_card(number: "4242424242424242", expiry: StripePaymentMethodH
       fill_in "ZIP", with: zip_code, visible: false if zip_code.present?
     end
   end
-  fill_in "Full name", with: "Gumhead Moneybags"
+  fill_in "Full name", with: full_name if full_name.present?
 end
 
 def within_sca_frame(&block)

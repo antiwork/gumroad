@@ -109,19 +109,19 @@ describe("Purchase from a product page", type: :system, js: true) do
       within_frame { expect_focused find_field("Card number") }
     end
 
-    fill_in_credit_card(expiry: nil, cvc: nil)
+    fill_in_credit_card(expiry: nil, cvc: nil, full_name: nil)
     click_on "Pay"
     within_fieldset "Card information" do
       within_frame { expect_focused find_field("MM / YY") }
     end
 
-    fill_in_credit_card(cvc: nil)
+    fill_in_credit_card(cvc: nil, full_name: nil)
     click_on "Pay"
     within_fieldset "Card information" do
       within_frame { expect_focused find_field("CVC") }
     end
 
-    fill_in_credit_card
+    fill_in_credit_card(full_name: nil)
     click_on "Pay"
     expect_focused find_field("Your email address")
 
