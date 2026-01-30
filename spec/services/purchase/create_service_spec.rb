@@ -3482,6 +3482,12 @@ describe Purchase::CreateService, :vcr do
 
         expect(error).to eq("You already have an active subscription to this membership. Visit your Library to manage your subscription.")
       end
+
+      it "sends existing active subscription notice email" do
+        expect do
+          Purchase::CreateService.new(product: membership_product, params: membership_params, buyer: buyer).perform
+        end.to have_enqueued_mail(CustomerLowPriorityMailer, :existing_active_subscription_notice).with(existing_subscription.id)
+      end
     end
 
     describe "when buyer has pending cancellation subscription within billing period" do
@@ -3489,27 +3495,22 @@ describe Purchase::CreateService, :vcr do
       let(:existing_subscription) { existing_purchase.subscription }
 
       before do
-        # Simulate a subscription that was paid and cancelled but hasn't expired
         existing_subscription.update!(
           user: buyer,
           cancelled_at: 1.week.from_now,
           user_requested_cancellation_at: Time.current,
           cancelled_by_buyer: true
         )
-        # Set up the last purchase to be recent (within billing period)
         existing_purchase.update!(succeeded_at: 1.day.ago)
       end
 
-      it "marks purchase for no charge and sets existing_subscription_for_restart" do
+      it "sets purchase for restart without charge" do
         service = Purchase::CreateService.new(product: membership_product, params: membership_params, buyer: buyer)
+        service.purchase = service.send(:build_purchase, service.purchase_params)
+        service.send(:validate_and_handle_existing_subscription)
 
-        # We need to check the purchase attributes after validation but before charge
-        # For this test, we'll just verify the overall flow succeeds
-        purchase, error = service.perform
-
-        # The purchase should succeed (no charge) and be associated with existing subscription
-        expect(error).to be_nil
-        expect(purchase.is_subscription_restart_without_charge).to eq(true) if purchase.respond_to?(:is_subscription_restart_without_charge)
+        expect(service.purchase.is_subscription_restart_without_charge).to eq(true)
+        expect(service.purchase.existing_subscription_for_restart).to eq(existing_subscription)
       end
     end
 
@@ -3525,11 +3526,33 @@ describe Purchase::CreateService, :vcr do
         )
       end
 
-      it "allows purchase and charges normally" do
-        purchase, error = Purchase::CreateService.new(product: membership_product, params: membership_params, buyer: buyer).perform
+      it "does not set restart flags" do
+        service = Purchase::CreateService.new(product: membership_product, params: membership_params, buyer: buyer)
+        service.purchase = service.send(:build_purchase, service.purchase_params)
+        service.send(:validate_and_handle_existing_subscription)
 
-        expect(error).to be_nil
-        expect(purchase.purchase_state).to eq("successful")
+        expect(service.purchase.is_subscription_restart_without_charge).to be_falsey
+        expect(service.purchase.existing_subscription_for_restart).to be_nil
+      end
+    end
+
+    describe "when buyer has seller-cancelled pending subscription" do
+      let!(:existing_purchase) { create(:membership_purchase, link: membership_product, purchaser: buyer, email: email) }
+      let(:existing_subscription) { existing_purchase.subscription }
+
+      before do
+        existing_subscription.update!(
+          user: buyer,
+          cancelled_at: 1.week.from_now,
+          user_requested_cancellation_at: Time.current,
+          cancelled_by_buyer: false
+        )
+      end
+
+      it "prevents purchase with error message" do
+        _, error = Purchase::CreateService.new(product: membership_product, params: membership_params, buyer: buyer).perform
+
+        expect(error).to eq("You already have an active subscription to this membership. Visit your Library to manage your subscription.")
       end
     end
   end
