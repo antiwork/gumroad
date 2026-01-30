@@ -3102,7 +3102,7 @@ class Purchase < ApplicationRecord
                 charge_processor_id.nil? &&
                 self.merchant_account.nil?
 
-      # errors.add(:base, "We couldn't charge your card. Try again or use a different card.")
+      errors.add(:base, "We couldn't charge your card. Try again or use a different card.")
     end
 
     def zip_code_from_geoip
