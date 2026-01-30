@@ -36,7 +36,7 @@ import { applySelection } from "$app/components/Product/ConfigurationSelector";
 import { Search } from "$app/components/Search";
 import { Select } from "$app/components/Select";
 import { showAlert } from "$app/components/server-components/Alert";
-import { CrossSellModal, UpsellModal } from "$app/components/Checkout/CheckoutPageContent";
+import { CrossSellModal, UpsellModal } from "$app/components/Checkout/modals";
 import { Skeleton } from "$app/components/Skeleton";
 import { Card, CardContent } from "$app/components/ui/Card";
 import { PageHeader } from "$app/components/ui/PageHeader";

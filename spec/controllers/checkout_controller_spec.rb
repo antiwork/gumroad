@@ -38,10 +38,11 @@ describe CheckoutController, type: :controller, inertia: true do
           sign_in user
         end
 
-        it "does not redirect when cart_id is blank" do
+        it "does not redirect when cart_id is blank and includes logged_in_user in props" do
           get :index
 
           expect(response).to be_successful
+          expect(inertia.props[:logged_in_user][:id]).to eq(user.external_id)
         end
 
         it "redirects to the same path removing the `cart_id` query param" do
@@ -90,7 +91,7 @@ describe CheckoutController, type: :controller, inertia: true do
           end
         end
 
-        context "when the cart matching the `cart_id` query param has the `browser_guid` same as the current `_gumroad_guid` cookie value"  do
+        context "when the cart matching the `cart_id` query param has the `browser_guid` same as the current `_gumroad_guid` cookie value" do
           it "redirects to the same path without modifying the cart" do
             browser_guid = SecureRandom.uuid
             cookies[:_gumroad_guid] = browser_guid
