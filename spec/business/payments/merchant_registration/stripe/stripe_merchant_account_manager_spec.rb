@@ -1533,6 +1533,88 @@ describe StripeMerchantAccountManager, :vcr do
       end
     end
 
+    describe "all info provided of a Kazakhstan individual" do
+      let(:user_compliance_info) do create(:user_compliance_info, user:, city: "Almaty",
+                                                                  street_address: "address_full_match", state: nil, zip_code: "050000",
+                                                                  country: "Kazakhstan", individual_tax_id: "000000000") end
+      let(:bank_account) { create(:kazakhstan_bank_account, user:) }
+      let(:tos_agreement) { create(:tos_agreement, user:) }
+
+      before do
+        user_compliance_info
+        bank_account
+        travel_to(Time.find_zone("UTC").local(2015, 4, 1)) do
+          tos_agreement
+        end
+      end
+
+      let(:expected_account_params) do
+        {
+          type: "custom",
+          country: "KZ",
+          metadata: {
+            user_id: user.external_id,
+            tos_agreement_id: tos_agreement.external_id,
+            user_compliance_info_id: user_compliance_info.external_id,
+            bank_account_id: bank_account.external_id
+          },
+          tos_acceptance: { date: 1427846400, ip: "54.234.242.13", service_agreement: "recipient" },
+          default_currency: "kzt",
+          business_type: "individual",
+          business_profile: {
+            name: user_compliance_info.legal_entity_name,
+            url: user.business_profile_url,
+            product_description: user_compliance_info.legal_entity_name
+          },
+          individual: {
+            address: {
+              line1: "address_full_match",
+              line2: nil,
+              city: "Almaty",
+              state: nil,
+              postal_code: "050000",
+              country: "KZ"
+            },
+            dob: { day: 1, month: 1, year: 1901 },
+            first_name: "Chuck",
+            last_name: "Bartowski",
+            phone: "0000000000",
+            email: user.email,
+            id_number: "000000000"
+          },
+          bank_account: {
+            country: "KZ",
+            currency: "kzt",
+            account_number: "KZ221251234567890123",
+            routing_number: "AAAAKZKZXXX"
+          },
+          settings: {
+            payouts: {
+              schedule: {
+                interval: "manual"
+              },
+              debit_negative_balances: false
+            }
+          },
+          requested_capabilities: StripeMerchantAccountManager::CROSS_BORDER_PAYOUTS_ONLY_CAPABILITIES
+        }
+      end
+
+      it "creates an account at stripe with all the params and returns the corresponding merchant account" do
+        expect(Stripe::Account).to receive(:create).with(expected_account_params).and_call_original
+
+        merchant_account = subject.create_account(user, passphrase: "1234")
+
+        expect(merchant_account.charge_processor_id).to eq(StripeChargeProcessor.charge_processor_id)
+        expect(merchant_account.charge_processor_merchant_id).to be_present
+        expect(merchant_account.country).to eq("KZ")
+        expect(merchant_account.currency).to eq("kzt")
+        expect(bank_account.reload.stripe_connect_account_id).to eq(merchant_account.charge_processor_merchant_id)
+        expect(bank_account.reload.stripe_bank_account_id).to match(/ba_[a-zA-Z0-9]+/)
+        expect(bank_account.reload.stripe_fingerprint).to match(/[a-zA-Z0-9]+/)
+      end
+    end
+
     describe "all info provided of an Ecuadorian individual" do
       let(:user_compliance_info) do create(:user_compliance_info, user:, city: "Quito",
                                                                   street_address: "address_full_match", state: nil, zip_code: "170102",
