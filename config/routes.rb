@@ -682,8 +682,17 @@ Rails.application.routes.draw do
       end
     end
 
-    get "/products/:id/edit", to: "links#edit", as: :edit_link
-    get "/products/:id/edit/*other", to: "links#edit"
+    # Product edit tabs (Inertia pages)
+    scope path: "/products/:product_id", as: :product do
+      resource :edit, only: [:show, :update], controller: "products/edit", path: "edit" do
+        resource :content, only: [:show, :update], controller: "products/edit/content"
+        resource :share, only: [:show, :update], controller: "products/edit/share"
+        resource :receipt, only: [:show, :update], controller: "products/edit/receipt"
+      end
+    end
+
+    # Backward compatibility: keep edit_link_path helper
+    get "/products/:id/edit", to: "products/edit#show", as: :edit_link
     get "/products/:id/card", to: "links#card", as: :product_card
     get "/products/search", to: "links#search"
 
