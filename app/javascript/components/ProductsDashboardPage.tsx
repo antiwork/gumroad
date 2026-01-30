@@ -35,7 +35,7 @@ export const ProductsDashboardPage = ({
   can_create_product: canCreateProduct,
 }: ProductsDashboardPageProps) => {
   const [enableArchiveTab, setEnableArchiveTab] = React.useState(archivedProductsCount > 0);
-  const [query, setQuery] = React.useState<string | null>(null);
+  const [query, setQuery] = React.useState("");
 
   return (
     <ProductsLayout
@@ -45,7 +45,7 @@ export const ProductsDashboardPage = ({
       ctaButton={
         <>
           {products.length > 0 ? (
-            <Search value={query ?? ""} onSearch={setQuery} placeholder="Search products" />
+            <Search value={query} onSearch={setQuery} placeholder="Search products" />
           ) : null}
           <NavigationButtonInertia href={Routes.new_product_path()} disabled={!canCreateProduct} color="accent">
             New product

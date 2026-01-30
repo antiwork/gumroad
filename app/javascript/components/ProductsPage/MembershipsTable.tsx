@@ -72,9 +72,13 @@ export const ProductsPageMembershipsTable = (props: {
   };
 
   const debouncedLoadMemberships = useDebouncedCallback(() => loadMemberships(1), 300);
+  const prevQueryRef = React.useRef(props.query);
 
   React.useEffect(() => {
-    if (props.query !== null) debouncedLoadMemberships();
+    if (props.query !== null && prevQueryRef.current !== props.query) {
+      debouncedLoadMemberships();
+    }
+    prevQueryRef.current = props.query;
   }, [props.query]);
 
   const reloadMemberships = () => loadMemberships(pagination.page);

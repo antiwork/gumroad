@@ -72,9 +72,13 @@ export const ProductsPageProductsTable = (props: {
   };
 
   const debouncedLoadProducts = useDebouncedCallback(() => loadProducts(1), 300);
+  const prevQueryRef = React.useRef(props.query);
 
   React.useEffect(() => {
-    if (props.query !== null) debouncedLoadProducts();
+    if (props.query !== null && prevQueryRef.current !== props.query) {
+      debouncedLoadProducts();
+    }
+    prevQueryRef.current = props.query;
   }, [props.query]);
 
   const reloadProducts = () => loadProducts(pagination.page);
