@@ -5,7 +5,7 @@
       text_color: "white",
       subtitle: "Careers",
       title: "Build the road<br class=\"sm:hidden\"> <span class=\"whitespace-nowrap\">with us.</span>",
-      description: "Join us to build the #1 tool for creators.",
+      description: "Join us in New York to build the #1 tool for creators.",
       no_border: true,
       gap: "gap-8 md:gap-12" do %>
       <%= render "home/shared/button", text: "See open roles", url: "#open-roles", variant: "dark" %>
@@ -16,8 +16,12 @@
     <div class="mx-auto px-8 max-w-7xl">
       <%= render "home/shared/office_carousel",
         images: [
-          image_path("auth/background.png"),
-          image_path("auth/background.png")
+          image_path("careers/dumbo.jpg"),
+          image_path("careers/map.png")
+        ],
+        captions: [
+          "DUMBO, Brooklyn",
+          "20 Jay St, Brooklyn, New York"
         ]
       %>
     </div>
@@ -33,8 +37,8 @@
       {
         icon: image_path("careers/flag.svg"),
         icon_bg: "pink",
-        title: "Dumbo HQ",
-        description: "We use our office for speed and remote for reach. High-bandwidth work, no matter where you sit."
+        title: "Dumbo HQ, NYC",
+        description: "High-bandwidth work from our office overlooking the Brooklyn Bridge. A seat in the city’s most iconic neighborhood."
       },
       {
         icon: image_path("careers/price.svg"),
@@ -45,30 +49,43 @@
       {
         icon: image_path("careers/calendar.svg"),
         icon_bg: "orange",
-        title: "30-hour weeks",
-        description: "Work to Live. 30 hours of work, then you're done. Use the extra time to build your own projects."
+        title: "35-hour weeks",
+        description: "We aim for a focused 35-hour week. No 'hustle culture'—just ship and go home."
       },
       {
         icon: image_path("careers/comics.svg"),
         icon_bg: "red",
-        title: "Fewer meetings",
-        description: "We only meet when we're stuck. We prefer PRs and clear writing so you can stay in flow and out of Zoom."
+        title: "Ship daily",
+        description: "We move fast. In-person collaboration to kill blockers and ship every day.
+"
       },
       {
         icon: image_path("careers/audience.svg"),
         icon_bg: "yellow",
-        title: "Equity for all",
-        description: "Every full-time hire gets equity. When Gumroad wins, the whole team wins. No exceptions."
+        title: "Ownership",
+        description: "Own what you build. Every team member has the option to purchase stock once a year."
       },
       {
         icon: image_path("careers/launch.svg"),
         icon_bg: "purple",
-        title: "Build in public",
-        description: "Our code is public. Fork the repo, ship a fix, and skip the line. We hire the people already building with us."
+        title: "Open source",
+        description: "Our code is public. We believe in transparency and hire people who share that mindset."
       }
     ]
   %>
   </div>
+
+  <%= render "home/shared/office_carousel",
+    variant: "gallery",
+    title: "Meet the office",
+    subtitle: "We make work play.",
+    images: [
+      image_path("careers/office-1.jpg"),
+      image_path("careers/office-2.jpg"),
+      image_path("careers/office-3.jpg"),
+      image_path("careers/office-4.jpg")
+    ]
+  %>
 
   <%= render "home/shared/job_listings",
     jobs: @jobs.map { |job| job.merge(url: career_path(job[:slug])) }
@@ -76,7 +93,7 @@
 
   <div class="px-8 pb-16 lg:px-[4vw] lg:pb-24">
     <div class="flex flex-col gap-8 lg:gap-16 max-w-5xl mx-auto items-center">
-      <h1 class="font-medium text-4xl sm:text-5xl lg:text-7xl text-center">Not looking for a full-time role? Help us build in public.</h1>
+      <h1 class="font-medium text-4xl sm:text-5xl lg:text-7xl text-center">Not looking for a full-time role? Contribute to our open source.</h1>
       <%= render "home/shared/button", text: "Contribute on GitHub", url: "https://github.com/antiwork/gumroad" %>
     </div>
   </div>

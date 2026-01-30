@@ -3,9 +3,9 @@
   categories = jobs.map { |j| j[:category] }.uniq
 %>
 
-<div id="open-roles" class="bg-white py-24 md:py-32 job-listings">
+<div id="open-roles" class="bg-white pb-24 md:pb-32 job-listings">
   <div class="mx-auto max-w-4xl md:px-8">
-    <h2 class="text-4xl md:text-5xl font-medium text-center mb-8 px-8 md:px-0">
+    <h2 class="text-4xl md:text-7xl font-medium text-center mb-8 px-8 md:px-0">
       We have <%= jobs.length %> open roles
     </h2>
 
@@ -28,8 +28,12 @@
             <span><%= job[:type] %></span>
             <span><%= job[:location] %></span>
           </div>
-          <h3 class="text-2xl md:text-3xl font-medium mb-1"><%= job[:title] %></h3>
-          <p class="text-xl md:text-2xl"><%= job[:salary] %></p>
+          <h3 class="text-2xl md:text-3xl font-medium mb-2"><%= job[:title] %></h3>
+          <div class="relative inline-grid grid-flow-col items-center border border-r-0 border-black">
+            <div class="bg-black px-2 py-1 text-white text-base leading-none self-stretch flex items-center"><%= job[:salary] %></div>
+            <div class="border-black border-r-transparent border-[calc(0.5lh+--spacing(1))] border-l-1"></div>
+            <div class="absolute top-0 right-px bottom-0 border-black border-r-transparent border-[calc(0.5lh+--spacing(1))] border-l-1"></div>
+          </div>
         </a>
       <% end %>
       <div class="border-t border-gray-200 md:-mx-4"></div>
