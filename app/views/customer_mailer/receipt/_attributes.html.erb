@@ -1,11 +1,11 @@
 <% if attributes.present? %>
-  <table class="table-stack" style="width: 100%;">
+  <table class="table-stack">
     <tbody>
       <% attributes.each do |attribute| %>
-        <tr style="width: 100%;">
-          <td style="width: 100%; padding: 16px; box-sizing: border-box; text-align: left;">
+        <tr>
+          <td>
             <% if attribute[:label].present? %>
-              <span style="font-weight: bold"><%= attribute[:label] %></span>
+              <span class="attribute-label"><%= attribute[:label] %></span>
               <br>
             <% end %>
             <% if attribute[:value].is_a?(Array) %>
