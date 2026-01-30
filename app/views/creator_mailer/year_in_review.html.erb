@@ -1,9 +1,16 @@
 <% formatted_total_amount = Money.new(@analytics_data[:total_amount_cents] * get_rate(@seller.currency_type).to_f, @seller.currency_type.to_sym).format(no_cents_if_whole: true, symbol: true) %>
 
-<div>
-  <%= image_tag("email/badge_year_#{@year}.png", alt: @year, class: "header-badge") %>
+<div style="background-color: #FF90E8">
   <h2 style="text-align: center;">Your year on Gumroad in review</h2>
 </div>
+
+<% if (rank = @analytics_data[:creator_rank]).present? %>
+  <div style="background-color: #FFC900;">
+    <%= image_tag("email/badge_year_#{@year}.png", alt: @year, class: "header-badge") %>
+    <h2 style="text-align: center;">You ranked #<%= rank %> among all creators</h2>
+  </div>
+<% end %>
+
 <div>
   <table class="reset stats">
     <tbody>
@@ -65,16 +72,22 @@
 
 <div>
   <table class="reset list">
+    <colgroup>
+      <col style="width: 45%;">
+      <col style="width: 18%;">
+      <col style="width: 18%;">
+      <col style="width: 19%;">
+    </colgroup>
     <thead>
       <tr>
-        <th>Country</th>
-        <th style="text-align: center; white-space: nowrap;">
+        <th style="text-align: left;">Country</th>
+        <th style="text-align: right; white-space: nowrap;">
           Views
         </th>
-        <th style="text-align: center; white-space: nowrap;">
+        <th style="text-align: right; white-space: nowrap;">
           Sales
         </th>
-        <th>Total</th>
+        <th style="text-align: right;">Total</th>
       </tr>
     </thead>
     <tbody>
@@ -82,14 +95,14 @@
         money = Money.new(total * 100 * get_rate(@seller.currency_type).to_f, @seller.currency_type.to_sym)
       %>
         <tr>
-          <td><%= country %></td>
-          <td style="text-align: center; white-space: nowrap;">
+          <td style="text-align: left;"><%= country %></td>
+          <td style="text-align: right; white-space: nowrap;">
             <%= number_to_si(views) %>
           </td>
-          <td style="text-align: center; white-space: nowrap;">
+          <td style="text-align: right; white-space: nowrap;">
             <%= number_to_si(sales) %>
           </td>
-          <td style="white-space: nowrap">
+          <td style="text-align: right; white-space: nowrap;">
             <%= "#{money.symbol}#{number_to_si(money.dollars)}" %>
           </td>
         </tr>
@@ -101,6 +114,39 @@
 <div>
   <h2 style="text-align: center;">You earned a total of <%= formatted_total_amount %></h2>
 </div>
+
+<% if @analytics_data[:gpt_buy_list].present? %>
+  <div>
+    <table class="reset list">
+      <colgroup>
+        <col style="width: 10%;">
+        <col style="width: 90%;">
+      </colgroup>
+      <tbody>
+        <tr>
+          <td>
+            <%= image_tag("email/gpt3_gumroad.png", alt: "Gumroad", class: "avatar") %>
+          </td>
+          <td>
+            <%= "Hey, can you suggest some things I could buy with my Gumroad earnings of #{formatted_total_amount}?" %>
+          </td>
+        </tr>
+        <tr>
+          <td>
+            <%= image_tag("email/ai-icon.png", alt: "AI", class: "avatar") %>
+          </td>
+          <td>
+            <ul style="padding: 0; margin: 0; list-style: none;">
+              <% @analytics_data[:gpt_buy_list].each do |item| %>
+                <li><%= item %></li>
+              <% end %>
+            </ul>
+          </td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+<% end %>
 
 <% if @seller.from_us? %>
   <div>
@@ -114,7 +160,8 @@
               </td>
               <td>
                 <% if @seller.eligible_for_1099?(@year) %>
-                  You'll be receiving a 1099 from us in the next few weeks.
+                  Your 1099 form is available for download on your
+                  <%= link_to "Gumroad Tax Center page", tax_center_url %> page.
                 <% else %>
                   You do not qualify for a 1099 this year.
                 <% end %>
