@@ -27,7 +27,7 @@ describe "Communities", :js, type: :system do
     end
 
     it "shows the community and allows the seller to send, edit, and delete own messages" do
-      visit community_path
+      visit communities_path
 
       wait_for_ajax
 
@@ -104,7 +104,7 @@ describe "Communities", :js, type: :system do
       customer = create(:user, name: "John Customer")
       customer_message = create(:community_chat_message, community:, user: customer, content: "Hello, world!")
 
-      visit community_path
+      visit communities_path
 
       customer_message_element = find_message("Hello, world!")
       customer_message_element.hover
@@ -128,7 +128,7 @@ describe "Communities", :js, type: :system do
     end
 
     it "allows seller to manage community notification settings" do
-      visit community_path
+      visit communities_path
 
       expect(seller.community_notification_settings.find_by(seller:)).to be_nil
 
@@ -197,7 +197,7 @@ describe "Communities", :js, type: :system do
       community2 = create(:community, resource: product2, seller:)
       create(:community_chat_message, community: community2, user: seller, content: "Are you ready to scale your web app?")
 
-      visit community_path
+      visit communities_path
 
       wait_for_ajax
       within "[aria-label='Sidebar']" do
@@ -293,7 +293,7 @@ describe "Communities", :js, type: :system do
     end
 
     it "shows the community and allows the buyer to send, edit, and delete own messages" do
-      visit community_path
+      visit communities_path
 
       wait_for_ajax
       within "[aria-label='Sidebar']" do
@@ -385,7 +385,7 @@ describe "Communities", :js, type: :system do
     end
 
     it "allows buyer to manage community notification settings" do
-      visit community_path
+      visit communities_path
 
       expect(buyer.community_notification_settings.find_by(seller:)).to be_nil
 
@@ -455,7 +455,7 @@ describe "Communities", :js, type: :system do
       create(:purchase, seller:, purchaser: buyer, link: product2)
       create(:community_chat_message, community: community2, user: seller, content: "Are you ready to scale your web app?")
 
-      visit community_path
+      visit communities_path
 
       wait_for_ajax
 
@@ -569,7 +569,7 @@ describe "Communities", :js, type: :system do
       create(:purchase, seller: other_seller, purchaser: buyer, link: other_product)
       create(:community_chat_message, community: other_community, user: other_seller, content: "Get excited!")
 
-      visit community_path
+      visit communities_path
 
       wait_for_ajax
 

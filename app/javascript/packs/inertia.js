@@ -5,6 +5,19 @@ import { createRoot } from "react-dom/client";
 import AppWrapper from "../inertia/app_wrapper.tsx";
 import Layout, { AuthenticationLayout, LoggedInUserLayout } from "../inertia/layout.tsx";
 
+// Track Inertia requests for wait_for_ajax compatibility in tests
+router.on("start", () => {
+  if (typeof globalThis.__activeRequests === "number") {
+    ++globalThis.__activeRequests;
+  }
+});
+
+router.on("finish", () => {
+  if (typeof globalThis.__activeRequests === "number") {
+    --globalThis.__activeRequests;
+  }
+});
+
 // Configure Inertia to send CSRF token with all requests
 router.on("before", (event) => {
   const token = document.querySelector('meta[name="csrf-token"]')?.getAttribute("content");

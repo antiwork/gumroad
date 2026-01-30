@@ -9,6 +9,42 @@ RSpec.describe CommunitiesPresenter do
   let!(:community) { create(:community, seller:, resource: product) }
   let(:presenter) { described_class.new(current_user:) }
 
+  describe "#first_community" do
+    context "when user has accessible communities" do
+      let(:current_user) { buyer }
+      let!(:purchase) { create(:purchase, purchaser: buyer, link: product) }
+
+      before do
+        Feature.activate_user(:communities, seller)
+      end
+
+      it "returns the first accessible community" do
+        expect(presenter.first_community).to eq(community)
+      end
+    end
+
+    context "when user has no accessible communities" do
+      let(:current_user) { buyer }
+
+      it "returns nil" do
+        expect(presenter.first_community).to be_nil
+      end
+    end
+
+    context "when communities feature flag is disabled for the seller" do
+      let(:current_user) { buyer }
+      let!(:purchase) { create(:purchase, purchaser: buyer, link: product) }
+
+      before do
+        Feature.deactivate_user(:communities, seller)
+      end
+
+      it "returns nil" do
+        expect(presenter.first_community).to be_nil
+      end
+    end
+  end
+
   describe "#props" do
     let(:current_user) { buyer }
     subject(:props) { presenter.props }
@@ -19,6 +55,7 @@ RSpec.describe CommunitiesPresenter do
           has_products: false,
           communities: [],
           notification_settings: {},
+          selected_community_id: nil,
         )
       end
     end
@@ -41,7 +78,8 @@ RSpec.describe CommunitiesPresenter do
           ],
           notification_settings: {
             seller.external_id => { recap_frequency: "daily" }
-          }
+          },
+          selected_community_id: nil,
         )
       end
 
@@ -100,6 +138,25 @@ RSpec.describe CommunitiesPresenter do
                                                         other_seller.external_id => { recap_frequency: "daily" }
                                                       })
         end
+      end
+
+      context "when selected_community_id is provided" do
+        it "includes the selected_community_id in props" do
+          props_with_selected = presenter.props(selected_community_id: community.external_id)
+          expect(props_with_selected[:selected_community_id]).to eq(community.external_id)
+        end
+      end
+    end
+
+    context "when user is a seller with visible products" do
+      let(:current_user) { seller }
+
+      before do
+        Feature.activate_user(:communities, seller)
+      end
+
+      it "returns has_products: true" do
+        expect(props[:has_products]).to be true
       end
     end
   end

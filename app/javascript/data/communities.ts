@@ -168,19 +168,3 @@ export function markCommunityChatMessagesAsRead({
   };
 }
 
-export async function updateCommunityNotificationSettings({
-  communityId,
-  settings,
-}: {
-  communityId: string;
-  settings: Partial<NotificationSettings>;
-}) {
-  const response = await request({
-    method: "PUT",
-    accept: "json",
-    url: Routes.internal_community_notification_setting_path(communityId),
-    data: { settings },
-  });
-  if (!response.ok) throw new ResponseError();
-  return cast<{ settings: NotificationSettings }>(await response.json());
-}

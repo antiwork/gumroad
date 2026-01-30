@@ -1,6 +1,4 @@
 import * as React from "react";
-import { useLoaderData } from "react-router-dom";
-import { cast } from "ts-safe-cast";
 
 import { Community, CommunityChatMessage, CommunityNotificationSettings } from "$app/data/communities";
 import { assertDefined } from "$app/utils/assert";
@@ -17,24 +15,27 @@ export type CommunityChat = {
   isLoading: boolean;
 };
 
+export interface InitialCommunitiesData {
+  hasProducts: boolean;
+  communities: Community[];
+  notificationSettings: CommunityNotificationSettings;
+  selectedCommunityId: string | null;
+}
+
 const sortByCreatedAt = <T extends { created_at: string }>(items: readonly T[]) =>
   [...items].sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime());
 
 const sortByName = <T extends { name: string }>(items: readonly T[]) =>
   [...items].sort((a, b) => a.name.localeCompare(b.name));
 
-export const useCommunities = () => {
-  const data = cast<{
-    has_products: boolean;
-    communities: Community[];
-    notification_settings: CommunityNotificationSettings;
-    selectedCommunityId?: string;
-  }>(useLoaderData());
-  const [communities, setCommunities] = React.useState<Community[]>(sortByName(data.communities));
+export const useCommunities = (initialData: InitialCommunitiesData) => {
+  const [communities, setCommunities] = React.useState<Community[]>(sortByName(initialData.communities));
   const [notificationSettings, setNotificationSettings] = React.useState<CommunityNotificationSettings>(
-    data.notification_settings,
+    initialData.notificationSettings,
   );
-  const [selectedCommunityId, setSelectedCommunityId] = React.useState<string | null>(data.selectedCommunityId ?? null);
+  const [selectedCommunityId, setSelectedCommunityId] = React.useState<string | null>(
+    initialData.selectedCommunityId ?? null,
+  );
   const [communityDrafts, setCommunityDrafts] = React.useState<Record<string, CommunityDraft>>({});
   const [communityChats, setCommunityChats] = React.useState<Record<string, CommunityChat>>({});
 
@@ -114,11 +115,12 @@ export const useCommunities = () => {
     [],
   );
 
+  // Update state when initialData changes (e.g., from Inertia navigation)
   React.useEffect(() => {
-    setSelectedCommunityId(data.selectedCommunityId ?? null);
-    setCommunities(sortByName(data.communities));
-    setNotificationSettings(data.notification_settings);
-  }, [data]);
+    setSelectedCommunityId(initialData.selectedCommunityId ?? null);
+    setCommunities(sortByName(initialData.communities));
+    setNotificationSettings(initialData.notificationSettings);
+  }, [initialData.selectedCommunityId, initialData.communities, initialData.notificationSettings]);
 
   const selectedCommunity = React.useMemo(
     () => communities.find((community) => community.id === selectedCommunityId),
@@ -136,7 +138,7 @@ export const useCommunities = () => {
   );
 
   return {
-    hasProducts: data.has_products,
+    hasProducts: initialData.hasProducts,
     communities,
     notificationSettings,
     selectedCommunity,

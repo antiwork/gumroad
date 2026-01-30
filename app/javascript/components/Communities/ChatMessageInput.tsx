@@ -16,7 +16,7 @@ export const ChatMessageInput = React.forwardRef<
     onHeightChange: (height: number) => void;
   }
 >(({ draft, updateDraftMessage, onSend, onHeightChange }, ref) => {
-  const handleSend = React.useCallback(() => {
+  const handleSendMessage = React.useCallback(() => {
     if (!draft?.content || draft.content.length === 0) return;
     if (draft.content.length > MAX_MESSAGE_LENGTH) {
       showAlert("Message is too long.", "error");
@@ -54,7 +54,7 @@ export const ChatMessageInput = React.forwardRef<
         onKeyDown={(e) => {
           if (e.key === "Enter" && !e.shiftKey) {
             e.preventDefault();
-            handleSend();
+            handleSendMessage();
           }
         }}
       />
@@ -65,7 +65,7 @@ export const ChatMessageInput = React.forwardRef<
             "cursor-default opacity-50": !draft?.content.trim(),
           },
         )}
-        onClick={handleSend}
+        onClick={handleSendMessage}
         disabled={draft?.isSending}
         aria-label="Send message"
       >

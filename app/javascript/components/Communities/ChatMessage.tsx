@@ -67,13 +67,13 @@ export const ChatMessage = ({
   const isAboveBreakpoint = useIsAboveBreakpoint("lg");
   useOnOutsideClick([messageRef], () => !isAboveBreakpoint && isHovered && setIsHovered(false));
 
-  const handleClick = () => {
+  const handleMessageClick = () => {
     if (!isAboveBreakpoint) {
       setIsHovered(!isHovered);
     }
   };
 
-  const handleEdit = (e: React.MouseEvent) => {
+  const handleStartMessageEdit = (e: React.MouseEvent) => {
     e.stopPropagation();
     setIsEditing(true);
   };
@@ -82,7 +82,7 @@ export const ChatMessage = ({
     setIsEditing(false);
   };
 
-  const handleSaveEdit = async (editedMessage: string) => {
+  const handleSaveMessageEdit = async (editedMessage: string) => {
     setIsSaving(true);
     try {
       if (editedMessage.length < MIN_MESSAGE_LENGTH) {
@@ -112,7 +112,7 @@ export const ChatMessage = ({
       ref={messageRef}
       onMouseEnter={() => setIsHovered(true)}
       onMouseLeave={() => setIsHovered(false)}
-      onClick={handleClick}
+      onClick={handleMessageClick}
       aria-label="Chat message"
     >
       <UserAvatar
@@ -151,7 +151,7 @@ export const ChatMessage = ({
             content={message.content}
             isSaving={isSaving}
             onCancel={handleCancelEdit}
-            onSave={handleSaveEdit}
+            onSave={handleSaveMessageEdit}
           />
         ) : (
           <div className="text-sm whitespace-pre-wrap" aria-label="Message content">
@@ -169,7 +169,7 @@ export const ChatMessage = ({
                 <WithTooltip position="top" tip="Edit">
                   <button
                     className="flex cursor-pointer items-center rounded-md border-r border-gray-200 px-2 py-1.5 text-xs all-unset hover:bg-gray dark:hover:bg-dark-gray"
-                    onClick={handleEdit}
+                    onClick={handleStartMessageEdit}
                     aria-label="Edit message"
                   >
                     <Icon name="pencil" />

@@ -1,8 +1,8 @@
 import { Channel } from "@anycable/web";
+import { router, useForm } from "@inertiajs/react";
 import cx from "classnames";
 import { debounce } from "lodash-es";
 import * as React from "react";
-import { useNavigate, useLocation } from "react-router-dom";
 import { is } from "ts-safe-cast";
 
 import cable from "$app/channels/consumer";
@@ -16,7 +16,6 @@ import {
   updateCommunityChatMessage,
   deleteCommunityChatMessage,
   NotificationSettings,
-  updateCommunityNotificationSettings,
 } from "$app/data/communities";
 import { assertDefined } from "$app/utils/assert";
 import { asyncVoid } from "$app/utils/promise";
@@ -39,7 +38,7 @@ import { ChatMessageList } from "./ChatMessageList";
 import { CommunityList } from "./CommunityList";
 import { ScrollToBottomButton } from "./ScrollToBottomButton";
 import { DateSeparator } from "./Separator";
-import { useCommunities } from "./useCommunities";
+import { InitialCommunitiesData, useCommunities } from "./useCommunities";
 import { UserAvatar } from "./UserAvatar";
 
 import placeholderImage from "$assets/images/placeholders/community.png";
@@ -111,11 +110,9 @@ const getComparedTimestamp = (
   return assertDefined(timestampToISOString.get(resultTime));
 };
 
-export const CommunityView = () => {
+export const CommunityView = ({ initialData }: { initialData: InitialCommunitiesData }) => {
   const currentSeller = useCurrentSeller();
   const isAboveBreakpoint = useIsAboveBreakpoint("lg");
-  const navigate = useNavigate();
-  const location = useLocation();
   const {
     hasProducts,
     communities,
@@ -124,11 +121,10 @@ export const CommunityView = () => {
     selectedCommunityDraft,
     selectedCommunityChat,
     setSelectedCommunityId,
-    setNotificationSettings,
     updateCommunity,
     updateCommunityDraft,
     updateCommunityChat,
-  } = useCommunities();
+  } = useCommunities(initialData);
   const [switcherOpen, setSwitcherOpen] = React.useState(false);
   const [sidebarOpen, setSidebarOpen] = React.useState(true);
   const activeFetchMessageRequest = React.useRef<{ cancel: () => void } | null>(null);
@@ -148,15 +144,15 @@ export const CommunityView = () => {
 
   React.useEffect(() => {
     if (selectedCommunity) {
-      const searchParams = new URLSearchParams(location.search);
+      const searchParams = new URLSearchParams(window.location.search);
       if (searchParams.has("notifications")) {
-        searchParams.delete("notifications");
-        const newSearch = searchParams.toString() ? `?${searchParams.toString()}` : "";
-        navigate(`${location.pathname}${newSearch}${location.hash}`, { replace: true });
+        const url = new URL(window.location.href);
+        url.searchParams.delete("notifications");
+        router.get(url.pathname + url.search, {}, { preserveState: true, replace: true });
         setShowNotificationsSettings(true);
       }
     }
-  }, [selectedCommunity, location, navigate]);
+  }, [selectedCommunity]);
 
   const debouncedMarkAsRead = React.useMemo(
     () =>
@@ -492,7 +488,7 @@ export const CommunityView = () => {
     const community = communities.find((community) => community.seller.id === sellerId);
     if (community) {
       setSelectedCommunityId(community.id);
-      navigate(`/communities/${community.seller.id}/${community.id}`);
+      router.get(`/communities/${community.seller.id}/${community.id}`, {}, { preserveState: true });
       setSwitcherOpen(false);
     }
   };
@@ -517,7 +513,7 @@ export const CommunityView = () => {
 
     const community = communities.find((community) => community.id === communityId);
     if (!community) return;
-    window.location.replace(`/communities/${community.seller.id}/${community.id}`);
+    router.get(`/communities/${community.seller.id}/${community.id}`, {}, { replace: true });
   });
 
   const sellers = React.useMemo(() => {
@@ -541,7 +537,7 @@ export const CommunityView = () => {
     [communities, selectedCommunity],
   );
 
-  const updateMessage = async (messageId: string, communityId: string, content: string) => {
+  const updateChatMessage = async (messageId: string, communityId: string, content: string) => {
     const response = await updateCommunityChatMessage({
       communityId,
       messageId,
@@ -557,20 +553,9 @@ export const CommunityView = () => {
     return response;
   };
 
-  const saveNotificationsSettings = async (community: Community, settings: NotificationSettings) => {
-    const response = await updateCommunityNotificationSettings({
-      communityId: community.id,
-      settings,
-    });
-    setNotificationSettings((prev) => ({ ...prev, [community.seller.id]: response.settings }));
-    showAlert("Changes saved!", "success");
-    setShowNotificationsSettings(false);
-    return response;
-  };
-
   const contextValue = React.useMemo(
-    () => ({ markMessageAsRead, updateMessage, deleteMessage }),
-    [markMessageAsRead, updateMessage, deleteMessage],
+    () => ({ markMessageAsRead, updateMessage: updateChatMessage, deleteMessage }),
+    [markMessageAsRead, updateChatMessage, deleteMessage],
   );
 
   const scrollToBottom = () => {
@@ -669,6 +654,7 @@ export const CommunityView = () => {
                 selectedCommunity={selectedCommunity}
                 isAboveBreakpoint={isAboveBreakpoint}
                 setSidebarOpen={setSidebarOpen}
+                onSelectCommunity={setSelectedCommunityId}
               />
             </div>
 
@@ -725,9 +711,9 @@ export const CommunityView = () => {
       {showNotificationsSettings && selectedCommunity ? (
         <NotificationsSettingsModal
           communityName={selectedCommunity.seller.name}
+          community={selectedCommunity}
           settings={notificationSettings[selectedCommunity.seller.id] ?? { recap_frequency: null }}
           onClose={() => setShowNotificationsSettings(false)}
-          onSave={(settings) => saveNotificationsSettings(selectedCommunity, settings)}
         />
       ) : null}
     </CommunityViewContext.Provider>
@@ -736,17 +722,27 @@ export const CommunityView = () => {
 
 const NotificationsSettingsModal = ({
   communityName,
+  community,
   settings,
   onClose,
-  onSave,
 }: {
   communityName: string;
+  community: Community;
   settings: NotificationSettings;
   onClose: () => void;
-  onSave: (settings: NotificationSettings) => Promise<{ settings: NotificationSettings }>;
 }) => {
-  const [isSaving, setIsSaving] = React.useState(false);
-  const [updatedSettings, setUpdatedSettings] = React.useState<NotificationSettings>(settings);
+  const form = useForm({
+    recap_frequency: settings.recap_frequency,
+  });
+
+  const onSave = () => {
+    form.put(Routes.community_notification_settings_path(community.seller.id, community.id), {
+      preserveScroll: true,
+      onSuccess: () => {
+        onClose();
+      },
+    });
+  };
 
   return (
     <Modal
@@ -756,23 +752,11 @@ const NotificationsSettingsModal = ({
       title="Notifications"
       footer={
         <>
-          <Button disabled={isSaving} onClick={onClose}>
+          <Button disabled={form.processing} onClick={onClose}>
             Cancel
           </Button>
-          <Button
-            color="primary"
-            onClick={asyncVoid(async () => {
-              setIsSaving(true);
-              try {
-                await onSave(updatedSettings);
-              } catch (_error: unknown) {
-                showAlert("Failed to save changes. Please try again later.", "error");
-              } finally {
-                setIsSaving(false);
-              }
-            })}
-          >
-            {isSaving ? "Saving..." : "Save"}
+          <Button color="primary" onClick={onSave} disabled={form.processing}>
+            {form.processing ? "Saving..." : "Save"}
           </Button>
         </>
       }
@@ -780,14 +764,14 @@ const NotificationsSettingsModal = ({
       <p>Receive email recaps of what's happening in "{communityName}" community.</p>
       <ToggleSettingRow
         label="Community recap"
-        value={updatedSettings.recap_frequency !== null}
-        onChange={(newValue) => setUpdatedSettings({ ...updatedSettings, recap_frequency: newValue ? "weekly" : null })}
+        value={form.data.recap_frequency !== null}
+        onChange={(newValue) => form.setData("recap_frequency", newValue ? "weekly" : null)}
         dropdown={
           <div className="radio-buttons flex! flex-col!" role="radiogroup">
             <Button
               role="radio"
-              aria-checked={updatedSettings.recap_frequency === "daily"}
-              onClick={() => setUpdatedSettings({ ...updatedSettings, recap_frequency: "daily" })}
+              aria-checked={form.data.recap_frequency === "daily"}
+              onClick={() => form.setData("recap_frequency", "daily")}
             >
               <div>
                 <h4>Daily</h4>
@@ -796,8 +780,8 @@ const NotificationsSettingsModal = ({
             </Button>
             <Button
               role="radio"
-              aria-checked={updatedSettings.recap_frequency === "weekly"}
-              onClick={() => setUpdatedSettings({ ...updatedSettings, recap_frequency: "weekly" })}
+              aria-checked={form.data.recap_frequency === "weekly"}
+              onClick={() => form.setData("recap_frequency", "weekly")}
             >
               <div>
                 <h4>Weekly</h4>
@@ -838,10 +822,7 @@ const CommunityChatHeader = ({
 const GoBackHeader = () => {
   const handleGoBack = (e: React.MouseEvent) => {
     e.preventDefault();
-    const referrerUrl = new URL(document.referrer.trim() !== "" ? document.referrer : Routes.dashboard_url());
-    window.location.href = referrerUrl.pathname.startsWith("/communities")
-      ? Routes.dashboard_path()
-      : referrerUrl.toString();
+    router.get(Routes.dashboard_path());
   };
 
   return (
