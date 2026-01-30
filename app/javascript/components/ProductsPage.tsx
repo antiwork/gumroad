@@ -30,7 +30,6 @@ const ProductsPage = ({
   type?: Tab;
 }) => (
   <div className="grid gap-12">
-    {/* Always render to keep search effect active even when memberships list is empty */}
     <ProductsPageMembershipsTable
       query={query}
       entries={memberships}
@@ -40,7 +39,6 @@ const ProductsPage = ({
       setEnableArchiveTab={setEnableArchiveTab}
     />
 
-    {/* Always render to keep search effect active even when products list is empty */}
     <ProductsPageProductsTable
       query={query}
       entries={products}
