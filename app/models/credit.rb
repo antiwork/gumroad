@@ -14,7 +14,8 @@ class Credit < ApplicationRecord
   belongs_to :financing_paydown_purchase, class_name: "Purchase", optional: true
   belongs_to :fee_retention_refund, class_name: "Refund", optional: true
   belongs_to :backtax_agreement, optional: true
-  belongs_to :balance_top_up, optional: true
+  belongs_to :refund_funding_purchase, class_name: "Purchase", optional: true
+  belongs_to :credit_card, optional: true
 
   has_one :balance_transaction
 
@@ -25,6 +26,8 @@ class Credit < ApplicationRecord
   validate :validate_associated_entity
 
   attr_json_data_accessor :stripe_loan_paydown_id
+  attr_json_data_accessor :refund_funding_processor_transaction_id
+  attr_json_data_accessor :refund_funding_processor_payment_intent_id
 
   def self.create_for_credit!(user:, amount_cents:, crediting_user:)
     credit = new
@@ -52,12 +55,15 @@ class Credit < ApplicationRecord
     credit
   end
 
-  def self.create_for_balance_top_up!(user:, amount_cents:, balance_top_up:)
+  def self.create_for_refund_funding!(user:, amount_cents:, purchase:, credit_card:, processor_transaction_id:, processor_payment_intent_id:)
     credit = new
     credit.user = user
     credit.merchant_account = MerchantAccount.gumroad(StripeChargeProcessor.charge_processor_id)
     credit.amount_cents = amount_cents
-    credit.balance_top_up = balance_top_up
+    credit.refund_funding_purchase = purchase
+    credit.credit_card = credit_card
+    credit.refund_funding_processor_transaction_id = processor_transaction_id
+    credit.refund_funding_processor_payment_intent_id = processor_payment_intent_id
     credit.save!
 
     balance_transaction_amount = BalanceTransaction::Amount.new(
@@ -460,17 +466,17 @@ class Credit < ApplicationRecord
       comment_attrs[:content] = "issued adjustment due to currency conversion differences when payment #{returned_payment.id} returned."
     elsif refund
       comment_attrs[:author_name] = "AutoCredit PayPal Connect VAT refund (#{refund.purchase.id})"
-    elsif balance_top_up
-      comment_attrs[:author_name] = "Balance Top-Up (#{balance_top_up.external_id})"
-      comment_attrs[:content] = "credited #{formatted_dollar_amount(amount_cents)} from balance top-up charge."
+    elsif refund_funding_purchase
+      comment_attrs[:author_name] = "Refund Funding"
+      comment_attrs[:content] = "credited #{formatted_dollar_amount(amount_cents)} from backup card charge to cover refund."
     end
     user.comments.create(comment_attrs)
   end
 
   private
     def validate_associated_entity
-      return if crediting_user || chargebacked_purchase || returned_payment || refund || financing_paydown_purchase || fee_retention_refund || backtax_agreement || balance_top_up
+      return if crediting_user || chargebacked_purchase || returned_payment || refund || financing_paydown_purchase || fee_retention_refund || backtax_agreement || refund_funding_purchase
 
-      errors.add(:base, "A crediting user, chargebacked purchase, returned payment, refund, financing_paydown_purchase, fee_retention_refund, backtax_agreement or balance_top_up must be provided.")
+      errors.add(:base, "A crediting user, chargebacked purchase, returned payment, refund, financing_paydown_purchase, fee_retention_refund, backtax_agreement or refund_funding_purchase must be provided.")
     end
 end

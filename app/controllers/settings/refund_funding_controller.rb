@@ -8,7 +8,7 @@ class Settings::RefundFundingController < Sellers::BaseController
 
     render json: {
       enabled: funding_card.present?,
-      name_on_card: current_seller.refund_funding_card_name,
+      name_on_card: funding_card&.holder_name,
       credit_card: funding_card.present? ? {
         id: funding_card.id,
         visual: funding_card.visual,
@@ -40,10 +40,8 @@ class Settings::RefundFundingController < Sellers::BaseController
       return render json: { success: false, error: credit_card.errors.full_messages.join(", ") }, status: :unprocessable_entity
     end
 
-    current_seller.update!(
-      refund_funding_credit_card: credit_card,
-      refund_funding_card_name: params[:name_on_card]
-    )
+    credit_card.update!(holder_name: params[:name_on_card])
+    current_seller.update!(refund_funding_credit_card: credit_card)
 
     render json: {
       success: true,
@@ -58,18 +56,17 @@ class Settings::RefundFundingController < Sellers::BaseController
   end
 
   def update
-    if params[:name_on_card].present?
-      current_seller.update!(refund_funding_card_name: params[:name_on_card])
+    funding_card = current_seller.refund_funding_credit_card
+
+    if funding_card.present? && params[:name_on_card].present?
+      funding_card.update!(holder_name: params[:name_on_card])
     end
 
     render json: { success: true }
   end
 
   def destroy
-    current_seller.update!(
-      refund_funding_credit_card: nil,
-      refund_funding_card_name: nil
-    )
+    current_seller.update!(refund_funding_credit_card: nil)
 
     render json: { success: true }
   end
@@ -78,36 +75,6 @@ class Settings::RefundFundingController < Sellers::BaseController
     current_seller.update!(dismissed_refund_payment_method_banner: true)
 
     render json: { success: true }
-  end
-
-  def test_charge
-    amount_cents = params[:amount_cents].to_i
-
-    if amount_cents < BalanceTopUp::ChargeService::MINIMUM_TOP_UP_AMOUNT_CENTS
-      return render json: { success: false, error: "Minimum test charge is $1.00" }, status: :unprocessable_entity
-    end
-
-    if current_seller.refund_funding_credit_card.blank?
-      return render json: { success: false, error: "No funding credit card configured" }, status: :unprocessable_entity
-    end
-
-    result = BalanceTopUp::ChargeService.new(
-      user: current_seller,
-      amount_cents:
-    ).perform
-
-    if result.success?
-      render json: {
-        success: true,
-        balance_top_up: {
-          id: result.balance_top_up.external_id,
-          amount_cents: result.balance_top_up.amount_cents,
-          formatted_amount: result.balance_top_up.formatted_amount
-        }
-      }
-    else
-      render json: { success: false, error: result.error_message }, status: :unprocessable_entity
-    end
   end
 
   private

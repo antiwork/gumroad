@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[7.1].define(version: 2026_11_19_011937) do
+ActiveRecord::Schema[7.1].define(version: 2026_11_19_011936) do
   create_table "active_storage_attachments", charset: "utf8mb4", collation: "utf8mb4_unicode_ci", force: :cascade do |t|
     t.string "name", limit: 191, null: false
     t.string "record_type", limit: 191, null: false
@@ -146,27 +146,6 @@ ActiveRecord::Schema[7.1].define(version: 2026_11_19_011937) do
     t.index ["link_id"], name: "index_asset_previews_on_link_id"
   end
 
-  create_table "audience_export_chunks", charset: "utf8mb4", collation: "utf8mb4_unicode_ci", force: :cascade do |t|
-    t.bigint "export_id", null: false
-    t.text "member_ids", size: :long
-    t.text "members_data", size: :long
-    t.boolean "processed", default: false, null: false
-    t.string "revision"
-    t.datetime "created_at", null: false
-    t.datetime "updated_at", null: false
-    t.index ["export_id"], name: "index_audience_export_chunks_on_export_id"
-  end
-
-  create_table "audience_exports", charset: "utf8mb4", collation: "utf8mb4_unicode_ci", force: :cascade do |t|
-    t.bigint "seller_id", null: false
-    t.bigint "recipient_id", null: false
-    t.text "options"
-    t.datetime "created_at", null: false
-    t.datetime "updated_at", null: false
-    t.index ["recipient_id"], name: "index_audience_exports_on_recipient_id"
-    t.index ["seller_id"], name: "index_audience_exports_on_seller_id"
-  end
-
   create_table "audience_members", charset: "utf8mb4", collation: "utf8mb4_unicode_ci", force: :cascade do |t|
     t.bigint "seller_id", null: false
     t.string "email", null: false
@@ -224,26 +203,6 @@ ActiveRecord::Schema[7.1].define(version: 2026_11_19_011937) do
     t.datetime "updated_at", null: false
     t.index ["backtax_agreement_id"], name: "index_backtax_collections_on_backtax_agreement_id"
     t.index ["user_id"], name: "index_backtax_collections_on_user_id"
-  end
-
-  create_table "balance_top_ups", charset: "utf8mb4", collation: "utf8mb4_unicode_ci", force: :cascade do |t|
-    t.bigint "user_id", null: false
-    t.bigint "credit_card_id", null: false
-    t.bigint "purchase_id"
-    t.bigint "credit_id"
-    t.integer "amount_cents", null: false
-    t.string "state", default: "pending", null: false
-    t.string "processor", null: false
-    t.string "processor_transaction_id"
-    t.string "processor_payment_intent_id"
-    t.string "error_message"
-    t.datetime "created_at", null: false
-    t.datetime "updated_at", null: false
-    t.index ["credit_card_id"], name: "index_balance_top_ups_on_credit_card_id"
-    t.index ["credit_id"], name: "index_balance_top_ups_on_credit_id"
-    t.index ["processor_transaction_id"], name: "index_balance_top_ups_on_processor_transaction_id", unique: true
-    t.index ["purchase_id"], name: "index_balance_top_ups_on_purchase_id"
-    t.index ["user_id"], name: "index_balance_top_ups_on_user_id"
   end
 
   create_table "balance_transactions", id: :integer, charset: "utf8mb4", collation: "utf8mb4_unicode_ci", force: :cascade do |t|
@@ -676,6 +635,7 @@ ActiveRecord::Schema[7.1].define(version: 2026_11_19_011937) do
     t.string "paypal_billing_agreement_id", limit: 191
     t.string "processor_payment_method_id"
     t.json "json_data"
+    t.string "holder_name"
     t.index ["preorder_id"], name: "index_credit_cards_on_preorder_id"
     t.index ["stripe_fingerprint"], name: "index_credit_cards_on_stripe_fingerprint"
   end
@@ -696,10 +656,12 @@ ActiveRecord::Schema[7.1].define(version: 2026_11_19_011937) do
     t.integer "fee_retention_refund_id"
     t.bigint "backtax_agreement_id"
     t.text "json_data"
-    t.bigint "balance_top_up_id"
+    t.bigint "refund_funding_purchase_id"
+    t.bigint "credit_card_id"
     t.index ["balance_id"], name: "index_credits_on_balance_id"
-    t.index ["balance_top_up_id"], name: "index_credits_on_balance_top_up_id"
+    t.index ["credit_card_id"], name: "index_credits_on_credit_card_id"
     t.index ["dispute_id"], name: "index_credits_on_dispute_id"
+    t.index ["refund_funding_purchase_id"], name: "index_credits_on_refund_funding_purchase_id"
   end
 
   create_table "custom_domains", id: :integer, charset: "utf8mb4", collation: "utf8mb4_unicode_ci", force: :cascade do |t|
@@ -1167,7 +1129,7 @@ ActiveRecord::Schema[7.1].define(version: 2026_11_19_011937) do
     t.string "native_type", default: "digital", null: false
     t.integer "discover_fee_per_thousand", default: 100, null: false
     t.string "support_email"
-    t.integer "default_offer_code_id"
+    t.bigint "default_offer_code_id"
     t.index ["banned_at"], name: "index_links_on_banned_at"
     t.index ["custom_permalink"], name: "index_links_on_custom_permalink", length: 191
     t.index ["default_offer_code_id"], name: "index_links_on_default_offer_code_id"
@@ -2214,7 +2176,6 @@ ActiveRecord::Schema[7.1].define(version: 2026_11_19_011937) do
     t.bigint "seller_id"
     t.string "token"
     t.datetime "token_expires_at"
-    t.string "business_vat_id", limit: 191
     t.index ["cancelled_at"], name: "index_subscriptions_on_cancelled_at"
     t.index ["deactivated_at"], name: "index_subscriptions_on_deactivated_at"
     t.index ["ended_at"], name: "index_subscriptions_on_ended_at"
@@ -2578,8 +2539,7 @@ ActiveRecord::Schema[7.1].define(version: 2026_11_19_011937) do
     t.string "notification_content_type", default: "application/x-www-form-urlencoded"
     t.string "google_uid"
     t.integer "purchasing_power_parity_limit"
-    t.bigint "refund_funding_credit_card_id"
-    t.string "refund_funding_card_name"
+    t.integer "refund_funding_credit_card_id"
     t.index ["account_created_ip"], name: "index_users_on_account_created_ip"
     t.index ["confirmation_token"], name: "index_users_on_confirmation_token", length: 191
     t.index ["created_at"], name: "index_users_on_created_at"

@@ -47,15 +47,15 @@ class Purchase
         if amount_cents_to_refund > seller.unpaid_balance_cents && charged_using_gumroad_merchant_account?
           if seller.refund_funding_credit_card.present?
             shortfall = amount_cents_to_refund - seller.unpaid_balance_cents
-            charge_amount = [shortfall, BalanceTopUp::ChargeService::MINIMUM_TOP_UP_AMOUNT_CENTS].max
-            top_up_result = BalanceTopUp::ChargeService.new(
+            charge_amount = [shortfall, RefundFundingChargeService::MINIMUM_CHARGE_CENTS].max
+            result = RefundFundingChargeService.new(
               user: seller,
               amount_cents: charge_amount,
               purchase: self
             ).perform
 
-            if !top_up_result.success?
-              errors.add :base, top_up_result.error_message || "Could not charge your card to cover the refund shortfall."
+            if !result.success?
+              errors.add :base, result.error_message || "Could not charge your backup card to cover the refund shortfall."
               return false
             end
           else

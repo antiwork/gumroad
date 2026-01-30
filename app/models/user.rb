@@ -52,8 +52,6 @@ class User < ApplicationRecord
   belongs_to :credit_card, optional: true
   belongs_to :refund_funding_credit_card, class_name: "CreditCard", optional: true
 
-  has_many :balance_top_ups
-
   # Associate with CustomDomain.alive objects
   has_one :custom_domain, -> { alive }
 
