@@ -76,9 +76,6 @@ class Order::CreateService
         end
 
         if purchase&.persisted?
-          # For subscription restarts without a new charge, the original purchase is returned
-          # which is already successful. Add its response directly since ChargeService
-          # only processes in_progress purchases.
           if purchase.successful?
             purchase_responses[line_item_uid] = purchase.purchase_response
           else
@@ -182,9 +179,6 @@ class Order::CreateService
       user_or_email = buyer || email
       return nil unless user_or_email.present?
 
-      # Use pessimistic locking to prevent race conditions where multiple concurrent
-      # checkout attempts could all pass the active subscription check before any
-      # creates a new subscription. Lock the subscription record during the check.
       active_subscription = Subscription.active_for_user_and_product(
         user_or_email: user_or_email,
         product: product,

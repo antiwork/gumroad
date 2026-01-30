@@ -3,7 +3,6 @@
 class Subscription::RestartAtCheckoutService
   include CurrencyHelper
 
-  # Custom exception for charge failures that should trigger transaction rollback
   class ChargeFailed < StandardError
     attr_reader :purchase
 
@@ -42,9 +41,7 @@ class Subscription::RestartAtCheckoutService
       success_result
     end
   rescue ChargeFailed => e
-    # Charge failed after transaction rolled back - now mark subscription as failed
-    # This happens outside the transaction to avoid committing partial state changes
-    subscription.reload # Reload to get the pre-transaction state
+    subscription.reload
     subscription.unsubscribe_and_fail!
     error_result(e.message)
   rescue ActiveRecord::RecordInvalid, Subscription::UpdateFailed => e
@@ -124,9 +121,7 @@ class Subscription::RestartAtCheckoutService
     end
 
     def should_charge?
-      return false if within_billing_period?
-      return false if subscription.in_free_trial?
-      true
+      !within_billing_period? && !subscription.in_free_trial?
     end
 
     def within_billing_period?

@@ -383,8 +383,6 @@ class Purchase::CreateService < Purchase::BaseService
       end
     end
 
-    # Check if we should look for restartable subscriptions
-    # Only applies to membership products that are not gifts
     def should_check_for_restartable_subscription?
       product.is_recurring_billing && !is_gift?
     end
@@ -393,8 +391,6 @@ class Purchase::CreateService < Purchase::BaseService
       user_or_email = buyer || purchase_params[:email]
       return nil unless user_or_email.present?
 
-      # First check for active subscriptions - block purchase if one exists
-      # This check is also in Order::CreateService but we need it here for direct API calls
       active_subscription = Subscription.active_for_user_and_product(
         user_or_email: user_or_email,
         product: product,
