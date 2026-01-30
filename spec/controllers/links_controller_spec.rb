@@ -3765,7 +3765,7 @@ describe LinksController, :vcr, inertia: true do
           expect(response).to be_successful
           expect(inertia.component).to eq("Products/Show")
           expect(inertia.props[:product]).to be_present
-          expect(inertia.props[:meta]).to include(:canonical, :structured_data, :custom_styles)
+          expect(inertia.props[:meta]).to include(:custom_styles)
         end
 
         it "renders Products/Profile/Show for profile layout" do

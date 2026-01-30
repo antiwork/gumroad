@@ -4,8 +4,6 @@ import * as React from "react";
 import ToastAlert from "$app/components/server-components/Alert";
 
 export type ProductPageMeta = {
-  canonical: string;
-  structured_data: unknown;
   custom_styles: string | null;
 };
 
@@ -15,16 +13,11 @@ type ProductPageHeadProps = {
 };
 
 export const ProductPageHead = ({ meta, title }: ProductPageHeadProps) => {
-  const structuredData = Array.isArray(meta.structured_data) ? meta.structured_data : [];
   const customStyles = meta.custom_styles ?? "";
 
   return (
     <Head {...(title ? { title } : {})}>
-      {meta.canonical ? <link rel="canonical" href={meta.canonical} /> : null}
       {customStyles.trim().length > 0 ? <style dangerouslySetInnerHTML={{ __html: customStyles }} /> : null}
-      {structuredData.length > 0 ? (
-        <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(structuredData) }} />
-      ) : null}
     </Head>
   );
 };
