@@ -17,10 +17,10 @@ import * as React from "react";
 import { useBraintreeToken } from "$app/data/braintree_client_token_data";
 import { preparePaymentRequestPaymentMethodData } from "$app/data/card_payment_method_data";
 import {
-  getReusablePaymentMethodResult,
-  getPaymentRequestPaymentMethodResult,
-  getReusablePaymentRequestPaymentMethodResult,
   getPaymentMethodResult,
+  getPaymentRequestPaymentMethodResult,
+  getReusablePaymentMethodResult,
+  getReusablePaymentRequestPaymentMethodResult,
   SelectedPaymentMethod,
 } from "$app/data/payment_method_result";
 import { createBillingAgreement, createBillingAgreementToken } from "$app/data/paypal";
@@ -38,17 +38,19 @@ import {
   getErrors,
   getTotalPrice,
   hasShipping,
-  PaymentMethodType,
-  useState,
-  requiresPayment,
   isProcessing,
-  usePayLabel,
-  requiresReusablePaymentMethod,
   isSubmitDisabled,
+  PaymentMethodType,
+  requiresPayment,
+  requiresReusablePaymentMethod,
+  usePayLabel,
+  useState,
 } from "$app/components/Checkout/payment";
+import { Dropdown } from "$app/components/Dropdown";
 import { Icon } from "$app/components/Icons";
 import { LoadingSpinner } from "$app/components/LoadingSpinner";
 import { useLoggedInUser } from "$app/components/LoggedInUser";
+import { Popover, PopoverAnchor, PopoverContent } from "$app/components/Popover";
 import { showAlert } from "$app/components/server-components/Alert";
 import { Alert } from "$app/components/ui/Alert";
 import { Card, CardContent } from "$app/components/ui/Card";
@@ -327,26 +329,28 @@ const SharedInputs = ({ className }: { className?: string | undefined }) => {
             <legend>
               <label htmlFor={`${uid}email`}>Email address</label>
             </legend>
-            <div className={cx("popover", { expanded: !!state.emailTypoSuggestion })} style={{ width: "100%" }}>
-              <input
-                id={`${uid}email`}
-                type="email"
-                aria-invalid={errors.has("email")}
-                value={state.email}
-                onChange={(evt) => dispatch({ type: "set-value", email: evt.target.value.toLowerCase() })}
-                placeholder="Your email address"
-                disabled={(loggedInUser && loggedInUser.email !== null) || isProcessing(state)}
-                onBlur={checkForEmailTypos}
-              />
-              {state.emailTypoSuggestion ? (
-                <div className="dropdown grid gap-2">
+            <div className="relative inline-block w-full">
+              <Popover open={!!state.emailTypoSuggestion}>
+                <PopoverAnchor>
+                  <input
+                    id={`${uid}email`}
+                    type="email"
+                    aria-invalid={errors.has("email")}
+                    value={state.email}
+                    onChange={(evt) => dispatch({ type: "set-value", email: evt.target.value.toLowerCase() })}
+                    placeholder="Your email address"
+                    disabled={(loggedInUser && loggedInUser.email !== null) || isProcessing(state)}
+                    onBlur={checkForEmailTypos}
+                  />
+                </PopoverAnchor>
+                <PopoverContent className="grid gap-2" matchTriggerWidth>
                   <div>Did you mean {state.emailTypoSuggestion}?</div>
-                  <div className="flex flex-wrap gap-2">
+                  <div className="flex gap-2">
                     <Button onClick={rejectEmailTypoSuggestion}>No</Button>
                     <Button onClick={acceptEmailTypoSuggestion}>Yes</Button>
                   </div>
-                </div>
-              ) : null}
+                </PopoverContent>
+              </Popover>
             </div>
           </fieldset>
           {showFullNameInput ? (
@@ -561,47 +565,44 @@ const CustomerDetails = ({ className }: { className?: string }) => {
                 </label>
               ) : null}
             </div>
-            {addressVerification && addressVerification.type !== "done" ? (
-              <div className="dropdown flex flex-col gap-4">
-                {addressVerification.type === "verification-required" ? (
-                  <>
-                    <div>
-                      <strong>You entered this address:</strong>
-                      <br />
-                      {addressVerification.formattedOriginalAddress}
-                    </div>
-                    <div>
-                      <strong>We recommend using this format:</strong>
-                      <br />
-                      {addressVerification.formattedSuggestedAddress}
-                    </div>
-                    <div className="flex flex-wrap gap-2">
-                      <Button onClick={verifyAddress}>No, continue</Button>
-                      <Button
-                        color="primary"
-                        onClick={() =>
-                          setAddressVerification({
-                            type: "done",
-                            verifiedAddress: addressVerification.suggestedAddress,
-                          })
-                        }
-                      >
-                        Yes, update
-                      </Button>
-                    </div>
-                  </>
-                ) : (
-                  <>
-                    {addressVerification.type === "invalid"
-                      ? addressVerification.message
-                      : "We are unable to verify your shipping address. Is your address correct?"}
-                    <Button onClick={() => dispatch({ type: "cancel" })}>No</Button>
-                    <Button onClick={verifyAddress}>Yes, it is</Button>
-                  </>
-                )}
-              </div>
-            ) : null}
           </div>
+          {addressVerification && addressVerification.type !== "done" ? (
+            <Dropdown className="flex flex-col gap-4">
+              {addressVerification.type === "verification-required" ? (
+                <>
+                  <div>
+                    <strong>You entered this address:</strong>
+                    <br />
+                    {addressVerification.formattedOriginalAddress}
+                  </div>
+                  <div>
+                    <strong>We recommend using this format:</strong>
+                    <br />
+                    {addressVerification.formattedSuggestedAddress}
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    <Button onClick={verifyAddress}>No, continue</Button>
+                    <Button
+                      color="primary"
+                      onClick={() =>
+                        setAddressVerification({ type: "done", verifiedAddress: addressVerification.suggestedAddress })
+                      }
+                    >
+                      Yes, update
+                    </Button>
+                  </div>
+                </>
+              ) : (
+                <>
+                  {addressVerification.type === "invalid"
+                    ? addressVerification.message
+                    : "We are unable to verify your shipping address. Is your address correct?"}
+                  <Button onClick={() => dispatch({ type: "cancel" })}>No</Button>
+                  <Button onClick={verifyAddress}>Yes, it is</Button>
+                </>
+              )}
+            </Dropdown>
+          ) : null}
         </Card>
       ) : null}
       {state.warning ? (

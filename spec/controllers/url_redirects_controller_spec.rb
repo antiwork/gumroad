@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require "spec_helper"
+require "inertia_rails/rspec"
 
 describe UrlRedirectsController do
   render_views
@@ -1307,7 +1308,7 @@ describe UrlRedirectsController do
     end
   end
 
-  describe "GET 'confirm_page'" do
+  describe "GET 'confirm_page'", inertia: true do
     before do
       @url_redirect = create(:url_redirect)
     end
@@ -1321,18 +1322,18 @@ describe UrlRedirectsController do
     it "renders the confirm page correctly" do
       get :confirm_page, params: { id: @url_redirect.token }
       expect(response).to be_successful
-      expect(assigns(:hide_layouts)).to eq(true)
-      expect(assigns(:react_component_props)).to eq(UrlRedirectPresenter.new(url_redirect: @url_redirect, logged_in_user: nil).download_page_without_content_props(content_unavailability_reason_code: UrlRedirectPresenter::CONTENT_UNAVAILABILITY_REASON_CODES[:email_confirmation_required]).merge(
-        is_mobile_app_web_view: false,
-        content_unavailability_reason_code: UrlRedirectPresenter::CONTENT_UNAVAILABILITY_REASON_CODES[:email_confirmation_required],
-        add_to_library_option: "none",
-        confirmation_info: {
-          id: @url_redirect.token,
-          destination: nil,
-          display: nil,
-          email: nil,
-        }
-      ))
+      expect(inertia.component).to eq("UrlRedirects/ConfirmPage")
+      expect(inertia.props[:token]).to eq(@url_redirect.token)
+      expect(inertia.props[:redirect_id]).to eq(@url_redirect.external_id)
+      expect(inertia.props[:content_unavailability_reason_code]).to eq(UrlRedirectPresenter::CONTENT_UNAVAILABILITY_REASON_CODES[:email_confirmation_required])
+      expect(inertia.props[:is_mobile_app_web_view]).to eq(false)
+      expect(inertia.props[:add_to_library_option]).to eq("none")
+      expect(inertia.props[:confirmation_info]).to eq({
+                                                        id: @url_redirect.token,
+                                                        destination: nil,
+                                                        display: nil,
+                                                        email: nil,
+                                                      })
     end
 
     it "assigns the url_redirect correctly" do
@@ -1344,7 +1345,7 @@ describe UrlRedirectsController do
       it "assigns @destination with params[:destination]" do
         get :confirm_page, params: { id: @url_redirect.token, destination: "stream" }
 
-        expect(assigns(:react_component_props)[:confirmation_info][:destination]).to eq "stream"
+        expect(inertia.props[:confirmation_info][:destination]).to eq "stream"
       end
     end
 
@@ -1358,7 +1359,7 @@ describe UrlRedirectsController do
         it "assigns @destination with 'download_page'" do
           get :confirm_page, params: { id: @url_redirect.token }
 
-          expect(assigns(:react_component_props)[:confirmation_info][:destination]).to eq "download_page"
+          expect(inertia.props[:confirmation_info][:destination]).to eq "download_page"
         end
       end
 
@@ -1369,7 +1370,7 @@ describe UrlRedirectsController do
 
         get :confirm_page, params: { id: url_redirect.token }
 
-        expect(assigns(:react_component_props)[:confirmation_info][:destination]).to be_nil
+        expect(inertia.props[:confirmation_info][:destination]).to be_nil
       end
     end
   end
@@ -1804,6 +1805,91 @@ describe UrlRedirectsController do
         expect(response.parsed_body.count).to eq(2)
         expect(response.parsed_body[@audio.external_id]).to eq([@url_redirect.signed_location_for_file(@audio)])
         expect(response.parsed_body[@video.external_id]).to eq([@url_redirect.hls_playlist_or_smil_xml_path(@video), @url_redirect.signed_location_for_file(@video)])
+      end
+    end
+  end
+
+  describe "POST 'save_last_content_page'" do
+    let(:product) { create(:product_with_pdf_file) }
+    let(:purchase) { create(:purchase, link: product) }
+    let!(:url_redirect) { create(:url_redirect, link: product, purchase:) }
+
+    it "saves the last content page id for the purchase" do
+      expect do
+        post :save_last_content_page, params: { id: url_redirect.token, page_id: "page_123" }
+      end.to change { purchase.reload.last_content_page_id }.from(nil).to("page_123")
+
+      expect(response).to be_successful
+      expect(response.parsed_body).to eq("success" => true)
+    end
+
+    it "updates an existing last content page id" do
+      purchase.update!(last_content_page_id: "old_page")
+
+      expect do
+        post :save_last_content_page, params: { id: url_redirect.token, page_id: "new_page" }
+      end.to change { purchase.reload.last_content_page_id }.from("old_page").to("new_page")
+
+      expect(response).to be_successful
+    end
+
+    context "when there is no purchase" do
+      let!(:url_redirect_without_purchase) { create(:url_redirect, link: product, purchase: nil) }
+
+      it "returns an error" do
+        post :save_last_content_page, params: { id: url_redirect_without_purchase.token, page_id: "page_123" }
+
+        expect(response).to have_http_status(:unprocessable_entity)
+        expect(response.parsed_body).to eq("success" => false, "error" => "Purchase not found")
+      end
+    end
+
+    it "handles missing page_id parameter by setting nil" do
+      purchase.update!(last_content_page_id: "existing_page")
+
+      expect do
+        post :save_last_content_page, params: { id: url_redirect.token }
+      end.to change { purchase.reload.last_content_page_id }.from("existing_page").to(nil)
+
+      expect(response).to be_successful
+    end
+
+    context "when access is revoked for purchase" do
+      before do
+        purchase.update!(is_access_revoked: true)
+      end
+
+      it "redirects to expired page" do
+        post :save_last_content_page, params: { id: url_redirect.token, page_id: "page_123" }
+
+        expect(response).to redirect_to(url_redirect_expired_page_path(id: url_redirect.token))
+      end
+    end
+
+    context "when purchase is refunded" do
+      before do
+        purchase.update!(stripe_refunded: true)
+      end
+
+      it "raises an e404" do
+        expect do
+          post :save_last_content_page, params: { id: url_redirect.token, page_id: "page_123" }
+        end.to raise_error(ActionController::RoutingError)
+      end
+    end
+
+    context "with custom domain route", type: :request do
+      let!(:custom_domain) { create(:custom_domain, user: product.user) }
+
+      it "saves the last content page id via custom domain" do
+        expect do
+          post "/r/#{url_redirect.token}/save_last_content_page",
+               params: { page_id: "page_123" },
+               headers: { "HOST" => custom_domain.domain }
+        end.to change { purchase.reload.last_content_page_id }.from(nil).to("page_123")
+
+        expect(response).to be_successful
+        expect(response.parsed_body).to eq("success" => true)
       end
     end
   end

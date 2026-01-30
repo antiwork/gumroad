@@ -12,7 +12,7 @@ class Workflows::EmailsController < Sellers::BaseController
   FLASH_WORKFLOW_UNPUBLISHED = "Unpublished!"
 
   def index
-    @title = @workflow.name
+    set_meta_tag(title: @workflow.name)
     workflow_presenter = WorkflowPresenter.new(seller: current_seller, workflow: @workflow)
     render inertia: "Workflows/Emails/Index", props: {
       workflow: -> { workflow_presenter.workflow_props },
