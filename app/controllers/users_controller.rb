@@ -10,7 +10,7 @@ class UsersController < ApplicationController
 
   after_action :verify_authorized, only: %i[deactivate]
 
-  before_action :hide_layouts, only: %i[show coffee subscribe]
+  before_action :hide_layouts, only: %i[show coffee]
   before_action :set_as_modal, only: %i[show]
   before_action :set_user_and_custom_domain_config, only: %i[show coffee subscribe subscribe_preview]
   before_action :set_page_attributes, only: %i[show]
@@ -18,7 +18,7 @@ class UsersController < ApplicationController
   before_action :check_if_needs_redirect, only: %i[show]
   before_action :set_affiliate_cookie, only: %i[show]
 
-  layout "inertia", only: [:subscribe_preview]
+  layout "inertia", only: %i[subscribe subscribe_preview]
 
   def show
     format_search_params!
@@ -49,10 +49,12 @@ class UsersController < ApplicationController
 
   def subscribe
     set_meta_tag(title: "Subscribe to #{@user.name.presence || @user.username}")
+    set_favicon_meta_tags(@user)
     @profile_presenter = ProfilePresenter.new(
       pundit_user:,
       seller: @user
     )
+    render inertia: "Profile/Subscribe", props: { creator_profile: @profile_presenter.creator_profile }
   end
 
   def subscribe_preview

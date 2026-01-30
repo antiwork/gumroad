@@ -668,18 +668,19 @@ describe UsersController do
     end
   end
 
-  describe "GET subscribe" do
+  describe "GET subscribe", inertia: true do
     context "with user signed in as admin for seller" do
       include_context "with user signed in as admin for seller"
 
-      it "assigns the correct instance variables" do
+      it "renders Profile/Subscribe Inertia page with creator_profile" do
         @request.host = "#{creator.username}.test.gumroad.com"
         get :subscribe
 
-        expect(controller.send(:page_title)).to eq("Subscribe to creator")
-        profile_presenter = assigns[:profile_presenter]
-        expect(profile_presenter.seller).to eq(creator)
-        expect(profile_presenter.pundit_user).to eq(controller.pundit_user)
+        expect(response).to be_successful
+        expect(inertia.component).to eq("Profile/Subscribe")
+        expect(inertia.props[:creator_profile]).to be_present
+        expect(inertia.props[:creator_profile][:name]).to eq(creator.name_or_username)
+        expect(inertia.props[:creator_profile][:external_id]).to eq(creator.external_id)
       end
     end
   end
