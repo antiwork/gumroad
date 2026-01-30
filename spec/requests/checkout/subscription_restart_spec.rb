@@ -2,7 +2,7 @@
 
 require "spec_helper"
 
-describe "Checkout subscription restart", :js, :sidekiq_inline, :force_vcr_on, type: :system do
+describe "Checkout subscription restart", :js, :sidekiq_inline, type: :system do
   let(:seller) { create(:user) }
   let(:membership_product) { create(:membership_product, user: seller, price_cents: 1000) }
   let(:buyer) { create(:user, email: "buyer@example.com") }
@@ -32,6 +32,7 @@ describe "Checkout subscription restart", :js, :sidekiq_inline, :force_vcr_on, t
     fill_in_credit_card
     fill_in "ZIP code", with: "94107"
     click_button "Pay"
+    expect(page).to have_text("Your purchase was successful", wait: 30)
   end
 
   describe "when user has an active subscription" do
@@ -90,20 +91,16 @@ describe "Checkout subscription restart", :js, :sidekiq_inline, :force_vcr_on, t
         visit checkout_url_for(membership_product)
         complete_checkout
 
-        expect(page).to have_text("Your purchase was successful")
-
         cancelled_subscription.reload
         expect(cancelled_subscription.cancelled_at).to be_nil
         expect(cancelled_subscription.deactivated_at).to be_nil
       end
     end
 
-    context "when signed out with matching email", vcr: { cassette_name: "checkout/subscription_restart/cancelled_subscription_signed_out" } do
+    context "when signed out with matching email" do
       it "transparently restarts the subscription" do
         visit checkout_url_for(membership_product)
         complete_checkout(with_email: buyer.email)
-
-        expect(page).to have_text("Your purchase was successful")
 
         cancelled_subscription.reload
         expect(cancelled_subscription.cancelled_at).to be_nil
@@ -122,7 +119,7 @@ describe "Checkout subscription restart", :js, :sidekiq_inline, :force_vcr_on, t
       )
     end
 
-    context "when signed in", vcr: { cassette_name: "checkout/subscription_restart/failed_subscription" } do
+    context "when signed in" do
       before do
         login_as buyer
       end
@@ -130,8 +127,6 @@ describe "Checkout subscription restart", :js, :sidekiq_inline, :force_vcr_on, t
       it "transparently restarts the subscription" do
         visit checkout_url_for(membership_product)
         complete_checkout
-
-        expect(page).to have_text("Your purchase was successful")
 
         failed_subscription.reload
         expect(failed_subscription.failed_at).to be_nil
@@ -153,7 +148,7 @@ describe "Checkout subscription restart", :js, :sidekiq_inline, :force_vcr_on, t
       )
     end
 
-    context "when signed in", vcr: { cassette_name: "checkout/subscription_restart/seller_cancelled_subscription" } do
+    context "when signed in" do
       before do
         login_as buyer
       end
@@ -163,7 +158,6 @@ describe "Checkout subscription restart", :js, :sidekiq_inline, :force_vcr_on, t
 
         expect do
           complete_checkout
-          expect(page).to have_text("Your purchase was successful")
         end.to change { Subscription.count }.by(1)
       end
     end
@@ -182,7 +176,7 @@ describe "Checkout subscription restart", :js, :sidekiq_inline, :force_vcr_on, t
       )
     end
 
-    context "when signed in", vcr: { cassette_name: "checkout/subscription_restart/gift_purchase" } do
+    context "when signed in" do
       before do
         login_as buyer
       end
@@ -190,11 +184,7 @@ describe "Checkout subscription restart", :js, :sidekiq_inline, :force_vcr_on, t
       it "creates a new subscription for giftee instead of restarting their cancelled one" do
         visit checkout_url_for(membership_product)
 
-        find("label", text: "Give as a gift?").click
-        fill_in "Recipient's email address", with: "giftee@example.com"
-        complete_checkout
-
-        expect(page).to have_text("Your purchase was successful")
+        check_out(membership_product, gift: { email: "giftee@example.com" }, logged_in_user: buyer)
 
         giftee_cancelled_subscription.reload
         expect(giftee_cancelled_subscription.cancelled_at).to be_present

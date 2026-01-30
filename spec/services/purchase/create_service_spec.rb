@@ -3478,6 +3478,7 @@ describe Purchase::CreateService, :vcr do
         existing_purchase = create(:membership_purchase, link: membership_product, purchaser: buyer, email: buyer.email)
         subscription = existing_purchase.subscription
         subscription.update!(
+          user: buyer,
           cancelled_at: 1.day.ago,
           cancelled_by_buyer: true,
           deactivated_at: 1.day.ago

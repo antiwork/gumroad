@@ -408,7 +408,7 @@ class Purchase::CreateService < Purchase::BaseService
       ).perform
 
       if result[:success]
-        purchase = result[:purchase]
+        purchase = result[:purchase] || restartable_subscription.original_purchase
         self.purchase = purchase
         Rails.logger.info("Subscription #{restartable_subscription.external_id} restarted during checkout for product #{product.id}")
         return purchase, nil

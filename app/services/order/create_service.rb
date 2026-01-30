@@ -76,8 +76,15 @@ class Order::CreateService
         end
 
         if purchase&.persisted?
-          order.purchases << purchase
-          order.save!
+          # For subscription restarts without a new charge, the original purchase is returned
+          # which is already successful. Add its response directly since ChargeService
+          # only processes in_progress purchases.
+          if purchase.successful?
+            purchase_responses[line_item_uid] = purchase.purchase_response
+          else
+            order.purchases << purchase
+            order.save!
+          end
           if buyer.present? && buyer.email.blank? && !User.where(email: purchase.email).or(User.where(unconfirmed_email: purchase.email)).exists?
             buyer.update!(email: purchase.email)
           end
