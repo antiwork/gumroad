@@ -11,14 +11,14 @@ describe Subscription, ".restartable_for_user_and_product", :sidekiq_inline do
   def create_subscription_with_purchase(product:, purchaser:, **subscription_attrs)
     subscription = create(:subscription, link: product, user: purchaser)
     # Create purchase directly to avoid card charging issues
-    purchase = create(:purchase,
-      link: product,
-      purchaser: purchaser,
-      email: purchaser.email,
-      subscription: subscription,
-      is_original_subscription_purchase: true,
-      price_cents: product.price_cents,
-      variant_attributes: product.tiers.to_a
+    create(:purchase,
+           link: product,
+           purchaser: purchaser,
+           email: purchaser.email,
+           subscription: subscription,
+           is_original_subscription_purchase: true,
+           price_cents: product.price_cents,
+           variant_attributes: product.tiers.to_a
     )
     subscription.update!(subscription_attrs) if subscription_attrs.present?
     subscription
@@ -163,14 +163,14 @@ describe Subscription, ".active_for_user_and_product", :sidekiq_inline do
   def create_subscription_with_purchase(product:, purchaser:, **subscription_attrs)
     subscription = create(:subscription, link: product, user: purchaser)
     # Create purchase directly to avoid card charging issues
-    purchase = create(:purchase,
-      link: product,
-      purchaser: purchaser,
-      email: purchaser.email,
-      subscription: subscription,
-      is_original_subscription_purchase: true,
-      price_cents: product.price_cents,
-      variant_attributes: product.tiers.to_a
+    create(:purchase,
+           link: product,
+           purchaser: purchaser,
+           email: purchaser.email,
+           subscription: subscription,
+           is_original_subscription_purchase: true,
+           price_cents: product.price_cents,
+           variant_attributes: product.tiers.to_a
     )
     subscription.update!(subscription_attrs) if subscription_attrs.present?
     subscription

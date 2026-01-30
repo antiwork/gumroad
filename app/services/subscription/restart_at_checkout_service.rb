@@ -41,7 +41,6 @@ class Subscription::RestartAtCheckoutService
   end
 
   private
-
     def validate_restart
       return "This subscription cannot be restarted." if subscription.cancelled_by_seller?
       return "This subscription cannot be restarted." if product.deleted?

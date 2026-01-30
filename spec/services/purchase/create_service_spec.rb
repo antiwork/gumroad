@@ -3489,7 +3489,7 @@ describe Purchase::CreateService, :vcr do
       it "transparently restarts the subscription instead of creating a new one" do
         expect(Subscription::RestartAtCheckoutService).to receive(:new).and_call_original
 
-        purchase, error = Purchase::CreateService.new(
+        _, error = Purchase::CreateService.new(
           product: membership_product,
           params: membership_params,
           buyer: buyer
@@ -3570,7 +3570,7 @@ describe Purchase::CreateService, :vcr do
         logged_out_params = membership_params.dup
         logged_out_params[:purchase][:email] = "returning@example.com"
 
-        purchase, error = Purchase::CreateService.new(
+        _, error = Purchase::CreateService.new(
           product: membership_product,
           params: logged_out_params,
           buyer: nil # No logged in user

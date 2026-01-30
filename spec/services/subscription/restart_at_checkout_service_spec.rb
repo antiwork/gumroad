@@ -20,14 +20,14 @@ describe Subscription::RestartAtCheckoutService do
 
   def create_subscription_for_product(product:, purchaser:, email:, **subscription_attrs)
     subscription = create(:subscription, link: product, user: purchaser)
-    purchase = create(:purchase,
-      link: product,
-      purchaser: purchaser,
-      email: email,
-      subscription: subscription,
-      is_original_subscription_purchase: true,
-      price_cents: product.price_cents,
-      variant_attributes: product.tiers.to_a
+    create(:purchase,
+           link: product,
+           purchaser: purchaser,
+           email: email,
+           subscription: subscription,
+           is_original_subscription_purchase: true,
+           price_cents: product.price_cents,
+           variant_attributes: product.tiers.to_a
     )
     subscription.update!(subscription_attrs) if subscription_attrs.present?
     subscription
@@ -191,6 +191,5 @@ describe Subscription::RestartAtCheckoutService do
         expect(result[:error_message]).to eq("This subscription cannot be restarted.")
       end
     end
-
   end
 end

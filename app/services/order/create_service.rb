@@ -197,10 +197,10 @@ class Order::CreateService
         Bugsnag.notify(StandardError.new("Existing subscription checkout attempt")) do |report|
           report.severity = "info"
           report.add_metadata(:subscription, {
-            subscription_id: active_subscription.id,
-            product_id: product.id,
-            email: email
-          })
+                                subscription_id: active_subscription.id,
+                                product_id: product.id,
+                                email: email
+                              })
         end
         "Sorry, something went wrong. Please try again."
       end
