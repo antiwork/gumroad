@@ -735,7 +735,7 @@ const NotificationsSettingsModal = ({
     recap_frequency: settings.recap_frequency,
   });
 
-  const onSave = () => {
+  const saveNotificationSettings = () => {
     form.put(Routes.community_notification_settings_path(community.seller.id, community.id), {
       preserveScroll: true,
       onSuccess: () => {
@@ -755,7 +755,7 @@ const NotificationsSettingsModal = ({
           <Button disabled={form.processing} onClick={onClose}>
             Cancel
           </Button>
-          <Button color="primary" onClick={onSave} disabled={form.processing}>
+          <Button color="primary" onClick={saveNotificationSettings} disabled={form.processing}>
             {form.processing ? "Saving..." : "Save"}
           </Button>
         </>

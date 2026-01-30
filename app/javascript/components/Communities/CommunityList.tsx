@@ -1,4 +1,4 @@
-import { router } from "@inertiajs/react";
+import { Link, router } from "@inertiajs/react";
 import cx from "classnames";
 import * as React from "react";
 
@@ -24,22 +24,22 @@ export const CommunityList = ({
       const isCommunitySelected = community.id === selectedCommunity?.id;
 
       const handleCommunityClick = (e: React.MouseEvent) => {
-        e.preventDefault();
         if (isCommunitySelected) {
+          e.preventDefault();
           scrollTo({ target: community.unread_count > 0 ? "unread-separator" : "bottom" });
         } else {
-          router.get(`/communities/${community.seller.id}/${community.id}`, {}, { preserveState: true });
           onSelectCommunity(community.id);
         }
         if (!isAboveBreakpoint) setSidebarOpen(false);
       };
 
       return (
-        <a
+        <Link
           key={community.id}
           href={`/communities/${community.seller.id}/${community.id}`}
           aria-selected={isCommunitySelected}
           onClick={handleCommunityClick}
+          preserveState
           className={cx("flex items-center gap-2 p-2 no-underline", {
             "bg-black text-white": isCommunitySelected,
             "hover:bg-black/5 hover:text-black dark:hover:bg-white/5 dark:hover:text-white": !isCommunitySelected,
@@ -60,7 +60,7 @@ export const CommunityList = ({
               {community.unread_count}
             </span>
           ) : null}
-        </a>
+        </Link>
       );
     })}
   </section>
