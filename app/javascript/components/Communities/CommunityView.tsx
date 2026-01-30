@@ -120,7 +120,6 @@ export const CommunityView = ({ initialData }: { initialData: InitialCommunities
     selectedCommunity,
     selectedCommunityDraft,
     selectedCommunityChat,
-    setSelectedCommunityId,
     updateCommunity,
     updateCommunityDraft,
     updateCommunityChat,
@@ -480,14 +479,13 @@ export const CommunityView = ({ initialData }: { initialData: InitialCommunities
         });
       }
     }
-  }, [selectedCommunity]);
+  }, [selectedCommunity?.id]);
 
   React.useEffect(() => chatMessageInputRef.current?.focus(), [selectedCommunity?.id]);
 
   const switchSeller = (sellerId: string) => {
     const community = communities.find((community) => community.seller.id === sellerId);
     if (community) {
-      setSelectedCommunityId(community.id);
       router.get(`/communities/${community.seller.id}/${community.id}`, {}, { preserveState: true });
       setSwitcherOpen(false);
     }
@@ -654,7 +652,6 @@ export const CommunityView = ({ initialData }: { initialData: InitialCommunities
                 selectedCommunity={selectedCommunity}
                 isAboveBreakpoint={isAboveBreakpoint}
                 setSidebarOpen={setSidebarOpen}
-                onSelectCommunity={setSelectedCommunityId}
               />
             </div>
 

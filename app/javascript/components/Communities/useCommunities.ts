@@ -28,14 +28,13 @@ const sortByCreatedAt = <T extends { created_at: string }>(items: readonly T[]) 
 const sortByName = <T extends { name: string }>(items: readonly T[]) =>
   [...items].sort((a, b) => a.name.localeCompare(b.name));
 
-export const useCommunities = (initialData: InitialCommunitiesData) => {
-  const [communities, setCommunities] = React.useState<Community[]>(sortByName(initialData.communities));
-  const [notificationSettings, setNotificationSettings] = React.useState<CommunityNotificationSettings>(
-    initialData.notificationSettings,
-  );
-  const [selectedCommunityId, setSelectedCommunityId] = React.useState<string | null>(
-    initialData.selectedCommunityId ?? null,
-  );
+export const useCommunities = ({
+  hasProducts,
+  communities: initialCommunities,
+  notificationSettings,
+  selectedCommunityId,
+}: InitialCommunitiesData) => {
+  const [communities, setCommunities] = React.useState<Community[]>(sortByName(initialCommunities));
   const [communityDrafts, setCommunityDrafts] = React.useState<Record<string, CommunityDraft>>({});
   const [communityChats, setCommunityChats] = React.useState<Record<string, CommunityChat>>({});
 
@@ -115,12 +114,9 @@ export const useCommunities = (initialData: InitialCommunitiesData) => {
     [],
   );
 
-  // Update state when initialData changes (e.g., from Inertia navigation)
   React.useEffect(() => {
-    setSelectedCommunityId(initialData.selectedCommunityId ?? null);
-    setCommunities(sortByName(initialData.communities));
-    setNotificationSettings(initialData.notificationSettings);
-  }, [initialData.selectedCommunityId, initialData.communities, initialData.notificationSettings]);
+    setCommunities(sortByName(initialCommunities));
+  }, [initialCommunities]);
 
   const selectedCommunity = React.useMemo(
     () => communities.find((community) => community.id === selectedCommunityId),
@@ -138,15 +134,13 @@ export const useCommunities = (initialData: InitialCommunitiesData) => {
   );
 
   return {
-    hasProducts: initialData.hasProducts,
+    hasProducts,
     communities,
     notificationSettings,
     selectedCommunity,
     selectedCommunityDraft,
     selectedCommunityChat,
     updateCommunity,
-    setSelectedCommunityId,
-    setNotificationSettings,
     updateCommunityDraft,
     updateCommunityChat,
   };

@@ -1,4 +1,4 @@
-import { Link, router } from "@inertiajs/react";
+import { Link } from "@inertiajs/react";
 import cx from "classnames";
 import * as React from "react";
 
@@ -11,13 +11,11 @@ export const CommunityList = ({
   selectedCommunity,
   isAboveBreakpoint,
   setSidebarOpen,
-  onSelectCommunity,
 }: {
   communities: Community[];
   selectedCommunity: Community | null;
   isAboveBreakpoint: boolean;
   setSidebarOpen: (open: boolean) => void;
-  onSelectCommunity: (communityId: string) => void;
 }) => (
   <section role="navigation" aria-label="Community list" className="flex flex-col overflow-y-auto py-2">
     {communities.map((community) => {
@@ -27,8 +25,6 @@ export const CommunityList = ({
         if (isCommunitySelected) {
           e.preventDefault();
           scrollTo({ target: community.unread_count > 0 ? "unread-separator" : "bottom" });
-        } else {
-          onSelectCommunity(community.id);
         }
         if (!isAboveBreakpoint) setSidebarOpen(false);
       };
