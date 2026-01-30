@@ -75,7 +75,7 @@ RSpec.shared_examples_for "a product with 'Download all' buttons on file embed g
     visit(url)
 
     within_file_group("folder 1") do
-      expect(page).to have_disclosure("Download all")
+      expect(page).to have_disclosure_button("Download all")
     end
 
     within_file_group("Untitled") do
@@ -94,11 +94,11 @@ RSpec.shared_examples_for "a product with 'Download all' buttons on file embed g
     select_tab("Page 2")
 
     within_file_group("no downloadable files") do
-      expect(page).to_not have_disclosure("Download all")
+      expect(page).to_not have_disclosure_button("Download all")
     end
 
     within_file_group("total file size exceeds limit") do
-      expect(page).to_not have_disclosure("Download all")
+      expect(page).to_not have_disclosure_button("Download all")
     end
 
     expect_any_instance_of(SignedUrlHelper).to receive(:signed_download_url_for_s3_key_and_filename).with(@page2_folder_archive.s3_key, @page2_folder_archive.s3_filename).and_return("https://example.com/zip-archive.zip")

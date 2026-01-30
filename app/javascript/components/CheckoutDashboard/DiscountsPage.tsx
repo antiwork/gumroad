@@ -16,19 +16,21 @@ import { asyncVoid } from "$app/utils/promise";
 import { AbortError, assertResponseError } from "$app/utils/request";
 import { writeQueryParams } from "$app/utils/url";
 
-import { Button, buttonVariants } from "$app/components/Button";
+import { Button } from "$app/components/Button";
 import { DiscountInput, InputtedDiscount } from "$app/components/CheckoutDashboard/DiscountInput";
 import { Layout, Page } from "$app/components/CheckoutDashboard/Layout";
 import { CopyToClipboard } from "$app/components/CopyToClipboard";
 import { useCurrentSeller } from "$app/components/CurrentSeller";
 import { DateInput } from "$app/components/DateInput";
 import { Details } from "$app/components/Details";
+import { Dropdown } from "$app/components/Dropdown";
 import { Icon } from "$app/components/Icons";
 import { useLoggedInUser } from "$app/components/LoggedInUser";
 import { NumberInput } from "$app/components/NumberInput";
 import { Pagination, PaginationProps } from "$app/components/Pagination";
-import { Popover } from "$app/components/Popover";
+import { Popover, PopoverContent, PopoverTrigger } from "$app/components/Popover";
 import { PriceInput } from "$app/components/PriceInput";
+import { Search } from "$app/components/Search";
 import { Select, Option } from "$app/components/Select";
 import { showAlert } from "$app/components/server-components/Alert";
 import { Skeleton } from "$app/components/Skeleton";
@@ -45,7 +47,6 @@ import { useGlobalEventListener } from "$app/components/useGlobalEventListener";
 import { useOriginalLocation } from "$app/components/useOriginalLocation";
 import { useUserAgentInfo } from "$app/components/UserAgent";
 import { useSortingTableDriver, Sort } from "$app/components/useSortingTableDriver";
-import { WithTooltip } from "$app/components/WithTooltip";
 
 import blackFridayIllustration from "$assets/images/illustrations/black_friday.svg";
 import placeholder from "$assets/images/placeholders/discounts.png";
@@ -56,6 +57,7 @@ type Product = {
   currency_type: CurrencyCode;
   url: string;
   is_tiered_membership: boolean;
+  is_recurring_billing: boolean;
   archived: boolean;
 };
 
@@ -231,8 +233,6 @@ const DiscountsPage = ({
   });
 
   const [searchQuery, setSearchQuery] = React.useState<string | null>(initialQueryParams.query);
-  const [isSearchPopoverOpen, setIsSearchPopoverOpen] = React.useState(false);
-  const searchInputRef = React.useRef<HTMLInputElement | null>(null);
 
   const loadDiscounts = asyncVoid(async ({ page, query, sort, keepUrl }: QueryParams & { keepUrl?: boolean }) => {
     try {
@@ -263,10 +263,6 @@ const DiscountsPage = ({
   const reloadDiscounts = () => loadDiscounts({ page: pagination.page, query: searchQuery, sort });
 
   const debouncedLoadDiscounts = useDebouncedCallback(() => loadDiscounts({ page: 1, query: searchQuery, sort }), 300);
-
-  React.useEffect(() => {
-    if (isSearchPopoverOpen) searchInputRef.current?.focus();
-  }, [isSearchPopoverOpen]);
 
   const deleteOfferCode = async (id: string) => {
     await deleteDiscount(id);
@@ -302,34 +298,14 @@ const DiscountsPage = ({
       actions={
         <>
           {offerCodes.length > 0 ? (
-            <Popover
-              open={isSearchPopoverOpen}
-              onToggle={setIsSearchPopoverOpen}
-              aria-label="Search"
-              trigger={
-                <WithTooltip tip="Search" position="bottom">
-                  <div className={buttonVariants({ size: "default" })}>
-                    <Icon name="solid-search" />
-                  </div>
-                </WithTooltip>
-              }
-            >
-              <div className="input">
-                <Icon name="solid-search" />
-                <input
-                  ref={searchInputRef}
-                  type="text"
-                  placeholder="Search"
-                  value={searchQuery ?? ""}
-                  onChange={(evt) => {
-                    setSearchQuery(evt.target.value);
-                    debouncedLoadDiscounts();
-                  }}
-                />
-              </div>
-            </Popover>
+            <Search
+              onSearch={(query) => {
+                setSearchQuery(query);
+                debouncedLoadDiscounts();
+              }}
+              value={searchQuery ?? ""}
+            />
           ) : null}
-
           <Button
             color="accent"
             onClick={() => {
@@ -444,48 +420,51 @@ const DiscountsPage = ({
                           </Button>
                           <Popover
                             open={popoverOfferCodeId === offerCode.id}
-                            onToggle={(open) => setPopoverOfferCodeId(open ? offerCode.id : null)}
-                            aria-label="Open discount action menu"
-                            trigger={
-                              <div className={buttonVariants({ size: "default" })}>
-                                <Icon name="three-dots" />
-                              </div>
-                            }
+                            onOpenChange={(open) => {
+                              setPopoverOfferCodeId(open ? offerCode.id : null);
+                            }}
                           >
-                            <div role="menu">
-                              <div
-                                role="menuitem"
-                                inert={!offerCode.can_update || isLoading}
-                                onClick={() => {
-                                  setPopoverOfferCodeId(null);
-                                  setSelectedOfferCodeId(offerCode.id);
-                                  setView("create");
-                                }}
-                              >
-                                <Icon name="outline-duplicate" />
-                                &ensp;Duplicate
-                              </div>
-                              <div
-                                role="menuitem"
-                                className="danger"
-                                inert={!offerCode.can_update || isLoading}
-                                onClick={asyncVoid(async (e) => {
-                                  e.stopPropagation();
-                                  try {
-                                    setIsLoading(true);
+                            <PopoverTrigger asChild>
+                              <Button aria-label="Open discount action menu" onClick={(e) => e.stopPropagation()}>
+                                <Icon name="three-dots" />
+                              </Button>
+                            </PopoverTrigger>
+                            <PopoverContent sideOffset={4} className="border-0 p-0 shadow-none">
+                              <div role="menu">
+                                <div
+                                  role="menuitem"
+                                  inert={!offerCode.can_update || isLoading}
+                                  onClick={() => {
                                     setPopoverOfferCodeId(null);
-                                    await deleteOfferCode(offerCode.id);
-                                  } catch (e) {
-                                    assertResponseError(e);
-                                    showAlert(e.message, "error");
-                                  }
-                                  setIsLoading(false);
-                                })}
-                              >
-                                <Icon name="trash2" />
-                                &ensp;Delete
+                                    setSelectedOfferCodeId(offerCode.id);
+                                    setView("create");
+                                  }}
+                                >
+                                  <Icon name="outline-duplicate" />
+                                  &ensp;Duplicate
+                                </div>
+                                <div
+                                  role="menuitem"
+                                  className="danger"
+                                  inert={!offerCode.can_update || isLoading}
+                                  onClick={asyncVoid(async (e) => {
+                                    e.stopPropagation();
+                                    try {
+                                      setIsLoading(true);
+                                      setPopoverOfferCodeId(null);
+                                      await deleteOfferCode(offerCode.id);
+                                    } catch (e) {
+                                      assertResponseError(e);
+                                      showAlert(e.message, "error");
+                                    }
+                                    setIsLoading(false);
+                                  })}
+                                >
+                                  <Icon name="trash2" />
+                                  &ensp;Delete
+                                </div>
                               </div>
-                            </div>
+                            </PopoverContent>
                           </Popover>
                         </div>
                       </TableCell>
@@ -812,7 +791,7 @@ const Form = ({
   );
 
   const canSetDuration = (universal ? products : selectedProducts).some(
-    ({ is_tiered_membership }) => is_tiered_membership,
+    ({ is_recurring_billing }) => is_recurring_billing,
   );
   const [durationInBillingCycles, setDurationInMonths] = React.useState(offerCode?.duration_in_billing_cycles ?? null);
 
@@ -1055,7 +1034,7 @@ const Form = ({
                 </label>
               }
             >
-              <div className="dropdown">
+              <Dropdown>
                 <fieldset className={cx({ danger: maxQuantity.error })}>
                   <legend>
                     <label htmlFor={`${uid}quantity`}>Quantity</label>
@@ -1071,7 +1050,7 @@ const Form = ({
                     )}
                   </NumberInput>
                 </fieldset>
-              </div>
+              </Dropdown>
             </Details>
             <Details
               className="toggle"
@@ -1088,14 +1067,7 @@ const Form = ({
                 </label>
               }
             >
-              <div
-                className="dropdown"
-                style={{
-                  display: "grid",
-                  gridTemplateColumns: "repeat(auto-fit, minmax(var(--dynamic-grid), 1fr))",
-                  gap: "var(--spacer-4)",
-                }}
-              >
+              <Dropdown className="gap-4 lg:grid-cols-2">
                 <fieldset>
                   <legend>
                     <label htmlFor={`${uid}validAt`}>Valid from</label>
@@ -1132,7 +1104,7 @@ const Form = ({
                     aria-invalid={expiresAt.error ?? false}
                   />
                 </fieldset>
-              </div>
+              </Dropdown>
             </Details>
             <Details
               className="toggle"
@@ -1149,7 +1121,7 @@ const Form = ({
                 </label>
               }
             >
-              <div className="dropdown">
+              <Dropdown>
                 <fieldset className={cx({ danger: minimumAmount.error })}>
                   <legend>
                     <label htmlFor={`${uid}minimumAmount`}>Minimum amount</label>
@@ -1163,7 +1135,7 @@ const Form = ({
                     hasError={minimumAmount.error ?? false}
                   />
                 </fieldset>
-              </div>
+              </Dropdown>
             </Details>
             <Details
               className="toggle"
@@ -1180,7 +1152,7 @@ const Form = ({
                 </label>
               }
             >
-              <div className="dropdown">
+              <Dropdown>
                 <fieldset className={cx({ danger: minimumQuantity.error })}>
                   <legend>
                     <label htmlFor={`${uid}minimumQuantity`}>Minimum quantity per product</label>
@@ -1201,7 +1173,7 @@ const Form = ({
                     )}
                   </NumberInput>
                 </fieldset>
-              </div>
+              </Dropdown>
             </Details>
           </fieldset>
         </section>

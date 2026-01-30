@@ -64,6 +64,7 @@ export const ProductPreview = ({ showRefundPolicyModal }: { showRefundPolicyModa
     ratings: product.display_product_reviews ? ratings : null,
     is_legacy_subscription: false,
     is_tiered_membership: false,
+    is_recurring_billing: product.native_type === "membership",
     is_physical: false,
     custom_view_content_button_text: null,
     permalink: uniquePermalink,
