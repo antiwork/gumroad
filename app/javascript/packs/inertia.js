@@ -5,17 +5,12 @@ import { createRoot } from "react-dom/client";
 import AppWrapper from "../inertia/app_wrapper.tsx";
 import Layout, { AuthenticationLayout, LoggedInUserLayout } from "../inertia/layout.tsx";
 
-// Track Inertia requests for wait_for_ajax compatibility in tests
 router.on("start", () => {
-  if (typeof globalThis.__activeRequests === "number") {
-    ++globalThis.__activeRequests;
-  }
+  window.__activeRequests = (window.__activeRequests || 0) + 1;
 });
 
 router.on("finish", () => {
-  if (typeof globalThis.__activeRequests === "number") {
-    --globalThis.__activeRequests;
-  }
+  window.__activeRequests = Math.max((window.__activeRequests || 1) - 1, 0);
 });
 
 // Configure Inertia to send CSRF token with all requests
