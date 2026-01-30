@@ -28,6 +28,11 @@ class Purchase::CreateService < Purchase::BaseService
     end
 
     begin
+      if should_check_for_restartable_subscription?
+        subscription_result = handle_existing_subscription
+        return subscription_result if subscription_result.present?
+      end
+
       # create gift if necessary
       self.gift = create_gift if is_gift?
 
@@ -375,6 +380,40 @@ class Purchase::CreateService < Purchase::BaseService
         url_params.reject do |parameter_name, _parameter_value|
           RESERVED_URL_PARAMETERS.include?(parameter_name)
         end
+      end
+    end
+
+    # Check if we should look for restartable subscriptions
+    # Only applies to membership products that are not gifts
+    def should_check_for_restartable_subscription?
+      product.is_recurring_billing && !is_gift?
+    end
+
+    def handle_existing_subscription
+      user_or_email = buyer || purchase_params[:email]
+      return nil unless user_or_email.present?
+
+      restartable_subscription = Subscription.restartable_for_user_and_product(
+        user_or_email: user_or_email,
+        product: product
+      )
+
+      return nil unless restartable_subscription.present?
+
+      result = Subscription::RestartAtCheckoutService.new(
+        subscription: restartable_subscription,
+        product: product,
+        params: params,
+        buyer: buyer
+      ).perform
+
+      if result[:success]
+        purchase = result[:purchase]
+        self.purchase = purchase
+        Rails.logger.info("Subscription #{restartable_subscription.external_id} restarted during checkout for product #{product.id}")
+        return purchase, nil
+      else
+        return nil, result[:error_message]
       end
     end
 end

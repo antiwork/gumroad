@@ -95,8 +95,8 @@ class OrdersController < ApplicationController
       return false if [params[:wallet_type], params[:stripe_payment_method_id]].any?(&:blank?)
       payment_method = Stripe::PaymentMethod.retrieve(params[:stripe_payment_method_id])
       payment_method&.card&.wallet&.type == params[:wallet_type]
-    rescue Stripe::StripeError
-      render_error("Sorry, something went wrong.")
+    rescue Stripe::StripeError => e
+      render_error("Sorry, something went wrong. #{e.message}")
     end
 
     def permitted_order_params
