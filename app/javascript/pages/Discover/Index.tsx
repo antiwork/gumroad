@@ -235,6 +235,16 @@ export default function Discover() {
   const resultsRef = useScrollToElement(isBlackFridayPage && props.show_black_friday_hero, undefined, [state.params]);
 
   const fromUrl = React.useRef(false);
+
+  const refreshRecommendations = (url?: string) => {
+    router.visit(url || window.location.href, {
+      only: ["recommended_products", "recommended_wishlists"],
+      preserveState: true,
+      preserveScroll: true,
+      replace: true,
+    });
+  };
+
   React.useEffect(() => {
     if (!fromUrl.current) {
       // don't pushState if we're already loading from history state
@@ -273,12 +283,7 @@ export default function Discover() {
       // Keep server-provided recommended sections in sync with browser history navigation.
       // (We use pushState for the URL, so we need an Inertia visit to refresh props.)
       if (!newParams.query && !newParams.offer_code) {
-        router.visit(window.location.href, {
-          only: ["recommended_products", "recommended_wishlists"],
-          preserveState: true,
-          preserveScroll: true,
-          replace: true,
-        });
+        refreshRecommendations();
       }
     };
     window.addEventListener("popstate", parseUrl);
@@ -303,12 +308,7 @@ export default function Discover() {
     if (!prevOfferCode || state.params.offer_code) return;
     if (state.params.query) return;
 
-    router.visit(window.location.href, {
-      only: ["recommended_products", "recommended_wishlists"],
-      preserveState: true,
-      preserveScroll: true,
-      replace: true,
-    });
+    refreshRecommendations();
   }, [state.params.offer_code, state.params.query]);
 
   const isCuratedProducts =
@@ -342,11 +342,7 @@ export default function Discover() {
               ? Routes.discover_taxonomy_url(newTaxonomyPath)
               : Routes.discover_url();
 
-        router.visit(url, {
-          only: ["recommended_products", "recommended_wishlists"],
-          preserveState: true,
-          preserveScroll: true,
-        });
+        refreshRecommendations(url);
       }}
       query={state.params.query}
       setQuery={(query) => dispatch({ type: "set-params", params: { query, taxonomy: taxonomyPath } })}

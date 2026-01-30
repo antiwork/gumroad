@@ -49,14 +49,12 @@ class DiscoverController < ApplicationController
 
     prepare_discover_page
 
-    recommended_products = recommendations
-
     render inertia: "Discover/Index", props: {
       search_results:,
       currency_code: logged_in_user&.currency_type || "usd",
       taxonomies_for_nav:,
-      recommended_products:,
-      recommended_wishlists: recommended_products.any? && params[:query].blank? ? recommended_wishlists : [],
+      recommended_products: -> recommendations { recommendations },
+      recommended_wishlists: -> recommended_wishlists { recommended_wishlists },
       curated_product_ids: curated_products.map { _1.product.external_id },
       search_offset: params[:from] || 0,
       show_black_friday_hero: black_friday_feature_active?,
@@ -131,7 +129,7 @@ class DiscoverController < ApplicationController
       wishlists = RecommendedWishlistsService.fetch(
         limit: 4,
         current_seller:,
-        curated_product_ids: discover_curated_product_ids,
+        curated_product_ids: (params[:curated_product_ids] || []).map { ObfuscateIds.decrypt(_1) },
         taxonomy_id: taxonomy&.id
       )
 
@@ -141,16 +139,6 @@ class DiscoverController < ApplicationController
         layout: Product::Layout::DISCOVER,
         recommended_by: RecommendationType::GUMROAD_DISCOVER_WISHLIST_RECOMMENDATION,
       )
-    end
-
-    def discover_curated_product_ids
-      Array(params[:curated_product_ids]).filter_map do |id|
-        Integer(id)
-      rescue ArgumentError, TypeError
-        ObfuscateIds.decrypt(id)
-      rescue StandardError
-        nil
-      end
     end
 
     def prepare_discover_page
