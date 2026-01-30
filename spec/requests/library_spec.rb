@@ -444,6 +444,36 @@ describe("Library Scenario", type: :system, js: true) do
       expect(page).to have_selector("label:has(input[type=checkbox]):nth-of-type(4)", text: creator_with_3_products.name, visible: false)
       expect(page).to have_selector("label:has(input[type=checkbox]):nth-of-type(5)", text: creator_with_1_product.name, visible: false)
     end
+
+    it "updates creator counts when toggling archived filter" do
+      another_creator = create(:named_user, name: "Another Creator")
+      @a.update!(is_archived: true)
+      @b.update!(is_archived: true)
+      @c.update!(is_archived: true)
+
+      create(:purchase, link: create(:product, user: another_creator, name: "Another Product 1"), purchaser: @user)
+      create(:purchase, link: create(:product, user: another_creator, name: "Another Product 2"), purchaser: @user)
+      create(:purchase, link: create(:product, user: another_creator, name: "Another Product 3"), purchaser: @user, is_archived: true)
+
+      Link.import(refresh: true, force: true)
+      visit "/library"
+
+      expect(page).to have_text("Showing 1-9 of 9")
+      expect(find("label", text: @creator.name)).to have_text("(7)")
+      expect(find("label", text: another_creator.name)).to have_text("(2)")
+
+      find_and_click("label", text: "Show archived only")
+
+      expect(page).to have_text("Showing 1-4 of 4")
+      expect(find("label", text: @creator.name)).to have_text("(3)")
+      expect(find("label", text: another_creator.name)).to have_text("(1)")
+
+      find_and_click("label", text: "Show archived only")
+
+      expect(page).to have_text("Showing 1-9 of 9")
+      expect(find("label", text: @creator.name)).to have_text("(7)")
+      expect(find("label", text: another_creator.name)).to have_text("(2)")
+    end
   end
 
   it "allow marking deleted by the buyer" do

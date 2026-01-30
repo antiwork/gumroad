@@ -12,7 +12,7 @@ class Products::ArchivedController < Sellers::BaseController
 
     return redirect_to products_url if archived_products_page_presenter.empty?
 
-    @title = "Archived products"
+    set_meta_tag(title: "Archived products")
 
     render inertia: "Products/Archived/Index", props: {
       can_create_product: -> { archived_products_page_presenter.page_props[:can_create_product] },

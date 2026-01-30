@@ -7,7 +7,7 @@ class TaxCenterController < Sellers::BaseController
   def index
     authorize :balance
 
-    @title = "Payouts"
+    set_meta_tag(title: "Payouts")
     year = params[:year]&.to_i || Time.current.year - 1
 
     tax_center_presenter = TaxCenterPresenter.new(seller: current_seller, year:)
