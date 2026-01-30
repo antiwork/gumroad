@@ -88,7 +88,9 @@ export function StandaloneLayout({ children }: { children: React.ReactNode }) {
       <CurrentSellerProvider value={parseCurrentSeller(current_seller)}>
         <MetaTags />
         <Alert initial={null} />
-        <div className="flex min-h-screen flex-col">{children}</div>
+        <div className="flex h-screen flex-col lg:flex-row">
+          <main className="flex-1 overflow-y-auto">{children}</main>
+        </div>
       </CurrentSellerProvider>
     </LoggedInUserProvider>
   );
