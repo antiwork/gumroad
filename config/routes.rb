@@ -345,8 +345,10 @@ Rails.application.routes.draw do
       scope "/users" do
         get "/check_twitter_link", to: "users/oauth#check_twitter_link"
         get "/unsubscribe/:id", to: "users#email_unsubscribe", as: :user_unsubscribe
-        get "/unsubscribe_review_reminders", to: "users#unsubscribe_review_reminders", as: :user_unsubscribe_review_reminders
-        get "/subscribe_review_reminders", to: "users#subscribe_review_reminders", as: :user_subscribe_review_reminders
+        scope module: :users do
+          get "subscribe_review_reminders", to: "review_reminders#subscribe", as: :user_subscribe_review_reminders
+          get "unsubscribe_review_reminders", to: "review_reminders#unsubscribe", as: :user_unsubscribe_review_reminders
+        end
       end
     end
 
@@ -600,15 +602,26 @@ Rails.application.routes.draw do
       get :compute_discount
     end
 
-    resources :bundles, only: [:show, :update] do
-      member do
-        get "*other", to: "bundles#show"
-        post :update_purchases_content
+    resources :bundles, only: [:show] do
+      collection do
+        get :create_from_email
+      end
+    end
+
+    resources :bundles, only: [] do
+      scope module: :bundles do
+        resource :product, only: [:edit, :update], controller: "product"
+        resource :content, only: [:edit, :update], controller: "content" do
+          post :update_purchases_content
+        end
+        resource :share, only: [:edit, :update], controller: "share"
       end
 
-      collection do
-        get :products
-        get :create_from_email
+      # Backward compatibility redirects for old bundle edit URLs
+      member do
+        get :edit, to: redirect("/bundles/%{id}/product/edit")
+        get "edit/content", to: redirect("/bundles/%{id}/content/edit")
+        get "edit/share", to: redirect("/bundles/%{id}/share/edit")
       end
     end
 

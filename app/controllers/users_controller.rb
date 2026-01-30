@@ -10,13 +10,15 @@ class UsersController < ApplicationController
 
   after_action :verify_authorized, only: %i[deactivate]
 
-  before_action :hide_layouts, only: %i[show coffee subscribe subscribe_preview unsubscribe_review_reminders subscribe_review_reminders]
+  before_action :hide_layouts, only: %i[show coffee subscribe]
   before_action :set_as_modal, only: %i[show]
   before_action :set_user_and_custom_domain_config, only: %i[show coffee subscribe subscribe_preview]
   before_action :set_page_attributes, only: %i[show]
   before_action :set_user_for_action, only: %i[email_unsubscribe]
   before_action :check_if_needs_redirect, only: %i[show]
   before_action :set_affiliate_cookie, only: %i[show]
+
+  layout "inertia", only: [:subscribe_preview]
 
   def show
     format_search_params!
@@ -54,9 +56,10 @@ class UsersController < ApplicationController
   end
 
   def subscribe_preview
-    @subscribe_preview_props = {
+    render inertia: "Users/SubscribePreview", props: {
       avatar_url: @user.resized_avatar_url(size: 240),
       title: @user.name_or_username,
+      custom_styles: @user.seller_profile.custom_styles,
     }
   end
 
@@ -131,14 +134,6 @@ class UsersController < ApplicationController
       end
     end
     render json: { success: false }
-  end
-
-  def unsubscribe_review_reminders
-    logged_in_user.update!(opted_out_of_review_reminders: true)
-  end
-
-  def subscribe_review_reminders
-    logged_in_user.update!(opted_out_of_review_reminders: false)
   end
 
   private

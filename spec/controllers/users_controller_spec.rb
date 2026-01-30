@@ -2,6 +2,7 @@
 
 require "spec_helper"
 require "shared_examples/authorize_called"
+require "inertia_rails/rspec"
 
 describe UsersController do
   render_views
@@ -683,60 +684,14 @@ describe UsersController do
     end
   end
 
-  describe "GET subscribe_preview" do
+  describe "GET subscribe_preview", inertia: true do
     it "assigns subscribe preview props for the react component" do
       get :subscribe_preview, params: { username: creator.username }
       expect(response).to be_successful
-      expect(assigns[:subscribe_preview_props][:title]).to eq(creator.name_or_username)
-      expect(assigns[:subscribe_preview_props][:avatar_url]).to end_with(".png")
-    end
-  end
-
-  describe "GET unsubscribe_review_reminders" do
-    before do
-      @user = create(:user)
-    end
-
-    context "when user is logged in" do
-      it "sets opted_out_of_review_reminders flag successfully" do
-        sign_in(@user)
-        expect do
-          get :unsubscribe_review_reminders
-        end.to change { @user.reload.opted_out_of_review_reminders? }.from(false).to(true)
-        expect(response).to be_successful
-      end
-    end
-
-    context "when user is not logged in" do
-      it "redirects to login page" do
-        sign_out(@user)
-        get :unsubscribe_review_reminders
-        expect(response).to redirect_to(login_url(next: user_unsubscribe_review_reminders_path))
-      end
-    end
-  end
-
-  describe "GET subscribe_review_reminders" do
-    before do
-      @user = create(:user, opted_out_of_review_reminders: true)
-    end
-
-    context "when user is logged in" do
-      it "sets opted_out_of_review_reminders flag successfully" do
-        sign_in(@user)
-        expect do
-          get :subscribe_review_reminders
-        end.to change { @user.reload.opted_out_of_review_reminders? }.from(true).to(false)
-        expect(response).to be_successful
-      end
-    end
-
-    context "when user is not logged in" do
-      it "redirects to login page" do
-        sign_out(@user)
-        get :subscribe_review_reminders
-        expect(response).to redirect_to(login_url(next: user_subscribe_review_reminders_path))
-      end
+      expect(inertia.component).to eq("Users/SubscribePreview")
+      expect(inertia.props[:title]).to eq(creator.name_or_username)
+      expect(inertia.props[:avatar_url]).to end_with(".png")
+      expect(inertia.props[:custom_styles]).to eq(creator.seller_profile.custom_styles)
     end
   end
 end

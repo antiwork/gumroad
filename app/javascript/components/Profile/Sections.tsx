@@ -13,6 +13,7 @@ import {
 import { SearchResults } from "$app/data/search";
 import { CreatorProfile } from "$app/parsers/profile";
 import { CurrencyCode } from "$app/utils/currency";
+import { formatPostDate } from "$app/utils/date";
 
 import { Icon } from "$app/components/Icons";
 import { Product, Props as ProductProps } from "$app/components/Product";
@@ -21,7 +22,6 @@ import { PriceSelection } from "$app/components/Product/ConfigurationSelector";
 import { FollowForm } from "$app/components/Profile/FollowForm";
 import { useRichTextEditor } from "$app/components/RichTextEditor";
 import { CoffeeProduct } from "$app/components/server-components/Profile/CoffeePage";
-import { formatPostDate } from "$app/components/server-components/Profile/PostPage";
 import { CardContent } from "$app/components/ui/Card";
 import { useUserAgentInfo } from "$app/components/UserAgent";
 import { Card as WishlistCard, CardGrid as WishlistCardGrid, CardWishlist } from "$app/components/Wishlist/Card";
