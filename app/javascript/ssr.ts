@@ -21,7 +21,6 @@ import ProductEditPage from "$app/components/server-components/ProductEditPage";
 import Profile from "$app/components/server-components/Profile";
 import ProfileCoffeePage from "$app/components/server-components/Profile/CoffeePage";
 import ProfileProductPage from "$app/components/server-components/Profile/ProductPage";
-import ProfileWishlistPage from "$app/components/server-components/Profile/WishlistPage";
 import DisputeEvidencePage from "$app/components/server-components/Purchase/DisputeEvidencePage";
 import SecureRedirectPage from "$app/components/server-components/SecureRedirectPage";
 import SubscribePage from "$app/components/server-components/SubscribePage";
@@ -56,7 +55,6 @@ ReactOnRails.register({
   Profile,
   ProfileCoffeePage,
   ProfileProductPage,
-  ProfileWishlistPage,
   SecureRedirectPage,
   SubscribePage,
   SubscriptionManager,
