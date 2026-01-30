@@ -5,6 +5,7 @@ class CommunitiesController < ApplicationController
   after_action :verify_authorized
   before_action :set_community, only: [:show, :update_notification_settings]
   before_action :set_default_page_title
+
   layout "inertia"
 
   def index
