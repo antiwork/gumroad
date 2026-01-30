@@ -141,11 +141,14 @@ describe("Product Edit Scenario", type: :system, js: true) do
     select_disclosure "Insert" do
       click_on "Upsell"
     end
-    select_combo_box_option search: "Sample product", from: "Product"
-    check "Add a discount to the offered product"
-    choose "Fixed amount"
-    fill_in "Fixed amount", with: "1"
-    click_on "Insert"
+
+    within_modal do
+      select_combo_box_option search: "Sample product", from: "Product"
+      check "Add a discount to the offered product"
+      choose "Fixed amount"
+      fill_in "Fixed amount", with: "1"
+      click_on "Insert"
+    end
 
     within("[aria-label='Description']") do
       within_section "Sample product", section_element: :article do
@@ -212,6 +215,9 @@ describe("Product Edit Scenario", type: :system, js: true) do
       expect(variant2_option).to have_selector("span.icon.icon-arrow-right-reply"); # icon for variant
     end
 
+    discount_amount_cents = 100
+    discount_amount = discount_amount_cents / 100.0
+
     # When searching, only variants should appear, not the product itself, and no icon
     within_modal do
       fill_in "Product", with: "Sample product"
@@ -222,16 +228,14 @@ describe("Product Edit Scenario", type: :system, js: true) do
 
       variant2_option = find("[role='option']", text: "Sample product (#{variant2.name})")
       expect(variant2_option).not_to have_selector("span.icon.icon-arrow-right-reply"); # icon for variant
-    end
 
-    # Select the first variant
-    select_combo_box_option search: "Sample product (#{variant1.name})", from: "Product"
-    check "Add a discount to the offered product"
-    choose "Fixed amount"
-    discount_amount_cents = 100
-    discount_amount = discount_amount_cents / 100.0
-    fill_in "Fixed amount", with: discount_amount
-    click_on "Insert"
+      # Select the first variant
+      select_combo_box_option search: "Sample product (#{variant1.name})", from: "Product"
+      check "Add a discount to the offered product"
+      choose "Fixed amount"
+      fill_in "Fixed amount", with: discount_amount
+      click_on "Insert"
+    end
 
     within_section "Sample product", section_element: :article do
       expect(page).to have_selector("span", text: "(#{variant1.name})")
@@ -289,11 +293,13 @@ describe("Product Edit Scenario", type: :system, js: true) do
     select_disclosure "Insert" do
       click_on "Upsell"
     end
-    select_combo_box_option search: "Sample product", from: "Product"
-    check "Add a discount to the offered product"
-    choose "Fixed amount"
-    fill_in "Fixed amount", with: "1"
-    click_on "Insert"
+    within_modal do
+      select_combo_box_option search: "Sample product", from: "Product"
+      check "Add a discount to the offered product"
+      choose "Fixed amount"
+      fill_in "Fixed amount", with: "1"
+      click_on "Insert"
+    end
 
     within_section "Sample product", section_element: :article do
       expect(page).to have_text("5.0 (1)", normalize_ws: true)
@@ -930,7 +936,7 @@ describe("Product Edit Scenario", type: :system, js: true) do
         end
         expect(page).to have_text("Conversion is not reversible once completed.")
 
-        expect(page).to have_link("Yes, let's select the products", href: "#{bundle_path(product.external_id)}/content")
+        expect(page).to have_link("Yes, let's select the products", href: edit_bundle_content_path(product.external_id))
         click_on "No, cancel"
       end
 
