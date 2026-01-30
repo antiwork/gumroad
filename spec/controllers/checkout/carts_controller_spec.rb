@@ -2,7 +2,7 @@
 
 require "spec_helper"
 
-describe Api::Internal::CartsController do
+describe Checkout::CartsController do
   let!(:seller) { create(:named_seller) }
 
   describe "PUT update" do

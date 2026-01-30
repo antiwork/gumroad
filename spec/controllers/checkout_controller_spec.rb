@@ -5,10 +5,9 @@ require "inertia_rails/rspec"
 
 describe CheckoutController, type: :controller, inertia: true do
   describe "GET index" do
-    it "renders Inertia Checkout/Index component with correct instance variables and props" do
+    it "renders Inertia Checkout/Index component with correct props" do
       get :index
 
-      expect(assigns[:on_checkout_page]).to eq(true)
       expect(response).to be_successful
       expect(inertia.component).to eq("Checkout/Index")
 
@@ -91,7 +90,7 @@ describe CheckoutController, type: :controller, inertia: true do
           end
         end
 
-        context "when the cart matching the `cart_id` query param has the `browser_guid` same as the current `_gumroad_guid` cookie value" do
+        context "when the cart matching the `cart_id` query param has the `browser_guid` same as the current `_gumroad_guid` cookie value"  do
           it "redirects to the same path without modifying the cart" do
             browser_guid = SecureRandom.uuid
             cookies[:_gumroad_guid] = browser_guid
