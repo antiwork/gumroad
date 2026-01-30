@@ -233,6 +233,10 @@ const CheckoutPage = () => {
   >(null);
   const currentOffer = offers?.[0];
 
+  // Because the Apple Pay dialog has to be opened synchronously, we need
+  // to precompute what the surcharges would be if the offer were accepted.
+  // Without this, the price displayed on the Apple Pay payment sheet
+  // won't reflect the accepted offer.
   const [surchargesIfAccepted, setSurchargesIfAccepted] = React.useState<SurchargesResponse | null>(null);
   useOnChange(
     () =>
@@ -265,6 +269,9 @@ const CheckoutPage = () => {
     completeOffer();
   };
 
+  // show (the Stripe Payment Request method that triggers the Apple Pay
+  // modal) can't be called in asynchronous code, so we have to use a
+  // synchronous layout effect.
   useOnChangeSync(() => {
     if (state.status.type !== "offering") return;
     const seenCrossSellIds = new Set();
@@ -427,6 +434,7 @@ const CheckoutPage = () => {
             recommenderModelName: item.recommender_model_name,
             affiliateId: item.affiliate_id,
             customFields: buildCustomFieldValues(item.product.custom_fields, state.customFieldValues, item.product),
+            // TODO: Pass item.url_parameters (Record<string, string>) here after new checkout experience is rolled out
             urlParameters: JSON.stringify(item.url_parameters),
             referrer: item.referrer,
           };
