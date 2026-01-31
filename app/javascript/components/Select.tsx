@@ -267,7 +267,6 @@ const Option = <IsMulti extends boolean>(props: OptionProps<Option, IsMulti>) =>
         "px-4 py-2",
         "cursor-pointer",
         props.isFocused && "bg-primary text-primary-foreground",
-        "[&_img]:h-6 [&_img]:w-6 [&_img]:flex-shrink-0 [&_img]:rounded [&_img]:border [&_img]:border-border [&_img]:object-cover",
       )}
       ref={props.innerRef}
       id={innerProps.id}

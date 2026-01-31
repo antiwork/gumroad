@@ -108,7 +108,11 @@ export const Search = ({ query, setQuery }: { query?: string | undefined; setQue
             </div>
           ) : (
             <a {...props} href={item.url} className={cx("flex items-center gap-4 no-underline", props.className)}>
-              <img src={item.thumbnail_url ?? thumbnailPlaceholder} alt={item.name} />
+              <img
+                src={item.thumbnail_url ?? thumbnailPlaceholder}
+                alt={item.name}
+                className="h-12 w-12 flex-none rounded border border-border object-cover"
+              />
               <div>
                 {highlightQuery(item.name)}
                 <small>{item.seller_name ? `Product by ${item.seller_name}` : "Product"}</small>
