@@ -357,6 +357,14 @@ describe Purchase, :vcr do
 
         expect(Purchase.for_library).to include(purchase)
       end
+
+      it "excludes recurring subscription charges that are not gift receiver purchases" do
+        original = create(:membership_purchase)
+        renewal = create(:purchase, link: original.link, subscription: original.subscription,
+                         is_original_subscription_purchase: false, is_gift_receiver_purchase: false)
+
+        expect(Purchase.for_library).not_to include(renewal)
+      end
     end
 
     describe ".for_mobile_listing" do
@@ -383,6 +391,20 @@ describe Purchase, :vcr do
         create(:membership_purchase, purchase_state: "successful", is_original_subscription_purchase: true, is_archived_original_subscription_purchase: true)
 
         expect(Purchase.where.not(id: original_purchase.id).for_mobile_listing).to be_empty
+      end
+
+      it "includes gift receiver purchases with a subscription" do
+        purchase = create(:membership_purchase, :gift_receiver, is_original_subscription_purchase: false)
+
+        expect(Purchase.for_mobile_listing).to include(purchase)
+      end
+
+      it "excludes recurring subscription charges that are not gift receiver purchases" do
+        original = create(:membership_purchase)
+        renewal = create(:purchase, link: original.link, subscription: original.subscription,
+                         is_original_subscription_purchase: false, is_gift_receiver_purchase: false)
+
+        expect(Purchase.for_mobile_listing).not_to include(renewal)
       end
     end
 

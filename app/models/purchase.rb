@@ -534,7 +534,13 @@ class Purchase < ApplicationRecord
     all_success_states
     .not_is_deleted_by_buyer
     .not_is_additional_contribution
-    .not_recurring_charge
+    .where(
+      "purchases.subscription_id IS NULL OR purchases.flags & ? = ? OR purchases.flags & ? = ?",
+      flag_mapping["flags"][:is_original_subscription_purchase],
+      flag_mapping["flags"][:is_original_subscription_purchase],
+      flag_mapping["flags"][:is_gift_receiver_purchase],
+      flag_mapping["flags"][:is_gift_receiver_purchase]
+    )
     .not_is_gift_sender_purchase
     .not_refunded_except_subscriptions
     .not_chargedback_or_chargedback_reversed
