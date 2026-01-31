@@ -402,6 +402,9 @@ GEM
     google-protobuf (4.29.3)
       bigdecimal
       rake (>= 13)
+    google-protobuf (4.29.3-aarch64-linux)
+      bigdecimal
+      rake (>= 13)
     google-protobuf (4.29.3-arm64-darwin)
       bigdecimal
       rake (>= 13)
@@ -421,6 +424,9 @@ GEM
       os (>= 0.9, < 2.0)
       signet (>= 0.16, < 2.a)
     grpc (1.70.1)
+      google-protobuf (>= 3.25, < 5.0)
+      googleapis-common-protos-types (~> 1.0)
+    grpc (1.70.1-aarch64-linux)
       google-protobuf (>= 3.25, < 5.0)
       googleapis-common-protos-types (~> 1.0)
     grpc (1.70.1-arm64-darwin)
@@ -515,6 +521,7 @@ GEM
       rexml
     language_server-protocol (3.17.0.5)
     libv8-node (18.19.0.0)
+    libv8-node (18.19.0.0-aarch64-linux)
     libv8-node (18.19.0.0-arm64-darwin)
     libv8-node (18.19.0.0-x86_64-darwin)
     libv8-node (18.19.0.0-x86_64-linux)
@@ -601,6 +608,8 @@ GEM
     nio4r (2.7.4)
     nokogiri (1.18.10)
       mini_portile2 (~> 2.8.2)
+      racc (~> 1.4)
+    nokogiri (1.18.10-aarch64-linux-gnu)
       racc (~> 1.4)
     nokogiri (1.18.10-arm64-darwin)
       racc (~> 1.4)
@@ -1115,6 +1124,7 @@ GEM
       rubyzip (>= 1.0.0)
 
 PLATFORMS
+  aarch64-linux
   arm64-darwin
   ruby
   x86_64-darwin
