@@ -88,7 +88,17 @@ $accent-color: map-get($colors, "pink"); // [1]
 
       &.stats {
         // [3]
+        width: 100%;
+        display: table;
+        table-layout: fixed;
+
+        tbody {
+          display: table-row-group;
+        }
+
         tr {
+          display: table-row;
+
           &:first-child {
             td {
               padding-bottom: spacer(5);
@@ -116,11 +126,22 @@ $accent-color: map-get($colors, "pink"); // [1]
 
       &.list {
         // [3]
+        width: 100%;
+        display: table;
+        table-layout: fixed;
+        border: none;
+
         & > thead {
-          display: revert;
+          display: table-header-group;
+        }
+
+        & > tbody {
+          display: table-row-group;
         }
 
         tr {
+          display: table-row;
+
           &:first-child {
             td {
               padding-top: 0;
@@ -135,8 +156,10 @@ $accent-color: map-get($colors, "pink"); // [1]
 
           td,
           th {
+            display: table-cell;
             vertical-align: top;
-            padding: spacer(2);
+            border: none;
+            padding: 0 spacer(3) spacer(3);
 
             &:first-child {
               padding-left: 0;

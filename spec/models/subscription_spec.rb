@@ -987,42 +987,92 @@ describe Subscription, :vcr do
     end
 
     describe "discount with duration" do
-      let(:user) { create(:user) }
-      let(:product) { create(:membership_product_with_preset_tiered_pricing, user:) }
-      let(:offer_code) { create(:offer_code, products: [product]) }
-      let(:subscription) { create(:membership_purchase, link: product, offer_code:, variant_attributes: [product.alive_variants.first], price_cents: 200).subscription }
+      context "tiered membership" do
+        let(:user) { create(:user) }
+        let(:product) { create(:membership_product_with_preset_tiered_pricing, user:) }
+        let(:offer_code) { create(:offer_code, products: [product]) }
+        let(:subscription) { create(:subscription, user: create(:user, credit_card: create(:credit_card)), link: product) }
 
-      before do
-        subscription.original_purchase.create_purchase_offer_code_discount!(offer_code:, offer_code_amount: 100, offer_code_is_percent: false, pre_discount_minimum_price_cents: 300, duration_in_billing_cycles: 1)
-      end
-
-      context "when the discount is no longer valid" do
-        it "charges the full price" do
-          subscription.charge!
-
-          purchase = Purchase.last
-          expect(purchase.offer_code).to eq(nil)
-          expect(purchase.displayed_price_cents).to eq(300)
-          expect(purchase.price_cents).to eq(300)
-          expect(purchase.purchase_offer_code_discount).to eq(nil)
-        end
-      end
-
-      context "when the discount is still valid" do
         before do
-          subscription.original_purchase.purchase_offer_code_discount.update!(duration_in_billing_cycles: 2)
+          purchase = create(:purchase, link: product, email: subscription.user.email, full_name: "squiddy",
+                                       price_cents: 200, is_original_subscription_purchase: true,
+                                       subscription: subscription, offer_code: offer_code,
+                                       variant_attributes: [product.alive_variants.first], created_at: 2.days.ago)
+          purchase.create_purchase_offer_code_discount!(offer_code: offer_code, offer_code_amount: 100, offer_code_is_percent: false, pre_discount_minimum_price_cents: 300, duration_in_billing_cycles: 1)
         end
 
-        it "charges the discounted price" do
-          subscription.charge!
+        context "when the discount is no longer valid" do
+          it "charges the full price" do
+            subscription.charge!
 
-          purchase = Purchase.last
-          expect(purchase.displayed_price_cents).to eq(200)
-          expect(purchase.price_cents).to eq(200)
-          purchase_offer_code_discount = purchase.purchase_offer_code_discount
-          expect(purchase_offer_code_discount.offer_code).to eq(offer_code)
-          expect(purchase_offer_code_discount.offer_code_amount).to eq(100)
-          expect(purchase_offer_code_discount.offer_code_is_percent).to eq(false)
+            purchase = Purchase.last
+            expect(purchase.offer_code).to eq(nil)
+            expect(purchase.displayed_price_cents).to eq(300)
+            expect(purchase.price_cents).to eq(300)
+            expect(purchase.purchase_offer_code_discount).to eq(nil)
+          end
+        end
+
+        context "when the discount is still valid" do
+          before do
+            subscription.original_purchase.purchase_offer_code_discount.update!(duration_in_billing_cycles: 2)
+          end
+
+          it "charges the discounted price" do
+            subscription.charge!
+
+            purchase = Purchase.last
+            expect(purchase.displayed_price_cents).to eq(200)
+            expect(purchase.price_cents).to eq(200)
+            purchase_offer_code_discount = purchase.purchase_offer_code_discount
+            expect(purchase_offer_code_discount.offer_code).to eq(offer_code)
+            expect(purchase_offer_code_discount.offer_code_amount).to eq(100)
+            expect(purchase_offer_code_discount.offer_code_is_percent).to eq(false)
+          end
+        end
+      end
+
+      context "legacy subscription" do
+        let(:user) { create(:user) }
+        let(:product) { create(:subscription_product, user:, price_cents: 300) }
+        let(:offer_code) { create(:offer_code, products: [product], amount_cents: 100) }
+        let(:subscription) { create(:subscription, user: create(:user, credit_card: create(:credit_card)), link: product) }
+
+        before do
+          purchase = create(:purchase, link: product, email: subscription.user.email, full_name: "squiddy",
+                                       price_cents: 200, is_original_subscription_purchase: true,
+                                       subscription: subscription, offer_code: offer_code, created_at: 2.days.ago)
+          purchase.create_purchase_offer_code_discount!(offer_code: offer_code, offer_code_amount: 100, offer_code_is_percent: false, pre_discount_minimum_price_cents: 300, duration_in_billing_cycles: 1)
+        end
+
+        context "when the discount is no longer valid" do
+          it "charges the full price" do
+            subscription.charge!
+
+            purchase = Purchase.last
+            expect(purchase.offer_code).to eq(nil)
+            expect(purchase.displayed_price_cents).to eq(300)
+            expect(purchase.price_cents).to eq(300)
+            expect(purchase.purchase_offer_code_discount).to eq(nil)
+          end
+        end
+
+        context "when the discount is still valid" do
+          before do
+            subscription.original_purchase.purchase_offer_code_discount.update!(duration_in_billing_cycles: 2)
+          end
+
+          it "charges the discounted price" do
+            subscription.charge!
+
+            purchase = Purchase.last
+            expect(purchase.displayed_price_cents).to eq(200)
+            expect(purchase.price_cents).to eq(200)
+            purchase_offer_code_discount = purchase.purchase_offer_code_discount
+            expect(purchase_offer_code_discount.offer_code).to eq(offer_code)
+            expect(purchase_offer_code_discount.offer_code_amount).to eq(100)
+            expect(purchase_offer_code_discount.offer_code_is_percent).to eq(false)
+          end
         end
       end
     end

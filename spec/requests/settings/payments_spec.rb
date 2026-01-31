@@ -1725,55 +1725,6 @@ describe("Payments Settings Scenario", type: :system, js: true) do
       end
     end
 
-    describe "Kazakhstan creator" do
-      before do
-        old_user_compliance_info = @user.alive_user_compliance_info
-        new_user_compliance_info = old_user_compliance_info.dup
-        new_user_compliance_info.country = "Kazakhstan"
-
-        ActiveRecord::Base.transaction do
-          old_user_compliance_info.mark_deleted!
-          new_user_compliance_info.save!
-        end
-
-        @user.active_bank_account&.mark_deleted!
-        @user.update!(payment_address: nil)
-      end
-
-      it "collects PayPal payout info instead of bank details" do
-        visit settings_payments_path
-
-        fill_in("First name", with: "barnabas")
-        fill_in("Last name", with: "barnabastein")
-        fill_in("Address", with: "address_full_match")
-        fill_in("City", with: "Almaty")
-        fill_in("Phone number", with: "7012345678")
-        fill_in("Postal code", with: "050000")
-
-        select("1", from: "Day")
-        select("January", from: "Month")
-        select("1980", from: "Year")
-        select("Kazakhstan", from: "Country")
-        fill_in("Individual identification number (IIN)", with: "000000000")
-
-        expect(page).to have_field("PayPal Email")
-        fill_in("PayPal Email", with: "kazakh@example.com")
-
-        click_on("Update settings")
-
-        expect(page).to have_alert(text: "Thanks! You're all set.")
-        compliance_info = @user.alive_user_compliance_info
-        expect(compliance_info.first_name).to eq("barnabas")
-        expect(compliance_info.last_name).to eq("barnabastein")
-        expect(compliance_info.street_address).to eq("address_full_match")
-        expect(compliance_info.city).to eq("Almaty")
-        expect(compliance_info.zip_code).to eq("050000")
-        expect(compliance_info.phone).to eq("+77012345678")
-        expect(@user.reload.payment_address).to eq("kazakh@example.com")
-        expect(@user.reload.active_bank_account).to be_nil
-      end
-    end
-
     describe "AE business" do
       before do
         old_user_compliance_info = @user.alive_user_compliance_info
@@ -3133,6 +3084,95 @@ describe("Payments Settings Scenario", type: :system, js: true) do
         expect(compliance_info.birthday).to eq(Date.new(1980, 1, 1))
         expect(@user.reload.active_bank_account.send(:account_number_decrypted)).to eq("RS35105008123123123173")
         expect(@user.reload.active_bank_account.routing_number).to eq("TESTSERBXXX")
+      end
+    end
+
+    describe "KZ creator" do
+      before do
+        old_user_compliance_info = @user.alive_user_compliance_info
+        new_user_compliance_info = old_user_compliance_info.dup
+        new_user_compliance_info.country = "Kazakhstan"
+        ActiveRecord::Base.transaction do
+          old_user_compliance_info.mark_deleted!
+          new_user_compliance_info.save!
+        end
+      end
+
+      it "allows to enter bank account details" do
+        visit settings_payments_path
+
+        choose "Bank Account"
+
+        fill_in("First name", with: "barnabas")
+        fill_in("Last name", with: "barnabastein")
+        fill_in("Address", with: "address_full_match")
+        fill_in("City", with: "Almaty")
+        fill_in("Phone number", with: "7012345678")
+        fill_in("Postal code", with: "050000")
+
+        select("1", from: "Day")
+        select("January", from: "Month")
+        select("1980", from: "Year")
+
+        fill_in("Pay to the order of", with: "barnabas ngagy")
+        fill_in("SWIFT / BIC Code", with: "AAAAKZKZXXX")
+        fill_in("IBAN", with: "KZ221251234567890123")
+        fill_in("Confirm IBAN", with: "KZ221251234567890123")
+
+        fill_in("Individual identification number (IIN)", with: "000000000")
+
+        expect(page).to have_content("Must exactly match the name on your bank account")
+        expect(page).to have_content("Payouts will be made in KZT.")
+
+        click_on("Update settings")
+
+        expect(page).to have_content("Thanks! You're all set.")
+        expect(page).to have_content("SWIFT / BIC code")
+        compliance_info = @user.alive_user_compliance_info
+        expect(compliance_info.first_name).to eq("barnabas")
+        expect(compliance_info.last_name).to eq("barnabastein")
+        expect(compliance_info.street_address).to eq("address_full_match")
+        expect(compliance_info.city).to eq("Almaty")
+        expect(compliance_info.zip_code).to eq("050000")
+        expect(compliance_info.phone).to eq("+77012345678")
+        expect(compliance_info.birthday).to eq(Date.new(1980, 1, 1))
+        expect(@user.reload.active_bank_account.send(:account_number_decrypted)).to eq("KZ221251234567890123")
+        expect(@user.reload.active_bank_account.routing_number).to eq("AAAAKZKZXXX")
+      end
+
+      it "allows to enter PayPal details" do
+        visit settings_payments_path
+
+        choose "PayPal"
+
+        fill_in("First name", with: "barnabas")
+        fill_in("Last name", with: "barnabastein")
+        fill_in("Address", with: "address_full_match")
+        fill_in("City", with: "barnabasville")
+        fill_in("Phone number", with: "9876543210")
+        fill_in("Postal code", with: "10110")
+
+        select("1", from: "Day")
+        select("January", from: "Month")
+        select("1980", from: "Year")
+
+        expect(page).to have_status(text: "PayPal payouts are subject to a 2% processing fee.")
+        fill_in("PayPal Email", with: "kzcr@example.com")
+
+        click_on("Update settings")
+
+        expect(page).to have_content("Thanks! You're all set.")
+        compliance_info = @user.alive_user_compliance_info
+        expect(compliance_info.first_name).to eq("barnabas")
+        expect(compliance_info.last_name).to eq("barnabastein")
+        expect(compliance_info.street_address).to eq("address_full_match")
+        expect(compliance_info.city).to eq("barnabasville")
+        expect(compliance_info.zip_code).to eq("10110")
+        expect(compliance_info.country).to eq("Kazakhstan")
+        expect(compliance_info.phone).to eq("+79876543210")
+        expect(compliance_info.birthday).to eq(Date.new(1980, 1, 1))
+        expect(@user.reload.payment_address).to eq("kzcr@example.com")
+        expect(@user.active_bank_account).to be nil
       end
     end
 

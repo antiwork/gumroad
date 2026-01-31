@@ -29,7 +29,7 @@ class User
     end
 
     def can_setup_paypal_payouts?
-      payment_address.present? || !native_payouts_supported? || signed_up_from_united_arab_emirates? || signed_up_from_egypt?
+      payment_address.present? || !native_payouts_supported? || signed_up_from_united_arab_emirates? || signed_up_from_egypt? || signed_up_from_kazakhstan?
     end
 
     def charge_paypal_payout_fee?
