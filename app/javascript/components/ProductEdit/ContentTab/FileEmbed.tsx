@@ -490,8 +490,6 @@ const FileEmbedNodeView = ({ node, editor, getPos, updateAttributes }: NodeViewP
           {downloadUrl && !file.stream_only ? (
             <Button
               asChild
-              // href={downloadUrl}
-              // download={`${file.display_name}.${file.extension?.toLocaleLowerCase()}`}
             >
               <a href={downloadUrl} download={`${file.display_name}.${file.extension?.toLocaleLowerCase()}`}>
                 Download

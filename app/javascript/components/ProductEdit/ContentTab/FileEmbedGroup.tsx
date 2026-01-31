@@ -192,13 +192,7 @@ const FileEmbedGroupNodeView = ({
                           Zipping files...
                         </Button>
                       ) : isTuple(downloadableFiles, 1) ? (
-                        <Button
-                          asChild
-                          // href={downloadableFiles[0].url ?? undefined}
-                          // download={downloadableFiles[0].display_name}
-                          // target="_blank"
-                          // rel="noopener noreferrer"
-                        >
+                        <Button asChild>
                           <a
                             href={downloadableFiles[0].url ?? undefined}
                             download={downloadableFiles[0].display_name}
