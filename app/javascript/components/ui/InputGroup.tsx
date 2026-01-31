@@ -2,7 +2,8 @@ import { cva, type VariantProps } from "class-variance-authority";
 import * as React from "react";
 
 import { classNames } from "$app/utils/classNames";
-import { useFieldset, stateBorderStyles } from "$app/components/ui/Fieldset";
+
+import { stateBorderStyles, useFieldset } from "$app/components/ui/Fieldset";
 
 const InputGroupContext = React.createContext<{ isInsideInputGroup: boolean; disabled?: boolean }>({
   isInsideInputGroup: false,
@@ -38,9 +39,10 @@ export const InputGroup = React.forwardRef<
   React.HTMLAttributes<HTMLDivElement> & VariantProps<typeof inputGroupVariants>
 >(({ className, disabled, readOnly, children, ...props }, ref) => {
   const { state } = useFieldset();
+  const contextValue = React.useMemo(() => ({ isInsideInputGroup: true, disabled: disabled ?? false }), [state]);
 
   return (
-    <InputGroupContext.Provider value={{ isInsideInputGroup: true, disabled: disabled ?? false }}>
+    <InputGroupContext.Provider value={contextValue}>
       <div
         ref={ref}
         className={classNames(inputGroupVariants({ disabled, readOnly }), stateBorderStyles[state], className)}

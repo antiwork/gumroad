@@ -22,13 +22,16 @@ const fieldsetStyles = "flex flex-col border-none gap-2 [&[role=group]_label_inp
 export const Fieldset = React.forwardRef<
   HTMLFieldSetElement,
   React.FieldsetHTMLAttributes<HTMLFieldSetElement> & { state?: FieldsetState | undefined }
->(({ className, state, children, ...props }, ref) => (
-  <FieldsetContext.Provider value={{ state: state ?? "default" }}>
-    <fieldset ref={ref} className={classNames(fieldsetStyles, className)} {...props}>
-      {children}
-    </fieldset>
-  </FieldsetContext.Provider>
-));
+>(({ className, state, children, ...props }, ref) => {
+  const contextValue = React.useMemo(() => ({ state: state ?? "default" }), [state]);
+  return (
+    <FieldsetContext.Provider value={contextValue}>
+      <fieldset ref={ref} className={classNames(fieldsetStyles, className)} {...props}>
+        {children}
+      </fieldset>
+    </FieldsetContext.Provider>
+  );
+});
 Fieldset.displayName = "Fieldset";
 
 export const FieldsetTitle = React.forwardRef<
