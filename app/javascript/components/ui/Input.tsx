@@ -11,7 +11,8 @@ export const baseInputStyles = classNames(
   "disabled:cursor-not-allowed disabled:opacity-30",
 );
 
-const inputGroupChildStyles = "border-none flex-1 bg-transparent shadow-none outline-none -mx-4 max-w-none";
+// !important override should be removed after complete forms migration
+const inputGroupChildStyles = "border-none! flex-1 bg-transparent! shadow-none! outline-none! -mx-4 max-w-none";
 
 export const Input = React.forwardRef<HTMLInputElement, React.InputHTMLAttributes<HTMLInputElement>>(
   ({ className, readOnly, ...props }, ref) => {

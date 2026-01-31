@@ -21,6 +21,7 @@ export const Radio = React.forwardRef<
         "checked:bg-accent",
         "rounded-full",
         "peer",
+        "after:hidden!", // this should be removed after complete forms migration
         className,
       )}
       {...props}
