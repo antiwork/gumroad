@@ -183,6 +183,26 @@ describe LibraryPresenter do
       end
     end
 
+    context "when purchase is a gift receiver subscription" do
+      let(:gift_purchase) do
+        create(:membership_purchase, :gift_receiver,
+               link: product,
+               purchaser: buyer,
+               is_original_subscription_purchase: false)
+      end
+
+      before do
+        gift_purchase.create_url_redirect!
+      end
+
+      it "includes gift receiver subscription purchases in library" do
+        purchases, _ = described_class.new(buyer).library_cards
+
+        gift_ids = purchases.map { |p| p[:purchase][:id] }
+        expect(gift_ids).to include(gift_purchase.external_id)
+      end
+    end
+
     describe "bundle purchase" do
       let(:purchase1) { create(:purchase, purchaser: buyer, link: create(:product, :bundle)) }
       let(:purchase2) { create(:purchase, purchaser: buyer, link: create(:product, :bundle)) }
