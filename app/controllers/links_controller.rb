@@ -128,7 +128,7 @@ class LinksController < ApplicationController
 
       unless (@product.customizable_price || cart_item[:option]&.[](:is_pwyw)) &&
              (params[:price].blank? || params[:price] < cart_item[:price])
-        return redirect_to checkout_index_url(**params.permit!, host: DOMAIN, product: @product.unique_permalink,
+        return redirect_to checkout_index_url(**params.permit!.except(:code, :offer_code), host: DOMAIN, product: @product.unique_permalink,
                                                               rent: cart_item[:rental], recurrence: cart_item[:recurrence],
                                                               price: cart_item[:price],
                                                               code: @product.best_offer_code_for(params[:offer_code] || params[:code]),
