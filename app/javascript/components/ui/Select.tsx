@@ -1,8 +1,9 @@
 import * as React from "react";
 
 import { classNames } from "$app/utils/classNames";
-import { useFieldset, stateBorderStyles } from "$app/components/ui/Fieldset";
+
 import { Icon } from "$app/components/Icons";
+import { useFieldset, stateBorderStyles } from "$app/components/ui/Fieldset";
 import { baseInputStyles } from "$app/components/ui/Input";
 
 export const Select = React.forwardRef<
