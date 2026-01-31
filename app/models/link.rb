@@ -826,7 +826,7 @@ class Link < ApplicationRecord
     return url_code unless default_offer
     return default_code unless url_offer
 
-    url_offer.amount_off(price_cents) >= default_offer.amount_off(price_cents) ? url_code : default_code
+    url_offer.amount_off(price_cents) > default_offer.amount_off(price_cents) ? url_code : default_code
   end
 
   def find_offer_code_by_external_id(external_id)

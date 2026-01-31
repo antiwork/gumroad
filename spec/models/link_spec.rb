@@ -4828,12 +4828,12 @@ describe Link, :vcr do
       expect(product.best_offer_code_for(small_discount.code)).to eq(big_discount.code)
     end
 
-    it "returns the URL code when discounts are equal" do
+    it "returns the default code when discounts are equal" do
       code_a = create(:offer_code, code: "codea", user: seller, products: [product], amount_cents: nil, amount_percentage: 25)
       code_b = create(:offer_code, code: "codeb", user: seller, products: [product], amount_cents: nil, amount_percentage: 25)
       product.update!(default_offer_code: code_b)
 
-      expect(product.best_offer_code_for(code_a.code)).to eq(code_a.code)
+      expect(product.best_offer_code_for(code_a.code)).to eq(code_b.code)
     end
   end
 end
