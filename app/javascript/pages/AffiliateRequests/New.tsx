@@ -4,7 +4,7 @@ import { cast } from "ts-safe-cast";
 
 import { CreatorProfile } from "$app/parsers/profile";
 
-import { Button } from "$app/components/Button";
+import { Button } from "$app/components/ui/Button";
 import { useAppDomain } from "$app/components/DomainSettings";
 import { useLoggedInUser } from "$app/components/LoggedInUser";
 import { Layout } from "$app/components/Profile/Layout";

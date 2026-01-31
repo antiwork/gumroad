@@ -108,7 +108,7 @@ export const buttonVariants = cva(
 );
 
 // Legacy props for backward compatibility
-type ButtonVariation = {
+export type ButtonVariation = {
   color?: ButtonColor | BrandName | undefined;
   outline?: boolean | undefined;
   small?: boolean | undefined;
@@ -135,30 +135,5 @@ export const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
 );
 Button.displayName = "Button";
 
-export interface NavigationButtonProps extends Omit<React.ComponentPropsWithoutRef<"a">, "color">, ButtonVariation {
-  disabled?: boolean | undefined;
-}
+// NavigationButton removed
 
-export const NavigationButton = React.forwardRef<HTMLAnchorElement, NavigationButtonProps>(
-  ({ className, color, outline, small, disabled, children, ...props }, ref) => (
-    <Button asChild className={className} color={color} outline={outline} small={small} disabled={disabled}>
-      <a
-        ref={ref}
-        inert={disabled}
-        {...props}
-        onClick={(evt) => {
-          if (props.onClick == null) return;
-
-          if (props.href == null || props.href === "#") evt.preventDefault();
-
-          props.onClick(evt);
-
-          evt.stopPropagation();
-        }}
-      >
-        {children}
-      </a>
-    </Button>
-  ),
-);
-NavigationButton.displayName = "NavigationButton";

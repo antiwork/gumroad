@@ -7,7 +7,7 @@ import React from "react";
 
 import FileUtils from "$app/utils/file";
 
-import { Button } from "$app/components/Button";
+import { Button } from "$app/components/ui/Button";
 import { useCurrentSeller } from "$app/components/CurrentSeller";
 import { useDomains } from "$app/components/DomainSettings";
 import { FileRowContent } from "$app/components/FileRowContent";

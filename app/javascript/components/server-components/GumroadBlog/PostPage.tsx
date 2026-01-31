@@ -7,7 +7,7 @@ import { incrementPostViews } from "$app/data/view_event";
 import { formatPostDate } from "$app/utils/date";
 import { register } from "$app/utils/serverComponentUtil";
 
-import { Button } from "$app/components/Button";
+import { Button } from "$app/components/ui/Button";
 import { Icon } from "$app/components/Icons";
 import { LoadingSpinner } from "$app/components/LoadingSpinner";
 import { useRichTextEditor } from "$app/components/RichTextEditor";

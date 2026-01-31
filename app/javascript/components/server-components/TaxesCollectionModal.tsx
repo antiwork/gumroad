@@ -4,7 +4,7 @@ import { cast, createCast } from "ts-safe-cast";
 import { assertResponseError, request, ResponseError } from "$app/utils/request";
 import { register } from "$app/utils/serverComponentUtil";
 
-import { Button } from "$app/components/Button";
+import { Button } from "$app/components/ui/Button";
 import { LoadingSpinner } from "$app/components/LoadingSpinner";
 import { Modal } from "$app/components/Modal";
 

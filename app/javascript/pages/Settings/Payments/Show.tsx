@@ -11,7 +11,7 @@ import type { ComplianceInfo, PayoutMethod, FormFieldName, User, PayoutDebitCard
 import { formatPriceCentsWithCurrencySymbol, formatPriceCentsWithoutCurrencySymbol } from "$app/utils/currency";
 import { asyncVoid } from "$app/utils/promise";
 
-import { Button } from "$app/components/Button";
+import { Button } from "$app/components/ui/Button";
 import { ConfirmBalanceForfeitOnPayoutMethodChangeModal } from "$app/components/ConfirmBalanceForfeitOnPayoutMethodChangeModal";
 import { CountrySelectionModal } from "$app/components/CountrySelectionModal";
 import { Icon } from "$app/components/Icons";

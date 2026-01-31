@@ -1,13 +1,13 @@
-import { useForm, usePage } from "@inertiajs/react";
+import { useForm, usePage, Link } from "@inertiajs/react";
 import * as React from "react";
 import { cast } from "ts-safe-cast";
 
 import { isUrlValid } from "$app/utils/url";
 
-import { Button } from "$app/components/Button";
+import { Button } from "$app/components/ui/Button";
 import { Icon } from "$app/components/Icons";
 import { useLoggedInUser } from "$app/components/LoggedInUser";
-import { NavigationButtonInertia } from "$app/components/NavigationButton";
+
 import { showAlert } from "$app/components/server-components/Alert";
 import { PageHeader } from "$app/components/ui/PageHeader";
 
@@ -135,10 +135,12 @@ export default function AffiliatesEdit() {
         title="Edit Affiliate"
         actions={
           <>
-            <NavigationButtonInertia href={Routes.affiliates_path()} disabled={processing}>
-              <Icon name="x-square" />
-              Cancel
-            </NavigationButtonInertia>
+            <Button asChild disabled={processing}>
+              <Link href={Routes.affiliates_path()}>
+                <Icon name="x-square" />
+                Cancel
+              </Link>
+            </Button>
             <Button
               color="accent"
               onClick={handleSubmit}

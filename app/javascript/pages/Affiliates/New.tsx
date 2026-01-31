@@ -1,4 +1,4 @@
-import { useForm, usePage } from "@inertiajs/react";
+import { useForm, usePage, Link } from "@inertiajs/react";
 import cx from "classnames";
 import * as React from "react";
 import { cast } from "ts-safe-cast";
@@ -6,10 +6,9 @@ import { cast } from "ts-safe-cast";
 import { isValidEmail } from "$app/utils/email";
 import { isUrlValid } from "$app/utils/url";
 
-import { Button } from "$app/components/Button";
+import { Button } from "$app/components/ui/Button";
 import { Icon } from "$app/components/Icons";
 import { useLoggedInUser } from "$app/components/LoggedInUser";
-import { NavigationButtonInertia } from "$app/components/NavigationButton";
 import { showAlert } from "$app/components/server-components/Alert";
 import { PageHeader } from "$app/components/ui/PageHeader";
 
@@ -130,10 +129,12 @@ export default function AffiliatesNew() {
         title="New Affiliate"
         actions={
           <>
-            <NavigationButtonInertia href={Routes.affiliates_path()} disabled={processing}>
-              <Icon name="x-square" />
-              Cancel
-            </NavigationButtonInertia>
+            <Button asChild disabled={processing}>
+              <Link href={Routes.affiliates_path()}>
+                <Icon name="x-square" />
+                Cancel
+              </Link>
+            </Button>
             <Button
               color="accent"
               onClick={handleSubmit}

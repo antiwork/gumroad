@@ -5,7 +5,7 @@ import { cast } from "ts-safe-cast";
 
 import { classNames } from "$app/utils/classNames";
 
-import { Button } from "$app/components/Button";
+import { Button } from "$app/components/ui/Button";
 import Errors from "$app/components/Form/Errors";
 
 type Props = {

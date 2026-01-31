@@ -4,7 +4,7 @@ import FileUtils from "$app/utils/file";
 import { getMimeType } from "$app/utils/mimetypes";
 import { summarizeUploadProgress } from "$app/utils/summarizeUploadProgress";
 
-import { Button } from "$app/components/Button";
+import { Button } from "$app/components/ui/Button";
 import { useEvaporateUploader } from "$app/components/EvaporateUploader";
 import { FileRowContent } from "$app/components/FileRowContent";
 import { Icon } from "$app/components/Icons";

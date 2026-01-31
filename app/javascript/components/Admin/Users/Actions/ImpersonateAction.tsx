@@ -1,7 +1,7 @@
 import React from "react";
 
 import { type User } from "$app/components/Admin/Users/User";
-import { buttonVariants } from "$app/components/Button";
+import { buttonVariants } from "$app/components/ui/Button";
 import { WithTooltip } from "$app/components/WithTooltip";
 
 type ImpersonateActionProps = {

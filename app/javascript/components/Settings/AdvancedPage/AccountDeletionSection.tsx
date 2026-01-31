@@ -3,7 +3,7 @@ import { cast } from "ts-safe-cast";
 
 import { assertResponseError, request, ResponseError } from "$app/utils/request";
 
-import { Button } from "$app/components/Button";
+import { Button } from "$app/components/ui/Button";
 import { Modal } from "$app/components/Modal";
 import { showAlert } from "$app/components/server-components/Alert";
 

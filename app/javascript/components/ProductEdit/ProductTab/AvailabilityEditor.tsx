@@ -1,7 +1,7 @@
 import { fromZonedTime, toZonedTime, format } from "date-fns-tz";
 import * as React from "react";
 
-import { Button } from "$app/components/Button";
+import { Button } from "$app/components/ui/Button";
 import { useCurrentSeller } from "$app/components/CurrentSeller";
 import { DateInput } from "$app/components/DateInput";
 import { Icon } from "$app/components/Icons";

@@ -4,7 +4,7 @@ import { fetchServerInfo } from "$app/data/discord_integration";
 import { DISCORD_CLIENT_ID, DISCORD_OAUTH_URL } from "$app/utils/integrations";
 import { startOauthRedirectChecker } from "$app/utils/oauth";
 
-import { Button } from "$app/components/Button";
+import { Button } from "$app/components/ui/Button";
 import { LoadingSpinner } from "$app/components/LoadingSpinner";
 import { useProductEditContext } from "$app/components/ProductEdit/state";
 import { showAlert } from "$app/components/server-components/Alert";

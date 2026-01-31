@@ -4,7 +4,7 @@ import * as React from "react";
 import { isOpenTuple, last } from "$app/utils/array";
 import { assert } from "$app/utils/assert";
 
-import { Button } from "$app/components/Button";
+import { Button } from "$app/components/ui/Button";
 import { Icon } from "$app/components/Icons";
 
 export type PaginationProps = { pages: number; page: number };

@@ -5,7 +5,7 @@ import { cast } from "ts-safe-cast";
 
 import type { ComplianceInfo, FormFieldName, User } from "$app/types/payments";
 
-import { Button } from "$app/components/Button";
+import { Button } from "$app/components/ui/Button";
 import { Icon } from "$app/components/Icons";
 
 const AccountDetailsSection = ({

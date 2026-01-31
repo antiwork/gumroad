@@ -13,7 +13,7 @@ import { classNames } from "$app/utils/classNames";
 import { formatDate } from "$app/utils/date";
 import { assertResponseError } from "$app/utils/request";
 
-import { Button } from "$app/components/Button";
+import { Button } from "$app/components/ui/Button";
 import { useAppDomain } from "$app/components/DomainSettings";
 import { Icon } from "$app/components/Icons";
 import { useLoggedInUser } from "$app/components/LoggedInUser";

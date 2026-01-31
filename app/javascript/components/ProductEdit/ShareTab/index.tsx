@@ -1,7 +1,7 @@
 import hands from "images/illustrations/hands.png";
 import * as React from "react";
 
-import { Button, NavigationButton } from "$app/components/Button";
+import { Button } from "$app/components/ui/Button";
 import { CopyToClipboard } from "$app/components/CopyToClipboard";
 import { useCurrentSeller } from "$app/components/CurrentSeller";
 import { useDiscoverUrl } from "$app/components/DomainSettings";
@@ -48,15 +48,19 @@ export const ShareTab = () => {
                   Copy URL
                 </Button>
               </CopyToClipboard>
-              <NavigationButton
-                href={`https://gum.new?productId=${id}`}
-                target="_blank"
-                rel="noopener noreferrer"
+              <Button
+                asChild
                 color="accent"
               >
-                <Icon name="plus" />
-                Create Gum
-              </NavigationButton>
+                <a
+                  href={`https://gum.new?productId=${id}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                >
+                  <Icon name="plus" />
+                  Create Gum
+                </a>
+              </Button>
             </div>
           </section>
           <ProfileSectionsEditor

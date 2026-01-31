@@ -5,7 +5,7 @@ import { cast } from "ts-safe-cast";
 
 import { assertResponseError, request } from "$app/utils/request";
 
-import { Button } from "$app/components/Button";
+import { Button } from "$app/components/ui/Button";
 import { LoadingSpinner } from "$app/components/LoadingSpinner";
 import { Modal } from "$app/components/Modal";
 

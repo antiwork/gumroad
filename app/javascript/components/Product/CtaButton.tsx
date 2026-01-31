@@ -6,7 +6,7 @@ import { formatInstallmentPaymentSchedule } from "$app/utils/price";
 import { assertResponseError } from "$app/utils/request";
 import { trackProductEvent } from "$app/utils/user_analytics";
 
-import { NavigationButton } from "$app/components/Button";
+import { Button } from "$app/components/ui/Button";
 import { getNotForSaleMessage, Product, ProductDiscount, Purchase } from "$app/components/Product";
 import {
   applySelection,
@@ -144,24 +144,28 @@ export const CtaButton = React.forwardRef<HTMLAnchorElement, Props>(
 
     return (
       <>
-        <NavigationButton ref={ref} href={url.toString()} color="accent" {...buttonCommonProps}>
-          {label ??
-            (purchase
-              ? "Purchase again"
-              : product.recurrences
-                ? "Subscribe"
-                : selection.rent
-                  ? "Rent"
-                  : product.custom_button_text_option
-                    ? getCtaName(product.custom_button_text_option)
-                    : "I want this!")}
-        </NavigationButton>
+        <Button asChild color="accent" style={buttonCommonProps.style}>
+          <a href={url.toString()} {...buttonCommonProps} ref={ref}>
+            {label ??
+              (purchase
+                ? "Purchase again"
+                : product.recurrences
+                  ? "Subscribe"
+                  : selection.rent
+                    ? "Rent"
+                    : product.custom_button_text_option
+                      ? getCtaName(product.custom_button_text_option)
+                      : "I want this!")}
+          </a>
+        </Button>
 
         {product.installment_plan && product.installment_plan.number_of_installments > 1 ? (
           <>
-            <NavigationButton color="black" href={urlWithInstallments.toString()} {...buttonCommonProps}>
-              Pay in {product.installment_plan.number_of_installments} installments
-            </NavigationButton>
+            <Button asChild color="black" style={buttonCommonProps.style}>
+              <a href={urlWithInstallments.toString()} {...buttonCommonProps}>
+                Pay in {product.installment_plan.number_of_installments} installments
+              </a>
+            </Button>
             {showInstallmentPlanNotes ? (
               <small className="text-center">
                 {formatInstallmentPaymentSchedule(

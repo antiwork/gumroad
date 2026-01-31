@@ -5,7 +5,7 @@ import { isOpenTuple } from "$app/utils/array";
 import { assert } from "$app/utils/assert";
 import { classNames } from "$app/utils/classNames";
 
-import { Button } from "$app/components/Button";
+import { Button } from "$app/components/ui/Button";
 import { useCurrentSeller } from "$app/components/CurrentSeller";
 import { Icon } from "$app/components/Icons";
 import { Popover, PopoverContent, PopoverTrigger } from "$app/components/Popover";

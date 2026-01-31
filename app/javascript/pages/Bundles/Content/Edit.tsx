@@ -7,7 +7,7 @@ import { BundleProductItem } from "$app/components/BundleEdit/ContentTab/BundleP
 import { BundleProductSelector } from "$app/components/BundleEdit/ContentTab/BundleProductSelector";
 import { BundleEditLayout, useProductUrl } from "$app/components/BundleEdit/Layout";
 import { BundleProduct } from "$app/components/BundleEdit/types";
-import { Button } from "$app/components/Button";
+import { Button } from "$app/components/ui/Button";
 import { CartItemList } from "$app/components/CartItemList";
 import { Icon } from "$app/components/Icons";
 import { LoadingSpinner } from "$app/components/LoadingSpinner";

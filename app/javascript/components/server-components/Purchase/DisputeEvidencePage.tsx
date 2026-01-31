@@ -17,7 +17,7 @@ import { asyncVoid } from "$app/utils/promise";
 import { assertResponseError } from "$app/utils/request";
 import { register } from "$app/utils/serverComponentUtil";
 
-import { Button, NavigationButton } from "$app/components/Button";
+import { Button } from "$app/components/ui/Button";
 import { Icon } from "$app/components/Icons";
 import { LoadingSpinner } from "$app/components/LoadingSpinner";
 import { showAlert } from "$app/components/server-components/Alert";
@@ -388,9 +388,11 @@ const Files = ({
             </div>
           </RowContent>
           <RowActions>
-            <NavigationButton outline href={Routes.s3_utility_cdn_url_for_blob_path({ key: blob.key })} target="_blank">
-              View
-            </NavigationButton>
+            <Button asChild outline>
+              <a href={Routes.s3_utility_cdn_url_for_blob_path({ key: blob.key })} target="_blank">
+                View
+              </a>
+            </Button>
             {blob.signed_id ? (
               <Button
                 color="danger"

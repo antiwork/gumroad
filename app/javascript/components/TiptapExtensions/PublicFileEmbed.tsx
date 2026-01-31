@@ -7,7 +7,7 @@ import * as React from "react";
 import FileUtils, { FILE_TYPE_EXTENSIONS_MAP } from "$app/utils/file";
 
 import { AudioPlayer } from "$app/components/AudioPlayer";
-import { Button } from "$app/components/Button";
+import { Button } from "$app/components/ui/Button";
 import { FileRowContent } from "$app/components/FileRowContent";
 import { Icon } from "$app/components/Icons";
 import { usePublicFilesSettings } from "$app/components/ProductEdit/ProductTab/DescriptionEditor";

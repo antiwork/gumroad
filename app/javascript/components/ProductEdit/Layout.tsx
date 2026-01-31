@@ -7,7 +7,7 @@ import { setProductPublished } from "$app/data/publish_product";
 import { classNames } from "$app/utils/classNames";
 import { assertResponseError } from "$app/utils/request";
 
-import { Button, NavigationButton } from "$app/components/Button";
+import { Button } from "$app/components/ui/Button";
 import { CopyToClipboard } from "$app/components/CopyToClipboard";
 import { useCurrentSeller } from "$app/components/CurrentSeller";
 import { useDomains } from "$app/components/DomainSettings";
@@ -96,23 +96,27 @@ const NotifyAboutProductUpdatesAlert = () => {
             <Button color="primary" outline onClick={() => close()}>
               Skip for now
             </Button>
-            <NavigationButton
+            <Button
+              asChild
               color="primary"
-              href={Routes.new_email_path({
-                template: "content_updates",
-                product: uniquePermalink,
-                bought: contentUpdates?.uniquePermalinkOrVariantIds ?? [],
-              })}
               onClick={() => {
                 // NOTE: this is a workaround to make sure the alert closes after the tab is opened
                 // with correct URL params. Otherwise `bought` won't be set correctly.
                 setTimeout(() => close(), 100);
               }}
-              target="_blank"
-              rel="noreferrer"
             >
-              Send notification
-            </NavigationButton>
+              <a
+                href={Routes.new_email_path({
+                  template: "content_updates",
+                  product: uniquePermalink,
+                  bought: contentUpdates?.uniquePermalinkOrVariantIds ?? [],
+                })}
+                target="_blank"
+                rel="noreferrer"
+              >
+                Send notification
+              </a>
+            </Button>
           </div>
         </div>
       </Alert>
@@ -319,15 +323,19 @@ export const Layout = ({
           <PreviewSidebar
             {...(showNavigationButton && {
               previewLink: (props) => (
-                <NavigationButton
+                <Button
                   {...props}
+                  asChild
                   disabled={isBusy}
-                  href={url}
                   onClick={(evt) => {
                     evt.preventDefault();
                     void save().then(() => window.open(url, "_blank"));
                   }}
-                />
+                >
+                  <a href={url}>
+                    {props.children}
+                  </a>
+                </Button>
               ),
             })}
           >

@@ -1,6 +1,6 @@
 import * as React from "react";
 
-import { Button } from "$app/components/Button";
+import { Button } from "$app/components/ui/Button";
 import { Icon } from "$app/components/Icons";
 import { PriceInput } from "$app/components/PriceInput";
 import { Version, useProductEditContext } from "$app/components/ProductEdit/state";

@@ -18,7 +18,7 @@ import { recurrenceLabels, RecurrenceId } from "$app/utils/recurringPricing";
 import { assertResponseError } from "$app/utils/request";
 import { register } from "$app/utils/serverComponentUtil";
 
-import { Button } from "$app/components/Button";
+import { Button } from "$app/components/ui/Button";
 import { Creator } from "$app/components/Checkout/cartState";
 import {
   createReducer,

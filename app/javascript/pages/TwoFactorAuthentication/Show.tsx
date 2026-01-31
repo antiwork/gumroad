@@ -3,7 +3,7 @@ import * as React from "react";
 
 import { AuthAlert } from "$app/components/AuthAlert";
 import { Layout } from "$app/components/Authentication/Layout";
-import { Button } from "$app/components/Button";
+import { Button } from "$app/components/ui/Button";
 import { useOriginalLocation } from "$app/components/useOriginalLocation";
 
 type PageProps = {

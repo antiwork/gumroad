@@ -2,7 +2,7 @@ import { usePoll } from "@inertiajs/react";
 import * as React from "react";
 
 import AdminSalesReportsForm from "$app/components/Admin/SalesReports/Form";
-import { Button } from "$app/components/Button";
+import { Button } from "$app/components/ui/Button";
 import { Icon } from "$app/components/Icons";
 import { LoadingSpinner } from "$app/components/LoadingSpinner";
 import { Placeholder } from "$app/components/ui/Placeholder";

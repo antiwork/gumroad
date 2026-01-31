@@ -16,7 +16,7 @@ import {
 } from "$app/utils/recurringPricing";
 import { assertResponseError, request } from "$app/utils/request";
 
-import { Button } from "$app/components/Button";
+import { Button } from "$app/components/ui/Button";
 import Errors from "$app/components/Form/Errors";
 import { Icon } from "$app/components/Icons";
 import { Popover, PopoverAnchor, PopoverContent, PopoverTrigger } from "$app/components/Popover";

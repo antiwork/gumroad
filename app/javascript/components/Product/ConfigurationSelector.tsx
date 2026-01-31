@@ -32,7 +32,7 @@ import { formatInstallmentPaymentSchedule } from "$app/utils/price";
 import { recurrenceNames, recurrenceLabels, RecurrenceId } from "$app/utils/recurringPricing";
 
 import { Breaklines } from "$app/components/Breaklines";
-import { Button } from "$app/components/Button";
+import { Button } from "$app/components/ui/Button";
 import { LoadingSpinner } from "$app/components/LoadingSpinner";
 import { NumberInput } from "$app/components/NumberInput";
 import { PriceInput } from "$app/components/PriceInput";

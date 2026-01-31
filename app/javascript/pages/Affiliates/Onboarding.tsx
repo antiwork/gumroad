@@ -6,10 +6,9 @@ import { cast } from "ts-safe-cast";
 import { SelfServeAffiliateProduct } from "$app/data/affiliates";
 import { isUrlValid } from "$app/utils/url";
 
-import { Button } from "$app/components/Button";
+import { Button } from "$app/components/ui/Button";
 import { CopyToClipboard } from "$app/components/CopyToClipboard";
 import { useLoggedInUser } from "$app/components/LoggedInUser";
-import { NavigationButtonInertia } from "$app/components/NavigationButton";
 import { NumberInput } from "$app/components/NumberInput";
 import { showAlert } from "$app/components/server-components/Alert";
 import { ToggleSettingRow } from "$app/components/SettingRow";
@@ -104,12 +103,12 @@ export default function AffiliatesOnboarding() {
         actions={
           <>
             <WithTooltip position="bottom" tip={props.affiliates_disabled_reason}>
-              <NavigationButtonInertia
-                href={cast<string>(Routes.new_affiliate_path())}
+              <Button
+                asChild
                 disabled={!loggedInUser?.policies.direct_affiliate.create || props.affiliates_disabled_reason !== null}
               >
-                Add affiliate
-              </NavigationButtonInertia>
+                <Link href={cast<string>(Routes.new_affiliate_path())}>Add affiliate</Link>
+              </Button>
             </WithTooltip>
             <Button
               onClick={handleSaveChanges}
@@ -129,13 +128,13 @@ export default function AffiliatesOnboarding() {
             <PlaceholderImage src={placeholderImage} />
             <h2>Almost there!</h2>
             You need a published product to add affiliates.
-            <NavigationButtonInertia
-              href={Routes.new_product_path()}
+            <Button
+              asChild
               color="accent"
               disabled={!loggedInUser?.policies.product.create}
             >
-              New product
-            </NavigationButtonInertia>
+              <Link href={Routes.new_product_path()}>New product</Link>
+            </Button>
           </Placeholder>
         </section>
       ) : (

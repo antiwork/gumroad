@@ -1,7 +1,7 @@
 import { router } from "@inertiajs/react";
 import * as React from "react";
 
-import { Button } from "$app/components/Button";
+import { Button } from "$app/components/ui/Button";
 import { Alert } from "$app/components/ui/Alert";
 
 type BundleContentUpdatedStatusProps = {

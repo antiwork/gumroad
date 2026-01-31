@@ -19,7 +19,7 @@ import { assertResponseError } from "$app/utils/request";
 import { register } from "$app/utils/serverComponentUtil";
 import { startTrackingForSeller, trackProductEvent } from "$app/utils/user_analytics";
 
-import { Button } from "$app/components/Button";
+import { Button } from "$app/components/ui/Button";
 import { Checkout } from "$app/components/Checkout";
 import {
   CartItem,

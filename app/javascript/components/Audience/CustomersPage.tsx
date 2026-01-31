@@ -1,4 +1,5 @@
 import { Blob, DirectUpload } from "@rails/activestorage";
+import { Link } from "@inertiajs/react";
 import cx from "classnames";
 import { lightFormat, subMonths } from "date-fns";
 import { format } from "date-fns-tz";
@@ -58,7 +59,7 @@ import { asyncVoid } from "$app/utils/promise";
 import { RecurrenceId, recurrenceLabels } from "$app/utils/recurringPricing";
 import { AbortError, assertResponseError } from "$app/utils/request";
 
-import { Button, NavigationButton, buttonVariants } from "$app/components/Button";
+import { Button, buttonVariants } from "$app/components/ui/Button";
 import { useCurrentSeller } from "$app/components/CurrentSeller";
 import { DateInput } from "$app/components/DateInput";
 import { DateRangePicker } from "$app/components/DateRangePicker";
@@ -66,7 +67,7 @@ import { FileKindIcon } from "$app/components/FileRowContent";
 import { Icon } from "$app/components/Icons";
 import { LoadingSpinner } from "$app/components/LoadingSpinner";
 import { Modal } from "$app/components/Modal";
-import { NavigationButtonInertia } from "$app/components/NavigationButton";
+
 import { NumberInput } from "$app/components/NumberInput";
 import { Pagination, PaginationProps } from "$app/components/Pagination";
 import { Popover, PopoverAnchor, PopoverContent, PopoverTrigger } from "$app/components/Popover";
@@ -408,18 +409,22 @@ const CustomersPage = ({
                       : "This will download a CSV with each purchase on its own row."}
                   </div>
                   <DateRangePicker from={from} to={to} setFrom={setFrom} setTo={setTo} />
-                  <NavigationButtonInertia
+                  <Button
+                    asChild
                     color="primary"
+                    onClick={() => setExportPopoverOpen(false)}
+                  >
+                   <Link
                     href={Routes.export_purchases_path({
                       start_time: lightFormat(from, "yyyy-MM-dd"),
                       end_time: lightFormat(to, "yyyy-MM-dd"),
                       product_ids: includedProductIds,
                       variant_ids: includedVariantIds,
                     })}
-                    onSuccess={() => setExportPopoverOpen(false)}
-                  >
+                   >
                     Download
-                  </NavigationButtonInertia>
+                   </Link>
+                  </Button>
                   {count > 2000 && (
                     <div className="mt-2 text-sm text-gray-600">
                       Exports over 2,000 rows will be processed in the background and emailed to you.
@@ -553,9 +558,9 @@ const CustomersPage = ({
                 Every time a new customer purchases a product from your Gumroad, their email address and other details
                 are added here.
                 <div>
-                  <NavigationButton color="accent" href={Routes.new_product_path()}>
-                    Start selling today
-                  </NavigationButton>
+                  <Button asChild color="accent">
+                    <a href={Routes.new_product_path()}>Start selling today</a>
+                  </Button>
                 </div>
                 <p>
                   or{" "}
@@ -1550,9 +1555,11 @@ const TrackingSection = ({
         {tracking.shipped ? (
           tracking.url ? (
             <CardContent>
-              <NavigationButton color="primary" href={tracking.url} target="_blank" className="grow">
-                Track shipment
-              </NavigationButton>
+              <Button asChild color="primary" className="grow">
+                <a href={tracking.url} target="_blank">
+                  Track package
+                </a>
+              </Button>
             </CardContent>
           ) : (
             <CardContent>
@@ -2594,15 +2601,19 @@ const FileRow = ({ file, disabled, onDelete }: { file: File; disabled?: boolean;
           <Icon name="trash2" />
         </Button>
       ) : null}
-      <NavigationButton
-        href={Routes.s3_utility_cdn_url_for_blob_path({ key: file.key })}
-        download
-        target="_blank"
+      <Button
+        asChild
         disabled={disabled}
-        aria-label="Download"
       >
-        <Icon name="download-fill" />
-      </NavigationButton>
+        <a
+          href={Routes.s3_utility_cdn_url_for_blob_path({ key: file.key })}
+          download
+          target="_blank"
+          aria-label="Download"
+        >
+          <Icon name="download-fill" />
+        </a>
+      </Button>
     </RowActions>
   </Row>
 );

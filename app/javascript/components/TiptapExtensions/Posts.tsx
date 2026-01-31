@@ -7,7 +7,7 @@ import * as React from "react";
 import { type Post } from "$app/types/workflow";
 import { assertDefined } from "$app/utils/assert";
 
-import { Button } from "$app/components/Button";
+import { Button } from "$app/components/ui/Button";
 import { TrackClick } from "$app/components/Download/Interactions";
 import { Icon } from "$app/components/Icons";
 import { LoadingSpinner } from "$app/components/LoadingSpinner";

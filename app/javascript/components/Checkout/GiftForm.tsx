@@ -1,7 +1,7 @@
 import cx from "classnames";
 import * as React from "react";
 
-import { Button } from "$app/components/Button";
+import { Button } from "$app/components/ui/Button";
 import { useState, getErrors } from "$app/components/Checkout/payment";
 import { Modal } from "$app/components/Modal";
 import { Alert } from "$app/components/ui/Alert";

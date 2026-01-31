@@ -4,7 +4,7 @@ import { archiveProduct, deleteProduct, duplicateProduct, unarchiveProduct } fro
 import { Membership, Product } from "$app/data/products";
 import { assertResponseError } from "$app/utils/request";
 
-import { Button } from "$app/components/Button";
+import { Button } from "$app/components/ui/Button";
 import { Icon } from "$app/components/Icons";
 import { Modal } from "$app/components/Modal";
 import { Popover, PopoverContent, PopoverTrigger } from "$app/components/Popover";

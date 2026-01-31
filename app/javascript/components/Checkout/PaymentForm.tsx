@@ -30,7 +30,7 @@ import { assert, assertDefined } from "$app/utils/assert";
 import { checkEmailForTypos as checkEmailForTyposUtil } from "$app/utils/email";
 import { asyncVoid } from "$app/utils/promise";
 
-import { Button } from "$app/components/Button";
+import { Button } from "$app/components/ui/Button";
 import { CreditCardInput, StripeElementsProvider } from "$app/components/Checkout/CreditCardInput";
 import { CustomFields } from "$app/components/Checkout/CustomFields";
 import {

@@ -1,6 +1,6 @@
 import * as React from "react";
 
-import { Button, NavigationButton } from "$app/components/Button";
+import { Button } from "$app/components/ui/Button";
 import { Icon } from "$app/components/Icons";
 import { Popover, PopoverAnchor, PopoverContent, PopoverTrigger } from "$app/components/Popover";
 
@@ -18,10 +18,12 @@ export const DownloadAllButton = ({ zip_path, files }: Props) => (
     </PopoverAnchor>
     <PopoverContent sideOffset={4}>
       <div className="grid gap-2">
-        <NavigationButton href={zip_path}>
-          <Icon name="file-earmark-binary-fill" />
-          Download as ZIP
-        </NavigationButton>
+        <Button asChild>
+          <a href={zip_path}>
+            <Icon name="file-earmark-binary-fill" />
+            Download as ZIP
+          </a>
+        </Button>
         <Button onClick={() => Dropbox.save({ files })}>
           <Icon name="dropbox" />
           Save to Dropbox

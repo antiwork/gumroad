@@ -11,7 +11,7 @@ import { classNames } from "$app/utils/classNames";
 import { asyncVoid } from "$app/utils/promise";
 import { assertResponseError } from "$app/utils/request";
 
-import { Button, NavigationButton, buttonVariants } from "$app/components/Button";
+import { Button, buttonVariants } from "$app/components/ui/Button";
 import { FileRow, shouldShowSubtitlesForFile } from "$app/components/Download/FileList";
 import { Icon } from "$app/components/Icons";
 import { LoadingSpinner } from "$app/components/LoadingSpinner";
@@ -390,15 +390,19 @@ const FileGroupDownloadAllButton = ({ folderId, files }: { folderId: string; fil
               Zipping files...
             </Button>
           ) : files.length === 1 && firstDownloadableFile ? (
-            <NavigationButton
+            <Button
+              asChild
               contentEditable={false}
-              href={firstDownloadableFile.url}
-              download={firstDownloadableFile.downloadFileName}
-              target="_blank"
-              rel="noopener noreferrer"
             >
-              Download file
-            </NavigationButton>
+              <a
+                href={firstDownloadableFile.url}
+                download={firstDownloadableFile.downloadFileName}
+                target="_blank"
+                rel="noopener noreferrer"
+              >
+                Download file
+              </a>
+            </Button>
           ) : (
             <Button
               contentEditable={false}

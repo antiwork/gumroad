@@ -5,7 +5,7 @@ import { cast, createCast, is } from "ts-safe-cast";
 import { trackMediaLocationChanged } from "$app/data/media_location";
 import { register } from "$app/utils/serverComponentUtil";
 
-import { Button } from "$app/components/Button";
+import { Button } from "$app/components/ui/Button";
 import { Icon } from "$app/components/Icons";
 import { Popover, PopoverContent, PopoverTrigger } from "$app/components/Popover";
 import { useRunOnce } from "$app/components/useRunOnce";

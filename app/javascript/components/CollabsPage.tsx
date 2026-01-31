@@ -3,7 +3,9 @@ import * as React from "react";
 import { Membership, Product } from "$app/data/collabs";
 import { formatPriceCentsWithCurrencySymbol } from "$app/utils/currency";
 
-import { NavigationButtonInertia } from "$app/components/NavigationButton";
+import { Link } from "@inertiajs/react";
+
+import { Button } from "$app/components/ui/Button";
 import { PaginationProps } from "$app/components/Pagination";
 import { ProductsLayout } from "$app/components/ProductsLayout";
 import { CollabsMembershipsTable } from "$app/components/ProductsPage/Collabs/MembershipsTable";
@@ -52,13 +54,13 @@ const CollabsPage = ({
             <h2>Create your first collab!</h2>
             Offer a product in collaboration with another Gumroad creator to grow your audience.
             <WithTooltip position="top" tip={collaboratorsDisabledReason}>
-              <NavigationButtonInertia
+              <Button
+                asChild
                 disabled={collaboratorsDisabledReason !== null}
-                href="/collaborators/new"
                 color="accent"
               >
-                Add a collab
-              </NavigationButtonInertia>
+                <Link href="/collaborators/new">Add a collab</Link>
+              </Button>
             </WithTooltip>
             <p>
               or{" "}

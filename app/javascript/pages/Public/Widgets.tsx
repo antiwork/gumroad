@@ -6,7 +6,7 @@ import { cast } from "ts-safe-cast";
 import { usePersistentExternalScript } from "$app/hooks/usePersistentExternalScript";
 import { buildOverlayCodeToCopy, buildEmbedCodeToCopy } from "$app/utils/widgetCodeToCopyBuilders";
 
-import { Button } from "$app/components/Button";
+import { Button } from "$app/components/ui/Button";
 import { CopyToClipboard } from "$app/components/CopyToClipboard";
 import { useCurrentSeller } from "$app/components/CurrentSeller";
 import { CodeContainer } from "$app/components/Developer/CodeContainer";

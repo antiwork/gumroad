@@ -8,7 +8,7 @@ import { incrementPostViews } from "$app/data/view_event";
 import { CreatorProfile } from "$app/parsers/profile";
 import { formatPostDate } from "$app/utils/date";
 
-import { Button } from "$app/components/Button";
+import { Button } from "$app/components/ui/Button";
 import { Icon } from "$app/components/Icons";
 import { LoadingSpinner } from "$app/components/LoadingSpinner";
 import { CommentsMetadataProvider, PostCommentsSection } from "$app/components/Post/PostCommentsSection";

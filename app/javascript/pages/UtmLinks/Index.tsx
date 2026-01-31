@@ -5,12 +5,12 @@ import { SavedUtmLink, SortKey, UtmLinkStats, UtmLinksStats } from "$app/types/u
 import { classNames } from "$app/utils/classNames";
 
 import { AnalyticsLayout } from "$app/components/Analytics/AnalyticsLayout";
-import { Button } from "$app/components/Button";
+import { Button } from "$app/components/ui/Button";
 import { CopyToClipboard } from "$app/components/CopyToClipboard";
 import { Icon } from "$app/components/Icons";
 import { LoadingSpinner } from "$app/components/LoadingSpinner";
 import { Modal } from "$app/components/Modal";
-import { NavigationButtonInertia } from "$app/components/NavigationButton";
+
 import { Pagination, PaginationProps } from "$app/components/Pagination";
 import { Popover, PopoverAnchor, PopoverContent, PopoverTrigger } from "$app/components/Popover";
 import { Search } from "$app/components/Search";
@@ -162,9 +162,9 @@ export default function UtmLinksIndex() {
       actions={
         <>
           <Search value={query} onSearch={onSearch} />
-          <NavigationButtonInertia href={Routes.new_dashboard_utm_link_path()} color="accent">
-            Create link
-          </NavigationButtonInertia>
+          <Button asChild color="accent">
+            <Link href={Routes.new_dashboard_utm_link_path()}>Create link</Link>
+          </Button>
         </>
       }
     >
@@ -490,9 +490,9 @@ const UtmLinkDetails = ({
         <Button asChild>
           <Link href={Routes.new_dashboard_utm_link_path({ copy_from: utmLink.id })}>Duplicate</Link>
         </Button>
-        <NavigationButtonInertia href={Routes.edit_dashboard_utm_link_path(utmLink.id)} disabled={isNavigating}>
-          Edit
-        </NavigationButtonInertia>
+        <Button asChild disabled={isNavigating}>
+          <Link href={Routes.edit_dashboard_utm_link_path(utmLink.id)}>Edit</Link>
+        </Button>
         <Button color="danger" onClick={onDelete}>
           Delete
         </Button>

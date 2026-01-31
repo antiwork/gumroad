@@ -7,7 +7,7 @@ import { signupAndAddPurchaseToLibrary } from "$app/data/open_in_app";
 import { asyncVoid } from "$app/utils/promise";
 import { assertResponseError, request } from "$app/utils/request";
 
-import { Button, NavigationButton } from "$app/components/Button";
+import { Button } from "$app/components/ui/Button";
 import { PageListLayout } from "$app/components/Download/PageListLayout";
 import { Icon } from "$app/components/Icons";
 import { useLoggedInUser } from "$app/components/LoggedInUser";
@@ -155,9 +155,13 @@ export const Layout = ({
                       {purchase.membership.is_installment_plan_completed ? (
                         "This installment plan has been paid in full."
                       ) : (
-                        <NavigationButton href={Routes.manage_subscription_url(purchase.membership.subscription_id)}>
-                          Manage
-                        </NavigationButton>
+                        <Button
+                          asChild
+                        >
+                          <a href={Routes.manage_subscription_url(purchase.membership.subscription_id)}>
+                            Manage
+                          </a>
+                        </Button>
                       )}
                     </details>
                   </CardContent>
@@ -169,15 +173,19 @@ export const Layout = ({
                       </summary>
                       <div style={{ display: "grid" }}>
                         {purchase.membership.has_active_subscription ? (
-                          <NavigationButton href={Routes.manage_subscription_url(purchase.membership.subscription_id)}>
-                            Manage
-                          </NavigationButton>
+                          <Button asChild>
+                            <a href={Routes.manage_subscription_url(purchase.membership.subscription_id)}>
+                              Manage
+                            </a>
+                          </Button>
                         ) : purchase.membership.is_subscription_ended ? (
                           "This subscription has ended."
                         ) : purchase.membership.is_subscription_cancelled_or_failed ? (
-                          <NavigationButton href={Routes.manage_subscription_url(purchase.membership.subscription_id)}>
-                            Restart
-                          </NavigationButton>
+                          <Button asChild>
+                            <a href={Routes.manage_subscription_url(purchase.membership.subscription_id)}>
+                              Restart
+                            </a>
+                          </Button>
                         ) : null}
                       </div>
                     </details>
@@ -189,15 +197,19 @@ export const Layout = ({
                   <details>
                     <summary className="grow grid-flow-col grid-cols-[1fr_auto] before:col-start-2">Receipt</summary>
                     <div className="flex flex-col gap-4">
-                      <NavigationButton
-                        href={
-                          purchase.email
-                            ? Routes.receipt_purchase_url(receiptPurchaseId, { email: purchase.email })
-                            : Routes.receipt_purchase_url(receiptPurchaseId)
-                        }
+                      <Button
+                        asChild
                       >
-                        View receipt
-                      </NavigationButton>
+                        <a
+                          href={
+                            purchase.email
+                              ? Routes.receipt_purchase_url(receiptPurchaseId, { email: purchase.email })
+                              : Routes.receipt_purchase_url(receiptPurchaseId)
+                          }
+                        >
+                          View receipt
+                        </a>
+                      </Button>
                       <Button onClick={() => handleResendReceipt(receiptPurchaseId)} disabled={isResendingReceipt}>
                         {isResendingReceipt ? "Resending receipt..." : "Resend receipt"}
                       </Button>

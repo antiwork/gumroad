@@ -4,7 +4,7 @@ import { fetchAccountInfo, fetchCalendarList, getOAuthUrl } from "$app/data/goog
 import { startOauthRedirectChecker } from "$app/utils/oauth";
 import { assertResponseError } from "$app/utils/request";
 
-import { Button } from "$app/components/Button";
+import { Button } from "$app/components/ui/Button";
 import { LoadingSpinner } from "$app/components/LoadingSpinner";
 import { useProductEditContext } from "$app/components/ProductEdit/state";
 import { showAlert } from "$app/components/server-components/Alert";

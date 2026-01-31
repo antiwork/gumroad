@@ -4,7 +4,7 @@ import { setPurchaseArchived } from "$app/data/library";
 import { asyncVoid } from "$app/utils/promise";
 import { assertResponseError } from "$app/utils/request";
 
-import { Button } from "$app/components/Button";
+import { Button } from "$app/components/ui/Button";
 import { showAlert } from "$app/components/server-components/Alert";
 
 type Props = { purchase_id: string; initial_is_archived: boolean };

@@ -1,7 +1,7 @@
 import { Link, usePage } from "@inertiajs/react";
 import * as React from "react";
 
-import { Button } from "$app/components/Button";
+import { Button } from "$app/components/ui/Button";
 import { CopyToClipboard } from "$app/components/CopyToClipboard";
 import { useCurrentSeller } from "$app/components/CurrentSeller";
 import { useDomains } from "$app/components/DomainSettings";

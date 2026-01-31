@@ -7,10 +7,9 @@ import { UtmLink, UtmLinkDestinationOption, SavedUtmLink } from "$app/types/utm_
 import { assertDefined } from "$app/utils/assert";
 
 import { AnalyticsLayout } from "$app/components/Analytics/AnalyticsLayout";
-import { Button } from "$app/components/Button";
+import { Button } from "$app/components/ui/Button";
 import { CopyToClipboard } from "$app/components/CopyToClipboard";
 import { Icon } from "$app/components/Icons";
-import { NavigationButtonInertia } from "$app/components/NavigationButton";
 import { Select } from "$app/components/Select";
 import { showAlert } from "$app/components/server-components/Alert";
 import { Pill } from "$app/components/ui/Pill";
@@ -258,10 +257,12 @@ export const UtmLinkForm = (pageProps: UtmLinkFormProps | UtmLinkEditProps) => {
       title={isEditing ? "Edit link" : "Create link"}
       actions={
         <>
-          <NavigationButtonInertia href={Routes.dashboard_utm_links_path()} disabled={processing}>
-            <Icon name="x-square" />
-            Cancel
-          </NavigationButtonInertia>
+          <Button asChild disabled={processing}>
+            <a href={Routes.dashboard_utm_links_path()}>
+              <Icon name="x-square" />
+              Cancel
+            </a>
+          </Button>
           <Button color="accent" onClick={handleSubmit} disabled={processing}>
             {processing ? "Saving..." : isEditing ? "Save changes" : "Add link"}
           </Button>

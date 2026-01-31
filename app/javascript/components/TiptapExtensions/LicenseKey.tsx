@@ -5,7 +5,7 @@ import * as React from "react";
 
 import { assertDefined } from "$app/utils/assert";
 
-import { Button } from "$app/components/Button";
+import { Button } from "$app/components/ui/Button";
 import { CopyToClipboard } from "$app/components/CopyToClipboard";
 import { Icon } from "$app/components/Icons";
 import { Drawer } from "$app/components/SortableList";

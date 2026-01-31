@@ -5,7 +5,7 @@ import { cast } from "ts-safe-cast";
 import { ThirdPartyAnalytics, Snippet, SNIPPET_LOCATIONS } from "$app/data/third_party_analytics";
 import { SettingPage } from "$app/parsers/settings";
 
-import { Button } from "$app/components/Button";
+import { Button } from "$app/components/ui/Button";
 import { Details } from "$app/components/Details";
 import { Dropdown } from "$app/components/Dropdown";
 import { Icon } from "$app/components/Icons";

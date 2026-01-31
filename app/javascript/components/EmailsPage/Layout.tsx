@@ -3,7 +3,7 @@ import React from "react";
 
 import { EmailTab } from "$app/data/installments";
 
-import { Button } from "$app/components/Button";
+import { Button } from "$app/components/ui/Button";
 import { Search } from "$app/components/Search";
 import { PageHeader } from "$app/components/ui/PageHeader";
 import { Tab, Tabs } from "$app/components/ui/Tabs";

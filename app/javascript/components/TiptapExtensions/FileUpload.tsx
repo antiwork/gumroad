@@ -3,7 +3,7 @@ import { NodeViewWrapper, ReactNodeViewRenderer } from "@tiptap/react";
 import * as React from "react";
 import { cast } from "ts-safe-cast";
 
-import { Button } from "$app/components/Button";
+import { Button } from "$app/components/ui/Button";
 import { FileInput } from "$app/components/Download/CustomField/FileInput";
 import { Icon } from "$app/components/Icons";
 import { createInsertCommand } from "$app/components/TiptapExtensions/utils";

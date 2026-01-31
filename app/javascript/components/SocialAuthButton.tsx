@@ -2,7 +2,7 @@ import * as React from "react";
 import * as ReactDOM from "react-dom";
 import { cast } from "ts-safe-cast";
 
-import { BrandName, Button, ButtonProps } from "$app/components/Button";
+import { BrandName, Button, ButtonProps } from "$app/components/ui/Button";
 import { useRunOnce } from "$app/components/useRunOnce";
 
 export const SocialAuthButton = ({

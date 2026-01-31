@@ -3,7 +3,7 @@ import * as React from "react";
 import { classNames } from "$app/utils/classNames";
 import { getRootTaxonomy, getRootTaxonomyCss, Taxonomy } from "$app/utils/discover";
 
-import { NavigationButton } from "$app/components/Button";
+import { Button } from "$app/components/ui/Button";
 import { CartNavigationButton } from "$app/components/Checkout/CartNavigationButton";
 import { useCurrentSeller } from "$app/components/CurrentSeller";
 import { Nav } from "$app/components/Discover/Nav";
@@ -18,13 +18,15 @@ const UserActionButtons: React.FC = () => {
   if (currentSeller) {
     return (
       <>
-        <NavigationButton href={Routes.library_url()} className="flex-1 lg:flex-none">
-          <Icon name="bookmark-heart-fill" /> Library
-        </NavigationButton>
+        <Button asChild className="flex-1 lg:flex-none">
+          <a href={Routes.library_url()}>
+            <Icon name="bookmark-heart-fill" /> Library
+          </a>
+        </Button>
         {currentSeller.has_published_products ? null : (
-          <NavigationButton href={Routes.products_url()} color="primary" className="flex-1 lg:flex-none">
-            Start selling
-          </NavigationButton>
+          <Button asChild color="primary" className="flex-1 lg:flex-none">
+            <a href={Routes.products_url()}>Start selling</a>
+          </Button>
         )}
       </>
     );
@@ -32,12 +34,12 @@ const UserActionButtons: React.FC = () => {
 
   return (
     <>
-      <NavigationButton href={Routes.login_url()} className="flex-1 lg:flex-none">
-        Log in
-      </NavigationButton>
-      <NavigationButton href={Routes.signup_url()} color="primary" className="flex-1 lg:flex-none">
-        Start selling
-      </NavigationButton>
+      <Button asChild className="flex-1 lg:flex-none">
+        <a href={Routes.login_url()}>Log in</a>
+      </Button>
+      <Button asChild color="primary" className="flex-1 lg:flex-none">
+        <a href={Routes.signup_url()}>Start selling</a>
+      </Button>
     </>
   );
 };

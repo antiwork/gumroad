@@ -9,7 +9,7 @@ import { cast } from "ts-safe-cast";
 
 import { classNames } from "$app/utils/classNames";
 
-import { Button, buttonVariants } from "$app/components/Button";
+import { Button, buttonVariants } from "$app/components/ui/Button";
 import { Icon } from "$app/components/Icons";
 import { Modal } from "$app/components/Modal";
 import { Popover, PopoverContent, PopoverTrigger } from "$app/components/Popover";

@@ -4,7 +4,7 @@ import React from "react";
 import DateTimeWithRelativeTooltip from "$app/components/Admin/DateTimeWithRelativeTooltip";
 import { type Product } from "$app/components/Admin/Products/Product";
 import AdminProductStats from "$app/components/Admin/Products/Stats";
-import { buttonVariants } from "$app/components/Button";
+import { buttonVariants } from "$app/components/ui/Button";
 import { Icon } from "$app/components/Icons";
 
 import coverPlaceholder from "$assets/images/cover_placeholder.png";

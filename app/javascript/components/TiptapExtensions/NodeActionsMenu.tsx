@@ -3,7 +3,7 @@ import * as React from "react";
 
 import { assertDefined } from "$app/utils/assert";
 
-import { Button } from "$app/components/Button";
+import { Button } from "$app/components/ui/Button";
 import { Icon } from "$app/components/Icons";
 import { Popover, PopoverAnchor, PopoverContent, PopoverTrigger } from "$app/components/Popover";
 

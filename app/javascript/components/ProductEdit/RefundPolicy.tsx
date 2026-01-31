@@ -3,7 +3,7 @@ import * as React from "react";
 import { OtherRefundPolicy } from "$app/data/products/other_refund_policies";
 import { assertDefined } from "$app/utils/assert";
 
-import { Button } from "$app/components/Button";
+import { Button } from "$app/components/ui/Button";
 import { Details } from "$app/components/Details";
 import { Dropdown } from "$app/components/Dropdown";
 import { Modal } from "$app/components/Modal";

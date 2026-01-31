@@ -1,9 +1,9 @@
-import { usePage } from "@inertiajs/react";
+import { Link, usePage } from "@inertiajs/react";
 import * as React from "react";
 import { cast } from "ts-safe-cast";
 
 import { ArticleLink } from "$app/components/HelpCenterPage/types";
-import { NavigationButtonInertia } from "$app/components/NavigationButton";
+import { Button } from "$app/components/ui/Button";
 
 import { HelpCenterLayout } from "../Layout";
 
@@ -46,14 +46,14 @@ const CategoryArticles = ({ category, searchTerm }: { category: Category; search
         style={{ display: "grid", gridAutoRows: "160px" }}
       >
         {category.articles.map((article) => (
-          <NavigationButtonInertia
-            key={article.url}
-            href={article.url}
-            color="filled"
-            className="box-border! flex! h-full! w-full! items-center! justify-center! p-12! text-center text-xl!"
-          >
-            {renderHighlightedText(article.title, searchTerm)}
-          </NavigationButtonInertia>
+            <Button
+              asChild
+              key={article.url}
+              color="filled"
+              className="box-border! flex! h-full! w-full! items-center! justify-center! p-12! text-center text-xl!"
+            >
+              <Link href={article.url}>{renderHighlightedText(article.title, searchTerm)}</Link>
+            </Button>
         ))}
       </div>
     </div>

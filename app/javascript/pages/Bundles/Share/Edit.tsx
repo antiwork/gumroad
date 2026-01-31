@@ -10,7 +10,7 @@ import { BundleEditLayout, useProductUrl } from "$app/components/BundleEdit/Layo
 import { ProductPreview } from "$app/components/BundleEdit/ProductPreview";
 import { MarketingEmailStatus } from "$app/components/BundleEdit/ShareTab/MarketingEmailStatus";
 import { BundleProduct } from "$app/components/BundleEdit/types";
-import { Button } from "$app/components/Button";
+import { Button } from "$app/components/ui/Button";
 import { CopyToClipboard } from "$app/components/CopyToClipboard";
 import { useCurrentSeller } from "$app/components/CurrentSeller";
 import { FacebookShareButton } from "$app/components/FacebookShareButton";

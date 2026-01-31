@@ -22,7 +22,7 @@ import { assertDefined } from "$app/utils/assert";
 import { asyncVoid } from "$app/utils/promise";
 import { AbortError } from "$app/utils/request";
 
-import { Button, NavigationButton } from "$app/components/Button";
+import { Button } from "$app/components/ui/Button";
 import { useCurrentSeller } from "$app/components/CurrentSeller";
 import { Icon } from "$app/components/Icons";
 import { Modal } from "$app/components/Modal";
@@ -868,9 +868,14 @@ const EmptyCommunitiesPlaceholder = ({ hasProducts }: { hasProducts: boolean }) 
           When you publish a product, we automatically create a dedicated community chat—your own space to connect with
           customers, answer questions, and build relationships.
         </p>
-        <NavigationButton href={hasProducts ? Routes.products_path() : Routes.new_product_path()} color="accent">
-          {hasProducts ? "Enable community chat for your products" : "Create a product with community"}
-        </NavigationButton>
+        <Button
+          asChild
+          color="accent"
+        >
+          <a href={hasProducts ? Routes.products_path() : Routes.new_product_path()}>
+            {hasProducts ? "Enable community chat for your products" : "Create a product with community"}
+          </a>
+        </Button>
         <p>
           or{" "}
           <a href="/help/article/347-gumroad-community" target="_blank" rel="noreferrer">

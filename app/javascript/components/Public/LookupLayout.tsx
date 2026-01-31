@@ -4,7 +4,7 @@ import React, { useEffect, useRef } from "react"
 import { lookupCharges, lookupPaypalCharges } from "$app/data/charge"
 import { assertResponseError } from "$app/utils/request"
 
-import { Button } from "$app/components/Button"
+import { Button } from "$app/components/ui/Button"
 import { showAlert } from "$app/components/server-components/Alert"
 import { Alert } from "$app/components/ui/Alert"
 import { PageHeader } from "$app/components/ui/PageHeader"

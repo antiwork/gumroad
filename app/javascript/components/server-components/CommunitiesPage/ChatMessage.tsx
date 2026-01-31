@@ -4,7 +4,7 @@ import React from "react";
 import { CommunityChatMessage } from "$app/data/communities";
 import { asyncVoid } from "$app/utils/promise";
 
-import { Button } from "$app/components/Button";
+import { Button } from "$app/components/ui/Button";
 import { useCurrentSeller } from "$app/components/CurrentSeller";
 import { Icon } from "$app/components/Icons";
 import { Modal } from "$app/components/Modal";

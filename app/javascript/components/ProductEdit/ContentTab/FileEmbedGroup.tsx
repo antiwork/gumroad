@@ -12,7 +12,7 @@ import { classNames } from "$app/utils/classNames";
 import GuidGenerator from "$app/utils/guid_generator";
 import { assertResponseError } from "$app/utils/request";
 
-import { Button, NavigationButton } from "$app/components/Button";
+import { Button } from "$app/components/ui/Button";
 import { Icon } from "$app/components/Icons";
 import { LoadingSpinner } from "$app/components/LoadingSpinner";
 import { Popover, PopoverTrigger, PopoverContent, PopoverAnchor } from "$app/components/Popover";
@@ -192,14 +192,22 @@ const FileEmbedGroupNodeView = ({
                           Zipping files...
                         </Button>
                       ) : isTuple(downloadableFiles, 1) ? (
-                        <NavigationButton
-                          href={downloadableFiles[0].url ?? undefined}
-                          download={downloadableFiles[0].display_name}
-                          target="_blank"
-                          rel="noopener noreferrer"
+                        <Button
+                          asChild
+                          // href={downloadableFiles[0].url ?? undefined}
+                          // download={downloadableFiles[0].display_name}
+                          // target="_blank"
+                          // rel="noopener noreferrer"
                         >
-                          Download file
-                        </NavigationButton>
+                          <a
+                            href={downloadableFiles[0].url ?? undefined}
+                            download={downloadableFiles[0].display_name}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                          >
+                            Download file
+                          </a>
+                        </Button>
                       ) : (
                         <Button onClick={() => void download()}>Download as ZIP</Button>
                       )}

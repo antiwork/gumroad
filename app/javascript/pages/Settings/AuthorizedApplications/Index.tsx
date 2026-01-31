@@ -5,7 +5,7 @@ import { cast } from "ts-safe-cast";
 
 import { SettingPage } from "$app/parsers/settings";
 
-import { Button } from "$app/components/Button";
+import { Button } from "$app/components/ui/Button";
 import { Icon } from "$app/components/Icons";
 import { Modal } from "$app/components/Modal";
 import { showAlert } from "$app/components/server-components/Alert";

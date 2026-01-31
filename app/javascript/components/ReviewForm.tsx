@@ -7,7 +7,7 @@ import FileUtils from "$app/utils/file";
 import { assertResponseError } from "$app/utils/request";
 import { summarizeUploadProgress } from "$app/utils/summarizeUploadProgress";
 
-import { Button } from "$app/components/Button";
+import { Button } from "$app/components/ui/Button";
 import { useAppDomain } from "$app/components/DomainSettings";
 import { useLoggedInUser } from "$app/components/LoggedInUser";
 import { RatingSelector } from "$app/components/RatingSelector";

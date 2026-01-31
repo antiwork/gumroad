@@ -3,7 +3,7 @@ import * as React from "react";
 import { CardProduct } from "$app/parsers/product";
 import { formatPriceCentsWithCurrencySymbol, CurrencyCode } from "$app/utils/currency";
 
-import { NavigationButton } from "$app/components/Button";
+import { Button } from "$app/components/ui/Button";
 import { Alert } from "$app/components/ui/Alert";
 
 type BundleProduct = CardProduct & {
@@ -88,14 +88,18 @@ export const MarketingEmailStatus = ({
             All customers
           </label>
         </fieldset>
-        <NavigationButton
+        <Button
+          asChild
           color="primary"
-          href={Routes.new_email_path(queryParams)}
-          target="_blank"
-          rel="noopener noreferrer"
         >
-          Draft and send
-        </NavigationButton>
+          <a
+            href={Routes.new_email_path(queryParams)}
+            target="_blank"
+            rel="noopener noreferrer"
+          >
+            Draft and send
+          </a>
+        </Button>
       </div>
     </Alert>
   );

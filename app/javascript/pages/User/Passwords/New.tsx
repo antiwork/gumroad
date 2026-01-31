@@ -4,7 +4,7 @@ import * as React from "react";
 import { AuthAlert } from "$app/components/AuthAlert";
 import { Layout } from "$app/components/Authentication/Layout";
 import { SocialAuth } from "$app/components/Authentication/SocialAuth";
-import { Button } from "$app/components/Button";
+import { Button } from "$app/components/ui/Button";
 import { Separator } from "$app/components/Separator";
 import { useOriginalLocation } from "$app/components/useOriginalLocation";
 

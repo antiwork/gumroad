@@ -18,7 +18,7 @@ import { getMimeType } from "$app/utils/mimetypes";
 import { assertResponseError, request, ResponseError } from "$app/utils/request";
 import { generatePageIcon } from "$app/utils/rich_content_page";
 
-import { Button } from "$app/components/Button";
+import { Button } from "$app/components/ui/Button";
 import { InputtedDiscount } from "$app/components/CheckoutDashboard/DiscountInput";
 import { ComboBox } from "$app/components/ComboBox";
 import { PageList, PageListItem, PageListLayout } from "$app/components/Download/PageListLayout";

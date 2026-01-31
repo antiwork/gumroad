@@ -6,7 +6,7 @@ import { formatStatNumber } from "$app/utils/formatStatNumber";
 import { asyncVoid } from "$app/utils/promise";
 import { assertResponseError } from "$app/utils/request";
 
-import { Button, NavigationButton } from "$app/components/Button";
+import { Button } from "$app/components/ui/Button";
 import { EditEmailButton, NewEmailButton } from "$app/components/EmailsPage/Layout";
 import { ViewEmailButton } from "$app/components/EmailsPage/ViewEmailButton";
 import { Icon } from "$app/components/Icons";
@@ -104,10 +104,12 @@ export const EmailSheetActions = ({ installment, onDelete }: EmailSheetActionsPr
     <div className="grid grid-flow-col gap-4">
       {installment.send_emails ? <ViewEmailButton installment={installment} /> : null}
       {installment.shown_on_profile ? (
-        <NavigationButton href={installment.full_url} target="_blank" rel="noopener noreferrer">
-          <Icon name="file-earmark-medical-fill" />
-          View post
-        </NavigationButton>
+        <Button asChild>
+          <a href={installment.full_url} target="_blank" rel="noopener noreferrer">
+            <Icon name="file-earmark-medical-fill" />
+            View post
+          </a>
+        </Button>
       ) : null}
     </div>
     <div className="grid grid-flow-col gap-4">

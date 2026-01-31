@@ -2,7 +2,7 @@ import React from "react";
 
 import { assertResponseError, request, ResponseError } from "$app/utils/request";
 
-import { Button } from "$app/components/Button";
+import { Button } from "$app/components/ui/Button";
 import { Modal } from "$app/components/Modal";
 import { showAlert } from "$app/components/server-components/Alert";
 import { useRecaptcha, RecaptchaCancelledError } from "$app/components/useRecaptcha";

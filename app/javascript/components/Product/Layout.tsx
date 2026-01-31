@@ -4,7 +4,7 @@ import { assertDefined } from "$app/utils/assert";
 import { classNames } from "$app/utils/classNames";
 import { assertResponseError, request, ResponseError } from "$app/utils/request";
 
-import { NavigationButton } from "$app/components/Button";
+import { Button } from "$app/components/ui/Button";
 import { useAppDomain } from "$app/components/DomainSettings";
 import { Icon } from "$app/components/Icons";
 import {
@@ -347,13 +347,17 @@ const EditButton = ({ product }: { product: Product }) => {
       }}
     >
       <WithTooltip tip="Edit product" position={isDesktop ? "right" : "left"}>
-        <NavigationButton
+        <Button
+          asChild
           color="filled"
-          href={Routes.edit_link_url({ id: product.permalink }, { host: appDomain })}
-          aria-label="Edit product"
         >
-          <Icon name="pencil" />
-        </NavigationButton>
+          <a
+            href={Routes.edit_link_url({ id: product.permalink }, { host: appDomain })}
+            aria-label="Edit product"
+          >
+            <Icon name="pencil" />
+          </a>
+        </Button>
       </WithTooltip>
     </div>
   );

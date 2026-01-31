@@ -2,7 +2,8 @@ import React from "react";
 
 import { Membership, Product, SortKey } from "$app/data/products";
 
-import { NavigationButtonInertia } from "$app/components/NavigationButton";
+import { Link } from "@inertiajs/react";
+import { Button } from "$app/components/ui/Button";
 import { PaginationProps } from "$app/components/Pagination";
 import { ProductsLayout } from "$app/components/ProductsLayout";
 import { Search } from "$app/components/Search";
@@ -45,9 +46,9 @@ export const ProductsDashboardPage = ({
       ctaButton={
         <>
           {products.length > 0 ? <Search value={query} onSearch={setQuery} placeholder="Search products" /> : null}
-          <NavigationButtonInertia href={Routes.new_product_path()} disabled={!canCreateProduct} color="accent">
-            New product
-          </NavigationButtonInertia>
+          <Button asChild disabled={!canCreateProduct} color="accent">
+            <Link href={Routes.new_product_path()}>New product</Link>
+          </Button>
         </>
       }
     >
@@ -58,9 +59,9 @@ export const ProductsDashboardPage = ({
             <h2>We’ve never met an idea we didn’t like.</h2>
             <p>Your first product doesn’t need to be perfect. Just put it out there, and see if it sticks.</p>
             <div>
-              <NavigationButtonInertia href={Routes.new_product_path()} disabled={!canCreateProduct} color="accent">
-                New product
-              </NavigationButtonInertia>
+              <Button asChild disabled={!canCreateProduct} color="accent">
+                <Link href={Routes.new_product_path()}>New product</Link>
+              </Button>
             </div>
             <span>
               or{" "}

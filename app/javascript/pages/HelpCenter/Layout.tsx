@@ -2,7 +2,7 @@ import { HelperClientProvider } from "@helperai/react";
 import { Link, router, usePage } from "@inertiajs/react";
 import * as React from "react";
 
-import { Button, NavigationButton } from "$app/components/Button";
+import { Button } from "$app/components/ui/Button";
 import { Icon } from "$app/components/Icons";
 import { NewTicketModal } from "$app/components/support/NewTicketModal";
 import { UnauthenticatedNewTicketModal } from "$app/components/support/UnauthenticatedNewTicketModal";
@@ -32,17 +32,21 @@ type HelpCenterLayoutProps = {
 
 function ReportBugButton() {
   return (
-    <NavigationButton
+    <Button
+      asChild
       color="accent"
       outline
-      href="https://github.com/antiwork/gumroad/issues/new"
-      target="_blank"
-      rel="noopener noreferrer"
       className="flex items-center gap-2"
     >
-      <img src={githubIcon} alt="" className="h-4 w-4" />
-      Report a bug
-    </NavigationButton>
+      <a
+        href="https://github.com/antiwork/gumroad/issues/new"
+        target="_blank"
+        rel="noopener noreferrer"
+      >
+        <img src={githubIcon} alt="" className="h-4 w-4" />
+        Report a bug
+      </a>
+    </Button>
   );
 }
 

@@ -9,7 +9,7 @@ import { RecurrenceId, recurrenceNames } from "$app/utils/recurringPricing";
 import { assertResponseError } from "$app/utils/request";
 import { register } from "$app/utils/serverComponentUtil";
 
-import { Button, NavigationButton } from "$app/components/Button";
+import { Button } from "$app/components/ui/Button";
 import { CopyToClipboard } from "$app/components/CopyToClipboard";
 import { Icon } from "$app/components/Icons";
 import { Card } from "$app/components/Product/Card";
@@ -151,8 +151,8 @@ const WishlistItemCard = ({
         item.purchasable ? (
           <div style={{ position: "absolute", top: "var(--spacer-4)", right: "var(--spacer-4)" }}>
             <WithTooltip position="top" tip="Add to cart">
-              <NavigationButton
-                href={addToCartUrl(item)}
+              <Button
+                asChild
                 color="primary"
                 aria-label="Add to cart"
                 onClick={() =>
@@ -163,8 +163,10 @@ const WishlistItemCard = ({
                   })
                 }
               >
-                <Icon name="cart3-fill" />
-              </NavigationButton>
+                <a href={addToCartUrl(item)}>
+                  <Icon name="cart3-fill" />
+                </a>
+              </Button>
             </WithTooltip>
           </div>
         ) : null
@@ -239,14 +241,16 @@ export const Wishlist = ({
       ) : null}
       {can_follow ? <FollowButton wishlistId={id} wishlistName={name} initialValue={following} /> : null}
       <WithTooltip tip={checkout_enabled ? null : "None of the products on this wishlist are available for purchase"}>
-        <NavigationButton
+        <Button
+          asChild
           color="accent"
-          href={Routes.checkout_index_url({ params: { wishlist: id } })}
           disabled={!checkout_enabled}
         >
-          <Icon name="cart3-fill" />
-          Buy this wishlist
-        </NavigationButton>
+          <a href={Routes.checkout_index_url({ params: { wishlist: id } })}>
+            <Icon name="cart3-fill" />
+            Buy this wishlist
+          </a>
+        </Button>
       </WithTooltip>
     </>
   );

@@ -1,16 +1,15 @@
-import { useForm, usePage } from "@inertiajs/react";
+import { useForm, usePage, Link } from "@inertiajs/react";
 import * as React from "react";
 import { cast } from "ts-safe-cast";
 
 import type { Collaborator, CollaboratorPagesSharedProps } from "$app/data/collaborators";
 import { formatCommission, formatProductNames } from "$app/utils/collaboratorFormatters";
 
-import { Button } from "$app/components/Button";
+import { Button } from "$app/components/ui/Button";
 import CollaboratorDetailsSheet from "$app/components/Collaborators/CollaboratorDetailsSheet";
 import { Layout } from "$app/components/Collaborators/Layout";
 import { Icon } from "$app/components/Icons";
 import { useLoggedInUser } from "$app/components/LoggedInUser";
-import { NavigationButtonInertia } from "$app/components/NavigationButton";
 import { showAlert } from "$app/components/server-components/Alert";
 import { Placeholder, PlaceholderImage } from "$app/components/ui/Placeholder";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "$app/components/ui/Table";
@@ -54,13 +53,13 @@ const CollaboratorsPage = () => {
       showTabs={has_incoming_collaborators}
       headerActions={
         <WithTooltip position="bottom" tip={collaborators_disabled_reason}>
-          <NavigationButtonInertia
-            href={Routes.new_collaborator_path()}
+          <Button
+            asChild
             color="accent"
             disabled={disableActions || collaborators_disabled_reason !== null}
           >
-            Add collaborator
-          </NavigationButtonInertia>
+            <Link href={Routes.new_collaborator_path()}>Add collaborator</Link>
+          </Button>
         </WithTooltip>
       }
     >
@@ -117,13 +116,15 @@ const CollaboratorsPage = () => {
                     </TableCell>
                     <TableCell onClick={(e) => e.stopPropagation()}>
                       <div className="flex flex-wrap gap-3 lg:justify-end">
-                        <NavigationButtonInertia
-                          href={Routes.edit_collaborator_path(collaborator.id)}
+                        <Button
+                          asChild
                           aria-label="Edit"
                           disabled={disableActions}
                         >
-                          <Icon name="pencil" />
-                        </NavigationButtonInertia>
+                          <Link href={Routes.edit_collaborator_path(collaborator.id)}>
+                            <Icon name="pencil" />
+                          </Link>
+                        </Button>
 
                         <Button
                           type="submit"
@@ -148,14 +149,14 @@ const CollaboratorsPage = () => {
               showSetupWarning={selectedCollaborator.setup_incomplete}
               actions={
                 <>
-                  <NavigationButtonInertia
-                    href={Routes.edit_collaborator_path(selectedCollaborator.id)}
+                  <Button
+                    asChild
                     className="flex-1"
                     aria-label="Edit"
                     disabled={disableActions}
                   >
-                    Edit
-                  </NavigationButtonInertia>
+                    <Link href={Routes.edit_collaborator_path(selectedCollaborator.id)}>Edit</Link>
+                  </Button>
                   <Button
                     className="flex-1"
                     color="danger"

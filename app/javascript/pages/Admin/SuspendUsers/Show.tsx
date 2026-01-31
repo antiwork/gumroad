@@ -1,7 +1,7 @@
 import { useForm, usePage } from "@inertiajs/react";
 import React from "react";
 
-import { Button } from "$app/components/Button";
+import { Button } from "$app/components/ui/Button";
 import CodeSnippet from "$app/components/ui/CodeSnippet";
 
 type PageProps = {

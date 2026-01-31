@@ -4,7 +4,7 @@ import { cast } from "ts-safe-cast";
 
 import { SettingPage } from "$app/parsers/settings";
 
-import { Button } from "$app/components/Button";
+import { Button } from "$app/components/ui/Button";
 import { PasswordInput } from "$app/components/PasswordInput";
 import { showAlert } from "$app/components/server-components/Alert";
 import { Layout as SettingsLayout } from "$app/components/Settings/Layout";

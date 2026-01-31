@@ -25,7 +25,7 @@ import { variantLabel } from "$app/utils/labels";
 import { assertResponseError } from "$app/utils/request";
 import { startTrackingForSeller, trackProductEvent } from "$app/utils/user_analytics";
 
-import { NavigationButton } from "$app/components/Button";
+import { Button } from "$app/components/ui/Button";
 import {
   CartItem,
   CartItemEnd,
@@ -665,9 +665,15 @@ const ExistingPurchaseCard = ({
     }).catch(assertResponseError);
 
   const viewContentButton = purchase.show_view_content_button_on_product_page ? (
-    <NavigationButton color="primary" href={purchase.content_url ?? ""} target="_blank" onClick={handleViewClick}>
-      {customViewContentButtonText ?? "View content"}
-    </NavigationButton>
+    <Button
+      asChild
+      color="primary"
+      onClick={handleViewClick}
+    >
+      <a href={purchase.content_url ?? ""} target="_blank">
+        {customViewContentButtonText ?? "View content"}
+      </a>
+    </Button>
   ) : null;
 
   const allowRating = differenceInYears(new Date(), parseISO(purchase.created_at)) < 1;
@@ -684,19 +690,23 @@ const ExistingPurchaseCard = ({
               {purchase.total_price_including_tax_and_shipping}
             </CardContent>
             <CardContent>
-              <NavigationButton
-                href={purchase.membership.manage_url}
-                target="_blank"
+              <Button
+                asChild
+                className="grow basis-0"
                 onClick={() =>
                   void trackUserProductAction({
                     name: "product_information_manage_membership",
                     permalink,
                   }).catch(assertResponseError)
                 }
-                className="grow basis-0"
               >
-                {purchase.subscription_has_lapsed ? "Restart membership" : "Manage membership"}
-              </NavigationButton>
+                <a
+                  href={purchase.membership.manage_url}
+                  target="_blank"
+                >
+                  {purchase.subscription_has_lapsed ? "Restart membership" : "Manage membership"}
+                </a>
+              </Button>
               {viewContentButton}
             </CardContent>
           </>

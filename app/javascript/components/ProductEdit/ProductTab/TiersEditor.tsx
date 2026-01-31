@@ -14,7 +14,7 @@ import {
 } from "$app/utils/recurringPricing";
 import { assertResponseError } from "$app/utils/request";
 
-import { Button } from "$app/components/Button";
+import { Button } from "$app/components/ui/Button";
 import { DateInput } from "$app/components/DateInput";
 import { Details } from "$app/components/Details";
 import { Dropdown } from "$app/components/Dropdown";

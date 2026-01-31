@@ -2,7 +2,7 @@ import * as React from "react";
 
 import FileUtils from "$app/utils/file";
 
-import { Button, buttonVariants } from "$app/components/Button";
+import { Button, buttonVariants } from "$app/components/ui/Button";
 import { Icon } from "$app/components/Icons";
 import { LoadingSpinner } from "$app/components/LoadingSpinner";
 import { showAlert } from "$app/components/server-components/Alert";

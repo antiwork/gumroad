@@ -5,7 +5,7 @@ import FileUtils from "$app/utils/file";
 import { SUBTITLE_LANGUAGES } from "$app/utils/subtitle_languages";
 import { summarizeUploadProgress } from "$app/utils/summarizeUploadProgress";
 
-import { Button } from "$app/components/Button";
+import { Button } from "$app/components/ui/Button";
 import { Icon } from "$app/components/Icons";
 import { LoadingSpinner } from "$app/components/LoadingSpinner";
 import { Row, RowActions, RowContent, RowDetails } from "$app/components/ui/Rows";

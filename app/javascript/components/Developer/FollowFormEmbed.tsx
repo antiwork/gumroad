@@ -5,7 +5,7 @@ import { asyncVoid } from "$app/utils/promise";
 import { assertResponseError } from "$app/utils/request";
 import { getAppliedStyles } from "$app/utils/styles";
 
-import { Button } from "$app/components/Button";
+import { Button } from "$app/components/ui/Button";
 import { useAppDomain } from "$app/components/DomainSettings";
 import { showAlert } from "$app/components/server-components/Alert";
 

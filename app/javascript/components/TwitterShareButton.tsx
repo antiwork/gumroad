@@ -1,6 +1,6 @@
 import * as React from "react";
 
-import { NavigationButton } from "$app/components/Button";
+import { Button } from "$app/components/ui/Button";
 
 // if true
 export const TwitterShareButton = ({ url, text = "Join me on @Gumroad!" }: { url: string; text?: string }) => {
@@ -17,9 +17,11 @@ export const TwitterShareButton = ({ url, text = "Join me on @Gumroad!" }: { url
   };
 
   return (
-    <NavigationButton color="twitter" onClick={handleClick} href={shareUrl} target="_blank" rel="noopener noreferrer">
-      <span className="brand-icon brand-icon-twitter" />
-      Share on X
-    </NavigationButton>
+    <Button asChild color="twitter">
+      <a href={shareUrl} onClick={handleClick} target="_blank" rel="noopener noreferrer">
+        <span className="brand-icon brand-icon-twitter" />
+        Share on X
+      </a>
+    </Button>
   );
 };

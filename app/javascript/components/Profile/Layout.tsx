@@ -2,7 +2,7 @@ import * as React from "react";
 
 import { CreatorProfile } from "$app/parsers/profile";
 
-import { NavigationButton } from "$app/components/Button";
+import { Button } from "$app/components/ui/Button";
 import { CartNavigationButton } from "$app/components/Checkout/CartNavigationButton";
 import { useCartItemsCount } from "$app/components/Checkout/useCartItemsCount";
 import { Icon } from "$app/components/Icons";
@@ -27,9 +27,11 @@ export const Layout = ({ creatorProfile, hideFollowForm, children }: LayoutProps
     creatorProfile.twitter_handle || cartItemsCount ? (
       <div className="ml-auto flex items-center gap-3">
         {creatorProfile.twitter_handle ? (
-          <NavigationButton outline href={`https://twitter.com/${creatorProfile.twitter_handle}`} target="_blank">
-            <Icon name="twitter" />
-          </NavigationButton>
+          <Button asChild outline>
+            <a href={`https://twitter.com/${creatorProfile.twitter_handle}`} target="_blank">
+              <Icon name="twitter" />
+            </a>
+          </Button>
         ) : null}
         <CartNavigationButton />
       </div>
@@ -42,15 +44,19 @@ export const Layout = ({ creatorProfile, hideFollowForm, children }: LayoutProps
           <div className="relative flex grow items-center gap-3 border-b border-border px-4 py-8 lg:flex-1 lg:border-0 lg:p-0">
             {(loggedInUser?.isGumroadAdmin || loggedInUser?.isImpersonating) &&
             creatorProfile.external_id !== loggedInUser.id ? (
-              <NavigationButton
-                href={Routes.admin_impersonate_url({
-                  user_identifier: creatorProfile.external_id,
-                })}
+              <Button
+                asChild
                 className="left-3"
                 color="filled"
               >
-                Impersonate
-              </NavigationButton>
+                <a
+                  href={Routes.admin_impersonate_url({
+                    user_identifier: creatorProfile.external_id,
+                  })}
+                >
+                  Impersonate
+                </a>
+              </Button>
             ) : null}
             <img className="user-avatar" src={creatorProfile.avatar_url} alt="Profile Picture" />
             <a href={Routes.root_path()} className="no-underline">

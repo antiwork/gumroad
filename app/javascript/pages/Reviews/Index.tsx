@@ -3,7 +3,7 @@ import { cast } from "ts-safe-cast";
 
 import { ProductNativeType } from "$app/parsers/product";
 
-import { Button, NavigationButton } from "$app/components/Button";
+import { Button } from "$app/components/ui/Button";
 import { CartItem, CartItemList, CartItemMain, CartItemMedia, CartItemTitle } from "$app/components/CartItemList";
 import { useDiscoverUrl } from "$app/components/DomainSettings";
 import { Icon } from "$app/components/Icons";
@@ -188,9 +188,9 @@ export default function ReviewsIndex({
         <section className="p-4 md:p-8">
           <Placeholder>
             <h2>You've reviewed all your products!</h2>
-            <NavigationButton href={discoverUrl} color="accent">
-              Discover more
-            </NavigationButton>
+            <Button asChild color="accent">
+              <a href={discoverUrl}>Discover more</a>
+            </Button>
           </Placeholder>
         </section>
       ) : null}
@@ -200,9 +200,9 @@ export default function ReviewsIndex({
             <PlaceholderImage src={placeholderImage} />
             <h2>You haven't bought anything... yet!</h2>
             Once you do, it'll show up here so you can review them.
-            <NavigationButton href={discoverUrl} color="accent">
-              Discover products
-            </NavigationButton>
+            <Button asChild color="accent">
+              <a href={discoverUrl}>Discover products</a>
+            </Button>
             <a href="/help/article/344-rate-and-review-your-purchase" target="_blank" rel="noreferrer">
               Learn more about reviews
             </a>

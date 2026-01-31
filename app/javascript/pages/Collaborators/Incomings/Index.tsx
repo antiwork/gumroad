@@ -1,4 +1,4 @@
-import { useForm, usePage } from "@inertiajs/react";
+import { useForm, usePage, Link } from "@inertiajs/react";
 import * as React from "react";
 import { cast } from "ts-safe-cast";
 
@@ -7,12 +7,11 @@ import type { IncomingCollaborator } from "$app/data/incoming_collaborators";
 import { classNames } from "$app/utils/classNames";
 import { formatCommission, formatProductNames } from "$app/utils/collaboratorFormatters";
 
-import { Button } from "$app/components/Button";
+import { Button } from "$app/components/ui/Button";
 import CollaboratorDetailsSheet from "$app/components/Collaborators/CollaboratorDetailsSheet";
 import { Layout } from "$app/components/Collaborators/Layout";
 import { Icon } from "$app/components/Icons";
 import { useLoggedInUser } from "$app/components/LoggedInUser";
-import { NavigationButtonInertia } from "$app/components/NavigationButton";
 import { showAlert } from "$app/components/server-components/Alert";
 import { Placeholder, PlaceholderImage } from "$app/components/ui/Placeholder";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "$app/components/ui/Table";
@@ -186,15 +185,15 @@ const IncomingCollaboratorsPage = () => {
       showTabs
       headerActions={
         <WithTooltip position="bottom" tip={collaborators_disabled_reason}>
-          <NavigationButtonInertia
-            href={Routes.new_collaborator_path()}
+          <Button
+            asChild
             color="accent"
             disabled={
               !loggedInUser?.policies.collaborator.create || collaborators_disabled_reason !== null || form.processing
             }
           >
-            Add collaborator
-          </NavigationButtonInertia>
+            <Link href={Routes.new_collaborator_path()}>Add collaborator</Link>
+          </Button>
         </WithTooltip>
       }
     >

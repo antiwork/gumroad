@@ -3,7 +3,7 @@ import * as React from "react";
 
 import { SettingPage as Page } from "$app/parsers/settings";
 
-import { Button } from "$app/components/Button";
+import { Button } from "$app/components/ui/Button";
 import { PageHeader } from "$app/components/ui/PageHeader";
 import { Tabs, Tab } from "$app/components/ui/Tabs";
 

@@ -3,7 +3,7 @@ import * as React from "react";
 import { CircleCommunity, CircleSpaceGroup, fetchCommunities, fetchSpaceGroups } from "$app/data/circle_integration";
 import { assertResponseError } from "$app/utils/request";
 
-import { Button } from "$app/components/Button";
+import { Button } from "$app/components/ui/Button";
 import { LoadingSpinner } from "$app/components/LoadingSpinner";
 import { useProductEditContext } from "$app/components/ProductEdit/state";
 import { showAlert } from "$app/components/server-components/Alert";

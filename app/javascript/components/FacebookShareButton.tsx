@@ -1,6 +1,6 @@
 import * as React from "react";
 
-import { NavigationButton } from "$app/components/Button";
+import { Button } from "$app/components/ui/Button";
 
 const isFbSdkInitialized = () => typeof FB !== "undefined";
 
@@ -16,9 +16,11 @@ export const FacebookShareButton = ({ url, text = "Join me on Gumroad!" }: { url
   };
 
   return (
-    <NavigationButton color="facebook" onClick={handleClick} href={shareUrl} target="_blank" rel="noopener noreferrer">
-      <span className="brand-icon brand-icon-facebook" />
-      Share on Facebook
-    </NavigationButton>
+    <Button asChild color="facebook">
+      <a href={shareUrl} onClick={handleClick} target="_blank" rel="noopener noreferrer">
+        <span className="brand-icon brand-icon-facebook" />
+        Share on Facebook
+      </a>
+    </Button>
   );
 };

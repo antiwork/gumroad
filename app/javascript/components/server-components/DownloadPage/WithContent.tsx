@@ -9,7 +9,7 @@ import { request } from "$app/utils/request";
 import { generatePageIcon } from "$app/utils/rich_content_page";
 import { register } from "$app/utils/serverComponentUtil";
 
-import { Button } from "$app/components/Button";
+import { Button } from "$app/components/ui/Button";
 import { DiscordButton } from "$app/components/DiscordButton";
 import { DownloadAllButton } from "$app/components/Download/DownloadAllButton";
 import { FileList as DownloadFileList, FileItem, FolderItem } from "$app/components/Download/FileList";

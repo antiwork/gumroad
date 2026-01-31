@@ -5,7 +5,7 @@ import { ProductNativeType } from "$app/parsers/product";
 import { CurrencyCode } from "$app/utils/currency";
 import { assertResponseError, request } from "$app/utils/request";
 
-import { Button } from "$app/components/Button";
+import { Button } from "$app/components/ui/Button";
 import { DiscountInput, InputtedDiscount } from "$app/components/CheckoutDashboard/DiscountInput";
 import { Details } from "$app/components/Details";
 import { Dropdown } from "$app/components/Dropdown";

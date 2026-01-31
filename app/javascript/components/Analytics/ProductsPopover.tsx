@@ -1,7 +1,7 @@
 import * as React from "react";
 
 import { type Product } from "$app/components/Analytics";
-import { Button } from "$app/components/Button";
+import { Button } from "$app/components/ui/Button";
 import { Icon } from "$app/components/Icons";
 import { Popover, PopoverContent, PopoverTrigger } from "$app/components/Popover";
 import { Card, CardContent } from "$app/components/ui/Card";

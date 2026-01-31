@@ -3,7 +3,7 @@ import * as React from "react";
 import { sendSubscribersReport } from "$app/data/audience";
 import { assertResponseError } from "$app/utils/request";
 
-import { Button } from "$app/components/Button";
+import { Button } from "$app/components/ui/Button";
 import { LoadingSpinner } from "$app/components/LoadingSpinner";
 import { PopoverClose } from "$app/components/Popover";
 import { showAlert } from "$app/components/server-components/Alert";

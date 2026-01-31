@@ -3,7 +3,7 @@ import * as React from "react";
 import { Review as ReviewType, getReviews } from "$app/data/product_reviews";
 import { assertResponseError } from "$app/utils/request";
 
-import { Button } from "$app/components/Button";
+import { Button } from "$app/components/ui/Button";
 import { LoadingSpinner } from "$app/components/LoadingSpinner";
 import { Modal } from "$app/components/Modal";
 import { PaginationProps } from "$app/components/Pagination";

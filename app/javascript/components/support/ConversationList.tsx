@@ -2,7 +2,7 @@ import { useConversations } from "@helperai/react";
 import placeholderImage from "images/placeholders/support.png";
 import React from "react";
 
-import { Button } from "$app/components/Button";
+import { Button } from "$app/components/ui/Button";
 import { Placeholder, PlaceholderImage } from "$app/components/ui/Placeholder";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "$app/components/ui/Table";
 
