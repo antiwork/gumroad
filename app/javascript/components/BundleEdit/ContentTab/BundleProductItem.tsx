@@ -2,7 +2,7 @@ import * as React from "react";
 
 import { variantLabel } from "$app/utils/labels";
 
-import { BundleProduct } from "$app/components/BundleEdit/state";
+import { BundleProduct } from "$app/components/BundleEdit/types";
 import { Button } from "$app/components/Button";
 import {
   CartItemEnd,

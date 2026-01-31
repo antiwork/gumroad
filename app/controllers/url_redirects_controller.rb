@@ -164,9 +164,7 @@ class UrlRedirectsController < ApplicationController
         email: params[:email],
       },
     )
-    props = UrlRedirectPresenter.new(url_redirect: @url_redirect, logged_in_user:).download_page_without_content_props(extra_props)
-
-    render inertia: "UrlRedirects/ConfirmPage", props:
+    @react_component_props = UrlRedirectPresenter.new(url_redirect: @url_redirect, logged_in_user:).download_page_without_content_props(extra_props)
   end
 
   def expired
