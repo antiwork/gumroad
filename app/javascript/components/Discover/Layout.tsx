@@ -18,7 +18,7 @@ const UserActionButtons: React.FC = () => {
   if (currentSeller) {
     return (
       <>
-        <NavigationButton href={Routes.library_url()} className="flex-1 lg:flex-none">
+        <NavigationButton href={Routes.library_url()} className="flex-1 lg:flex-none border-black">
           <Icon name="bookmark-heart-fill" /> Library
         </NavigationButton>
         {currentSeller.has_published_products ? null : (
