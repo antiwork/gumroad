@@ -3,7 +3,7 @@ import * as React from "react";
 import { classNames } from "$app/utils/classNames";
 import { useFieldset, stateBorderStyles } from "$app/components/ui/Fieldset";
 import { Icon } from "$app/components/Icons";
-import { baseStyles } from "$app/components/ui/Input";
+import { baseInputStyles } from "$app/components/ui/Input";
 
 export const Select = React.forwardRef<
   HTMLSelectElement,
@@ -15,7 +15,7 @@ export const Select = React.forwardRef<
     <div className={classNames("relative inline-grid", wrapperClassName)}>
       <select
         ref={ref}
-        className={classNames(baseStyles, "appearance-none pr-10", stateBorderStyles[state], className)}
+        className={classNames(baseInputStyles, "appearance-none pr-10", stateBorderStyles[state], className)}
         {...props}
       >
         {children}

@@ -4,7 +4,7 @@ import { classNames } from "$app/utils/classNames";
 import { useFieldset, stateBorderStyles } from "$app/components/ui/Fieldset";
 import { useInputGroup } from "$app/components/ui/InputGroup";
 
-export const baseStyles = classNames(
+export const baseInputStyles = classNames(
   "font-[inherit] py-3 px-4 text-base leading-[1.4]",
   "border border-border rounded block w-full bg-background placeholder:text-muted",
   "focus:outline-2 focus:outline-accent focus:outline-offset-0",
@@ -23,7 +23,7 @@ export const Input = React.forwardRef<HTMLInputElement, React.InputHTMLAttribute
         ref={ref}
         readOnly={readOnly}
         className={classNames(
-          baseStyles,
+          baseInputStyles,
           readOnly && "cursor-default bg-body focus:outline-none",
           isInsideInputGroup ? inputGroupChildStyles : stateBorderStyles[state],
           inputGroupDisabled && "opacity-100",

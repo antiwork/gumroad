@@ -9,7 +9,7 @@ export const Label = React.forwardRef<
   <label
     ref={ref}
     className={classNames(
-      "inline-flex cursor-pointer gap-2 has-[:disabled]:cursor-not-allowed has-[:disabled]:opacity-30",
+      "inline-flex cursor-pointer gap-2 font-normal has-[:disabled]:cursor-not-allowed has-[:disabled]:opacity-30",
       className,
     )}
     {...props}

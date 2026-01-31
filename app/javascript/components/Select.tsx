@@ -193,7 +193,7 @@ const DropdownIndicator = <IsMulti extends boolean>(props: DropdownIndicatorProp
 const Control = <IsMulti extends boolean>(props: ControlProps<Option, IsMulti>) => (
   <components.Control
     className={classNames(
-      "relative inline-flex min-h-[3.025rem] w-full items-center gap-2 rounded border border-border px-4 py-0",
+      "relative inline-flex min-h-12 w-full items-center gap-2 rounded border border-border px-4 py-0",
       props.menuIsOpen && "rounded-b-none",
       "bg-background text-foreground",
       "focus-within:outline-2 focus-within:outline-offset-0 focus-within:outline-accent",
