@@ -3186,6 +3186,95 @@ describe LinksController, :vcr, inertia: true do
           expect(response).to be_successful
           expect(response).not_to be_redirect
         end
+
+        describe "discount code selection" do
+          let(:url_offer_code) { create(:offer_code, products: [product], code: "URL10", amount_cents: 200, currency_type: product.price_currency_type) }
+          let(:default_offer_code) { create(:offer_code, products: [product], code: "DEFAULT10", amount_cents: 300, currency_type: product.price_currency_type) }
+
+          before do
+            product.update!(default_offer_code: default_offer_code)
+          end
+
+          context "when URL code has better discount than default code" do
+            let(:url_offer_code) { create(:offer_code, products: [product], code: "URL10", amount_cents: 400, currency_type: product.price_currency_type) }
+            let(:default_offer_code) { create(:offer_code, products: [product], code: "DEFAULT10", amount_cents: 200, currency_type: product.price_currency_type) }
+
+            it "uses the URL code in checkout redirect" do
+              get :show, params: { id: product.to_param, wanted: "true", code: url_offer_code.code }
+
+              expect(response).to be_redirect
+              redirect_url = URI.parse(response.location)
+              query_params = Rack::Utils.parse_query(redirect_url.query)
+              expect(query_params["code"]).to eq(url_offer_code.code)
+            end
+          end
+
+          context "when default code has better discount than URL code" do
+            let(:url_offer_code) { create(:offer_code, products: [product], code: "URL10", amount_cents: 200, currency_type: product.price_currency_type) }
+            let(:default_offer_code) { create(:offer_code, products: [product], code: "DEFAULT10", amount_cents: 400, currency_type: product.price_currency_type) }
+
+            it "uses the default code in checkout redirect" do
+              get :show, params: { id: product.to_param, wanted: "true", code: url_offer_code.code }
+
+              expect(response).to be_redirect
+              redirect_url = URI.parse(response.location)
+              query_params = Rack::Utils.parse_query(redirect_url.query)
+              expect(query_params["code"]).to eq(default_offer_code.code)
+            end
+          end
+
+          context "when only URL code is provided" do
+            before do
+              product.update!(default_offer_code: nil)
+            end
+
+            it "uses the URL code in checkout redirect" do
+              get :show, params: { id: product.to_param, wanted: "true", code: url_offer_code.code }
+
+              expect(response).to be_redirect
+              redirect_url = URI.parse(response.location)
+              query_params = Rack::Utils.parse_query(redirect_url.query)
+              expect(query_params["code"]).to eq(url_offer_code.code)
+            end
+          end
+
+          context "when only default code is provided" do
+            it "uses the default code in checkout redirect" do
+              get :show, params: { id: product.to_param, wanted: "true" }
+
+              expect(response).to be_redirect
+              redirect_url = URI.parse(response.location)
+              query_params = Rack::Utils.parse_query(redirect_url.query)
+              expect(query_params["code"]).to eq(default_offer_code.code)
+            end
+          end
+
+          context "when URL code is invalid and default code is valid" do
+            it "uses the default code in checkout redirect" do
+              get :show, params: { id: product.to_param, wanted: "true", code: "INVALID" }
+
+              expect(response).to be_redirect
+              redirect_url = URI.parse(response.location)
+              query_params = Rack::Utils.parse_query(redirect_url.query)
+              expect(query_params["code"]).to eq(default_offer_code.code)
+            end
+          end
+
+          context "when both codes are invalid" do
+            before do
+              product.update!(default_offer_code: nil)
+            end
+
+            it "does not include code in checkout redirect" do
+              get :show, params: { id: product.to_param, wanted: "true", code: "INVALID" }
+
+              expect(response).to be_redirect
+              redirect_url = URI.parse(response.location)
+              query_params = Rack::Utils.parse_query(redirect_url.query)
+              expect(query_params["code"]).to be_nil
+            end
+          end
+        end
       end
 
       context "with user signed in" do

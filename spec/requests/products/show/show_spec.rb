@@ -252,13 +252,15 @@ describe("ProductShowScenario", type: :system, js: true) do
         expect(page).to have_text("Total US$90", normalize_ws: true, wait: 5)
       end
 
-      it "prioritizes URL code parameter over default when both are present" do
-        url_offer_code = create(:offer_code, user: seller, products: [product], code: "URL5", amount_cents: 500)
-        visit "#{product.long_url}/#{url_offer_code.code}?wanted=true"
+      context "when both URL and default codes are present" do
+        it "takes the maximum discount between the two codes" do
+          url_offer_code = create(:offer_code, user: seller, products: [product], code: "URL5", amount_cents: 500)
+          visit "#{product.long_url}/#{url_offer_code.code}?wanted=true"
 
-        expect(page).to have_current_path(/^\/checkout/, wait: 10)
-        expect(page).to have_selector("[aria-label='Discount code']", text: url_offer_code.code, wait: 5)
-        expect(page).to have_text("Total US$95", normalize_ws: true, wait: 5)
+          expect(page).to have_current_path(/^\/checkout/, wait: 10)
+          expect(page).to have_selector("[aria-label='Discount code']", text: default_offer_code.code, wait: 5)
+          expect(page).to have_text("Total US$90", normalize_ws: true, wait: 5)
+        end
       end
     end
   end
