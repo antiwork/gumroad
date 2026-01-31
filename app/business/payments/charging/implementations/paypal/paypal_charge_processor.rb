@@ -603,7 +603,7 @@ class PaypalChargeProcessor
     dispute = dispute_evidence.dispute
     paypal_dispute_id = dispute.charge_processor_dispute_id
 
-    return if paypal_dispute_id.blank?
+    raise ChargeProcessorInvalidRequestError, "PayPal dispute ID is missing" if paypal_dispute_id.blank?
 
     merchant_account ||= dispute.purchase&.merchant_account || dispute.charge&.merchant_account
     seller_merchant_id = merchant_account&.charge_processor_merchant_id

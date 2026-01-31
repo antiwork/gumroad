@@ -1568,9 +1568,10 @@ describe PaypalChargeProcessor, :vcr do
     context "when dispute has no charge_processor_dispute_id" do
       let(:dispute) { instance_double(Dispute, charge_processor_dispute_id: nil, reason: Dispute::REASON_PRODUCT_NOT_RECEIVED, purchases: [], event_created_at: nil) }
 
-      it "returns early without submitting evidence" do
-        expect(paypal_rest_api).not_to receive(:provide_evidence)
-        processor.fight_chargeback("capture_123", dispute_evidence)
+      it "raises ChargeProcessorInvalidRequestError" do
+        expect do
+          processor.fight_chargeback("capture_123", dispute_evidence)
+        end.to raise_error(ChargeProcessorInvalidRequestError, "PayPal dispute ID is missing")
       end
     end
 
