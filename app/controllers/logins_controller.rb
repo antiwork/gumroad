@@ -3,18 +3,24 @@
 class LoginsController < Devise::SessionsController
   include OauthApplicationConfig, ValidateRecaptcha, InertiaRendering
 
+  include PageMeta::Base
+
   skip_before_action :check_suspended, only: %i[create destroy]
   before_action :block_json_request, only: :new
   after_action :clear_dashboard_preference, only: :destroy
   before_action :reset_impersonated_user, only: :destroy
   before_action :set_noindex_header, only: :new, if: -> { params[:next]&.start_with?("/oauth/authorize") }
 
+  before_action :set_csrf_meta_tags
+  before_action :set_default_meta_tags
+  helper_method :erb_meta_tags
+
   layout "inertia", only: [:new]
 
   def new
     return redirect_to login_path(next: request.referrer) if params[:next].blank? && request_referrer_is_a_valid_after_login_path?
 
-    @title = "Log In"
+    set_meta_tag(title: "Log In")
     auth_presenter = AuthPresenter.new(params:, application: @application)
     render inertia: "Logins/New", props: auth_presenter.login_props
   end

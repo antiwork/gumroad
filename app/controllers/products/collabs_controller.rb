@@ -6,7 +6,7 @@ class Products::CollabsController < Sellers::BaseController
   layout "inertia"
 
   def index
-    @title = "Products"
+    set_meta_tag(title: "Products")
     presenter = CollabProductsPagePresenter.new(
       pundit_user:,
       query: collabs_params[:query],

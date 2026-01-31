@@ -127,15 +127,22 @@ class DiscoverController < ApplicationController
     end
 
     def prepare_discover_page
-      @on_discover_page = true
-      @body_id = "discover-page"
+      set_meta_tag(tag_name: "base", target: "_parent") unless user_signed_in?
 
-      @canonical_url = Discover::CanonicalUrlPresenter.canonical_url(params)
+      set_meta_tag(property: "og:title", content: "Gumroad")
+      set_meta_tag(property: "og:type", content: "website")
+      set_meta_tag(property: "og:site_name", content: "Gumroad")
+      set_meta_tag(tag_name: "link", rel: "canonical", href: Discover::CanonicalUrlPresenter.canonical_url(params), head_key: "canonical")
 
       if !params[:taxonomy].present? && !params[:query].present? && params[:tags].present?
         presenter = Discover::TagPageMetaPresenter.new(params[:tags], @search_results[:total])
-        @title = "#{presenter.title} | Gumroad"
-        @discover_tag_meta_description = presenter.meta_description
+        set_meta_tag(title: "#{presenter.title} | Gumroad")
+        set_meta_tag(name: "description", content: presenter.meta_description)
+        set_meta_tag(property: "og:description", content: presenter.meta_description)
+      else
+        description = "Browse over 1.6 million free and premium digital products in education, tech, design, and more categories from Gumroad creators and online entrepreneurs."
+        set_meta_tag(name: "description", content: description)
+        set_meta_tag(property: "og:description", content: description)
       end
     end
 
