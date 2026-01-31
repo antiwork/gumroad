@@ -23,7 +23,7 @@ export const Checkbox = React.forwardRef<
         "checked:bg-accent",
         "rounded-lg",
         "peer",
-        "after:hidden!", // !important should be removed after complete forms migration
+        "after:hidden!", // this should be removed after complete forms migration
         className,
       )}
       {...props}
