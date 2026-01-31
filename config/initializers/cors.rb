@@ -20,7 +20,16 @@ Rails.application.config.middleware.insert_before 0, Rack::Cors do
   if Rails.env.development? || Rails.env.test?
     allow do
       origins "*"
-      resource "/assets/ABCFavorit-Regular*"
+      resource "/assets/*",
+               headers: :any,
+               methods: [:get]
+    end
+
+    allow do
+      origins "*"
+      resource "/packs/*",
+               headers: :any,
+               methods: [:get]
     end
   end
 end
