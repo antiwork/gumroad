@@ -4,10 +4,10 @@ import { Form } from "$app/components/Admin/Form";
 import type { User } from "$app/components/Admin/Users/User";
 import { Button } from "$app/components/Button";
 import { showAlert } from "$app/components/server-components/Alert";
-import { Pill } from "$app/components/ui/Pill";
-import { InputGroup } from "$app/components/ui/InputGroup";
-import { Input } from "$app/components/ui/Input";
 import { Fieldset, FieldsetDescription } from "$app/components/ui/Fieldset";
+import { Input } from "$app/components/ui/Input";
+import { InputGroup } from "$app/components/ui/InputGroup";
+import { Pill } from "$app/components/ui/Pill";
 
 type AdminUserAddCreditProps = {
   user: User;

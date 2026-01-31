@@ -5,9 +5,9 @@ import AdminSalesReportsForm from "$app/components/Admin/SalesReports/Form";
 import { Button } from "$app/components/Button";
 import { Icon } from "$app/components/Icons";
 import { LoadingSpinner } from "$app/components/LoadingSpinner";
+import { FormSection } from "$app/components/ui/FormSection";
 import { Placeholder } from "$app/components/ui/Placeholder";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "$app/components/ui/Table";
-import { FormSection } from "$app/components/ui/FormSection";
 
 export type JobHistoryItem = {
   job_id: string;

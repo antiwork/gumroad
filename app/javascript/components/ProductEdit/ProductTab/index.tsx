@@ -36,9 +36,9 @@ import { VersionsEditor } from "$app/components/ProductEdit/ProductTab/VersionsE
 import { RefundPolicySelector } from "$app/components/ProductEdit/RefundPolicy";
 import { useProductEditContext } from "$app/components/ProductEdit/state";
 import { ToggleSettingRow } from "$app/components/SettingRow";
-import { Switch } from "$app/components/ui/Switch";
 import { TypeSafeOptionSelect } from "$app/components/TypeSafeOptionSelect";
 import { Alert } from "$app/components/ui/Alert";
+import { Switch } from "$app/components/ui/Switch";
 
 export const ProductTab = () => {
   const uid = React.useId();

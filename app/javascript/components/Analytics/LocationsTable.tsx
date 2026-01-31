@@ -3,9 +3,9 @@ import * as React from "react";
 import { AnalyticsDataByState, LocationDataValue } from "$app/data/analytics";
 import { formatPriceCentsWithCurrencySymbol } from "$app/utils/currency";
 
+import { Select } from "$app/components/ui/Select";
 import { Table, TableBody, TableCaption, TableCell, TableHead, TableHeader, TableRow } from "$app/components/ui/Table";
 import { useClientSortingTableDriver } from "$app/components/useSortingTableDriver";
-import { Select } from "$app/components/ui/Select";
 
 type TableEntry = {
   name: string;

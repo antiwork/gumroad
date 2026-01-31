@@ -18,9 +18,9 @@ import { useLoggedInUser } from "$app/components/LoggedInUser";
 import { WithPreviewSidebar } from "$app/components/PreviewSidebar";
 import { Select } from "$app/components/Select";
 import { showAlert } from "$app/components/server-components/Alert";
-import { Switch } from "$app/components/ui/Switch";
 import { TypeSafeOptionSelect } from "$app/components/TypeSafeOptionSelect";
 import { Card, CardContent } from "$app/components/ui/Card";
+import { Switch } from "$app/components/ui/Switch";
 
 export type SimpleProduct = { id: string; name: string; archived: boolean };
 

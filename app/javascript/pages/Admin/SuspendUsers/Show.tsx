@@ -3,8 +3,8 @@ import React from "react";
 
 import { Button } from "$app/components/Button";
 import CodeSnippet from "$app/components/ui/CodeSnippet";
-import { Label } from "$app/components/ui/Label";
 import { FormSection } from "$app/components/ui/FormSection";
+import { Label } from "$app/components/ui/Label";
 import { Select } from "$app/components/ui/Select";
 import { Textarea } from "$app/components/ui/Textarea";
 

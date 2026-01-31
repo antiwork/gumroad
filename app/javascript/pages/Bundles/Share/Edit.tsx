@@ -22,8 +22,8 @@ import { ProfileSectionsEditor } from "$app/components/ProductEdit/ShareTab/Prof
 import { TagSelector } from "$app/components/ProductEdit/ShareTab/TagSelector";
 import { TaxonomyEditor } from "$app/components/ProductEdit/ShareTab/TaxonomyEditor";
 import { ProfileSection, PublicFileWithStatus } from "$app/components/ProductEdit/state";
-import { Switch } from "$app/components/ui/Switch";
 import { TwitterShareButton } from "$app/components/TwitterShareButton";
+import { Switch } from "$app/components/ui/Switch";
 
 type SharePageProps = {
   bundle: {

@@ -11,8 +11,8 @@ import { Icon } from "$app/components/Icons";
 import { Drawer } from "$app/components/SortableList";
 import { NodeActionsMenu } from "$app/components/TiptapExtensions/NodeActionsMenu";
 import { createInsertCommand } from "$app/components/TiptapExtensions/utils";
-import { Switch } from "$app/components/ui/Switch";
 import { Row, RowActions, RowContent, RowDetails } from "$app/components/ui/Rows";
+import { Switch } from "$app/components/ui/Switch";
 
 declare module "@tiptap/core" {
   interface Commands<ReturnType> {

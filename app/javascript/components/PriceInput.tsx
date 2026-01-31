@@ -9,9 +9,9 @@ import {
 
 import { Icon } from "$app/components/Icons";
 import { TypeSafeOptionSelect } from "$app/components/TypeSafeOptionSelect";
-import { Pill } from "$app/components/ui/Pill";
-import { InputGroup } from "$app/components/ui/InputGroup";
 import { Input } from "$app/components/ui/Input";
+import { InputGroup } from "$app/components/ui/InputGroup";
+import { Pill } from "$app/components/ui/Pill";
 
 export const PriceInput = React.forwardRef<
   HTMLInputElement,

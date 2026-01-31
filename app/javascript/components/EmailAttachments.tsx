@@ -14,8 +14,8 @@ import { Drawer } from "$app/components/SortableList";
 import { SubtitleList } from "$app/components/SubtitleList";
 import { SubtitleFile } from "$app/components/SubtitleList/Row";
 import { SubtitleUploadBox } from "$app/components/SubtitleUploadBox";
-import { Switch } from "$app/components/ui/Switch";
 import { Row, RowActions, RowContent, RowDetails, Rows } from "$app/components/ui/Rows";
+import { Switch } from "$app/components/ui/Switch";
 import { UploadProgress } from "$app/components/useConfigureEvaporate";
 import { WithTooltip } from "$app/components/WithTooltip";
 

@@ -15,10 +15,10 @@ import * as React from "react";
 import { DateInput } from "$app/components/DateInput";
 import { Icon } from "$app/components/Icons";
 import { Popover, PopoverContent, PopoverTrigger } from "$app/components/Popover";
-import { useUserAgentInfo } from "$app/components/UserAgent";
-import { InputGroup } from "$app/components/ui/InputGroup";
 import { Fieldset, FieldsetDescription, FieldsetTitle } from "$app/components/ui/Fieldset";
+import { InputGroup } from "$app/components/ui/InputGroup";
 import { Label } from "$app/components/ui/Label";
+import { useUserAgentInfo } from "$app/components/UserAgent";
 
 export const DateRangePicker = ({
   from,

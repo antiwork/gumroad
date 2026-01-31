@@ -1,7 +1,7 @@
-import { Input } from "$app/components/ui/Input";
 import React from "react";
 
 import { buttonVariants } from "$app/components/Button";
+import { Input } from "$app/components/ui/Input";
 
 const AdminDashboard = () => {
   const [userIdentifier, setUserIdentifier] = React.useState("");

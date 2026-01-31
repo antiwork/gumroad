@@ -19,7 +19,6 @@ type Props = {
   isPlaying?: boolean;
 };
 
-
 export const AudioPlayer = (props: Props) => {
   const userAgentInfo = useUserAgentInfo();
   const [isPlaying, setIsPlaying] = React.useState(props.isPlaying ?? false);

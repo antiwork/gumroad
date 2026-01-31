@@ -8,9 +8,9 @@ import { register } from "$app/utils/serverComponentUtil";
 import { Button } from "$app/components/Button";
 import { Icon } from "$app/components/Icons";
 import { Popover, PopoverContent, PopoverTrigger } from "$app/components/Popover";
+import { Range } from "$app/components/ui/Range";
 import { useRunOnce } from "$app/components/useRunOnce";
 import { WithTooltip } from "$app/components/WithTooltip";
-import { Range } from "$app/components/ui/Range";
 
 const zoomLevelMin = 0.1;
 const zoomLevelMax = 5.0;
