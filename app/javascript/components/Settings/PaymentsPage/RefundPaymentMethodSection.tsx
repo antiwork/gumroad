@@ -291,7 +291,6 @@ const RefundPaymentMethodForm = ({
 
 export const RefundPaymentMethodSection = ({ refundPaymentMethod, isFormDisabled }: Props) => {
   const [stripePromise, setStripePromise] = React.useState<Promise<Stripe | null> | null>(null);
-  const handleSuccess = () => undefined;
 
   React.useEffect(() => {
     setStripePromise(getStripeInstance());
@@ -306,7 +305,7 @@ export const RefundPaymentMethodSection = ({ refundPaymentMethod, isFormDisabled
       <RefundPaymentMethodForm
         refundPaymentMethod={refundPaymentMethod}
         isFormDisabled={isFormDisabled}
-        onSuccess={handleSuccess}
+        onSuccess={() => {}}
       />
     </Elements>
   );

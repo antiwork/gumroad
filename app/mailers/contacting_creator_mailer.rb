@@ -537,8 +537,8 @@ class ContactingCreatorMailer < ApplicationMailer
     @seller = @credit.user
     @amount = Money.new(@credit.amount_cents, :usd).format(no_cents_if_whole: true, symbol: true)
     @card_visual = @credit.credit_card&.visual || "****"
+    @product_name = @credit.refund_funding_purchase&.link&.name
     @subject = "Your backup card was charged #{@amount}"
-    mail(to: @seller.form_email, subject: @subject)
   end
 
   private

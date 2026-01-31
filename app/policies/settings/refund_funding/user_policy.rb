@@ -20,8 +20,4 @@ class Settings::RefundFunding::UserPolicy < ApplicationPolicy
   def dismiss_banner?
     create?
   end
-
-  def test_charge?
-    create?
-  end
 end
