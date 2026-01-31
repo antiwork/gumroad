@@ -12,7 +12,7 @@ import { Icon } from "$app/components/Icons";
 import { ProfileSectionsEditor } from "$app/components/ProductEdit/ShareTab/ProfileSectionsEditor";
 import { TagSelector } from "$app/components/ProductEdit/ShareTab/TagSelector";
 import { TaxonomyEditor } from "$app/components/ProductEdit/ShareTab/TaxonomyEditor";
-import { Toggle } from "$app/components/Toggle";
+import { Switch } from "$app/components/ui/Switch";
 import { TwitterShareButton } from "$app/components/TwitterShareButton";
 
 export const ShareTab = () => {
@@ -69,15 +69,16 @@ export const ShareTab = () => {
           />
           <TagSelector tags={bundle.tags} onChange={(tags) => updateBundle({ tags })} />
           <fieldset>
-            <Toggle
-              value={bundle.display_product_reviews}
-              onChange={(newValue) => updateBundle({ display_product_reviews: newValue })}
-            >
-              Display your product's 1-5 star rating to prospective customers
-            </Toggle>
-            <Toggle value={bundle.is_adult} onChange={(newValue) => updateBundle({ is_adult: newValue })}>
-              This product contains content meant only for adults, including the preview
-            </Toggle>
+            <Switch
+              checked={bundle.display_product_reviews}
+              onChange={(e) => updateBundle({ display_product_reviews: e.target.checked })}
+              label="Display your product's 1-5 star rating to prospective customers"
+            />
+            <Switch
+              checked={bundle.is_adult}
+              onChange={(e) => updateBundle({ is_adult: e.target.checked })}
+              label="This product contains content meant only for adults, including the preview"
+            />
           </fieldset>
         </section>
       </form>

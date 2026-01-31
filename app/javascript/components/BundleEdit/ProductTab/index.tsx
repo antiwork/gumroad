@@ -16,7 +16,7 @@ import { MaxPurchaseCountToggle } from "$app/components/ProductEdit/ProductTab/M
 import { PriceEditor } from "$app/components/ProductEdit/ProductTab/PriceEditor";
 import { ThumbnailEditor } from "$app/components/ProductEdit/ProductTab/ThumbnailEditor";
 import { RefundPolicySelector } from "$app/components/ProductEdit/RefundPolicy";
-import { Toggle } from "$app/components/Toggle";
+import { Switch } from "$app/components/ui/Switch";
 
 export const ProductTab = () => {
   const {
@@ -137,24 +137,28 @@ export const ProductTab = () => {
               maxPurchaseCount={bundle.max_purchase_count}
               setMaxPurchaseCount={(value) => updateBundle({ max_purchase_count: value })}
             />
-            <Toggle
-              value={bundle.quantity_enabled}
-              onChange={(newValue) => updateBundle({ quantity_enabled: newValue })}
-            >
-              Allow customers to choose a quantity
-            </Toggle>
-            <Toggle
-              value={bundle.should_show_sales_count}
-              onChange={(newValue) => updateBundle({ should_show_sales_count: newValue })}
-            >
-              Publicly show the number of sales on your product page
-            </Toggle>
-            <Toggle value={bundle.is_epublication} onChange={(newValue) => updateBundle({ is_epublication: newValue })}>
-              Mark product as e-publication for VAT purposes{" "}
-              <a href="/help/article/10-dealing-with-vat" target="_blank" rel="noreferrer">
-                Learn more
-              </a>
-            </Toggle>
+            <Switch
+              checked={bundle.quantity_enabled}
+              onChange={(e) => updateBundle({ quantity_enabled: e.target.checked })}
+              label="Allow customers to choose a quantity"
+            />
+            <Switch
+              checked={bundle.should_show_sales_count}
+              onChange={(e) => updateBundle({ should_show_sales_count: e.target.checked })}
+              label="Publicly show the number of sales on your product page"
+            />
+            <Switch
+              checked={bundle.is_epublication}
+              onChange={(e) => updateBundle({ is_epublication: e.target.checked })}
+              label={
+                <>
+                  Mark product as e-publication for VAT purposes{" "}
+                  <a href="/help/article/10-dealing-with-vat" target="_blank" rel="noreferrer">
+                    Learn more
+                  </a>
+                </>
+              }
+            />
             {!seller_refund_policy_enabled ? (
               <RefundPolicySelector
                 refundPolicy={bundle.refund_policy}
