@@ -10,7 +10,7 @@ class UsersController < ApplicationController
 
   after_action :verify_authorized, only: %i[deactivate]
 
-  before_action :hide_layouts, only: %i[show coffee subscribe]
+  before_action :hide_layouts, only: %i[show subscribe]
   before_action :set_as_modal, only: %i[show]
   before_action :set_user_and_custom_domain_config, only: %i[show coffee subscribe subscribe_preview]
   before_action :set_page_attributes, only: %i[show]
@@ -18,7 +18,7 @@ class UsersController < ApplicationController
   before_action :check_if_needs_redirect, only: %i[show]
   before_action :set_affiliate_cookie, only: %i[show]
 
-  layout "inertia", only: [:subscribe_preview]
+  layout "inertia", only: [:coffee, :subscribe_preview]
 
   def show
     format_search_params!
@@ -44,7 +44,15 @@ class UsersController < ApplicationController
     e404 if @product.nil?
 
     set_meta_tag(title: @product.name)
-    @product_props = ProductPresenter.new(pundit_user:, product: @product, request:).product_props(seller_custom_domain_url:, recommended_by: params[:recommended_by])
+    if params[:purchase_email].present?
+      flash[:notice] = "Your purchase was successful! We sent a receipt to #{params[:purchase_email]}."
+      return redirect_to request.path
+    end
+    product_props = ProductPresenter.new(pundit_user:, product: @product, request:).product_props(seller_custom_domain_url:, recommended_by: params[:recommended_by])
+    creator_profile = ProfilePresenter.new(pundit_user:, seller: @product.user).creator_profile
+    custom_styles = @product.user.seller_profile.custom_styles.to_s
+
+    render inertia: "Users/Coffee", props: product_props.merge(creator_profile:, custom_styles:)
   end
 
   def subscribe
@@ -137,6 +145,18 @@ class UsersController < ApplicationController
   end
 
   private
+    def inertia_flash_props
+      if action_name == "coffee"
+        flash_message = flash[:alert] || flash[:warning] || flash[:notice]
+        return if flash_message.blank?
+        status = flash[:alert] ? "danger" : flash[:warning] ? "warning" : "success"
+        flash.clear
+        { message: flash_message, status: status }
+      else
+        super
+      end
+    end
+
     def check_if_needs_redirect
       if !@is_user_custom_domain && @user.subdomain_with_protocol.present?
         redirect_to root_url(host: @user.subdomain_with_protocol, params: request.query_parameters),
