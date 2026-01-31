@@ -813,6 +813,22 @@ class Link < ApplicationRecord
       user.offer_codes.universal_with_matching_currency(price_currency_type).alive.find_by_code(code)
   end
 
+  def best_offer_code_for(url_code)
+    url_code = url_code.presence
+    default_code = default_offer_code&.code
+
+    return url_code if default_code.blank?
+    return default_code if url_code.blank?
+
+    url_offer = find_offer_code(code: url_code)
+    default_offer = find_offer_code(code: default_code)
+
+    return url_code unless default_offer
+    return default_code unless url_offer
+
+    url_offer.amount_off(price_cents) >= default_offer.amount_off(price_cents) ? url_code : default_code
+  end
+
   def find_offer_code_by_external_id(external_id)
     offer_codes.alive.find_by_external_id(external_id) ||
       user.offer_codes.universal_with_matching_currency(price_currency_type).alive.find_by_external_id(external_id)

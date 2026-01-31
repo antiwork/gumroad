@@ -4800,4 +4800,40 @@ describe Link, :vcr do
       end
     end
   end
+
+  describe "#best_offer_code_for" do
+    let(:product) { create(:product) }
+    let(:seller) { product.user }
+
+    it "returns the URL code when no default offer code exists" do
+      url_code = create(:offer_code, user: seller, products: [product])
+      expect(product.best_offer_code_for(url_code.code)).to eq(url_code.code)
+    end
+
+    it "returns the default offer code when no URL code is provided" do
+      default_code = create(:offer_code, user: seller, products: [product])
+      product.update!(default_offer_code: default_code)
+      expect(product.best_offer_code_for(nil)).to eq(default_code.code)
+    end
+
+    it "returns nil when neither URL code nor default code exists" do
+      expect(product.best_offer_code_for(nil)).to be_nil
+    end
+
+    it "returns the code with the higher discount" do
+      small_discount = create(:offer_code, user: seller, products: [product], amount_percentage: 10)
+      big_discount = create(:offer_code, user: seller, products: [product], amount_percentage: 50)
+      product.update!(default_offer_code: big_discount)
+
+      expect(product.best_offer_code_for(small_discount.code)).to eq(big_discount.code)
+    end
+
+    it "returns the URL code when discounts are equal" do
+      code_a = create(:offer_code, user: seller, products: [product], amount_percentage: 25)
+      code_b = create(:offer_code, user: seller, products: [product], amount_percentage: 25)
+      product.update!(default_offer_code: code_b)
+
+      expect(product.best_offer_code_for(code_a.code)).to eq(code_a.code)
+    end
+  end
 end

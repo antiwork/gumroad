@@ -3186,6 +3186,41 @@ describe LinksController, :vcr, inertia: true do
           expect(response).to be_successful
           expect(response).not_to be_redirect
         end
+
+        it "applies the default offer code when no code is provided" do
+          offer_code = create(:offer_code, user: @user, products: [product], amount_percentage: 25)
+          product.update!(default_offer_code: offer_code)
+
+          get :show, params: { id: product.to_param, wanted: "true" }
+
+          expect(response).to be_redirect
+          query_params = Rack::Utils.parse_query(URI.parse(response.location).query)
+          expect(query_params["code"]).to eq(offer_code.code)
+        end
+
+        it "uses the URL offer code when it gives a better discount than the default" do
+          default_code = create(:offer_code, user: @user, products: [product], amount_percentage: 10)
+          product.update!(default_offer_code: default_code)
+          url_code = create(:offer_code, user: @user, products: [product], amount_percentage: 50)
+
+          get :show, params: { id: product.to_param, wanted: "true", code: url_code.code }
+
+          expect(response).to be_redirect
+          query_params = Rack::Utils.parse_query(URI.parse(response.location).query)
+          expect(query_params["code"]).to eq(url_code.code)
+        end
+
+        it "uses the default offer code when it gives a better discount than the URL code" do
+          default_code = create(:offer_code, user: @user, products: [product], amount_percentage: 50)
+          product.update!(default_offer_code: default_code)
+          url_code = create(:offer_code, user: @user, products: [product], amount_percentage: 10)
+
+          get :show, params: { id: product.to_param, wanted: "true", code: url_code.code }
+
+          expect(response).to be_redirect
+          query_params = Rack::Utils.parse_query(URI.parse(response.location).query)
+          expect(query_params["code"]).to eq(default_code.code)
+        end
       end
 
       context "with user signed in" do
