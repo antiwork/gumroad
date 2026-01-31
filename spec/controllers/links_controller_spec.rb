@@ -243,7 +243,7 @@ describe LinksController, :vcr, inertia: true do
         it "redirects to the bundle edit page" do
           sign_in bundle.user
           get :edit, params: { id: bundle.unique_permalink }
-          expect(response).to redirect_to(bundle_path(bundle.external_id))
+          expect(response).to redirect_to(edit_bundle_product_path(bundle.external_id))
         end
       end
     end
@@ -3799,11 +3799,11 @@ describe LinksController, :vcr, inertia: true do
     end
 
     describe "GET cart_items_count" do
-      it "assigns the correct instance variables and excludes third-party analytics scripts" do
+      it "renders the Inertia page" do
         get :cart_items_count
 
-        expect(assigns(:hide_layouts)).to eq(true)
-        expect(assigns(:disable_third_party_analytics)).to eq(true)
+        expect(inertia.component).to eq("Products/CartItemsCount")
+        expect(inertia.props[:cart]).to be_nil
 
         html = Nokogiri::HTML.parse(response.body)
         [
@@ -3812,6 +3812,29 @@ describe LinksController, :vcr, inertia: true do
         ].each do |property|
           expect(html.xpath("//meta[@property='#{property}']/@content").text).to eq("false")
         end
+      end
+
+      it "returns cart props when the user has a cart with items" do
+        sign_in @user
+        product = create(:product)
+        cart = create(:cart, user: @user, email: @user.email)
+        create(:cart_product, cart:, product:)
+
+        get :cart_items_count
+
+        expect(inertia.component).to eq("Products/CartItemsCount")
+        expect(inertia.props[:cart]).to match(
+          email: @user.email,
+          returnUrl: "",
+          rejectPppDiscount: false,
+          discountCodes: [],
+          items: [
+            a_hash_including(
+              product: a_hash_including(permalink: product.unique_permalink),
+              quantity: 1,
+            ),
+          ],
+        )
       end
     end
 
