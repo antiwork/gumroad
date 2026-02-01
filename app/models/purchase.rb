@@ -477,6 +477,15 @@ class Purchase < ApplicationRecord
     where("purchases.subscription_id IS NULL OR purchases.flags & ? = ?",
           Purchase.flag_mapping["flags"][:is_original_subscription_purchase], Purchase.flag_mapping["flags"][:is_original_subscription_purchase])
   }
+  scope :visible_in_library, lambda {
+    where(
+      "purchases.subscription_id IS NULL OR purchases.flags & ? = ? OR purchases.flags & ? = ?",
+      Purchase.flag_mapping["flags"][:is_original_subscription_purchase],
+      Purchase.flag_mapping["flags"][:is_original_subscription_purchase],
+      Purchase.flag_mapping["flags"][:is_gift_receiver_purchase],
+      Purchase.flag_mapping["flags"][:is_gift_receiver_purchase]
+    )
+  }
   # TODO: since Memberships, `not_recurring_charge` & `recurring_charge` are not an accurate names for what the scopes filter, and they should be renamed.
   scope :not_recurring_charge, lambda { not_subscription_or_original_purchase }
   scope :recurring_charge, -> { where("purchases.subscription_id IS NOT NULL AND purchases.flags & ? = 0", Purchase.flag_mapping["flags"][:is_original_subscription_purchase]) }
@@ -534,13 +543,7 @@ class Purchase < ApplicationRecord
     all_success_states
     .not_is_deleted_by_buyer
     .not_is_additional_contribution
-    .where(
-      "purchases.subscription_id IS NULL OR purchases.flags & ? = ? OR purchases.flags & ? = ?",
-      flag_mapping["flags"][:is_original_subscription_purchase],
-      flag_mapping["flags"][:is_original_subscription_purchase],
-      flag_mapping["flags"][:is_gift_receiver_purchase],
-      flag_mapping["flags"][:is_gift_receiver_purchase]
-    )
+    .visible_in_library
     .not_is_gift_sender_purchase
     .not_refunded_except_subscriptions
     .not_chargedback_or_chargedback_reversed
@@ -552,13 +555,7 @@ class Purchase < ApplicationRecord
   scope :for_library, lambda {
     all_success_states
       .not_is_additional_contribution
-      .where(
-        "purchases.subscription_id IS NULL OR purchases.flags & ? = ? OR purchases.flags & ? = ?",
-        flag_mapping["flags"][:is_original_subscription_purchase],
-        flag_mapping["flags"][:is_original_subscription_purchase],
-        flag_mapping["flags"][:is_gift_receiver_purchase],
-        flag_mapping["flags"][:is_gift_receiver_purchase]
-      )
+      .visible_in_library
       .not_is_gift_sender_purchase
       .not_refunded_except_subscriptions
       .not_chargedback_or_chargedback_reversed
