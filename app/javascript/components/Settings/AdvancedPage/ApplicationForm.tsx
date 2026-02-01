@@ -11,7 +11,7 @@ import { assertResponseError, request, ResponseError } from "$app/utils/request"
 
 import { Button } from "$app/components/Button";
 import { showAlert } from "$app/components/server-components/Alert";
-import { Fieldset, Legend } from "$app/components/ui/Fieldset";
+import { Fieldset, FieldsetTitle } from "$app/components/ui/Fieldset";
 import { Input } from "$app/components/ui/Input";
 import { Label } from "$app/components/ui/Label";
 import { WithTooltip } from "$app/components/WithTooltip";
@@ -134,9 +134,9 @@ const ApplicationForm = ({ application }: { application?: Application }) => {
         onChange={handleIconChange}
       />
       <Fieldset>
-        <Legend>
+        <FieldsetTitle>
           <Label>Application icon</Label>
-        </Legend>
+        </FieldsetTitle>
         <div style={{ display: "flex", gap: "var(--spacer-4)", alignItems: "flex-start" }}>
           <img className="application-icon" src={icon?.url || placeholderAppIcon} width={80} height={80} />
           <Button onClick={() => iconInputRef.current?.click()} disabled={isUploadingIcon || isSubmitting}>
@@ -145,9 +145,9 @@ const ApplicationForm = ({ application }: { application?: Application }) => {
         </div>
       </Fieldset>
       <Fieldset state={name.error ? "danger" : undefined}>
-        <Legend>
+        <FieldsetTitle>
           <Label htmlFor={`${uid}-name`}>Application name</Label>
-        </Legend>
+        </FieldsetTitle>
         <Input
           id={`${uid}-name`}
           ref={nameRef}
@@ -158,9 +158,9 @@ const ApplicationForm = ({ application }: { application?: Application }) => {
         />
       </Fieldset>
       <Fieldset state={redirectUri.error ? "danger" : undefined}>
-        <Legend>
+        <FieldsetTitle>
           <Label htmlFor={`${uid}-redirectUri`}>Redirect URI</Label>
-        </Legend>
+        </FieldsetTitle>
         <Input
           id={`${uid}-redirectUri`}
           ref={redirectUriRef}
@@ -175,28 +175,28 @@ const ApplicationForm = ({ application }: { application?: Application }) => {
       {application ? (
         <>
           <Fieldset>
-            <Legend>
+            <FieldsetTitle>
               <Label htmlFor={`${uid}-uid`}>Application ID</Label>
-            </Legend>
+            </FieldsetTitle>
             <Input id={`${uid}-uid`} readOnly type="text" value={application.uid} />
           </Fieldset>
           <Fieldset>
-            <Legend>
+            <FieldsetTitle>
               <Label htmlFor={`${uid}-secret`}>Application Secret</Label>
-            </Legend>
+            </FieldsetTitle>
             <Input id={`${uid}-secret`} readOnly type="text" value={application.secret} />
           </Fieldset>
 
           {token ? (
             <Fieldset>
-              <Legend>
+              <FieldsetTitle>
                 <Label htmlFor={`${uid}-accessToken`}>
                   Access Token
                   <WithTooltip tip="This is a ready-to-use access token for our API.">
                     <span>(?)</span>
                   </WithTooltip>
                 </Label>
-              </Legend>
+              </FieldsetTitle>
               <Input id={`${uid}-accessToken`} readOnly type="text" value={token} />
             </Fieldset>
           ) : null}

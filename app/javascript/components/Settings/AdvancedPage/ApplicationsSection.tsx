@@ -5,7 +5,7 @@ import * as React from "react";
 import { Button } from "$app/components/Button";
 import { showAlert } from "$app/components/server-components/Alert";
 import ApplicationForm from "$app/components/Settings/AdvancedPage/ApplicationForm";
-import { Section } from "$app/components/ui/Section";
+import { FormSection } from "$app/components/ui/FormSection";
 import { Row, RowActions, RowContent, Rows } from "$app/components/ui/Rows";
 
 export type Application = {
@@ -78,7 +78,7 @@ const ApplicationRow = ({ application, onRemove }: { application: Application; o
 };
 
 const ApplicationsSection = (props: { applications: Application[] }) => (
-  <Section
+  <FormSection
     className="p-4! md:p-8!"
     header={
       <>
@@ -91,6 +91,6 @@ const ApplicationsSection = (props: { applications: Application[] }) => (
   >
     <CreateApplication />
     <ApplicationList applications={props.applications} />
-  </Section>
+  </FormSection>
 );
 export default ApplicationsSection;

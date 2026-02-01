@@ -5,7 +5,7 @@ import { asyncVoid } from "$app/utils/promise";
 import { assertResponseError, request, ResponseError } from "$app/utils/request";
 
 import { Button } from "$app/components/Button";
-import { Fieldset, Legend } from "$app/components/ui/Fieldset";
+import { Fieldset, FieldsetTitle } from "$app/components/ui/Fieldset";
 import { Input } from "$app/components/ui/Input";
 import { InputGroup } from "$app/components/ui/InputGroup";
 import { Label } from "$app/components/ui/Label";
@@ -75,17 +75,16 @@ const CustomDomain = ({
         verificationInfo.state === "success" ? "success" : verificationInfo.state === "failure" ? "danger" : undefined
       }
     >
-      <Legend>
+      <FieldsetTitle>
         <Label htmlFor={uid}>{label}</Label>
         {includeLearnMoreLink ? (
           <a href="/help/article/153-setting-up-a-custom-domain" target="_blank" rel="noreferrer">
             Learn more
           </a>
         ) : null}
-      </Legend>
+      </FieldsetTitle>
       <InputGroup>
         <Input
-          asChild
           id={uid}
           placeholder="yourdomain.com"
           type="text"

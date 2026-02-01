@@ -6,11 +6,11 @@ import { assertResponseError, request, ResponseError } from "$app/utils/request"
 
 import { Button } from "$app/components/Button";
 import { showAlert } from "$app/components/server-components/Alert";
-import { Fieldset, Legend } from "$app/components/ui/Fieldset";
+import { Fieldset, FieldsetTitle } from "$app/components/ui/Fieldset";
+import { FormSection } from "$app/components/ui/FormSection";
 import { Input } from "$app/components/ui/Input";
 import { InputGroup } from "$app/components/ui/InputGroup";
 import { Label } from "$app/components/ui/Label";
-import { Section } from "$app/components/ui/Section";
 import { Pill } from "$app/components/ui/Pill";
 import { WithTooltip } from "$app/components/WithTooltip";
 
@@ -53,7 +53,7 @@ const NotificationEndpointSection = ({
   });
 
   return (
-    <Section
+    <FormSection
       className="p-4! md:p-8!"
       header={
         <>
@@ -65,12 +65,11 @@ const NotificationEndpointSection = ({
       }
     >
       <Fieldset>
-        <Legend>
+        <FieldsetTitle>
           <Label htmlFor={uid}>Ping endpoint</Label>
-        </Legend>
+        </FieldsetTitle>
         <InputGroup>
           <Input
-            asChild
             placeholder="Ping endpoint"
             type="url"
             id={uid}
@@ -87,7 +86,7 @@ const NotificationEndpointSection = ({
         </InputGroup>
         <small className="text-muted">For external services, your `seller_id` is {userId}</small>
       </Fieldset>
-    </Section>
+    </FormSection>
   );
 };
 

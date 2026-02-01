@@ -1,7 +1,7 @@
 import * as React from "react";
 
 import CustomDomain from "$app/components/CustomDomain";
-import { Section } from "$app/components/ui/Section";
+import { FormSection } from "$app/components/ui/FormSection";
 
 const CustomDomainSection = ({
   verificationStatus,
@@ -12,7 +12,7 @@ const CustomDomainSection = ({
   customDomain: string;
   setCustomDomain: (val: string) => void;
 }) => (
-  <Section
+  <FormSection
     className="p-4! md:p-8!"
     header={
       <>
@@ -29,7 +29,7 @@ const CustomDomainSection = ({
       setCustomDomain={setCustomDomain}
       label="Domain"
     />
-  </Section>
+  </FormSection>
 );
 
 export default CustomDomainSection;

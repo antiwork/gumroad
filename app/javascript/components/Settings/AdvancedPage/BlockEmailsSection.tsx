@@ -2,9 +2,9 @@ import * as React from "react";
 
 import { isValidEmail } from "$app/utils/email";
 
-import { Fieldset, Legend } from "$app/components/ui/Fieldset";
+import { Fieldset, FieldsetTitle } from "$app/components/ui/Fieldset";
+import { FormSection } from "$app/components/ui/FormSection";
 import { Label } from "$app/components/ui/Label";
-import { Section } from "$app/components/ui/Section";
 import { Textarea } from "$app/components/ui/Textarea";
 
 type Props = {
@@ -44,7 +44,7 @@ const BlockEmailsSection = ({ blockedEmails, setBlockedEmails }: Props) => {
   };
 
   return (
-    <Section
+    <FormSection
       className="p-4! md:p-8!"
       header={
         <>
@@ -56,9 +56,9 @@ const BlockEmailsSection = ({ blockedEmails, setBlockedEmails }: Props) => {
       }
     >
       <Fieldset>
-        <Legend>
+        <FieldsetTitle>
           <Label htmlFor={uid}>Block emails from purchasing</Label>
-        </Legend>
+        </FieldsetTitle>
         <Textarea
           id={uid}
           placeholder={["name@example.com", "name@example.net", "name@example.org"].join("\n")}
@@ -69,7 +69,7 @@ const BlockEmailsSection = ({ blockedEmails, setBlockedEmails }: Props) => {
         />
         <small className="text-muted">Please enter each email address on a new line.</small>
       </Fieldset>
-    </Section>
+    </FormSection>
   );
 };
 

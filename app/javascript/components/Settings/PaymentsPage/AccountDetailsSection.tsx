@@ -8,7 +8,7 @@ import { classNames } from "$app/utils/classNames";
 import { Button } from "$app/components/Button";
 import { Icon } from "$app/components/Icons";
 import { Checkbox } from "$app/components/ui/Checkbox";
-import { Fieldset, Legend } from "$app/components/ui/Fieldset";
+import { Fieldset, FieldsetTitle } from "$app/components/ui/Fieldset";
 import { Input } from "$app/components/ui/Input";
 import { Label } from "$app/components/ui/Label";
 import { Select } from "$app/components/ui/Select";
@@ -58,10 +58,10 @@ const AccountDetailsSection = ({
       {(complianceInfo.is_business ? complianceInfo.business_country !== "AE" : complianceInfo.country !== "AE") ? (
         <section>
           <Fieldset>
-            <Legend>
+            <FieldsetTitle>
               <Label>Account type</Label>
               <a href="/help/article/260-your-payout-settings-page">What type of account should I choose?</a>
-            </Legend>
+            </FieldsetTitle>
           </Fieldset>
           <div
             className="grid gap-4"
@@ -122,9 +122,9 @@ const AccountDetailsSection = ({
             }}
           >
             <Fieldset state={errorFieldNames.has("business_name") ? "danger" : undefined}>
-              <Legend>
+              <FieldsetTitle>
                 <Label htmlFor={`${uid}-business-legal-name`}>Legal business name</Label>
-              </Legend>
+              </FieldsetTitle>
               <Input
                 id={`${uid}-business-legal-name`}
                 placeholder="Acme"
@@ -136,9 +136,9 @@ const AccountDetailsSection = ({
               />
             </Fieldset>
             <Fieldset state={errorFieldNames.has("business_type") ? "danger" : undefined}>
-              <Legend>
+              <FieldsetTitle>
                 <Label htmlFor={`${uid}-business-type`}>Type</Label>
-              </Legend>
+              </FieldsetTitle>
               {complianceInfo.business_country === "AE" ? (
                 <Select
                   id={`${uid}-business-type`}
@@ -209,9 +209,9 @@ const AccountDetailsSection = ({
           {complianceInfo.business_country === "JP" ? (
             <div style={{ display: "grid", gap: "var(--spacer-5)", gridAutoFlow: "column", gridAutoColumns: "1fr" }}>
               <Fieldset state={errorFieldNames.has("business_name_kanji") ? "danger" : undefined}>
-                <Legend>
+                <FieldsetTitle>
                   <Label htmlFor={`${uid}-business-name-kanji`}>Business Name (Kanji)</Label>
-                </Legend>
+                </FieldsetTitle>
                 <Input
                   id={`${uid}-business-name-kanji`}
                   type="text"
@@ -224,9 +224,9 @@ const AccountDetailsSection = ({
                 />
               </Fieldset>
               <Fieldset state={errorFieldNames.has("business_name_kana") ? "danger" : undefined}>
-                <Legend>
+                <FieldsetTitle>
                   <Label htmlFor={`${uid}-business-name-kana`}>Legal Business Name (Kana)</Label>
-                </Legend>
+                </FieldsetTitle>
                 <Input
                   id={`${uid}-business-name-kana`}
                   type="text"
@@ -243,9 +243,9 @@ const AccountDetailsSection = ({
           {complianceInfo.business_country === "JP" ? (
             <div style={{ display: "grid", gap: "var(--spacer-5)", gridAutoFlow: "column", gridAutoColumns: "1fr" }}>
               <Fieldset state={errorFieldNames.has("business_building_number") ? "danger" : undefined}>
-                <Legend>
+                <FieldsetTitle>
                   <Label htmlFor={`${uid}-business-building-number`}>Business Block / Building Number</Label>
-                </Legend>
+                </FieldsetTitle>
                 <Input
                   id={`${uid}-business-building-number`}
                   type="text"
@@ -258,9 +258,9 @@ const AccountDetailsSection = ({
                 />
               </Fieldset>
               <Fieldset state={errorFieldNames.has("business_street_address_kanji") ? "danger" : undefined}>
-                <Legend>
+                <FieldsetTitle>
                   <Label htmlFor={`${uid}-business-street-address-kanji`}>Business Street Address (Kanji)</Label>
-                </Legend>
+                </FieldsetTitle>
                 <Input
                   id={`${uid}-business-street-address-kanji`}
                   type="text"
@@ -273,9 +273,9 @@ const AccountDetailsSection = ({
                 />
               </Fieldset>
               <Fieldset state={errorFieldNames.has("business_street_address_kana") ? "danger" : undefined}>
-                <Legend>
+                <FieldsetTitle>
                   <Label htmlFor={`${uid}-business-street-address-kana`}>Business Street Address (Kana)</Label>
-                </Legend>
+                </FieldsetTitle>
                 <Input
                   id={`${uid}-business-street-address-kana`}
                   type="text"
@@ -290,9 +290,9 @@ const AccountDetailsSection = ({
             </div>
           ) : (
             <Fieldset state={errorFieldNames.has("business_street_address") ? "danger" : undefined}>
-              <Legend>
+              <FieldsetTitle>
                 <Label htmlFor={`${uid}-business-street-address`}>Address</Label>
-              </Legend>
+              </FieldsetTitle>
               <Input
                 id={`${uid}-business-street-address`}
                 placeholder="123 smith street"
@@ -311,9 +311,9 @@ const AccountDetailsSection = ({
             }}
           >
             <Fieldset state={errorFieldNames.has("business_city") ? "danger" : undefined}>
-              <Legend>
+              <FieldsetTitle>
                 <Label htmlFor={`${uid}-business-city`}>City</Label>
-              </Legend>
+              </FieldsetTitle>
               <Input
                 id={`${uid}-business-city`}
                 placeholder="Springfield"
@@ -325,9 +325,9 @@ const AccountDetailsSection = ({
             </Fieldset>
             {complianceInfo.business_country === "US" ? (
               <Fieldset state={errorFieldNames.has("business_state") ? "danger" : undefined}>
-                <Legend>
+                <FieldsetTitle>
                   <Label htmlFor={`${uid}-business-state`}>State</Label>
-                </Legend>
+                </FieldsetTitle>
                 <Select
                   id={`${uid}-business-state`}
                   required={complianceInfo.is_business}
@@ -348,9 +348,9 @@ const AccountDetailsSection = ({
               </Fieldset>
             ) : complianceInfo.business_country === "CA" ? (
               <Fieldset state={errorFieldNames.has("business_state") ? "danger" : undefined}>
-                <Legend>
+                <FieldsetTitle>
                   <Label htmlFor={`${uid}-business-province`}>Province</Label>
-                </Legend>
+                </FieldsetTitle>
                 <Select
                   id={`${uid}-business-province`}
                   required={complianceInfo.is_business}
@@ -371,9 +371,9 @@ const AccountDetailsSection = ({
               </Fieldset>
             ) : complianceInfo.business_country === "AU" ? (
               <Fieldset state={errorFieldNames.has("business_state") ? "danger" : undefined}>
-                <Legend>
+                <FieldsetTitle>
                   <Label htmlFor={`${uid}-business-state`}>State</Label>
-                </Legend>
+                </FieldsetTitle>
                 <Select
                   id={`${uid}-business-state`}
                   required={complianceInfo.is_business}
@@ -394,9 +394,9 @@ const AccountDetailsSection = ({
               </Fieldset>
             ) : complianceInfo.business_country === "MX" ? (
               <Fieldset state={errorFieldNames.has("business_state") ? "danger" : undefined}>
-                <Legend>
+                <FieldsetTitle>
                   <Label htmlFor={`${uid}-business-state`}>State</Label>
-                </Legend>
+                </FieldsetTitle>
                 <Select
                   id={`${uid}-business-state`}
                   required={complianceInfo.is_business}
@@ -417,9 +417,9 @@ const AccountDetailsSection = ({
               </Fieldset>
             ) : complianceInfo.business_country === "AE" ? (
               <Fieldset state={errorFieldNames.has("business_state") ? "danger" : undefined}>
-                <Legend>
+                <FieldsetTitle>
                   <Label htmlFor={`${uid}-business-state`}>Province</Label>
-                </Legend>
+                </FieldsetTitle>
                 <Select
                   id={`${uid}-business-state`}
                   required={complianceInfo.is_business}
@@ -440,9 +440,9 @@ const AccountDetailsSection = ({
               </Fieldset>
             ) : complianceInfo.business_country === "IE" ? (
               <Fieldset state={errorFieldNames.has("business_state") ? "danger" : undefined}>
-                <Legend>
+                <FieldsetTitle>
                   <Label htmlFor={`${uid}-business-county`}>County</Label>
-                </Legend>
+                </FieldsetTitle>
                 <Select
                   id={`${uid}-business-county`}
                   required={complianceInfo.is_business}
@@ -463,11 +463,11 @@ const AccountDetailsSection = ({
               </Fieldset>
             ) : null}
             <Fieldset state={errorFieldNames.has("business_zip_code") ? "danger" : undefined}>
-              <Legend>
+              <FieldsetTitle>
                 <Label htmlFor={`${uid}-business-zip-code`}>
                   {complianceInfo.business_country === "US" ? "ZIP code" : "Postal code"}
                 </Label>
-              </Legend>
+              </FieldsetTitle>
               <Input
                 id={`${uid}-business-zip-code`}
                 placeholder="12345"
@@ -480,9 +480,9 @@ const AccountDetailsSection = ({
             </Fieldset>
           </div>
           <Fieldset>
-            <Legend>
+            <FieldsetTitle>
               <Label htmlFor={`${uid}-business-country`}>Country</Label>
-            </Legend>
+            </FieldsetTitle>
             <Select
               id={`${uid}-business-country`}
               value={complianceInfo.business_country || ""}
@@ -498,9 +498,9 @@ const AccountDetailsSection = ({
             </Select>
           </Fieldset>
           <Fieldset state={errorFieldNames.has("business_phone") ? "danger" : undefined}>
-            <Legend>
+            <FieldsetTitle>
               <Label htmlFor={`${uid}-business-phone-number`}>Business phone number</Label>
-            </Legend>
+            </FieldsetTitle>
             <Input
               id={`${uid}-business-phone-number`}
               type="tel"
@@ -520,12 +520,12 @@ const AccountDetailsSection = ({
             <Fieldset state={errorFieldNames.has("business_tax_id") ? "danger" : undefined}>
               {complianceInfo.business_country === "US" ? (
                 <>
-                  <Legend>
+                  <FieldsetTitle>
                     <Label htmlFor={`${uid}-business-tax-id`}>Business Tax ID (EIN, or SSN for sole proprietors)</Label>
                     <div className="small">
                       <a href="/help/article/260-your-payout-settings-page">I'm not sure what my Tax ID is.</a>
                     </div>
-                  </Legend>
+                  </FieldsetTitle>
                   <Input
                     id={`${uid}-business-tax-id`}
                     type="text"
@@ -538,9 +538,9 @@ const AccountDetailsSection = ({
                 </>
               ) : complianceInfo.business_country === "CA" ? (
                 <>
-                  <Legend>
+                  <FieldsetTitle>
                     <Label htmlFor={`${uid}-business-tax-id`}>Business Number (BN)</Label>
-                  </Legend>
+                  </FieldsetTitle>
                   <Input
                     id={`${uid}-business-tax-id`}
                     type="text"
@@ -553,9 +553,9 @@ const AccountDetailsSection = ({
                 </>
               ) : complianceInfo.business_country === "AU" ? (
                 <>
-                  <Legend>
+                  <FieldsetTitle>
                     <Label htmlFor={`${uid}-business-tax-id`}>Australian Business Number (ABN)</Label>
-                  </Legend>
+                  </FieldsetTitle>
                   <Input
                     id={`${uid}-business-tax-id`}
                     type="text"
@@ -568,9 +568,9 @@ const AccountDetailsSection = ({
                 </>
               ) : complianceInfo.business_country === "GB" ? (
                 <>
-                  <Legend>
+                  <FieldsetTitle>
                     <Label htmlFor={`${uid}-business-tax-id`}>Company Number (CRN)</Label>
-                  </Legend>
+                  </FieldsetTitle>
                   <Input
                     id={`${uid}-business-tax-id`}
                     type="text"
@@ -583,9 +583,9 @@ const AccountDetailsSection = ({
                 </>
               ) : complianceInfo.business_country === "AE" ? (
                 <>
-                  <Legend>
+                  <FieldsetTitle>
                     <Label htmlFor={`${uid}-business-tax-id`}>Company tax ID</Label>
-                  </Legend>
+                  </FieldsetTitle>
                   <Input
                     id={`${uid}-business-tax-id`}
                     type="text"
@@ -598,9 +598,9 @@ const AccountDetailsSection = ({
                 </>
               ) : complianceInfo.business_country === "MX" ? (
                 <>
-                  <Legend>
+                  <FieldsetTitle>
                     <Label htmlFor={`${uid}-business-tax-id`}>Business RFC</Label>
-                  </Legend>
+                  </FieldsetTitle>
                   <Input
                     id={`${uid}-business-tax-id`}
                     type="text"
@@ -613,9 +613,9 @@ const AccountDetailsSection = ({
                 </>
               ) : (
                 <>
-                  <Legend>
+                  <FieldsetTitle>
                     <Label htmlFor={`${uid}-business-tax-id`}>Company tax ID</Label>
-                  </Legend>
+                  </FieldsetTitle>
                   <Input
                     id={`${uid}-business-tax-id`}
                     type="text"
@@ -630,7 +630,7 @@ const AccountDetailsSection = ({
             </Fieldset>
           ) : null}
           <Fieldset>
-            <Legend>
+            <FieldsetTitle>
               <Label htmlFor={`${uid}-personal-address-is-business-address`}>
                 <Checkbox
                   id={`${uid}-personal-address-is-business-address`}
@@ -647,16 +647,16 @@ const AccountDetailsSection = ({
                 />
                 Same as business
               </Label>
-            </Legend>
+            </FieldsetTitle>
           </Fieldset>
         </section>
       ) : null}
       <section className="grid gap-8">
         <div style={{ display: "grid", gap: "var(--spacer-5)", gridAutoFlow: "column", gridAutoColumns: "1fr" }}>
           <Fieldset state={errorFieldNames.has("first_name") ? "danger" : undefined}>
-            <Legend>
+            <FieldsetTitle>
               <Label htmlFor={`${uid}-creator-first-name`}>First name</Label>
-            </Legend>
+            </FieldsetTitle>
             <Input
               id={`${uid}-creator-first-name`}
               type="text"
@@ -670,9 +670,9 @@ const AccountDetailsSection = ({
             <small className="text-muted">Include your middle name if it appears on your ID.</small>
           </Fieldset>
           <Fieldset state={errorFieldNames.has("last_name") ? "danger" : undefined}>
-            <Legend>
+            <FieldsetTitle>
               <Label htmlFor={`${uid}-creator-last-name`}>Last name</Label>
-            </Legend>
+            </FieldsetTitle>
             <Input
               id={`${uid}-creator-last-name`}
               type="text"
@@ -687,9 +687,9 @@ const AccountDetailsSection = ({
         </div>
         {complianceInfo.is_business && complianceInfo.country === "CA" ? (
           <Fieldset state={errorFieldNames.has("job_title") ? "danger" : undefined}>
-            <Legend>
+            <FieldsetTitle>
               <Label htmlFor={`${uid}-creator-job-title`}>Job title</Label>
-            </Legend>
+            </FieldsetTitle>
             <Input
               id={`${uid}-creator-job-title`}
               type="text"
@@ -706,9 +706,9 @@ const AccountDetailsSection = ({
           <>
             <div style={{ display: "grid", gap: "var(--spacer-5)", gridAutoFlow: "column", gridAutoColumns: "1fr" }}>
               <Fieldset state={errorFieldNames.has("first_name_kanji") ? "danger" : undefined}>
-                <Legend>
+                <FieldsetTitle>
                   <Label htmlFor={`${uid}-creator-first-name-kanji`}>First name (Kanji)</Label>
-                </Legend>
+                </FieldsetTitle>
                 <Input
                   id={`${uid}-creator-first-name-kanji`}
                   type="text"
@@ -721,9 +721,9 @@ const AccountDetailsSection = ({
                 />
               </Fieldset>
               <Fieldset state={errorFieldNames.has("last_name_kanji") ? "danger" : undefined}>
-                <Legend>
+                <FieldsetTitle>
                   <Label htmlFor={`${uid}-creator-last-name-kanji`}>Last name (Kanji)</Label>
-                </Legend>
+                </FieldsetTitle>
                 <Input
                   id={`${uid}-creator-last-name-kanji`}
                   type="text"
@@ -738,9 +738,9 @@ const AccountDetailsSection = ({
             </div>
             <div style={{ display: "grid", gap: "var(--spacer-5)", gridAutoFlow: "column", gridAutoColumns: "1fr" }}>
               <Fieldset state={errorFieldNames.has("first_name_kana") ? "danger" : undefined}>
-                <Legend>
+                <FieldsetTitle>
                   <Label htmlFor={`${uid}-creator-first-name-kana`}>First name (Kana)</Label>
-                </Legend>
+                </FieldsetTitle>
                 <Input
                   id={`${uid}-creator-first-name-kana`}
                   type="text"
@@ -753,9 +753,9 @@ const AccountDetailsSection = ({
                 />
               </Fieldset>
               <Fieldset state={errorFieldNames.has("last_name_kana") ? "danger" : undefined}>
-                <Legend>
+                <FieldsetTitle>
                   <Label htmlFor={`${uid}-creator-last-name-kana`}>Last name (Kana)</Label>
-                </Legend>
+                </FieldsetTitle>
                 <Input
                   id={`${uid}-creator-last-name-kana`}
                   type="text"
@@ -773,9 +773,9 @@ const AccountDetailsSection = ({
         {complianceInfo.country === "JP" ? (
           <div style={{ display: "grid", gap: "var(--spacer-5)", gridAutoFlow: "column", gridAutoColumns: "1fr" }}>
             <Fieldset state={errorFieldNames.has("building_number") ? "danger" : undefined}>
-              <Legend>
+              <FieldsetTitle>
                 <Label htmlFor={`${uid}-creator-building-number`}>Block / Building Number</Label>
-              </Legend>
+              </FieldsetTitle>
               <Input
                 id={`${uid}-creator-building-number`}
                 type="text"
@@ -788,9 +788,9 @@ const AccountDetailsSection = ({
               />
             </Fieldset>
             <Fieldset state={errorFieldNames.has("street_address_kanji") ? "danger" : undefined}>
-              <Legend>
+              <FieldsetTitle>
                 <Label htmlFor={`${uid}-creator-street-address-kanji`}>Street Address (Kanji)</Label>
-              </Legend>
+              </FieldsetTitle>
               <Input
                 id={`${uid}-creator-street-address-kanji`}
                 type="text"
@@ -803,9 +803,9 @@ const AccountDetailsSection = ({
               />
             </Fieldset>
             <Fieldset state={errorFieldNames.has("street_address_kana") ? "danger" : undefined}>
-              <Legend>
+              <FieldsetTitle>
                 <Label htmlFor={`${uid}-creator-street-address-kana`}>Street Address (Kana)</Label>
-              </Legend>
+              </FieldsetTitle>
               <Input
                 id={`${uid}-creator-street-address-kana`}
                 type="text"
@@ -820,9 +820,9 @@ const AccountDetailsSection = ({
           </div>
         ) : (
           <Fieldset state={errorFieldNames.has("street_address") ? "danger" : undefined}>
-            <Legend>
+            <FieldsetTitle>
               <Label htmlFor={`${uid}-creator-street-address`}>Address</Label>
-            </Legend>
+            </FieldsetTitle>
             <Input
               id={`${uid}-creator-street-address`}
               type="text"
@@ -838,9 +838,9 @@ const AccountDetailsSection = ({
       </section>
       <div style={{ display: "grid", gap: "var(--spacer-5)", gridAutoFlow: "column", gridAutoColumns: "1fr" }}>
         <Fieldset state={errorFieldNames.has("city") ? "danger" : undefined}>
-          <Legend>
+          <FieldsetTitle>
             <Label htmlFor={`${uid}-creator-city`}>City</Label>
-          </Legend>
+          </FieldsetTitle>
           <Input
             id={`${uid}-creator-city`}
             type="text"
@@ -854,9 +854,9 @@ const AccountDetailsSection = ({
         </Fieldset>
         {complianceInfo.country === "US" ? (
           <Fieldset state={errorFieldNames.has("state") ? "danger" : undefined}>
-            <Legend>
+            <FieldsetTitle>
               <Label htmlFor={`${uid}-creator-state`}>State</Label>
-            </Legend>
+            </FieldsetTitle>
             <Select
               id={`${uid}-creator-state`}
               required
@@ -877,9 +877,9 @@ const AccountDetailsSection = ({
           </Fieldset>
         ) : complianceInfo.country === "CA" ? (
           <Fieldset state={errorFieldNames.has("state") ? "danger" : undefined}>
-            <Legend>
+            <FieldsetTitle>
               <Label htmlFor={`${uid}-creator-province`}>Province</Label>
-            </Legend>
+            </FieldsetTitle>
             <Select
               id={`${uid}-creator-province`}
               required
@@ -900,9 +900,9 @@ const AccountDetailsSection = ({
           </Fieldset>
         ) : complianceInfo.country === "AU" ? (
           <Fieldset state={errorFieldNames.has("state") ? "danger" : undefined}>
-            <Legend>
+            <FieldsetTitle>
               <Label htmlFor={`${uid}-creator-state`}>State</Label>
-            </Legend>
+            </FieldsetTitle>
             <Select
               id={`${uid}-creator-state`}
               required
@@ -923,9 +923,9 @@ const AccountDetailsSection = ({
           </Fieldset>
         ) : complianceInfo.country === "MX" ? (
           <Fieldset state={errorFieldNames.has("state") ? "danger" : undefined}>
-            <Legend>
+            <FieldsetTitle>
               <Label htmlFor={`${uid}-creator-state`}>State</Label>
-            </Legend>
+            </FieldsetTitle>
             <Select
               id={`${uid}-creator-state`}
               required
@@ -946,9 +946,9 @@ const AccountDetailsSection = ({
           </Fieldset>
         ) : complianceInfo.country === "AE" ? (
           <Fieldset state={errorFieldNames.has("state") ? "danger" : undefined}>
-            <Legend>
+            <FieldsetTitle>
               <Label htmlFor={`${uid}-creator-province`}>Province</Label>
-            </Legend>
+            </FieldsetTitle>
             <Select
               id={`${uid}-creator-province`}
               required
@@ -969,9 +969,9 @@ const AccountDetailsSection = ({
           </Fieldset>
         ) : complianceInfo.country === "IE" ? (
           <Fieldset state={errorFieldNames.has("state") ? "danger" : undefined}>
-            <Legend>
+            <FieldsetTitle>
               <Label htmlFor={`${uid}-creator-county`}>County</Label>
-            </Legend>
+            </FieldsetTitle>
             <Select
               id={`${uid}-creator-county`}
               required
@@ -992,9 +992,9 @@ const AccountDetailsSection = ({
           </Fieldset>
         ) : complianceInfo.country === "BR" ? (
           <Fieldset state={errorFieldNames.has("state") ? "danger" : undefined}>
-            <Legend>
+            <FieldsetTitle>
               <Label htmlFor={`${uid}-creator-state`}>State</Label>
-            </Legend>
+            </FieldsetTitle>
             <Select
               id={`${uid}-creator-state`}
               required
@@ -1015,11 +1015,11 @@ const AccountDetailsSection = ({
           </Fieldset>
         ) : null}
         <Fieldset state={errorFieldNames.has("zip_code") ? "danger" : undefined}>
-          <Legend>
+          <FieldsetTitle>
             <Label htmlFor={`${uid}-creator-zip-code`}>
               {complianceInfo.country === "US" ? "ZIP code" : "Postal code"}
             </Label>
-          </Legend>
+          </FieldsetTitle>
           <Input
             id={`${uid}-creator-zip-code`}
             type="text"
@@ -1033,9 +1033,9 @@ const AccountDetailsSection = ({
         </Fieldset>
       </div>
       <Fieldset>
-        <Legend>
+        <FieldsetTitle>
           <Label htmlFor={`${uid}-creator-country`}>Country</Label>
-        </Legend>
+        </FieldsetTitle>
         <Select
           id={`${uid}-creator-country`}
           disabled={isFormDisabled}
@@ -1054,9 +1054,9 @@ const AccountDetailsSection = ({
         </Select>
       </Fieldset>
       <Fieldset state={errorFieldNames.has("phone") ? "danger" : undefined}>
-        <Legend>
+        <FieldsetTitle>
           <Label htmlFor={`${uid}-creator-phone`}>Phone number</Label>
-        </Legend>
+        </FieldsetTitle>
         <Input
           id={`${uid}-creator-phone`}
           type="tel"
@@ -1071,10 +1071,10 @@ const AccountDetailsSection = ({
         />
       </Fieldset>
       <Fieldset>
-        <Legend>
+        <FieldsetTitle>
           <Label>Date of Birth</Label>
           <a href="/help/article/260-your-payout-settings-page">Why does Gumroad need this information?</a>
-        </Legend>
+        </FieldsetTitle>
         <div style={{ display: "grid", gap: "var(--spacer-5)", gridAutoFlow: "column", gridAutoColumns: "1fr" }}>
           <Fieldset state={errorFieldNames.has("dob_month") ? "danger" : undefined}>
             <Select
@@ -1140,9 +1140,9 @@ const AccountDetailsSection = ({
       user.country_code === "PK" ||
       user.country_code === "BD" ? (
         <Fieldset state={errorFieldNames.has("nationality") ? "danger" : undefined}>
-          <Legend>
+          <FieldsetTitle>
             <Label htmlFor={`${uid}-nationality`}>Nationality</Label>
-          </Legend>
+          </FieldsetTitle>
           <div>
             <Select
               id={`${uid}-nationality`}
@@ -1169,9 +1169,9 @@ const AccountDetailsSection = ({
           {complianceInfo.country === "US" ? (
             user.need_full_ssn ? (
               <div>
-                <Legend>
+                <FieldsetTitle>
                   <Label htmlFor={`${uid}-social-security-number-full`}>Social Security Number</Label>
-                </Legend>
+                </FieldsetTitle>
                 <Input
                   id={`${uid}-social-security-number-full`}
                   type="text"
@@ -1186,9 +1186,9 @@ const AccountDetailsSection = ({
               </div>
             ) : (
               <div>
-                <Legend>
+                <FieldsetTitle>
                   <Label htmlFor={`${uid}-social-security-number`}>Last 4 digits of SSN</Label>
-                </Legend>
+                </FieldsetTitle>
                 <Input
                   id={`${uid}-social-security-number`}
                   type="text"
@@ -1204,9 +1204,9 @@ const AccountDetailsSection = ({
             )
           ) : complianceInfo.country === "CA" ? (
             <div>
-              <Legend>
+              <FieldsetTitle>
                 <Label htmlFor={`${uid}-social-insurance-number`}>Social Insurance Number</Label>
-              </Legend>
+              </FieldsetTitle>
               <Input
                 id={`${uid}-social-insurance-number`}
                 type="text"
@@ -1221,9 +1221,9 @@ const AccountDetailsSection = ({
             </div>
           ) : complianceInfo.country === "CO" ? (
             <div>
-              <Legend>
+              <FieldsetTitle>
                 <Label htmlFor={`${uid}-colombia-id-number`}>Cédula de Ciudadanía (CC)</Label>
-              </Legend>
+              </FieldsetTitle>
               <Input
                 id={`${uid}-colombia-id-number`}
                 type="text"
@@ -1238,9 +1238,9 @@ const AccountDetailsSection = ({
             </div>
           ) : complianceInfo.country === "UY" ? (
             <div>
-              <Legend>
+              <FieldsetTitle>
                 <Label htmlFor={`${uid}-uruguay-id-number`}>Cédula de Identidad (CI)</Label>
-              </Legend>
+              </FieldsetTitle>
               <Input
                 id={`${uid}-uruguay-id-number`}
                 type="text"
@@ -1255,9 +1255,9 @@ const AccountDetailsSection = ({
             </div>
           ) : complianceInfo.country === "HK" ? (
             <div>
-              <Legend>
+              <FieldsetTitle>
                 <Label htmlFor={`${uid}-hong-kong-id-number`}>Hong Kong ID Number</Label>
-              </Legend>
+              </FieldsetTitle>
               <Input
                 id={`${uid}-hong-kong-id-number`}
                 type="text"
@@ -1272,9 +1272,9 @@ const AccountDetailsSection = ({
             </div>
           ) : complianceInfo.country === "SG" ? (
             <div>
-              <Legend>
+              <FieldsetTitle>
                 <Label htmlFor={`${uid}-singapore-id-number`}>NRIC number / FIN</Label>
-              </Legend>
+              </FieldsetTitle>
               <Input
                 id={`${uid}-singapore-id-number`}
                 type="text"
@@ -1289,9 +1289,9 @@ const AccountDetailsSection = ({
             </div>
           ) : complianceInfo.country === "AE" ? (
             <div>
-              <Legend>
+              <FieldsetTitle>
                 <Label htmlFor={`${uid}-uae-id-number`}>Emirates ID</Label>
-              </Legend>
+              </FieldsetTitle>
               <Input
                 id={`${uid}-uae-id-number`}
                 type="text"
@@ -1306,9 +1306,9 @@ const AccountDetailsSection = ({
             </div>
           ) : complianceInfo.country === "MX" ? (
             <div>
-              <Legend>
+              <FieldsetTitle>
                 <Label htmlFor={`${uid}-mexico-id-number`}>Personal RFC</Label>
-              </Legend>
+              </FieldsetTitle>
               <Input
                 id={`${uid}-mexico-id-number`}
                 type="text"
@@ -1323,9 +1323,9 @@ const AccountDetailsSection = ({
             </div>
           ) : complianceInfo.country === "KZ" ? (
             <div>
-              <Legend>
+              <FieldsetTitle>
                 <Label htmlFor={`${uid}-kazakhstan-id-number`}>Individual identification number (IIN)</Label>
-              </Legend>
+              </FieldsetTitle>
               <Input
                 id={`${uid}-kazakhstan-id-number`}
                 type="text"
@@ -1340,9 +1340,9 @@ const AccountDetailsSection = ({
             </div>
           ) : complianceInfo.country === "AR" ? (
             <div>
-              <Legend>
+              <FieldsetTitle>
                 <Label htmlFor={`${uid}-argentina-id-number`}>CUIL</Label>
-              </Legend>
+              </FieldsetTitle>
               <Input
                 id={`${uid}-argentina-id-number`}
                 type="text"
@@ -1357,9 +1357,9 @@ const AccountDetailsSection = ({
             </div>
           ) : complianceInfo.country === "PE" ? (
             <div>
-              <Legend>
+              <FieldsetTitle>
                 <Label htmlFor={`${uid}-peru-id-number`}>DNI number</Label>
-              </Legend>
+              </FieldsetTitle>
               <Input
                 id={`${uid}-peru-id-number`}
                 type="text"
@@ -1374,9 +1374,9 @@ const AccountDetailsSection = ({
             </div>
           ) : complianceInfo.country === "PK" ? (
             <div>
-              <Legend>
+              <FieldsetTitle>
                 <Label htmlFor={`${uid}-snic`}>National Identity Card Number (SNIC or CNIC)</Label>
-              </Legend>
+              </FieldsetTitle>
               <Input
                 id={`${uid}-snic`}
                 type="text"
@@ -1391,9 +1391,9 @@ const AccountDetailsSection = ({
             </div>
           ) : complianceInfo.country === "CR" ? (
             <div>
-              <Legend>
+              <FieldsetTitle>
                 <Label htmlFor={`${uid}-costa-rica-id-number`}>Tax Identification Number</Label>
-              </Legend>
+              </FieldsetTitle>
               <Input
                 id={`${uid}-costa-rica-id-number`}
                 type="text"
@@ -1408,9 +1408,9 @@ const AccountDetailsSection = ({
             </div>
           ) : complianceInfo.country === "CL" ? (
             <div>
-              <Legend>
+              <FieldsetTitle>
                 <Label htmlFor={`${uid}-chile-id-number`}>Rol Único Tributario (RUT)</Label>
-              </Legend>
+              </FieldsetTitle>
               <Input
                 id={`${uid}-chile-id-number`}
                 type="text"
@@ -1425,9 +1425,9 @@ const AccountDetailsSection = ({
             </div>
           ) : complianceInfo.country === "DO" ? (
             <div>
-              <Legend>
+              <FieldsetTitle>
                 <Label htmlFor={`${uid}-dominican-republic-id-number`}>Cédula de identidad y electoral (CIE)</Label>
-              </Legend>
+              </FieldsetTitle>
               <Input
                 id={`${uid}-dominican-republic-id-number`}
                 type="text"
@@ -1442,9 +1442,9 @@ const AccountDetailsSection = ({
             </div>
           ) : complianceInfo.country === "BO" ? (
             <div>
-              <Legend>
+              <FieldsetTitle>
                 <Label htmlFor={`${uid}-bolivia-id-number`}>Cédula de Identidad (CI)</Label>
-              </Legend>
+              </FieldsetTitle>
               <Input
                 id={`${uid}-bolivia-id-number`}
                 type="text"
@@ -1459,9 +1459,9 @@ const AccountDetailsSection = ({
             </div>
           ) : complianceInfo.country === "PY" ? (
             <div>
-              <Legend>
+              <FieldsetTitle>
                 <Label htmlFor={`${uid}-paraguay-id-number`}>Cédula de Identidad (CI)</Label>
-              </Legend>
+              </FieldsetTitle>
               <Input
                 id={`${uid}-paraguay-id-number`}
                 type="text"
@@ -1476,9 +1476,9 @@ const AccountDetailsSection = ({
             </div>
           ) : complianceInfo.country === "BD" ? (
             <div>
-              <Legend>
+              <FieldsetTitle>
                 <Label htmlFor={`${uid}-bangladesh-id-number`}>Personal ID number</Label>
-              </Legend>
+              </FieldsetTitle>
               <Input
                 id={`${uid}-bangladesh-id-number`}
                 type="text"
@@ -1493,9 +1493,9 @@ const AccountDetailsSection = ({
             </div>
           ) : complianceInfo.country === "MZ" ? (
             <div>
-              <Legend>
+              <FieldsetTitle>
                 <Label htmlFor={`${uid}-mozambique-id-number`}>Mozambique Taxpayer Single ID Number (NUIT)</Label>
-              </Legend>
+              </FieldsetTitle>
               <Input
                 id={`${uid}-mozambique-id-number`}
                 type="text"
@@ -1510,9 +1510,9 @@ const AccountDetailsSection = ({
             </div>
           ) : complianceInfo.country === "GT" ? (
             <div>
-              <Legend>
+              <FieldsetTitle>
                 <Label htmlFor={`${uid}-guatemala-id-number`}>Número de Identificación Tributaria (NIT)</Label>
-              </Legend>
+              </FieldsetTitle>
               <Input
                 id={`${uid}-guatemala-id-number`}
                 type="text"
@@ -1527,9 +1527,9 @@ const AccountDetailsSection = ({
             </div>
           ) : complianceInfo.country === "BR" ? (
             <div>
-              <Legend>
+              <FieldsetTitle>
                 <Label htmlFor={`${uid}-brazil-id-number`}>Cadastro de Pessoas Físicas (CPF)</Label>
-              </Legend>
+              </FieldsetTitle>
               <Input
                 id={`${uid}-brazil-id-number`}
                 type="text"

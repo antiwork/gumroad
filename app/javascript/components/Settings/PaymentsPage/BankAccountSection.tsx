@@ -5,7 +5,7 @@ import type { FormFieldName, User } from "$app/types/payments";
 
 import { Button } from "$app/components/Button";
 import { Alert } from "$app/components/ui/Alert";
-import { Fieldset, Legend } from "$app/components/ui/Fieldset";
+import { Fieldset, FieldsetTitle } from "$app/components/ui/Fieldset";
 import { Input } from "$app/components/ui/Input";
 import { Label } from "$app/components/ui/Label";
 import { Select } from "$app/components/ui/Select";
@@ -937,9 +937,9 @@ const BankAccountSection = ({
       <div className="whitespace-pre-line">{feeInfoText}</div>
       <section className="grid gap-8">
         <Fieldset state={errorFieldNames.has("account_holder_full_name") ? "danger" : undefined}>
-          <Legend>
+          <FieldsetTitle>
             <Label htmlFor={`${uid}-account-holder-full-name`}>Pay to the order of</Label>
-          </Legend>
+          </FieldsetTitle>
           <Input
             id={`${uid}-account-holder-full-name`}
             placeholder="Full name of account holder"
@@ -956,9 +956,9 @@ const BankAccountSection = ({
               {user.country_code === "CA" ? (
                 <>
                   <Fieldset state={errorFieldNames.has("transit_number") ? "danger" : undefined}>
-                    <Legend>
+                    <FieldsetTitle>
                       <Label htmlFor={`${uid}-transit-number`}>Transit #</Label>
-                    </Legend>
+                    </FieldsetTitle>
                     <Input
                       type="text"
                       id={`${uid}-transit-number`}
@@ -971,9 +971,9 @@ const BankAccountSection = ({
                     />
                   </Fieldset>
                   <Fieldset state={errorFieldNames.has("institution_number") ? "danger" : undefined}>
-                    <Legend>
+                    <FieldsetTitle>
                       <Label htmlFor={`${uid}-institution-number`}>Institution #</Label>
-                    </Legend>
+                    </FieldsetTitle>
                     <Input
                       type="text"
                       id={`${uid}-institution-number`}
@@ -988,9 +988,9 @@ const BankAccountSection = ({
                 </>
               ) : user.country_code === "AU" ? (
                 <Fieldset state={errorFieldNames.has("bsb_number") ? "danger" : undefined}>
-                  <Legend>
+                  <FieldsetTitle>
                     <Label htmlFor={`${uid}-bsb-number`}>BSB</Label>
-                  </Legend>
+                  </FieldsetTitle>
                   <Input
                     type="text"
                     id={`${uid}-bsb-number`}
@@ -1004,9 +1004,9 @@ const BankAccountSection = ({
                 </Fieldset>
               ) : user.country_code === "GB" ? (
                 <Fieldset state={errorFieldNames.has("sort_code") ? "danger" : undefined}>
-                  <Legend>
+                  <FieldsetTitle>
                     <Label htmlFor={`${uid}-sort-code`}>Sort code</Label>
-                  </Legend>
+                  </FieldsetTitle>
                   <Input
                     type="text"
                     id={`${uid}-sort-code`}
@@ -1020,9 +1020,9 @@ const BankAccountSection = ({
                 </Fieldset>
               ) : user.country_code === "GI" ? (
                 <Fieldset state={errorFieldNames.has("sort_code") ? "danger" : undefined}>
-                  <Legend>
+                  <FieldsetTitle>
                     <Label htmlFor={`${uid}-sort-code`}>Sort code</Label>
-                  </Legend>
+                  </FieldsetTitle>
                   <Input
                     type="text"
                     id={`${uid}-sort-code`}
@@ -1036,9 +1036,9 @@ const BankAccountSection = ({
                 </Fieldset>
               ) : user.country_code === "IN" ? (
                 <Fieldset state={errorFieldNames.has("ifsc") ? "danger" : undefined}>
-                  <Legend>
+                  <FieldsetTitle>
                     <Label htmlFor={`${uid}-ifsc`}>IFSC</Label>
-                  </Legend>
+                  </FieldsetTitle>
                   <Input
                     type="text"
                     id={`${uid}-ifsc`}
@@ -1053,9 +1053,9 @@ const BankAccountSection = ({
               ) : user.country_code === "HK" ? (
                 <>
                   <Fieldset state={errorFieldNames.has("clearing_code") ? "danger" : undefined}>
-                    <Legend>
+                    <FieldsetTitle>
                       <Label htmlFor={`${uid}-clearing-code`}>Clearing Code</Label>
-                    </Legend>
+                    </FieldsetTitle>
                     <Input
                       type="text"
                       id={`${uid}-clearing-code`}
@@ -1068,9 +1068,9 @@ const BankAccountSection = ({
                     />
                   </Fieldset>
                   <Fieldset state={errorFieldNames.has("branch_code") ? "danger" : undefined}>
-                    <Legend>
+                    <FieldsetTitle>
                       <Label htmlFor={`${uid}-branch-code`}>Branch code</Label>
-                    </Legend>
+                    </FieldsetTitle>
                     <Input
                       type="text"
                       id={`${uid}-branch-code`}
@@ -1086,9 +1086,9 @@ const BankAccountSection = ({
               ) : user.country_code === "SG" ? (
                 <>
                   <Fieldset state={errorFieldNames.has("bank_code") ? "danger" : undefined}>
-                    <Legend>
+                    <FieldsetTitle>
                       <Label htmlFor={`${uid}-bank-code`}>Bank code</Label>
-                    </Legend>
+                    </FieldsetTitle>
                     <Input
                       type="text"
                       id={`${uid}-bank-code`}
@@ -1101,9 +1101,9 @@ const BankAccountSection = ({
                     />
                   </Fieldset>
                   <Fieldset state={errorFieldNames.has("branch_code") ? "danger" : undefined}>
-                    <Legend>
+                    <FieldsetTitle>
                       <Label htmlFor={`${uid}-branch-code`}>Branch code</Label>
-                    </Legend>
+                    </FieldsetTitle>
                     <Input
                       type="text"
                       id={`${uid}-branch-code`}
@@ -1119,9 +1119,9 @@ const BankAccountSection = ({
               ) : user.country_code === "JP" ? (
                 <>
                   <Fieldset state={errorFieldNames.has("bank_code") ? "danger" : undefined}>
-                    <Legend>
+                    <FieldsetTitle>
                       <Label htmlFor={`${uid}-bank-code`}>Bank code</Label>
-                    </Legend>
+                    </FieldsetTitle>
                     <Input
                       type="text"
                       id={`${uid}-bank-code`}
@@ -1134,9 +1134,9 @@ const BankAccountSection = ({
                     />
                   </Fieldset>
                   <Fieldset state={errorFieldNames.has("branch_code") ? "danger" : undefined}>
-                    <Legend>
+                    <FieldsetTitle>
                       <Label htmlFor={`${uid}-branch-code`}>Branch code</Label>
-                    </Legend>
+                    </FieldsetTitle>
                     <Input
                       type="text"
                       id={`${uid}-branch-code`}
@@ -1151,9 +1151,9 @@ const BankAccountSection = ({
                 </>
               ) : user.country_code === "TH" ? (
                 <Fieldset state={errorFieldNames.has("bank_code") ? "danger" : undefined}>
-                  <Legend>
+                  <FieldsetTitle>
                     <Label htmlFor={`${uid}-bank-code`}>Bank code</Label>
-                  </Legend>
+                  </FieldsetTitle>
                   <Input
                     type="text"
                     id={`${uid}-bank-code`}
@@ -1167,9 +1167,9 @@ const BankAccountSection = ({
                 </Fieldset>
               ) : user.country_code === "KR" ? (
                 <Fieldset state={errorFieldNames.has("bank_code") ? "danger" : undefined}>
-                  <Legend>
+                  <FieldsetTitle>
                     <Label htmlFor={`${uid}-bank-code`}>Bank code</Label>
-                  </Legend>
+                  </FieldsetTitle>
                   <Input
                     type="text"
                     id={`${uid}-bank-code`}
@@ -1183,9 +1183,9 @@ const BankAccountSection = ({
                 </Fieldset>
               ) : user.country_code === "VN" ? (
                 <Fieldset state={errorFieldNames.has("bank_code") ? "danger" : undefined}>
-                  <Legend>
+                  <FieldsetTitle>
                     <Label htmlFor={`${uid}-bank-code`}>Bank Code</Label>
-                  </Legend>
+                  </FieldsetTitle>
                   <Input
                     type="text"
                     id={`${uid}-bank-code`}
@@ -1199,9 +1199,9 @@ const BankAccountSection = ({
                 </Fieldset>
               ) : user.country_code === "TW" ? (
                 <Fieldset state={errorFieldNames.has("bank_code") ? "danger" : undefined}>
-                  <Legend>
+                  <FieldsetTitle>
                     <Label htmlFor={`${uid}-bank-code`}>SWIFT / BIC Code</Label>
-                  </Legend>
+                  </FieldsetTitle>
                   <Input
                     type="text"
                     id={`${uid}-bank-code`}
@@ -1215,9 +1215,9 @@ const BankAccountSection = ({
                 </Fieldset>
               ) : user.country_code === "ID" ? (
                 <Fieldset state={errorFieldNames.has("bank_code") ? "danger" : undefined}>
-                  <Legend>
+                  <FieldsetTitle>
                     <Label htmlFor={`${uid}-bank-code`}>Bank code</Label>
-                  </Legend>
+                  </FieldsetTitle>
                   <Input
                     type="text"
                     id={`${uid}-bank-code`}
@@ -1231,9 +1231,9 @@ const BankAccountSection = ({
                 </Fieldset>
               ) : user.country_code === "MA" ? (
                 <Fieldset state={errorFieldNames.has("bank_code") ? "danger" : undefined}>
-                  <Legend>
+                  <FieldsetTitle>
                     <Label htmlFor={`${uid}-bank-code`}>SWIFT / BIC Code</Label>
-                  </Legend>
+                  </FieldsetTitle>
                   <Input
                     type="text"
                     id={`${uid}-bank-code`}
@@ -1247,9 +1247,9 @@ const BankAccountSection = ({
                 </Fieldset>
               ) : user.country_code === "RS" ? (
                 <Fieldset state={errorFieldNames.has("bank_code") ? "danger" : undefined}>
-                  <Legend>
+                  <FieldsetTitle>
                     <Label htmlFor={`${uid}-bank-code`}>SWIFT / BIC Code</Label>
-                  </Legend>
+                  </FieldsetTitle>
                   <Input
                     type="text"
                     id={`${uid}-bank-code`}
@@ -1264,9 +1264,9 @@ const BankAccountSection = ({
               ) : user.country_code === "TT" ? (
                 <>
                   <Fieldset state={errorFieldNames.has("bank_code") ? "danger" : undefined}>
-                    <Legend>
+                    <FieldsetTitle>
                       <Label htmlFor={`${uid}-bank-code`}>Bank code</Label>
-                    </Legend>
+                    </FieldsetTitle>
                     <Input
                       type="text"
                       id={`${uid}-bank-code`}
@@ -1279,9 +1279,9 @@ const BankAccountSection = ({
                     />
                   </Fieldset>
                   <Fieldset state={errorFieldNames.has("branch_code") ? "danger" : undefined}>
-                    <Legend>
+                    <FieldsetTitle>
                       <Label htmlFor={`${uid}-branch-code`}>Branch code</Label>
-                    </Legend>
+                    </FieldsetTitle>
                     <Input
                       type="text"
                       id={`${uid}-branch-code`}
@@ -1297,9 +1297,9 @@ const BankAccountSection = ({
               ) : user.country_code === "JM" ? (
                 <>
                   <Fieldset state={errorFieldNames.has("bank_code") ? "danger" : undefined}>
-                    <Legend>
+                    <FieldsetTitle>
                       <Label htmlFor={`${uid}-bank-code`}>Bank code</Label>
-                    </Legend>
+                    </FieldsetTitle>
                     <Input
                       type="text"
                       id={`${uid}-bank-code`}
@@ -1312,9 +1312,9 @@ const BankAccountSection = ({
                     />
                   </Fieldset>
                   <Fieldset state={errorFieldNames.has("branch_code") ? "danger" : undefined}>
-                    <Legend>
+                    <FieldsetTitle>
                       <Label htmlFor={`${uid}-branch-code`}>Branch code</Label>
-                    </Legend>
+                    </FieldsetTitle>
                     <Input
                       type="text"
                       id={`${uid}-branch-code`}
@@ -1329,9 +1329,9 @@ const BankAccountSection = ({
                 </>
               ) : user.country_code === "UY" ? (
                 <Fieldset state={errorFieldNames.has("bank_code") ? "danger" : undefined}>
-                  <Legend>
+                  <FieldsetTitle>
                     <Label htmlFor={`${uid}-bank-code`}>Bank code</Label>
-                  </Legend>
+                  </FieldsetTitle>
                   <Input
                     type="text"
                     id={`${uid}-bank-code`}
@@ -1345,9 +1345,9 @@ const BankAccountSection = ({
                 </Fieldset>
               ) : user.country_code === "AG" ? (
                 <Fieldset state={errorFieldNames.has("bank_code") ? "danger" : undefined}>
-                  <Legend>
+                  <FieldsetTitle>
                     <Label htmlFor={`${uid}-bank-code`}>SWIFT / BIC Code</Label>
-                  </Legend>
+                  </FieldsetTitle>
                   <Input
                     type="text"
                     id={`${uid}-bank-code`}
@@ -1361,9 +1361,9 @@ const BankAccountSection = ({
                 </Fieldset>
               ) : user.country_code === "LC" ? (
                 <Fieldset state={errorFieldNames.has("bank_code") ? "danger" : undefined}>
-                  <Legend>
+                  <FieldsetTitle>
                     <Label htmlFor={`${uid}-bank-code`}>SWIFT / BIC Code</Label>
-                  </Legend>
+                  </FieldsetTitle>
                   <Input
                     type="text"
                     id={`${uid}-bank-code`}
@@ -1377,9 +1377,9 @@ const BankAccountSection = ({
                 </Fieldset>
               ) : user.country_code === "TZ" ? (
                 <Fieldset state={errorFieldNames.has("bank_code") ? "danger" : undefined}>
-                  <Legend>
+                  <FieldsetTitle>
                     <Label htmlFor={`${uid}-bank-code`}>SWIFT / BIC Code</Label>
-                  </Legend>
+                  </FieldsetTitle>
                   <Input
                     type="text"
                     id={`${uid}-bank-code`}
@@ -1393,9 +1393,9 @@ const BankAccountSection = ({
                 </Fieldset>
               ) : user.country_code === "NA" ? (
                 <Fieldset state={errorFieldNames.has("bank_code") ? "danger" : undefined}>
-                  <Legend>
+                  <FieldsetTitle>
                     <Label htmlFor={`${uid}-bank-code`}>SWIFT / BIC Code</Label>
-                  </Legend>
+                  </FieldsetTitle>
                   <Input
                     type="text"
                     id={`${uid}-bank-code`}
@@ -1409,9 +1409,9 @@ const BankAccountSection = ({
                 </Fieldset>
               ) : user.country_code === "PH" ? (
                 <Fieldset state={errorFieldNames.has("bank_code") ? "danger" : undefined}>
-                  <Legend>
+                  <FieldsetTitle>
                     <Label htmlFor={`${uid}-bank-code`}>Bank Identifier Code (BIC)</Label>
-                  </Legend>
+                  </FieldsetTitle>
                   <Input
                     type="text"
                     id={`${uid}-bank-code`}
@@ -1425,9 +1425,9 @@ const BankAccountSection = ({
                 </Fieldset>
               ) : user.country_code === "ZA" ? (
                 <Fieldset state={errorFieldNames.has("bank_code") ? "danger" : undefined}>
-                  <Legend>
+                  <FieldsetTitle>
                     <Label htmlFor={`${uid}-bank-code`}>SWIFT / BIC Code</Label>
-                  </Legend>
+                  </FieldsetTitle>
                   <Input
                     type="text"
                     id={`${uid}-bank-code`}
@@ -1441,9 +1441,9 @@ const BankAccountSection = ({
                 </Fieldset>
               ) : user.country_code === "KE" ? (
                 <Fieldset state={errorFieldNames.has("bank_code") ? "danger" : undefined}>
-                  <Legend>
+                  <FieldsetTitle>
                     <Label htmlFor={`${uid}-bank-code`}>SWIFT / BIC Code</Label>
-                  </Legend>
+                  </FieldsetTitle>
                   <Input
                     type="text"
                     id={`${uid}-bank-code`}
@@ -1457,9 +1457,9 @@ const BankAccountSection = ({
                 </Fieldset>
               ) : user.country_code === "MY" ? (
                 <Fieldset state={errorFieldNames.has("bank_code") ? "danger" : undefined}>
-                  <Legend>
+                  <FieldsetTitle>
                     <Label htmlFor={`${uid}-bank-code`}>SWIFT / BIC Code</Label>
-                  </Legend>
+                  </FieldsetTitle>
                   <Input
                     type="text"
                     id={`${uid}-bank-code`}
@@ -1474,9 +1474,9 @@ const BankAccountSection = ({
               ) : user.country_code === "CL" ? (
                 <>
                   <Fieldset state={errorFieldNames.has("account_type") ? "danger" : undefined}>
-                    <Legend>
+                    <FieldsetTitle>
                       <Label htmlFor={`${uid}-bank-account-type`}>Bank account type</Label>
-                    </Legend>
+                    </FieldsetTitle>
                     <Select
                       id={`${uid}-bank-account-type`}
                       required
@@ -1495,9 +1495,9 @@ const BankAccountSection = ({
                     </Select>
                   </Fieldset>
                   <Fieldset state={errorFieldNames.has("bank_code") ? "danger" : undefined}>
-                    <Legend>
+                    <FieldsetTitle>
                       <Label htmlFor={`${uid}-bank-code`}>Bank code</Label>
-                    </Legend>
+                    </FieldsetTitle>
                     <Input
                       type="text"
                       id={`${uid}-bank-code`}
@@ -1513,9 +1513,9 @@ const BankAccountSection = ({
               ) : user.country_code === "CO" ? (
                 <>
                   <Fieldset state={errorFieldNames.has("account_type") ? "danger" : undefined}>
-                    <Legend>
+                    <FieldsetTitle>
                       <Label htmlFor={`${uid}-account-type`}>Account Type</Label>
-                    </Legend>
+                    </FieldsetTitle>
                     <Select
                       id={`${uid}-account-type`}
                       required
@@ -1534,9 +1534,9 @@ const BankAccountSection = ({
                     </Select>
                   </Fieldset>
                   <Fieldset state={errorFieldNames.has("bank_code") ? "danger" : undefined}>
-                    <Legend>
+                    <FieldsetTitle>
                       <Label htmlFor={`${uid}-bank-code`}>Bank Code</Label>
-                    </Legend>
+                    </FieldsetTitle>
                     <Input
                       type="text"
                       id={`${uid}-bank-code`}
@@ -1551,9 +1551,9 @@ const BankAccountSection = ({
                 </>
               ) : user.country_code === "RW" ? (
                 <Fieldset state={errorFieldNames.has("bank_code") ? "danger" : undefined}>
-                  <Legend>
+                  <FieldsetTitle>
                     <Label htmlFor={`${uid}-bank-code`}>SWIFT / BIC Code</Label>
-                  </Legend>
+                  </FieldsetTitle>
                   <Input
                     type="text"
                     id={`${uid}-bank-code`}
@@ -1567,9 +1567,9 @@ const BankAccountSection = ({
                 </Fieldset>
               ) : user.country_code === "EC" ? (
                 <Fieldset state={errorFieldNames.has("bank_code") ? "danger" : undefined}>
-                  <Legend>
+                  <FieldsetTitle>
                     <Label htmlFor={`${uid}-bank-code`}>SWIFT / BIC Code</Label>
-                  </Legend>
+                  </FieldsetTitle>
                   <Input
                     type="text"
                     id={`${uid}-bank-code`}
@@ -1583,9 +1583,9 @@ const BankAccountSection = ({
                 </Fieldset>
               ) : user.country_code === "BW" ? (
                 <Fieldset state={errorFieldNames.has("bank_code") ? "danger" : undefined}>
-                  <Legend>
+                  <FieldsetTitle>
                     <Label htmlFor={`${uid}-bank-code`}>SWIFT / BIC Code</Label>
-                  </Legend>
+                  </FieldsetTitle>
                   <Input
                     type="text"
                     id={`${uid}-bank-code`}
@@ -1599,9 +1599,9 @@ const BankAccountSection = ({
                 </Fieldset>
               ) : user.country_code === "OM" ? (
                 <Fieldset state={errorFieldNames.has("bank_code") ? "danger" : undefined}>
-                  <Legend>
+                  <FieldsetTitle>
                     <Label htmlFor={`${uid}-bank-code`}>SWIFT / BIC Code</Label>
-                  </Legend>
+                  </FieldsetTitle>
                   <Input
                     type="text"
                     id={`${uid}-bank-code`}
@@ -1615,9 +1615,9 @@ const BankAccountSection = ({
                 </Fieldset>
               ) : user.country_code === "PY" ? (
                 <Fieldset state={errorFieldNames.has("bank_code") ? "danger" : undefined}>
-                  <Legend>
+                  <FieldsetTitle>
                     <Label htmlFor={`${uid}-bank-code`}>Bank code</Label>
-                  </Legend>
+                  </FieldsetTitle>
                   <Input
                     type="text"
                     id={`${uid}-bank-code`}
@@ -1631,9 +1631,9 @@ const BankAccountSection = ({
                 </Fieldset>
               ) : user.country_code === "MG" ? (
                 <Fieldset state={errorFieldNames.has("bank_code") ? "danger" : undefined}>
-                  <Legend>
+                  <FieldsetTitle>
                     <Label htmlFor={`${uid}-bank-code`}>SWIFT / BIC Code</Label>
-                  </Legend>
+                  </FieldsetTitle>
                   <Input
                     type="text"
                     id={`${uid}-bank-code`}
@@ -1647,9 +1647,9 @@ const BankAccountSection = ({
                 </Fieldset>
               ) : user.country_code === "GH" ? (
                 <Fieldset state={errorFieldNames.has("bank_code") ? "danger" : undefined}>
-                  <Legend>
+                  <FieldsetTitle>
                     <Label htmlFor={`${uid}-bank-code`}>Bank code</Label>
-                  </Legend>
+                  </FieldsetTitle>
                   <Input
                     type="text"
                     id={`${uid}-bank-code`}
@@ -1663,9 +1663,9 @@ const BankAccountSection = ({
                 </Fieldset>
               ) : user.country_code === "US" ? (
                 <Fieldset state={errorFieldNames.has("routing_number") ? "danger" : undefined}>
-                  <Legend>
+                  <FieldsetTitle>
                     <Label htmlFor={`${uid}-routing-number`}>Routing number</Label>
-                  </Legend>
+                  </FieldsetTitle>
                   <Input
                     type="text"
                     id={`${uid}-routing-number`}
@@ -1679,9 +1679,9 @@ const BankAccountSection = ({
                 </Fieldset>
               ) : user.country_code === "MD" ? (
                 <Fieldset state={errorFieldNames.has("bank_code") ? "danger" : undefined}>
-                  <Legend>
+                  <FieldsetTitle>
                     <Label htmlFor={`${uid}-bank-code`}>SWIFT / BIC Code</Label>
-                  </Legend>
+                  </FieldsetTitle>
                   <Input
                     type="text"
                     id={`${uid}-bank-code`}
@@ -1695,9 +1695,9 @@ const BankAccountSection = ({
                 </Fieldset>
               ) : user.country_code === "PA" ? (
                 <Fieldset state={errorFieldNames.has("bank_code") ? "danger" : undefined}>
-                  <Legend>
+                  <FieldsetTitle>
                     <Label htmlFor={`${uid}-bank-code`}>SWIFT / BIC Code</Label>
-                  </Legend>
+                  </FieldsetTitle>
                   <Input
                     type="text"
                     id={`${uid}-bank-code`}
@@ -1712,9 +1712,9 @@ const BankAccountSection = ({
               ) : user.country_code === "DO" ? (
                 <>
                   <Fieldset state={errorFieldNames.has("bank_code") ? "danger" : undefined}>
-                    <Legend>
+                    <FieldsetTitle>
                       <Label htmlFor={`${uid}-bank-code`}>Bank code</Label>
-                    </Legend>
+                    </FieldsetTitle>
                     <Input
                       type="text"
                       id={`${uid}-bank-code`}
@@ -1727,9 +1727,9 @@ const BankAccountSection = ({
                     />
                   </Fieldset>
                   <Fieldset state={errorFieldNames.has("branch_code") ? "danger" : undefined}>
-                    <Legend>
+                    <FieldsetTitle>
                       <Label htmlFor={`${uid}-branch-code`}>Branch code (optional)</Label>
-                    </Legend>
+                    </FieldsetTitle>
                     <Input
                       type="text"
                       id={`${uid}-branch-code`}
@@ -1743,9 +1743,9 @@ const BankAccountSection = ({
               ) : user.country_code === "UZ" ? (
                 <>
                   <Fieldset state={errorFieldNames.has("bank_code") ? "danger" : undefined}>
-                    <Legend>
+                    <FieldsetTitle>
                       <Label htmlFor={`${uid}-bank-code`}>Bank code</Label>
-                    </Legend>
+                    </FieldsetTitle>
                     <Input
                       type="text"
                       id={`${uid}-bank-code`}
@@ -1758,9 +1758,9 @@ const BankAccountSection = ({
                     />
                   </Fieldset>
                   <Fieldset state={errorFieldNames.has("branch_code") ? "danger" : undefined}>
-                    <Legend>
+                    <FieldsetTitle>
                       <Label htmlFor={`${uid}-branch-code`}>Branch code</Label>
-                    </Legend>
+                    </FieldsetTitle>
                     <Input
                       type="text"
                       id={`${uid}-branch-code`}
@@ -1775,9 +1775,9 @@ const BankAccountSection = ({
                 </>
               ) : user.country_code === "BO" ? (
                 <Fieldset state={errorFieldNames.has("bank_code") ? "danger" : undefined}>
-                  <Legend>
+                  <FieldsetTitle>
                     <Label htmlFor={`${uid}-bank-code`}>Bank code</Label>
-                  </Legend>
+                  </FieldsetTitle>
                   <Input
                     type="text"
                     id={`${uid}-bank-code`}
@@ -1791,9 +1791,9 @@ const BankAccountSection = ({
                 </Fieldset>
               ) : user.country_code === "NG" ? (
                 <Fieldset state={errorFieldNames.has("bank_code") ? "danger" : undefined}>
-                  <Legend>
+                  <FieldsetTitle>
                     <Label htmlFor={`${uid}-bank-code`}>SWIFT / BIC Code</Label>
-                  </Legend>
+                  </FieldsetTitle>
                   <Input
                     type="text"
                     id={`${uid}-bank-code`}
@@ -1807,9 +1807,9 @@ const BankAccountSection = ({
                 </Fieldset>
               ) : user.country_code === "AM" ? (
                 <Fieldset state={errorFieldNames.has("bank_code") ? "danger" : undefined}>
-                  <Legend>
+                  <FieldsetTitle>
                     <Label htmlFor={`${uid}-bank-code`}>SWIFT / BIC Code</Label>
-                  </Legend>
+                  </FieldsetTitle>
                   <Input
                     type="text"
                     id={`${uid}-bank-code`}
@@ -1824,9 +1824,9 @@ const BankAccountSection = ({
               ) : user.country_code === "LK" ? (
                 <>
                   <Fieldset state={errorFieldNames.has("bank_code") ? "danger" : undefined}>
-                    <Legend>
+                    <FieldsetTitle>
                       <Label htmlFor={`${uid}-bank-code`}>Bank code</Label>
-                    </Legend>
+                    </FieldsetTitle>
                     <Input
                       type="text"
                       id={`${uid}-bank-code`}
@@ -1839,9 +1839,9 @@ const BankAccountSection = ({
                     />
                   </Fieldset>
                   <Fieldset state={errorFieldNames.has("branch_code") ? "danger" : undefined}>
-                    <Legend>
+                    <FieldsetTitle>
                       <Label htmlFor={`${uid}-branch-code`}>Branch code</Label>
-                    </Legend>
+                    </FieldsetTitle>
                     <Input
                       type="text"
                       id={`${uid}-branch-code`}
@@ -1856,9 +1856,9 @@ const BankAccountSection = ({
                 </>
               ) : user.country_code === "ET" ? (
                 <Fieldset state={errorFieldNames.has("bank_code") ? "danger" : undefined}>
-                  <Legend>
+                  <FieldsetTitle>
                     <Label htmlFor={`${uid}-bank-code`}>SWIFT / BIC Code</Label>
-                  </Legend>
+                  </FieldsetTitle>
                   <Input
                     type="text"
                     id={`${uid}-bank-code`}
@@ -1872,9 +1872,9 @@ const BankAccountSection = ({
                 </Fieldset>
               ) : user.country_code === "BN" ? (
                 <Fieldset state={errorFieldNames.has("bank_code") ? "danger" : undefined}>
-                  <Legend>
+                  <FieldsetTitle>
                     <Label htmlFor={`${uid}-bank-code`}>SWIFT / BIC Code</Label>
-                  </Legend>
+                  </FieldsetTitle>
                   <Input
                     type="text"
                     id={`${uid}-bank-code`}
@@ -1888,9 +1888,9 @@ const BankAccountSection = ({
                 </Fieldset>
               ) : user.country_code === "GY" ? (
                 <Fieldset state={errorFieldNames.has("bank_code") ? "danger" : undefined}>
-                  <Legend>
+                  <FieldsetTitle>
                     <Label htmlFor={`${uid}-bank-code`}>SWIFT / BIC Code</Label>
-                  </Legend>
+                  </FieldsetTitle>
                   <Input
                     type="text"
                     id={`${uid}-bank-code`}
@@ -1904,9 +1904,9 @@ const BankAccountSection = ({
                 </Fieldset>
               ) : user.country_code === "MK" ? (
                 <Fieldset state={errorFieldNames.has("bank_code") ? "danger" : undefined}>
-                  <Legend>
+                  <FieldsetTitle>
                     <Label htmlFor={`${uid}-bank-code`}>SWIFT / BIC Code</Label>
-                  </Legend>
+                  </FieldsetTitle>
                   <Input
                     type="text"
                     id={`${uid}-bank-code`}
@@ -1920,9 +1920,9 @@ const BankAccountSection = ({
                 </Fieldset>
               ) : user.country_code === "BD" ? (
                 <Fieldset state={errorFieldNames.has("bank_code") ? "danger" : undefined}>
-                  <Legend>
+                  <FieldsetTitle>
                     <Label htmlFor={`${uid}-bank-code`}>Bank Code</Label>
-                  </Legend>
+                  </FieldsetTitle>
                   <Input
                     type="text"
                     id={`${uid}-bank-code`}
@@ -1936,9 +1936,9 @@ const BankAccountSection = ({
                 </Fieldset>
               ) : user.country_code === "BT" ? (
                 <Fieldset state={errorFieldNames.has("bank_code") ? "danger" : undefined}>
-                  <Legend>
+                  <FieldsetTitle>
                     <Label htmlFor={`${uid}-bank-code`}>SWIFT / BIC Code</Label>
-                  </Legend>
+                  </FieldsetTitle>
                   <Input
                     type="text"
                     id={`${uid}-bank-code`}
@@ -1952,9 +1952,9 @@ const BankAccountSection = ({
                 </Fieldset>
               ) : user.country_code === "LA" ? (
                 <Fieldset state={errorFieldNames.has("bank_code") ? "danger" : undefined}>
-                  <Legend>
+                  <FieldsetTitle>
                     <Label htmlFor={`${uid}-bank-code`}>SWIFT / BIC Code</Label>
-                  </Legend>
+                  </FieldsetTitle>
                   <Input
                     type="text"
                     id={`${uid}-bank-code`}
@@ -1968,9 +1968,9 @@ const BankAccountSection = ({
                 </Fieldset>
               ) : user.country_code === "MZ" ? (
                 <Fieldset state={errorFieldNames.has("bank_code") ? "danger" : undefined}>
-                  <Legend>
+                  <FieldsetTitle>
                     <Label htmlFor={`${uid}-bank-code`}>SWIFT / BIC Code</Label>
-                  </Legend>
+                  </FieldsetTitle>
                   <Input
                     type="text"
                     id={`${uid}-bank-code`}
@@ -1984,9 +1984,9 @@ const BankAccountSection = ({
                 </Fieldset>
               ) : user.country_code === "QA" ? (
                 <Fieldset state={errorFieldNames.has("bank_code") ? "danger" : undefined}>
-                  <Legend>
+                  <FieldsetTitle>
                     <Label htmlFor={`${uid}-bank-code`}>SWIFT / BIC Code</Label>
-                  </Legend>
+                  </FieldsetTitle>
                   <Input
                     type="text"
                     id={`${uid}-bank-code`}
@@ -2000,9 +2000,9 @@ const BankAccountSection = ({
                 </Fieldset>
               ) : user.country_code === "GA" ? (
                 <Fieldset state={errorFieldNames.has("bank_code") ? "danger" : undefined}>
-                  <Legend>
+                  <FieldsetTitle>
                     <Label htmlFor={`${uid}-bank-code`}>SWIFT / BIC Code</Label>
-                  </Legend>
+                  </FieldsetTitle>
                   <Input
                     type="text"
                     id={`${uid}-bank-code`}
@@ -2016,9 +2016,9 @@ const BankAccountSection = ({
                 </Fieldset>
               ) : user.country_code === "BS" ? (
                 <Fieldset state={errorFieldNames.has("bank_code") ? "danger" : undefined}>
-                  <Legend>
+                  <FieldsetTitle>
                     <Label htmlFor={`${uid}-bank-code`}>SWIFT / BIC Code</Label>
-                  </Legend>
+                  </FieldsetTitle>
                   <Input
                     type="text"
                     id={`${uid}-bank-code`}
@@ -2032,9 +2032,9 @@ const BankAccountSection = ({
                 </Fieldset>
               ) : user.country_code === "KH" ? (
                 <Fieldset state={errorFieldNames.has("bank_code") ? "danger" : undefined}>
-                  <Legend>
+                  <FieldsetTitle>
                     <Label htmlFor={`${uid}-bank-code`}>SWIFT / BIC Code</Label>
-                  </Legend>
+                  </FieldsetTitle>
                   <Input
                     type="text"
                     id={`${uid}-bank-code`}
@@ -2048,9 +2048,9 @@ const BankAccountSection = ({
                 </Fieldset>
               ) : user.country_code === "MN" ? (
                 <Fieldset state={errorFieldNames.has("bank_code") ? "danger" : undefined}>
-                  <Legend>
+                  <FieldsetTitle>
                     <Label htmlFor={`${uid}-bank-code`}>SWIFT / BIC Code</Label>
-                  </Legend>
+                  </FieldsetTitle>
                   <Input
                     type="text"
                     id={`${uid}-bank-code`}
@@ -2064,9 +2064,9 @@ const BankAccountSection = ({
                 </Fieldset>
               ) : user.country_code === "DZ" ? (
                 <Fieldset state={errorFieldNames.has("bank_code") ? "danger" : undefined}>
-                  <Legend>
+                  <FieldsetTitle>
                     <Label htmlFor={`${uid}-bank-code`}>SWIFT / BIC Code</Label>
-                  </Legend>
+                  </FieldsetTitle>
                   <Input
                     type="text"
                     id={`${uid}-bank-code`}
@@ -2080,9 +2080,9 @@ const BankAccountSection = ({
                 </Fieldset>
               ) : user.country_code === "MO" ? (
                 <Fieldset state={errorFieldNames.has("bank_code") ? "danger" : undefined}>
-                  <Legend>
+                  <FieldsetTitle>
                     <Label htmlFor={`${uid}-bank-code`}>SWIFT / BIC Code</Label>
-                  </Legend>
+                  </FieldsetTitle>
                   <Input
                     type="text"
                     id={`${uid}-bank-code`}
@@ -2099,9 +2099,9 @@ const BankAccountSection = ({
                 <>
                   {user.country_code === "PK" || user.country_code === "TR" ? (
                     <Fieldset state={errorFieldNames.has("bank_code") ? "danger" : undefined}>
-                      <Legend>
+                      <FieldsetTitle>
                         <Label htmlFor={`${uid}-bank-code`}>SWIFT / BIC Code</Label>
-                      </Legend>
+                      </FieldsetTitle>
                       <Input
                         type="text"
                         id={`${uid}-bank-code`}
@@ -2115,9 +2115,9 @@ const BankAccountSection = ({
                     </Fieldset>
                   ) : user.country_code === "GT" ? (
                     <Fieldset state={errorFieldNames.has("bank_code") ? "danger" : undefined}>
-                      <Legend>
+                      <FieldsetTitle>
                         <Label htmlFor={`${uid}-bank-code`}>SWIFT / BIC Code</Label>
-                      </Legend>
+                      </FieldsetTitle>
                       <Input
                         type="text"
                         id={`${uid}-bank-code`}
@@ -2131,9 +2131,9 @@ const BankAccountSection = ({
                     </Fieldset>
                   ) : user.country_code === "BA" ? (
                     <Fieldset state={errorFieldNames.has("bank_code") ? "danger" : undefined}>
-                      <Legend>
+                      <FieldsetTitle>
                         <Label htmlFor={`${uid}-bank-code`}>SWIFT / BIC Code</Label>
-                      </Legend>
+                      </FieldsetTitle>
                       <Input
                         type="text"
                         id={`${uid}-bank-code`}
@@ -2147,9 +2147,9 @@ const BankAccountSection = ({
                     </Fieldset>
                   ) : user.country_code === "EG" ? (
                     <Fieldset state={errorFieldNames.has("bank_code") ? "danger" : undefined}>
-                      <Legend>
+                      <FieldsetTitle>
                         <Label htmlFor={`${uid}-bank-code`}>SWIFT / BIC Code</Label>
-                      </Legend>
+                      </FieldsetTitle>
                       <Input
                         type="text"
                         id={`${uid}-bank-code`}
@@ -2163,9 +2163,9 @@ const BankAccountSection = ({
                     </Fieldset>
                   ) : user.country_code === "SA" ? (
                     <Fieldset state={errorFieldNames.has("bank_code") ? "danger" : undefined}>
-                      <Legend>
+                      <FieldsetTitle>
                         <Label htmlFor={`${uid}-bank-code`}>SWIFT / BIC Code</Label>
-                      </Legend>
+                      </FieldsetTitle>
                       <Input
                         type="text"
                         id={`${uid}-bank-code`}
@@ -2179,9 +2179,9 @@ const BankAccountSection = ({
                     </Fieldset>
                   ) : user.country_code === "MU" ? (
                     <Fieldset state={errorFieldNames.has("bank_code") ? "danger" : undefined}>
-                      <Legend>
+                      <FieldsetTitle>
                         <Label htmlFor={`${uid}-bank-code`}>SWIFT / BIC Code</Label>
-                      </Legend>
+                      </FieldsetTitle>
                       <Input
                         type="text"
                         id={`${uid}-bank-code`}
@@ -2195,9 +2195,9 @@ const BankAccountSection = ({
                     </Fieldset>
                   ) : user.country_code === "KZ" ? (
                     <Fieldset state={errorFieldNames.has("bank_code") ? "danger" : undefined}>
-                      <Legend>
+                      <FieldsetTitle>
                         <Label htmlFor={`${uid}-bank-code`}>SWIFT / BIC Code</Label>
-                      </Legend>
+                      </FieldsetTitle>
                       <Input
                         type="text"
                         id={`${uid}-bank-code`}
@@ -2211,9 +2211,9 @@ const BankAccountSection = ({
                     </Fieldset>
                   ) : user.country_code === "SV" ? (
                     <Fieldset state={errorFieldNames.has("bank_code") ? "danger" : undefined}>
-                      <Legend>
+                      <FieldsetTitle>
                         <Label htmlFor={`${uid}-bank-code`}>SWIFT / BIC Code</Label>
-                      </Legend>
+                      </FieldsetTitle>
                       <Input
                         type="text"
                         id={`${uid}-bank-code`}
@@ -2227,9 +2227,9 @@ const BankAccountSection = ({
                     </Fieldset>
                   ) : user.country_code === "AL" ? (
                     <Fieldset state={errorFieldNames.has("bank_code") ? "danger" : undefined}>
-                      <Legend>
+                      <FieldsetTitle>
                         <Label htmlFor={`${uid}-bank-code`}>SWIFT / BIC Code</Label>
-                      </Legend>
+                      </FieldsetTitle>
                       <Input
                         type="text"
                         id={`${uid}-bank-code`}
@@ -2243,9 +2243,9 @@ const BankAccountSection = ({
                     </Fieldset>
                   ) : user.country_code === "BH" ? (
                     <Fieldset state={errorFieldNames.has("bank_code") ? "danger" : undefined}>
-                      <Legend>
+                      <FieldsetTitle>
                         <Label htmlFor={`${uid}-bank-code`}>SWIFT / BIC Code</Label>
-                      </Legend>
+                      </FieldsetTitle>
                       <Input
                         type="text"
                         id={`${uid}-bank-code`}
@@ -2259,9 +2259,9 @@ const BankAccountSection = ({
                     </Fieldset>
                   ) : user.country_code === "JO" ? (
                     <Fieldset state={errorFieldNames.has("bank_code") ? "danger" : undefined}>
-                      <Legend>
+                      <FieldsetTitle>
                         <Label htmlFor={`${uid}-bank-code`}>SWIFT / BIC Code</Label>
-                      </Legend>
+                      </FieldsetTitle>
                       <Input
                         type="text"
                         id={`${uid}-bank-code`}
@@ -2276,9 +2276,9 @@ const BankAccountSection = ({
                   ) : user.country_code === "AZ" ? (
                     <>
                       <Fieldset state={errorFieldNames.has("bank_code") ? "danger" : undefined}>
-                        <Legend>
+                        <FieldsetTitle>
                           <Label htmlFor={`${uid}-bank-code`}>Bank code</Label>
-                        </Legend>
+                        </FieldsetTitle>
                         <Input
                           type="text"
                           id={`${uid}-bank-code`}
@@ -2291,9 +2291,9 @@ const BankAccountSection = ({
                         />
                       </Fieldset>
                       <Fieldset state={errorFieldNames.has("branch_code") ? "danger" : undefined}>
-                        <Legend>
+                        <FieldsetTitle>
                           <Label htmlFor={`${uid}-branch-code`}>Branch code</Label>
-                        </Legend>
+                        </FieldsetTitle>
                         <Input
                           type="text"
                           id={`${uid}-branch-code`}
@@ -2308,9 +2308,9 @@ const BankAccountSection = ({
                     </>
                   ) : user.country_code === "AO" ? (
                     <Fieldset state={errorFieldNames.has("bank_code") ? "danger" : undefined}>
-                      <Legend>
+                      <FieldsetTitle>
                         <Label htmlFor={`${uid}-bank-code`}>SWIFT / BIC Code</Label>
-                      </Legend>
+                      </FieldsetTitle>
                       <Input
                         type="text"
                         id={`${uid}-bank-code`}
@@ -2324,9 +2324,9 @@ const BankAccountSection = ({
                     </Fieldset>
                   ) : user.country_code === "SM" ? (
                     <Fieldset state={errorFieldNames.has("bank_code") ? "danger" : undefined}>
-                      <Legend>
+                      <FieldsetTitle>
                         <Label htmlFor={`${uid}-bank-code`}>SWIFT / BIC Code</Label>
-                      </Legend>
+                      </FieldsetTitle>
                       <Input
                         type="text"
                         id={`${uid}-bank-code`}
@@ -2340,9 +2340,9 @@ const BankAccountSection = ({
                     </Fieldset>
                   ) : user.country_code === "KW" ? (
                     <Fieldset state={errorFieldNames.has("bank_code") ? "danger" : undefined}>
-                      <Legend>
+                      <FieldsetTitle>
                         <Label htmlFor={`${uid}-bank-code`}>SWIFT / BIC Code</Label>
-                      </Legend>
+                      </FieldsetTitle>
                       <Input
                         type="text"
                         id={`${uid}-bank-code`}
@@ -2356,9 +2356,9 @@ const BankAccountSection = ({
                     </Fieldset>
                   ) : null}
                   <Fieldset state={errorFieldNames.has("account_number") ? "danger" : undefined}>
-                    <Legend>
+                    <FieldsetTitle>
                       <Label htmlFor={`${uid}-account-number`}>IBAN</Label>
-                    </Legend>
+                    </FieldsetTitle>
                     <Input
                       type="text"
                       id={`${uid}-account-number`}
@@ -2370,9 +2370,9 @@ const BankAccountSection = ({
                     />
                   </Fieldset>
                   <Fieldset state={errorFieldNames.has("account_number_confirmation") ? "danger" : undefined}>
-                    <Legend>
+                    <FieldsetTitle>
                       <Label htmlFor={`${uid}-confirm-account-number`}>Confirm IBAN</Label>
-                    </Legend>
+                    </FieldsetTitle>
                     <Input
                       type="text"
                       id={`${uid}-confirm-account-number`}
@@ -2387,13 +2387,13 @@ const BankAccountSection = ({
               ) : (
                 <>
                   <Fieldset state={errorFieldNames.has("account_number") ? "danger" : undefined}>
-                    <Legend>
+                    <FieldsetTitle>
                       <Label htmlFor={`${uid}-account-number`}>
                         {user.country_code && ["US", "MX", "AR", "PE"].includes(user.country_code)
                           ? "Account number"
                           : "Account #"}
                       </Label>
-                    </Legend>
+                    </FieldsetTitle>
                     <Input
                       type="text"
                       id={`${uid}-account-number`}
@@ -2405,13 +2405,13 @@ const BankAccountSection = ({
                     />
                   </Fieldset>
                   <Fieldset state={errorFieldNames.has("account_number_confirmation") ? "danger" : undefined}>
-                    <Legend>
+                    <FieldsetTitle>
                       <Label htmlFor={`${uid}-confirm-account-number`}>
                         {user.country_code && ["US", "MX", "AR", "PE"].includes(user.country_code)
                           ? "Confirm account number"
                           : "Confirm account #"}
                       </Label>
-                    </Legend>
+                    </FieldsetTitle>
                     <Input
                       type="text"
                       id={`${uid}-confirm-account-number`}
@@ -2432,11 +2432,11 @@ const BankAccountSection = ({
               >
                 {bankAccountDetails.routing_number !== null && (
                   <Fieldset>
-                    <Legend>
+                    <FieldsetTitle>
                       <Label htmlFor={`${uid}-saved-routing-number`}>
                         {getRoutingNumberLabel(user.country_code || "")}
                       </Label>
-                    </Legend>
+                    </FieldsetTitle>
                     <Input
                       id={`${uid}-saved-routing-number`}
                       disabled
@@ -2445,9 +2445,9 @@ const BankAccountSection = ({
                   </Fieldset>
                 )}
                 <Fieldset>
-                  <Legend>
+                  <FieldsetTitle>
                     <Label htmlFor={`${uid}-saved-account-number`}>Account number</Label>
-                  </Legend>
+                  </FieldsetTitle>
                   <Input
                     id={`${uid}-saved-account-number`}
                     disabled

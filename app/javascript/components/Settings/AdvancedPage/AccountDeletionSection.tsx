@@ -6,7 +6,7 @@ import { assertResponseError, request, ResponseError } from "$app/utils/request"
 import { Button } from "$app/components/Button";
 import { Modal } from "$app/components/Modal";
 import { showAlert } from "$app/components/server-components/Alert";
-import { Section } from "$app/components/ui/Section";
+import { FormSection } from "$app/components/ui/FormSection";
 
 type Props = {
   formatted_balance_to_forfeit_on_account_deletion: string | null;
@@ -33,7 +33,7 @@ const AccountDeletionSection = (props: Props) => {
   };
 
   return (
-    <Section className="p-4! md:p-8!" header={<h2>Danger Zone</h2>}>
+    <FormSection className="p-4! md:p-8!" header={<h2>Danger Zone</h2>}>
       <p>
         <a href="/help/article/37-how-to-delete-your-gumroad-account" target="_blank" rel="noreferrer">
           Deleting your account
@@ -82,7 +82,7 @@ const AccountDeletionSection = (props: Props) => {
           .
         </p>
       </Modal>
-    </Section>
+    </FormSection>
   );
 };
 

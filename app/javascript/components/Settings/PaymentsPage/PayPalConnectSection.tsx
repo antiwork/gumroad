@@ -8,10 +8,10 @@ import { Button } from "$app/components/Button";
 import { Icon } from "$app/components/Icons";
 import { showAlert } from "$app/components/server-components/Alert";
 import { Alert } from "$app/components/ui/Alert";
-import { Fieldset, Legend } from "$app/components/ui/Fieldset";
+import { Fieldset, FieldsetTitle } from "$app/components/ui/Fieldset";
+import { FormSection } from "$app/components/ui/FormSection";
 import { InputGroup } from "$app/components/ui/InputGroup";
 import { Label } from "$app/components/ui/Label";
-import { Section } from "$app/components/ui/Section";
 
 export type PayPalConnect = {
   email: string | null;
@@ -50,7 +50,7 @@ const PayPalConnectSection = ({
   });
 
   return (
-    <Section
+    <FormSection
       className="p-4! md:p-8!"
       header={
         <>
@@ -103,9 +103,9 @@ const PayPalConnectSection = ({
             <p>{connectAccountFeeInfoText}</p>
             <div className="grid gap-8">
               <Fieldset>
-                <Legend>
+                <FieldsetTitle>
                   <Label>PayPal account</Label>
-                </Legend>
+                </FieldsetTitle>
                 <InputGroup readOnly>
                   <span className="flex-1">{paypalConnect.charge_processor_merchant_id}</span>
                   <Icon name="solid-check-circle" className="text-success" />
@@ -170,7 +170,7 @@ const PayPalConnectSection = ({
           </>
         )}
       </div>
-    </Section>
+    </FormSection>
   );
 };
 export default PayPalConnectSection;

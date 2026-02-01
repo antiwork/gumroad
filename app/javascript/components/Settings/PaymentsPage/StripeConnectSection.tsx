@@ -9,7 +9,7 @@ import { Icon } from "$app/components/Icons";
 import { showAlert } from "$app/components/server-components/Alert";
 import { SocialAuthButton } from "$app/components/SocialAuthButton";
 import { Alert } from "$app/components/ui/Alert";
-import { Fieldset, Legend } from "$app/components/ui/Fieldset";
+import { Fieldset, FieldsetTitle } from "$app/components/ui/Fieldset";
 import { InputGroup } from "$app/components/ui/InputGroup";
 import { Label } from "$app/components/ui/Label";
 
@@ -69,9 +69,9 @@ const StripeConnectSection = ({
         {stripeConnect.has_connected_stripe ? (
           <div className="grid gap-8">
             <Fieldset>
-              <Legend>
+              <FieldsetTitle>
                 <Label>Stripe account</Label>
-              </Legend>
+              </FieldsetTitle>
               <InputGroup readOnly>
                 <span className="flex-1">{stripeConnect.stripe_connect_account_id}</span>
                 <Icon name="solid-check-circle" className="text-success" />

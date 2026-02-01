@@ -28,12 +28,12 @@ import { Option, Select } from "$app/components/Select";
 import { showAlert } from "$app/components/server-components/Alert";
 import { Layout as SettingsLayout } from "$app/components/Settings/Layout";
 import { Alert } from "$app/components/ui/Alert";
+import { Fieldset, FieldsetTitle } from "$app/components/ui/Fieldset";
+import { FormSection } from "$app/components/ui/FormSection";
+import { Input } from "$app/components/ui/Input";
+import { Label } from "$app/components/ui/Label";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "$app/components/ui/Table";
 import { WithTooltip } from "$app/components/WithTooltip";
-import { Section } from "$app/components/ui/Section";
-import { Fieldset, Legend } from "$app/components/ui/Fieldset";
-import { Label } from "$app/components/ui/Label";
-import { Input } from "$app/components/ui/Input";
 
 const ROLE_TITLES: Record<Role, string> = {
   owner: "Owner",
@@ -132,7 +132,7 @@ const AddTeamMembersSection = ({
   });
 
   return (
-    <Section
+    <FormSection
       className="p-4! md:p-8!"
       header={
         <>
@@ -152,9 +152,9 @@ const AddTeamMembersSection = ({
         }}
       >
         <Fieldset state={errors.has("email") ? "danger" : undefined}>
-          <Legend>
+          <FieldsetTitle>
             <Label htmlFor={emailUID}>Email</Label>
-          </Legend>
+          </FieldsetTitle>
           <Input
             id={emailUID}
             type="text"
@@ -169,9 +169,9 @@ const AddTeamMembersSection = ({
           />
         </Fieldset>
         <Fieldset state={errors.has("role") ? "danger" : undefined}>
-          <Legend>
+          <FieldsetTitle>
             <Label htmlFor={roleUID}>Role</Label>
-          </Legend>
+          </FieldsetTitle>
           <Select
             ref={roleFieldRef}
             inputId={roleUID}
@@ -199,7 +199,7 @@ const AddTeamMembersSection = ({
           "Send invitation"
         )}
       </Button>
-    </Section>
+    </FormSection>
   );
 };
 
@@ -266,7 +266,7 @@ const TeamMembersSection = ({
   };
 
   return (
-    <Section className="p-4! md:p-8!" header={<h2 ref={ref}>Team members</h2>}>
+    <FormSection className="p-4! md:p-8!" header={<h2 ref={ref}>Team members</h2>}>
       {deletedMember ? (
         <Alert variant="success">
           <div className="flex flex-col justify-between sm:flex-row">
@@ -393,6 +393,6 @@ const TeamMembersSection = ({
           have access.
         </Modal>
       ) : null}
-    </Section>
+    </FormSection>
   );
 };

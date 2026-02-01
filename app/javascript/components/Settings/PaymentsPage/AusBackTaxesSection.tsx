@@ -2,7 +2,7 @@ import * as React from "react";
 
 import { TaxesCollectionModal } from "$app/components/server-components/TaxesCollectionModal";
 import { Alert } from "$app/components/ui/Alert";
-import { Section } from "$app/components/ui/Section";
+import { FormSection } from "$app/components/ui/FormSection";
 
 export type AusBacktaxDetails = {
   total_amount_to_au: string;
@@ -25,7 +25,7 @@ const AusBackTaxesSection = ({
   are_au_backtaxes_paid,
   au_backtaxes_paid_date,
 }: AusBacktaxDetails) => (
-  <Section className="p-4! md:p-8!" header={<h2>Backtaxes collection</h2>}>
+  <FormSection className="p-4! md:p-8!" header={<h2>Backtaxes collection</h2>}>
     {opted_in_to_au_backtax ? (
       <div className="flex flex-col gap-4">
         <Alert variant="success">You've opted in to backtaxes collection.</Alert>
@@ -70,6 +70,6 @@ const AusBackTaxesSection = ({
         />
       </div>
     )}
-  </Section>
+  </FormSection>
 );
 export default AusBackTaxesSection;

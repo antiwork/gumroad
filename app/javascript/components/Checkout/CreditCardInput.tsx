@@ -8,7 +8,7 @@ import { getCssVariable } from "$app/utils/styles";
 
 import { useFont } from "$app/components/DesignSettings";
 import { Icon } from "$app/components/Icons";
-import { Fieldset, Legend } from "$app/components/ui/Fieldset";
+import { Fieldset, FieldsetTitle } from "$app/components/ui/Fieldset";
 import { InputGroup } from "$app/components/ui/InputGroup";
 import { Label } from "$app/components/ui/Label";
 
@@ -35,7 +35,7 @@ export const CreditCardInput = ({
 
   return (
     <Fieldset state={invalid ? "danger" : undefined}>
-      <Legend>
+      <FieldsetTitle>
         <Label>Card information</Label>
         {savedCreditCard ? (
           <button
@@ -46,7 +46,7 @@ export const CreditCardInput = ({
             {useSavedCard ? "Use a different card?" : "Use saved card"}
           </button>
         ) : null}
-      </Legend>
+      </FieldsetTitle>
       {savedCreditCard && useSavedCard ? (
         <InputGroup readOnly aria-label="Saved credit card">
           <Icon name="outline-credit-card" />

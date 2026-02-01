@@ -3,7 +3,7 @@ import * as React from "react";
 import { Button } from "$app/components/Button";
 import { Icon } from "$app/components/Icons";
 import { TagInput } from "$app/components/TagInput";
-import { Fieldset, Legend } from "$app/components/ui/Fieldset";
+import { Fieldset, FieldsetTitle } from "$app/components/ui/Fieldset";
 import { Input } from "$app/components/ui/Input";
 import { Label } from "$app/components/ui/Label";
 import { Placeholder } from "$app/components/ui/Placeholder";
@@ -92,9 +92,9 @@ const ProductLevelSupportEmailRow = React.memo(
               <small className="text-muted">This reply-to email will appear on receipts for selected products.</small>
             </Fieldset>
             <Fieldset>
-              <Legend>
+              <FieldsetTitle>
                 <Label htmlFor={`${uid}-products`}>Products</Label>
-              </Legend>
+              </FieldsetTitle>
               <TagInput
                 inputId={`${uid}-products`}
                 tagIds={supportEmail.product_ids}

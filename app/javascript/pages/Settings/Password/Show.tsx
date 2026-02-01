@@ -8,9 +8,9 @@ import { Button } from "$app/components/Button";
 import { PasswordInput } from "$app/components/PasswordInput";
 import { showAlert } from "$app/components/server-components/Alert";
 import { Layout as SettingsLayout } from "$app/components/Settings/Layout";
-import { Fieldset, Legend } from "$app/components/ui/Fieldset";
+import { Fieldset, FieldsetTitle } from "$app/components/ui/Fieldset";
+import { FormSection } from "$app/components/ui/FormSection";
 import { Label } from "$app/components/ui/Label";
-import { Section } from "$app/components/ui/Section";
 
 const MIN_PASSWORD_LENGTH = 4;
 const MAX_PASSWORD_LENGTH = 128;
@@ -57,12 +57,12 @@ export default function PasswordPage() {
   return (
     <SettingsLayout currentPage="password" pages={props.settings_pages}>
       <form onSubmit={handleSubmit}>
-        <Section className="p-4! md:p-8!" header={<h2>Change password</h2>}>
+        <FormSection className="p-4! md:p-8!" header={<h2>Change password</h2>}>
           {requireOldPassword ? (
             <Fieldset>
-              <Legend>
+              <FieldsetTitle>
                 <Label htmlFor={`${uid}-old-password`}>Old password</Label>
-              </Legend>
+              </FieldsetTitle>
               <PasswordInput
                 id={`${uid}-old-password`}
                 value={form.data.user.password}
@@ -73,9 +73,9 @@ export default function PasswordPage() {
             </Fieldset>
           ) : null}
           <Fieldset>
-            <Legend>
+            <FieldsetTitle>
               <Label htmlFor={`${uid}-new-password`}>{requireOldPassword ? "New password" : "Add password"}</Label>
-            </Legend>
+            </FieldsetTitle>
             <PasswordInput
               id={`${uid}-new-password`}
               value={form.data.user.new_password}
@@ -91,7 +91,7 @@ export default function PasswordPage() {
               </Button>
             </div>
           </Fieldset>
-        </Section>
+        </FormSection>
       </form>
     </SettingsLayout>
   );

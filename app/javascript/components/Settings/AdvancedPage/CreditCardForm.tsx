@@ -8,8 +8,8 @@ import { assertResponseError, request, ResponseError } from "$app/utils/request"
 import { Button } from "$app/components/Button";
 import { Icon } from "$app/components/Icons";
 import { showAlert } from "$app/components/server-components/Alert";
+import { FormSection } from "$app/components/ui/FormSection";
 import { InputGroup } from "$app/components/ui/InputGroup";
-import { Section } from "$app/components/ui/Section";
 import { WithTooltip } from "$app/components/WithTooltip";
 
 type Props = {
@@ -38,7 +38,7 @@ export const CreditCardForm = ({ card, can_remove, read_only }: Props) => {
   });
 
   return status === "removed" ? null : (
-    <Section
+    <FormSection
       className="p-4! md:p-8!"
       header={
         <>
@@ -70,7 +70,7 @@ export const CreditCardForm = ({ card, can_remove, read_only }: Props) => {
           </WithTooltip>
         )}
       </div>
-    </Section>
+    </FormSection>
   );
 };
 

@@ -21,11 +21,11 @@ import { showAlert } from "$app/components/server-components/Alert";
 import { Profile, Props as ProfileProps } from "$app/components/server-components/Profile";
 import { Layout as SettingsLayout } from "$app/components/Settings/Layout";
 import { SocialAuthButton } from "$app/components/SocialAuthButton";
-import { Fieldset, Legend } from "$app/components/ui/Fieldset";
-import { Label } from "$app/components/ui/Label";
-import { Input } from "$app/components/ui/Input";
-import { Textarea } from "$app/components/ui/Textarea";
 import { ColorPicker } from "$app/components/ui/ColorPicker";
+import { Fieldset, FieldsetTitle } from "$app/components/ui/Fieldset";
+import { Input } from "$app/components/ui/Input";
+import { Label } from "$app/components/ui/Label";
+import { Textarea } from "$app/components/ui/Textarea";
 
 type ProfilePageProps = {
   profile_settings: ProfileSettings;
@@ -112,9 +112,9 @@ export default function SettingsPage() {
               <h2>Profile</h2>
             </header>
             <Fieldset>
-              <Legend>
+              <FieldsetTitle>
                 <Label htmlFor={`${uid}-username`}>Username</Label>
-              </Legend>
+              </FieldsetTitle>
               <Input
                 id={`${uid}-username`}
                 type="text"
@@ -129,9 +129,9 @@ export default function SettingsPage() {
               </small>
             </Fieldset>
             <Fieldset>
-              <Legend>
+              <FieldsetTitle>
                 <Label htmlFor={`${uid}-name`}>Name</Label>
-              </Legend>
+              </FieldsetTitle>
               <Input
                 id={`${uid}-name`}
                 type="text"
@@ -144,9 +144,9 @@ export default function SettingsPage() {
               />
             </Fieldset>
             <Fieldset>
-              <Legend>
+              <FieldsetTitle>
                 <Label htmlFor={`${uid}-bio`}>Bio</Label>
-              </Legend>
+              </FieldsetTitle>
               <Textarea
                 id={`${uid}-bio`}
                 value={profileSettings.bio ?? ""}
@@ -167,7 +167,7 @@ export default function SettingsPage() {
             />
             {loggedInUser?.policies.settings_profile.manage_social_connections ? (
               <Fieldset>
-                <Legend>Social links</Legend>
+                <FieldsetTitle>Social links</FieldsetTitle>
                 {creatorProfile.twitter_handle ? (
                   <Button type="button" color="twitter" onClick={handleUnlinkTwitter}>
                     <span className="brand-icon brand-icon-twitter" />
@@ -192,7 +192,7 @@ export default function SettingsPage() {
               <h2>Design</h2>
             </header>
             <Fieldset>
-              <Legend>Font</Legend>
+              <FieldsetTitle>Font</FieldsetTitle>
               <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 md:grid-cols-3" role="radiogroup">
                 {FONT_CHOICES.map((font) => {
                   const isSelected = font === profileSettings.font;
@@ -222,9 +222,9 @@ export default function SettingsPage() {
             </Fieldset>
             <div className="flex gap-4">
               <Fieldset>
-                <Legend>
+                <FieldsetTitle>
                   <Label htmlFor={`${uid}-backgroundColor`}>Background color</Label>
-                </Legend>
+                </FieldsetTitle>
                 <ColorPicker
                   id={`${uid}-backgroundColor`}
                   value={profileSettings.background_color}
@@ -233,9 +233,9 @@ export default function SettingsPage() {
                 />
               </Fieldset>
               <Fieldset>
-                <Legend>
+                <FieldsetTitle>
                   <Label htmlFor={`${uid}-highlightColor`}>Highlight color</Label>
-                </Legend>
+                </FieldsetTitle>
                 <ColorPicker
                   id={`${uid}-highlightColor`}
                   value={profileSettings.highlight_color}

@@ -3,7 +3,7 @@ import * as React from "react";
 import type { FormFieldName, PayoutMethod } from "$app/types/payments";
 
 import { Alert } from "$app/components/ui/Alert";
-import { Fieldset, Legend } from "$app/components/ui/Fieldset";
+import { Fieldset, FieldsetTitle } from "$app/components/ui/Fieldset";
 import { Input } from "$app/components/ui/Input";
 import { Label } from "$app/components/ui/Label";
 
@@ -46,9 +46,9 @@ const PayPalEmailSection = ({
           </button>
         ) : null}
         <Fieldset state={errorFieldNames.has("paypal_email_address") ? "danger" : undefined}>
-          <Legend>
+          <FieldsetTitle>
             <Label htmlFor={`${uid}-paypal-email`}>PayPal Email</Label>
-          </Legend>
+          </FieldsetTitle>
           <Input
             type="email"
             id={`${uid}-paypal-email`}
