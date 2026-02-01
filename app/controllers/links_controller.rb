@@ -33,7 +33,7 @@ class LinksController < ApplicationController
   before_action :fetch_product_and_enforce_ownership, only: %i[destroy]
   before_action :fetch_product_and_enforce_access, only: %i[update publish unpublish release_preorder update_sections]
 
-  layout "inertia", only: [:index, :new, :cart_items_count]
+  layout "inertia", only: [:index, :new, :cart_items_count, :show]
 
   def index
     authorize Link
@@ -162,7 +162,20 @@ class LinksController < ApplicationController
 
     set_noindex_header if !@product.alive?
     respond_to do |format|
-      format.html
+      format.html do
+        product_page_props = @product_props.merge(hide_layouts: true)
+        if params[:layout] == "profile"
+          render inertia: "Links/Profile", props: product_page_props.merge({
+            creator_profile: ProfilePresenter.new(pundit_user:, seller: @product.user).creator_profile
+          })
+        elsif params[:layout] == Product::Layout::DISCOVER
+          render inertia: "Links/Discover", props: product_page_props.merge(@discover_props)
+        elsif params[:embed] || params[:overlay]
+          render inertia: "Links/Iframe", props: product_page_props
+        else
+          render inertia: "Links/Show", props: product_page_props
+        end
+      end
       format.json { render json: @product.as_json }
       format.any { e404 }
     end

@@ -3206,6 +3206,43 @@ describe LinksController, :vcr, inertia: true do
         end
       end
 
+      describe "Inertia page rendering" do
+        it "renders Links/Show for default product page" do
+          get :show, params: { id: product.to_param }
+
+          expect(response).to be_successful
+          expect(inertia).to render_component("Links/Show")
+        end
+
+        it "renders Links/Profile when layout=profile" do
+          get :show, params: { id: product.to_param, layout: "profile" }
+
+          expect(response).to be_successful
+          expect(inertia).to render_component("Links/Profile")
+        end
+
+        it "renders Links/Discover when layout=discover" do
+          get :show, params: { id: product.to_param, layout: "discover" }
+
+          expect(response).to be_successful
+          expect(inertia).to render_component("Links/Discover")
+        end
+
+        it "renders Links/Iframe when embed=true" do
+          get :show, params: { id: product.to_param, embed: true }
+
+          expect(response).to be_successful
+          expect(inertia).to render_component("Links/Iframe")
+        end
+
+        it "renders Links/Iframe when overlay=true" do
+          get :show, params: { id: product.to_param, overlay: true }
+
+          expect(response).to be_successful
+          expect(inertia).to render_component("Links/Iframe")
+        end
+      end
+
       describe "meta tags sanitization" do
         it "properly escapes double quote in content" do
           link = create(:product, user: @user, description: 'I like pie."')
@@ -3529,7 +3566,7 @@ describe LinksController, :vcr, inertia: true do
             get :show
             expect(response).to be_successful
             expect(assigns[:product]).to eq(product)
-            expect(response).to render_template(:show)
+            expect(inertia).to render_component("Links/Show")
           end
         end
 
@@ -3553,7 +3590,7 @@ describe LinksController, :vcr, inertia: true do
             get :show
             expect(response).to be_successful
             expect(assigns[:product]).to eq(product)
-            expect(response).to render_template(:show)
+            expect(inertia).to render_component("Links/Show")
           end
         end
 
@@ -3576,7 +3613,7 @@ describe LinksController, :vcr, inertia: true do
             get :show
             expect(response).to be_successful
             expect(assigns[:product]).to eq(product)
-            expect(response).to render_template(:show)
+            expect(inertia).to render_component("Links/Show")
           end
         end
       end
@@ -3597,7 +3634,7 @@ describe LinksController, :vcr, inertia: true do
             get :show, params: { id: @product.unique_permalink }
             expect(response).to be_successful
             expect(assigns[:product]).to eq(@product)
-            expect(response).to render_template(:show)
+            expect(inertia).to render_component("Links/Show")
           end
         end
 
@@ -3621,7 +3658,7 @@ describe LinksController, :vcr, inertia: true do
             get :show, params: { id: @product.custom_permalink }
             expect(response).to be_successful
             expect(assigns[:product]).to eq(@product)
-            expect(response).to render_template(:show)
+            expect(inertia).to render_component("Links/Show")
           end
         end
 
