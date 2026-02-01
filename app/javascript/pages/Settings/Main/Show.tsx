@@ -16,15 +16,15 @@ import { Layout } from "$app/components/Settings/Layout";
 import { TagInput } from "$app/components/TagInput";
 import { Checkbox } from "$app/components/ui/Checkbox";
 import { Fieldset, FieldsetTitle } from "$app/components/ui/Fieldset";
+import { FormSection } from "$app/components/ui/FormSection";
 import { Input } from "$app/components/ui/Input";
 import { InputGroup } from "$app/components/ui/InputGroup";
 import { Label } from "$app/components/ui/Label";
-import { Select } from "$app/components/ui/Select";
-import { Textarea } from "$app/components/ui/Textarea";
 import { Pill } from "$app/components/ui/Pill";
-import { FormSection } from "$app/components/ui/FormSection";
+import { Select } from "$app/components/ui/Select";
 import { Switch } from "$app/components/ui/Switch";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "$app/components/ui/Table";
+import { Textarea } from "$app/components/ui/Textarea";
 
 type ProductLevelSupportEmail = {
   email: string;

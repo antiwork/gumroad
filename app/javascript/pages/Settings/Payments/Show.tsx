@@ -32,8 +32,8 @@ import StripeConnectSection, { StripeConnect } from "$app/components/Settings/Pa
 import { TypeSafeOptionSelect } from "$app/components/TypeSafeOptionSelect";
 import { Alert } from "$app/components/ui/Alert";
 import { Fieldset } from "$app/components/ui/Fieldset";
-import { Label } from "$app/components/ui/Label";
 import { FormSection } from "$app/components/ui/FormSection";
+import { Label } from "$app/components/ui/Label";
 import { Switch } from "$app/components/ui/Switch";
 import { UpdateCountryConfirmationModal } from "$app/components/UpdateCountryConfirmationModal";
 import { useUserAgentInfo } from "$app/components/UserAgent";
