@@ -4,6 +4,8 @@ import { Form } from "$app/components/Admin/Form";
 import type { User } from "$app/components/Admin/Users/User";
 import { Button } from "$app/components/Button";
 import { showAlert } from "$app/components/server-components/Alert";
+import { Fieldset, FieldsetDescription } from "$app/components/ui/Fieldset";
+import { Input } from "$app/components/ui/Input";
 
 type AdminUserChangeEmailProps = {
   user: User;
@@ -23,15 +25,15 @@ const AdminUserChangeEmail = ({ user }: AdminUserChangeEmailProps) => (
         onSuccess={() => showAlert("Successfully updated email address.", "success")}
       >
         {(isLoading) => (
-          <fieldset>
+          <Fieldset>
             <div className="grid grid-cols-[1fr_auto] gap-3">
-              <input type="email" name="update_email[email_address]" placeholder={user.email} required />
+              <Input type="email" name="update_email[email_address]" placeholder={user.email} required />
               <Button type="submit" disabled={isLoading}>
                 {isLoading ? "Updating..." : "Update email"}
               </Button>
             </div>
-            <small>This will update the user's email to this new one!</small>
-          </fieldset>
+            <FieldsetDescription>This will update the user's email to this new one!</FieldsetDescription>
+          </Fieldset>
         )}
       </Form>
     </details>
