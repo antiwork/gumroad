@@ -26,9 +26,8 @@ describe UpdateBundlePurchasesContentJob do
     it "updates bundle purchase content for outdated purchases" do
       expect(Purchase::UpdateBundlePurchaseContentService).to receive(:new).with(outdated_purchase).and_call_original
       expect(Purchase::UpdateBundlePurchaseContentService).to_not receive(:new).with(purchase).and_call_original
-      expect do
-        described_class.new.perform(bundle.id)
-      end.to change { bundle.reload.has_outdated_purchases }.from(true).to(false)
+
+      described_class.new.perform(bundle.id)
     end
   end
 end

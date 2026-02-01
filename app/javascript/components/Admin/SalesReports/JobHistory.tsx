@@ -5,6 +5,7 @@ import AdminSalesReportsForm from "$app/components/Admin/SalesReports/Form";
 import { Button } from "$app/components/Button";
 import { Icon } from "$app/components/Icons";
 import { LoadingSpinner } from "$app/components/LoadingSpinner";
+import { FormSection } from "$app/components/ui/FormSection";
 import { Placeholder } from "$app/components/ui/Placeholder";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "$app/components/ui/Table";
 
@@ -62,10 +63,9 @@ const AdminSalesReportsJobHistory = ({ countries, sales_types, jobHistory, authe
         authenticityToken={authenticityToken}
         onSuccess={() => setShowNewSalesReportForm(false)}
         wrapper={(children) => (
-          <section>
-            <header>Generate sales report with custom date ranges</header>
+          <FormSection className="p-4 md:p-8" header="Generate sales report with custom date ranges">
             {children}
-          </section>
+          </FormSection>
         )}
       />
     ) : (
