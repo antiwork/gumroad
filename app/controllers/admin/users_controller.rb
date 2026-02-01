@@ -9,7 +9,7 @@ class Admin::UsersController < Admin::BaseController
   before_action :fetch_user, except: %i[block_ip_address]
 
   def show
-    @title = "#{@user.display_name} on Gumroad"
+    set_meta_tag(title: "#{@user.display_name} on Gumroad")
 
     respond_to do |format|
       format.html do

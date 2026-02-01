@@ -29,9 +29,9 @@ import DebitCardSection from "$app/components/Settings/PaymentsPage/DebitCardSec
 import PayPalConnectSection, { PayPalConnect } from "$app/components/Settings/PaymentsPage/PayPalConnectSection";
 import PayPalEmailSection from "$app/components/Settings/PaymentsPage/PayPalEmailSection";
 import StripeConnectSection, { StripeConnect } from "$app/components/Settings/PaymentsPage/StripeConnectSection";
-import { Toggle } from "$app/components/Toggle";
 import { TypeSafeOptionSelect } from "$app/components/TypeSafeOptionSelect";
 import { Alert } from "$app/components/ui/Alert";
+import { Switch } from "$app/components/ui/Switch";
 import { UpdateCountryConfirmationModal } from "$app/components/UpdateCountryConfirmationModal";
 import { useUserAgentInfo } from "$app/components/UserAgent";
 import { WithTooltip } from "$app/components/WithTooltip";
@@ -267,7 +267,10 @@ export default function PaymentsPage() {
     if (form.data.bank_account.type === "TrinidadAndTobagoBankAccount" && !form.data.bank_account.branch_code) {
       markFieldInvalid("branch_code");
     }
-    if (form.data.bank_account.type === "UkBankAccount" && !form.data.bank_account.sort_code) {
+    if (
+      (form.data.bank_account.type === "UkBankAccount" || form.data.bank_account.type === "GibraltarBankAccount") &&
+      !form.data.bank_account.sort_code
+    ) {
       markFieldInvalid("sort_code");
     }
     if (form.data.bank_account.type === "IndianBankAccount" && !form.data.bank_account.ifsc) {
@@ -630,7 +633,9 @@ export default function PaymentsPage() {
       markFieldInvalid("paypal_email_address");
     }
 
-    validateComplianceInfoFields();
+    if (selectedPayoutMethod !== "stripe") {
+      validateComplianceInfoFields();
+    }
 
     return errorFieldNames.size === 0;
   };
@@ -724,14 +729,13 @@ export default function PaymentsPage() {
 
   const payoutsPausedToggle = (
     <fieldset>
-      <Toggle
-        value={form.data.payouts_paused_by_user || props.payouts_paused_internally}
-        onChange={(value) => form.setData("payouts_paused_by_user", value)}
-        ariaLabel="Pause payouts"
+      <Switch
+        checked={form.data.payouts_paused_by_user || props.payouts_paused_internally}
+        onChange={(e) => form.setData("payouts_paused_by_user", e.target.checked)}
+        aria-label="Pause payouts"
         disabled={props.is_form_disabled || props.payouts_paused_internally}
-      >
-        Pause payouts
-      </Toggle>
+        label="Pause payouts"
+      />
       <small>
         By pausing payouts, they won't be processed until you decide to resume them, and your balance will remain in
         your account until then.
@@ -831,7 +835,7 @@ export default function PaymentsPage() {
 
         {(errors?.base && errors.base.length > 0) || clientErrorMessage ? (
           <div className="mb-12 px-8">
-            <Alert role="status" className="danger">
+            <Alert variant="danger" role="status">
               {errors?.base && errors.base.length > 0 ? (
                 errors.error_code?.[0] === "stripe_error" ? (
                   <div>Your account could not be updated due to an error with Stripe.</div>
@@ -868,7 +872,7 @@ export default function PaymentsPage() {
               </small>
             </fieldset>
             {form.data.payout_frequency === "daily" && props.payout_frequency_daily_supported ? (
-              <Alert role="status" className="info">
+              <Alert variant="info" role="status">
                 <div>
                   Every day, your balance from the previous day will be sent to you via instant payouts, subject to a{" "}
                   <b>3% fee</b>.
@@ -876,7 +880,7 @@ export default function PaymentsPage() {
               </Alert>
             ) : null}
             {form.data.payout_frequency === "daily" && !props.payout_frequency_daily_supported && (
-              <Alert role="status" className="danger">
+              <Alert variant="danger" role="status">
                 <div>Your account is no longer eligible for daily payouts. Please update your schedule.</div>
               </Alert>
             )}

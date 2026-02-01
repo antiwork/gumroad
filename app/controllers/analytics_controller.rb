@@ -68,7 +68,7 @@ class AnalyticsController < Sellers::BaseController
       CreatorAnalytics::Web.new(user: current_seller, dates: (@start_date .. @end_date).to_a)
     end
 
-    def set_title
-      @title = "Analytics"
+    def set_default_page_title
+      set_meta_tag(title: "Analytics")
     end
 end

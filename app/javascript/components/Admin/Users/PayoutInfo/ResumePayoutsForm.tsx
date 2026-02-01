@@ -1,6 +1,8 @@
 import * as React from "react";
 
 import { Form } from "$app/components/Admin/Form";
+import { Button } from "$app/components/Button";
+import { Fieldset } from "$app/components/ui/Fieldset";
 
 const AdminResumePayoutsForm = ({
   user_external_id,
@@ -20,7 +22,7 @@ const AdminResumePayoutsForm = ({
     onSuccess={onSuccess}
   >
     {(isLoading) => (
-      <fieldset>
+      <Fieldset>
         <div className="flex items-end justify-between gap-2">
           {payouts_paused_by === "admin" ? (
             <p>Payouts are currently paused by Gumroad admin. Reason: {reason}</p>
@@ -31,11 +33,11 @@ const AdminResumePayoutsForm = ({
           ) : payouts_paused_by === "user" ? (
             <p>Payouts are currently paused by the creator.</p>
           ) : null}
-          <button type="submit" className="button shrink-0" disabled={isLoading}>
+          <Button type="submit" className="shrink-0" disabled={isLoading}>
             {isLoading ? "Resuming Payouts" : "Resume Payouts"}
-          </button>
+          </Button>
         </div>
-      </fieldset>
+      </Fieldset>
     )}
   </Form>
 );

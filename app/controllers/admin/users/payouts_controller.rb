@@ -9,7 +9,7 @@ class Admin::Users::PayoutsController < Admin::BaseController
   private_constant :RECORDS_PER_PAGE
 
   def index
-    @title = "Payouts"
+    set_meta_tag(title: "Payouts")
 
     pagination, @payouts = pagy(
       @user.payments.order(id: :desc),

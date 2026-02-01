@@ -5,7 +5,10 @@ import { cast } from "ts-safe-cast";
 import { request } from "$app/utils/request";
 
 import type { CommentProps } from "$app/components/Admin/Commentable/Comment";
+import { Button } from "$app/components/Button";
 import { showAlert } from "$app/components/server-components/Alert";
+import { Fieldset } from "$app/components/ui/Fieldset";
+import { Textarea } from "$app/components/ui/Textarea";
 
 type AdminCommentableFormProps = {
   endpoint: string;
@@ -63,9 +66,9 @@ const AdminCommentableForm = ({ endpoint, onCommentAdded, commentableType }: Adm
   return (
     <form onSubmit={(e) => void onSubmit(e)}>
       <input type="hidden" name="authenticity_token" value={authenticity_token} />
-      <fieldset>
+      <Fieldset>
         <div className="flex items-center gap-2">
-          <textarea
+          <Textarea
             name="comment[content]"
             className="flex-1"
             rows={1}
@@ -74,11 +77,11 @@ const AdminCommentableForm = ({ endpoint, onCommentAdded, commentableType }: Adm
             value={content}
             onChange={onContentChange}
           />
-          <button type="submit" className="button" disabled={processing}>
+          <Button type="submit" disabled={processing}>
             {processing ? "Saving..." : "Add comment"}
-          </button>
+          </Button>
         </div>
-      </fieldset>
+      </Fieldset>
     </form>
   );
 };

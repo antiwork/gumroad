@@ -1,8 +1,9 @@
 import * as React from "react";
 
+import { classNames } from "$app/utils/classNames";
 import FileUtils from "$app/utils/file";
 
-import { Button } from "$app/components/Button";
+import { Button, buttonVariants } from "$app/components/Button";
 import { Icon } from "$app/components/Icons";
 import { LoadingSpinner } from "$app/components/LoadingSpinner";
 import { showAlert } from "$app/components/server-components/Alert";
@@ -43,9 +44,10 @@ export const ImageUploader = ({
         </Placeholder>
       ) : imageUrl == null ? (
         <Placeholder className="aspect-square items-center" style={{ background }}>
-          <label className="button primary">
+          <label className={classNames(buttonVariants({ size: "default", color: "primary" }), "relative")}>
             <input
               type="file"
+              className="sr-only"
               id={id}
               accept={allowedExtensions.map((ext) => `.${ext}`).join(",")}
               onChange={(evt) => {

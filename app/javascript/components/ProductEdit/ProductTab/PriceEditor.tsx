@@ -3,9 +3,13 @@ import * as React from "react";
 import { CurrencyCode, formatPriceCentsWithoutCurrencySymbol } from "$app/utils/currency";
 
 import { Details } from "$app/components/Details";
+import { Dropdown } from "$app/components/Dropdown";
 import { PriceInput } from "$app/components/PriceInput";
+import { DefaultDiscountCodeSelector } from "$app/components/ProductEdit/ProductTab/DefaultDiscountCodeSelector";
 import { InstallmentPlanEditor } from "$app/components/ProductEdit/ProductTab/InstallmentPlanEditor";
-import { Toggle } from "$app/components/Toggle";
+import { ProductEditContext } from "$app/components/ProductEdit/state";
+import { Alert } from "$app/components/ui/Alert";
+import { Switch } from "$app/components/ui/Switch";
 
 export const PriceEditor = ({
   priceCents,
@@ -38,6 +42,7 @@ export const PriceEditor = ({
 }) => {
   const uid = React.useId();
   const isFreeProduct = priceCents === 0;
+  const productEditContext = React.useContext(ProductEditContext);
 
   return (
     <fieldset>
@@ -49,30 +54,24 @@ export const PriceEditor = ({
         onChange={(newAmount) => setPriceCents(newAmount ?? 0)}
         currencyCodeSelector={currencyCodeSelector}
       />
-      {isFreeProduct ? (
-        <div role="alert" className="info">
-          Free products require a pay what they want price.
-        </div>
-      ) : null}
+      {isFreeProduct ? <Alert variant="info">Free products require a pay what they want price.</Alert> : null}
       <Details
         className="toggle"
         open={isPWYW}
         summary={
-          <Toggle value={isPWYW} onChange={setIsPWYW} disabled={isFreeProduct}>
-            <a href="/help/article/133-pay-what-you-want-pricing" target="_blank" rel="noreferrer">
-              Allow customers to pay what they want
-            </a>
-          </Toggle>
+          <Switch
+            checked={isPWYW}
+            onChange={(e) => setIsPWYW(e.target.checked)}
+            disabled={isFreeProduct}
+            label={
+              <a href="/help/article/133-pay-what-you-want-pricing" target="_blank" rel="noreferrer">
+                Allow customers to pay what they want
+              </a>
+            }
+          />
         }
       >
-        <div
-          className="dropdown"
-          style={{
-            display: "grid",
-            gap: "var(--spacer-4)",
-            gridTemplateColumns: "repeat(auto-fit, minmax(var(--dynamic-grid), 1fr))",
-          }}
-        >
+        <Dropdown className="gap-4 lg:grid-cols-2">
           <fieldset>
             <label htmlFor={`${uid}-minimum-amount`}>Minimum amount</label>
             <PriceInput id={`${uid}-minimum-amount`} currencyCode={currencyType} cents={priceCents} disabled />
@@ -87,7 +86,7 @@ export const PriceEditor = ({
               onChange={setSuggestedPriceCents}
             />
           </fieldset>
-        </div>
+        </Dropdown>
       </Details>
       {eligibleForInstallmentPlans ? (
         <InstallmentPlanEditor
@@ -99,6 +98,7 @@ export const PriceEditor = ({
           onNumberOfInstallmentsChange={onNumberOfInstallmentsChange}
         />
       ) : null}
+      {productEditContext ? <DefaultDiscountCodeSelector /> : null}
     </fieldset>
   );
 };

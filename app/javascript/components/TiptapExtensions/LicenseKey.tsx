@@ -11,8 +11,8 @@ import { Icon } from "$app/components/Icons";
 import { Drawer } from "$app/components/SortableList";
 import { NodeActionsMenu } from "$app/components/TiptapExtensions/NodeActionsMenu";
 import { createInsertCommand } from "$app/components/TiptapExtensions/utils";
-import { Toggle } from "$app/components/Toggle";
 import { Row, RowActions, RowContent, RowDetails } from "$app/components/ui/Rows";
+import { Switch } from "$app/components/ui/Switch";
 
 declare module "@tiptap/core" {
   interface Commands<ReturnType> {
@@ -76,9 +76,11 @@ const LicenseKeyNodeView = ({ editor, selected }: NodeViewProps) => {
           <RowDetails asChild>
             <Drawer>
               {isMultiSeatLicense !== null ? (
-                <Toggle value={isMultiSeatLicense} onChange={assertDefined(onIsMultiSeatLicenseChange)}>
-                  Allow customers to choose number of seats per license purchased
-                </Toggle>
+                <Switch
+                  checked={isMultiSeatLicense}
+                  onChange={(e) => assertDefined(onIsMultiSeatLicenseChange)(e.target.checked)}
+                  label="Allow customers to choose number of seats per license purchased"
+                />
               ) : null}
               {productId ? (
                 <fieldset>
@@ -88,7 +90,7 @@ const LicenseKeyNodeView = ({ editor, selected }: NodeViewProps) => {
                   <div className="flex gap-2">
                     <input id={`product_id-${uid}`} type="text" value={productId} className="flex-1" readOnly />
                     <CopyToClipboard text={productId} tooltipPosition="bottom">
-                      <a className="button">Copy</a>
+                      <Button>Copy</Button>
                     </CopyToClipboard>
                   </div>
                 </fieldset>

@@ -1,62 +1,70 @@
 # frozen_string_literal: true
 
 require "spec_helper"
+require "inertia_rails/rspec"
 
-describe HelpCenter::ArticlesController do
+describe HelpCenter::ArticlesController, inertia: true do
+  render_views
+
   describe "GET index" do
-    it "returns http success" do
+    it "returns successful response with Inertia page data" do
       get :index
+      expect(response).to be_successful
+      expect(inertia.component).to eq("HelpCenter/Articles/Index")
+      expect(inertia.props[:categories]).to be_an(Array)
+      expect(inertia.props[:categories]).not_to be_empty
+      expect(inertia.props[:categories].first).to include(:title, :url, :audience, :articles)
+    end
 
-      expect(response).to have_http_status(:ok)
+    it "includes all categories with their articles" do
+      get :index
+      categories = inertia.props[:categories]
+
+      expect(categories.map { |c| c[:title] }).to include("Accessing your purchase", "Before you buy", "Open an account")
+
+      category_with_articles = categories.find { |c| c[:articles].present? }
+      expect(category_with_articles[:articles].first).to include(:title, :url)
+    end
+
+    it "sets meta tags" do
+      get :index
+      expect(response.body).to include("Gumroad Help Center</title>")
     end
   end
 
   describe "GET show" do
-    let(:article) { HelpCenter::Article.find(43) }
+    let(:article) { HelpCenter::Article.first }
 
-    it "returns http success" do
+    it "returns successful response with Inertia page data" do
       get :show, params: { slug: article.slug }
-      expect(response).to have_http_status(:ok)
+      expect(response).to be_successful
+      expect(inertia.component).to eq("HelpCenter/Articles/Show")
+      expect(inertia.props[:article]).to include(
+        title: article.title,
+        slug: article.slug
+      )
+      expect(inertia.props[:article][:category]).to include(:title, :slug, :url)
     end
 
-    context "render views" do
-      render_views
-
-      it "renders the article and categories for the same audience" do
-        get :show, params: { slug: article.slug }
-
-        expect(response).to have_http_status(:ok)
-
-        article.category.categories_for_same_audience.each do |c|
-          expect(response.body).to include(c.title)
-        end
-
-        expect(response.body).to include(article.title)
-      end
-
-      HelpCenter::Article.all.each do |article|
-        it "renders the article #{article.slug}" do
-          get :show, params: { slug: article.slug }
-
-          expect(response).to have_http_status(:ok)
-          expect(response.body).to include(ERB::Util.html_escape(article.title))
-        end
-      end
+    it "includes sidebar categories" do
+      get :show, params: { slug: article.slug }
+      expect(inertia.props[:sidebar_categories]).to be_an(Array)
+      expect(inertia.props[:sidebar_categories].first).to include(:title, :slug, :url)
     end
 
-    context "when article is not found" do
-      it "redirects to the help center root path" do
-        get :show, params: { slug: "nonexistent-slug" }
-
-        expect(response).to redirect_to(help_center_root_path)
-        expect(response).to have_http_status(:found)
-      end
+    it "sets meta tags" do
+      get :show, params: { slug: article.slug }
+      expect(response.body).to include("#{CGI.escapeHTML(article.title)} - Gumroad Help Center</title>")
     end
 
-    context "when accessing the old jobs article URL" do
-      it "redirects to the about page jobs section with 301 status" do
+    it "redirects to help center root for non-existent articles" do
+      get :show, params: { slug: "non-existent-article" }
+      expect(response).to redirect_to(help_center_root_path)
+    end
+
+    context "with legacy article redirect" do
+      it "redirects to the correct URL" do
         get :show, params: { slug: "284-jobs-at-gumroad" }
-
         expect(response).to redirect_to("/about#jobs")
         expect(response).to have_http_status(:moved_permanently)
       end

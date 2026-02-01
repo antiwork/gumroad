@@ -75,8 +75,8 @@ class WorkflowsController < Sellers::BaseController
   end
 
   private
-    def set_title
-      @title = "Workflows"
+    def set_default_page_title
+      set_meta_tag(title: "Workflows")
     end
 
     def set_workflow

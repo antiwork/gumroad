@@ -1,6 +1,6 @@
 import { DirectUpload } from "@rails/activestorage";
 import { Editor, findChildren, Node as TiptapNode } from "@tiptap/core";
-import { DOMParser as ProseMirrorDOMParser, DOMSerializer } from "@tiptap/pm/model";
+import { DOMSerializer, DOMParser as ProseMirrorDOMParser } from "@tiptap/pm/model";
 import { NodeSelection, Plugin } from "@tiptap/pm/state";
 import { NodeViewProps, NodeViewWrapper, ReactNodeViewRenderer } from "@tiptap/react";
 import cx from "classnames";
@@ -15,14 +15,14 @@ import { getMimeType } from "$app/utils/mimetypes";
 import { summarizeUploadProgress } from "$app/utils/summarizeUploadProgress";
 
 import { AudioPlayer } from "$app/components/AudioPlayer";
-import { Button, NavigationButton } from "$app/components/Button";
+import { Button, buttonVariants, NavigationButton } from "$app/components/Button";
 import { connectedFileRowClassName } from "$app/components/Download/RichContent";
 import { useEvaporateUploader } from "$app/components/EvaporateUploader";
 import { FileRowContent } from "$app/components/FileRowContent";
 import { Icon } from "$app/components/Icons";
 import { LoadingSpinner } from "$app/components/LoadingSpinner";
 import { PlayVideoIcon } from "$app/components/PlayVideoIcon";
-import { Popover } from "$app/components/Popover";
+import { Popover, PopoverAnchor, PopoverClose, PopoverContent, PopoverTrigger } from "$app/components/Popover";
 import {
   FileEmbedGroup,
   titleWithFallback,
@@ -385,7 +385,7 @@ const FileEmbedNodeView = ({ node, editor, getPos, updateAttributes }: NodeViewP
                     }}
                   />
                   <button
-                    className="underline"
+                    className="cursor-pointer underline all-unset"
                     style={{
                       position: "absolute",
                       top: "50%",
@@ -399,7 +399,10 @@ const FileEmbedNodeView = ({ node, editor, getPos, updateAttributes }: NodeViewP
                   </button>
                   <div style={{ position: "absolute", top: "var(--spacer-5)", right: "var(--spacer-5)" }}>
                     <WithTooltip tip="Replace thumbnail">
-                      <label className="button primary" aria-label="Replace thumbnail">
+                      <label
+                        className={buttonVariants({ size: "default", color: "primary" })}
+                        aria-label="Replace thumbnail"
+                      >
                         {thumbnailInput}
                         <Icon name="upload-fill" />
                       </label>
@@ -410,7 +413,7 @@ const FileEmbedNodeView = ({ node, editor, getPos, updateAttributes }: NodeViewP
             ) : (
               <div className="preview">
                 <Placeholder>
-                  <label className="button primary">
+                  <label className={buttonVariants({ size: "default", color: "primary" })}>
                     {thumbnailInput}
                     <Icon name="upload-fill" />
                     Upload a thumbnail
@@ -470,7 +473,7 @@ const FileEmbedNodeView = ({ node, editor, getPos, updateAttributes }: NodeViewP
 
                 {file.is_streamable && isComplete ? (
                   <li>
-                    <button className="underline" onClick={() => setExpanded(!expanded)}>
+                    <button className="cursor-pointer underline all-unset" onClick={() => setExpanded(!expanded)}>
                       {file.subtitle_files.length}{" "}
                       {file.subtitle_files.length === 1 ? "closed caption" : "closed captions"}
                     </button>
@@ -494,48 +497,51 @@ const FileEmbedNodeView = ({ node, editor, getPos, updateAttributes }: NodeViewP
           ) : null}
 
           {file.is_streamable ? (
-            <Popover
-              trigger={
-                <Button aria-label="Thumbnail view">
-                  <Icon name={node.attrs.collapsed ? "arrows-expand" : "arrows-collapse"} />
-                </Button>
-              }
-            >
-              {(close) => (
+            <Popover>
+              <PopoverAnchor>
+                <PopoverTrigger aria-label="Thumbnail view" asChild>
+                  <Button>
+                    <Icon name={node.attrs.collapsed ? "arrows-expand" : "arrows-collapse"} />
+                  </Button>
+                </PopoverTrigger>
+              </PopoverAnchor>
+              <PopoverContent sideOffset={4} className="border-0 p-0 shadow-none">
                 <div role="menu">
-                  <div
-                    role="menuitem"
-                    onClick={() => {
-                      updateAttributes({ collapsed: !node.attrs.collapsed });
-                      close();
-                    }}
-                  >
-                    <Icon name={node.attrs.collapsed ? "arrows-expand" : "arrows-collapse"} />
-                    <span>{node.attrs.collapsed ? "Expand selected" : "Collapse selected"}</span>
-                  </div>
-                  <div
-                    role="menuitem"
-                    onClick={() => {
-                      editor.commands.command(({ tr }) => {
-                        const targetState = !node.attrs.collapsed;
-                        tr.doc.descendants((node, pos) => {
-                          if (node.type.name === FileEmbed.name && node.attrs.collapsed !== targetState) {
-                            tr.setNodeMarkup(pos, null, {
-                              ...node.attrs,
-                              collapsed: targetState,
-                            });
-                          }
+                  <PopoverClose asChild>
+                    <div
+                      role="menuitem"
+                      onClick={() => {
+                        updateAttributes({ collapsed: !node.attrs.collapsed });
+                      }}
+                    >
+                      <Icon name={node.attrs.collapsed ? "arrows-expand" : "arrows-collapse"} />
+                      <span>{node.attrs.collapsed ? "Expand selected" : "Collapse selected"}</span>
+                    </div>
+                  </PopoverClose>
+                  <PopoverClose asChild>
+                    <div
+                      role="menuitem"
+                      onClick={() => {
+                        editor.commands.command(({ tr }) => {
+                          const targetState = !node.attrs.collapsed;
+                          tr.doc.descendants((node, pos) => {
+                            if (node.type.name === FileEmbed.name && node.attrs.collapsed !== targetState) {
+                              tr.setNodeMarkup(pos, null, {
+                                ...node.attrs,
+                                collapsed: targetState,
+                              });
+                            }
+                          });
+                          return true;
                         });
-                        return true;
-                      });
-                      close();
-                    }}
-                  >
-                    <Icon name={node.attrs.collapsed ? "arrows-expand" : "arrows-collapse"} />
-                    <span>{node.attrs.collapsed ? "Expand all thumbnails" : "Collapse all thumbnails"}</span>
-                  </div>
+                      }}
+                    >
+                      <Icon name={node.attrs.collapsed ? "arrows-expand" : "arrows-collapse"} />
+                      <span>{node.attrs.collapsed ? "Expand all thumbnails" : "Collapse all thumbnails"}</span>
+                    </div>
+                  </PopoverClose>
                 </div>
-              )}
+              </PopoverContent>
             </Popover>
           ) : null}
 
@@ -677,7 +683,11 @@ const FileEmbedNodeView = ({ node, editor, getPos, updateAttributes }: NodeViewP
       </Row>
       {isDropZone ? (
         <div className="absolute inset-0 bg-backdrop">
-          <div className="button primary absolute top-1/2 left-1/2 -translate-1/2">Create folder with 2 items</div>
+          <div
+            className={`${buttonVariants({ size: "default", color: "primary" })} absolute top-1/2 left-1/2 -translate-1/2`}
+          >
+            Create folder with 2 items
+          </div>
         </div>
       ) : null}
     </NodeViewWrapper>

@@ -48,8 +48,6 @@
   --color-success-foreground: rgb(var(--contrast-success));
   --color-danger: rgb(var(--danger));
   --color-danger-foreground: rgb(var(--contrast-danger));
-  --color-primary: rgb(var(--primary));
-  --color-primary-foreground: rgb(var(--contrast-primary));
   --color-warning: rgb(var(--warning));
   --color-warning-foreground: rgb(var(--contrast-warning));
   --color-info: rgb(var(--info));
@@ -72,6 +70,13 @@
     * {
       border-color: var(--color-border);
     }
+  }
+}
+
+@utility all-unset {
+  /* Ensure low precedence so it doesn't override other styles */
+  :where(&) {
+    all: unset;
   }
 }
 
